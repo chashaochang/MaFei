@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomoFin - 智能媒体播放器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 60px 0;
+            color: white;
+        }
+
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .app-icon svg {
+            width: 80px;
+            height: 80px;
+        }
+
+        .app-title {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .app-subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .download-btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(238, 90, 36, 0.3);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(238, 90, 36, 0.4);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 80px 0;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 60px;
+            color: #2c3e50;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(720px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+            justify-items: center;
+        }
+
+        /* 当包含PC卡片时调整网格布局 */
+        .features-grid:has(.pc-card) {
+            grid-template-columns: 1fr;
+        }
+
+        .feature-card {
+            width: 720px;
+            height: 1280px;
+            overflow: hidden;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            position: relative;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        }
+
+        /* PC卡片样式 */
+        .feature-card.pc-card {
+            width: 1280px;
+            height: 720px;
+        }
+
+        .pc-card .feature-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 30%;
+            height: 100%;
+            padding: 40px 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 40px 0 0 40px;
+            z-index: 2;
+        }
+
+        .pc-card .feature-image {
+            position: absolute;
+            top: 50%;
+            left: 65%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            height: 80%;
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            overflow: hidden;
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            z-index: 1;
+        }
+
+        .pc-card .feature-image::before,
+        .pc-card .feature-image::after {
+            display: none;
+        }
+
+        /* PC截图模式样式调整 */
+        .pc-card .feature-image[style*="--screenshot-mode"]::before {
+            background: rgba(44, 62, 80, 0.3) !important;
+        }
+
+        .pc-card .feature-image[style*="--screenshot-mode"]::after {
+            background: rgba(44, 62, 80, 0.3) !important;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.2);
+        }
+
+        .feature-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30%;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            z-index: 2;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        .feature-image {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 67%;
+            bottom: 0;
+            background-size: cover;
+            background-position: top;
+            background-repeat: no-repeat;
+            overflow: hidden;
+            border-radius: 40px 40px 0 0;
+            border: 8px solid #2c3e50;
+            border-bottom: none;
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2), inset 0 0 0 2px #34495e;
+        }
+        
+        .feature-image::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 6px;
+            background: #2c3e50;
+            border-radius: 3px;
+            z-index: 1;
+        }
+        
+        .feature-image::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%) translateX(80px);
+            width: 12px;
+            height: 12px;
+            background: #2c3e50;
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        /* 截图时调整伪元素颜色 */
+        .feature-image[style*="--screenshot-mode"]::before {
+            background: rgba(44, 62, 80, 0.3) !important;
+        }
+        
+        .feature-image[style*="--screenshot-mode"]::after {
+            background: rgba(44, 62, 80, 0.3) !important;
+        }
+
+        .connect-bg .feature-image {
+            background-image: url('connect.jpg');
+        }
+
+        .videolist-bg .feature-image {
+            background-image: url('videolist.jpg');
+        }
+
+        .player-bg .feature-image {
+            background-image: url('player.jpg');
+        }
+
+        .cast-bg .feature-image {
+            background-image: url('cast.jpg');
+        }
+
+        .pc-fullscreen-bg .feature-image {
+            background-image: url('pc_fullscreen.png');
+        }
+
+        .pc-play-bg .feature-image {
+            background-image: url('pc_play.png');
+        }
+
+        .pc-detail-bg .feature-image {
+            background-image: url('pc_video_detail.png');
+        }
+
+
+
+        .feature-title {
+            font-size: 2.8rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .feature-description {
+            color: rgba(255, 255, 255, 0.9);
+            line-height: 1.8;
+            font-size: 1.4rem;
+            text-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Highlights Section */
+        .highlights {
+            padding: 80px 0;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+
+        .highlights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+
+        .highlight-item {
+            text-align: center;
+            padding: 40px 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .highlight-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .highlight-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .highlight-text {
+            color: #666;
+            font-weight: 500;
+        }
+
+        /* Footer */
+        .footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 40px 0;
+        }
+
+        .footer-text {
+            opacity: 0.8;
+        }
+
+        /* Export Button */
+        .export-section {
+            text-align: center;
+            margin-top: 40px;
+            padding-bottom: 20px;
+        }
+
+        .export-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin: 0 10px;
+            display: inline-block;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .export-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-title {
+                font-size: 2.5rem;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            .highlights-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .container {
+                padding: 0 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .highlights-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <header class="header">
+        <div class="container">
+            <div class="app-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#87CEEB;stop-opacity:1" />
+                            <stop offset="25%" style="stop-color:#6A5ACD;stop-opacity:1" />
+                            <stop offset="75%" style="stop-color:#8A2BE2;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#4B0082;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="15" y="20" width="20" height="60" rx="6" fill="url(#iconGradient)"/>
+                    <rect x="65" y="20" width="20" height="60" rx="6" fill="url(#iconGradient)"/>
+                    <path d="M 46 45 L 46 75 L 78 60 Z" fill="none" stroke="url(#iconGradient)" stroke-width="10" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h1 class="app-title">HomoFin</h1>
+            <p class="app-subtitle">智能媒体播放器 - 让娱乐更简单</p>
+            <a href="#" class="download-btn">立即下载体验</a>
+        </div>
+    </header>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">核心功能</h2>
+            <div class="features-grid">
+                <div class="feature-card connect-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">服务器连接</h3>
+                        <p class="feature-description">发现媒体服务器，一键连接，安全稳定。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card videolist-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">精美视频列表</h3>
+                        <p class="feature-description">海报墙展示，智能分类，快速找片。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card player-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">HomoFin</h3>
+                        <p class="feature-description">轻松打造智能私人影院。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card cast-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">智能播控中心</h3>
+                        <p class="feature-description">远程控制播放，投屏互动，多设备同步。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card pc-card pc-fullscreen-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">全屏播放</h3>
+                        <p class="feature-description">大屏沉浸体验，优质视觉享受。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card pc-card pc-play-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">播放界面</h3>
+                        <p class="feature-description">简洁操控界面，功能一目了然。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+
+                <div class="feature-card pc-card pc-detail-bg">
+                    <div class="feature-content">
+                        <h3 class="feature-title">详情页面</h3>
+                        <p class="feature-description">完整信息展示，丰富内容介绍。</p>
+                    </div>
+                    <div class="feature-image"></div>
+                </div>
+            </div>
+        </div>
+        </div>
+        
+        <!-- Export Buttons -->
+        <div class="export-section">
+            <button id="exportAllBtn" class="export-btn">保存所有卡片</button>
+            <button id="exportIndividualBtn" class="export-btn">保存单个卡片</button>
+        </div>
+    </section>
+
+    <!-- Highlights Section -->
+    <section class="highlights">
+        <div class="container">
+            <h2 class="section-title">为什么选择 HomoFin</h2>
+            <div class="highlights-grid">
+                <div class="highlight-item">
+                    <div class="highlight-number">4K</div>
+                    <div class="highlight-text">超高清播放</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-number">∞</div>
+                    <div class="highlight-text">无限媒体库</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-number">5★</div>
+                    <div class="highlight-text">用户好评</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-number">24/7</div>
+                    <div class="highlight-text">随时观看</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer-text">© 2025 HomoFin. 让每一次观看都成为享受。</p>
+        </div>
+    </footer>
+    
+    <!-- html2canvas library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <script>
+        // 保存所有卡片为一张图片
+        document.getElementById('exportAllBtn').addEventListener('click', function() {
+            const featuresGrid = document.querySelector('.features-grid');
+            
+            // 创建一个临时容器来包装功能卡片
+            const tempContainer = document.createElement('div');
+            tempContainer.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)';
+            tempContainer.style.padding = '40px';
+            tempContainer.style.borderRadius = '20px';
+            tempContainer.style.position = 'absolute';
+            tempContainer.style.left = '-9999px';
+            tempContainer.style.top = '0';
+            tempContainer.style.width = '1200px';
+            
+            // 克隆功能卡片网格
+            const clonedGrid = featuresGrid.cloneNode(true);
+            tempContainer.appendChild(clonedGrid);
+            document.body.appendChild(tempContainer);
+            
+            // 使用html2canvas截图
+            html2canvas(tempContainer, {
+                backgroundColor: null,
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                width: 1200,
+                height: tempContainer.scrollHeight
+            }).then(function(canvas) {
+                // 移除临时容器
+                document.body.removeChild(tempContainer);
+                
+                // 创建下载链接
+                const link = document.createElement('a');
+                link.download = 'HomoFin-功能介绍-全部.png';
+                link.href = canvas.toDataURL('image/png');
+                
+                // 触发下载
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }).catch(function(error) {
+                console.error('截图失败:', error);
+                alert('截图失败，请重试');
+                // 移除临时容器
+                if (document.body.contains(tempContainer)) {
+                    document.body.removeChild(tempContainer);
+                }
+            });
+        });
+        
+        // 保存每个卡片为单独图片
+        document.getElementById('exportIndividualBtn').addEventListener('click', function() {
+            const featureCards = document.querySelectorAll('.feature-card');
+            const cardNames = ['智能服务器连接', '精美视频列表', '高清视频播放', '智能播控中心', '全屏播放', '播放界面', '详情页面'];
+            
+            featureCards.forEach(function(card, index) {
+                setTimeout(function() {
+                    // 检查是否为PC卡片
+                    const isPcCard = card.classList.contains('pc-card');
+                    const cardWidth = isPcCard ? '1280px' : '720px';
+                    const cardHeight = isPcCard ? '720px' : '1280px';
+                    
+                    // 创建临时容器，不添加边距
+                    const tempContainer = document.createElement('div');
+                    tempContainer.style.position = 'absolute';
+                    tempContainer.style.left = '-9999px';
+                    tempContainer.style.top = '0';
+                    tempContainer.style.width = cardWidth;
+                    tempContainer.style.height = cardHeight;
+                    tempContainer.style.overflow = 'hidden';
+                    
+                    // 克隆单个卡片，保持原始尺寸和样式
+                    const clonedCard = card.cloneNode(true);
+                    clonedCard.style.width = cardWidth;
+                    clonedCard.style.height = cardHeight;
+                    clonedCard.style.margin = '0';
+                    clonedCard.style.position = 'relative';
+                    clonedCard.style.transform = 'none'; // 移除hover效果
+                    
+                    // PC卡片移除外层阴影
+                    if (isPcCard) {
+                        clonedCard.style.boxShadow = 'none';
+                    }
+                    
+                    // 优化截图时的边框效果
+                    const featureImage = clonedCard.querySelector('.feature-image');
+                    if (featureImage) {
+                        // PC卡片完全移除边框和阴影
+                        if (isPcCard) {
+                            featureImage.style.border = 'none';
+                            featureImage.style.boxShadow = 'none';
+                            featureImage.style.borderRadius = '0';
+                        } else {
+                            // 移动端卡片保留边框但改为更浅的颜色
+                            featureImage.style.border = '4px solid rgba(44, 62, 80, 0.3)';
+                            featureImage.style.boxShadow = '0 -2px 8px rgba(0, 0, 0, 0.1)';
+                        }
+                        featureImage.style.setProperty('--screenshot-mode', 'true');
+                        
+                        // PC卡片移除伪元素装饰
+                        if (isPcCard) {
+                            const style = document.createElement('style');
+                            style.textContent = `
+                                .pc-card .feature-image::before,
+                                .pc-card .feature-image::after {
+                                    display: none !important;
+                                }
+                            `;
+                            clonedCard.appendChild(style);
+                        }
+                    }
+                    
+                    tempContainer.appendChild(clonedCard);
+                    document.body.appendChild(tempContainer);
+                    
+                    // 等待背景图片加载完成
+                    setTimeout(function() {
+                        // 确保背景图片已加载
+                        const images = clonedCard.querySelectorAll('*');
+                        const imagePromises = [];
+                        
+                        // 检查所有背景图片
+                        images.forEach(function(element) {
+                            const bgImage = window.getComputedStyle(element).backgroundImage;
+                            if (bgImage && bgImage !== 'none' && bgImage.includes('url(')) {
+                                const imageUrl = bgImage.slice(4, -1).replace(/["']/g, '');
+                                const img = new Image();
+                                const promise = new Promise(function(resolve) {
+                                    img.onload = resolve;
+                                    img.onerror = resolve; // 即使加载失败也继续
+                                    img.src = imageUrl;
+                                });
+                                imagePromises.push(promise);
+                            }
+                        });
+                        
+                        // 等待所有图片加载完成后再截图
+                         Promise.all(imagePromises).then(function() {
+                             // 直接截图卡片，不包含额外边距
+                             html2canvas(clonedCard, {
+                                 backgroundColor: null,
+                                 scale: 2, // 提高清晰度
+                                 useCORS: true,
+                                 allowTaint: true,
+                                 foreignObjectRendering: false,
+                                 width: isPcCard ? 1280 : 720,
+                                 height: isPcCard ? 720 : 1280,
+                                 scrollX: 0,
+                                 scrollY: 0
+                             }).then(function(canvas) {
+                                 // 移除临时容器
+                                 document.body.removeChild(tempContainer);
+                                 
+                                 // 创建下载链接
+                                 const link = document.createElement('a');
+                                 link.download = 'HomoFin-' + cardNames[index] + '.png';
+                                 link.href = canvas.toDataURL('image/png');
+                                 
+                                 // 触发下载
+                                 document.body.appendChild(link);
+                                 link.click();
+                                 document.body.removeChild(link);
+                             }).catch(function(error) {
+                                 console.error('截图失败:', error);
+                                 alert('卡片 ' + cardNames[index] + ' 截图失败');
+                                 // 移除临时容器
+                                 if (document.body.contains(tempContainer)) {
+                                     document.body.removeChild(tempContainer);
+                                 }
+                             });
+                         });
+                     }, 500); // 增加等待时间让背景图片加载
+                }, index * 500); // 延迟500ms避免同时下载
+            });
+        });
+    </script>
+</body>
+</html>

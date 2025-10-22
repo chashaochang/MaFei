@@ -1,0 +1,17 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+**/**lock.json5
+**/BuildProfile.ets
+
+# API配置文件 - 包含敏感信息，不应上传到版本控制
+**/api-config.ets

@@ -1,0 +1,207 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PlayerAbility_desc",
+      "value": "正在播放..."
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "HomoFin"
+    },
+    {
+      "name": "Play",
+      "value": "Play"
+    },
+    {
+      "name": "Pause",
+      "value": "Pause"
+    },
+    {
+      "name": "Switch",
+      "value": "Switch"
+    },
+    {
+      "name": "Stop",
+      "value": "Stop"
+    },
+    {
+      "name": "1x",
+      "value": "1x"
+    },
+    {
+      "name": "1_5x",
+      "value": "1.5x"
+    },
+    {
+      "name": "2x",
+      "value": "2x"
+    },
+    {
+      "name": "Video_volume",
+      "value": "Video volume"
+    },
+    {
+      "name": "Honey_the_video_is_playing_errant_The_system_is_wandering",
+      "value": "Honey, the video is playing errant. The system is wandering."
+    },
+    {
+      "name": "ijkplayer_Audio_player",
+      "value": "ijkplayer Audio player"
+    },
+    {
+      "name": "ijkplayer_Example",
+      "value": "ijkplayer Example"
+    },
+    {
+      "name": "Test_address",
+      "value": "Test address:"
+    },
+    {
+      "name": "destroy",
+      "value": "destroy"
+    },
+    {
+      "name": "startRecord",
+      "value": "startRecord"
+    },
+    {
+      "name": "stopRecord",
+      "value": "stopRecord"
+    },
+    {
+      "name": "screenshot",
+      "value": "screenshot"
+    },
+    {
+      "name": "recordIng",
+      "value": "recordIng"
+    },
+    {
+      "name": "start_record_success",
+      "value": "start record success"
+    },
+    {
+      "name": "start_record_failed",
+      "value": "start record failed"
+    },
+    {
+      "name": "record_not_enabled",
+      "value": "record not enabled"
+    },
+    {
+      "name": "stop_record_success",
+      "value": "stop record success"
+    },
+    {
+      "name": "stop_record_failed",
+      "value": "stop record failed"
+    },
+    {
+      "name": "screenshot_success",
+      "value": "screenshot success"
+    },
+    {
+      "name": "screenshot_failed",
+      "value": "screenshot failed"
+    },
+    {
+      "name": "IMAGEVIDEO_REQUEST_PERMISSION",
+      "value": "api apply image video request permission."
+    },
+    {
+      "name": "reason_background",
+      "value": "避免应用在投播时进入后台被系统冻结"
+    },
+    {
+      "name": "playback_info_play_method",
+      "value": "播放方式： "
+    },
+    {
+      "name": "playback_info_video_streams",
+      "value": "视频流"
+    },
+    {
+      "name": "playback_info_audio_streams",
+      "value": "音频流"
+    },
+    {
+      "name": "playback_info_stream_unknown_title",
+      "value": "未知标题"
+    },
+    {
+      "name": "playback_info_and_x_more",
+      "value": "....还有 %d 个"
+    },
+    {
+      "name": "interactive_button_height",
+      "value": "40vp"
+    },
+    {
+      "name": "reload",
+      "value": "重新加载"
+    },
+    {
+      "name": "load_failed",
+      "value": "加载失败"
+    },
+    {
+      "name": "splash_sub_title",
+      "value": "HomoFin"
+    },    {
+      "name": "button_agree",
+      "value": "同意"
+    },
+    {
+      "name": "button_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "safe_desc1_str1",
+      "value": "本应用需"
+    },
+    {
+      "name": "safe_desc1_str2",
+      "value": "联网"
+    },
+    {
+      "name": "safe_desc1_str3",
+      "value": "调用"
+    },
+    {
+      "name": "safe_desc1_str4",
+      "value": "XX、XX"
+    },
+    {
+      "name": "safe_desc1_str5",
+      "value": ",我们非常重视您的隐私保护,我们将严格遵守相关法律法规,保护您的个人信息安全.请仔细阅读"
+    },
+    {
+      "name": "safe_desc1_str6",
+      "value": "HomoFin隐私政策声明"
+    },
+    {
+      "name": "safe_desc1_str7",
+      "value": "了解我们的隐私保护措施."
+    },
+    {
+      "name": "safe_desc2",
+      "value": "请仔细阅读以上声明。点击\"同意\"，即表示您同意HomoFin隐私协议。"
+    },
+    {
+      "name": "welcome_to_use",
+      "value": "欢迎使用"
+    },
+    {
+      "name": "privacy_statement",
+      "value": "隐私声明"
+    }
+  ]
+}

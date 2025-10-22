@@ -1,0 +1,86 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B579DC8423B3F07B4CCC36C6E2EAEFD6089BFD6EC88CAC311F5EA954515AFE1CFC07882AC7829C4",
+          "profile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p12",
+          "storePassword": "0000001BFF0ADBD2794E8EB291626B368E5A3214042B72E07E13FA835D6A2B450871DE5E6305351EF5474C"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "6.0.0(20)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        },
+        "targetSdkVersion": "6.0.0(20)"
+      },
+      {
+        "name": "release",
+        "compatibleSdkVersion": "6.0.0(20)",
+        "runtimeOS": "HarmonyOS",
+        "bundleName": "cn.xiaobai.jellyfin",
+        "icon": "$media:app_icon",
+        "label": "$string:app_name",
+        "bundleType": "app",
+        "versionCode": 1000000,
+        "versionName": "1.0.0",
+        "output": {
+          "artifactName": "HomoFin_Release"
+        },
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        },
+        "targetSdkVersion": "6.0.0(20)"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        },
+        {
+          "name": "release",
+          "applyToProducts": [
+            "release"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sdk",
+      "srcPath": "./sdk"
+    }
+  ]
+}
