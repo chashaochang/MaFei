@@ -50,6 +50,11 @@ export default class EntryAbility extends UIAbility {
 
     windowStage.getMainWindow().then((windowClass) => {
       try {
+        windowClass.on('windowSizeChange', () =>{
+          const properties = windowClass.getWindowProperties();
+          this.appUIState.deviceHeight = windowClass.getUIContext().px2vp(properties.windowRect.height);
+          this.appUIState.deviceWidth = windowClass.getUIContext().px2vp(properties.windowRect.width);
+        })
         windowClass.setWindowLayoutFullScreen(true).catch()
         const avoidAreaType = window.AvoidAreaType.TYPE_SYSTEM; // 系统默认区域，包括状态栏，导航栏
         const avoidAreaTop = windowClass.getWindowAvoidArea(avoidAreaType);
