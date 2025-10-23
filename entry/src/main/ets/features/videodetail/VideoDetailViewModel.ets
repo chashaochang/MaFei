@@ -13,8 +13,11 @@ import { ApiClient } from "../../network/ApiClient";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { VideoDetailUIState } from "./VideoDetailUIState";
 import { common, Want } from "@kit.AbilityKit";
+import { curves } from '@kit.ArkUI';
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
+  private originImageHeight: number = 0;
+  private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
 
   getVideoDetail(id: string) {
@@ -198,4 +201,50 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       }
     }
   }
+
+  calculateImageHeight(param: CalculateHeightParam): boolean {
+    if (param.yOffset === 0) {
+      this.ui.hasEdgeEffect = false;
+    } else {
+      this.ui.hasEdgeEffect = param.offset > 0;
+    }
+    if (param.yOffset > 0) {
+      return false;
+    }
+    if (param.state === ScrollState.Scroll && param.offset !== 0) {
+      this.ui.currentScrollState = ScrollState.Scroll;
+      const currentBannerHeight: number = this.ui.imageHeight - param.offset;
+      if (currentBannerHeight < this.originImageHeight) {
+        this.ui.currentScrollState = ScrollState.Fling;
+        this.ui.imageHeight = this.originImageHeight;
+        return false;
+      }
+      const bannerOffset: number = -(param.offset / BANNER_SCALE_FACTOR);
+      this.ui.imageHeight += bannerOffset
+      return true;
+    } else if (this.ui.currentScrollState === ScrollState.Scroll && param.state === ScrollState.Fling) {
+      this.bannerSpringBack();
+      return true;
+    }
+    return false;
+  }
+
+  bannerSpringBack() {
+    this.ui.currentScrollState = 2;
+    this.ui.context.animateTo({ curve: this.springBackAnimation, duration: 250 }, () => {
+      this.changeImageHeight();
+    });
+  }
+
+  protected changeImageHeight(): void {
+    this.ui.imageHeight = VideoDetailUIState.imageInitHeight
+    this.originImageHeight = this.ui.imageHeight;
+  }
+}
+// Banner magnification effect factor.
+export const BANNER_SCALE_FACTOR: number = 3.00;
+export interface CalculateHeightParam {
+  yOffset: number;
+  offset: number;
+  state: ScrollState;
 }

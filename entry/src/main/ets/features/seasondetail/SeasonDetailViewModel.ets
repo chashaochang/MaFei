@@ -6,8 +6,12 @@ import { getItemImageUrl, getVideoTagsByStreams, playItems } from "../../common/
 import { ApiClient } from "../../network/ApiClient";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { SeasonDetailUIState } from "./SeasonDetailUIState";
+import { curves } from '@kit.ArkUI';
+import { BANNER_SCALE_FACTOR, CalculateHeightParam } from "../videodetail/VideoDetailViewModel";
 
 export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
+  private originImageHeight: number = 0;
+  private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
 
   // 将剧集按30个一组分组，并生成组名与视频列表
@@ -134,5 +138,44 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
       return
     }
     playItems(this.episodeList, getContext())
+  }
+
+  calculateImageHeight(param: CalculateHeightParam): boolean {
+    if (param.yOffset === 0) {
+      this.ui.hasEdgeEffect = false;
+    } else {
+      this.ui.hasEdgeEffect = param.offset > 0;
+    }
+    if (param.yOffset > 0) {
+      return false;
+    }
+    if (param.state === ScrollState.Scroll && param.offset !== 0) {
+      this.ui.currentScrollState = ScrollState.Scroll;
+      const currentBannerHeight: number = this.ui.imageHeight - param.offset;
+      if (currentBannerHeight < this.originImageHeight) {
+        this.ui.currentScrollState = ScrollState.Fling;
+        this.ui.imageHeight = this.originImageHeight;
+        return false;
+      }
+      const bannerOffset: number = -(param.offset / BANNER_SCALE_FACTOR);
+      this.ui.imageHeight += bannerOffset
+      return true;
+    } else if (this.ui.currentScrollState === ScrollState.Scroll && param.state === ScrollState.Fling) {
+      this.bannerSpringBack();
+      return true;
+    }
+    return false;
+  }
+
+  bannerSpringBack() {
+    this.ui.currentScrollState = 2;
+    this.ui.context.animateTo({ curve: this.springBackAnimation, duration: 250 }, () => {
+      this.changeImageHeight();
+    });
+  }
+
+  protected changeImageHeight(): void {
+    this.ui.imageHeight = SeasonDetailUIState.imageInitHeight;
+    this.originImageHeight = this.ui.imageHeight;
   }
 }
