@@ -7,4 +7,6 @@ export class AppUIState {
   @Trace safeTop: number = 0
   @Trace safeBottom: number = 0
   @Trace isLogin: boolean = false
+  @Trace deviceWidth: number = 0
+  @Trace deviceHeight: number = 0
 }

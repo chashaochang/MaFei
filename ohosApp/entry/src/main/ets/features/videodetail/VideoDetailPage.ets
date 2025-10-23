@@ -2,7 +2,7 @@ import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { ImageKnifeComponentV2 } from '@ohos/imageknife';
 import { ActionBar } from '../../component/ActionBar';
 import { VideoDetailUIState } from './VideoDetailUIState';
-import { VideoDetailViewModel } from './VideoDetailViewModel';
+import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
 import { BaseItemPerson, ExternalUrl, ImageType, PersonKind } from 'sdk/src/main/ets/generated-client/models';
 import { ApiClient } from '../../network/ApiClient'
@@ -103,7 +103,7 @@ export struct VideoDetailPage {
               }.padding(16).alignItems(HorizontalAlign.Start)
             }
           }.width('100%')
-          .height(350)
+          .height(this.ui.imageHeight)
           .alignContent(Alignment.BottomStart)
 
           Column() {
@@ -371,11 +371,23 @@ export struct VideoDetailPage {
           .align(Alignment.Top)
 
         }
-      }.width('100%')
+      }
+      .width('100%')
       .height('100%')
+      .onScrollFrameBegin((offset: number, state: ScrollState) => {
+        const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
+        const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
+        if (imageHeightChange) {
+          return { offsetRemain: 0 };
+        }
+        return { offsetRemain: offset };
+      })
       .scrollBar(BarState.Off)
       .onDidScroll(() => {
         let y = this.ui.scroller.currentOffset().yOffset
+        if (y === 0 && this.ui.currentScrollState === 1) {
+          this.vm.bannerSpringBack();
+        }
         this.ui.blur = y / 10
         if (y > 200) {
           this.ui.showActionBar = true

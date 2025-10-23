@@ -33,4 +33,10 @@ export class SeasonDetailUIState extends BaseUIState {
   videoScroller: Scroller = new Scroller()
   @Trace blur: number = 0
   @Trace actionBarOpacity: number = 0
+
+  static readonly imageInitHeight: number = 320;
+  @Trace hasEdgeEffect: boolean = false;
+  @Trace currentScrollState: ScrollState = ScrollState.Idle;
+  @Trace imageHeight: number = SeasonDetailUIState.imageInitHeight;
+
 }

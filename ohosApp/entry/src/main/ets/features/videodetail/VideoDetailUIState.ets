@@ -41,6 +41,12 @@ export class VideoDetailUIState extends BaseUIState {
   //剩余时间
   @Trace remainingTime: string = ''
   @Trace playButtonText: string = '播放'
+
+  static readonly imageInitHeight: number = 350;
+  @Trace hasEdgeEffect: boolean = false;
+  @Trace currentScrollState: ScrollState = ScrollState.Idle;
+  @Trace imageHeight: number = VideoDetailUIState.imageInitHeight;
+
 }
 
 export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY_VISION' | 'DOLBY_ATOMS'

@@ -11,6 +11,7 @@ import { VideoItem } from '../home/hometab/HomeUIState';
 import { TextExpandView } from '../../component/textexpand/TextExpand';
 import { LastSpanAttribute } from '../../component/textexpand/Model';
 import { RouterConsts } from '../../common/RouterConsts';
+import { CalculateHeightParam } from '../videodetail/VideoDetailViewModel';
 
 @HMRouter({
   pageUrl: RouterConsts.SeasonDetailPage
@@ -46,11 +47,11 @@ export struct SeasonDetailPage {
                 objectFit: ImageFit.Cover,
               }
             }).width('100%')
-              .height(220)
+              .height(this.ui.imageHeight - 100)
               .blur(this.ui.blur)
             //渐变遮罩
             Stack().width('100%')
-              .height(220)
+              .height(this.ui.imageHeight - 100)
               .linearGradient({
                 angle: 0, // 0度在CSS中是从下到上，ArkTS中180度对应
                 colors: [
@@ -103,7 +104,7 @@ export struct SeasonDetailPage {
             .height('100%')
 
           }.width('100%')
-          .height(320)
+          .height(this.ui.imageHeight)
           .alignContent(Alignment.Top)
 
           Column() {
@@ -381,8 +382,19 @@ export struct SeasonDetailPage {
       }.width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
+      .onScrollFrameBegin((offset: number, state: ScrollState) => {
+        const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
+        const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
+        if (imageHeightChange) {
+          return { offsetRemain: 0 };
+        }
+        return { offsetRemain: offset };
+      })
       .onDidScroll(() => {
         let y = this.ui.scroller.currentOffset().yOffset
+        if (y === 0 && this.ui.currentScrollState === 1) {
+          this.vm.bannerSpringBack();
+        }
         this.ui.blur = y / 5
         if (y > 128) {
           this.ui.showActionBar = true
