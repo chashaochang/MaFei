@@ -8,7 +8,7 @@
   "dependencies": {
     "sdk": "file:../sdk",
     "@ohos/ijkplayer": "^2.0.7-rc.3",
-    "ohos_smart_dialog": "^1.8.2",
+    "ohos_smart_dialog": "^1.8.8",
     "@ohos/danmakuflamemaster": "^2.1.1",
     "@ohos/imageknife": "^3.2.7",
     "@hadss/scroll_components": "^1.0.0-rc.2"

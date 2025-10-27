@@ -6,6 +6,8 @@ import { MineViewModel } from "./MineViewModel"
 import { BaseGroupItem, ListGroup } from "../../../component/ListGroup"
 import { RouterConsts } from "../../../common/RouterConsts"
 import { getUIAbilityContext } from "../../../common/CommonFunc"
+import { wantConstant } from "@kit.AbilityKit"
+import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 
 @ComponentV2
 export struct MineTab {
@@ -63,9 +65,25 @@ export struct MineTab {
                   })
                   break
                 case 1:
-                  getUIAbilityContext().startAbility({
-                    uri: 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=991893385&card_type=group&source=qrcode'
-                  }).catch()
+                  try {
+                    getUIAbilityContext().startAbility({
+                      uri: 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=991893385&card_type=group&source=qrcode',
+                      flags: wantConstant.Flags.FLAG_START_WITHOUT_TIPS
+                    }).catch(() => {
+                      //弹提示框
+                      let uiContext: UIContext = this.getUIContext();
+                      uiContext.getPromptAction().openCustomDialog({
+                        builder: () => {
+                          this.dialogBuilder();
+                        }
+                      }).catch(() => {
+
+                      });
+                    })
+                  } catch (e) {
+                    console.log('catch2');
+                  }
+
                   break
                 case 2:
                   // HMRouterMgr.push({
@@ -128,5 +146,19 @@ export struct MineTab {
     .width('100%')
     .height('100%')
     .alignContent(Alignment.Top)
+  }
+
+  @Builder
+  dialogBuilder(): void {
+    AlertDialogV2({
+      primaryTitle: '提示',
+      content: 'QQ群:991893385',
+      primaryButton: new AdvancedDialogV2Button({
+        content: '确认',
+        action: () => {
+
+        },
+      })
+    })
   }
 }
