@@ -367,7 +367,9 @@ export struct SeasonDetailPage {
                         objectFit: ImageFit.Cover,
                         border: {
                           radius: 33
-                        }
+                        },
+                        placeholderSrc: $r('app.media.placeholder_video'),
+                        placeholderObjectFit: ImageFit.CENTER
                       }
                     })
                       .width(66)
