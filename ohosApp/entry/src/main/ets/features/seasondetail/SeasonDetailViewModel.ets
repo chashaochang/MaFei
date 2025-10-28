@@ -1,5 +1,5 @@
 import { AxiosResponse } from "@ohos/axios";
-import { getTvShowsApi, getUserLibraryApi, ImageUrlsApi } from "sdk";
+import { getPlaystateApi, getTvShowsApi, getUserLibraryApi, ImageUrlsApi } from "sdk";
 import { BaseItemDto, BaseItemDtoQueryResult, ImageType, ItemFields } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getVideoTagsByStreams, playItems } from "../../common/CommonFunc";
@@ -8,6 +8,7 @@ import { VideoItem } from "../home/hometab/HomeUIState";
 import { SeasonDetailUIState } from "./SeasonDetailUIState";
 import { curves } from '@kit.ArkUI';
 import { BANNER_SCALE_FACTOR, CalculateHeightParam } from "../videodetail/VideoDetailViewModel";
+import { ToastUtil } from "../../utils/ToastUtil";
 
 export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   private originImageHeight: number = 0;
@@ -90,6 +91,8 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
         this.ui.info = `${itemData.ProductionYear}  /  ${this.ui.preInfo}`
         this.ui.overview = itemData.Overview || ''
         this.ui.people = itemData.People || []
+        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
+        this.ui.played = itemData.UserData?.Played || false
         getTvShowsApi(ApiClient.Instance()).getEpisodes({
           userId: ApiClient.Instance().userId,
           seasonId: this.ui.id,
@@ -177,5 +180,53 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   protected changeImageHeight(): void {
     this.ui.imageHeight = SeasonDetailUIState.imageInitHeight;
     this.originImageHeight = this.ui.imageHeight;
+  }
+
+  changeFavorite() {
+    if (this.ui.isFavorite) {
+      getUserLibraryApi(ApiClient.Instance()).unmarkFavoriteItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.isFavorite = false
+        ToastUtil.showToast(this.ui.context, '已取消收藏')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '取消收藏失败')
+      })
+    } else {
+      getUserLibraryApi(ApiClient.Instance()).markFavoriteItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.isFavorite = true
+        ToastUtil.showToast(this.ui.context, '已收藏')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '收藏失败')
+      })
+    }
+  }
+
+  changePlayedState() {
+    if (this.ui.played) {
+      getPlaystateApi(ApiClient.Instance()).markUnplayedItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.played = false
+        ToastUtil.showToast(this.ui.context, '标记为未观看')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '操作失败')
+      })
+    } else {
+      getPlaystateApi(ApiClient.Instance()).markPlayedItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.played = true
+        ToastUtil.showToast(this.ui.context, '标记为已观看')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '操作失败')
+      })
+    }
   }
 }
