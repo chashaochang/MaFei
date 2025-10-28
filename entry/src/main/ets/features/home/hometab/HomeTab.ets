@@ -107,7 +107,9 @@ export struct HomeTab {
                   objectFit: ImageFit.Contain,
                   border: {
                     radius: 6
-                  }
+                  },
+                  placeholderSrc: $r('app.media.placeholder_video'),
+                  placeholderObjectFit: ImageFit.CENTER
                 }
               }).height(80)
             }
@@ -153,7 +155,9 @@ export struct HomeTab {
                     objectFit: ImageFit.Cover,
                     border: {
                       radius: 6
-                    }
+                    },
+                    placeholderSrc: $r('app.media.placeholder_video'),
+                    placeholderObjectFit: ImageFit.CENTER
                   }
                 })
                   .width(160)
@@ -217,7 +221,9 @@ export struct HomeTab {
                   objectFit: ImageFit.Cover,
                   border: {
                     radius: 6
-                  }
+                  },
+                  placeholderSrc: $r('app.media.placeholder_video'),
+                  placeholderObjectFit: ImageFit.CENTER
                 }
               })
                 .width(160)
@@ -281,7 +287,9 @@ export struct HomeTab {
                   objectFit: ImageFit.Cover,
                   border: {
                     radius: 6
-                  }
+                  },
+                  placeholderSrc: $r('app.media.placeholder_video'),
+                  placeholderObjectFit: ImageFit.CENTER
                 }
               })
                 .width(100)

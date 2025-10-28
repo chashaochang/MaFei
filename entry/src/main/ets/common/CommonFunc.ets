@@ -32,6 +32,8 @@ export function getItemImageUrl(e: BaseItemDto, type?: ImageType): string {
   if (e.Type === BaseItemKind.Episode) {
     return ApiClient.Instance().basePath +
     new ImageUrlsApi().getItemImageUrlById(e.ParentThumbItemId, type || ImageType.Primary)
+  } else if (e.Type === BaseItemKind.Season) {
+    return ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary)
   } else {
     return ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, type || ImageType.Primary)
   }

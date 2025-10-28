@@ -1,5 +1,5 @@
 import { AxiosResponse } from "@ohos/axios";
-import { getTvShowsApi, getUserLibraryApi } from "sdk";
+import { getPlaystateApi, getTvShowsApi, getUserLibraryApi } from "sdk";
 import {
   BaseItemDto,
   BaseItemDtoQueryResult,
@@ -14,6 +14,7 @@ import { VideoItem } from "../home/hometab/HomeUIState";
 import { VideoDetailUIState } from "./VideoDetailUIState";
 import { common, Want } from "@kit.AbilityKit";
 import { curves } from '@kit.ArkUI';
+import { ToastUtil } from "../../utils/ToastUtil";
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private originImageHeight: number = 0;
@@ -31,7 +32,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.image = getItemImageUrl(itemData, ImageType.Backdrop)
         this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
         this.ui.score = itemData.CommunityRating ? itemData.CommunityRating : 0
-
+        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
+        this.ui.played = itemData.UserData?.Played || false
         if (itemData.Type == BaseItemKind.Episode) {
           this.ui.subtitle = `${itemData.SeriesName} ${itemData.SeasonName} · ${itemData.IndexNumber}集`
           this.ui.info = ` ${itemData.ProductionYear}  /  ${itemData.RunTimeTicks ?
@@ -111,6 +113,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.info = `${itemData.Genres?.join('  ')}  /  ${this.ui.mediaName}`
         this.ui.overview = itemData.Overview || ''
         this.ui.people = itemData.People || []
+        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
+        this.ui.played = itemData.UserData?.Played || false
         getTvShowsApi(ApiClient.Instance()).getSeasons({
           userId: ApiClient.Instance().userId,
           seriesId: id,
@@ -240,9 +244,59 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.imageHeight = VideoDetailUIState.imageInitHeight
     this.originImageHeight = this.ui.imageHeight;
   }
+
+  changeFavorite() {
+    if (this.ui.isFavorite) {
+      getUserLibraryApi(ApiClient.Instance()).unmarkFavoriteItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.isFavorite = false
+        ToastUtil.showToast(this.ui.context, '已取消收藏')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '取消收藏失败')
+      })
+    } else {
+      getUserLibraryApi(ApiClient.Instance()).markFavoriteItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.isFavorite = true
+        ToastUtil.showToast(this.ui.context, '已收藏')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '收藏失败')
+      })
+    }
+  }
+
+  changePlayedState() {
+    if (this.ui.played) {
+      getPlaystateApi(ApiClient.Instance()).markUnplayedItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.played = false
+        ToastUtil.showToast(this.ui.context, '标记为未观看')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '操作失败')
+      })
+    } else {
+      getPlaystateApi(ApiClient.Instance()).markPlayedItem({
+        userId: ApiClient.Instance().userId,
+        itemId: this.ui.id,
+      }).then(() => {
+        this.ui.played = true
+        ToastUtil.showToast(this.ui.context, '标记为已观看')
+      }).catch(() => {
+        ToastUtil.showToast(this.ui.context, '操作失败')
+      })
+    }
+  }
 }
+
 // Banner magnification effect factor.
 export const BANNER_SCALE_FACTOR: number = 3.00;
+
 export interface CalculateHeightParam {
   yOffset: number;
   offset: number;

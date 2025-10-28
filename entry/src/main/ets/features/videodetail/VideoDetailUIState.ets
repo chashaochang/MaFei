@@ -18,6 +18,8 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace info: string = ''
   @Trace overview: string = ''
   @Trace people: BaseItemPerson[] = []
+  @Trace isFavorite: boolean = false
+  @Trace played: boolean = false
   //标签
   @Trace tags: string[] = []
   @Trace showActionBar = false
