@@ -21,6 +21,8 @@ export class SeasonDetailUIState extends BaseUIState {
   @Trace info: string = ''
   @Trace overview: string = ''
   @Trace people: BaseItemPerson[] = []
+  @Trace isFavorite: boolean = false
+  @Trace played: boolean = false
 
   @Trace showActionBar = false
 

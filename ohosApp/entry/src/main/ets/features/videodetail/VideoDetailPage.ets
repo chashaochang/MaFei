@@ -37,7 +37,6 @@ export struct VideoDetailPage {
         this.vm.getVideoDetail(this.ui.id)
       }
     }
-
   }
 
   build() {
@@ -146,23 +145,62 @@ export struct VideoDetailPage {
               }.width('100%').justifyContent(FlexAlign.Start)
             }
             Blank().height(16)
-            Button() {
-              Row() {
-                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                Text(this.ui.playButtonText)
-                  .fontSize(16)
-                  .fontColor(Color.White)
-                  .fontWeight(FontWeight.Medium)
+            Row({ space: 8 }) {
+              Button() {
+                Row() {
+                  Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                  Text(this.ui.playButtonText)
+                    .fontSize(16)
+                    .fontColor(Color.White)
+                    .fontWeight(FontWeight.Medium)
+                }
               }
+              .height(50)
+              .layoutWeight(1)
+              .margin({
+                right: 12
+              })
+              .borderRadius(25)
+              .onClick(() => {
+                if (this.ui.isTvShows) {
+                  this.vm.playFirst()
+                } else {
+                  playItems([this.ui.id], this.getUIContext().getHostContext()!)
+                }
+              })
+
+              Button() {
+                Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                  .fillColor('#CBD5E0')
+                  .width(22)
+                  .height(22)
+              }
+              .width(50)
+              .height(50)
+              .borderWidth(1)
+              .borderColor($r('app.color.border'))
+              .borderRadius(25)
+              .backgroundColor('#0affffff')
+              .onClick(()=>{
+                this.vm.changeFavorite()
+              })
+
+              Button() {
+                Image($r('app.media.ic_check'))
+                  .fillColor(this.ui.played ? $r('app.color.color_main') : '#CBD5E0')
+                  .width(22)
+                  .height(22)
+              }
+              .width(50)
+              .height(50)
+              .borderWidth(1)
+              .borderColor($r('app.color.border'))
+              .borderRadius(25)
+              .backgroundColor('#0affffff')
+              .onClick(()=>{
+                this.vm.changePlayedState()
+              })
             }.width('100%')
-            .height(50)
-            .onClick(() => {
-              if (this.ui.isTvShows) {
-                this.vm.playFirst()
-              } else {
-                playItems([this.ui.id], this.getUIContext().getHostContext()!)
-              }
-            })
 
 
             // TextExpandView({

@@ -39,6 +39,10 @@
     {
       "name": "primary_light_hover",
       "value": "#0A2547"
+    },
+    {
+      "name": "border",
+      "value": "#40a0aec0"
     }
   ]
 }

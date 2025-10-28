@@ -1,6 +1,7 @@
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { RecyclerView } from "@hadss/scroll_components";
 import { ImageKnifeComponentV2 } from "@ohos/imageknife";
+import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
@@ -80,7 +81,10 @@ export struct VideoCard {
             objectFit: ImageFit.Cover,
             border: {
               radius: 6
-            }
+            },
+            placeholderSrc: this.item.type == BaseItemKind.Season ? $r('app.media.placeholder_folder') :
+              $r('app.media.placeholder_video'),
+            placeholderObjectFit: ImageFit.CENTER
           }
         })
           .aspectRatio(2 / 3)
@@ -88,6 +92,8 @@ export struct VideoCard {
           .borderColor('#535b60')
           .borderWidth(0.5)
           .borderRadius(6)
+          .backgroundColor('#CBD2D3')
+          .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         if (this.item.score) {
           Text(this.item.score.toFixed(1) + '')
             .fontSize(11)

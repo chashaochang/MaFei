@@ -68,7 +68,7 @@ export struct SeasonDetailPage {
                 ImageKnifeComponentV2({
                   imageKnifeOption: {
                     loadSrc: this.ui.image,
-                    objectFit: ImageFit.Contain,
+                    objectFit: ImageFit.Fill,
                     border: {
                       width: 0.5,
                       radius: 12,
@@ -108,19 +108,58 @@ export struct SeasonDetailPage {
           .alignContent(Alignment.Top)
 
           Column() {
-            Button() {
-              Row() {
-                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
-                  .fontSize(16)
-                  .fontColor(Color.White)
-                  .fontWeight(FontWeight.Medium)
+            Row({ space: 8 }) {
+              Button() {
+                Row() {
+                  Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                  Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
+                    .fontSize(16)
+                    .fontColor(Color.White)
+                    .fontWeight(FontWeight.Medium)
+                }
               }
+              .layoutWeight(1)
+              .margin({
+                right: 12
+              })
+              .borderRadius(25)
+              .height(50)
+              .onClick(() => {
+                this.vm.playFirst()
+              })
+
+              Button() {
+                Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                  .fillColor('#CBD5E0')
+                  .width(22)
+                  .height(22)
+              }
+              .width(50)
+              .height(50)
+              .borderWidth(1)
+              .borderColor($r('app.color.border'))
+              .borderRadius(25)
+              .backgroundColor('#0affffff')
+              .onClick(() => {
+                this.vm.changeFavorite()
+              })
+
+              Button() {
+                Image($r('app.media.ic_check'))
+                  .fillColor(this.ui.played ? $r('app.color.color_main') : '#CBD5E0')
+                  .width(22)
+                  .height(22)
+              }
+              .width(50)
+              .height(50)
+              .borderWidth(1)
+              .borderColor($r('app.color.border'))
+              .borderRadius(25)
+              .backgroundColor('#0affffff')
+              .onClick(() => {
+                this.vm.changePlayedState()
+              })
             }.width('100%')
-            .height(50)
-            .onClick(() => {
-              this.vm.playFirst()
-            })
 
             if (this.ui.overview.length > 0) {
               Blank().height(20)
@@ -379,7 +418,8 @@ export struct SeasonDetailPage {
           .align(Alignment.Top)
 
         }
-      }.width('100%')
+      }
+      .width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
       .onScrollFrameBegin((offset: number, state: ScrollState) => {
