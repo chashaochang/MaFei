@@ -7,12 +7,13 @@ import {
   ImageType,
   ItemFields,
 } from "sdk/src/main/ets/generated-client/models";
-import { getItemImageUrl, getTypeByCollectionType, parseVideoType } from "../../../common/CommonFunc";
+import { getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
 
 export class HomeViewModel {
   ui: HomeUIState
+  imageApi: ImageUrlsApi = new ImageUrlsApi()
 
   constructor(ui: HomeUIState) {
     this.ui = ui
@@ -51,7 +52,7 @@ export class HomeViewModel {
             resolve()
           }
         }
-      }).catch((e:Error) => {
+      }).catch((e: Error) => {
         reject()
       })
     })
@@ -64,6 +65,7 @@ export class HomeViewModel {
         limit: 12,
         fields: [ItemFields.PrimaryImageAspectRatio],
         imageTypeLimit: 1,
+        enableImages: true,
         enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
         enableTotalRecordCount: false,
         mediaTypes: ['Video'],
@@ -72,37 +74,7 @@ export class HomeViewModel {
         if (res.data) {
           if (res.data.Items && res.data.Items.length > 0) {
             let list = res.data.Items.map<VideoItem>((e: BaseItemDto) => {
-              let imageId = ''
-              let name = ''
-              let subtitle = ''
-              switch (e.Type) {
-                case BaseItemKind.Movie:
-                  imageId = e.Id || ''
-                  name = e.Name || ''
-                  subtitle = parseVideoType(e.Type)
-                  break
-                case BaseItemKind.Episode:
-                  imageId = e.ParentThumbItemId || ''
-                  name = e.SeriesName || ''
-                  subtitle = `${e.SeasonName} · ${e.Name}`
-                  break
-                default:
-                  imageId = e.Id || ''
-                  name = e.Name || ''
-                  subtitle = parseVideoType(e.Type)
-                  break
-              }
-              return {
-                id: e.Id || '',
-                name: name,
-                subtitle: subtitle,
-                image: ApiClient.Instance().basePath +
-                new ImageUrlsApi().getItemImageUrlById(imageId, ImageType.Thumb, {
-                  tag: e.ImageTags![0]
-                }),
-                type: e.Type,
-                percent: e.UserData?.PlayedPercentage ? Math.round(e.UserData.PlayedPercentage) : 0
-              }
+              return mapResumeItem(e, new ImageUrlsApi());
             }) || []
             this.ui.resumeList = list
             resolve()
@@ -183,7 +155,7 @@ export class HomeViewModel {
             return {
               id: e.Id || '',
               name: e.SeriesName || e.Name || '',
-              image: getItemImageUrl(e),
+              image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
               subtitle: subtitle,
               mediaName: item.name,
               type: e.Type
@@ -198,4 +170,93 @@ export class HomeViewModel {
 
     }
   }
+}
+
+function resolveImageUrl(e: BaseItemDto, imageApi: ImageUrlsApi, baseFallback?: string): string {
+  // 预取各类型标签
+  const tags = e.ImageTags || {};
+  const thumbTag = tags[ImageType.Thumb];
+  const primaryTag = tags[ImageType.Primary];
+  const backdropTags: string[] = e.BackdropImageTags || [];
+
+  if (e.ParentThumbItemId) {
+    return imageApi.getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb, { tag: thumbTag });
+  }
+
+  if (e.ParentBackdropItemId) {
+    return imageApi.getItemImageUrlById(e.ParentBackdropItemId, ImageType.Backdrop, { tag: thumbTag });
+  }
+
+  // 如果自身有 Thumb
+  if (thumbTag) {
+    return imageApi.getItemImageUrlById(e.Id, ImageType.Thumb, { tag: thumbTag });
+  }
+
+  // 自身 Primary
+  if (primaryTag) {
+    return imageApi.getItemImageUrlById(e.Id, ImageType.Primary, { tag: primaryTag });
+  }
+
+  // 自身 Backdrop 第一张
+  if (backdropTags.length > 0) {
+    return imageApi.getItemImageUrlById(e.Id, ImageType.Backdrop, { tag: backdropTags[0] });
+  }
+
+  // Episode 特殊：父级缩略图
+  if (e.Type === BaseItemKind.Episode) {
+    // ParentThumbItemId
+    if (e.ParentThumbItemId) {
+      return imageApi.getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb);
+    }
+    // SeriesId 回退
+    if (e.SeriesId) {
+      return imageApi.getItemImageUrlById(e.SeriesId, ImageType.Primary);
+    }
+    // SeasonId 回退
+    if (e.SeasonId) {
+      return imageApi.getItemImageUrlById(e.SeasonId, ImageType.Primary);
+    }
+  }
+
+  // 通用父级 Backdrop
+  if (e.ParentBackdropItemId && e.ParentBackdropImageTags?.length) {
+    return imageApi.getItemImageUrlById(
+      e.ParentBackdropItemId,
+      ImageType.Backdrop,
+      { tag: e.ParentBackdropImageTags[0] }
+    );
+  }
+
+  // 失败则占位图
+  return baseFallback || '/assets/placeholder-video.png';
+}
+
+function mapResumeItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem {
+  let name = '';
+  let subtitle = '';
+  switch (e.Type) {
+    case BaseItemKind.Movie:
+      name = e.Name || '';
+      subtitle = '电影';
+      break;
+    case BaseItemKind.Episode:
+      name = e.SeriesName || e.Name || '';
+      subtitle = `${e.SeasonName || ''} · ${e.Name || ''}`;
+      break;
+    default:
+      name = e.Name || '';
+      subtitle = e.Type || '';
+      break;
+  }
+
+  const imageUrl = resolveImageUrl(e, imageApi);
+
+  return {
+    id: e.Id || '',
+    name,
+    subtitle,
+    image: ApiClient.Instance().basePath + imageUrl,
+    type: e.Type,
+    percent: e.UserData?.PlayedPercentage ? Math.round(e.UserData.PlayedPercentage) : 0
+  };
 }

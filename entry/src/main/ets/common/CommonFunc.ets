@@ -39,6 +39,122 @@ export function getItemImageUrl(e: BaseItemDto, type?: ImageType): string {
   }
 }
 
+export function resolveLatestImageUrl(
+  item: BaseItemDto,
+  imageApi: ImageUrlsApi,
+): string {
+  const allowEpisodeSelfFallback = false,
+    includeParentBackdropFallback = true
+
+  const placeholder = '/assets/placeholder-video.png';
+
+  if (!item?.Id) {
+    return placeholder;
+  }
+  // 仅针对 Episode 做特殊处理
+  if (item.Type === BaseItemKind.Episode) {
+    // 1. Series 主图（最符合“显示整个剧”的需求）
+    if (item.SeriesId) {
+      const tag = item.SeriesPrimaryImageTag || item.ImageTags?.[ImageType.Primary]; // 有些版本可能缺少 SeriesPrimaryImageTag
+      return imageApi.getItemImageUrlById(
+        item.ParentBackdropItemId,
+        ImageType.Primary,
+        tag ? { tag } : {}
+      );
+    }
+
+    // 2. 父级主图（可能是 Season 或 Series，具体由 Jellyfin 返回）
+    if (item.ParentPrimaryImageItemId) {
+      return imageApi.getItemImageUrlById(
+        item.ParentPrimaryImageItemId,
+        ImageType.Primary,
+        item.ParentPrimaryImageTag ? { tag: item.ParentPrimaryImageTag } : {}
+      );
+    }
+
+    // 3. 父级缩略图
+    if (item.ParentThumbItemId) {
+      return imageApi.getItemImageUrlById(
+        item.ParentThumbItemId,
+        ImageType.Thumb,
+        item.ParentThumbImageTag ? { tag: item.ParentThumbImageTag } : {}
+      );
+    }
+
+    // 4. 父级 Backdrop
+    if (includeParentBackdropFallback &&
+    item.ParentBackdropItemId &&
+      item.ParentBackdropImageTags?.length) {
+      return imageApi.getItemImageUrlById(
+        item.ParentBackdropItemId,
+        ImageType.Backdrop,
+        { tag: item.ParentBackdropImageTags[0] }
+      );
+    }
+
+    // 5. 是否允许回退到 Episode 自身
+    if (allowEpisodeSelfFallback) {
+      // 尝试自身 Thumb → Primary → Backdrop 单标签
+      const order = [ImageType.Thumb, ImageType.Primary, ImageType.Backdrop];
+      for (const t of order) {
+        const tag = item.ImageTags?.[t];
+        if (tag) {
+          return imageApi.getItemImageUrlById(item.Id, t, { tag });
+        }
+      }
+      // 自身 Backdrop 列表
+      if (item.BackdropImageTags?.length) {
+        return imageApi.getItemImageUrlById(
+          item.Id,
+          ImageType.Backdrop,
+          { tag: item.BackdropImageTags[0] }
+        );
+      }
+    }
+
+    return placeholder;
+  } else if (item.Type === BaseItemKind.Series || item.Type === BaseItemKind.Movie) {
+    // Series 自身 Primary 的 tag 一般在 item.ImageTags?.Primary
+    const seriesPrimaryTag = item.ImageTags?.[ImageType.Primary];
+    return imageApi.getItemImageUrlById(
+      item.Id,
+      ImageType.Primary,
+      seriesPrimaryTag ? { tag: seriesPrimaryTag } : {},
+    );
+  }
+
+  // 非 Episode：保持原逻辑（可与你原来的合并）
+  const preferOrder = [ImageType.Thumb, ImageType.Primary, ImageType.Backdrop];
+  const tags = item.ImageTags || {};
+
+  for (const t of preferOrder) {
+    const tag = tags[t];
+    if (tag) {
+      return imageApi.getItemImageUrlById(item.Id, t, { tag });
+    }
+  }
+
+  if (item.BackdropImageTags?.length) {
+    return imageApi.getItemImageUrlById(
+      item.Id,
+      ImageType.Backdrop,
+      { tag: item.BackdropImageTags[0] }
+    );
+  }
+
+  if (includeParentBackdropFallback &&
+  item.ParentBackdropItemId &&
+    item.ParentBackdropImageTags?.length) {
+    return imageApi.getItemImageUrlById(
+      item.ParentBackdropItemId,
+      ImageType.Backdrop,
+      { tag: item.ParentBackdropImageTags[0] }
+    );
+  }
+
+  return placeholder;
+}
+
 export function getTypeByCollectionType(collectionType?: CollectionType) {
   switch (collectionType) {
     case CollectionType.Movies:

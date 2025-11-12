@@ -1,6 +1,6 @@
 import { AppUIState } from "../../entity/AppUIState";
 import { HomeTab } from "./hometab/HomeTab";
-import { MediaTab } from "./media/MediaTab";
+import { MediaTab } from "./mediatab/MediaTab";
 import { MineTab } from "./minetab/MineTab";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { UIConstants } from "../../common/UIConstants";
