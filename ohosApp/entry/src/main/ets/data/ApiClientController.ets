@@ -34,7 +34,7 @@ export class ApiClientController {
       id = server.id
     }
     this.appPreference.setCurrentServerId(id)
-    ApiClient.init(hostname)
+    ApiClient.update(hostname)
   }
 
   loadSavedServer(): ServerEntity | null {
@@ -55,7 +55,7 @@ export class ApiClientController {
 
   configureApiClientServer(server: ServerEntity | null) {
     if (server) {
-      ApiClient.init(server?.hostname)
+      ApiClient.update(server?.hostname)
     }
   }
 

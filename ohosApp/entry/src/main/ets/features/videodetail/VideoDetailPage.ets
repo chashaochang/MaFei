@@ -255,62 +255,65 @@ export struct VideoDetailPage {
               .rowsGap(20)
               .width('100%')
             }
-            Blank().height(16)
-            Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
-            List({ space: 12 }) {
-              ForEach(this.ui.people, (item: BaseItemPerson) => {
-                ListItem() {
-                  Column({ space: 8 }) {
-                    ImageKnifeComponentV2({
-                      imageKnifeOption: {
-                        loadSrc: ApiClient.Instance().basePath +
-                        new ImageUrlsApi().getItemImageUrlById(item.Id || '', ImageType.Primary),
-                        objectFit: ImageFit.Cover,
-                        border: {
-                          radius: 33
+            if(this.ui.people.length > 0){
+              Blank().height(16)
+              Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
+              List({ space: 12 }) {
+                ForEach(this.ui.people, (item: BaseItemPerson) => {
+                  ListItem() {
+                    Column({ space: 8 }) {
+                      ImageKnifeComponentV2({
+                        imageKnifeOption: {
+                          loadSrc: ApiClient.Instance().basePath +
+                          new ImageUrlsApi().getItemImageUrlById(item.Id || '', ImageType.Primary),
+                          objectFit: ImageFit.Cover,
+                          border: {
+                            radius: 33
+                          },
+                          placeholderSrc: $r('app.media.ic_avatar'),
                         }
-                      }
-                    })
-                      .width(66)
-                      .height(66)
-                      .borderColor('#535b60')
-                      .borderWidth(1)
-                      .borderRadius(33)
+                      })
+                        .width(66)
+                        .height(66)
+                        .borderColor('#535b60')
+                        .borderRadius(33)
+                        .backgroundColor('#0affffff')
 
-                    Text(item.Name)
-                      .fontColor(Color.White)
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .width(66)
-                      .maxLines(1)
-                      .ellipsisMode(EllipsisMode.END)
-                      .textOverflow({
-                        overflow: TextOverflow.Ellipsis
-                      })
-                      .textAlign(TextAlign.Center)
-                    Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
-                      (item.Type == PersonKind.Director ? '导演' : item.Role))
-                      .fontColor('#b3cbd5e0')
-                      .fontSize(10)
-                      .width(66)
-                      .maxLines(1)
-                      .ellipsisMode(EllipsisMode.END)
-                      .textOverflow({
-                        overflow: TextOverflow.Ellipsis
-                      })
-                      .textAlign(TextAlign.Center)
+                      Text(item.Name)
+                        .fontColor(Color.White)
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Medium)
+                        .width(66)
+                        .maxLines(1)
+                        .ellipsisMode(EllipsisMode.END)
+                        .textOverflow({
+                          overflow: TextOverflow.Ellipsis
+                        })
+                        .textAlign(TextAlign.Center)
+                      Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
+                        (item.Type == PersonKind.Director ? '导演' : item.Role))
+                        .fontColor('#b3cbd5e0')
+                        .fontSize(10)
+                        .width(66)
+                        .maxLines(1)
+                        .ellipsisMode(EllipsisMode.END)
+                        .textOverflow({
+                          overflow: TextOverflow.Ellipsis
+                        })
+                        .textAlign(TextAlign.Center)
+                    }
                   }
-                }
+                })
+              }
+              .height(130)
+              .width('100%')
+              .listDirection(Axis.Horizontal)
+              .scrollBar(BarState.Off)
+              .padding({
+                top: 10, bottom: 10
               })
-            }
-            .height(130)
-            .width('100%')
-            .listDirection(Axis.Horizontal)
-            .scrollBar(BarState.Off)
-            .padding({
-              top: 10, bottom: 10
-            })
 
+            }
             if (!this.ui.isTvShows) {
               Blank().height(16)
 

@@ -85,7 +85,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
         this.ui.title = `${itemData.SeriesName} ${itemData.Name}`
         this.ui.image = getItemImageUrl(itemData, ImageType.Primary)
         this.ui.backgroundImage = ApiClient.Instance().basePath +
-        new ImageUrlsApi().getItemImageUrlById(itemData.ParentThumbItemId, ImageType.Backdrop)
+        new ImageUrlsApi().getItemImageUrlById(itemData.SeriesId, ImageType.Backdrop)
         this.ui.seriesName = itemData.SeriesName || ''
         this.ui.seasonName = itemData.Name || ''
         this.ui.info = `${itemData.ProductionYear}  /  ${this.ui.preInfo}`

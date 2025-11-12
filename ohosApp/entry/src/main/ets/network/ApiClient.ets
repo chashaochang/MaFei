@@ -11,9 +11,11 @@ export class ApiClient extends Api {
     return ApiClient.api!
   }
 
-  static init(host: string): Api {
+  static update(host: string): Api {
     if (!ApiClient.api) {
       ApiClient.api = jellyfin.createApi(host)
+    } else {
+      ApiClient.api.basePath = host.endsWith('/') ? host.slice(0, -1) : host;
     }
     return ApiClient.api!
   }

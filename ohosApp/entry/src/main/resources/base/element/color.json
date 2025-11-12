@@ -43,6 +43,10 @@
     {
       "name": "border",
       "value": "#40a0aec0"
+    },
+    {
+      "name": "bg_hover",
+      "value": "#1A1E23"
     }
   ]
 }

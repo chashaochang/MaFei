@@ -26,12 +26,19 @@ export struct MediaTab {
         Scroll() {
           Column() {
             Blank().height(this.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
+            ListGroup({
+              items: [new BaseGroupItem('收藏', $r('app.media.ic_unlike'), this.ui.favoriteCount + '')],
+              onItemClick: (_index) => {
+                HMRouterMgr.to(RouterConsts.FavoriteListPage).push()
+              }
+            }).margin({ top: 12 })
             Text('媒体库').fontColor(Color.White).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
             ListGroup({
               items: this.ui.mediaList.map((e) => {
-                return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'), e.childCount + '')
+                return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'),
+                  e.childCount + '')
               }),
-              onItemClick:(index)=>{
+              onItemClick: (index) => {
                 if (this.ui.mediaList[index].type == undefined) {
                   ToastUtil.showToast(this.getUIContext(), '暂不支持')
                   return;

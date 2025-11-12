@@ -1,4 +1,3 @@
-import { GridManager } from "@hadss/scroll_components";
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi } from "sdk";
 import { BaseItemDtoQueryResult, BaseItemKind } from "sdk/src/main/ets/generated-client/models";
@@ -9,7 +8,6 @@ import { VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 
 export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
-  gridManager: GridManager = new GridManager({ context: this.ui.context });
   scroller: ListScroller = new ListScroller()
   startIndex: number = 0
   limit: number = 100
@@ -38,7 +36,8 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
               type: e.Type,
             }
           })
-          this.gridManager.setDataSource(videoList)
+          this.ui.dataSource.addArray(videoList)
+          this.ui.dataSource.notifyDataReload()
         }
       }).catch()
     } else {
@@ -67,7 +66,8 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
               type: e.Type,
             }
           })
-          this.gridManager.setDataSource(videoList)
+          this.ui.dataSource.addArray(videoList)
+          this.ui.dataSource.notifyDataReload()
         }
       }).catch()
     }

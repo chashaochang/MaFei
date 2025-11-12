@@ -1,5 +1,5 @@
 import { AxiosResponse } from "@ohos/axios";
-import { getPlaystateApi, getTvShowsApi, getUserLibraryApi } from "sdk";
+import { getPlaystateApi, getTvShowsApi, getUserLibraryApi, ImageUrlsApi } from "sdk";
 import {
   BaseItemDto,
   BaseItemDtoQueryResult,
@@ -29,7 +29,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       if (res.data) {
         let itemData = res.data
         this.ui.title = itemData.Name || ''
-        this.ui.image = getItemImageUrl(itemData, ImageType.Backdrop)
+        this.ui.image = ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Primary)
         this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
         this.ui.score = itemData.CommunityRating ? itemData.CommunityRating : 0
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false

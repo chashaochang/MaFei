@@ -4,6 +4,16 @@ export struct ListGroup {
   @Param onItemClick: (index: number) => void = (_index: number) => {
   }
 
+  @Styles
+  pressedStyles(): void {
+    .backgroundColor('#ff7a7e88')
+  }
+
+  @Styles
+  normalStyles(): void {
+    .backgroundColor(Color.Transparent)
+  }
+
   build() {
     Column({ space: 8 }) {
       Column() {
@@ -37,6 +47,7 @@ export struct ListGroup {
             left: 16,
             right: 16
           })
+          .stateStyles({ pressed: this.pressedStyles, normal: this.normalStyles })
           .onClick(() => {
             this.onItemClick(index)
           })
