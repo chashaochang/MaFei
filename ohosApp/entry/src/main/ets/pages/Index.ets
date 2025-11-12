@@ -11,6 +11,8 @@ import { AppUIState } from '../entity/AppUIState';
 import { HomeScreen } from '../features/home/HomeScreen';
 import { AppPreference } from '../data/AppPreference';
 import { ApiClientController } from '../data/ApiClientController';
+import connectionHelper from '../setup/ConnectionHelper';
+import { CheckUrlStateType } from '../ui/state/CheckUrlState';
 
 @Entry
 @ComponentV2
@@ -53,10 +55,17 @@ struct Index {
     let isLogin = token.length > 0 && userId.length > 0
     if (isLogin) {
       let serverEntity = this.apiClientController.loadSavedServer()
-      if (serverEntity) {
-        this.apiClientController.setupServer(serverEntity.hostname)
-        this.apiClientController.setupUser(serverEntity.id, userId, token)
-        this.appUIState.isLogin = true
+      if (serverEntity != null) {
+        connectionHelper.checkServerUrl(serverEntity.hostname)
+          .then((state) => {
+            if (state.type === CheckUrlStateType.Success) {
+              this.apiClientController.setupServer(serverEntity!.hostname)
+              this.apiClientController.setupUser(serverEntity!.id, userId, token)
+              this.appUIState.isLogin = true
+            } else {
+              this.appUIState.isLogin = false
+            }
+          })
       }
     }
     this.activityEventHandler.subscribe()

@@ -1,5 +1,4 @@
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
-import { RecyclerView } from "@hadss/scroll_components";
 import { ImageKnifeComponentV2 } from "@ohos/imageknife";
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
 import { RouterConsts } from "../../common/RouterConsts";
@@ -23,10 +22,33 @@ export struct VideoListPage {
       this.ui.title = mediaItem.name
       this.vm.getVideoList(mediaItem.id, mediaItem.type)
     }
-    // 设置视图属性，通过调用setViewStyle设置属性。
-    this.vm.gridManager.setViewStyle(this.vm.scroller)
+  }
+
+  build() {
+    Column() {
+      ActionBar({
+        title: this.ui.title
+      }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+      Grid(this.vm.scroller){
+        LazyForEach(this.ui.dataSource, (item: VideoItem) => {
+          GridItem(){
+            // 自定义item
+            VideoCard({ item: item })
+              .onClick(() => {
+                HMRouterMgr.to(RouterConsts.VideoDetailPage)
+                  .withParam({
+                    id: item.id,
+                    mediaName: item.mediaName,
+                    isTvShows: item.type === 'Series',
+                  })
+                  .push()
+              })
+          }
+        })
+      }
+      .cachedCount(12)
       .width('100%') // 同原生方式链式调用设置属性
-      .height('100%')
+      .layoutWeight(1)
       .scrollBar(BarState.Off)
       .enableScrollInteraction(true)
       .edgeEffect(EdgeEffect.Spring)
@@ -35,36 +57,8 @@ export struct VideoListPage {
       .padding({
         left: 16, right: 16, bottom: this.vm.appUIState.safeBottom
       })
-    this.vm.gridManager.registerNodeItem('itemContainer', wrapBuilder(GridItemContainer));
-  }
-
-  build() {
-    Column() {
-      ActionBar({
-        title: this.ui.title
-      }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
-      // 使用RecyclerView创建视图，传入视图管理器
-      RecyclerView({
-        viewManager: this.vm.gridManager
-      })
     }.backgroundColor($r('app.color.bg_main'))
   }
-}
-
-// item节点模板builder函数
-@Builder
-function GridItemContainer(params: VideoItem) {
-  // 自定义item
-  VideoCard({ item: params })
-    .onClick(() => {
-      HMRouterMgr.to(RouterConsts.VideoDetailPage)
-        .withParam({
-          id: params.id,
-          mediaName: params.mediaName,
-          isTvShows: params.type === 'Series',
-        })
-        .push()
-    })
 }
 
 @ComponentV2

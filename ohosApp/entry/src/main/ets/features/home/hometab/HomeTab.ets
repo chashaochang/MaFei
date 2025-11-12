@@ -9,7 +9,6 @@ import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
 import { playItems } from "../../../common/CommonFunc"
 import { HomeRefreshEvent } from "../../../events/Events"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
-import { it } from "@ohos/hypium"
 import { ToastUtil } from "../../../utils/ToastUtil"
 import { RouterConsts } from "../../../common/RouterConsts"
 
@@ -55,9 +54,10 @@ export struct HomeTab {
               this.buildLastAddedList(item)
             }
           })
-          ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + 10)
+          ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom + 20)
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
+      .height('100%')
       .onRefreshing(() => {
         this.vm.init()
       })
@@ -90,7 +90,6 @@ export struct HomeTab {
     .width('100%')
     .height('100%')
     .alignContent(Alignment.Top)
-
   }
 
   @Builder
@@ -164,6 +163,7 @@ export struct HomeTab {
                   .height(90)
                   .borderColor('#535b60')
                   .borderWidth(0.5)
+                  .backgroundColor('#0affffff')
                 Progress({
                   value: item.percent || 0,
                   total: 100,
@@ -231,7 +231,7 @@ export struct HomeTab {
                 .borderColor('#535b60')
                 .borderWidth(0.5)
                 .borderRadius(6)
-
+                .backgroundColor('#0affffff')
               Text(item.name)
                 .fontColor(Color.White)
                 .fontSize(14)
@@ -297,7 +297,7 @@ export struct HomeTab {
                 .borderColor('#535b60')
                 .borderWidth(0.5)
                 .borderRadius(6)
-
+                .backgroundColor('#0affffff')
               Text(item.name)
                 .fontColor(Color.White)
                 .fontSize(14)
