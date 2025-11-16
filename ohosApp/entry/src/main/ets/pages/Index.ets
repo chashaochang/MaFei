@@ -1,5 +1,5 @@
 import { ConnectScreen } from '../features/connect/ConnectScreen'
-import { common } from '@kit.AbilityKit';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { ActivityEventHandler } from '../events/ActivityEventHandler';
 import { AppStorageV2, AttributeUpdater, display } from '@kit.ArkUI';
 import { HMDefaultGlobalAnimator, HMNavigation } from '@hadss/hmrouter';
@@ -13,6 +13,7 @@ import { AppPreference } from '../data/AppPreference';
 import { ApiClientController } from '../data/ApiClientController';
 import connectionHelper from '../setup/ConnectionHelper';
 import { CheckUrlStateType } from '../ui/state/CheckUrlState';
+import { WindowUtil } from '../utils/WindowUtil';
 
 @Entry
 @ComponentV2
@@ -44,8 +45,16 @@ struct Index {
     }
   }
 
+  @Monitor('appUIState.colorMode')
+  onColorModeChanged() {
+    let context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    WindowUtil.updateStatusBarColor(context, this.appUIState.colorMode === 0)
+  }
+
   onPageShow(): void {
     AppStorage.setOrCreate('modifier', this.modifier)
+    let context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    WindowUtil.updateStatusBarColor(context, this.appUIState.colorMode === 0)
   }
 
   aboutToAppear(): void {
@@ -133,6 +142,7 @@ export class NavModifier extends AttributeUpdater<NavigationAttribute> {
     instance.hideTitleBar(true)
     instance.hideToolBar(true)
     let appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+    appUIState.navInstance = instance
     OneMoreUtil.updateNavModifier(appUIState, instance)
   }
 }

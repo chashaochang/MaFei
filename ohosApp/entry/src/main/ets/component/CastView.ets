@@ -1,0 +1,70 @@
+import { ImageKnifeComponentV2 } from "@ohos/imageknife"
+import { ImageUrlsApi } from "sdk"
+import { BaseItemPerson, ImageType, PersonKind } from "sdk/src/main/ets/generated-client/models"
+import { ApiClient } from "../network/ApiClient"
+
+@ComponentV2
+export struct CastView {
+
+  @Param @Require peopleList: Array<BaseItemPerson>
+  imageUrlsApi:ImageUrlsApi = new ImageUrlsApi()
+
+  build() {
+    Column(){
+      Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+      List({ space: 12 }) {
+        ForEach(this.peopleList, (item: BaseItemPerson) => {
+          ListItem() {
+            Column({ space: 8 }) {
+              ImageKnifeComponentV2({
+                imageKnifeOption: {
+                  loadSrc: ApiClient.Instance().basePath +
+                  this.imageUrlsApi.getItemImageUrlById(item.Id || '', ImageType.Primary),
+                  objectFit: ImageFit.Cover,
+                  border: {
+                    radius: 33
+                  },
+                  placeholderSrc: $r('app.media.ic_avatar'),
+                }
+              })
+                .width(66)
+                .height(66)
+                .borderRadius(33)
+                .backgroundColor($r('app.color.bg_2'))
+
+              Text(item.Name)
+                .fontColor($r('app.color.text_primary'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .width(66)
+                .maxLines(1)
+                .ellipsisMode(EllipsisMode.END)
+                .textOverflow({
+                  overflow: TextOverflow.Ellipsis
+                })
+                .textAlign(TextAlign.Center)
+              Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
+                (item.Type == PersonKind.Director ? '导演' : item.Role))
+                .fontColor($r('app.color.text_2'))
+                .fontSize(10)
+                .width(66)
+                .maxLines(1)
+                .ellipsisMode(EllipsisMode.END)
+                .textOverflow({
+                  overflow: TextOverflow.Ellipsis
+                })
+                .textAlign(TextAlign.Center)
+            }
+          }
+        })
+      }
+      .height(130)
+      .width('100%')
+      .listDirection(Axis.Horizontal)
+      .scrollBar(BarState.Off)
+      .padding({
+        top: 10, bottom: 10
+      })
+    }.alignItems(HorizontalAlign.Start)
+  }
+}

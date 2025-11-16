@@ -1,4 +1,4 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppStorageV2, display, mediaquery, window } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
@@ -14,12 +14,9 @@ export default class EntryAbility extends UIAbility {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   async onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam) {
-    AppStorage.setOrCreate('context', this.context);
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    } catch (error) {
-
-    }
+    this.appUIState.context = this.context
+    if(this.context.config.colorMode !== undefined)
+      this.appUIState.colorMode = this.context.config.colorMode
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
     //预初始化
     webview.WebviewController.initializeWebEngine()
@@ -49,8 +46,9 @@ export default class EntryAbility extends UIAbility {
     });
 
     windowStage.getMainWindow().then((windowClass) => {
+      this.appUIState.windowClass = windowClass
       try {
-        windowClass.on('windowSizeChange', () =>{
+        windowClass.on('windowSizeChange', () => {
           const properties = windowClass.getWindowProperties();
           this.appUIState.deviceHeight = windowClass.getUIContext().px2vp(properties.windowRect.height);
           this.appUIState.deviceWidth = windowClass.getUIContext().px2vp(properties.windowRect.width);
@@ -97,5 +95,11 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
     this.context.eventHub.emit('onBackground')
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    if (newConfig.colorMode !== undefined && this.appUIState.colorMode !== newConfig.colorMode) {
+      this.appUIState.colorMode = newConfig.colorMode
+    }
   }
 }

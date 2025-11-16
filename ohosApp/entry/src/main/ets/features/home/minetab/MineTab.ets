@@ -1,4 +1,4 @@
-import { HMRouterMgr } from "@hadss/hmrouter"
+import { HMLifecycleState, HMRouterMgr } from "@hadss/hmrouter"
 import { ImageKnifeComponentV2 } from "@ohos/imageknife"
 import { UIConstants } from "../../../common/UIConstants"
 import { MineUIState } from "./MineUIState"
@@ -15,7 +15,11 @@ export struct MineTab {
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
   aboutToAppear(): void {
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown,()=>{
+      this.vm.getColorModeName()
+    })
     this.vm.init()
+    this.vm.getColorModeName()
   }
 
   build() {
@@ -34,7 +38,7 @@ export struct MineTab {
                 placeholderSrc: $r('app.media.default_avatar')
               }
             }).width(64).height(64).margin({ left: 12 })
-            Text(this.ui.userName).fontColor(Color.White).fontSize(24).fontWeight(FontWeight.Medium)
+            Text(this.ui.userName).fontColor($r('app.color.text_primary')).fontSize(24).fontWeight(FontWeight.Medium)
             Text(this.ui.userPolicy)
               .fontColor($r('app.color.color_main'))
               .fontSize(12)
@@ -51,6 +55,12 @@ export struct MineTab {
             left: 8, right: 8, bottom: 8
           })
 
+          ListGroup({
+            items: [new BaseGroupItem('外观', '', this.ui.colorModeName)],
+            onItemClick: () => {
+              HMRouterMgr.to(RouterConsts.ColorModePage).push()
+            }
+          })
           ListGroup({
             items: [
               new BaseGroupItem('隐私协议'),

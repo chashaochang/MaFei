@@ -23,7 +23,7 @@ struct PrivacyPage {
     }
     .width(CommonConstants.FULL_PERCENT)
     .height(CommonConstants.FULL_PERCENT)
-    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+    .backgroundColor($r('app.color.start_window_background'))
     .padding({ top: AppStorage.get<number>('statusBarHeight'), bottom: $r('app.float.xxl_padding_margin') })
   }
 }

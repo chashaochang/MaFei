@@ -4,15 +4,16 @@ import { ActionBar } from '../../component/ActionBar';
 import { VideoDetailUIState } from './VideoDetailUIState';
 import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
-import { BaseItemPerson, ExternalUrl, ImageType, PersonKind } from 'sdk/src/main/ets/generated-client/models';
-import { ApiClient } from '../../network/ApiClient'
-import { ImageUrlsApi } from 'sdk'
+import { ExternalUrl } from 'sdk/src/main/ets/generated-client/models';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { playItems } from '../../common/CommonFunc';
 import { TextExpandView } from '../../component/textexpand/TextExpand';
 import { LastSpanAttribute } from '../../component/textexpand/Model';
 import { RouterConsts } from '../../common/RouterConsts';
+import { ColorUtils } from '../../utils/ColorUtils';
+import { ConfigurationConstant } from '@kit.AbilityKit';
+import { CastView } from '../../component/CastView';
 
 @HMRouter({
   pageUrl: RouterConsts.VideoDetailPage
@@ -21,7 +22,14 @@ import { RouterConsts } from '../../common/RouterConsts';
 export struct VideoDetailPage {
   @Local ui: VideoDetailUIState = new VideoDetailUIState(this.getUIContext())
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
-  @Local isShowSheet: boolean = false;
+
+  @Monitor('vm.appUIState.colorMode')
+  onColorModeChange(): void {
+    let color =
+      this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#ffffffff' :
+        '#ff000000';
+    this.ui.colorFilter = ColorUtils.hexToColorMatrix(color);
+  }
 
   aboutToAppear(): void {
     let param = HMRouterMgr.getCurrentParam() as object
@@ -37,6 +45,7 @@ export struct VideoDetailPage {
         this.vm.getVideoDetail(this.ui.id)
       }
     }
+    this.onColorModeChange()
   }
 
   build() {
@@ -114,7 +123,7 @@ export struct VideoDetailPage {
               Span(this.ui.info)
             }
             .fontSize(12)
-            .fontColor('#CBD5E0')
+            .fontColor($r('app.color.text_1'))
             .lineSpacing({ value: 6, unit: LengthUnit.VP })
             .width('100%')
             .textAlign(TextAlign.Start)
@@ -125,7 +134,9 @@ export struct VideoDetailPage {
               //todo 字幕音频切换
               Row({ space: 16 }) {
                 ForEach(this.ui.tags, (item: string) => {
-                  Image(item).height(22)
+                  Image(item)
+                    .height(22)
+                    .colorFilter(this.ui.colorFilter)
                 })
               }
             }
@@ -141,7 +152,7 @@ export struct VideoDetailPage {
                   .height(4)
                   .width(150)
                   .color('#3B82F6')
-                Text(this.ui.remainingTime).fontColor('#CBD5E0').fontSize(12)
+                Text(this.ui.remainingTime).fontColor($r('app.color.text_1')).fontSize(12)
               }.width('100%').justifyContent(FlexAlign.Start)
             }
             Blank().height(16)
@@ -171,7 +182,7 @@ export struct VideoDetailPage {
 
               Button() {
                 Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                  .fillColor('#CBD5E0')
+                  .fillColor($r('app.color.text_1'))
                   .width(22)
                   .height(22)
               }
@@ -180,14 +191,14 @@ export struct VideoDetailPage {
               .borderWidth(1)
               .borderColor($r('app.color.border'))
               .borderRadius(25)
-              .backgroundColor('#0affffff')
-              .onClick(()=>{
+              .backgroundColor($r('app.color.bg_2'))
+              .onClick(() => {
                 this.vm.changeFavorite()
               })
 
               Button() {
                 Image($r('app.media.ic_check'))
-                  .fillColor(this.ui.played ? $r('app.color.color_main') : '#CBD5E0')
+                  .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
                   .width(22)
                   .height(22)
               }
@@ -196,8 +207,8 @@ export struct VideoDetailPage {
               .borderWidth(1)
               .borderColor($r('app.color.border'))
               .borderRadius(25)
-              .backgroundColor('#0affffff')
-              .onClick(()=>{
+              .backgroundColor($r('app.color.bg_2'))
+              .onClick(() => {
                 this.vm.changePlayedState()
               })
             }.width('100%')
@@ -214,11 +225,11 @@ export struct VideoDetailPage {
               TextExpandView({
                 text: this.ui.overview,
                 onMoreClick: () => {
-                  this.isShowSheet = !this.isShowSheet;
+                  this.ui.isShowSheet = !this.ui.isShowSheet;
                 },
                 lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 14, $r('app.color.color_main'))
               })
-                .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+                .bindSheet($$this.ui.isShowSheet, this.SheetBuilder(), {
                   height: 420,
                   preferType: SheetType.BOTTOM,
                   title: { title: '简介' },
@@ -228,7 +239,10 @@ export struct VideoDetailPage {
             if (this.ui.isTvShows) {
               if (this.ui.seasons.length > 1) {
                 Blank().height(20)
-                Text(`共${this.ui.seasons.length}季`).fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
+                Text(`共${this.ui.seasons.length}季`)
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.text_primary'))
               }
               Blank().height(20)
               Grid() {
@@ -255,85 +269,32 @@ export struct VideoDetailPage {
               .rowsGap(20)
               .width('100%')
             }
-            if(this.ui.people.length > 0){
+            if (this.ui.people.length > 0) {
               Blank().height(16)
-              Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
-              List({ space: 12 }) {
-                ForEach(this.ui.people, (item: BaseItemPerson) => {
-                  ListItem() {
-                    Column({ space: 8 }) {
-                      ImageKnifeComponentV2({
-                        imageKnifeOption: {
-                          loadSrc: ApiClient.Instance().basePath +
-                          new ImageUrlsApi().getItemImageUrlById(item.Id || '', ImageType.Primary),
-                          objectFit: ImageFit.Cover,
-                          border: {
-                            radius: 33
-                          },
-                          placeholderSrc: $r('app.media.ic_avatar'),
-                        }
-                      })
-                        .width(66)
-                        .height(66)
-                        .borderColor('#535b60')
-                        .borderRadius(33)
-                        .backgroundColor('#0affffff')
-
-                      Text(item.Name)
-                        .fontColor(Color.White)
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Medium)
-                        .width(66)
-                        .maxLines(1)
-                        .ellipsisMode(EllipsisMode.END)
-                        .textOverflow({
-                          overflow: TextOverflow.Ellipsis
-                        })
-                        .textAlign(TextAlign.Center)
-                      Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
-                        (item.Type == PersonKind.Director ? '导演' : item.Role))
-                        .fontColor('#b3cbd5e0')
-                        .fontSize(10)
-                        .width(66)
-                        .maxLines(1)
-                        .ellipsisMode(EllipsisMode.END)
-                        .textOverflow({
-                          overflow: TextOverflow.Ellipsis
-                        })
-                        .textAlign(TextAlign.Center)
-                    }
-                  }
-                })
-              }
-              .height(130)
-              .width('100%')
-              .listDirection(Axis.Horizontal)
-              .scrollBar(BarState.Off)
-              .padding({
-                top: 10, bottom: 10
+              CastView({
+                peopleList: this.ui.people
               })
-
             }
             if (!this.ui.isTvShows) {
               Blank().height(16)
 
-              Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
+              Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
 
               Column() {
-                Text('文件位置').fontSize(12).fontColor('#b3cbd5e0')
+                Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
                 Blank().height(10)
-                Text(this.ui.path).fontSize(12).fontColor('#CBD5E0')
+                Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
                 Blank().height(16)
-                Text('文件大小').fontSize(12).fontColor('#b3cbd5e0')
+                Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
                 Blank().height(10)
-                Text(this.ui.size).fontSize(12).fontColor('#CBD5E0')
+                Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
                 Blank().height(16)
-                Text('创建日期').fontSize(12).fontColor('#b3cbd5e0')
+                Text('创建日期').fontSize(12).fontColor($r('app.color.text_2'))
                 Blank().height(10)
-                Text(this.ui.createDate).fontSize(12).fontColor('#CBD5E0')
+                Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
               }
               .width('100%')
-              .backgroundColor('#0affffff')
+              .backgroundColor($r('app.color.bg_2'))
               .borderRadius(12)
               .padding(12)
               .alignItems(HorizontalAlign.Start)
@@ -341,42 +302,42 @@ export struct VideoDetailPage {
 
               Blank().height(16)
 
-              Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
+              Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
 
               Column({ space: 16 }) {
                 if (this.ui.videoInfo.length > 0) {
                   Column({ space: 10 }) {
-                    Text('视频').fontSize(12).fontColor('#b3cbd5e0')
+                    Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
                     Text(this.ui.videoInfo)
                       .fontSize(12)
-                      .fontColor('#CBD5E0')
+                      .fontColor($r('app.color.text_1'))
                       .lineSpacing({ value: 4, unit: LengthUnit.VP })
                   }.width('100%')
                   .alignItems(HorizontalAlign.Start)
                 }
                 if (this.ui.audioInfo.length > 0) {
                   Column({ space: 10 }) {
-                    Text('音频').fontSize(12).fontColor('#b3cbd5e0')
+                    Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
                     Text(this.ui.audioInfo)
                       .fontSize(12)
-                      .fontColor('#CBD5E0')
+                      .fontColor($r('app.color.text_1'))
                       .lineSpacing({ value: 4, unit: LengthUnit.VP })
                   }.width('100%')
                   .alignItems(HorizontalAlign.Start)
                 }
                 if (this.ui.subtitleInfo.length > 0) {
                   Column({ space: 10 }) {
-                    Text('字幕').fontSize(12).fontColor('#b3cbd5e0')
+                    Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
                     Text(this.ui.subtitleInfo)
                       .fontSize(12)
-                      .fontColor('#CBD5E0')
+                      .fontColor($r('app.color.text_1'))
                       .lineSpacing({ value: 4, unit: LengthUnit.VP })
                   }.width('100%')
                   .alignItems(HorizontalAlign.Start)
                 }
               }
               .width('100%')
-              .backgroundColor('#0affffff')
+              .backgroundColor($r('app.color.bg_2'))
               .borderRadius(12)
               .padding(12)
               .margin({ top: 12 })
@@ -384,13 +345,13 @@ export struct VideoDetailPage {
 
             if (this.ui.externalUrls.length) {
               Blank().height(16)
-              Text('链接').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
+              Text('链接').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
               Row({ space: 6 }) {
                 ForEach(this.ui.externalUrls, (item: ExternalUrl) => {
                   Text(item.Name)
                     .fontSize(12)
-                    .fontColor('#CBD5E0')
-                    .backgroundColor('#0affffff')
+                    .fontColor($r('app.color.text_1'))
+                    .backgroundColor($r('app.color.bg_2'))
                     .borderRadius(4)
                     .padding({
                       left: 12,
@@ -441,8 +402,8 @@ export struct VideoDetailPage {
 
       ActionBar({
         title: this.ui.showActionBar ? this.ui.title : ''
-      }).backgroundColor('rgba(18,22,24,' + this.ui.actionBarOpacity + ')')
-        .backdropBlur((this.ui.blur - 20) * 10)
+      })
+        .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
     }.backgroundColor($r('app.color.bg_main')).alignContent(Alignment.Top)
   }
 
@@ -451,7 +412,7 @@ export struct VideoDetailPage {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
-        .fontColor('#CBD5E0')
+        .fontColor($r('app.color.text_1'))
         .fontSize(14)
         .textAlign(TextAlign.Start)
         .lineSpacing({

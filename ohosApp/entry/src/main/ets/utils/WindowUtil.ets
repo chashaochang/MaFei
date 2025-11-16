@@ -14,7 +14,7 @@
  */
 
 import { AbilityConstant, common } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
+import { ColorMetrics, window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import Logger from './Logger';
 
@@ -23,18 +23,19 @@ const TAG: string = '[WindowUtil]';
 export class WindowUtil {
   public static updateStatusBarColor(context: common.BaseContext, isDark: boolean) {
     window.getLastWindow(context).then((windowClass: window.Window) => {
-      try {
-        windowClass.setWindowSystemBarProperties({ statusBarContentColor: isDark ? '#FFFFFF' : '#000000' }, (err) => {
-          if (err.code) {
-            Logger.error(TAG, 'Failed to set the system bar properties. Cause: ' + JSON.stringify(err));
-            return;
-          }
-          Logger.info(TAG, 'Succeeded in setting the system bar properties.');
-        });
-      } catch (exception) {
-        Logger.error(TAG, 'Failed to set the system bar properties. Cause: ' + JSON.stringify(exception));
-      }
-    });
+      // windowClass.setWindowBackgroundColor(isDark ? '#101010' : '#FFFFFF')
+      // windowClass.setWindowSystemBarProperties({
+      //   statusBarColor: isDark ? '#101010' : '#FFFFFF',
+      //   navigationBarColor: isDark ? '#101010' : '#FFFFFF',
+      //   navigationBarContentColor: isDark ? '#101010' : '#FFFFFF',
+      //   isStatusBarLightIcon: isDark
+      // })
+      windowClass.setStatusBarColor(ColorMetrics.numeric(isDark ? 0xFFFFFF : 0x000000)).then(() => {
+        Logger.info(TAG, 'Succeeded in setting the system bar properties.');
+      }).catch(() => {
+        Logger.error(TAG, 'Failed to set the system bar properties. Cause: ');
+      })
+    }).catch()
   }
 
   public static requestFullScreen(windowStage: window.WindowStage, context: Context): void {
@@ -90,7 +91,7 @@ export class WindowUtil {
       // Setting restricted display.
       windowClass.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED);
       //windowClass.setWindowLayoutFullScreen(false)
-      windowClass.setWindowSystemBarEnable(['status','navigation'])
+      windowClass.setWindowSystemBarEnable(['status', 'navigation'])
     });
   }
 

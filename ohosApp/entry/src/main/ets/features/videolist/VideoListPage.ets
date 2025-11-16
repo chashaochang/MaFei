@@ -47,7 +47,7 @@ export struct VideoListPage {
         })
       }
       .cachedCount(12)
-      .width('100%') // 同原生方式链式调用设置属性
+      .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       .enableScrollInteraction(true)
@@ -83,7 +83,7 @@ export struct VideoCard {
         })
           .aspectRatio(2 / 3)
           .width('100%')
-          .borderColor('#535b60')
+          .borderColor($r('app.color.border_1'))
           .borderWidth(0.5)
           .borderRadius(6)
           .backgroundColor('#CBD2D3')
@@ -151,7 +151,7 @@ export struct VideoCard {
       }.width('100%').aspectRatio(2 / 3)
 
       Text(this.item.name)
-        .fontColor(Color.White)
+        .fontColor($r('app.color.text_primary'))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .width('100%')

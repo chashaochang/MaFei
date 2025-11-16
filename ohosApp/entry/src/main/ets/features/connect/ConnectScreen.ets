@@ -1,5 +1,4 @@
 import { AppUIState } from "../../entity/AppUIState"
-import Theme from "../../ui/Theme"
 import { AppStorageV2 } from "@kit.ArkUI"
 import { ActionBar } from "../../component/ActionBar"
 import { ConnectionUIState } from "./ConnectionUIState"
@@ -134,7 +133,7 @@ export struct LogoHeader {
   build() {
     Column() {
       Image($r('app.media.app_icon')).height(100)
-      Text($r('app.string.app_name')).fontColor(Color.White).fontSize(24).fontWeight(FontWeight.Bold)
+      Text($r('app.string.app_name')).fontColor($r('app.color.text_primary')).fontSize(24).fontWeight(FontWeight.Bold)
     }.padding({ top: 10, bottom: 10 })
   }
 }
@@ -164,11 +163,11 @@ struct AuthTextField {
         .type(this.password ? InputType.Password : InputType.Normal)
         .maxLines(1)
         .borderWidth(1)
-        .borderColor('#374151')
+        .borderColor($r('app.color.border_input'))
         .borderRadius(8)
         .height(56)
         .placeholderColor(Color.Gray)
-        .fontColor(Color.White)
+        .fontColor($r('app.color.text_primary'))
         .backgroundColor($r('app.color.component_bg'))
       Image(this.icon).height(24).margin({ left: 16 })
     }.height(56).alignContent(Alignment.Start)
@@ -182,7 +181,7 @@ export struct AnimatedErrorText {
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
-      Text(this.errorText).width('100%').fontColor(Theme.colors.error)
+      Text(this.errorText).width('100%').fontColor(Color.Red)
     } else {
       Blank()
     }
@@ -279,11 +278,11 @@ struct ServerUrlField {
         })
         .maxLines(1)
         .borderWidth(1)
-        .borderColor('#374151')
+        .borderColor($r('app.color.border_input'))
         .borderRadius(8)
         .height(56)
         .placeholderColor(Color.Gray)
-        .fontColor(Color.White)
+        .fontColor($r('app.color.text_primary'))
         .backgroundColor($r('app.color.component_bg'))
       Image($r('app.media.ic_server')).height(24).margin({ left: 16 })
     }.height(56).alignContent(Alignment.Start)
@@ -325,7 +324,7 @@ struct ServerDiscoveryList {
       .width('100%')
       .layoutWeight(1)
       .margin({ bottom: 16 })
-      .backgroundColor(Theme.colors.surface)
+      .backgroundColor('#363636')
       .borderRadius(4)
     }.height('100%')
   }

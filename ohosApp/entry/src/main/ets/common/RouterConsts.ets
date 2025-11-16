@@ -7,4 +7,5 @@ export class RouterConsts {
   static readonly VideoDetailPage = 'VideoDetailPage';
   static readonly VideoListPage = 'VideoListPage';
   static readonly FavoriteListPage = 'FavoriteListPage';
+  static readonly ColorModePage = 'ColorModePage';
 }

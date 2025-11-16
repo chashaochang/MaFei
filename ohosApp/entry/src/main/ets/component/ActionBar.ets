@@ -15,13 +15,30 @@ export struct ActionBar {
   build() {
     Stack() {
       Row() {
-        Image($r('app.media.ic_back')).width(48).height(48).padding(16).onClick(() => {
-          this.onBackClick()
-        }).visibility(this.showBackButton ? Visibility.Visible : Visibility.Hidden)
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.text_primary')])
+          .fontWeight(FontWeight.Bold)
+          .align(Alignment.Center)
+          .width(48)
+          .height(48)
+          .padding(16)
+          .onClick(() => {
+            this.onBackClick()
+          })
+          .visibility(this.showBackButton ? Visibility.Visible : Visibility.Hidden)
         Blank()
       }.width('100%').height('100%')
 
-      Text(this.title).fontSize(18).fontColor(Color.White).fontWeight(FontWeight.Medium)
+      Text(this.title)
+        .fontSize(18)
+        .fontColor($r('app.color.text_primary'))
+        .fontWeight(FontWeight.Medium)
+        .maxLines(1)
+        .textOverflow({
+          overflow: TextOverflow.Ellipsis
+        })
+        .constraintSize({ maxWidth: '70%' })
     }
     .width('100%')
     .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
