@@ -4,5 +4,5 @@
     "src/main/ets/router/interceptors",
     "src/main/ets/router/lifecycles"
   ],
-  "saveGeneratedFile": false
+  "saveGeneratedFile": true
 }

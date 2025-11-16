@@ -54,7 +54,7 @@ export struct HomeScreen {
         .size({ width: 20, height: 20 })
       Text(title)
         .fontSize(14)
-        .fontColor(Color.White)
+        .fontColor($r('app.color.text_primary'))
     }
     .width('100%')
     .height(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)

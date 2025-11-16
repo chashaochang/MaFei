@@ -4,14 +4,12 @@ import { ActionBar } from '../../component/ActionBar';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
 import { SeasonDetailViewModel } from './SeasonDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
-import { BaseItemPerson, ImageType, PersonKind } from 'sdk/src/main/ets/generated-client/models';
-import { ApiClient } from '../../network/ApiClient'
-import { ImageUrlsApi } from 'sdk'
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { TextExpandView } from '../../component/textexpand/TextExpand';
 import { LastSpanAttribute } from '../../component/textexpand/Model';
 import { RouterConsts } from '../../common/RouterConsts';
 import { CalculateHeightParam } from '../videodetail/VideoDetailViewModel';
+import { CastView } from '../../component/CastView';
 
 @HMRouter({
   pageUrl: RouterConsts.SeasonDetailPage
@@ -72,7 +70,7 @@ export struct SeasonDetailPage {
                     border: {
                       width: 0.5,
                       radius: 12,
-                      color: '#535b60'
+                      color: $r('app.color.border_1')
                     }
                   }
                 })
@@ -82,14 +80,14 @@ export struct SeasonDetailPage {
                   Blank().height(60)
                   Text(this.ui.seriesName).fontColor(Color.White).fontWeight(FontWeight.Medium).fontSize(28)
                   Blank()
-                  Text(this.ui.seasonName).fontColor(Color.White).fontSize(14)
+                  Text(this.ui.seasonName).fontColor($r('app.color.text_primary')).fontSize(14)
                   Blank().height(10)
                   Text() {
                     //Span(this.ui.score + '分  / ').fontColor($r('app.color.text_score'))
                     Span(this.ui.info)
                   }
                   .fontSize(12)
-                  .fontColor('#CBD5E0')
+                  .fontColor($r('app.color.text_1'))
                   .lineSpacing({ value: 6, unit: LengthUnit.VP })
                   .width('100%')
                   .textAlign(TextAlign.Start)
@@ -130,7 +128,7 @@ export struct SeasonDetailPage {
 
               Button() {
                 Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                  .fillColor('#CBD5E0')
+                  .fillColor($r('app.color.text_1'))
                   .width(22)
                   .height(22)
               }
@@ -139,14 +137,14 @@ export struct SeasonDetailPage {
               .borderWidth(1)
               .borderColor($r('app.color.border'))
               .borderRadius(25)
-              .backgroundColor('#0affffff')
+              .backgroundColor($r('app.color.bg_2'))
               .onClick(() => {
                 this.vm.changeFavorite()
               })
 
               Button() {
                 Image($r('app.media.ic_check'))
-                  .fillColor(this.ui.played ? $r('app.color.color_main') : '#CBD5E0')
+                  .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
                   .width(22)
                   .height(22)
               }
@@ -155,7 +153,7 @@ export struct SeasonDetailPage {
               .borderWidth(1)
               .borderColor($r('app.color.border'))
               .borderRadius(25)
-              .backgroundColor('#0affffff')
+              .backgroundColor($r('app.color.bg_2'))
               .onClick(() => {
                 this.vm.changePlayedState()
               })
@@ -176,7 +174,7 @@ export struct SeasonDetailPage {
                   title: { title: '简介' },
                 })
             }
-            //Text(this.ui.overview).width('100%').fontSize(14).fontColor('#CBD5E0').textAlign(TextAlign.Start)
+            //Text(this.ui.overview).width('100%').fontSize(14).fontColor($r('app.color.text_1')).textAlign(TextAlign.Start)
 
             Blank().height(20)
             if (this.ui.seasons.length > 1) {
@@ -185,7 +183,7 @@ export struct SeasonDetailPage {
                   ListItem() {
                     Row() {
                       Text(season.name)
-                        .fontColor(season.id === this.ui.id ? $r('app.color.color_main') : '#CBD5E0')
+                        .fontColor(season.id === this.ui.id ? $r('app.color.color_main') : $r('app.color.text_1'))
                         .fontSize(14)
                         .onClick(() => {
                           this.ui.videoScroller.scrollEdge(Edge.Start)
@@ -207,7 +205,7 @@ export struct SeasonDetailPage {
                 ForEach(this.ui.videoGroups, (group: string, index) => {
                   ListItem() {
                     Text(group)
-                      .fontColor(index === this.ui.selectGroupIndex ? $r('app.color.color_main') : '#CBD5E0')
+                      .fontColor(index === this.ui.selectGroupIndex ? $r('app.color.color_main') : $r('app.color.text_1'))
                       .fontSize(14)
                       .padding({
                         left: 8,
@@ -252,7 +250,7 @@ export struct SeasonDetailPage {
                         })
                           .aspectRatio(16 / 9)
                           .width('100%')
-                          .borderColor('#535b60')
+                          .borderColor($r('app.color.border_1'))
                           .borderWidth(0.5)
                           .borderRadius(6)
                         if (item.tags && item.tags.length > 0) {
@@ -293,7 +291,7 @@ export struct SeasonDetailPage {
                       }.width('100%').aspectRatio(16 / 9)
 
                       Text(item.name)
-                        .fontColor(Color.White)
+                        .fontColor($r('app.color.text_primary'))
                         .fontSize(14)
                         .fontWeight(FontWeight.Medium)
                         .width('100%')
@@ -320,7 +318,7 @@ export struct SeasonDetailPage {
                           top: 4
                         })
                       Text(item.time)
-                        .fontColor('#CBD5E0')
+                        .fontColor($r('app.color.text_1'))
                         .fontSize(12)
                         .width('100%')
                         .maxLines(1)
@@ -355,61 +353,8 @@ export struct SeasonDetailPage {
             }
             if (this.ui.people.length > 0) {
               Blank().height(20)
-              Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor(Color.White)
-              List({ space: 12 }) {
-                ForEach(this.ui.people, (item: BaseItemPerson) => {
-                  ListItem() {
-                    Column({ space: 8 }) {
-                      ImageKnifeComponentV2({
-                        imageKnifeOption: {
-                          loadSrc: ApiClient.Instance().basePath +
-                          new ImageUrlsApi().getItemImageUrlById(item.Id || '', ImageType.Primary),
-                          objectFit: ImageFit.Cover,
-                          border: {
-                            radius: 33
-                          },
-                          placeholderSrc: $r('app.media.ic_avatar'),
-                        }
-                      })
-                        .width(66)
-                        .height(66)
-                        .borderColor('#535b60')
-                        .borderWidth(1)
-                        .borderRadius(33)
-                        .backgroundColor('#0affffff')
-
-                      Text(item.Name)
-                        .fontColor(Color.White)
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Medium)
-                        .width(66)
-                        .maxLines(1)
-                        .ellipsisMode(EllipsisMode.END)
-                        .textOverflow({
-                          overflow: TextOverflow.Ellipsis
-                        })
-                        .textAlign(TextAlign.Center)
-                      Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
-                        (item.Type == PersonKind.Director ? '导演' : item.Role))
-                        .fontColor('#b3cbd5e0')
-                        .fontSize(10)
-                        .width(66)
-                        .maxLines(1)
-                        .ellipsisMode(EllipsisMode.END)
-                        .textOverflow({
-                          overflow: TextOverflow.Ellipsis
-                        })
-                        .textAlign(TextAlign.Center)
-                    }
-                  }
-                })
-              }
-              .height(130)
-              .width('100%')
-              .listDirection(Axis.Horizontal)
-              .scrollBar(BarState.Off)
-              .padding({
-                top: 10, bottom: 10
+              CastView({
+                peopleList: this.ui.people
               })
             }
 
@@ -463,7 +408,7 @@ export struct SeasonDetailPage {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
-        .fontColor('#CBD5E0')
+        .fontColor($r('app.color.text_1'))
         .fontSize(14)
         .textAlign(TextAlign.Start)
         .lineSpacing({
