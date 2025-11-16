@@ -9,4 +9,5 @@ export class MineUIState extends BaseUIState {
   @Trace
   userPolicy: string = ''
   @Trace versionName: string = ''
+  @Trace colorModeName: ResourceStr = $r('app.string.color_mode_auto')
 }

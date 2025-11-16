@@ -55,7 +55,13 @@
           "fullscreen"
         ],
         "minWindowWidth": 1280,
-        "minWindowHeight": 720
+        "minWindowHeight": 720,
+        "metadata": [
+          {
+            "name": "configColorModeChangePerformanceInArkUI",
+            "value": "true"
+          }
+        ]
       }
     ],
     "extensionAbilities": [

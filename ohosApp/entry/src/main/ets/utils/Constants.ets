@@ -40,6 +40,7 @@ export class Constants {
   static readonly PREF_USER_NAME = "pref_user_name"
   static readonly PREF_PASSWD = "pref_passwd"
   static readonly PREF_REMEMBER_PW = "pref_remember_pw"
+  static readonly PREF_COLOR_MODE = "pref_color_mode"
   static readonly MAIN_BUNDLE_PATH_REGEX =
     /.*\/main\.[^/\s]+\.bundle\.js/ //new Regex(""".*/main\.[^/\s]+\.bundle\.js""")
   static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'

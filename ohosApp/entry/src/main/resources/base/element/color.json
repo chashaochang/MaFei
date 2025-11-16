@@ -2,7 +2,7 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#101010"
+      "value": "#efefef"
     },
     {
       "name": "color_main",
@@ -22,31 +22,55 @@
     },
     {
       "name": "bg_main",
-      "value": "#121618"
+      "value": "#f1f3f6"
     },
     {
       "name": "component_bg",
-      "value": "#1F2937"
+      "value": "#F3F4F6"
     },
     {
       "name": "text_score",
-      "value": "#EFD546"
+      "value": "#FFF1B020"
     },
     {
       "name": "bg_1",
-      "value": "#1E262B"
+      "value": "#ffffff"
     },
     {
       "name": "primary_light_hover",
-      "value": "#0A2547"
+      "value": "#E3F2FD"
     },
     {
       "name": "border",
       "value": "#40a0aec0"
     },
     {
+      "name": "border_1",
+      "value": "#535b60"
+    },
+    {
       "name": "bg_hover",
-      "value": "#1A1E23"
+      "value": "#fff2f2f2"
+    },
+    {
+      "name": "text_primary",
+      "value": "#121212"
+    },
+    {
+      "name": "border_input",
+      "value": "#C8BEAE"
+    },
+    {
+      "name": "text_1",
+      "value": "#4a5568"
+    },
+    {
+      "name": "bg_2",
+      "value": "#0a000000"
+    },
+    {
+      "name": "text_2",
+      "value": "#8496ae"
     }
   ]
 }

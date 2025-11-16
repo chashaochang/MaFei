@@ -3,7 +3,6 @@ import { AxiosResponse } from "@ohos/axios";
 import { AuthenticationResult } from "sdk/src/main/ets/generated-client/models";
 import { getUserApi } from "sdk/src/main/ets/utils/api/user-api";
 import { ApiClient } from "../../network/ApiClient";
-import Theme from "../../ui/Theme"
 
 @HMRouter({
   pageUrl: '/LoginPage',
@@ -99,7 +98,7 @@ export struct LoginPage {
     .width('100%')
     .height('100%')
     .padding({ left: 16, right: 16 })
-    .backgroundColor(Theme.colors.background)
+    .backgroundColor('#101010')
     .expandSafeArea([SafeAreaType.SYSTEM],[SafeAreaEdge.BOTTOM])
   }
 }
@@ -141,7 +140,7 @@ struct AuthTextField {
         .type(this.password ? InputType.Password : InputType.Normal)
         .maxLines(1)
         .borderWidth(1)
-        .borderColor('#374151')
+        .borderColor($r('app.color.border_input'))
         .borderRadius(8)
         .height(56)
         .placeholderColor(Color.Gray)
@@ -158,7 +157,7 @@ export struct AnimatedErrorText {
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
-      Text(this.errorText).width('100%').fontColor(Theme.colors.error)
+      Text(this.errorText).width('100%').fontColor(Color.Red)
     } else {
       Blank()
     }

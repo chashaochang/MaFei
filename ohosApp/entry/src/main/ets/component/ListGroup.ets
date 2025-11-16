@@ -6,7 +6,7 @@ export struct ListGroup {
 
   @Styles
   pressedStyles(): void {
-    .backgroundColor('#ff7a7e88')
+    .backgroundColor($r('app.color.bg_hover'))
   }
 
   @Styles
@@ -22,20 +22,20 @@ export struct ListGroup {
             Image(item.icon)
               .width(18)
               .height(18)
-              .fillColor(Color.White)
+              .fillColor($r('app.color.text_primary'))
               .visibility(item.icon != '' ? Visibility.Visible : Visibility.None)
             Text(item.name)
-              .fontColor(Color.White)
+              .fontColor($r('app.color.text_primary'))
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .layoutWeight(1)
-            Text(item.rightText + '')
-              .fontColor('#CBD5E0')
+            Text(item.rightText)
+              .fontColor($r('app.color.text_1'))
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
             SymbolGlyph($r('sys.symbol.chevron_right'))
               .fontSize(13)
-              .fontColor([Color.White])
+              .fontColor([$r('app.color.text_primary')])
               .fontWeight(FontWeight.Bold)
               .visibility(item.showArrow ? Visibility.Visible : Visibility.None)
           }
@@ -71,10 +71,10 @@ export struct ListGroup {
 export class BaseGroupItem {
   icon: ResourceStr = ''
   name: string = ''
-  rightText: string = ''
+  rightText: ResourceStr = ''
   showArrow: boolean = true
 
-  constructor(name: string, icon: ResourceStr = '', rightText: string = '', showArrow: boolean = true) {
+  constructor(name: string, icon: ResourceStr = '', rightText: ResourceStr = '', showArrow: boolean = true) {
     this.name = name
     this.icon = icon
     this.rightText = rightText

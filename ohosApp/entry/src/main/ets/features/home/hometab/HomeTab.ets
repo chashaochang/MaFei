@@ -66,7 +66,7 @@ export struct HomeTab {
       Row({ space: 12 }) {
         Row() {
           Image($r('app.media.app_icon')).height(40)
-          Text($r('app.string.app_name')).fontColor(Color.White).fontSize(18).fontWeight(FontWeight.Bold)
+          Text($r('app.string.app_name')).fontColor($r('app.color.text_primary')).fontSize(18).fontWeight(FontWeight.Bold)
         }
 
         Blank()
@@ -120,8 +120,7 @@ export struct HomeTab {
               right: 4,
               bottom: 4
             })
-            .backgroundColor('#293039')
-            .borderColor('#535b60')
+            .borderColor($r('app.color.border_1'))
             .borderWidth(0.5)
             .borderRadius(8)
           }.onClick(() => {
@@ -142,8 +141,9 @@ export struct HomeTab {
   @Builder
   buildResumeList() {
     Column() {
-      Text('继续观看').fontSize(14).fontWeight(FontWeight.Medium).fontColor(Color.White)
+      Text('继续观看').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).margin({ left: 16 })
       List({ space: 8 }) {
+        ListItem().width(8)
         ForEach(this.ui.resumeList, (item: VideoItem) => {
           ListItem() {
             Column({ space: 8 }) {
@@ -161,9 +161,9 @@ export struct HomeTab {
                 })
                   .width(160)
                   .height(90)
-                  .borderColor('#535b60')
+                  .borderColor($r('app.color.border_1'))
                   .borderWidth(0.5)
-                  .backgroundColor('#0affffff')
+                  .backgroundColor($r('app.color.bg_2'))
                 Progress({
                   value: item.percent || 0,
                   total: 100,
@@ -175,7 +175,7 @@ export struct HomeTab {
               }.alignContent(Alignment.Bottom).borderRadius(6).clip(true)
 
               Text(item.name)
-                .fontColor(Color.White)
+                .fontColor($r('app.color.text_primary'))
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .width('100%')
@@ -190,6 +190,7 @@ export struct HomeTab {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
         })
+        ListItem().width(8)
       }
       .width('100%')
       .height(134)
@@ -198,9 +199,6 @@ export struct HomeTab {
       .scrollBar(BarState.Off)
     }
     .width('100%')
-    .padding({
-      left: 16, right: 16
-    })
     .margin({
       top: 20
     })
@@ -210,8 +208,9 @@ export struct HomeTab {
   @Builder
   buildNextUpList() {
     Column() {
-      Text('接下来').fontSize(14).fontWeight(FontWeight.Medium).fontColor(Color.White)
+      Text('接下来').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).margin({ left: 16 })
       List({ space: 8 }) {
+        ListItem().width(8)
         ForEach(this.ui.nextUpList, (item: VideoItem) => {
           ListItem() {
             Column({ space: 8 }) {
@@ -228,12 +227,12 @@ export struct HomeTab {
               })
                 .width(160)
                 .height(90)
-                .borderColor('#535b60')
+                .borderColor($r('app.color.border_1'))
                 .borderWidth(0.5)
                 .borderRadius(6)
-                .backgroundColor('#0affffff')
+                .backgroundColor($r('app.color.bg_2'))
               Text(item.name)
-                .fontColor(Color.White)
+                .fontColor($r('app.color.text_primary'))
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .width('100%')
@@ -256,6 +255,7 @@ export struct HomeTab {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
         })
+        ListItem().width(8)
       }
       .width('100%')
       .height(134)
@@ -264,9 +264,6 @@ export struct HomeTab {
       .scrollBar(BarState.Off)
     }
     .width('100%')
-    .padding({
-      left: 16, right: 16
-    })
     .margin({
       top: 20
     })
@@ -276,8 +273,10 @@ export struct HomeTab {
   @Builder
   buildLastAddedList(item: MediaItem) {
     Column() {
-      Text('最近添加的 ' + item.name).fontSize(14).fontWeight(FontWeight.Medium).fontColor(Color.White)
+      Text('最近添加的 ' + item.name).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+        .margin({ left: 16 })
       List({ space: 8 }) {
+        ListItem().width(8)
         ForEach(this.ui.latestMap.get(item.id), (item: VideoItem) => {
           ListItem() {
             Column({ space: 8 }) {
@@ -294,12 +293,12 @@ export struct HomeTab {
               })
                 .width(100)
                 .height(150)
-                .borderColor('#535b60')
+                .borderColor($r('app.color.border_1'))
                 .borderWidth(0.5)
                 .borderRadius(6)
-                .backgroundColor('#0affffff')
+                .backgroundColor($r('app.color.bg_2'))
               Text(item.name)
-                .fontColor(Color.White)
+                .fontColor($r('app.color.text_primary'))
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .width('100%')
@@ -328,6 +327,7 @@ export struct HomeTab {
               .push()
           })
         })
+        ListItem().width(8)
       }
       .width('100%')
       .height(194)
@@ -336,9 +336,6 @@ export struct HomeTab {
       .scrollBar(BarState.Off)
     }
     .width('100%')
-    .padding({
-      left: 16, right: 16
-    })
     .margin({
       top: 24
     })

@@ -1,6 +1,7 @@
 import { BaseItemPerson, ExternalUrl } from "sdk/src/main/ets/generated-client/models"
 import { BaseUIState } from "../../common/base/BaseUIState"
 import { LastSpanAttribute, TextSectionAttribute } from "../../component/textexpand/Model"
+import { ColorUtils } from "../../utils/ColorUtils"
 import { VideoItem } from "../home/hometab/HomeUIState"
 
 @ObservedV2
@@ -49,6 +50,8 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace currentScrollState: ScrollState = ScrollState.Idle;
   @Trace imageHeight: number = VideoDetailUIState.imageInitHeight;
 
+  @Trace isShowSheet: boolean = false;
+  @Trace colorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ff000000')
 }
 
 export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY_VISION' | 'DOLBY_ATOMS'

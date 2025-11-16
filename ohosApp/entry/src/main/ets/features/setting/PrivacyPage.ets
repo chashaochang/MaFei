@@ -21,6 +21,8 @@ export struct PrivacyPage {
         src: 'https://jellyfin.xiaobaihome.cn/yinsi.html',
         controller: this.webviewController
       })
+        .darkMode(WebDarkMode.Auto)
+        .forceDarkAccess(true)
         .layoutWeight(1)
         .width('100%')
         .onPageBegin((event) => {
@@ -35,7 +37,7 @@ export struct PrivacyPage {
 
     }.width('100%')
     .height('100%')
-    .backgroundColor('#101010')
+    .backgroundColor($r('app.color.start_window_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 }

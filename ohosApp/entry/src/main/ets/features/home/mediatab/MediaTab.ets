@@ -32,7 +32,7 @@ export struct MediaTab {
                 HMRouterMgr.to(RouterConsts.FavoriteListPage).push()
               }
             }).margin({ top: 12 })
-            Text('媒体库').fontColor(Color.White).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
+            Text('媒体库').fontColor($r('app.color.text_primary')).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
             ListGroup({
               items: this.ui.mediaList.map((e) => {
                 return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'),

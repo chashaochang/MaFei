@@ -10,6 +10,7 @@ import { MineUIState } from "./MineUIState";
 import { bundleManager, common } from "@kit.AbilityKit";
 import { DBManager } from "../../../data/DBManager";
 import { ApiClientController } from "../../../data/ApiClientController";
+import { CustomColorMode } from "../../../entity/CustomColorMode";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
 
@@ -47,6 +48,16 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
         });
     } catch (error) {
       console.error('Failed to get context:', error);
+    }
+  }
+
+  getColorModeName() {
+    if (this.appUIState.customColorMode == CustomColorMode.Auto) {
+      this.ui.colorModeName = $r('app.string.color_mode_auto')
+    } else if (this.appUIState.customColorMode == CustomColorMode.Light) {
+      this.ui.colorModeName = $r('app.string.color_mode_light')
+    } else if (this.appUIState.customColorMode == CustomColorMode.Dark) {
+      this.ui.colorModeName = $r('app.string.color_mode_dark')
     }
   }
 

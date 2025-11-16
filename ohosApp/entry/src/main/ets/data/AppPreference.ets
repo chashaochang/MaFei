@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
+import { CustomColorMode } from '../entity/CustomColorMode';
 import { Constants } from '../utils/Constants';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
@@ -127,5 +128,17 @@ export class AppPreference {
 
   setPasswd(passwd: string) {
     this.setValue<string>(Constants.PREF_PASSWD, passwd)
+  }
+
+  setCustomColorMode(mode: CustomColorMode) {
+    this.setValue<CustomColorMode>(Constants.PREF_COLOR_MODE, mode)
+  }
+
+  getCustomColorMode(): CustomColorMode {
+    let mode = this.getValue<CustomColorMode>(Constants.PREF_COLOR_MODE)
+    if (mode !== null) {
+      return mode
+    }
+    return CustomColorMode.Auto
   }
 }

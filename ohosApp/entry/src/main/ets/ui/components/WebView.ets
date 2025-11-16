@@ -62,6 +62,7 @@ export struct WebView {
         Stack() {
           Web({ controller: this.webViewController, src: this.url })
             .darkMode(WebDarkMode.Auto)
+            .forceDarkAccess(true)
             .domStorageAccess(true)
             .zoomAccess(true)
             .fileAccess(true)
