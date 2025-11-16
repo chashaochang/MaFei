@@ -1,28 +1,43 @@
+import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi } from "sdk";
-import { BaseItemDtoQueryResult, BaseItemKind } from "sdk/src/main/ets/generated-client/models";
+import { BaseItemDtoQueryResult, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ApiClient } from "../../network/ApiClient";
-import { VideoItem } from "../home/hometab/HomeUIState";
+import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 
 export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
-  scroller: ListScroller = new ListScroller()
+  controller: RefreshController = new RefreshController() //刷新控制器，声明全局变量
+  dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
+  mediaItem?: MediaItem
   startIndex: number = 0
   limit: number = 100
+  sortBy: ItemSortBy[] = ['DateCreated']
 
-  getVideoList(id: string, type?: BaseItemKind) {
-    if (type === undefined) { //混合影片
+  init(mediaItem: MediaItem) {
+    this.ui.title = mediaItem.name
+    this.mediaItem = mediaItem
+    this.refresh()
+  }
+
+  getVideoList() {
+    if (this.mediaItem!.type === undefined) { //混合影片
       getItemsApi(ApiClient.Instance()).getItems({
         startIndex: this.startIndex,
         limit: this.limit,
-        fields: ['PrimaryImageAspectRatio','SortName','Path','ChildCount','MediaSourceCount','PrimaryImageAspectRatio'],
+        fields: ['PrimaryImageAspectRatio', 'SortName', 'Path', 'ChildCount', 'MediaSourceCount',
+          'PrimaryImageAspectRatio'],
         imageTypeLimit: 1,
-        parentId: id,
-        sortBy: ['SortName', 'ProductionYear'],
-        sortOrder: ['Ascending'],
+        parentId: this.mediaItem!.id,
+        sortBy: this.sortBy,
+        sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
+        let noMore = false
+        if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
+          noMore = true
+        }
         if (res.data && res.data.Items && res.data.Items.length > 0) {
           let videoList = res.data.Items.map<VideoItem>(e => {
             return {
@@ -36,23 +51,35 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
               type: e.Type,
             }
           })
-          this.ui.dataSource.addArray(videoList)
-          this.ui.dataSource.notifyDataReload()
+          if (res.data.StartIndex == 0) {
+            this.dataSource.initData(videoList)
+            //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
+            this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
+          } else {
+            this.dataSource.pushDataArray(videoList)
+          }
+          this.ui.totalCount = this.dataSource.totalCount() + ''
+          this.controller.finishLoadMore(noMore)
+          this.startIndex = this.dataSource.totalCount()
         }
       }).catch()
     } else {
       getItemsApi(ApiClient.Instance()).getItems({
-        parentId: id,
+        parentId: this.mediaItem!.id,
         recursive: true,
         fields: ['PrimaryImageAspectRatio', 'MediaSourceCount', 'MediaStreams'],
         imageTypeLimit: 1,
         enableImageTypes: ['Primary', 'Backdrop', 'Banner', 'Thumb'],
-        sortBy: ['SortName', 'ProductionYear'],
-        sortOrder: ['Ascending'],
-        includeItemTypes: [type],
+        sortBy: this.sortBy,
+        sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
+        includeItemTypes: [this.mediaItem!.type],
         startIndex: this.startIndex,
         limit: this.limit,
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
+        let noMore = false
+        if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
+          noMore = true
+        }
         if (res.data && res.data.Items && res.data.Items.length > 0) {
           let videoList = res.data.Items.map<VideoItem>(e => {
             return {
@@ -66,10 +93,28 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
               type: e.Type,
             }
           })
-          this.ui.dataSource.addArray(videoList)
-          this.ui.dataSource.notifyDataReload()
+          if (res.data.StartIndex == 0) {
+            this.dataSource.initData(videoList)
+            //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
+            this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
+          } else {
+            this.dataSource.pushDataArray(videoList)
+          }
+          this.ui.totalCount = this.dataSource.totalCount() + ''
+          this.controller.finishLoadMore(noMore)
+          this.startIndex = this.dataSource.totalCount()
         }
+
       }).catch()
     }
+  }
+
+  refresh() {
+    this.startIndex = 0
+    this.getVideoList()
+  }
+
+  loadMore() {
+    this.getVideoList()
   }
 }
