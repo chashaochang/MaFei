@@ -11,6 +11,7 @@
     "ohos_smart_dialog": "^1.8.8",
     "@ohos/danmakuflamemaster": "^2.1.1",
     "@ohos/imageknife": "^3.2.7",
+    "@ohos/lottie": "^2.0.24"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

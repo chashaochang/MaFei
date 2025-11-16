@@ -51,7 +51,7 @@ export class UserDao {
       this.updateDataSync(user.toValuesBucket())
       return user.id
     } else {
-      let entity = new UserEntity(serverId,userId,accessToken)
+      let entity = new UserEntity(serverId, userId, accessToken)
       return this.insertDataSync(entity.toValuesBucket())
     }
   }
@@ -83,9 +83,11 @@ export class UserDao {
     }
   }
 
-  deleteUser(){
-    this.deleteDataSync({
-      userId: ApiClient.Instance().userId
-    })
+  deleteUser() {
+    if (ApiClient.Instance().userId !== undefined) {
+      this.deleteDataSync({
+        userId: ApiClient.Instance().userId
+      })
+    }
   }
 }
