@@ -14,6 +14,7 @@ import { ApiClientController } from '../data/ApiClientController';
 import connectionHelper from '../setup/ConnectionHelper';
 import { CheckUrlStateType } from '../ui/state/CheckUrlState';
 import { WindowUtil } from '../utils/WindowUtil';
+import { ConnectingScreen } from '../features/connect/ConnectingScreen';
 
 @Entry
 @ComponentV2
@@ -22,10 +23,13 @@ struct Index {
   @Provider() activityEventHandler: ActivityEventHandler = new ActivityEventHandler(this.eventHub)
   @Provider() showExternalConnectionError: boolean = false
   @Provider() isLogin: boolean = false
+  @Provider() isConnecting: boolean = false
   modifier: NavModifier = new NavModifier();
   backController?: BackController
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   apiClientController: ApiClientController = new ApiClientController()
+  //是否点了取消登录
+  @Local isCancel: boolean = false
 
   @Monitor('appUIState.orientation')
   onBreakpointChanged() {
@@ -65,8 +69,12 @@ struct Index {
     if (isLogin) {
       let serverEntity = this.apiClientController.loadSavedServer()
       if (serverEntity != null) {
+        this.isConnecting = true
         connectionHelper.checkServerUrl(serverEntity.hostname)
           .then((state) => {
+            if (this.isCancel) {
+              return
+            }
             if (state.type === CheckUrlStateType.Success) {
               this.apiClientController.setupServer(serverEntity!.hostname)
               this.apiClientController.setupUser(serverEntity!.id, userId, token)
@@ -74,6 +82,10 @@ struct Index {
             } else {
               this.appUIState.isLogin = false
             }
+            this.isConnecting = false
+          })
+          .catch(() => {
+            this.isConnecting = false
           })
       }
     }
@@ -100,23 +112,18 @@ struct Index {
             if (this.appUIState.isLogin) {
               HomeScreen()
             } else {
-              ConnectScreen()
+              if (this.isConnecting) {
+                ConnectingScreen({
+                  onLogoutClick: () => {
+                    this.isCancel = true
+                    this.apiClientController.logout()
+                    this.isConnecting = false
+                  }
+                })
+              } else {
+                ConnectScreen()
+              }
             }
-
-            // if (this.mainViewModel.serverState === ServerState.Unset || this.showExternalConnectionError) {
-            //   ConnectScreen()
-            // } else {
-            //   Stack() {
-            //     WebViewScreen({
-            //       onBackController: (controller: BackController) => {
-            //         this.backController = controller
-            //       }
-            //     })
-            //     if (this.isLogin) {
-            //       HomeScreen()
-            //     }
-            //   }
-            // }
           }.width('100%').height('100%')
         }
       }
