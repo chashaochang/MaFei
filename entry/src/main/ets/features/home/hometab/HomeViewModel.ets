@@ -20,15 +20,19 @@ export class HomeViewModel {
   }
 
   async init() {
-    //获取媒体库列表
-    await this.getMediaList()
-    //获取继续观看列表
-    await this.getResumeList()
-    //获取接下来列表
-    await this.getNextUpList()
-    //获取latest
-    await this.getLatestList()
-    this.ui.isRefreshing = false;
+    try {
+      //获取媒体库列表
+      await this.getMediaList()
+      //获取继续观看列表
+      await this.getResumeList()
+      //获取接下来列表
+      await this.getNextUpList()
+      //获取latest
+      await this.getLatestList()
+      this.ui.isRefreshing = false;
+    } catch (e) {
+      this.ui.isRefreshing = false;
+    }
   }
 
   private async getMediaList(): Promise<void> {
