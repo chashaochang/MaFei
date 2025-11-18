@@ -59,6 +59,10 @@
     {
       "name": "text_2",
       "value": "#b3cbd5e0"
+    },
+    {
+      "name": "tab",
+      "value": "#01FFFFFF"
     }
   ]
 }
