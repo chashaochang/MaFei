@@ -22,7 +22,7 @@
     },
     {
       "name": "bg_main",
-      "value": "#f1f3f6"
+      "value": "#f1f4f9"
     },
     {
       "name": "component_bg",
@@ -71,6 +71,10 @@
     {
       "name": "text_2",
       "value": "#8496ae"
+    },
+    {
+      "name": "tab",
+      "value": "#ffffff"
     }
   ]
 }

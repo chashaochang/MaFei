@@ -30,7 +30,7 @@ export struct HomeScreen {
         .tabBar(this.tabBuilder('我', 2, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine')))
       }
       .barHeight(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)
-      .barBackgroundColor('rgba(255,255,255,0.05)')
+      .barBackgroundColor($r('app.color.tab'))
       .barOverlap(true)
       .onChange((index: number) => {
         this.currentIndex = index;
