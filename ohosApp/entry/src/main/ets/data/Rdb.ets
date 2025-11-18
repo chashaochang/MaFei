@@ -15,8 +15,6 @@ export default class Rdb {
   }
 
   getRdbStore(context: Context) {
-    //let context: Context = getContext(this) as Context;
-
     const STORE_CONFIG: relationalStore.StoreConfig = {
       name: RdbConstants.DB_NAME, // 数据库文件名
       securityLevel: relationalStore.SecurityLevel.S1 // 数据库安全级别

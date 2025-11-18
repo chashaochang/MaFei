@@ -123,6 +123,8 @@ export class HomeViewModel {
             }) || []
             this.ui.nextUpList = list
             resolve()
+          } else {
+            resolve()
           }
         }
       }).catch(() => {
@@ -131,48 +133,61 @@ export class HomeViewModel {
     })
   }
 
-  private async getLatestList() {
-    this.ui.latestMediaList = []
-    this.ui.latestMap.clear()
-    for (const item of this.ui.mediaList) {
-      let list: VideoItem[] = []
-      ///Users/4ce4745330314948b8791958423de149/Items/Latest?Limit=16&Fields=PrimaryImageAspectRatio%2CPath&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&ParentId=66e9b0b6aea8727e12b214521b59c67d
-      try {
-        let res: AxiosResponse<BaseItemDto[]> = await getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-          limit: 16,
-          fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
-          imageTypeLimit: 1,
-          enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
-          parentId: item.id,
-          userId: ApiClient.Instance().userId
-        })
-        if (res.data && res.data.length > 0) {
-          list = res.data.map<VideoItem>((e) => {
-            let subtitle = ''
-            if (e.Type === BaseItemKind.Series) {
-              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-            } else if (e.Type === BaseItemKind.Episode) {
-              subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
+  private async getLatestList(): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      this.ui.latestMediaList = []
+      this.ui.latestMap.clear()
+      let promises: Promise<void>[] = []
+      for (const item of this.ui.mediaList) {
+        let promise = new Promise<void>(async (resolve, reject) => {
+          let list: VideoItem[] = []
+          ///Users/4ce4745330314948b8791958423de149/Items/Latest?Limit=16&Fields=PrimaryImageAspectRatio%2CPath&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&ParentId=66e9b0b6aea8727e12b214521b59c67d
+          try {
+            let res: AxiosResponse<BaseItemDto[]> = await getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
+              limit: 16,
+              fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+              imageTypeLimit: 1,
+              enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
+              parentId: item.id,
+              userId: ApiClient.Instance().userId
+            })
+            if (res.data && res.data.length > 0) {
+              list = res.data.map<VideoItem>((e) => {
+                let subtitle = ''
+                if (e.Type === BaseItemKind.Series) {
+                  subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+                } else if (e.Type === BaseItemKind.Episode) {
+                  subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
+                } else {
+                  subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+                }
+                return {
+                  id: e.Id || '',
+                  name: e.SeriesName || e.Name || '',
+                  image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
+                  subtitle: subtitle,
+                  mediaName: item.name,
+                  type: e.Type
+                }
+              })
+              this.ui.latestMap.set(item.id, list)
+              this.ui.latestMediaList.push(item)
+              resolve()
             } else {
-              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+              resolve()
             }
-            return {
-              id: e.Id || '',
-              name: e.SeriesName || e.Name || '',
-              image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
-              subtitle: subtitle,
-              mediaName: item.name,
-              type: e.Type
-            }
-          })
-          this.ui.latestMap.set(item.id, list)
-          this.ui.latestMediaList.push(item)
-        }
-      } catch (error) {
-
+          } catch (error) {
+            reject()
+          }
+        })
+        promises.push(promise)
       }
-
-    }
+      Promise.all(promises).then(() => {
+        resolve()
+      }).catch(() => {
+        reject()
+      })
+    })
   }
 }
 

@@ -3,12 +3,9 @@ import { ImageUrlsApi } from "sdk";
 import { UserDto } from "sdk/src/main/ets/generated-client/models";
 import { getUserApi } from "sdk/src/main/ets/utils/api/user-api";
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
-import { AppPreference } from "../../../data/AppPreference";
-import { ActivityEventType } from "../../../events/ActivityEvent";
 import { ApiClient } from "../../../network/ApiClient";
 import { MineUIState } from "./MineUIState";
 import { bundleManager, common } from "@kit.AbilityKit";
-import { DBManager } from "../../../data/DBManager";
 import { ApiClientController } from "../../../data/ApiClientController";
 import { CustomColorMode } from "../../../entity/CustomColorMode";
 
