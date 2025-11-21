@@ -5,6 +5,10 @@ export class MineUIState extends BaseUIState {
   @Trace
   userName: string = '未登录'
   @Trace
+  serverName: string = ''
+  @Trace
+  serverVersion: string = ''
+  @Trace
   userAvatar: string = ''
   @Trace
   userPolicy: string = ''

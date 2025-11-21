@@ -24,10 +24,14 @@ export class Pending extends CheckUrlState {
 export class Success extends CheckUrlState {
   type = CheckUrlStateType.Success;
   address: string;
+  name: string;
+  version: string
 
-  constructor(address: string) {
+  constructor(address: string, name: string, version: string) {
     super();
     this.address = address;
+    this.name = name;
+    this.version = version
   }
 }
 

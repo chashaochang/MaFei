@@ -14,13 +14,17 @@
  */
 
 import { common } from '@kit.AbilityKit';
-import { BreakpointSystem, BreakpointType, BreakpointTypeEnum } from '../utils/BreakpointSystem';
-import { ColumnEnum, OffsetEnum, SpanEnum } from '../utils/CommonEnums';
-import { CommonConstants } from '../utils/CommonConstants';
+import { BreakpointSystem, BreakpointType, BreakpointTypeEnum } from '../../utils/BreakpointSystem';
+import { ColumnEnum, OffsetEnum, SpanEnum } from '../../utils/CommonEnums';
+import { CommonConstants } from '../../utils/CommonConstants';
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { RouterConsts } from '../../common/RouterConsts';
 
-@Entry
+@HMRouter({
+  pageUrl: RouterConsts.SafePage
+})
 @Component
-struct SafePage {
+export struct SafePage {
   @StorageProp('currentBreakpoint') currentBreakpoint: string = BreakpointTypeEnum.MD;
   private breakpointSystem: BreakpointSystem = new BreakpointSystem();
 
@@ -102,7 +106,7 @@ struct SafePage {
               .fontWeight(FontWeight.Medium)
               .lineHeight($r('app.float.safe_desc_line_height'))
               .onClick(() => {
-                this.getUIContext().getRouter().pushUrl({ url: 'pages/PrivacyPage' }).catch()
+                HMRouterMgr.to(RouterConsts.PrivacyPage).push()
               })
             Span($r('app.string.safe_desc1_str7'))
               .fontSize($r('app.float.little_text_size'))
@@ -125,14 +129,16 @@ struct SafePage {
               .layoutWeight(1)
               .onClick(() => {
                 let context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
-                context.terminateSelf();
+                context.terminateSelf().catch(() => {
+
+                });
               })
             Button($r('app.string.button_agree'))
               .backgroundColor($r('app.color.color_main'))
               .fontColor(Color.White)
               .layoutWeight(1)
               .onClick(() => {
-                this.getUIContext().getRouter().replaceUrl({ url: 'pages/SplashPage', params: { isAgreedPrivacy: true } })
+                HMRouterMgr.to(RouterConsts.SplashPage).withParam({ isAgreedPrivacy: true }).replace()
               })
           }
           .width(CommonConstants.FULL_PERCENT)

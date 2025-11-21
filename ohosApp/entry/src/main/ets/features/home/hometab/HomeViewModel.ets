@@ -1,4 +1,4 @@
-import { AxiosResponse } from "@ohos/axios";
+import { AxiosError, AxiosResponse } from "@ohos/axios";
 import { getItemsApi, getTvShowsApi, getUserLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
 import {
   BaseItemDto,
@@ -56,7 +56,7 @@ export class HomeViewModel {
             resolve()
           }
         }
-      }).catch((e: Error) => {
+      }).catch((e: AxiosError) => {
         reject()
       })
     })

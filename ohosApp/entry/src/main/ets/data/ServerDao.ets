@@ -47,10 +47,7 @@ export class ServerDao {
     let result: ServerEntity | null = null;
     if (resultSet) {
       while (resultSet.goToNextRow()) {
-        let item: ServerEntity = new ServerEntity(resultSet.getString(1))
-        item.id = resultSet.getLong(0)
-        item.lastUsedTimestamp = resultSet.getLong(2)
-        result = item
+        result = ServerEntity.fromResultSet(resultSet)
       }
       return result
     }
@@ -65,18 +62,18 @@ export class ServerDao {
     let result: ServerEntity | null = null;
     if (resultSet) {
       while (resultSet.goToNextRow()) {
-        let item: ServerEntity = new ServerEntity(resultSet.getString(1))
-        item.id = resultSet.getLong(0)
-        item.lastUsedTimestamp = resultSet.getLong(2)
-        result = item
+        result = ServerEntity.fromResultSet(resultSet)
       }
       return result
     }
     return null;
   }
 
-  insert(hostname: string): number {
-    return this.serverTable.insertDataSync(new ServerEntity(hostname).toValuesBucket())
+  insert(hostname: string, serverName: string, version: string): number {
+    let server = new ServerEntity(hostname)
+    server.servername = serverName
+    server.version = version
+    return this.serverTable.insertDataSync(server.toValuesBucket())
   }
 
   getAllServers(): ServerEntity[] {
@@ -86,9 +83,7 @@ export class ServerDao {
     let res: ServerEntity[] = []
     if (resultSet) {
       while (resultSet.goToNextRow()) {
-        let item: ServerEntity = new ServerEntity(resultSet.getString(1))
-        item.id = resultSet.getLong(0)
-        item.lastUsedTimestamp = resultSet.getLong(2)
+        let item: ServerEntity = ServerEntity.fromResultSet(resultSet)
         res.push(item)
       }
     }

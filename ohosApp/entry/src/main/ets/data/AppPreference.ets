@@ -84,7 +84,7 @@ export class AppPreference {
 
   getCurrentServerId(): number | null {
     let id = this.getValue<number>(Constants.PREF_SERVER_ID)
-    if (id && id >= 0) {
+    if (id !== undefined && id != null && id >= 0) {
       return id
     }
     return null
@@ -120,14 +120,6 @@ export class AppPreference {
 
   setUserName(userName: string) {
     this.setValue<string>(Constants.PREF_USER_NAME, userName)
-  }
-
-  getPasswd(): string {
-    return this.getValue<string>(Constants.PREF_PASSWD) ?? ''
-  }
-
-  setPasswd(passwd: string) {
-    this.setValue<string>(Constants.PREF_PASSWD, passwd)
   }
 
   setCustomColorMode(mode: CustomColorMode) {

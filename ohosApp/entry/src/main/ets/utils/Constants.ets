@@ -38,7 +38,6 @@ export class Constants {
   static readonly PREF_USER_ID = "pref_user_id"
   static readonly PREF_ACCESS_TOKEN = "pref_access_token"
   static readonly PREF_USER_NAME = "pref_user_name"
-  static readonly PREF_PASSWD = "pref_passwd"
   static readonly PREF_REMEMBER_PW = "pref_remember_pw"
   static readonly PREF_COLOR_MODE = "pref_color_mode"
   static readonly MAIN_BUNDLE_PATH_REGEX =
