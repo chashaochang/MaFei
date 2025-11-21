@@ -15,7 +15,7 @@ export struct MineTab {
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
   aboutToAppear(): void {
-    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown,()=>{
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown, () => {
       this.vm.getColorModeName()
     })
     this.vm.init()
@@ -38,23 +38,45 @@ export struct MineTab {
                 placeholderSrc: $r('app.media.default_avatar')
               }
             }).width(64).height(64).margin({ left: 12 })
-            Text(this.ui.userName).fontColor($r('app.color.text_primary')).fontSize(24).fontWeight(FontWeight.Medium)
-            Text(this.ui.userPolicy)
-              .fontColor($r('app.color.color_main'))
-              .fontSize(12)
-              .padding({
-                left: 6,
-                right: 6,
-                top: 2,
-                bottom: 2
-              })
-              .backgroundColor($r('app.color.primary_light_hover'))
-              .borderRadius(4)
+            Column({ space: 4 }) {
+              Row({ space: 12 }) {
+                Text(this.ui.userName)
+                  .fontColor($r('app.color.text_primary'))
+                  .fontSize(24)
+                  .fontWeight(FontWeight.Medium)
+                Text(this.ui.userPolicy)
+                  .fontColor($r('app.color.color_main'))
+                  .fontSize(12)
+                  .padding({
+                    left: 6,
+                    right: 6,
+                    top: 2,
+                    bottom: 2
+                  })
+                  .backgroundColor($r('app.color.primary_light_hover'))
+                  .borderRadius(4)
+              }
+
+              Text(this.ui.serverName)
+                .fontColor($r('app.color.text_1'))
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+              Text(this.ui.serverVersion)
+                .fontColor($r('app.color.text_2'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+            }.alignItems(HorizontalAlign.Start)
           }.width('100%')
           .padding({
             left: 8, right: 8, bottom: 8
           })
 
+          ListGroup({
+            items: [new BaseGroupItem('切换账号')],
+            onItemClick: () => {
+              HMRouterMgr.to(RouterConsts.AccountPage).push()
+            }
+          })
           ListGroup({
             items: [new BaseGroupItem('外观', '', this.ui.colorModeName)],
             onItemClick: () => {

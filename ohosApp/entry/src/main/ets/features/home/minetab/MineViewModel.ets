@@ -8,10 +8,15 @@ import { MineUIState } from "./MineUIState";
 import { bundleManager, common } from "@kit.AbilityKit";
 import { ApiClientController } from "../../../data/ApiClientController";
 import { CustomColorMode } from "../../../entity/CustomColorMode";
+import { AppPreference } from "../../../data/AppPreference";
+import { DBManager } from "../../../data/DBManager";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
+  apiClientController: ApiClientController = new ApiClientController()
 
   init() {
+    this.ui.userName = AppPreference.getInstance().getUserName()
+    this.getServerInfo()
     this.getAppVersion()
     getUserApi(ApiClient.Instance()).getUserById({
       userId: ApiClient.Instance().userId
@@ -19,6 +24,11 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
       if (res.data) {
         let user = res.data
         this.ui.userName = user.Name || ''
+        let localUser = DBManager.getInstance().getUserDao().getByUserId(AppPreference.getInstance().getCurrentServerId()!,ApiClient.Instance().userId)
+        if(user.Name !== localUser?.username){
+          AppPreference.getInstance().setUserName(user.Name || '')
+          this.apiClientController.updateUserName(ApiClient.Instance().userId, user.Name || '')
+        }
         this.ui.userAvatar =
           ApiClient.Instance().basePath + new ImageUrlsApi().getUserImageUrl({
             Id: ApiClient.Instance().userId
@@ -29,6 +39,17 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
         this.ui.userPolicy = user.Policy?.IsAdministrator ? '管理员' : '普通用户'
       }
     }).catch()
+  }
+
+  getServerInfo() {
+    let serverId = AppPreference.getInstance().getCurrentServerId()
+    if(serverId != null){
+      let server = DBManager.getInstance().getServerDao().getServer(serverId)
+      if (server) {
+        this.ui.serverName = server.servername
+        this.ui.serverVersion = server.version
+      }
+    }
   }
 
   private getAppVersion() {
@@ -59,7 +80,7 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   }
 
   logout() {
-    new ApiClientController().logout()
+    this.apiClientController.logout()
     this.appUIState.isLogin = false
   }
 }

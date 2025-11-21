@@ -6,6 +6,7 @@ import { DBManager } from "./DBManager";
 import { ServerDao } from "./ServerDao";
 import ServerEntity from "./ServerEntity";
 import { UserDao } from "./UserDao";
+import { ValuesBucket } from "@kit.ArkData";
 
 export class ApiClientController {
   appPreference: AppPreference
@@ -19,17 +20,31 @@ export class ApiClientController {
     this.userDao = DBManager.getInstance().getUserDao()
   }
 
-  setupUser(serverId: number, userId: string, accessToken: string) {
-    this.userDao.upsert(serverId,userId,accessToken)
+  setupUser(serverId: number, userId: string, accessToken: string, username?: string) {
+    this.userDao.upsert(serverId, userId, accessToken, username)
     this.appPreference.setCurrentUserId(userId)
+    if (!!username) {
+      this.appPreference.setUserName(username)
+    }
     this.configureApiClientUser(userId, accessToken)
   }
 
-  setupServer(hostname: string) {
+  updateUserName(userId: string, username: string) {
+    let valueBucket: ValuesBucket = {
+      USER_ID: userId,
+      USER_NAME: username,
+      LAST_LOGIN_TIMESTAMP: Date.now()
+    }
+    this.userDao.updateDataSync(valueBucket)
+  }
+
+  setupServer(hostname: string, serverName?: string, version?: string) {
     let server = this.serverDao.getServerByHostname(hostname)
     let id: number
-    if (!server) {
-      id = this.serverDao.insert(hostname)
+    if (!server && serverName !== undefined && version !== undefined) {
+      id = this.serverDao.insert(hostname, serverName, version)
+    } else if (!server) {
+      id = this.serverDao.insert(hostname, '', '')
     } else {
       id = server.id
     }
@@ -37,10 +52,20 @@ export class ApiClientController {
     ApiClient.update(hostname)
   }
 
+  updateServerName(server: ServerEntity) {
+    let valueBucket: ValuesBucket = {
+      id: server.id,
+      server_name: server.servername,
+      version: server.version,
+      last_used_timestamp: Date.now()
+    }
+    this.serverDao.updateDataSync(valueBucket)
+  }
+
   loadSavedServer(): ServerEntity | null {
     let server: ServerEntity | null = null
     let serverId = this.appPreference.getCurrentServerId()
-    if (serverId) {
+    if (serverId !== null) {
       server = this.serverDao.getServer(serverId)
     }
     this.configureApiClientServer(server)
@@ -63,15 +88,16 @@ export class ApiClientController {
     ApiClient.Instance().userId = userId
     ApiClient.Instance().accessToken = accessToken
     // Append user id to device id to ensure uniqueness across sessions
-    let info = ObjectUtil.Assign({},this.baseDeviceInfo)
+    let info = ObjectUtil.Assign({}, this.baseDeviceInfo)
     info.id = this.baseDeviceInfo.id + userId
     ApiClient.Instance().deviceInfo = info
   }
 
-  logout(){
-    this.userDao.deleteUser()
+  logout() {
+    //this.userDao.deleteUser()
     AppPreference.getInstance().setAccessToken('')
     AppPreference.getInstance().setCurrentUserId('')
-    ApiClient.Instance().logout()
+    AppPreference.getInstance().setUserName('')
+    // ApiClient.Instance().logout()
   }
 }

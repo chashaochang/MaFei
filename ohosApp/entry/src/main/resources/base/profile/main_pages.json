@@ -1,9 +1,6 @@
 {
   "src": [
     "pages/Index",
-    "pages/PcPlayerPage",
-    "pages/SplashPage",
-    "pages/SafePage",
-    "pages/PrivacyPage"
+    "pages/PcPlayerPage"
   ]
 }

@@ -4,12 +4,16 @@ import relationalStore from '@ohos.data.relationalStore'
 const TABLE_NAME = 'Server'
 const ID = 'id'
 const HOSTNAME = 'hostname'
+const SERVER_NAME = 'server_name'
+const VERSION = 'version'
 const LAST_USED_TIMESTAMP = 'last_used_timestamp'
 
 // 定义实体类
 class ServerEntity {
   id: number = 0
   hostname: string = ''
+  servername: string = ''
+  version: string = ''
   lastUsedTimestamp: number = 0
 
   // 构造函数
@@ -20,21 +24,12 @@ class ServerEntity {
     }
   }
 
-  // 创建表的SQL语句
-  static getCreateTableSql(): string {
-    return `
-      CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
-        ${ID} INTEGER PRIMARY KEY AUTOINCREMENT,
-        ${HOSTNAME} TEXT NOT NULL UNIQUE,
-        ${LAST_USED_TIMESTAMP} INTEGER NOT NULL
-      )
-    `
-  }
-
   // 转换为数据库值映射
   toValuesBucket(): relationalStore.ValuesBucket {
     return {
       HOSTNAME: this.hostname,
+      SERVER_NAME: this.servername,
+      VERSION: this.version,
       LAST_USED_TIMESTAMP: this.lastUsedTimestamp
     }
   }
@@ -44,6 +39,8 @@ class ServerEntity {
     const server = new ServerEntity()
     server.id = resultSet.getLong(resultSet.getColumnIndex(ID))
     server.hostname = resultSet.getString(resultSet.getColumnIndex(HOSTNAME))
+    server.servername = resultSet.getString(resultSet.getColumnIndex(SERVER_NAME))
+    server.version = resultSet.getString(resultSet.getColumnIndex(VERSION))
     server.lastUsedTimestamp = resultSet.getLong(resultSet.getColumnIndex(LAST_USED_TIMESTAMP))
     return server
   }

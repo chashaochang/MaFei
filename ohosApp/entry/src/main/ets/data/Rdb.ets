@@ -20,14 +20,36 @@ export default class Rdb {
       securityLevel: relationalStore.SecurityLevel.S1 // 数据库安全级别
     };
 
-    relationalStore.getRdbStore(context, STORE_CONFIG, (err, rdb) => {
+    relationalStore.getRdbStore(context, STORE_CONFIG, async (err, rdb) => {
       if (err) {
         console.error(`Get RdbStore failed, code is ${err.code},message is ${err.message}`);
         return;
       }
       this.rdbStore = rdb;
-      this.rdbStore.executeSql(this.sqlCreateTable);
-      console.info(`Get ${RdbConstants.DB_NAME}.${this.tableName} RdbStore successfully.`);
+      let storeVersion = rdb.version;
+      // 当数据库创建时，数据库默认版本为0
+      if (storeVersion === 0) {
+        try {
+          await this.rdbStore.executeSql(this.sqlCreateTable);
+          console.info(`Get ${RdbConstants.DB_NAME}.${this.tableName} RdbStore successfully.`);
+        } catch (e) {
+          const err = e as BusinessError;
+          console.error(`Failed to execute sql. Code:${err.code}, message:${err.message}`);
+        }
+        // version = 1
+        try {
+          await rdb.execute(`ALTER TABLE Server ADD COLUMN server_name TEXT NOT NULL DEFAULT ""`);
+          await rdb.execute(`ALTER TABLE Server ADD COLUMN version TEXT NOT NULL DEFAULT ""`);
+          await rdb.execute(`ALTER TABLE User ADD COLUMN user_name TEXT NOT NULL DEFAULT ""`);
+          storeVersion = 1;
+          console.info("Upgrade store version from 0 to 1 success.")
+        } catch (e) {
+          const err = e as BusinessError;
+          console.error(`Failed to execute sql. Code:${err.code}, message:${err.message}`);
+        }
+      }
+      // 版本变化时，会触发Upgrade
+      rdb.version = storeVersion;
     });
   }
 
@@ -108,7 +130,11 @@ export default class Rdb {
   insertDataSync(data: relationalStore.ValuesBucket) : number {
     const valueBucket: relationalStore.ValuesBucket = data;
     if (this.rdbStore) {
-      return this.rdbStore.insertSync(this.tableName, valueBucket);
+      try {
+        return this.rdbStore.insertSync(this.tableName, valueBucket);
+      } catch (error) {
+        return 0
+      }
     }
     return 0;
   }
@@ -124,9 +150,13 @@ export default class Rdb {
 
   deleteDataSync(predicates: relationalStore.RdbPredicates) : number {
     if (this.rdbStore) {
-      return this.rdbStore.deleteSync(predicates);
+      try {
+        return this.rdbStore.deleteSync(predicates);
+      } catch (error) {
+        return -1
+      }
     }
-    return 0;
+    return -1
   }
 
   queryDataSync(predicates: relationalStore.RdbPredicates) :  relationalStore.ResultSet | undefined {

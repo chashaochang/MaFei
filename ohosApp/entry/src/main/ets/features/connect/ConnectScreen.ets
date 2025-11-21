@@ -8,9 +8,12 @@ import { ServerSuggestion } from "./ServerSuggestion"
 import { KeyCode } from "@kit.InputKit"
 import { CheckUrlStateType, Unchecked, Error } from "../../ui/state/CheckUrlState"
 import { inputMethod } from "@kit.IMEKit"
+import { HMRouterMgr } from "@hadss/hmrouter"
+import { RouterConsts } from "../../common/RouterConsts"
 
 @ComponentV2
 export struct ConnectScreen {
+  @Param isFromAddAccount: boolean = false
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   @Local ui: ConnectionUIState = new ConnectionUIState(this.getUIContext())
   vm: ConnectionViewModel = new ConnectionViewModel(this.ui)
@@ -18,7 +21,9 @@ export struct ConnectScreen {
 
   aboutToAppear(): void {
     this.ui.externalError = this.showExternalConnectionError
-    this.vm.init()
+    if (!this.isFromAddAccount) {
+      this.vm.init()
+    }
   }
 
   build() {
@@ -26,7 +31,7 @@ export struct ConnectScreen {
       Column() {
         ActionBar({
           title: '',
-          showBackButton: false
+          showBackButton: this.isFromAddAccount
         })
         LogoHeader()
         Column() {
@@ -34,7 +39,8 @@ export struct ConnectScreen {
             AddressSelection({
               text: this.ui.hostname,
               errorText: this.showExternalConnectionError ? '无法建立连接。 请检查主机名和你的网络连接。' :
-                (this.ui.checkUrlState.type === CheckUrlStateType.Error ? (this.ui.checkUrlState as Error).message : undefined),
+                (this.ui.checkUrlState.type === CheckUrlStateType.Error ? (this.ui.checkUrlState as Error).message :
+                  undefined),
               loading: this.ui.checkUrlState.type === CheckUrlStateType.Pending,
               onTextChange: (value: string) => {
                 this.ui.externalError = false
@@ -64,12 +70,13 @@ export struct ConnectScreen {
             }).height('100%')
           }
         }.alignItems(HorizontalAlign.Start).width('100%').margin({ top: 30 })
+
         Blank().height(16)
         Column() {
           // Text('用户名').padding({ bottom: 8 }).fontSize(14).fontColor(Color.White).fontWeight(FontWeight.Medium)
           AuthTextField({
             text: this.ui.username,
-            icon: $r('app.media.ic_user'),
+            // icon: $r('app.media.ic_user'),
             placeholder: '请输入用户名',
             onTextChanged: (v: string) => {
               this.ui.username = v
@@ -78,7 +85,7 @@ export struct ConnectScreen {
           Blank().height(16)
           AuthTextField({
             text: this.ui.password,
-            icon: $r('app.media.ic_pwd'),
+            // icon: $r('app.media.ic_pwd'),
             placeholder: '请输入密码',
             password: true,
             onTextChanged: (v: string) => {
@@ -89,7 +96,7 @@ export struct ConnectScreen {
           Row({ space: 4 }) {
             Toggle({ type: ToggleType.Checkbox, isOn: this.ui.rememberPwd })
               .width(16)
-              .onChange((isOn)=>{
+              .onChange((isOn) => {
                 this.ui.rememberPwd = isOn
               })
             Text("记住密码")
@@ -106,7 +113,7 @@ export struct ConnectScreen {
               text: '登录',
               enable: this.ui.username.length > 0 && this.ui.password.length > 0,
               onclick: (): void => {
-                this.vm.onLogin()
+                this.vm.onLogin(this.isFromAddAccount)
               }
             })
           } else {
@@ -142,7 +149,7 @@ export struct LogoHeader {
 @Component
 struct AuthTextField {
   @Prop text: string
-  @Prop icon: ResourceStr
+  // @Prop icon: ResourceStr
   @Prop placeholder: string
   @Prop password: boolean = false
   onTextChanged: (val: string) => void = () => {
@@ -158,7 +165,7 @@ struct AuthTextField {
       })
         .onChange((v) => this.onTextChanged(v))
         .width('100%')
-        .padding({ left: 48, right: 16 })
+        .padding({ left: 16, right: 16 })
         .onSubmit(() => this.onSubmit())
         .type(this.password ? InputType.Password : InputType.Normal)
         .maxLines(1)
@@ -169,7 +176,7 @@ struct AuthTextField {
         .placeholderColor(Color.Gray)
         .fontColor($r('app.color.text_primary'))
         .backgroundColor($r('app.color.component_bg'))
-      Image(this.icon).height(24).margin({ left: 16 })
+      // Image(this.icon).height(24).margin({ left: 16 })
     }.height(56).alignContent(Alignment.Start)
   }
 }
@@ -260,13 +267,13 @@ struct ServerUrlField {
     Stack() {
       TextInput({
         text: this.text,
-        placeholder: 'https://jellyfin.example.com',
+        placeholder: '请输入IP地址/域名',
       })
         .onChange((v) => {
           this.onTextChanged(v)
         })
         .width('100%')
-        .padding({ left: 48 })
+        .padding({ left: 16, right: 48 })
         .onKeyEvent((event) => {
           if (event.keyCode === KeyCode.KEYCODE_ENTER) {
             this.onSubmit()
@@ -284,8 +291,13 @@ struct ServerUrlField {
         .placeholderColor(Color.Gray)
         .fontColor($r('app.color.text_primary'))
         .backgroundColor($r('app.color.component_bg'))
-      Image($r('app.media.ic_server')).height(24).margin({ left: 16 })
-    }.height(56).alignContent(Alignment.Start)
+      Image($r('app.media.history')).height(20).fillColor($r('app.color.text_primary')).margin({ right: 12 })
+        .onClick(() => {
+          HMRouterMgr.to(RouterConsts.AccountPage).withParam({
+            fromLogin: true
+          }).push()
+        })
+    }.height(56).alignContent(Alignment.End)
   }
 }
 

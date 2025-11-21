@@ -10,6 +10,9 @@ export struct ActionBar {
   @Param onBackClick: () => void = () => {
     HMRouterMgr.pop()
   }
+  @Param rightBtnIcon?: Resource = undefined
+  @Param onRightBtnClick?: () => void = () => {
+  }
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   build() {
@@ -28,6 +31,16 @@ export struct ActionBar {
           })
           .visibility(this.showBackButton ? Visibility.Visible : Visibility.Hidden)
         Blank()
+        if (this.rightBtnIcon) {
+          Image(this.rightBtnIcon)
+            .width(48)
+            .height(48)
+            .padding(16)
+            .fillColor($r('app.color.text_primary'))
+            .onClick(() => {
+              this.onRightBtnClick && this.onRightBtnClick()
+            })
+        }
       }.width('100%').height('100%')
 
       Text(this.title)

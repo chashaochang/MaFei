@@ -24,14 +24,14 @@ export class UserDao {
   deleteDataSync(valuesBucket: relationalStore.ValuesBucket): number {
     let predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(RdbConstants.TABLE_USER.tableName)
-    predicates.equalTo('user_id', valuesBucket['userId'])
+    predicates.equalTo('id', valuesBucket['ID'])
     return this.userTable.deleteDataSync(predicates)
   }
 
   updateDataSync(valuesBucket: relationalStore.ValuesBucket): number {
     let predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(RdbConstants.TABLE_USER.tableName)
-    predicates.equalTo('user_id', valuesBucket['USER_ID'])
+    predicates.equalTo('id', valuesBucket['ID'])
     return this.userTable.updateDataSync(predicates, valuesBucket)
   }
 
@@ -42,17 +42,43 @@ export class UserDao {
     return this.userTable.queryDataSync(predicates)
   }
 
-  upsert(serverId: number, userId: string, accessToken: string): number {
+  queryAllDataSync(): UserEntity[] {
+    let users: UserEntity[] = []
+    let predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(RdbConstants.TABLE_USER.tableName)
+    let res = this.userTable.queryDataSync(predicates)
+    if (res) {
+      try {
+        while (res.goToNextRow()) {
+          let user = UserEntity.fromResultSet(res)
+          users.push(user)
+        }
+      } catch (error) {
+
+      }
+    }
+    return users
+  }
+
+  upsert(serverId: number, userId: string, accessToken: string, username?: string): number {
     // 查询现有用户
     const user = this.getByUserId(serverId, userId)
     if (user) {
       // 如果用户存在，更新访问令牌
       user.accessToken = accessToken
+      if (username) {
+        user.username = username
+      }
       this.updateDataSync(user.toValuesBucket())
       return user.id
     } else {
-      let entity = new UserEntity(serverId, userId, accessToken)
-      return this.insertDataSync(entity.toValuesBucket())
+      return this.insertDataSync({
+        SERVER_ID: serverId,
+        USER_ID: userId,
+        ACCESS_TOKEN: accessToken,
+        USER_NAME: username!,
+        LAST_LOGIN_TIMESTAMP: Date.now()
+      })
     }
   }
 
@@ -68,12 +94,7 @@ export class UserDao {
       let result: UserEntity | null = null
       if (resultSet) {
         while (resultSet.goToNextRow()) {
-          result = new UserEntity()
-          result.id = resultSet.getLong(0)
-          result.serverId = resultSet.getLong(1)
-          result.userId = resultSet.getString(2)
-          result.accessToken = resultSet.getString(3)
-          result.lastLoginTimestamp = resultSet.getLong(4)
+          result = UserEntity.fromResultSet(resultSet)
         }
       }
       return result
@@ -83,10 +104,11 @@ export class UserDao {
     }
   }
 
+  //相同服务器不同域名有可能有相同的userId
   deleteUser() {
     if (ApiClient.Instance().userId !== undefined) {
       this.deleteDataSync({
-        userId: ApiClient.Instance().userId
+        USER_ID: ApiClient.Instance().userId
       })
     }
   }

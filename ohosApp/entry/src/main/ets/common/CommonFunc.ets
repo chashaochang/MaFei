@@ -13,6 +13,7 @@ import { ApiClient } from '../network/ApiClient'
 import { PlayOptions } from '../player/interaction/PlayOptions'
 import { UIConstants } from './UIConstants'
 import { common, Want } from '@kit.AbilityKit'
+import { util } from '@kit.ArkTS'
 
 export function parseVideoType(type?: BaseItemKind): string {
   let res = ''
@@ -341,4 +342,9 @@ export function openUrlByBrowser(url: string) {
 
 export function getUIAbilityContext(): common.UIAbilityContext {
   return AppStorage.get<common.UIAbilityContext>('context')!
+}
+
+export function stringToArray(str: string): Uint8Array {
+  let textEncoder = new util.TextEncoder();
+  return textEncoder.encodeInto(str);
 }

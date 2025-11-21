@@ -24,10 +24,10 @@ class ConnectionHelper {
     })
     const server = greatServer ?? goodServers[0]
     if (server) {
-      const systemInfo:PublicSystemInfo|undefined = server.systemInfo
+      const systemInfo: PublicSystemInfo | undefined = server.systemInfo
       const serverVersion = systemInfo?.Version
       console.log(`Found valid server at ${server.address} with rating ${server.score} and version ${serverVersion}`)
-      let suc = new Success(server.address)
+      let suc = new Success(server.address, systemInfo?.ServerName || '', systemInfo?.Version || '')
       return suc
     }
     const loggedServers = badServers.map(it => `${it.address}/${it.systemInfo}`).join(', ')
@@ -53,11 +53,11 @@ class ConnectionHelper {
 
       error = errorMessage
     }
-    let err = new Error(error??'')
+    let err = new Error(error ?? '')
     return err
   }
 
-  async discoverServers(): Promise<ServerDiscoveryInfo[]>{
+  async discoverServers(): Promise<ServerDiscoveryInfo[]> {
     return await jellyfin.discovery.discoverLocalServers()
   }
 }
