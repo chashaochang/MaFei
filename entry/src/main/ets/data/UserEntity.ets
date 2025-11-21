@@ -6,6 +6,7 @@ const ID = 'id'
 const SERVER_ID = 'server_id'
 const USER_ID = 'user_id'
 const ACCESS_TOKEN = 'access_token'
+const USER_NAME = 'user_name'
 const LAST_LOGIN_TIMESTAMP = 'last_login_timestamp'
 
 // 定义实体类
@@ -14,18 +15,21 @@ class UserEntity {
   serverId: number = 0
   userId: string = ''
   accessToken: string | null = null
+  username: string = ''
   lastLoginTimestamp: number = 0
 
   // 构造函数
   constructor(
     serverId?: number,
     userId?: string,
-    accessToken?: string | null
+    accessToken?: string | null,
+    username?: string,
   ) {
     if (serverId !== undefined && userId !== undefined) {
       this.serverId = serverId
       this.userId = userId
       this.accessToken = accessToken || null
+      this.username = username || ''
       this.lastLoginTimestamp = Date.now()
     }
   }
@@ -38,6 +42,7 @@ class UserEntity {
         ${SERVER_ID} INTEGER NOT NULL,
         ${USER_ID} TEXT NOT NULL,
         ${ACCESS_TOKEN} TEXT,
+        ${USER_NAME} TEXT NOT NULL,
         ${LAST_LOGIN_TIMESTAMP} INTEGER NOT NULL,
         UNIQUE(${SERVER_ID}, ${USER_ID}),
         FOREIGN KEY(${SERVER_ID}) REFERENCES Server(id)
@@ -48,9 +53,11 @@ class UserEntity {
   // 转换为数据库值映射
   toValuesBucket(): relationalStore.ValuesBucket {
     return {
+      ID: this.id,
       SERVER_ID: this.serverId,
       USER_ID: this.userId,
       ACCESS_TOKEN: this.accessToken,
+      USER_NAME: this.username,
       LAST_LOGIN_TIMESTAMP: this.lastLoginTimestamp
     }
   }
@@ -62,6 +69,7 @@ class UserEntity {
     user.serverId = resultSet.getLong(resultSet.getColumnIndex(SERVER_ID))
     user.userId = resultSet.getString(resultSet.getColumnIndex(USER_ID))
     user.accessToken = resultSet.getString(resultSet.getColumnIndex(ACCESS_TOKEN))
+    user.username = resultSet.getString(resultSet.getColumnIndex(USER_NAME))
     user.lastLoginTimestamp = resultSet.getLong(resultSet.getColumnIndex(LAST_LOGIN_TIMESTAMP))
     return user
   }

@@ -1,20 +1,23 @@
-import { AppPreference } from '../data/AppPreference';
-import { AppUIState } from '../entity/AppUIState';
-import { CommonConstants } from '../utils/CommonConstants';
-import { SplashConstants } from '../utils/SplashConstants';
+import { AppPreference } from '../../data/AppPreference';
+import { AppUIState } from '../../entity/AppUIState';
+import { CommonConstants } from '../../utils/CommonConstants';
+import { SplashConstants } from '../../utils/SplashConstants';
 import { AppStorageV2 } from '@kit.ArkUI';
-import { CustomColorMode } from '../entity/CustomColorMode';
+import { CustomColorMode } from '../../entity/CustomColorMode';
 import { ConfigurationConstant } from '@kit.AbilityKit';
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { RouterConsts } from '../../common/RouterConsts';
 
-@Entry
-@Component
-struct SplashPage {
+@HMRouter({
+  pageUrl: RouterConsts.SplashPage
+})
+@ComponentV2
+export struct SplashPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private preferenceManager: AppPreference = AppPreference.getInstance();
   isAgreedPrivacy: boolean =
-    this.getUIContext().getRouter().getParams() ?
-      (this.getUIContext().getRouter().getParams() as Record<string, boolean>)['isAgreedPrivacy'] :
-      false;
+    HMRouterMgr.getCurrentParam() ? (HMRouterMgr.getCurrentParam() as Record<string, boolean>)['isAgreedPrivacy'] :
+      false
 
   aboutToAppear(): void {
     this.appUIState.customColorMode = AppPreference.getInstance().getCustomColorMode()
@@ -57,15 +60,13 @@ struct SplashPage {
       if (isAgreed) {
         this.init();
       } else {
-        this.getUIContext().getRouter().replaceUrl({ url: 'pages/SafePage' }).catch()
+        HMRouterMgr.to(RouterConsts.SafePage).replace()
       }
     }
   }
 
   jump(): void {
-    this.getUIContext().getRouter().replaceUrl({
-      url: `pages/Index`
-    }).catch()
+    HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
   }
 
   build() {

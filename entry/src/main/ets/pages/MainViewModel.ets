@@ -29,10 +29,10 @@ export class MainViewModel {
     this.serverState = serverEntity ? ServerState.Available : ServerState.Unset
   }
 
-  async switchServer(hostname: string) {
-    this.apiClientController.setupServer(hostname)
-    this.refreshServer()
-  }
+  // async switchServer(hostname: string) {
+  //   this.apiClientController.setupServer(hostname)
+  //   this.refreshServer()
+  // }
 
   resetServer() {
     this.serverState = ServerState.Unset
