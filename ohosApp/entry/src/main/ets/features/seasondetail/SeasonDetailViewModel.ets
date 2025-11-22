@@ -103,14 +103,20 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
             // 分组剧集
             this.groupEpisodes(res.data.Items)
             this.getEpisodes(this.ui.id)
+            this.ui.firstLoading = false
           } else {
             // 清空
             this.ui.videoGroups = []
             this.ui.videos = []
+            this.ui.firstLoading = false
           }
-        }).catch()
+        }).catch(() => {
+          this.ui.firstLoading = false
+        })
       }
-    }).catch()
+    }).catch(() => {
+      this.ui.firstLoading = false
+    })
   }
 
   getEpisodes(seasonId: string) {
