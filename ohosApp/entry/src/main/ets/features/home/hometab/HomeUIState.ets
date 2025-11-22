@@ -13,6 +13,8 @@ export class HomeUIState {
   @Trace latestMap: Map<string, VideoItem[]> = new Map
 
   @Trace isRefreshing: boolean = false;
+  @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
+  @Trace refreshOffset: number = 0
 }
 
 export interface MediaItem {

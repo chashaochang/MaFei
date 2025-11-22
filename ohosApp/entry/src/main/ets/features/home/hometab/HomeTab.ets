@@ -57,7 +57,16 @@ export struct HomeTab {
           ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom + 20)
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
+      .pullDownRatio(0.3)
+      .refreshOffset(64)
+      .maxPullDownDistance(64 + this.appUIState.safeTop)
       .height('100%')
+      .onStateChange((status)=>{
+        this.ui.refreshStatus = status
+      })
+      .onOffsetChange((offset)=>{
+        this.ui.refreshOffset = offset
+      })
       .onRefreshing(() => {
         this.vm.init()
       })
@@ -344,9 +353,9 @@ export struct HomeTab {
 
   @Builder
   customRefreshComponent() {
-    CustomRefreshComponent()
-      .offset({
-        y: this.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT
-      })
+    CustomRefreshComponent({
+      refreshOffset: this.ui.refreshOffset,
+      refreshStatus: this.ui.refreshStatus
+    })
   }
 }
