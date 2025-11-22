@@ -126,21 +126,21 @@ export struct SeasonDetailPage {
                 this.vm.playFirst()
               })
 
-              Button() {
-                Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                  .fillColor($r('app.color.text_1'))
-                  .width(22)
-                  .height(22)
-              }
-              .width(50)
-              .height(50)
-              .borderWidth(1)
-              .borderColor($r('app.color.border'))
-              .borderRadius(25)
-              .backgroundColor($r('app.color.bg_2'))
-              .onClick(() => {
-                this.vm.changeFavorite()
-              })
+              // Button() {
+              //   Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+              //     .fillColor($r('app.color.text_1'))
+              //     .width(22)
+              //     .height(22)
+              // }
+              // .width(50)
+              // .height(50)
+              // .borderWidth(1)
+              // .borderColor($r('app.color.border'))
+              // .borderRadius(25)
+              // .backgroundColor($r('app.color.bg_2'))
+              // .onClick(() => {
+              //   this.vm.changeFavorite()
+              // })
 
               Button() {
                 Image($r('app.media.ic_check'))

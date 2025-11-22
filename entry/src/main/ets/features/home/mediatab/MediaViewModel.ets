@@ -1,7 +1,9 @@
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi, getLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
 import {
-  BaseItemDto, BaseItemDtoQueryResult, ImageType,
+  BaseItemDto,
+  BaseItemDtoQueryResult,
+  ImageType,
   ItemCounts,
 } from "sdk/src/main/ets/generated-client/models";
 import { getTypeByCollectionType } from "../../../common/CommonFunc";
@@ -18,33 +20,37 @@ export class MediaViewModel {
 
   async init() {
     //获取收藏数量
-    this.getFavoriteCount()
+    await this.getFavoriteCount()
     //获取媒体库列表
     await this.getMediaList()
     this.ui.isRefreshing = false;
   }
 
-  getFavoriteCount() {
-    getLibraryApi(ApiClient.Instance()).getItemCounts({
-      userId: ApiClient.Instance().userId,
-      isFavorite: true,
-    }).then((res:AxiosResponse<ItemCounts>) => {
-      if(res.data){
+  async getFavoriteCount() {
+    try {
+      let res: AxiosResponse<ItemCounts> = await getLibraryApi(ApiClient.Instance()).getItemCounts({
+        userId: ApiClient.Instance().userId,
+        isFavorite: true,
+      })
+      if (res.data) {
         //设置收藏数量
-        this.ui.favoriteCount = (res.data.ArtistCount || 0)
-          + (res.data.AlbumCount || 0)
-          + (res.data.ProgramCount || 0)
+        this.ui.favoriteCount = 0
+          // (res.data.ArtistCount || 0)
+          // + (res.data.AlbumCount || 0)
+          // + (res.data.ProgramCount || 0)
           + (res.data.MovieCount || 0)
           + (res.data.EpisodeCount || 0)
           + (res.data.SeriesCount || 0)
-          + (res.data.BookCount || 0)
-          + (res.data.MusicVideoCount || 0)
-          + (res.data.TrailerCount || 0)
-          + (res.data.SongCount || 0)
-          + (res.data.BoxSetCount || 0)
+          // + (res.data.BookCount || 0)
+          // + (res.data.MusicVideoCount || 0)
+          // + (res.data.TrailerCount || 0)
+          // + (res.data.SongCount || 0)
+          // + (res.data.BoxSetCount || 0)
           + (res.data.ItemCount || 0);
       }
-    }).catch()
+    } catch (e) {
+
+    }
   }
 
   private async getMediaList(): Promise<void> {
