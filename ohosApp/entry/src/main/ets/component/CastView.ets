@@ -5,14 +5,18 @@ import { ApiClient } from "../network/ApiClient"
 
 @ComponentV2
 export struct CastView {
-
   @Param @Require peopleList: Array<BaseItemPerson>
-  imageUrlsApi:ImageUrlsApi = new ImageUrlsApi()
+  imageUrlsApi: ImageUrlsApi = new ImageUrlsApi()
 
   build() {
-    Column(){
-      Text('演职人员').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+    Column() {
+      Text('演职人员')
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ left: 16 })
       List({ space: 12 }) {
+        ListItem().width(8)
         ForEach(this.peopleList, (item: BaseItemPerson) => {
           ListItem() {
             Column({ space: 8 }) {
@@ -57,6 +61,7 @@ export struct CastView {
             }
           }
         })
+        ListItem().width(8)
       }
       .height(130)
       .width('100%')

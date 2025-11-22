@@ -40,5 +40,5 @@ export class SeasonDetailUIState extends BaseUIState {
   @Trace hasEdgeEffect: boolean = false;
   @Trace currentScrollState: ScrollState = ScrollState.Idle;
   @Trace imageHeight: number = SeasonDetailUIState.imageInitHeight;
-
+  @Trace firstLoading: boolean = true;
 }

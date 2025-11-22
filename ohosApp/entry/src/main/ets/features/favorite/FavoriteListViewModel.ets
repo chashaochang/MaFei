@@ -2,6 +2,7 @@ import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi } from "sdk";
 import { BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
+import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ApiClient } from "../../network/ApiClient";
@@ -46,7 +47,7 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
         startIndex: this.startIndex,
         includeItemTypes: this.queryTypes
       })
-      .then((res:AxiosResponse<BaseItemDtoQueryResult>) => {
+      .then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
         let noMore = false
         if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
           noMore = true
@@ -65,19 +66,31 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
             }
           })
           if (res.data.StartIndex == 0) {
+            this.ui.pageState = PageState.Content
             this.dataSource.initData(videoList)
             //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
             this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
           } else {
             this.dataSource.pushDataArray(videoList)
           }
-          this.ui.totalCount = this.dataSource.totalCount() + ''
           this.controller.finishLoadMore(noMore)
           this.startIndex = this.dataSource.totalCount()
+        } else {
+          if(res.data.Items?.length === 0){
+            this.dataSource.deleteAll()
+          }
+          this.ui.pageState = PageState.Content
+          this.controller.finishRefresh()
+          this.controller.finishLoadMore(noMore)
         }
+        this.ui.totalCount = this.dataSource.totalCount() + ''
       })
-      .catch(()=>{
-
+      .catch(() => {
+        this.controller.finishRefresh()
+        this.controller.finishLoadMore(false)
+        if (this.startIndex === 0) {
+          this.ui.pageState = PageState.Error
+        }
       })
   }
 

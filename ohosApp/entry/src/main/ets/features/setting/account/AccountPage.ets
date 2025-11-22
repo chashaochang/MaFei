@@ -159,18 +159,22 @@ export struct AccountPage {
 
   @Builder
   emptyLayout() {
-    Column({ space: 12 }) {
+    Stack() {
       Image($r('app.media.no_history'))
         .width(240)
         .height(240)
       Text('无历史登录记录')
-        .fontSize(16)
+        .fontSize(14)
         .fontColor($r('app.color.text_2'))
+        .margin({
+          top: 180
+        })
     }
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
     .width('100%')
     .height('100%')
+    .padding({
+      bottom: 100
+    })
   }
 
   build() {

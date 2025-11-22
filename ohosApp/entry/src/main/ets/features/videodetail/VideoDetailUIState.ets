@@ -52,6 +52,8 @@ export class VideoDetailUIState extends BaseUIState {
 
   @Trace isShowSheet: boolean = false;
   @Trace colorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ff000000')
+
+  @Trace firstLoading: boolean = true;
 }
 
 export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY_VISION' | 'DOLBY_ATOMS'
