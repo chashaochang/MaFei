@@ -59,6 +59,16 @@ export struct MediaTab {
         .height('100%')
         .align(Alignment.Top)
       }
+      .pullDownRatio(0.3)
+      .refreshOffset(64)
+      .maxPullDownDistance(64 + this.appUIState.safeTop)
+      .height('100%')
+      .onStateChange((status)=>{
+        this.ui.refreshStatus = status
+      })
+      .onOffsetChange((offset)=>{
+        this.ui.refreshOffset = offset
+      })
       .onRefreshing(() => {
         this.vm.init()
       })
@@ -76,9 +86,9 @@ export struct MediaTab {
 
   @Builder
   customRefreshComponent() {
-    CustomRefreshComponent()
-      .offset({
-        y: this.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT
-      })
+    CustomRefreshComponent({
+      refreshOffset: this.ui.refreshOffset,
+      refreshStatus: this.ui.refreshStatus
+    })
   }
 }
