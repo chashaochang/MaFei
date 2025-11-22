@@ -7,4 +7,6 @@ export class MediaUIState {
   //媒体库列表
   @Trace mediaList: MediaItem[] = []
   @Trace isRefreshing: boolean = false;
+  @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
+  @Trace refreshOffset: number = 0
 }
