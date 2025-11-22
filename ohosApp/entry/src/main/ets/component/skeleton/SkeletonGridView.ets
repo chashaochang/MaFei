@@ -5,7 +5,7 @@ import { AnimateType, SkeletonTheme, SkeletonType, UISkeleton } from "@hw-agconn
 export struct SkeletonGridView {
   // 切换动画
   @Local animate: AnimateType = AnimateType.GRADIENT;
-  list: Array<number> = Array.from({ length: 99 })
+  list: Array<number> = Array.from({ length: 12 })
 
   build() {
     Column() {
