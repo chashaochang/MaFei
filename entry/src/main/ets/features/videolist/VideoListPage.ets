@@ -2,8 +2,12 @@ import { GridView, RefreshLayoutStatus } from "@abner/refresh_v2";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImageKnifeComponentV2 } from "@ohos/imageknife";
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
+import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
+import { EmptyView } from "../../component/EmptyView";
+import { FailedView } from "../../component/FailedView";
+import { SkeletonGridView } from "../../component/skeleton/SkeletonGridView";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 import { VideoListViewModel } from "./VideoListViewModel";
@@ -29,6 +33,7 @@ export struct VideoListPage {
         title: this.ui.title
       }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
       Column() {
+
         Row() {
           Text('按添加日期').fontSize(14).fontColor($r('app.color.text_primary'))
           Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
@@ -67,6 +72,8 @@ export struct VideoListPage {
             this.vm.dataSource = dataSource
           },
           itemLayout: (item, index) => this.itemLayout(item, index), //条目布局
+          emptyLayout: () => this.emptyLayout(),
+          showEmptyLayout: this.ui.totalCount === '0',
           controller: this.vm.controller, //控制器，负责关闭下拉和上拉
           onRefresh: () => {
             //下拉刷新
@@ -84,6 +91,15 @@ export struct VideoListPage {
           lazyCachedCount: 10 //缓存
         }).width('100%')
           .layoutWeight(1)
+        if (this.ui.pageState == PageState.Loading) {
+          SkeletonGridView()
+        }
+        if (this.ui.pageState == PageState.Error) {
+          FailedView()
+            .onClick(()=>{
+              this.vm.refresh()
+            })
+        }
       }
       .width('100%')
       .layoutWeight(1)
@@ -112,6 +128,11 @@ export struct VideoListPage {
           })
           .push()
       })
+  }
+
+  @Builder
+  emptyLayout() {
+    EmptyView()
   }
 }
 

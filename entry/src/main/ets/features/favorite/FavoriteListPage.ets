@@ -1,7 +1,11 @@
 import { GridView, RefreshLayoutStatus } from '@abner/refresh_v2';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { PageState } from '../../common/base/BaseUIState';
 import { RouterConsts } from '../../common/RouterConsts';
 import { ActionBar } from '../../component/ActionBar';
+import { EmptyView } from '../../component/EmptyView';
+import { FailedView } from '../../component/FailedView';
+import { SkeletonGridView } from '../../component/skeleton/SkeletonGridView';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { FavoriteListUIState } from './FavoriteListUIState';
@@ -62,6 +66,8 @@ export struct FavoriteListPage {
           onLazyDataSource: (dataSource) => {
             this.vm.dataSource = dataSource
           },
+          showEmptyLayout: this.ui.totalCount === '0',
+          emptyLayout: () => this.emptyLayout(),
           itemLayout: (item, index) => this.itemLayout(item, index), //条目布局
           controller: this.vm.controller, //控制器，负责关闭下拉和上拉
           onRefresh: () => {
@@ -80,6 +86,14 @@ export struct FavoriteListPage {
           lazyCachedCount: 10 //缓存
         }).width('100%')
           .layoutWeight(1)
+        if (this.ui.pageState == PageState.Loading) {
+          SkeletonGridView()
+        }
+        if (this.ui.pageState == PageState.Error) {
+          FailedView().onClick(()=>{
+            this.vm.refresh()
+          })
+        }
       }
       .width('100%')
       .layoutWeight(1)
@@ -107,5 +121,10 @@ export struct FavoriteListPage {
           })
           .push()
       })
+  }
+
+  @Builder
+  emptyLayout() {
+    EmptyView()
   }
 }

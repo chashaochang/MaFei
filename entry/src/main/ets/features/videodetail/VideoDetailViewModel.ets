@@ -96,8 +96,11 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
           Math.floor(((itemData.RunTimeTicks! - res.data.UserData.PlaybackPositionTicks) / 10000000) / 60 % 60) + " 分钟"
           this.ui.playButtonText = '继续播放'
         }
+        this.ui.firstLoading = false
       }
-    }).catch()
+    }).catch(()=>{
+      this.ui.firstLoading = false
+    })
   }
 
   getTvShowDetail(id: string) {
@@ -134,10 +137,15 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
                 type: e.Type,
               }
             })
+            this.ui.firstLoading = false
           }
-        }).catch()
+        }).catch(()=>{
+          this.ui.firstLoading = false
+        })
       }
-    }).catch()
+    }).catch(()=>{
+      this.ui.firstLoading = false
+    })
   }
 
   getNextUp() {

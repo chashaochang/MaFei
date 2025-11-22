@@ -12,7 +12,8 @@
     "@ohos/danmakuflamemaster": "^2.1.1",
     "@ohos/imageknife": "^3.2.7",
     "@ohos/lottie": "^2.0.24",
-    "@abner/refresh_v2": "^1.0.4"
+    "@abner/refresh_v2": "^1.0.4",
+    "@hw-agconnect/ui-skeleton": "^1.0.0"
   },
   "devDependencies": {},
   "dynamicDependencies": {}
