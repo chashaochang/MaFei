@@ -7,7 +7,6 @@ import { UIConstants } from "../../common/UIConstants";
 
 @ComponentV2
 export struct HomeScreen {
-  @Local currentIndex: number = 0;
   @Local selectedIndex: number = 0
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
@@ -33,7 +32,6 @@ export struct HomeScreen {
       .barBackgroundColor($r('app.color.tab'))
       .barOverlap(true)
       .onChange((index: number) => {
-        this.currentIndex = index;
         this.selectedIndex = index
       })
       .onAnimationStart((index: number, targetIndex: number, event: TabsAnimationEvent) => {
