@@ -13,4 +13,5 @@ export class RouterConsts {
   static readonly ColorModePage = 'ColorModePage';
   static readonly AccountPage = 'AccountPage';
   static readonly AddAccountPage = 'AddAccountPage';
+  static readonly WebITongPage = 'WebITongPage';
 }
