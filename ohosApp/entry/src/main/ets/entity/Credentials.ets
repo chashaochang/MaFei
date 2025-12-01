@@ -9,7 +9,7 @@ export interface Server {
   ExchangeToken: null
   Id: string
   LastConnectionMode: number
-  LocalAddress: string
+  LocalAddress: string | null
   ManualAddress: string
   Name: string
   manualAddressOnly: boolean
