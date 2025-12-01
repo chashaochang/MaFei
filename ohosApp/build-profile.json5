@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B149B573C813F8EACB6630302952693FA18E7C4F4BBE1B40DE1163CE53679910B0F520CCA8CA0FC",
+          "keyPassword": "0000001B137C4DD1C5EB06D9BF3B264DBC274EBE3FB3C2120998D1E0066C3C1B0E7CC0E7B7A4F6D1C77524",
           "profile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p12",
-          "storePassword": "0000001BD54256EF0DE2C0AABF1C3CCA716436BD11DD05C79E7EBE575FACDFCF64E86050EE1A98D11AE237"
+          "storePassword": "0000001BE9C732E87C8C943D46E695FB579309CF658EE1BD1FC74DDE58B3D87CC01F0734B6E8194D06B424"
         }
       }
     ],
@@ -37,8 +37,8 @@
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
-        "versionCode": 1000003,
-        "versionName": "1.0.3",
+        "versionCode": 1000004,
+        "versionName": "1.0.4",
         "output": {
           "artifactName": "HomoFin_Release"
         },

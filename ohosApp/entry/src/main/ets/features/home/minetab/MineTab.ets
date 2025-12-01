@@ -102,20 +102,11 @@ export struct MineTab {
                       uri: 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=991893385&card_type=group&source=qrcode',
                       flags: wantConstant.Flags.FLAG_START_WITHOUT_TIPS
                     }).catch(() => {
-                      //弹提示框
-                      let uiContext: UIContext = this.getUIContext();
-                      uiContext.getPromptAction().openCustomDialog({
-                        builder: () => {
-                          this.dialogBuilder();
-                        }
-                      }).catch(() => {
-
-                      });
+                      HMRouterMgr.to(RouterConsts.AddGroupPage).push()
                     })
                   } catch (e) {
-                    console.log('catch2');
+                    HMRouterMgr.to(RouterConsts.AddGroupPage).push()
                   }
-
                   break
                 case 2:
                   // HMRouterMgr.push({

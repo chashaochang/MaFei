@@ -29,7 +29,7 @@ export class Constants {
    */
   static readonly PLAYBACK_STATE_PLAY: number = 2;
 
-  static readonly APP_INFO_NAME = "Jellyfin HarmonyOS"
+  static readonly APP_INFO_NAME = "HomoFin"
   // Webapp constants
   static readonly INITIAL_CONNECTION_TIMEOUT = 10000 // 10 seconds
 
