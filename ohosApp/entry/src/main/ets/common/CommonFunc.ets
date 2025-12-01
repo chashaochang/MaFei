@@ -14,6 +14,8 @@ import { PlayOptions } from '../player/interaction/PlayOptions'
 import { UIConstants } from './UIConstants'
 import { common, Want } from '@kit.AbilityKit'
 import { util } from '@kit.ArkTS'
+import { AppStorageV2 } from '@kit.ArkUI'
+import { AppUIState } from '../entity/AppUIState'
 
 export function parseVideoType(type?: BaseItemKind): string {
   let res = ''
@@ -341,7 +343,8 @@ export function openUrlByBrowser(url: string) {
 }
 
 export function getUIAbilityContext(): common.UIAbilityContext {
-  return AppStorage.get<common.UIAbilityContext>('context')!
+  let appUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  return appUIState.context!
 }
 
 export function stringToArray(str: string): Uint8Array {
