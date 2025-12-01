@@ -7,6 +7,7 @@ import { ServerDao } from "./ServerDao";
 import ServerEntity from "./ServerEntity";
 import { UserDao } from "./UserDao";
 import { ValuesBucket } from "@kit.ArkData";
+import { webview } from "@kit.ArkWeb";
 
 export class ApiClientController {
   appPreference: AppPreference
@@ -98,6 +99,7 @@ export class ApiClientController {
     AppPreference.getInstance().setAccessToken('')
     AppPreference.getInstance().setCurrentUserId('')
     AppPreference.getInstance().setUserName('')
+    webview.WebviewController.removeAllCache(true)
     // ApiClient.Instance().logout()
   }
 }
