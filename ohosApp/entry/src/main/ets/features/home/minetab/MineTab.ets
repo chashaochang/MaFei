@@ -72,22 +72,32 @@ export struct MineTab {
           })
 
           ListGroup({
-            items: [new BaseGroupItem('切换账号')],
-            onItemClick: () => {
-              HMRouterMgr.to(RouterConsts.AccountPage).push()
+            items: [new BaseGroupItem('切换账号',$r('app.media.ic_account_switch')),
+              new BaseGroupItem('网(Web)易通',$r('app.media.web'))],
+            onItemClick: (index) => {
+              switch (index){
+                case 0:{
+                  HMRouterMgr.to(RouterConsts.AccountPage).push()
+                  break
+                }
+                case 1:{
+                  HMRouterMgr.to(RouterConsts.WebITongPage).push()
+                  break
+                }
+              }
             }
           })
           ListGroup({
-            items: [new BaseGroupItem('外观', '', this.ui.colorModeName)],
+            items: [new BaseGroupItem('外观', $r('app.media.theme'), this.ui.colorModeName)],
             onItemClick: () => {
               HMRouterMgr.to(RouterConsts.ColorModePage).push()
             }
           })
           ListGroup({
             items: [
-              new BaseGroupItem('隐私协议'),
-              new BaseGroupItem('加入群聊'),
-              new BaseGroupItem('关于我们', '', this.ui.versionName, false)
+              new BaseGroupItem('隐私协议',$r('app.media.ic_yinsi')),
+              new BaseGroupItem('加入群聊', $r('app.media.add_group')),
+              new BaseGroupItem('关于我们', $r('app.media.about'), this.ui.versionName, false)
             ],
             onItemClick: (index) => {
               switch (index) {
