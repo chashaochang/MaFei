@@ -48,6 +48,7 @@ export struct MediaTab {
                   .push()
               }
             }).margin({ top: 12 })
+            Blank().height(this.appUIState.safeBottom + UIConstants.BOTTOM_BAR_HEIGHT)
           }.alignItems(HorizontalAlign.Start)
           .padding({
             left: 16,
