@@ -15,10 +15,11 @@ import { OneMoreUtil } from "../../utils/OneMoreUtil"
 import { AppUIState } from "../../entity/AppUIState"
 import { PlayerLifecycle } from "../../router/lifecycles/PlayerLifecycle"
 import { ToastUtil } from "../../utils/ToastUtil"
-import { PlayerUIState } from "./PlayerUIState"
-import { PlayerViewModel } from "./PlayerViewModel"
+import { PlayerPageUIState } from "./PlayerPageUIState"
+import { PlayerPageViewModel } from "./PlayerPageViewModel"
 import { PlayerView } from "./PlayerView"
 import { RouterConsts } from "../../common/RouterConsts"
+import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
 
 @HMRouter({
   pageUrl: RouterConsts.PlayerPage,
@@ -28,20 +29,20 @@ import { RouterConsts } from "../../common/RouterConsts"
 @ComponentV2
 export struct PlayerPage {
   options: PlayOptions = HMRouterMgr.getCurrentParam() as PlayOptions
-  @Provider() ui: PlayerUIState = new PlayerUIState()
-  @Provider() vm: PlayerViewModel = new PlayerViewModel(this.ui)
+  @Provider() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
+  @Provider() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
   castController: avSession.AVCastController | undefined = undefined;
+  playerFullscreenHelper: PlayerFullscreenHelper = new PlayerFullscreenHelper()
   backClickListener: () => void = () => {
     HMRouterMgr.pop()
   }
-  @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   @Local lifecycle: PlayerLifecycle = HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as PlayerLifecycle;
 
   @Monitor('lifecycle.options')
   onNewInstance() {
     this.options = this.lifecycle.options
-    this.ui = new PlayerUIState()
-    this.vm = new PlayerViewModel(this.ui)
+    this.ui = new PlayerPageUIState(this.getUIContext())
+    this.vm = new PlayerPageViewModel(this.ui)
     this.aboutToAppear()
   }
 
@@ -51,10 +52,9 @@ export struct PlayerPage {
       return
     }
     let mediaSource = this.vm.queueManager.currentMediaSourceOrNull!
-    if (MediaStreamUtil.isLandscape(mediaSource.selectedVideoStream) == false) {
+    if (MediaStreamUtil.isLandscape(mediaSource.selectedVideoStream)) {
       // For portrait videos, immediately enable fullscreen
-      //playerFullscreenHelper.enableFullscreen()
-
+      this.playerFullscreenHelper.enableFullscreen()
     }
     // else if (appPreferences.exoPlayerStartLandscapeVideoInLandscape) {
     //   // Auto-switch to landscape for landscape videos if enabled
@@ -75,16 +75,16 @@ export struct PlayerPage {
 
   async aboutToAppear(): Promise<void> {
     if (OneMoreUtil.isBigScreen()) {
-      if (this.appUIState.orientation == display.Orientation.LANDSCAPE ||
-        this.appUIState.orientation == display.Orientation.LANDSCAPE_INVERTED) {
+      if (this.vm.appUIState.orientation == display.Orientation.LANDSCAPE ||
+        this.vm.appUIState.orientation == display.Orientation.LANDSCAPE_INVERTED) {
         //如果现在横屏分栏展示,需要手动点击才能全屏
-        OneMoreUtil.updateNavModifier(this.appUIState)
+        OneMoreUtil.updateNavModifier(this.vm.appUIState)
       }
     }
     this.vm.initAVSession()
     // let callback = async () => {
     //   let defaultDisplay = display.getDefaultDisplaySync()
-    //   this.appUIState.isFullScreen = defaultDisplay.width > defaultDisplay.height
+    //   this.vm.appUIState.isFullScreen = defaultDisplay.width > defaultDisplay.height
     // }
     // try {
     //   display.on("change", callback); // 监听屏幕状态改变
@@ -134,8 +134,8 @@ export struct PlayerPage {
   }
 
   onBackPress(): boolean | void {
-    if (this.appUIState.isFullScreen) {
-      this.appUIState.isFullScreen = false
+    if (this.vm.appUIState.isFullScreen) {
+      this.vm.appUIState.isFullScreen = false
     } else {
       HMRouterMgr.pop()
     }
