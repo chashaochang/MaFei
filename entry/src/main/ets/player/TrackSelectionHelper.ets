@@ -5,14 +5,14 @@ import {
   PlayMethod,
   SubtitleDeliveryMethod
 } from "sdk/src/main/ets/generated-client/models";
-import { PlayerViewModel } from "../features/player/PlayerViewModel";
+import { PlayerPageViewModel } from "../features/player/PlayerPageViewModel";
 import { JellyfinMediaSource } from "./source/JellyfinMediaSource";
 
 const TAG = 'TrackSelectionHelper'
 export class TrackSelectionHelper {
-  viewModel: PlayerViewModel
+  viewModel: PlayerPageViewModel
 
-  constructor(viewModel: PlayerViewModel) {
+  constructor(viewModel: PlayerPageViewModel) {
     this.viewModel = viewModel
   }
 

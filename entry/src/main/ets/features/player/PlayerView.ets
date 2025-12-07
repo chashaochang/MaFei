@@ -29,7 +29,8 @@ import { QueueItem } from "../../entity/QueueItem";
 import { AppUIState } from "../../entity/AppUIState";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { DanmakuViewV2 } from "@ohos/danmakuflamemaster";
-import { PlayerUIState } from "./PlayerUIState";
+import { PlayerPageUIState } from "./PlayerPageUIState";
+import { PlayerPageViewModel } from "./PlayerPageViewModel";
 
 let uiTime: number = 0;
 let uiLockTime: number = 0;
@@ -37,7 +38,6 @@ let touchStartX: number = 0;
 let touchStartY: number = 0;
 let changeWidth: number = 0;
 let changeHeight: number = 0;
-let windowClass: window.Window | undefined = undefined;
 
 @ComponentV2
 export struct PlayerView {
@@ -48,7 +48,7 @@ export struct PlayerView {
     this.stop()
     this.startPlayOrResumePlay()
   }
-
+  
   @Param @Require onNext: () => void
   @Param @Require onAudioTrackSelected: (stream: MediaStream) => void
   @Param @Require onSubtitleSelected: (stream: MediaStream) => void
@@ -71,26 +71,26 @@ export struct PlayerView {
   onLockChanged() {
     if (this.lock) {
       if (OneMoreUtil.isNormalPhone()) {
-        windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE);
+        this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE);
       } else if (OneMoreUtil.isBigScreen()) {
         switch (display.getDefaultDisplaySync().orientation) {
           case display.Orientation.PORTRAIT:
-            windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT);
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT);
             break
           case display.Orientation.LANDSCAPE:
-            windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE_INVERTED); //不知道为啥模拟器是反的,没有真机
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE_INVERTED); //不知道为啥模拟器是反的,没有真机
             break
           case display.Orientation.PORTRAIT_INVERTED:
-            windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT_INVERTED);
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT_INVERTED);
             break
           case display.Orientation.LANDSCAPE_INVERTED:
-            windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE); //不知道为啥模拟器是反的,没有真机
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE); //不知道为啥模拟器是反的,没有真机
             break
         }
       }
     } else {
       if (OneMoreUtil.isBigScreen()) {
-        windowClass?.setPreferredOrientation(window.Orientation.AUTO_ROTATION)
+        this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.AUTO_ROTATION)
       }
       this.onScreenChanged()
     }
@@ -145,13 +145,12 @@ export struct PlayerView {
   pipController?: PiPWindow.PiPController;
   xComponentController: XComponentController = new XComponentController()
   @Local hintMsgVisibility: boolean = false;
-  @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   changeSystemBar() {
-    if (!this.appUIState.isFullScreen && this.showControls) {
-      windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+    if (!this.vm.appUIState.isFullScreen && this.showControls) {
+      this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
     } else {
-      windowClass?.setWindowSystemBarEnable([])
+      this.vm.appUIState.windowClass?.setWindowSystemBarEnable([])
     }
   }
 
@@ -160,13 +159,14 @@ export struct PlayerView {
     this.changeSystemBar()
   }
 
-  @Monitor('appUIState.isFullScreen')
+  @Monitor('vm.appUIState.isFullScreen')
   onScreenChanged() {
+    console.log('this.vm.appUIState.isFullScreen:'+this.vm.appUIState.isFullScreen);
     this.changeSystemBar()
-    if (this.appUIState.isFullScreen) {
+    if (this.vm.appUIState.isFullScreen) {
       if (OneMoreUtil.isNormalPhone()) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
-          windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
+          this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
         }
       } else if (OneMoreUtil.isBigScreen()) {
 
@@ -175,7 +175,7 @@ export struct PlayerView {
       if (OneMoreUtil.isNormalPhone()) {
         SmartDialog.dismiss()
         if (canIUse('SystemCapability.Window.SessionManager')) {
-          windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT);
+          this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT);
         }
       } else if (OneMoreUtil.isBigScreen()) {
 
@@ -183,14 +183,15 @@ export struct PlayerView {
     }
   }
 
-  @Consumer() ui: PlayerUIState = new PlayerUIState()
+  @Consumer() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
+  @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
 
-  @Monitor('uiState')
+  @Monitor('ui')
   onNewInstance() {
     this.stop()
   }
 
-  @Monitor('uiState.subtitles')
+  @Monitor('ui.subtitles')
   onSubtitleChanged() {
     if (this.ui.subtitles.length > 0) {
       this.startSubTitle()
@@ -199,29 +200,19 @@ export struct PlayerView {
     }
   }
 
-  @Monitor('uiState.playerStatus')
+  @Monitor('ui.playerStatus')
   onPlayerStateChanged() {
     this.sendAVSessionState(this.ui.playerStatus)
   }
 
-  @Monitor('uiState.isCastPlaying')
+  @Monitor('ui.isCastPlaying')
   onCastChanged() {
     if (this.ui.isCastPlaying) {
-      this.appUIState.isFullScreen = false
+      this.vm.appUIState.isFullScreen = false
     }
   }
 
   aboutToAppear() {
-    try {
-      let promise = window.getLastWindow(getContext(this));
-      promise.then((data) => {
-        windowClass = data;
-      }).catch((error: BusinessError) => {
-        LogUtils.getInstance().LOGI('Failed to obtain the top window. Cause: ' + JSON.stringify(error));
-      })
-    } catch (exception) {
-      LogUtils.getInstance().LOGI('Failed to obtain the top window. Cause: ' + JSON.stringify(exception));
-    }
     let groupid = audio.DEFAULT_VOLUME_GROUP_ID;
     this.mAudioManager = audio.getAudioManager();
     let volumeManager: audio.AudioVolumeManager = this.mAudioManager.getVolumeManager();
@@ -326,7 +317,7 @@ export struct PlayerView {
       this.stop();
     }
     this.mIjkMediaPlayer.off('audioInterrupt');
-    windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+    this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
   }
 
   @Builder
@@ -492,7 +483,7 @@ export struct PlayerView {
           left: 16
         })
         .onClick(() => {
-          this.appUIState.isFullScreen = false
+          this.vm.appUIState.isFullScreen = false
         })
       Text(this.ui.title)
         .fontColor(Color.White)
@@ -514,10 +505,24 @@ export struct PlayerView {
         .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
 
     }
-    .height(56)
+    .height(this.vm.appUIState.isFullScreen ? 56 + 20 : 56 + this.vm.appUIState.safeTop)
     .width('100%')
     .justifyContent(FlexAlign.Start)
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+    .padding({
+      top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop,
+      left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+      right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+    })
+    .linearGradient({
+      angle: 0, // 0度在CSS中是从下到上，ArkTS中180度对应
+      colors: [
+        ['rgba(26, 30, 35, 0.0)', 0], // 起始位置：完全不透明
+        ['rgba(26, 30, 35, 0.2)', 0.3], // 30%位置：60%不透明
+        ['rgba(26, 30, 35, 0.4)', 0.6], // 40%位置：20%不透明
+        ['rgba(26, 30, 35, 0.8)', 1]// 100%位置：10%不透明
+      ]
+    })
   }
 
   @Builder
@@ -568,7 +573,7 @@ export struct PlayerView {
           .height(48)
           .padding(12)
           .onClick(() => {
-            this.appUIState.isFullScreen = !this.appUIState.isFullScreen
+            this.vm.appUIState.isFullScreen = !this.vm.appUIState.isFullScreen
           })
       }.width('100%')
 
@@ -611,13 +616,40 @@ export struct PlayerView {
           Image($r("app.media.ic_info"))
             .width(44)
             .height(44)
-            .padding(12)
+            .padding(10)
         }.backgroundColor(Color.Transparent)
         .onClick(() => {
           if (this.ui.playerMenus) {
             this.ui.playerMenus.isShowPlayBackInfo = true
           }
         })
+
+        Button() {
+          Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
+            .width(44)
+            .height(44)
+            .padding(10)
+        }
+        .backgroundColor(Color.Transparent)
+        .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
+        .onClick(() => {
+          this.ui.danmuOpen = !this.ui.danmuOpen
+          if (this.ui.danmuOpen) {
+            this.ui.danmuModel.show()
+          } else {
+            this.ui.danmuModel.hide()
+          }
+        })
+
+        // Button(){
+        //   Image($r('app.media.danmu_setting'))
+        //     .width(44)
+        //     .height(44)
+        //     .padding(12)
+        // }.visibility(this.ui.enableDanmu && this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
+        // .onClick(()=>{
+        //
+        // })
 
         Blank().layoutWeight(1)
         if (this.ui.mediaType == BaseItemKind.Episode) {
@@ -662,14 +694,14 @@ export struct PlayerView {
           })
         if (OneMoreUtil.isPc()) {
           Button() {
-            Image(this.appUIState.isFullScreen ? $r('app.media.ic_out_fullscreen') : $r("app.media.ic_fullscreen"))
+            Image(this.vm.appUIState.isFullScreen ? $r('app.media.ic_out_fullscreen') : $r("app.media.ic_fullscreen"))
               .width(44)
               .height(44)
               .padding(12)
           }.backgroundColor(Color.Transparent)
           .onClick(() => {
-            this.appUIState.isFullScreen = !this.appUIState.isFullScreen
-            if (this.appUIState.isFullScreen) {
+            this.vm.appUIState.isFullScreen = !this.vm.appUIState.isFullScreen
+            if (this.vm.appUIState.isFullScreen) {
               OneMoreUtil.maximize()
             } else {
               OneMoreUtil.recover()
@@ -680,8 +712,11 @@ export struct PlayerView {
         left: 8,
         right: 8
       })
+      .visibility(this.vm.appUIState.isFullScreen ? Visibility.Visible : Visibility.None)
     }.padding({
-      bottom: this.showControls && !this.appUIState.isFullScreen ? this.appUIState.safeBottom : 0
+      bottom: this.showControls && !this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeBottom : 10,
+      left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+      right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
     })
   }
 
@@ -811,7 +846,7 @@ export struct PlayerView {
       if (this.ui.subtitles.length > 0) {
         Stack() {
           Text(this.ui.currentSubtitle)
-            .fontSize(this.appUIState.isFullScreen ? 21 : 13)
+            .fontSize(this.vm.appUIState.isFullScreen ? 21 : 13)
             .fontColor(Color.White)
             .width('100%')
             .padding(20)
@@ -824,8 +859,12 @@ export struct PlayerView {
       }
 
       DanmakuViewV2({ model: this.ui.danmuModel!! })
+        .padding({
+          top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
+        })
         .width('100%')
         .height('100%')
+        .opacity(0.6)
 
       Flex({ alignItems: ItemAlign.Center, justifyContent: FlexAlign.SpaceBetween }) {
         this.VolumeUi()
@@ -836,9 +875,9 @@ export struct PlayerView {
 
 
       Column() {
-        if (!this.appUIState.isFullScreen) {
-          Blank().height(this.appUIState.safeTop)
-        }
+        // if (!this.vm.appUIState.isFullScreen) {
+        //   Blank().height(this.vm.appUIState.safeTop)
+        // }
         //顶部菜单
         this.topControlView()
         Blank().layoutWeight(1)
@@ -847,7 +886,7 @@ export struct PlayerView {
       }.height('100%')
       .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
 
-      if (this.appUIState.isFullScreen && this.fullShowLock && !OneMoreUtil.isPc()) {
+      if (this.vm.appUIState.isFullScreen && this.fullShowLock && !OneMoreUtil.isPc()) {
         Stack() {
           Image(this.lock ? $r('app.media.lock') : $r('app.media.unlock'))
             .width(20)
@@ -936,13 +975,6 @@ export struct PlayerView {
     .width('100%')
     .backgroundColor($r('sys.color.black'))
     .clip(true)
-    .onClick(() => {
-      if (this.showControls) {
-        this.showControls = false
-      } else {
-        this.timeCountdown()
-      }
-    })
     .onHover((isHover: boolean) => {
       if (OneMoreUtil.isPc()) {
         if (isHover) {
@@ -975,9 +1007,9 @@ export struct PlayerView {
     //   if (e.type == KeyType.Down) {
     //     switch (e.keyCode) {
     //       case KeyCode.KEYCODE_ESCAPE: {
-    //         if(this.appUIState.isFullScreen){
+    //         if(this.vm.appUIState.isFullScreen){
     //           OneMoreUtil.recover()
-    //           this.appUIState.isFullScreen = false
+    //           this.vm.appUIState.isFullScreen = false
     //           return true
     //         }
     //         break
@@ -993,9 +1025,29 @@ export struct PlayerView {
     //   }
     //   return false
     // })
-    .gesture(GestureGroup(GestureMode.Parallel,
+    .gesture(GestureGroup(GestureMode.Exclusive,
+      TapGesture({ count: 2 }).onAction((_event: GestureEvent | undefined) => {
+        if (OneMoreUtil.isPc()) {
+          return
+        }
+        if (this.lock) {
+          return;
+        }
+        if (this.loadingVisible == Visibility.Visible) {
+          return;
+        }
+        if (!this.mIjkMediaPlayer) {
+          return;
+        }
+        LogUtils.getInstance().LOGI('double click start');
+        if (this.mIjkMediaPlayer.isPlaying()) {
+          this.pause();
+        } else {
+          this.startPlayOrResumePlay();
+        }
+      }),
       //点击事件
-      TapGesture().onAction((event: GestureEvent | undefined) => {
+      TapGesture({ count: 1 }).onAction((event: GestureEvent | undefined) => {
         if (event) {
           if (this.lock) {
             this.timeLockCountdown();
@@ -1007,8 +1059,13 @@ export struct PlayerView {
           if (OneMoreUtil.isPc()) {
             this.startOrStop()
           } else {
-            if (!this.showControls) {
-              this.timeCountdown();
+            // if (!this.showControls) {
+            //   this.timeCountdown();
+            // }
+            if (this.showControls) {
+              this.showControls = false
+            } else {
+              this.timeCountdown()
             }
           }
           if (event && event.fingerList && event.fingerList[0]) {
@@ -1092,8 +1149,8 @@ export struct PlayerView {
                 brightness = 255;
               }
               let finalValue = brightness / 255;
-              if (windowClass) {
-                windowClass.setWindowBrightness(finalValue);
+              if (this.vm.appUIState.windowClass) {
+                this.vm.appUIState.windowClass.setWindowBrightness(finalValue);
               }
               this.mCurrentBrightness = brightness;
             }
@@ -1220,26 +1277,6 @@ export struct PlayerView {
           this.isHorizontalDrag = false;
           this.showSeekProgressUi = false;
         }),
-      TapGesture({ count: 2 }).onAction((_event: GestureEvent | undefined) => {
-        if (OneMoreUtil.isPc()) {
-          return
-        }
-        if (this.lock) {
-          return;
-        }
-        if (this.loadingVisible == Visibility.Visible) {
-          return;
-        }
-        if (!this.mIjkMediaPlayer) {
-          return;
-        }
-        LogUtils.getInstance().LOGI('double click start');
-        if (this.mIjkMediaPlayer.isPlaying()) {
-          this.pause();
-        } else {
-          this.startPlayOrResumePlay();
-        }
-      }),
       LongPressGesture()//长按三倍速
         .onAction((event: GestureEvent) => {
           if (OneMoreUtil.isPc()) {
@@ -1269,103 +1306,12 @@ export struct PlayerView {
       changeWidth = newValue.width as number;
       changeHeight = newValue.height as number;
       // 如果用户不隐藏状态栏，全屏的时候组件高度与手机的高度差距小于50.就显示上方控制栏
-      if (this.appUIState.isFullScreen) {
+      if (this.vm.appUIState.isFullScreen) {
         this.fullShowLock = true;
       }
       this.ui.danmuModel.setWidth(this.getUIContext().vp2px(changeWidth))
       this.ui.danmuModel.setHeight(this.getUIContext().vp2px(changeHeight))
     })
-
-
-    // Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
-    //   Button($r('app.string.Play'))
-    //     .onClick(() => {
-    //       this.startPlayOrResumePlay();
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    //   Button($r('app.string.Pause'))
-    //     .onClick(() => {
-    //       this.pause();
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    // }
-    //
-    // Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
-    //   Button($r('app.string.1x'))
-    //     .onClick(() => {
-    //       if (!this.debounce()) {
-    //         return;
-    //       }
-    //       this.playSpeed = '1f'
-    //       this.mIjkMediaPlayer.setSpeed("1f");
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    //
-    //   Button($r('app.string.1_5x'))
-    //     .onClick(() => {
-    //       if (!this.debounce()) {
-    //         return;
-    //       }
-    //       this.playSpeed = '1.5f'
-    //       this.mIjkMediaPlayer.setSpeed("1.5f");
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    //
-    //   Button($r('app.string.2x'))
-    //     .onClick(() => {
-    //       this.playSpeed = '2f'
-    //       this.mIjkMediaPlayer.setSpeed("2f");
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    // }
-
-    // Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
-    //   Button($r('app.string.startRecord'))
-    //     .visibility(this.recordProgressVisible == Visibility.Visible ? Visibility.None : Visibility.Visible)
-    //     .onClick(() => {
-    //       this.startRecord()
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    //
-    //   Progress({ value: 0, total: 100, type: ProgressType.Ring })
-    //     .width(50).color(Color.Blue)
-    //     .style({ strokeWidth: 10, status: ProgressStatus.LOADING }).visibility(this.recordProgressVisible)
-    //
-    //   Button($r('app.string.stopRecord'))
-    //     .visibility(this.recordProgressVisible == Visibility.Visible ? Visibility.None : Visibility.Visible)
-    //     .onClick(() => {
-    //       this.stopRecord(true)
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    //
-    //   Progress({ value: 0, total: 100, type: ProgressType.Ring })
-    //     .width(50).color(Color.Blue)
-    //     .style({ strokeWidth: 10, status: ProgressStatus.LOADING }).visibility(this.screenshotProgressVisible)
-    //
-    //   Button($r('app.string.screenshot'))
-    //     .visibility(this.screenshotProgressVisible == Visibility.Visible ? Visibility.None : Visibility.Visible)
-    //     .onClick(() => {
-    //       this.screenshot()
-    //     })
-    //     .width('400px')
-    //     .height('80px')
-    //     .margin('15px')
-    // }
-
   }
 
   private startOrStop() {
@@ -1458,9 +1404,9 @@ export struct PlayerView {
       this.startProgressTask();
       this.play(this.videoUrl.toString());
       this.timeCountdown()
-      // if(this.uiState.danmuModel.isPrepared()){
-      //   this.uiState.danmuModel.start()
-      // }
+      if (this.ui.danmuModel.isPrepared()) {
+        this.ui.danmuModel.start()
+      }
     }
     if (this.ui.CONTROL_PlayStatus == PlayStatus.PAUSE) {
       this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
@@ -1800,120 +1746,12 @@ export struct PlayerView {
     return false;
   }
 
-  // private startRecord() {
-  //   let isRecord = this.mIjkMediaPlayer.isRecord()
-  //   if (isRecord) {
-  //     prompt.showToast({
-  //       message: $r('app.string.recordIng')
-  //     });
-  //     return
-  //   }
-  //   this.recordSaveFilePath = getContext(this).cacheDir + "/record.mp4";
-  //   let result = this.mIjkMediaPlayer.startRecord(this.recordSaveFilePath);
-  //   prompt.showToast({
-  //     message: result ? $r('app.string.start_record_success') : $r('app.string.start_record_failed')
-  //   });
-  // }
-
-  // private stopRecord(isShowTip: boolean) {
-  //   let isRecord = this.mIjkMediaPlayer.isRecord()
-  //   if (!isRecord) {
-  //     if (isShowTip) {
-  //       prompt.showToast({
-  //         message: $r('app.string.record_not_enabled')
-  //       });
-  //     }
-  //     return
-  //   }
-  //   this.recordProgressVisible = Visibility.Visible;
-  //   let that = this;
-  //   this.mIjkMediaPlayer.stopRecord().then((result) => {
-  //     that.recordProgressVisible = Visibility.None;
-  //     if (!result) {
-  //       prompt.showToast({
-  //         message: $r('app.string.stop_record_failed')
-  //       });
-  //       return;
-  //     }
-  //     let atManager = abilityAccessCtrl.createAtManager();
-  //     atManager.requestPermissionsFromUser(getContext(that), ['ohos.permission.WRITE_IMAGEVIDEO']).then(async () => {
-  //       let photoType: photoAccessHelper.PhotoType = photoAccessHelper.PhotoType.VIDEO;
-  //       let extension: string = 'mp4';
-  //       let options: photoAccessHelper.CreateOptions = {
-  //         title: "record_" + new Date().getTime() + ""
-  //       }
-  //       let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(getContext(that));
-  //       phAccessHelper.createAsset(photoType, extension, options, (err, uri) => {
-  //         LogUtils.getInstance().LOGI(`createAsset success uri:${uri}`)
-  //         if (uri !== undefined) {
-  //           let recordFile = fs.openSync(that.recordSaveFilePath);
-  //           let albumFile = fs.openSync(uri, fs.OpenMode.READ_WRITE);
-  //           fs.copyFileSync(recordFile.fd, albumFile.fd);
-  //           fs.closeSync(recordFile);
-  //           fs.closeSync(albumFile);
-  //           prompt.showToast({
-  //             message: $r('app.string.stop_record_success')
-  //           });
-  //         } else {
-  //           prompt.showToast({
-  //             message: $r('app.string.stop_record_failed')
-  //           });
-  //           LogUtils.getInstance().LOGI(`createAsset failed, error: ${err.code}, ${err.message}`)
-  //         }
-  //       });
-  //     })
-  //   })
-  // }
-  //
-  // private screenshot() {
-  //   let that = this;
-  //   let saveFilePath = getContext(this).cacheDir + "/screen.jpg";
-  //   this.screenshotProgressVisible = Visibility.Visible;
-  //   this.mIjkMediaPlayer.screenshot(saveFilePath).then((result) => {
-  //     that.screenshotProgressVisible = Visibility.None;
-  //     if (!result) {
-  //       prompt.showToast({
-  //         message: $r('app.string.screenshot_failed')
-  //       });
-  //       return;
-  //     }
-  //     let atManager = abilityAccessCtrl.createAtManager();
-  //     atManager.requestPermissionsFromUser(getContext(that), ['ohos.permission.WRITE_IMAGEVIDEO']).then(async () => {
-  //       let photoType: photoAccessHelper.PhotoType = photoAccessHelper.PhotoType.IMAGE;
-  //       let extension: string = 'jpg';
-  //       let options: photoAccessHelper.CreateOptions = {
-  //         title: "screenshot_" + new Date().getTime() + ""
-  //       }
-  //       let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(getContext(that));
-  //       phAccessHelper.createAsset(photoType, extension, options, (err, uri) => {
-  //         LogUtils.getInstance().LOGI(`createAsset success uri:${uri}`)
-  //         if (uri !== undefined) {
-  //           let screenshotFile = fs.openSync(saveFilePath);
-  //           let albumFile = fs.openSync(uri, fs.OpenMode.READ_WRITE);
-  //           fs.copyFileSync(screenshotFile.fd, albumFile.fd);
-  //           fs.closeSync(screenshotFile);
-  //           fs.closeSync(albumFile);
-  //           prompt.showToast({
-  //             message: $r('app.string.screenshot_success')
-  //           });
-  //         } else {
-  //           prompt.showToast({
-  //             message: $r('app.string.screenshot_failed')
-  //           });
-  //           LogUtils.getInstance().LOGI(`createAsset failed, error: ${err.code}, ${err.message}`)
-  //         }
-  //       });
-  //     })
-  //   });
-  // }
-
-
   private timeCountdown() {
     clearTimeout(uiTime);
     if (!this.lock) {
       this.showControls = true;
     }
-    if (this.appUIState.isFullScreen) {
+    if (this.vm.appUIState.isFullScreen) {
       this.fullShowLock = true
     }
     this.sec = 3;

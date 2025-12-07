@@ -31,7 +31,7 @@ import {
   DANMAKU_STYLE_STROKEN,
   JSONSource
 } from "@ohos/danmakuflamemaster";
-import { PlayerUIState } from "./PlayerUIState";
+import { PlayerPageUIState } from "./PlayerPageUIState";
 import { QueueManager } from "../../player/queue/QueueManager";
 import { PlayStatus } from "./PlayStatus";
 import { TrackSelectionHelper } from "../../player/TrackSelectionHelper";
@@ -39,15 +39,17 @@ import { parseXmlToCommentData } from "./danmu/DanmuUtil";
 import { CommentData, CommentResponseV2 } from "./danmu/CommentResponseV2";
 import { DanDanPlayParser } from "./danmu/DandanPlayParser";
 import { SearchBangumiResponse } from "./danmu/SearchBangumiResponse";
+import { BaseViewModel } from "../../common/base/BaseViewModel";
 
 @ObservedV2
-export class PlayerViewModel {
+export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   queueManager: QueueManager = new QueueManager(this)
   subtitleManager: SubtitleManager = new SubtitleManager()
-  ui: PlayerUIState
+  ui: PlayerPageUIState
   danmuContext: DanmakuContext
 
-  constructor(ui: PlayerUIState) {
+  constructor(ui: PlayerPageUIState) {
+    super(ui)
     this.ui = ui
     this.danmuContext = DanmakuContext.create();
     this.danmuInit()
@@ -69,7 +71,8 @@ export class PlayerViewModel {
       // .setCacheStuffer(new SpannedCacheStuffer(), this.mCacheStufferAdapter)// 图文混排使用SpannedCacheStuffer
       .setMaximumLines(maxLinesPair)
       .preventOverlapping(overlappingEnablePair)
-      .setDanmakuMargin(4);
+      .setDanmakuMargin(4)
+      .setScaleTextSize(this.appUIState.isFullScreen? 1 : 0.8)
   }
 
   @Monitor('mediaSourceOrNull')
@@ -91,7 +94,7 @@ export class PlayerViewModel {
       } else {
         //qualityButton.isVisible = false
       }
-      //this.searchDanmuku()
+      this.searchDanmuku()
     }
   }
 
@@ -272,41 +275,6 @@ export class PlayerViewModel {
         console.log('外挂字幕:' + element);
       }
     }
-    //更多类似的
-    getLibraryApi(ApiClient.Instance()).getSimilarItems({
-      itemId: source.item.SeriesId ?? source.itemId,
-      userId: AppStorage.get('userId'),
-      limit: 12,
-      fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.CanDelete]
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      this.queueManager.getItem(source.item.SeriesId ?? source.itemId)
-        .then((res2: AxiosResponse<BaseItemDtoQueryResult>) => {
-          if (res.data.Items && res.data.Items.length > 0) {
-            let result = res.data.Items?.map(e => {
-              let desc = e.ProductionYear + ''
-              switch (e.Status) {
-                case 'Continuing':
-                  desc += ' - 现在'
-                  break
-                case 'Ended':
-                  desc = desc + ' - ' + new Date(e.EndDate!).getFullYear()
-                  break
-              }
-              let overview: string = res2?.data?.Items?.[0].Overview ?? ""
-              let item: SimilarItem = {
-                id: e.Id!,
-                name: e.Name ?? '',
-                image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id),
-                desc: desc,
-                overview: overview,
-                runTimeTicks: e.RunTimeTicks
-              }
-              return item
-            }) ?? []
-            this.ui.similarItems = result
-          }
-        })
-    })
   }
 
   stopTranscoding(mediaSource: JellyfinMediaSource) {
@@ -656,6 +624,14 @@ export class PlayerViewModel {
       console.log(e.message);
     })
   }
+
+  changeDanmuState() {
+    if (this.appUIState.isFullScreen) {
+      this.ui.danmuModel.getConfig().setScaleTextSize(1)
+    } else {
+      this.ui.danmuModel.getConfig().setScaleTextSize(0.6)
+    }
+  }
 }
 
 class Call implements Callback {
@@ -676,8 +652,9 @@ class Call implements Callback {
   }
 
   public prepared(): void {
-    if (this.that.uiState.model) {
-      this.that.uiState.model.start(IjkMediaPlayer.getInstance().getCurrentPosition());
+    if (this.that.ui.danmuModel) {
+      this.that.ui.danmuModel.start(IjkMediaPlayer.getInstance().getCurrentPosition());
+      this.that.ui.enableDanmu = true
     }
   }
 }

@@ -133,10 +133,10 @@ export struct HomeTab {
             .borderWidth(0.5)
             .borderRadius(8)
           }.onClick(() => {
-            if (item.type == undefined) {
-              ToastUtil.showToast(this.getUIContext(), '暂不支持')
-              return;
-            }
+            // if (item.type == undefined) {
+            //   ToastUtil.showToast(this.getUIContext(), '暂不支持')
+            //   return;
+            // }
             HMRouterMgr.to(RouterConsts.VideoListPage)
               .withParam(item)
               .push()
