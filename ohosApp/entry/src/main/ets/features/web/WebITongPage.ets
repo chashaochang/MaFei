@@ -17,7 +17,7 @@ export struct WebITongPage {
     new ActivityEventHandler(this.vm.appUIState.context!.eventHub)
 
   aboutToAppear(): void {
-    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onBackPressed,()=>{
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onBackPressed, () => {
       if (this.vm.controller?.accessBackward()) {
         this.vm.controller?.backward()
         return true
@@ -134,6 +134,23 @@ export struct WebITongPage {
             HMRouterMgr.pop()
           }
         })
+        .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
+
+        Stack() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.text_primary')])
+            .fontWeight(FontWeight.Bold)
+        }
+        .align(Alignment.Center)
+        .width(40)
+        .height(40)
+        .borderRadius(26)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .onClick(() => {
+          HMRouterMgr.pop()
+        })
+        .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Text(this.ui.pageTitle)
           .fontSize(14)
@@ -152,6 +169,7 @@ export struct WebITongPage {
           .padding({
             left: 12, right: 12
           })
+          .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Stack() {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
@@ -171,10 +189,28 @@ export struct WebITongPage {
             console.log("刷新失败:" + JSON.stringify(error));
           }
         })
+        .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
+
+        Stack() {
+          SymbolGlyph(this.ui.expandControl ? $r('sys.symbol.chevron_right_circle') :
+            $r('sys.symbol.chevron_left_circle'))
+            .fontSize(20)
+            .fontColor([$r('app.color.text_primary')])
+            .fontWeight(FontWeight.Bold)
+        }
+        .align(Alignment.Center)
+        .width(40)
+        .height(40)
+        .borderRadius(26)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .onClick(() => {
+          this.ui.expandControl = !this.ui.expandControl
+        })
       }
       .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.End)
       .height(UIConstants.ACTION_BAR_HEIGHT)
-      .layoutWeight(1)
+      .width('100%')
       .padding({
         left: 16,
         right: 16,
@@ -182,8 +218,6 @@ export struct WebITongPage {
       .margin({
         bottom: this.vm.appUIState.safeBottom
       })
-
-      // .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
     }.width('100%')
     .height('100%')
     .align(Alignment.Bottom)

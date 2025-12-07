@@ -4,4 +4,5 @@ import { BaseUIState } from "../../common/base/BaseUIState";
 export class WebITongUIState extends BaseUIState {
   @Trace pageTitle: string = "网(Web)易通"
   @Trace progress: number = 0
+  @Trace expandControl: boolean = true
 }
