@@ -8,9 +8,10 @@ import { SimilarItem } from "../../entity/SimilarItem"
 import { PlayerMenus } from "../../player/ui/PlayerMenus"
 import { DanmakuViewV2 } from "@ohos/danmakuflamemaster"
 import { PlayerStatus, PlayStatus } from "./PlayStatus"
+import { BaseUIState } from "../../common/base/BaseUIState"
 
 @ObservedV2
-export class PlayerUIState {
+export class PlayerPageUIState extends BaseUIState{
   @Trace url?: string
   //集名称
   @Trace title: string = ''
@@ -62,4 +63,6 @@ export class PlayerUIState {
   //是否正在倍速播放
   @Trace isFastSpeed: boolean = false
   danmuModel: DanmakuViewV2.Model = new DanmakuViewV2.Model()
+  @Trace enableDanmu: boolean = false
+  @Trace danmuOpen: boolean = true
 }

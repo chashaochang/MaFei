@@ -1,4 +1,4 @@
-import { PlayerViewModel } from "../../features/player/PlayerViewModel";
+import { PlayerPageViewModel } from "../../features/player/PlayerPageViewModel";
 import { PlayOptions } from "../interaction/PlayOptions";
 import { PlayerException } from "../PlayerException";
 import { JellyfinMediaSource } from "../source/JellyfinMediaSource";
@@ -19,9 +19,9 @@ import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
 
 @ObservedV2
 export class QueueManager {
-  private viewModel: PlayerViewModel
+  private viewModel: PlayerPageViewModel
 
-  constructor(viewModel: PlayerViewModel) {
+  constructor(viewModel: PlayerPageViewModel) {
     this.viewModel = viewModel
   }
 
