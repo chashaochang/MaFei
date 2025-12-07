@@ -40,7 +40,7 @@ export struct MediaTab {
               }),
               onItemClick: (index) => {
                 if (this.ui.mediaList[index].type == undefined) {
-                  ToastUtil.showToast(this.getUIContext(), '暂不支持')
+                  ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
                   return;
                 }
                 HMRouterMgr.to(RouterConsts.VideoListPage)
