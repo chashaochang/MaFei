@@ -77,7 +77,10 @@ export struct TextExpandView {
       .lineHeight(this.textSectionAttribute.lineHeight)
 
       //[EndExclude TextExpandView]
-    }
+    }.onAreaChange((old,newVal)=>{
+      this.textSectionAttribute.constraintWidth = newVal.width
+      this.getIsExpanded();
+    })
     // .onClick(() => {
     //   if (!this.textModifier.needProcess) {
     //     return;

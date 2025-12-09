@@ -1,6 +1,6 @@
 import { GridView, RefreshLayoutStatus } from "@abner/refresh_v2";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
-import { ImageKnifeComponentV2 } from "@ohos/imageknife";
+import { ImageKnifeComponent } from "@ohos/imageknifepro";
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
@@ -31,7 +31,7 @@ export struct VideoListPage {
     Column() {
       ActionBar({
         title: this.ui.title
-      }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+      })
       Column() {
 
         Row() {
@@ -144,7 +144,7 @@ export struct VideoCard {
   build() {
     Column() {
       RelativeContainer() {
-        ImageKnifeComponentV2({
+        ImageKnifeComponent({
           imageKnifeOption: {
             loadSrc: this.item.image,
             objectFit: ImageFit.Cover,

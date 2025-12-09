@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001AA3B7047202DC597735FC97EC77E12F2F1CFC6140E86F695D62C370B900EBF168EB5336BA6254",
+          "keyPassword": "0000001B4C49EEDF98CF295EF5309EFDF39CB8E9C3F10027F7FECE0DA5D50CB0A4664D730B4709ECAF8FC7",
           "profile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p12",
-          "storePassword": "0000001A2647591865DEE5F527A907B6A95E4A0B918CAF7EA42D824D019FA1FF023C051D919319E3A44F"
+          "storePassword": "0000001BC4C613BD3C974F34B86ACB39D3F08089E4B7F2EE09E08E4E6B0092B86FFC854897D89D9FA9FA1F"
         }
       }
     ],
@@ -33,7 +33,7 @@
         "name": "release",
         "compatibleSdkVersion": "6.0.0(20)",
         "runtimeOS": "HarmonyOS",
-        "bundleName": "cn.xiaobai.homofin",
+        "bundleName": "cn.xiaobai.jellyfin",
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
@@ -81,6 +81,10 @@
     {
       "name": "sdk",
       "srcPath": "./sdk"
+    },
+    {
+      "name": "iso_language_codes",
+      "srcPath": "./iso_language_codes"
     }
   ]
 }

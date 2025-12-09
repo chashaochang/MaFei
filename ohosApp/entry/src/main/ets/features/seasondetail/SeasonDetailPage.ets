@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnifeComponentV2 } from '@ohos/imageknife';
+import { ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
 import { SeasonDetailViewModel } from './SeasonDetailViewModel';
@@ -43,7 +43,7 @@ export struct SeasonDetailPage {
           Column() {
             Stack() {
               //背景图
-              ImageKnifeComponentV2({
+              ImageKnifeComponent({
                 imageKnifeOption: {
                   loadSrc: this.ui.backgroundImage,
                   objectFit: ImageFit.Cover,
@@ -67,7 +67,7 @@ export struct SeasonDetailPage {
               Column() {
                 Blank()
                 Row({ space: 16 }) {
-                  ImageKnifeComponentV2({
+                  ImageKnifeComponent({
                     imageKnifeOption: {
                       loadSrc: this.ui.image,
                       objectFit: ImageFit.Fill,
@@ -232,7 +232,7 @@ export struct SeasonDetailPage {
                     ListItem() {
                       Column() {
                         RelativeContainer() {
-                          ImageKnifeComponentV2({
+                          ImageKnifeComponent({
                             imageKnifeOption: {
                               loadSrc: item.image,
                               objectFit: ImageFit.Cover,

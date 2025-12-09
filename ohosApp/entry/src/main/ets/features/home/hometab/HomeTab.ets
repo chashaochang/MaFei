@@ -1,5 +1,5 @@
 import { HMRouterMgr } from "@hadss/hmrouter"
-import { ImageKnifeComponentV2 } from "@ohos/imageknife"
+import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
 import { HomeViewModel } from "./HomeViewModel"
 import { AppStorageV2 } from "@kit.ArkUI"
@@ -109,7 +109,7 @@ export struct HomeTab {
         ForEach(this.ui.mediaList, (item: MediaItem) => {
           ListItem() {
             Stack() {
-              ImageKnifeComponentV2({
+              ImageKnifeComponent({
                 imageKnifeOption: {
                   loadSrc: item.image,
                   objectFit: ImageFit.Contain,
@@ -157,7 +157,7 @@ export struct HomeTab {
           ListItem() {
             Column({ space: 8 }) {
               Stack() {
-                ImageKnifeComponentV2({
+                ImageKnifeComponent({
                   imageKnifeOption: {
                     loadSrc: item.image,
                     objectFit: ImageFit.Cover,
@@ -223,7 +223,7 @@ export struct HomeTab {
         ForEach(this.ui.nextUpList, (item: VideoItem) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponentV2({
+              ImageKnifeComponent({
                 imageKnifeOption: {
                   loadSrc: item.image,
                   objectFit: ImageFit.Cover,
@@ -289,7 +289,7 @@ export struct HomeTab {
         ForEach(this.ui.latestMap.get(item.id), (item: VideoItem) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponentV2({
+              ImageKnifeComponent({
                 imageKnifeOption: {
                   loadSrc: item.image,
                   objectFit: ImageFit.Cover,

@@ -1,6 +1,10 @@
 import { DeviceProfile } from "sdk";
 import {
+  CodecProfile,
+  CodecType,
   DlnaProfileType,
+  ProfileConditionType,
+  ProfileConditionValue,
   SubtitleDeliveryMethod,
 } from "sdk/src/main/ets/generated-client/models";
 import { Constants } from "../../utils/Constants";
@@ -100,6 +104,19 @@ const SUPPORTED_CONTAINER_FORMATS: Array<string> = [
   "3gp"
 ];
 
+const hevcExcludeDOVI: CodecProfile = {
+  Type: CodecType.Video,
+  Codec: 'hevc',
+  Conditions: [
+    { Condition: ProfileConditionType.Equals, Property: ProfileConditionValue.VideoBitDepth, Value: '8', IsRequired: true },
+    { Condition: ProfileConditionType.NotEquals, Property: ProfileConditionValue.VideoRangeType, Value: 'DOVI', IsRequired: true },
+    // 可选：再要求 SDR 或 Unknown
+    // { Condition: ProfileConditionType.EqualsAny, Property: ProfileConditionValue.VideoRangeType, Value: 'SDR,Unknown', IsRequired: true },
+    // 可选：排除 dvhe
+    // { Condition: ProfileConditionType.NotEquals, Property: ProfileConditionValue.VideoCodecTag, Value: 'dvhe', IsRequired: true },
+  ],
+};
+
 /***
  *
  */
@@ -137,7 +154,7 @@ export class DeviceProfileBuilder {
         },
       ],
       ContainerProfiles: [],
-      CodecProfiles: [],
+      CodecProfiles: [hevcExcludeDOVI],
       SubtitleProfiles: [{
         Format:'ass',
         Method:SubtitleDeliveryMethod.Embed

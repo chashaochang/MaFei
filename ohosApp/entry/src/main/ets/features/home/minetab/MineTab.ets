@@ -1,5 +1,5 @@
 import { HMLifecycleState, HMRouterMgr } from "@hadss/hmrouter"
-import { ImageKnifeComponentV2 } from "@ohos/imageknife"
+import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { UIConstants } from "../../../common/UIConstants"
 import { MineUIState } from "./MineUIState"
 import { MineViewModel } from "./MineViewModel"
@@ -29,7 +29,7 @@ export struct MineTab {
         Column({ space: 16 }) {
           Blank().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
           Row({ space: 12 }) {
-            ImageKnifeComponentV2({
+            ImageKnifeComponent({
               imageKnifeOption: {
                 loadSrc: this.ui.userAvatar,
                 border: {

@@ -1596,7 +1596,7 @@ export struct PlayerView {
             }
             this.ui.initSeek = 0
             if (this.ui.audioTrackIndex) {
-              this.mIjkMediaPlayer.selectTrack(this.ui.audioTrackIndex + 1 + '')
+              this.mIjkMediaPlayer.selectTrack(this.ui.audioTrackIndex + '')
             }
           }, 500)
         }
