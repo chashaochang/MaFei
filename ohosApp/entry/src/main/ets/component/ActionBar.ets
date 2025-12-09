@@ -18,7 +18,7 @@ export struct ActionBar {
   build() {
     Stack() {
       Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
+        SymbolGlyph($r('sys.symbol.arrow_left'))
           .fontSize(20)
           .fontColor([$r('app.color.text_primary')])
           .fontWeight(FontWeight.Bold)

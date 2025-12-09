@@ -1,4 +1,4 @@
-import { BaseItemPerson, ExternalUrl } from "sdk/src/main/ets/generated-client/models"
+import { BaseItemPerson, ExternalUrl, MediaSourceInfo, MediaStream } from "sdk/src/main/ets/generated-client/models"
 import { BaseUIState } from "../../common/base/BaseUIState"
 import { LastSpanAttribute, TextSectionAttribute } from "../../component/textexpand/Model"
 import { ColorUtils } from "../../utils/ColorUtils"
@@ -50,10 +50,18 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace currentScrollState: ScrollState = ScrollState.Idle;
   @Trace imageHeight: number = VideoDetailUIState.imageInitHeight;
 
-  @Trace isShowSheet: boolean = false;
+  @Trace isShowOverviewSheet: boolean = false;
+  @Trace isShowVideoInfoSheet: boolean = false;
   @Trace colorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ff000000')
 
   @Trace firstLoading: boolean = true;
+  @Trace mediaSources: MediaSourceInfo[] = []
+  //选中的媒体源索引
+  @Trace selectedMediaSourceIndex: number = 0
+  //选中的字幕
+  @Trace selectedSubtitle?: MediaStream
+  //选中的音频
+  @Trace selectedAudio?: MediaStream
 }
 
 export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY_VISION' | 'DOLBY_ATOMS'

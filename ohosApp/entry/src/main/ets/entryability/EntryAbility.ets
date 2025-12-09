@@ -7,7 +7,7 @@ import { DBManager } from '../data/DBManager';
 import { AppUIState } from '../entity/AppUIState';
 import { OneMoreUtil } from '../utils/OneMoreUtil';
 import { GlobalContext } from '@ohos/danmakuflamemaster';
-import { ImageKnife } from '@ohos/imageknife';
+import { ImageKnife } from '@ohos/imageknifepro';
 
 export default class EntryAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener

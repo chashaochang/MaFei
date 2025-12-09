@@ -1,10 +1,10 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnifeComponentV2 } from '@ohos/imageknife';
+import { ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { VideoDetailUIState } from './VideoDetailUIState';
 import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
-import { ExternalUrl } from 'sdk/src/main/ets/generated-client/models';
+import { ExternalUrl, MediaSourceInfo, MediaStream, MediaStreamType } from 'sdk/src/main/ets/generated-client/models';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { playItems } from '../../common/CommonFunc';
@@ -15,6 +15,8 @@ import { ColorUtils } from '../../utils/ColorUtils';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { CastView } from '../../component/CastView';
 import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView';
+import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
+import { VideoInfoDetail } from './components/VideoInfoDetail';
 
 @HMRouter({
   pageUrl: RouterConsts.VideoDetailPage
@@ -23,6 +25,8 @@ import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView'
 export struct VideoDetailPage {
   @Local ui: VideoDetailUIState = new VideoDetailUIState(this.getUIContext())
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
+  @Provider() selectedSubtitleIndex: number = 0
+  @Provider() selectedAudioIndex: number = 0
 
   @Monitor('vm.appUIState.colorMode')
   onColorModeChange(): void {
@@ -58,7 +62,7 @@ export struct VideoDetailPage {
           Column() {
             Stack() {
               Column() {
-                ImageKnifeComponentV2({
+                ImageKnifeComponent({
                   imageKnifeOption: {
                     loadSrc: this.ui.image,
                     objectFit: ImageFit.Cover
@@ -82,7 +86,7 @@ export struct VideoDetailPage {
                 })
 
               if (this.ui.isMovie) {
-                ImageKnifeComponentV2({
+                ImageKnifeComponent({
                   imageKnifeOption: {
                     loadSrc: this.ui.logo,
                     objectFit: ImageFit.Contain,
@@ -90,7 +94,7 @@ export struct VideoDetailPage {
                 })
                   .height(80)
                   .aspectRatio(80 / 31) // 刮削的logo都是800x310
-                  .margin({ bottom: 10 })
+                  .margin({ bottom: 10, left: 16 })
               } else {
                 Column({ space: 12 }) {
                   Text(this.ui.subtitle)
@@ -134,14 +138,26 @@ export struct VideoDetailPage {
               .padding({ left: 16, right: 16 })
 
               if (!this.ui.isTvShows) {
-                Blank().height(16)
-
-                //todo 字幕音频切换
+                Blank().height(10)
                 Row({ space: 16 }) {
-                  ForEach(this.ui.tags, (item: string) => {
+                  ForEach(this.vm.getTags(), (item: string) => {
                     Image(item)
                       .height(22)
                       .colorFilter(this.ui.colorFilter)
+                  })
+                }.padding({ left: 16, right: 16 })
+
+                Blank().height(10)
+                //todo 字幕音频切换
+                Row({ space: 16 }) {
+                  AudioSubtitleSelector({
+                    source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
+                    onSelectSubtitle: (subtitle) => {
+                      this.ui.selectedSubtitle = subtitle
+                    },
+                    onSelectAudio: (audio) => {
+                      this.ui.selectedAudio = audio
+                    }
                   })
                 }.padding({ left: 16, right: 16 })
               }
@@ -181,7 +197,9 @@ export struct VideoDetailPage {
                   if (this.ui.isTvShows) {
                     this.vm.playFirst()
                   } else {
-                    playItems([this.ui.id], this.getUIContext().getHostContext()!)
+                    let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
+                    playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
+                      this.ui.selectedSubtitle?.Index)
                   }
                 })
 
@@ -225,20 +243,52 @@ export struct VideoDetailPage {
               //     this.handleContent(), 16,
               //     $r('app.color.text_expand_selected_tab_name'))
               // }).id(`textClick${this.index}`)
+              if (this.ui.mediaSources.length > 1) {
+                Blank().height(16)
+                List({ space: 8 }) {
+                  ForEach(this.ui.mediaSources, (item: MediaSourceInfo, index: number) => {
+                    ListItem() {
+                      Text(item.Name)
+                        .fontSize(14)
+                        .fontColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
+                          $r('app.color.text_1'))
+                        .padding({
+                          left: 12,
+                          right: 12
+                        })
+                        .height(32)
+                        .borderWidth(1)
+                        .borderColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
+                          $r('app.color.border'))
+                        .borderRadius(4)
+                        .onClick(() => {
+                          this.ui.selectedMediaSourceIndex = index
+                          this.vm.getFileInfo()
+                          this.vm.getVideoInfo()
+                        })
+                    }
+                  })
+                }.listDirection(Axis.Horizontal)
+                .width('100%')
+                .height(32)
+                .padding({ left: 16, right: 16 })
+              }
               if (this.ui.overview.length > 0) {
                 Blank().height(16)
-                TextExpandView({
-                  text: this.ui.overview,
-                  onMoreClick: () => {
-                    this.ui.isShowSheet = !this.ui.isShowSheet;
-                  },
-                  lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 14, $r('app.color.color_main'))
-                }).padding({ left: 16, right: 16 })
-                  .bindSheet($$this.ui.isShowSheet, this.SheetBuilder(), {
+                Row() {
+                  TextExpandView({
+                    text: this.ui.overview,
+                    onMoreClick: () => {
+                      this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                    },
+                    lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                  }).bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
                     height: 420,
                     preferType: SheetType.BOTTOM,
                     title: { title: '简介' },
-                  })
+                  }).width('100%')
+                }.width('100%')
+                .padding({ left: 16, right: 16 })
               }
 
               if (this.ui.isTvShows) {
@@ -296,10 +346,11 @@ export struct VideoDetailPage {
                     Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
                     Blank().height(10)
                     Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
-                    Blank().height(16)
-                    Text('创建日期').fontSize(12).fontColor($r('app.color.text_2'))
-                    Blank().height(10)
-                    Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                    //这个不是每个文件的,不准
+                    // Blank().height(16)
+                    // Text('创建日期').fontSize(12).fontColor($r('app.color.text_2'))
+                    // Blank().height(10)
+                    // Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
                   }
                   .width('100%')
                   .backgroundColor($r('app.color.bg_2'))
@@ -343,6 +394,34 @@ export struct VideoDetailPage {
                       }.width('100%')
                       .alignItems(HorizontalAlign.Start)
                     }
+
+                    Divider().height(0.5).color($r('app.color.border'))
+
+                    Row({ space: 10 }) {
+                      Text('查看全部')
+                        .fontColor($r('app.color.text_1'))
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Medium)
+                        .layoutWeight(1)
+                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                        .fontSize(16)
+                        .fontColor([$r('app.color.text_1')])
+                        .fontWeight(FontWeight.Bold)
+                    }
+                    .width('100%')
+                    .padding({
+                      top: 4,
+                      left: 4,
+                      bottom: 8,
+                    })
+                    .onClick(() => {
+                      this.ui.isShowVideoInfoSheet = true
+                    })
+                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+                      height: '100%',
+                      preferType: SheetType.BOTTOM,
+                      title: { title: '文件媒体信息' },
+                    })
                   }
                   .width('100%')
                   .backgroundColor($r('app.color.bg_2'))
@@ -425,7 +504,7 @@ export struct VideoDetailPage {
   }
 
   @Builder
-  SheetBuilder() {
+  overviewSheetBuilder() {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
@@ -450,5 +529,29 @@ export struct VideoDetailPage {
       scrollForward: NestedScrollMode.PARENT_FIRST,
       scrollBackward: NestedScrollMode.SELF_FIRST,
     })
+  }
+
+  @Builder
+  videoInfoSheetBuilder() {
+    Scroll() {
+      VideoInfoDetail({
+        source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
+      })
+    }
+    .scrollBar(BarState.Off)
+    .scrollable(ScrollDirection.Vertical)
+    .padding({
+      left: 16,
+      right: 16,
+      bottom: 10 + this.vm.appUIState.safeBottom
+    })
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+
+    // .nestedScroll({
+    //   scrollForward: NestedScrollMode.PARENT_FIRST,
+    //   scrollBackward: NestedScrollMode.SELF_FIRST,
+    // })
   }
 }

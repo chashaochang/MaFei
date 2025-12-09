@@ -29,8 +29,15 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       if (res.data) {
         let itemData = res.data
         this.ui.title = itemData.Name || ''
-        this.ui.image = ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Primary)
-        this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
+        if (itemData.Type === BaseItemKind.Movie) {
+          this.ui.isMovie = true
+          this.ui.image =
+            ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Backdrop)
+          this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
+        } else {//电视剧
+          this.ui.image =
+            ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Primary)
+        }
         this.ui.score = itemData.CommunityRating ? itemData.CommunityRating : 0
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
@@ -48,43 +55,10 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         }
         this.ui.overview = itemData.Overview || ''
         this.ui.people = itemData.People || []
-        this.ui.tags = getVideoTagsByStreams(itemData.MediaStreams).map((e) => {
-          return getTagBase64(e)
-        }).filter((e) => {
-          return e !== ''
-        })
-        this.ui.path = itemData.Path || ''
-        this.ui.size = itemData.MediaSources && itemData.MediaSources.length > 0 && itemData.MediaSources[0].Size ?
-          (itemData.MediaSources[0].Size! / 1024 /
-        1024 / 1024
-        )
-        .
-        toFixed(2) + ' GB' :
-        ''
-        this.ui.createDate = itemData.DateCreated ? itemData.DateCreated.split('T')[0] : ''
-        //1080p H264 7 mbps · 8 bit
-        this.ui.videoInfo = itemData.MediaStreams && itemData.MediaStreams.length > 0 ?
-          itemData.MediaStreams.filter((e) => {
-            return e.Type === 'Video'
-          }).map((e) => {
-            return `${e.DisplayTitle} ${e.BitRate ? Math.floor(e.BitRate / 1000000) + ' mbps' :
-              ''} · ${e.BitDepth ? e.BitDepth + ' bit' : ''}`
-          }).join('\n') : ''
-        //英语 AAC · 48000 Hz
-        this.ui.audioInfo = itemData.MediaStreams && itemData.MediaStreams.length > 0 ?
-          itemData.MediaStreams.filter((e) => {
-            return e.Type === 'Audio'
-          }).map((e) => {
-            return `${e.DisplayTitle} · ${e.SampleRate ?
-              e.SampleRate + ' Hz' : ''}`
-          }).join('\n') : ''
-        //法语 SUBRIP
-        this.ui.subtitleInfo = itemData.MediaStreams && itemData.MediaStreams.length > 0 ?
-          itemData.MediaStreams.filter((e) => {
-            return e.Type === 'Subtitle'
-          }).map((e) => {
-            return `${e.Language} ${e.Codec}`
-          }).join('\n') : ''
+        this.ui.mediaSources = itemData.MediaSources || []
+        this.getFileInfo()
+        // this.ui.createDate = itemData.DateCreated ? itemData.DateCreated.split('T')[0] : ''
+        this.getVideoInfo()
         this.ui.externalUrls = itemData.ExternalUrls || []
         if (res.data.UserData?.PlaybackPositionTicks && res.data.UserData?.PlaybackPositionTicks > 0) {
           this.ui.playbackPositionTicks = res.data.UserData.PlaybackPositionTicks
@@ -98,7 +72,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         }
         this.ui.firstLoading = false
       }
-    }).catch(()=>{
+    }).catch(() => {
       this.ui.firstLoading = false
     })
   }
@@ -139,11 +113,11 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
             })
             this.ui.firstLoading = false
           }
-        }).catch(()=>{
+        }).catch(() => {
           this.ui.firstLoading = false
         })
       }
-    }).catch(()=>{
+    }).catch(() => {
       this.ui.firstLoading = false
     })
   }
@@ -299,6 +273,55 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         ToastUtil.showToast(this.ui.context, '操作失败')
       })
     }
+  }
+
+  getTags(): string[] {
+    this.ui.tags =
+      getVideoTagsByStreams(this.ui.mediaSources[this.ui.selectedMediaSourceIndex].MediaStreams).map((e) => {
+        return getTagBase64(e)
+      }).filter((e) => {
+        return e !== ''
+      })
+    return this.ui.tags;
+  }
+
+  getFileInfo() {
+    let source = this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
+    this.ui.path = source.Path || ''
+    this.ui.size = source.Size ? (source.Size! / 1024 /
+    1024 / 1024
+    )
+    .
+    toFixed(2) + ' GB' :
+    ''
+  }
+
+  getVideoInfo() {
+    let source = this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
+
+    //1080p H264 7 mbps · 8 bit
+    this.ui.videoInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
+      source.MediaStreams.filter((e) => {
+        return e.Type === 'Video'
+      }).map((e) => {
+        return `${e.DisplayTitle} ${e.BitRate ? Math.floor(e.BitRate / 1000000) + ' mbps' :
+          ''} · ${e.BitDepth ? e.BitDepth + ' bit' : ''}`
+      }).join('\n') : ''
+    //英语 AAC · 48000 Hz
+    this.ui.audioInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
+      source.MediaStreams.filter((e) => {
+        return e.Type === 'Audio'
+      }).map((e) => {
+        return `${e.DisplayTitle} · ${e.SampleRate ?
+          e.SampleRate + ' Hz' : ''}`
+      }).join('\n') : ''
+    //法语 SUBRIP
+    this.ui.subtitleInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
+      source.MediaStreams.filter((e) => {
+        return e.Type === 'Subtitle'
+      }).map((e) => {
+        return `${e.Language} ${e.Codec}`
+      }).join('\n') : ''
   }
 }
 

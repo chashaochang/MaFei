@@ -1,4 +1,4 @@
-import { ImageKnifeComponentV2 } from "@ohos/imageknife"
+import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { ImageUrlsApi } from "sdk"
 import { BaseItemPerson, ImageType, PersonKind } from "sdk/src/main/ets/generated-client/models"
 import { ApiClient } from "../network/ApiClient"
@@ -20,7 +20,7 @@ export struct CastView {
         ForEach(this.peopleList, (item: BaseItemPerson) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponentV2({
+              ImageKnifeComponent({
                 imageKnifeOption: {
                   loadSrc: ApiClient.Instance().basePath +
                   this.imageUrlsApi.getItemImageUrlById(item.Id || '', ImageType.Primary),
