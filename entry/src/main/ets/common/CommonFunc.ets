@@ -310,7 +310,9 @@ export function getTagBase64(tag: VideoTag): string {
   return res
 }
 
-export function playItems(ids: string[], context: Context) {
+export function playItems(ids: string[], context: Context,
+  audioStreamIndex?: number,
+  subtitleStreamIndex?: number) {
   getUserLibraryApi(ApiClient.Instance()).getItem({
     userId: ApiClient.Instance().userId,
     itemId: ids[0],
@@ -320,6 +322,12 @@ export function playItems(ids: string[], context: Context) {
       let options: PlayOptions = new PlayOptions()
       options.ids = ids
       options.startPositionTicks = itemData.UserData?.PlaybackPositionTicks || 0
+      if (audioStreamIndex !== undefined) {
+        options.audioStreamIndex = audioStreamIndex
+      }
+      if (subtitleStreamIndex !== undefined) {
+        options.subtitleStreamIndex = subtitleStreamIndex
+      }
       context.eventHub.emit(ActivityEventType.LaunchNativePlayer, options)
     }
   }).catch()
@@ -350,4 +358,43 @@ export function getUIAbilityContext(): common.UIAbilityContext {
 export function stringToArray(str: string): Uint8Array {
   let textEncoder = new util.TextEncoder();
   return textEncoder.encodeInto(str);
+}
+
+function isSubtitleStream(s: MediaStream): boolean {
+  return s.Type === 'Subtitle';
+}
+
+function isLikelySelectableSubtitle(s: MediaStream): boolean {
+  if (!isSubtitleStream(s)) {
+    return false;
+  }
+
+  const codec = (s.Codec ?? '').toLowerCase();
+  const textCodecs = new Set(['srt', 'ass', 'ssa', 'vtt', 'webvtt', 'ttml', 'subrip']);
+  const imageCodecs = new Set(['pgs', 'pgssub', 'sup', 'vobsub', 'dvdsub']);
+
+  const isText = s.IsTextSubtitleStream === true || textCodecs.has(codec);
+  const isImage = imageCodecs.has(codec);
+
+  // 外挂、文本型通常可软渲染；图像型根据设备能力，若 SupportsExternalStream 为真则倾向可软交付
+  if (s.IsExternal === true) {
+    return true;
+  }
+  if (isText) {
+    return true;
+  }
+  if (isImage && s.SupportsExternalStream === true) {
+    return true;
+  }
+
+  return false;
+}
+
+/** 详情页是否显示“关闭字幕（无）” */
+export function shouldShowCloseSubtitleOptionOnDetail(streams: MediaStream[]): boolean {
+  const subs = streams.filter(isSubtitleStream);
+  if (subs.length === 0) {
+    return false;
+  }
+  return subs.some(isLikelySelectableSubtitle);
 }

@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "cn.xiaobai.homofin",
+    "bundleName": "cn.xiaobai.jellyfin",
     "vendor": "example",
     "versionCode": 1000006,
     "versionName": "1.0.6",

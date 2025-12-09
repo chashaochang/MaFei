@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "iso_language_codes",
+    "type": "har",
+    "deviceTypes": [
+      "default"
+    ]
+  }
+}
