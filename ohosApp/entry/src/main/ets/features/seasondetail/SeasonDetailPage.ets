@@ -97,6 +97,7 @@ export struct SeasonDetailPage {
                     .textAlign(TextAlign.Start)
                   }.alignItems(HorizontalAlign.Start)
                   .height('100%')
+                  .layoutWeight(1)
                 }.height(200)
                 .padding({
                   left: 16,
