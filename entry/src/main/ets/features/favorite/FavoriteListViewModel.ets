@@ -5,6 +5,8 @@ import { BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/e
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
+import { ListDialog } from "../../component/ListDialog";
+import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { FavoriteListUIState } from "./FavoriteListUIState";
@@ -14,7 +16,14 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
   dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
   startIndex: number = 0
   limit: number = 100
-  sortBy: ItemSortBy[] = ['DateCreated']
+  sortBy: ItemSortBy[] = [sortOptions[this.ui.selectedSortIndex].value]
+  sortDialog = new ListDialog("排序", sortOptions.map((e) => e.label), this.ui.selectedSortIndex, (index) => {
+    this.ui.selectedSortIndex = index
+    this.sortBy = [sortOptions[this.ui.selectedSortIndex].value]
+    this.startIndex = 0
+    this.getFavoriteList()
+    this.sortDialog.dismiss()
+  })
   queryTypes: BaseItemKind[] = [
     BaseItemKind.Movie,
     BaseItemKind.Series,
