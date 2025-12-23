@@ -5,6 +5,8 @@ import { BaseItemDtoQueryResult, ItemSortBy } from "sdk/src/main/ets/generated-c
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
+import { ListDialog } from "../../component/ListDialog";
+import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
@@ -15,7 +17,14 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
   mediaItem?: MediaItem
   startIndex: number = 0
   limit: number = 100
-  sortBy: ItemSortBy[] = ['DateCreated']
+  sortBy: ItemSortBy[] = [sortOptions[this.ui.selectedSortIndex].value]
+  sortDialog = new ListDialog("排序", sortOptions.map((e) => e.label), this.ui.selectedSortIndex, (index) => {
+    this.ui.selectedSortIndex = index
+    this.sortBy = [sortOptions[this.ui.selectedSortIndex].value]
+    this.startIndex = 0
+    this.getVideoList()
+    this.sortDialog.dismiss()
+  })
 
   init(mediaItem: MediaItem) {
     this.ui.title = mediaItem.name
@@ -67,7 +76,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           if (this.startIndex === 0) {
             this.ui.pageState = PageState.Content
           }
-          if(res.data.Items?.length === 0){
+          if (res.data.Items?.length === 0) {
             this.dataSource.deleteAll()
           }
           this.controller.finishRefresh()
@@ -124,7 +133,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           if (this.startIndex === 0) {
             this.ui.pageState = PageState.Content
           }
-          if(res.data.Items?.length === 0){
+          if (res.data.Items?.length === 0) {
             this.dataSource.deleteAll()
           }
           this.controller.finishRefresh()

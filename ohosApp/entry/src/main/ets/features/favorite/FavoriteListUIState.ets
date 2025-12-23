@@ -7,4 +7,5 @@ export class FavoriteListUIState extends BaseUIState {
   @Trace isRefreshing: boolean = false;
   @Trace totalCount: string = '0'
   @Trace isDesc: boolean = true
+  @Trace selectedSortIndex = 2
 }
