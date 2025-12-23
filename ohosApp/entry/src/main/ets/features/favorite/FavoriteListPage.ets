@@ -6,6 +6,7 @@ import { ActionBar } from '../../component/ActionBar';
 import { EmptyView } from '../../component/EmptyView';
 import { FailedView } from '../../component/FailedView';
 import { SkeletonGridView } from '../../component/skeleton/SkeletonGridView';
+import { sortOptions } from '../../entity/SortOption';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { FavoriteListUIState } from './FavoriteListUIState';
@@ -30,7 +31,10 @@ export struct FavoriteListPage {
       }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
       Column() {
         Row() {
-          Text('按添加日期').fontSize(14).fontColor($r('app.color.text_primary'))
+          Text(sortOptions[this.ui.selectedSortIndex].label).fontSize(14).fontColor($r('app.color.text_primary'))
+            .onClick(()=>{
+              this.vm.sortDialog.show()
+            })
           Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
             .width(16)
             .height(16)
