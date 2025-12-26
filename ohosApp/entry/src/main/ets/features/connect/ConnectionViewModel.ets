@@ -124,29 +124,35 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         Pw: this.ui.password
       }
     }).then((result: AxiosResponse<AuthenticationResult>) => {
-      this.ui.loading = false
-      AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
-      if (this.ui.rememberPwd) {
-        let assetMap: asset.AssetMap = new Map
-        assetMap.set(asset.Tag.SECRET, stringToArray(this.ui.password))
-        assetMap.set(asset.Tag.ALIAS, stringToArray(serverEntity!.hostname + '_' + this.ui.username))
-        assetMap.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_UNLOCKED)
-        try {
-          asset.addSync(assetMap)
-        } catch (error) {
-          //保存密码失败
-          console.log("保存密码失败：" + (error as Error).message);
+      if(result){
+        this.ui.loading = false
+        AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
+        if (this.ui.rememberPwd) {
+          let assetMap: asset.AssetMap = new Map
+          assetMap.set(asset.Tag.SECRET, stringToArray(this.ui.password))
+          assetMap.set(asset.Tag.ALIAS, stringToArray(serverEntity!.hostname + '_' + this.ui.username))
+          assetMap.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_UNLOCKED)
+          try {
+            asset.addSync(assetMap)
+          } catch (error) {
+            //保存密码失败
+            console.log("保存密码失败：" + (error as Error).message);
+          }
         }
+        this.apiClientController.setupUser(AppPreference.getInstance().getCurrentServerId()!, result.data.User!.Id!,
+          result.data.AccessToken!,
+          this.ui.username)
+        this.appUIState.isLogin = true
+        if (isFromAddAccount) {
+          HMRouterMgr.getCurrentPathStack()?.clear()
+          HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+        }
+        this.appUIState.isConnecting = false
+      } else {
+        this.ui.errorText = '登录失败'
+        this.ui.loading = false
+        this.appUIState.isConnecting = false
       }
-      this.apiClientController.setupUser(AppPreference.getInstance().getCurrentServerId()!, result.data.User!.Id!,
-        result.data.AccessToken!,
-        this.ui.username)
-      this.appUIState.isLogin = true
-      if (isFromAddAccount) {
-        HMRouterMgr.getCurrentPathStack()?.clear()
-        HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
-      }
-      this.appUIState.isConnecting = false
     }).catch((e: Error) => {
       console.log(e.message);
       this.ui.errorText = '登录失败，用户名或密码错误'
