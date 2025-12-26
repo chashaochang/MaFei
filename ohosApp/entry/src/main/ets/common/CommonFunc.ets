@@ -42,6 +42,66 @@ export function getItemImageUrl(e: BaseItemDto, type?: ImageType): string {
   }
 }
 
+export function getItemBackDropImageUrl(e: BaseItemDto): string | null {
+  const imageApi = new ImageUrlsApi();
+  const basePath: string = ApiClient.Instance().basePath;
+
+  // helper
+  const getUrl = (id: string | undefined, type: ImageType) =>
+  id ? basePath + imageApi.getItemImageUrlById(id, type) : null;
+
+  if (e.Type === BaseItemKind.Episode) {
+    // 1. 优先父级thumb
+    if (e.ParentThumbItemId) {
+      return getUrl(e.ParentThumbItemId, ImageType.Thumb);
+    }
+    // 2. 再父级backdrop
+    if (e.ParentBackdropItemId) {
+      return getUrl(e.ParentBackdropItemId, ImageType.Backdrop);
+    }
+    // 3. SeriesId 通常有剧集主图
+    if (e.SeriesId) {
+      return getUrl(e.SeriesId, ImageType.Primary);
+    }
+  }
+
+  // 普通条目，尝试多种图片类型优先级
+  const preferredTypes: ImageType[] = [
+    ImageType.Backdrop,
+    ImageType.Primary,
+    ImageType.Thumb,
+    ImageType.Banner
+  ];
+
+  for (const type of preferredTypes) {
+    const url = getUrl(e.Id, type);
+    if (url) {
+      return url;
+    }
+  }
+
+  // 全部无图，返回 null
+  return null;
+}
+
+// export function getItemBackDropImageUrl(e: BaseItemDto): string {
+//   //电影和剧集封面不一样
+//   if (e.Type === BaseItemKind.Episode) {
+//     if (e.ParentThumbItemId) {
+//       return ApiClient.Instance().basePath +
+//       new ImageUrlsApi().getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb)
+//     } else if (e.ParentBackdropItemId) {
+//       return ApiClient.Instance().basePath +
+//       new ImageUrlsApi().getItemImageUrlById(e.ParentBackdropItemId, ImageType.Backdrop)
+//     } else if (e.SeriesPrimaryImageTag){
+//       return ApiClient.Instance().basePath +
+//       new ImageUrlsApi().getItemImageUrlById(e.SeriesId, ImageType.Primary)
+//     }
+//   }
+//   return ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary)
+// }
+
+
 export function resolveLatestImageUrl(
   item: BaseItemDto,
   imageApi: ImageUrlsApi,
@@ -397,4 +457,74 @@ export function shouldShowCloseSubtitleOptionOnDetail(streams: MediaStream[]): b
     return false;
   }
   return subs.some(isLikelySelectableSubtitle);
+}
+
+/**
+ * 生成美观的深色蓝色系随机背景色
+ * 包含蓝色、青色、紫蓝色等相近色调
+ * @returns 返回十六进制颜色字符串
+ */
+export function generateBeautifulDeepBlueColor(): string {
+  // 色相范围：180-260 度
+  const hue = Math.floor(Math.random() * 80) + 180;
+
+  // 饱和度：50%-75%，保证色彩鲜艳但不刺眼
+  const saturation = Math.floor(Math.random() * 25) + 50;
+
+  // 🔧 关键：亮度提升到 35%-50%，确保图标可见
+  const lightness = Math.floor(Math.random() * 15) + 35; // 改为 35-50%
+
+  return hslToHex(hue, saturation, lightness);
+}
+
+/**
+ * 将 HSL 颜色转换为十六进制格式
+ */
+function hslToHex(h: number, s: number, l: number): string {
+  // 将百分比转换为小数
+  s = s / 100;
+  l = l / 100;
+
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+
+  let r = 0, g = 0, b = 0;
+
+  if (h >= 0 && h < 60) {
+    r = c;
+    g = x;
+    b = 0;
+  } else if (h >= 60 && h < 120) {
+    r = x;
+    g = c;
+    b = 0;
+  } else if (h >= 120 && h < 180) {
+    r = 0;
+    g = c;
+    b = x;
+  } else if (h >= 180 && h < 240) {
+    r = 0;
+    g = x;
+    b = c;
+  } else if (h >= 240 && h < 300) {
+    r = x;
+    g = 0;
+    b = c;
+  } else {
+    r = c;
+    g = 0;
+    b = x;
+  }
+
+  // 转换为 0-255 范围并转为十六进制
+  const red = Math.round((r + m) * 255);
+  const green = Math.round((g + m) * 255);
+  const blue = Math.round((b + m) * 255);
+
+  const hexRed = red.toString(16).padStart(2, '0');
+  const hexGreen = green.toString(16).padStart(2, '0');
+  const hexBlue = blue.toString(16).padStart(2, '0');
+
+  return `#${hexRed}${hexGreen}${hexBlue}`;
 }

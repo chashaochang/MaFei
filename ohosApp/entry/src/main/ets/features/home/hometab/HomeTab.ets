@@ -2,11 +2,9 @@ import { HMRouterMgr } from "@hadss/hmrouter"
 import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
 import { HomeViewModel } from "./HomeViewModel"
-import { AppStorageV2 } from "@kit.ArkUI"
-import { AppUIState } from "../../../entity/AppUIState"
 import { UIConstants } from "../../../common/UIConstants"
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
-import { playItems } from "../../../common/CommonFunc"
+import { generateBeautifulDeepBlueColor, playItems } from "../../../common/CommonFunc"
 import { HomeRefreshEvent } from "../../../events/Events"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { ToastUtil } from "../../../utils/ToastUtil"
@@ -14,9 +12,8 @@ import { RouterConsts } from "../../../common/RouterConsts"
 
 @ComponentV2
 export struct HomeTab {
-  @Local ui: HomeUIState = new HomeUIState()
+  @Local ui: HomeUIState = new HomeUIState(this.getUIContext())
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   aboutToAppear(): void {
     //监听刷新事件
@@ -32,7 +29,7 @@ export struct HomeTab {
     Stack() {
       Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
         List() {
-          ListItem().height(this.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
+          ListItem().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
           if (this.ui.mediaList.length > 0) {
             ListItem() {
               this.buildMediaList()
@@ -49,22 +46,26 @@ export struct HomeTab {
             }
           }
 
+          ListItem() {
+            this.buildAllMediaCount()
+          }
+
           ForEach(this.ui.latestMediaList, (item: MediaItem) => {
             ListItem() {
               this.buildLastAddedList(item)
             }
           })
-          ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom + 20)
+          ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
       .pullDownRatio(0.3)
       .refreshOffset(64)
-      .maxPullDownDistance(64 + this.appUIState.safeTop)
+      .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
       .height('100%')
-      .onStateChange((status)=>{
+      .onStateChange((status) => {
         this.ui.refreshStatus = status
       })
-      .onOffsetChange((offset)=>{
+      .onOffsetChange((offset) => {
         this.ui.refreshOffset = offset
       })
       .onRefreshing(() => {
@@ -75,7 +76,10 @@ export struct HomeTab {
       Row({ space: 12 }) {
         Row() {
           Image($r('app.media.app_icon')).height(40)
-          Text($r('app.string.app_name')).fontColor($r('app.color.text_primary')).fontSize(18).fontWeight(FontWeight.Bold)
+          Text($r('app.string.app_name'))
+            .fontColor($r('app.color.text_primary'))
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
         }
 
         Blank()
@@ -89,10 +93,10 @@ export struct HomeTab {
           .objectFit(ImageFit.Contain)
           .backgroundColor($r('app.color.component_bg'))
           .visibility(Visibility.None)
-      }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
+      }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
       .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
       .padding({
-        left: 8, right: 16, top: this.appUIState.safeTop
+        left: 8, right: 16, top: this.vm.appUIState.safeTop
       })
     }
     .backgroundColor($r('app.color.bg_main'))
@@ -150,7 +154,11 @@ export struct HomeTab {
   @Builder
   buildResumeList() {
     Column() {
-      Text('继续观看').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).margin({ left: 16 })
+      Text('继续观看')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ left: 16 })
       List({ space: 8 }) {
         ListItem().width(8)
         ForEach(this.ui.resumeList, (item: VideoItem) => {
@@ -217,7 +225,11 @@ export struct HomeTab {
   @Builder
   buildNextUpList() {
     Column() {
-      Text('接下来').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).margin({ left: 16 })
+      Text('接下来')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .margin({ left: 16 })
       List({ space: 8 }) {
         ListItem().width(8)
         ForEach(this.ui.nextUpList, (item: VideoItem) => {
@@ -352,6 +364,155 @@ export struct HomeTab {
   }
 
   @Builder
+  buildAllMediaCount() {
+    Row({ space: 8 }) {
+      Stack() {
+        Image($r('app.media.bg_trans_all'))
+          .fillColor(Color.White)
+          .width(35)
+          .height(35)
+          .opacity(0.2)
+          .rotate({
+            x: 0,
+            y: 0,
+            z: 1,
+            centerX: '50%',
+            centerY: '50%',
+            angle: 22.5
+          })
+          .translate({
+            x: 5
+          })
+        Column({ space: 4 }) {
+          Text('全部影视')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text(this.ui.totalCount)
+            .fontSize(14)
+            .fontWeight(FontWeight.Normal)
+            .fontColor(Color.White)
+        }
+        .width(90)
+        .height(60)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          let mediaItem: MediaItem = {
+            name: '全部影视',
+            id: 'all',
+            image: '',
+            childCount: 0,
+            type: BaseItemKind.Video
+          }
+          HMRouterMgr.to(RouterConsts.VideoListPage)
+            .withParam(mediaItem)
+            .push()
+        })
+      }.backgroundColor(generateBeautifulDeepBlueColor())
+      .align(Alignment.BottomEnd)
+      .borderRadius(8)
+      .clip(true)
+
+      Stack() {
+        Image($r('app.media.bg_trans_movie'))
+          .fillColor(Color.White)
+          .width(35)
+          .height(35)
+          .opacity(0.2)
+          .rotate({
+            x: 0,
+            y: 0,
+            z: 1,
+            centerX: '50%',
+            centerY: '50%',
+            angle: 22.5
+          })
+          .translate({
+            x: 5
+          })
+        Column({ space: 4 }) {
+          Text('电影')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text(this.ui.movieCount)
+            .fontSize(14)
+            .fontWeight(FontWeight.Normal)
+            .fontColor(Color.White)
+        }
+        .width(90)
+        .height(60)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          let mediaItem: MediaItem = {
+            name: '电影',
+            id: 'movies',
+            image: '',
+            childCount: 0,
+            type: BaseItemKind.Movie
+          }
+          HMRouterMgr.to(RouterConsts.VideoListPage)
+            .withParam(mediaItem)
+            .push()
+        })
+      }.backgroundColor(generateBeautifulDeepBlueColor())
+      .align(Alignment.BottomEnd)
+      .borderRadius(8)
+      .clip(true)
+
+      Stack() {
+        Image($r('app.media.bg_trans_tv'))
+          .fillColor(Color.White)
+          .width(35)
+          .height(35)
+          .opacity(0.2)
+          .rotate({
+            x: 0,
+            y: 0,
+            z: 1,
+            centerX: '50%',
+            centerY: '50%',
+            angle: 22.5
+          })
+          .translate({
+            x: 5
+          })
+        Column({ space: 4 }) {
+          Text('电视节目')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+          Text(this.ui.tvCount)
+            .fontSize(14)
+            .fontWeight(FontWeight.Normal)
+            .fontColor(Color.White)
+        }
+        .width(90)
+        .height(60)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          let mediaItem: MediaItem = {
+            name: '电视节目',
+            id: 'tvs',
+            image: '',
+            childCount: 0,
+            type: BaseItemKind.TvProgram
+          }
+          HMRouterMgr.to(RouterConsts.VideoListPage)
+            .withParam(mediaItem)
+            .push()
+        })
+      }.backgroundColor(generateBeautifulDeepBlueColor())
+      .align(Alignment.BottomEnd)
+      .borderRadius(8)
+      .clip(true)
+    }
+    .margin({
+      top: 24, left: 16
+    })
+  }
+
+  @Builder
   customRefreshComponent() {
     CustomRefreshComponent({
       refreshOffset: this.ui.refreshOffset,
@@ -359,3 +520,4 @@ export struct HomeTab {
     })
   }
 }
+

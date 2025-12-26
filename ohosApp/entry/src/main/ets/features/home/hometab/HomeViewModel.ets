@@ -7,17 +7,13 @@ import {
   ImageType,
   ItemFields,
 } from "sdk/src/main/ets/generated-client/models";
-import { getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
+import { BaseViewModel } from "../../../common/base/BaseViewModel";
+import { getItemBackDropImageUrl, getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
 
-export class HomeViewModel {
-  ui: HomeUIState
+export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
-
-  constructor(ui: HomeUIState) {
-    this.ui = ui
-  }
 
   async init() {
     try {
@@ -25,6 +21,8 @@ export class HomeViewModel {
       await this.getMediaList()
       //获取继续观看列表
       await this.getResumeList()
+      //获取视频数量
+      await this.getCounts()
       //获取接下来列表
       await this.getNextUpList()
       //获取latest
@@ -35,6 +33,30 @@ export class HomeViewModel {
     }
   }
 
+  async getCounts() {
+    const totalRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+      userId: ApiClient.Instance().userId,
+      includeItemTypes: ['Movie', 'Series'],
+      recursive: true, // 递归统计所有子目录
+      limit: 1
+    });
+    this.ui.totalCount = totalRes.data.TotalRecordCount + '' || '--'
+    const movieRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+      userId: ApiClient.Instance().userId,
+      includeItemTypes: ['Movie'],
+      recursive: true, // 递归统计所有子目录
+      limit: 1
+    });
+    this.ui.movieCount = movieRes.data.TotalRecordCount + '' || '--'
+    const tvRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+      userId: ApiClient.Instance().userId,
+      includeItemTypes: ['Series'],
+      recursive: true, // 递归统计所有子目录
+      limit: 1
+    });
+    this.ui.tvCount = tvRes.data.TotalRecordCount + '' || '--'
+  }
+
   private async getMediaList(): Promise<void> {
     return new Promise((resolve, reject) => {
       getUserViewsApi(ApiClient.Instance()).getUserViews({
@@ -43,6 +65,7 @@ export class HomeViewModel {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
             this.ui.mediaList = res.data.Items?.map<MediaItem>((e: BaseItemDto) => {
+
               return {
                 name: e.Name || '',
                 image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary, {
@@ -54,7 +77,11 @@ export class HomeViewModel {
               }
             }) || []
             resolve()
+          } else {
+            resolve()
           }
+        } else {
+          resolve()
         }
       }).catch((e: AxiosError) => {
         reject()
@@ -82,7 +109,11 @@ export class HomeViewModel {
             }) || []
             this.ui.resumeList = list
             resolve()
+          } else {
+            resolve()
           }
+        } else {
+          resolve()
         }
       }).catch(() => {
         reject()
@@ -114,10 +145,7 @@ export class HomeViewModel {
               return {
                 id: e.Id || '',
                 name: e.SeriesName || '',
-                image: ApiClient.Instance().basePath +
-                new ImageUrlsApi().getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb, {
-                  tag: e.ParentThumbImageTag
-                }),
+                image: getItemBackDropImageUrl(e) || resolveImageUrl(e, this.imageApi),
                 subtitle: `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`,
               }
             }) || []
@@ -126,6 +154,8 @@ export class HomeViewModel {
           } else {
             resolve()
           }
+        } else {
+          resolve()
         }
       }).catch(() => {
         reject()
@@ -268,13 +298,11 @@ function mapResumeItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem {
       break;
   }
 
-  const imageUrl = resolveImageUrl(e, imageApi);
-
   return {
     id: e.Id || '',
     name,
     subtitle,
-    image: ApiClient.Instance().basePath + imageUrl,
+    image: getItemBackDropImageUrl(e) || resolveImageUrl(e, new ImageUrlsApi()),
     type: e.Type,
     percent: e.UserData?.PlayedPercentage ? Math.round(e.UserData.PlayedPercentage) : 0
   };

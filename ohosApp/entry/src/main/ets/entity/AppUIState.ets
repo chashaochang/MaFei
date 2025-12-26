@@ -14,6 +14,7 @@ export class AppUIState {
   @Trace isConnecting: boolean = false
   @Trace deviceWidth: number = 0
   @Trace deviceHeight: number = 0
+  @Trace currentBreakpoint: string = "MD"
   context?: common.UIAbilityContext
   windowClass?: window.Window
   navInstance?: NavigationAttribute

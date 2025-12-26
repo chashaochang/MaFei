@@ -29,7 +29,7 @@ export struct SafePage {
   private breakpointSystem: BreakpointSystem = new BreakpointSystem();
 
   aboutToAppear() {
-    this.breakpointSystem.register();
+    this.breakpointSystem.register(this.getUIContext());
   }
 
   aboutToDisappear() {
@@ -39,9 +39,11 @@ export struct SafePage {
   build() {
     GridRow({
       columns: {
+        xs: ColumnEnum.XS,
         sm: ColumnEnum.SM,
         md: ColumnEnum.MD,
-        lg: ColumnEnum.LG
+        lg: ColumnEnum.LG,
+        xl: ColumnEnum.XL
       },
       gutter: {
         x: { sm: $r('app.float.grid_gutter'), md: $r('app.float.grid_gutter'), lg: $r('app.float.grid_gutter') }
@@ -62,9 +64,12 @@ export struct SafePage {
         Column() {
           Image($r('app.media.app_icon'))
             .width(new BreakpointType<Resource>({
+              xs: $r('app.float.safe_logo_sm_md'),
               sm: $r('app.float.safe_logo_sm_md'),
               md: $r('app.float.safe_logo_sm_md'),
               lg: $r('app.float.safe_logo_lg'),
+              xl: $r('app.float.safe_logo_lg'),
+              xxl: $r('app.float.safe_logo_lg'),
             }).getValue(this.currentBreakpoint))
             .aspectRatio(1)
             .margin({ top: $r('app.float.safe_logo_margin') })

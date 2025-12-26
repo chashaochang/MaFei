@@ -1,7 +1,8 @@
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
+import { BaseUIState } from "../../../common/base/BaseUIState"
 
 @ObservedV2
-export class HomeUIState {
+export class HomeUIState extends BaseUIState{
   //媒体库列表
   @Trace mediaList: MediaItem[] = []
   //继续观看列表
@@ -15,6 +16,10 @@ export class HomeUIState {
   @Trace isRefreshing: boolean = false;
   @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
   @Trace refreshOffset: number = 0
+
+  @Trace totalCount: string = '--'
+  @Trace movieCount: string = '--'
+  @Trace tvCount: string = '--'
 }
 
 export interface MediaItem {
