@@ -12,6 +12,7 @@ import { sortOptions } from "../../entity/SortOption";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 import { VideoListViewModel } from "./VideoListViewModel";
+import { BreakpointTypeEnum } from "../../utils/BreakpointSystem";
 
 @HMRouter({
   pageUrl: RouterConsts.VideoListPage
@@ -38,7 +39,7 @@ export struct VideoListPage {
         Row() {
           Text(sortOptions[this.ui.selectedSortIndex].label).fontSize(14).fontColor($r('app.color.text_primary'))
             .height(46)
-            .onClick(()=>{
+            .onClick(() => {
               this.vm.sortDialog.show()
             })
           Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
@@ -90,7 +91,29 @@ export struct VideoListPage {
           },
           gridAttribute: (attr) => {
             attr.scrollBar = BarState.Off
-            attr.columnsTemplate = '1fr 1fr 1fr'
+            switch (this.vm.appUIState.currentBreakpoint){
+              case BreakpointTypeEnum.XS:
+                attr.columnsTemplate = '1fr '.repeat(2)
+                break
+              case BreakpointTypeEnum.SM:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+              case BreakpointTypeEnum.MD:
+                attr.columnsTemplate = '1fr '.repeat(4)
+                break
+              case BreakpointTypeEnum.LG:
+                attr.columnsTemplate = '1fr '.repeat(6)
+                break
+              case BreakpointTypeEnum.XL:
+                attr.columnsTemplate = '1fr '.repeat(8)
+                break
+              case BreakpointTypeEnum.XXL:
+                attr.columnsTemplate = '1fr '.repeat(12)
+                break
+              default:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+            }
             attr.columnsGap = 8
           },
           lazyCachedCount: 10 //缓存
@@ -101,7 +124,7 @@ export struct VideoListPage {
         }
         if (this.ui.pageState == PageState.Error) {
           FailedView()
-            .onClick(()=>{
+            .onClick(() => {
               this.vm.refresh()
             })
         }

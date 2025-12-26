@@ -1,7 +1,7 @@
 import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi } from "sdk";
-import { BaseItemDtoQueryResult, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
+import { BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
@@ -90,15 +90,27 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
         this.controller.finishLoadMore(false)
       })
     } else {
+      let isAll = this.mediaItem?.id === 'all'
+      let includeItemTypes = [this.mediaItem!.type]
+      let parentId: string | undefined = undefined
+      if (isAll) {
+        includeItemTypes = [BaseItemKind.Video, BaseItemKind.Movie, BaseItemKind.Series]
+      } else if (this.mediaItem?.id === 'movies') {
+        includeItemTypes = [BaseItemKind.Movie]
+      } else if (this.mediaItem?.id === 'tvs') {
+        includeItemTypes = [BaseItemKind.Series]
+      } else {
+        parentId = this.mediaItem!.id
+      }
       getItemsApi(ApiClient.Instance()).getItems({
-        parentId: this.mediaItem!.id,
+        parentId: parentId,
         recursive: true,
         fields: ['PrimaryImageAspectRatio', 'MediaSourceCount', 'MediaStreams'],
         imageTypeLimit: 1,
         enableImageTypes: ['Primary', 'Backdrop', 'Banner', 'Thumb'],
         sortBy: this.sortBy,
         sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
-        includeItemTypes: [this.mediaItem!.type],
+        includeItemTypes: includeItemTypes,
         startIndex: this.startIndex,
         limit: this.limit,
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {

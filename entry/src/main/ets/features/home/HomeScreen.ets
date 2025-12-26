@@ -4,31 +4,59 @@ import { MediaTab } from "./mediatab/MediaTab";
 import { MineTab } from "./minetab/MineTab";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { UIConstants } from "../../common/UIConstants";
+import { BreakpointSystem, BreakpointTypeEnum } from "../../utils/BreakpointSystem";
 
 @ComponentV2
 export struct HomeScreen {
   @Local selectedIndex: number = 0
+  private breakpointSystem: BreakpointSystem = new BreakpointSystem();
+
+  aboutToAppear() {
+    this.breakpointSystem.register(this.getUIContext());
+  }
+
+  aboutToDisappear() {
+    this.breakpointSystem.unregister();
+  }
+
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   build() {
     Column() {
-      Tabs({ barPosition: BarPosition.End }) {
+      Tabs({
+        barPosition: (this.appUIState.currentBreakpoint === BreakpointTypeEnum.XS ||
+          this.appUIState.currentBreakpoint === BreakpointTypeEnum.SM ||
+          this.appUIState.currentBreakpoint === BreakpointTypeEnum.MD) ? BarPosition.End : BarPosition.Start
+      }) {
         TabContent() {
           HomeTab()
         }
         .tabBar(this.tabBuilder('首页', 0, $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')))
+        .padding({
+          left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
+        })
 
         TabContent() {
           MediaTab()
         }
         .tabBar(this.tabBuilder('媒体库', 1, $r('app.media.ic_media_sel'), $r('app.media.ic_media_store')))
+        .padding({
+          left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
+        })
 
         TabContent() {
           MineTab()
         }
         .tabBar(this.tabBuilder('我', 2, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine')))
+        .padding({
+          left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
+        })
       }
-      .barHeight(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)
+      .barHeight(this.appUIState.currentBreakpoint.includes('l') ? '100%' : UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)
+      .barWidth(this.appUIState.currentBreakpoint.includes('l') ? 96 : '100%')
+      .barMode(this.appUIState.currentBreakpoint.includes('l') ? BarMode.Scrollable : BarMode.Fixed,
+        { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })
+      .vertical(this.appUIState.currentBreakpoint.includes('l'))
       .barBackgroundColor($r('app.color.tab'))
       .barOverlap(true)
       .onChange((index: number) => {

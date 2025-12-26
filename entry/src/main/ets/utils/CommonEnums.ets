@@ -42,39 +42,54 @@ export enum TagType {
  * GridRow column.
  */
 export enum ColumnEnum {
+  XS = 2,
   SM = 4,
   MD = 8,
-  LG = 12
+  LG = 12,
+  XL = 16,
+  XXL = 24
 }
 
 /**
  * GridCol span.
  */
 export enum SpanEnum {
+  XS = 2,
   SM = 4,
   MD = 6,
-  LG = 8
+  LG = 8,
+  XL = 10,
+  XXL = 12
 }
 
 export enum ColSpanEnum {
+  XS = 1,
   SM = 2,
   MD = 3,
-  LG = 4
+  LG = 4,
+  XL = 6,
+  XXL = 8
 }
 
 /**
  * GridCol offset.
  */
 export enum OffsetEnum {
-  SM = 0,
-  MD = 1,
-  LG = 2
+  XS = 0,
+  SM = 1,
+  MD = 2,
+  LG = 3,
+  XL = 4,
+  XXL = 5
 }
 
 export enum TemplateEnum {
+  XS = 1,
   SM = 2,
   MD = 3,
-  LG = 6
+  LG = 6,
+  XL = 8,
+  XXL = 12
 }
 
 export enum EventTypeEnum  {
