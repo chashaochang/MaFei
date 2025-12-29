@@ -84,7 +84,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
           resolve()
         }
       }).catch((e: AxiosError) => {
-        reject()
+        resolve()
       })
     })
   }
@@ -102,7 +102,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         mediaTypes: ['Video'],
         userId: ApiClient.Instance().userId
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res.data) {
+        if (res && res.data) {
           if (res.data.Items && res.data.Items.length > 0) {
             let list = res.data.Items.map<VideoItem>((e: BaseItemDto) => {
               return mapResumeItem(e, new ImageUrlsApi());
@@ -115,8 +115,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         } else {
           resolve()
         }
-      }).catch(() => {
-        reject()
+      }).catch((e:Error) => {
+        resolve()
       })
     })
   }
@@ -139,7 +139,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         enableResumable: false,
         enableRewatching: false
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res.data) {
+        if (res && res.data) {
           if (res.data.Items && res.data.Items.length > 0) {
             let list = res.data.Items.map<VideoItem>((e: BaseItemDto) => {
               return {
@@ -157,8 +157,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         } else {
           resolve()
         }
-      }).catch(() => {
-        reject()
+      }).catch((e:Error) => {
+        resolve()
       })
     })
   }
@@ -207,7 +207,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
               resolve()
             }
           } catch (error) {
-            reject()
+            resolve()
           }
         })
         promises.push(promise)
