@@ -1,6 +1,7 @@
 import { display, window } from "@kit.ArkUI";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { CustomColorMode } from "./CustomColorMode";
+import ServerEntity from "../data/ServerEntity";
 
 @ObservedV2
 export class AppUIState {
@@ -18,4 +19,5 @@ export class AppUIState {
   context?: common.UIAbilityContext
   windowClass?: window.Window
   navInstance?: NavigationAttribute
+  server?: ServerEntity
 }

@@ -1,4 +1,6 @@
 import { ApiClientController } from '../data/ApiClientController'
+import { AppUIState } from '../entity/AppUIState';
+import { AppStorageV2 } from '@kit.ArkUI';
 
 export enum ServerState {
   Pending = 0,
@@ -8,7 +10,7 @@ export enum ServerState {
 
 @ObservedV2
 export class MainViewModel {
-
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   apiClientController: ApiClientController
   @Trace serverState: ServerState = ServerState.Unset
   @Monitor('serverState') onStateChanged(monitor: IMonitor){
@@ -24,7 +26,7 @@ export class MainViewModel {
   refreshServer() {
     let serverEntity = this.apiClientController.loadSavedServer()
     if (serverEntity) {
-      AppStorage.setOrCreate('server', serverEntity)
+      this.appUIState.server = serverEntity
     }
     this.serverState = serverEntity ? ServerState.Available : ServerState.Unset
   }
