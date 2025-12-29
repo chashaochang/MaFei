@@ -13,10 +13,13 @@ import { common } from "@kit.AbilityKit";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { AuthenticationResult } from "sdk/src/main/ets/generated-client/models";
 import { ApiClient } from "../network/ApiClient";
+import { AppUIState } from "../entity/AppUIState";
+import { AppStorageV2 } from "@kit.ArkUI";
 
 @ComponentV2
 export struct WebViewScreen {
-  @Local server: ServerEntity = AppStorage.get<ServerEntity>('server') ?? new ServerEntity()
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  @Local server: ServerEntity = this.appUIState.server ?? new ServerEntity()
   controller: webview.WebviewController = new webview.WebviewController();
   responseWeb: WebResourceResponse = new WebResourceResponse();
   apiClientController: ApiClientController = new ApiClientController()

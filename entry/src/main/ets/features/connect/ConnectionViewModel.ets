@@ -84,7 +84,8 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         let serverEntity = this.apiClientController.loadSavedServer()
         if (serverEntity !== null) {
           this.appUIState.isConnecting = true
-          AppStorage.setOrCreate('server', serverEntity)
+          this.appUIState.server = serverEntity
+          // AppStorage.setOrCreate('server', serverEntity)
           // let token = AppPreference.getInstance().getAccessToken()
           // if (token.length > 0) {
           //   this.loginByAccessToken(isFromAddAccount, serverEntity, token)
