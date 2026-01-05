@@ -1,11 +1,13 @@
 @Component
 export struct EmptyView {
+  @Prop title: string = '暂无数据'
+
   build() {
     Stack() {
       Image($r('app.media.empty'))
         .width(240)
         .height(240)
-      Text('暂无数据')
+      Text(this.title)
         .fontSize(14)
         .fontColor($r('app.color.text_2'))
         .margin({

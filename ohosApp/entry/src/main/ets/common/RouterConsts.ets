@@ -14,4 +14,6 @@ export class RouterConsts {
   static readonly AccountPage = 'AccountPage';
   static readonly AddAccountPage = 'AddAccountPage';
   static readonly WebITongPage = 'WebITongPage';
+  static readonly SearchPage = 'SearchPage';
+
 }
