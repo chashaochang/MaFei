@@ -83,16 +83,15 @@ export struct HomeTab {
         }
 
         Blank()
-        Image($r('app.media.ic_search'))
-          .width(40)
+        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+          .fontSize(24)
+          .fontWeight(FontWeight.Medium)
+          .align(Alignment.Center)
           .height(40)
-          .borderRadius(20)
-          .padding({
-            top: 8, bottom: 8
+          .fontColor([$r('app.color.text_primary')])
+          .onClick(()=>{
+            HMRouterMgr.to(RouterConsts.SearchPage).push()
           })
-          .objectFit(ImageFit.Contain)
-          .backgroundColor($r('app.color.component_bg'))
-          .visibility(Visibility.None)
       }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
       .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
       .padding({
