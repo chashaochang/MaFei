@@ -133,4 +133,16 @@ export class AppPreference {
     }
     return CustomColorMode.Auto
   }
+
+  getSearchHistory(): string[] {
+    let history = this.getValue<string[]>(Constants.PREF_SEARCH_HISTORY)
+    if (history !== null) {
+      return history
+    }
+    return []
+  }
+
+  setSearchHistory(history: string[]) {
+    this.setValue<string[]>(Constants.PREF_SEARCH_HISTORY, history)
+  }
 }

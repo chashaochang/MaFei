@@ -1,11 +1,44 @@
 import { deviceInfo } from "@kit.BasicServicesKit";
-import { AppStorageV2, display, window } from "@kit.ArkUI";
+import { display, window } from "@kit.ArkUI";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { Constants } from "./Constants";
 import { NavModifier } from "../pages/Index";
 import { AppUIState } from "../entity/AppUIState";
+import { GridAttr } from "@abner/refresh_v2";
+import { BreakpointTypeEnum } from "./BreakpointSystem";
 
 export class OneMoreUtil {
+
+  static setResponsiveGridColumnsAttr(appUIState: AppUIState, attr: GridAttr) {
+    attr.columnsGap = 8
+    switch (appUIState.currentBreakpoint) {
+      case BreakpointTypeEnum.XS:
+        attr.columnsTemplate = '1fr '.repeat(2)
+        break
+      case BreakpointTypeEnum.SM:
+        attr.columnsTemplate = '1fr '.repeat(3)
+        break
+      case BreakpointTypeEnum.MD:
+        attr.columnsTemplate = '1fr '.repeat(5)
+        attr.columnsGap = 12
+        break
+      case BreakpointTypeEnum.LG:
+        attr.columnsTemplate = '1fr '.repeat(6)
+        attr.columnsGap = 16
+        break
+      case BreakpointTypeEnum.XL:
+        attr.columnsTemplate = '1fr '.repeat(8)
+        attr.columnsGap = 20
+        break
+      case BreakpointTypeEnum.XXL:
+        attr.columnsTemplate = '1fr '.repeat(12)
+        break
+      default:
+        attr.columnsTemplate = '1fr '.repeat(3)
+        break
+    }
+
+  }
   //是否大屏设备(需要分栏的) 暂时没适配折叠屏
   static isBigScreen() {
     return deviceInfo.deviceType == 'tablet' || deviceInfo.deviceType == 'car' || deviceInfo.deviceType == '2in1'
