@@ -61,11 +61,11 @@ export class TextSectionAttribute {
   fontColor: ResourceStr;
   fontSize: Resource | number | string;
   lineHeight: number;
-  constraintWidth: Resource | number | string;
+  constraintWidth?: number
 
   constructor(title: string = '', maxLines: number = 3, fontColor: ResourceStr = $r('app.color.text_1'),
     fontSize: Resource | number | string = 13, lineHeight: number = 18,
-    constraintWidth: Resource | number | string = 340) {
+    constraintWidth?: number) {
     this.title = title;
     this.maxLines = maxLines;
     this.fontColor = fontColor;

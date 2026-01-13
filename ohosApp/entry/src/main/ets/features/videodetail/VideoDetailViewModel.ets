@@ -89,7 +89,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
         this.ui.info = `${itemData.Genres?.join('  ')}  /  ${this.ui.mediaName}`
         this.ui.overview = itemData.Overview || ''
-        this.ui.people = itemData.People || []
+        //this.ui.people = itemData.People || []
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
         getTvShowsApi(ApiClient.Instance()).getSeasons({
