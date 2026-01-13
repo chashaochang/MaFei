@@ -1,6 +1,8 @@
+import { HMRouterMgr } from "@hadss/hmrouter"
 import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { ImageUrlsApi } from "sdk"
 import { BaseItemPerson, ImageType, PersonKind } from "sdk/src/main/ets/generated-client/models"
+import { RouterConsts } from "../common/RouterConsts"
 import { ApiClient } from "../network/ApiClient"
 
 @ComponentV2
@@ -58,7 +60,9 @@ export struct CastView {
                   overflow: TextOverflow.Ellipsis
                 })
                 .textAlign(TextAlign.Center)
-            }
+            }.onClick(() => {
+              HMRouterMgr.to(RouterConsts.CastDetailPage).withParam(item.Id).push()
+            })
           }
         })
         ListItem().width(8)
