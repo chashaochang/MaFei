@@ -29,3 +29,5 @@ export { getUserViewsApi } from './src/main/ets/utils/api/user-views-api'
 export { getTvShowsApi } from './src/main/ets/utils/api/tv-shows-api'
 
 export { getUserLibraryApi } from './src/main/ets/utils/api/user-library-api'
+
+export * from './src/main/ets/utils/api/live-tv-api'

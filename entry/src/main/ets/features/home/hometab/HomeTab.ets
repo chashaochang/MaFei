@@ -30,11 +30,11 @@ export struct HomeTab {
       Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
         List() {
           ListItem().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
-          if (this.ui.mediaList.length > 0) {
-            ListItem() {
-              this.buildMediaList()
-            }
-          }
+          // if (this.ui.mediaList.length > 0) {
+          //   ListItem() {
+          //     this.buildMediaList()
+          //   }
+          // }
           if (this.ui.resumeList.length > 0) {
             ListItem() {
               this.buildResumeList()
@@ -81,15 +81,21 @@ export struct HomeTab {
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
         }
-
         Blank()
+        Image($r('app.media.iptv'))
+          .height(40)
+          .fillColor($r('app.color.text_primary'))
+          .padding(9)
+          .onClick(() => {
+            HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+          })
         SymbolGlyph($r('sys.symbol.magnifyingglass'))
           .fontSize(24)
           .fontWeight(FontWeight.Medium)
           .align(Alignment.Center)
           .height(40)
           .fontColor([$r('app.color.text_primary')])
-          .onClick(()=>{
+          .onClick(() => {
             HMRouterMgr.to(RouterConsts.SearchPage).push()
           })
       }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
@@ -139,6 +145,10 @@ export struct HomeTab {
             if (item.type == undefined) {
               ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
               return;
+            } else if (item.type == BaseItemKind.LiveTvChannel) {
+              HMRouterMgr.to(RouterConsts.LiveTvPage)
+                .push()
+              return
             }
             HMRouterMgr.to(RouterConsts.VideoListPage)
               .withParam(item)
