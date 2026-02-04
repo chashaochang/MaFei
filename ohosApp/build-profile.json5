@@ -37,8 +37,8 @@
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
-        "versionCode": 1000008,
-        "versionName": "1.0.8",
+        "versionCode": 1000009,
+        "versionName": "1.0.9",
         "output": {
           "artifactName": "HomoFin_Release"
         },

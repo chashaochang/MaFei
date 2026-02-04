@@ -70,6 +70,9 @@ export struct ConnectScreen {
             }).height('100%')
           }
         }.alignItems(HorizontalAlign.Start).width('100%').margin({ top: 30 })
+        .constraintSize({
+          maxWidth: 375,
+        })
 
         Blank().height(16)
         Column() {
@@ -124,14 +127,17 @@ export struct ConnectScreen {
             }.padding({ top: 24 })
           }
         }.width('100%').alignItems(HorizontalAlign.Start)
+        .constraintSize({
+          maxWidth: 375,
+        })
       }
       .width('100%')
       .height('100%')
       .justifyContent(FlexAlign.Start)
       .padding({ left: 16, right: 16 })
-      .backgroundColor($r('app.color.bg_main'))
     }.height('100%').width('100%').scrollable(ScrollDirection.Vertical)
     .align(Alignment.Top)
+    .backgroundColor($r('app.color.bg_main'))
   }
 }
 
