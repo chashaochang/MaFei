@@ -4,6 +4,7 @@ import {
   BaseItemDto,
   BaseItemDtoQueryResult,
   BaseItemKind,
+  CollectionType,
   ImageType,
   ItemFields,
 } from "sdk/src/main/ets/generated-client/models";
@@ -58,6 +59,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
   }
 
   private async getMediaList(): Promise<void> {
+    this.ui.hasLiveTv = false
     return new Promise((resolve, reject) => {
       getUserViewsApi(ApiClient.Instance()).getUserViews({
         userId: ApiClient.Instance().userId
@@ -65,12 +67,14 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
             this.ui.mediaList = res.data.Items?.map<MediaItem>((e: BaseItemDto) => {
-
+              if(e.Type == BaseItemKind.TvChannel){
+                this.ui.hasLiveTv = true
+              }
               return {
                 name: e.Name || '',
                 image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary, {
-                  tag: e.ImageTags![0]
-                }),
+                    tag: e.ImageTags![0]
+                  }),
                 id: e.Id || '',
                 childCount: e.ChildCount || 0,
                 type: getTypeByCollectionType(e.CollectionType)
@@ -115,7 +119,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         } else {
           resolve()
         }
-      }).catch((e:Error) => {
+      }).catch((e: Error) => {
         resolve()
       })
     })
@@ -157,7 +161,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         } else {
           resolve()
         }
-      }).catch((e:Error) => {
+      }).catch((e: Error) => {
         resolve()
       })
     })
@@ -169,48 +173,50 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       this.ui.latestMap.clear()
       let promises: Promise<void>[] = []
       for (const item of this.ui.mediaList) {
-        let promise = new Promise<void>(async (resolve, reject) => {
-          let list: VideoItem[] = []
-          ///Users/4ce4745330314948b8791958423de149/Items/Latest?Limit=16&Fields=PrimaryImageAspectRatio%2CPath&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&ParentId=66e9b0b6aea8727e12b214521b59c67d
-          try {
-            let res: AxiosResponse<BaseItemDto[]> = await getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-              limit: 16,
-              fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
-              imageTypeLimit: 1,
-              enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
-              parentId: item.id,
-              userId: ApiClient.Instance().userId
-            })
-            if (res.data && res.data.length > 0) {
-              list = res.data.map<VideoItem>((e) => {
-                let subtitle = ''
-                if (e.Type === BaseItemKind.Series) {
-                  subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-                } else if (e.Type === BaseItemKind.Episode) {
-                  subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
-                } else {
-                  subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-                }
-                return {
-                  id: e.Id || '',
-                  name: e.SeriesName || e.Name || '',
-                  image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
-                  subtitle: subtitle,
-                  mediaName: item.name,
-                  type: e.Type
-                }
+        if(item.type != BaseItemKind.LiveTvChannel){
+          let promise = new Promise<void>(async (resolve, reject) => {
+            let list: VideoItem[] = []
+            ///Users/4ce4745330314948b8791958423de149/Items/Latest?Limit=16&Fields=PrimaryImageAspectRatio%2CPath&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&ParentId=66e9b0b6aea8727e12b214521b59c67d
+            try {
+              let res: AxiosResponse<BaseItemDto[]> = await getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
+                limit: 16,
+                fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+                imageTypeLimit: 1,
+                enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
+                parentId: item.id,
+                userId: ApiClient.Instance().userId
               })
-              this.ui.latestMap.set(item.id, list)
-              this.ui.latestMediaList.push(item)
-              resolve()
-            } else {
+              if (res.data && res.data.length > 0) {
+                list = res.data.map<VideoItem>((e) => {
+                  let subtitle = ''
+                  if (e.Type === BaseItemKind.Series) {
+                    subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+                  } else if (e.Type === BaseItemKind.Episode) {
+                    subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
+                  } else {
+                    subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+                  }
+                  return {
+                    id: e.Id || '',
+                    name: e.SeriesName || e.Name || '',
+                    image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
+                    subtitle: subtitle,
+                    mediaName: item.name,
+                    type: e.Type
+                  }
+                })
+                this.ui.latestMap.set(item.id, list)
+                this.ui.latestMediaList.push(item)
+                resolve()
+              } else {
+                resolve()
+              }
+            } catch (error) {
               resolve()
             }
-          } catch (error) {
-            resolve()
-          }
-        })
-        promises.push(promise)
+          })
+          promises.push(promise)
+        }
       }
       Promise.all(promises).then(() => {
         resolve()
