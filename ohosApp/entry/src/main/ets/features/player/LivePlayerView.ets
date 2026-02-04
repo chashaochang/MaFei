@@ -70,6 +70,7 @@ export struct LivePlayerView {
   @Local isPanning: boolean = false; // 标记是否正在滑动
   private panOptionChangeChannel: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical });
   private mAudioManager: audio.AudioManager | null = null;
+  private channelListScroller: Scroller = new Scroller();
   sec: number = 2;
   pipController?: PiPWindow.PiPController;
   xComponentController: XComponentController = new XComponentController()
@@ -87,6 +88,23 @@ export struct LivePlayerView {
   @Monitor('showControls')
   onControlVisibilityChanged() {
     this.changeSystemBar()
+  }
+
+  @Monitor('showChannelMenu')
+  onChannelMenuVisibilityChanged() {
+    if (this.showChannelMenu && this.vm.channelList.length > 0) {
+      // 延迟滚动，确保列表已渲染
+      setTimeout(() => {
+        this.scrollToSelectedChannel()
+      }, 50)
+    }
+  }
+
+  private scrollToSelectedChannel() {
+    if (this.vm.playIndex >= 0 && this.vm.playIndex < this.vm.channelList.length) {
+      // 滚动到选中项，并使其居中显示
+      this.channelListScroller.scrollToIndex(this.vm.playIndex, false, ScrollAlign.CENTER)
+    }
   }
 
   @Monitor('vm.appUIState.isFullScreen')
@@ -246,7 +264,7 @@ export struct LivePlayerView {
         .margin({ bottom: 8 })
 
       // 频道列表
-      List({ space: 6 }) {
+      List({ space: 6, scroller: this.channelListScroller }) {
         ForEach(this.vm.channelList, (channel: BaseItemDto, index: number) => {
           ListItem() {
             Row() {
