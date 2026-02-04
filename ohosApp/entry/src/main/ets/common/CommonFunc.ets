@@ -228,6 +228,8 @@ export function getTypeByCollectionType(collectionType?: CollectionType) {
       return BaseItemKind.Audio
     case CollectionType.Books:
       return BaseItemKind.Book
+    case CollectionType.Livetv:
+      return BaseItemKind.LiveTvChannel
     default:
       return undefined
   }

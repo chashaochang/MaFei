@@ -20,11 +20,13 @@ export class HomeUIState extends BaseUIState{
   @Trace totalCount: string = '--'
   @Trace movieCount: string = '--'
   @Trace tvCount: string = '--'
+
+  @Trace hasLiveTv = false
 }
 
 export interface MediaItem {
   name: string,
-  image: string,
+  image: ResourceStr,
   id: string,
   childCount: number,
   type?: BaseItemKind,

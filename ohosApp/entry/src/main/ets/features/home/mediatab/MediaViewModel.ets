@@ -3,6 +3,8 @@ import { getItemsApi, getLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
 import {
   BaseItemDto,
   BaseItemDtoQueryResult,
+  BaseItemKind,
+  CollectionType,
   ImageType,
   ItemCounts,
 } from "sdk/src/main/ets/generated-client/models";
@@ -60,7 +62,8 @@ export class MediaViewModel {
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
-            const items: BaseItemDto[] = res.data.Items || [];
+            let items: BaseItemDto[] = res.data.Items || [];
+            items = items.filter(e=>e.CollectionType != CollectionType.Livetv)
             Promise.all(items.map(async (e: BaseItemDto): Promise<MediaItem> => {
               const childRes: AxiosResponse<BaseItemDtoQueryResult> =
                 await getItemsApi(ApiClient.Instance()).getItems({
