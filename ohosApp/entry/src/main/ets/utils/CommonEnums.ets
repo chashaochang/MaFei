@@ -77,10 +77,10 @@ export enum ColSpanEnum {
 export enum OffsetEnum {
   XS = 0,
   SM = 1,
-  MD = 2,
-  LG = 3,
-  XL = 4,
-  XXL = 5
+  MD = 1,
+  LG = 2,
+  XL = 2,
+  XXL = 2
 }
 
 export enum TemplateEnum {

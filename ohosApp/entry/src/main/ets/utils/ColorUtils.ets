@@ -1,4 +1,94 @@
+import { image } from '@kit.ImageKit';
+import { http } from '@kit.NetworkKit';
+import Logger from './Logger';
+
 export class ColorUtils {
+  /**
+   * 从图片URL提取左边缘的平均颜色
+   * @param imageUrl 图片URL
+   * @returns Promise<string> 返回十六进制颜色字符串 #RRGGBB
+   */
+  static async extractLeftEdgeColor(imageUrl: string): Promise<string> {
+    try {
+      // 下载图片
+      const httpRequest = http.createHttp();
+      const response = await httpRequest.request(imageUrl, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER
+      });
+
+      if (response.responseCode !== 200) {
+        Logger.error('ColorUtils', `Failed to download image: ${response.responseCode}`);
+        return '#0000FF'; // 默认蓝色
+      }
+
+      // 创建图片源
+      const imageSource = image.createImageSource(response.result as ArrayBuffer);
+
+      // 创建PixelMap（使用较小尺寸以提高性能）
+      const pixelMap = await imageSource.createPixelMap({
+        desiredSize: { width: 100, height: 100 }
+      });
+
+      const imageInfo = await pixelMap.getImageInfo();
+      const width = imageInfo.size.width;
+      const height = imageInfo.size.height;
+
+      // 采样左边缘的像素（取左边10%的宽度）
+      const sampleWidth = Math.max(1, Math.floor(width * 0.1));
+
+      // 读取所有像素数据到缓冲区
+      const buffer = new ArrayBuffer(width * height * 4); // RGBA格式，每像素4字节
+      await pixelMap.readPixelsToBuffer(buffer);
+      const pixels = new Uint8Array(buffer);
+
+      let totalR = 0, totalG = 0, totalB = 0;
+      let validPixels = 0;
+
+      // 遍历左边缘的像素
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < sampleWidth; x++) {
+          const index = (y * width + x) * 4;
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          const a = pixels[index + 3];
+
+          // 只统计非透明像素
+          if (a > 0) {
+            totalR += r;
+            totalG += g;
+            totalB += b;
+            validPixels++;
+          }
+        }
+      }
+
+      // 释放资源
+      pixelMap.release();
+      httpRequest.destroy();
+
+      if (validPixels === 0) {
+        return '#0000FF'; // 默认蓝色
+      }
+
+      // 计算平均颜色
+      const avgR = Math.floor(totalR / validPixels);
+      const avgG = Math.floor(totalG / validPixels);
+      const avgB = Math.floor(totalB / validPixels);
+
+      // 转换为十六进制
+      const hexR = avgR.toString(16).padStart(2, '0');
+      const hexG = avgG.toString(16).padStart(2, '0');
+      const hexB = avgB.toString(16).padStart(2, '0');
+
+      return `#${hexR}${hexG}${hexB}`.toUpperCase();
+    } catch (error) {
+      Logger.error('ColorUtils', `Error extracting edge color: ${error}`);
+      return '#0000FF'; // 默认蓝色
+    }
+  }
+
   /**
    * 将十六进制颜色值转换为4x5颜色矩阵
    * @param hexColor 十六进制颜色字符串，支持格式：#RRGGBB, #AARRGGBB

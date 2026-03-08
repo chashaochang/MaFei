@@ -9,14 +9,37 @@ import {
   ItemFields,
 } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
-import { getItemBackDropImageUrl, getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
+import {
+  generateBeautifulDeepBlueColor,
+  getItemBackDropImageUrl, getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
+import { ColorUtils } from "../../../utils/ColorUtils";
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
 
+  /**
+   * 异步提取图片的左边缘颜色
+   * @param itemId 视频项ID
+   * @param imageUrl 图片URL
+   */
+  async extractEdgeColorForItem(itemId: string, imageUrl: string) {
+    if (!imageUrl || this.ui.edgeColorMap.has(itemId)) {
+      return; // 如果没有图片URL或已经提取过，则跳过
+    }
+
+    try {
+      const color = await ColorUtils.extractLeftEdgeColor(imageUrl);
+      this.ui.edgeColorMap.set(itemId, color);
+    } catch (error) {
+      // 使用默认颜色
+      this.ui.edgeColorMap.set(itemId, '#0000FF');
+    }
+  }
+
   async init() {
+    this.ui.allMediaBgColor = generateBeautifulDeepBlueColor()
     try {
       //获取媒体库列表
       await this.getMediaList()
@@ -112,6 +135,12 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
               return mapResumeItem(e, new ImageUrlsApi());
             }) || []
             this.ui.resumeList = list
+
+            // 只提取第一个项目的边缘颜色
+            if (list.length > 0 && list[0].image) {
+              this.extractEdgeColorForItem(list[0].id, list[0].image);
+            }
+
             resolve()
           } else {
             resolve()
@@ -154,6 +183,12 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
               }
             }) || []
             this.ui.nextUpList = list
+
+            // 只提取第一个项目的边缘颜色
+            if (list.length > 0 && list[0].image) {
+              this.extractEdgeColorForItem(list[0].id, list[0].image);
+            }
+
             resolve()
           } else {
             resolve()
@@ -207,6 +242,12 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
                 })
                 this.ui.latestMap.set(item.id, list)
                 this.ui.latestMediaList.push(item)
+
+                // 只提取第一个项目的边缘颜色
+                if (list.length > 0 && list[0].image) {
+                  this.extractEdgeColorForItem(list[0].id, list[0].image);
+                }
+
                 resolve()
               } else {
                 resolve()

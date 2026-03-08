@@ -1,0 +1,9 @@
+{
+  "routerMap": [
+    {
+      "name": "HomeTab",
+      "pageSourceFile": "src/main/ets/features/home/HomeScreen.ets",
+      "buildFunction": "HomeTabNavDestinationBuilder"
+    }
+  ]
+}

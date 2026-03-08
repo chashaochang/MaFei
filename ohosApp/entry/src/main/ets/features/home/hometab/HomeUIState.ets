@@ -22,6 +22,10 @@ export class HomeUIState extends BaseUIState{
   @Trace tvCount: string = '--'
 
   @Trace hasLiveTv = false
+  @Trace allMediaBgColor = '#0000FF'
+
+  // 存储每个视频项的左边缘颜色
+  @Trace edgeColorMap: Map<string, string> = new Map()
 }
 
 export interface MediaItem {
