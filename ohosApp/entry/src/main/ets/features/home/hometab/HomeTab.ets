@@ -9,6 +9,7 @@ import { HomeRefreshEvent } from "../../../events/Events"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { ToastUtil } from "../../../utils/ToastUtil"
 import { RouterConsts } from "../../../common/RouterConsts"
+import { hdsEffect } from "@kit.UIDesignKit"
 
 @ComponentV2
 export struct HomeTab {
@@ -29,7 +30,9 @@ export struct HomeTab {
     Stack() {
       Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
         List() {
-          ListItem().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
+          if (!this.vm.appUIState.currentBreakpoint.includes('l')) {
+            ListItem().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
+          }
           // if (this.ui.mediaList.length > 0) {
           //   ListItem() {
           //     this.buildMediaList()
@@ -48,7 +51,7 @@ export struct HomeTab {
 
           ListItem() {
             this.buildAllMediaCount()
-          }
+          }.visibility(this.vm.appUIState.isLargeScreen ? Visibility.None : Visibility.Visible)
 
           ForEach(this.ui.latestMediaList, (item: MediaItem) => {
             ListItem() {
@@ -58,6 +61,9 @@ export struct HomeTab {
           ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
+      .padding({
+        left: this.vm.appUIState.currentBreakpoint.includes('l') ? 16 : 0,
+      })
       .pullDownRatio(0.3)
       .refreshOffset(64)
       .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
@@ -72,39 +78,42 @@ export struct HomeTab {
         this.vm.init()
       })
 
-      //Header
-      Row({ space: 12 }) {
-        Row() {
-          Image($r('app.media.app_icon')).height(40)
-          Text($r('app.string.app_name'))
-            .fontColor($r('app.color.text_primary'))
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-        }
-        Blank()
-        Image($r('app.media.iptv'))
-          .height(40)
-          .fillColor($r('app.color.text_primary'))
-          .padding(9)
-          .onClick(() => {
-            HMRouterMgr.to(RouterConsts.LiveTvPage).push()
-          })
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(24)
-          .fontWeight(FontWeight.Medium)
-          .align(Alignment.Center)
-          .height(40)
-          .fontColor([$r('app.color.text_primary')])
-          .onClick(() => {
-            HMRouterMgr.to(RouterConsts.SearchPage).push()
-          })
-      }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-      .padding({
-        left: 8, right: 16, top: this.vm.appUIState.safeTop
-      })
+      if (!this.vm.appUIState.currentBreakpoint.includes('l')) {
+        //Header
+        Row({ space: 12 }) {
+          Row() {
+            Image($r('app.media.app_icon')).height(40)
+            Text($r('app.string.app_name'))
+              .fontColor($r('app.color.text_primary'))
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+          }
+
+          Blank()
+          Image($r('app.media.iptv'))
+            .height(40)
+            .fillColor($r('app.color.text_primary'))
+            .padding(9)
+            .onClick(() => {
+              HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+            })
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(24)
+            .fontWeight(FontWeight.Medium)
+            .align(Alignment.Center)
+            .height(40)
+            .fontColor([$r('app.color.text_primary')])
+            .onClick(() => {
+              HMRouterMgr.to(RouterConsts.SearchPage).push()
+            })
+        }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+        .padding({
+          left: 8, right: 16, top: this.vm.appUIState.safeTop
+        })
+      }
     }
-    .backgroundColor($r('app.color.bg_main'))
+    // .backgroundColor($r('app.color.bg_main'))
     .width('100%')
     .height('100%')
     .alignContent(Alignment.Top)
@@ -170,35 +179,83 @@ export struct HomeTab {
         .margin({ left: 16 })
       List({ space: 8 }) {
         ListItem().width(8)
-        ForEach(this.ui.resumeList, (item: VideoItem) => {
+        ForEach(this.ui.resumeList, (item: VideoItem, index: number) => {
           ListItem() {
             Column({ space: 8 }) {
-              Stack() {
-                ImageKnifeComponent({
-                  imageKnifeOption: {
-                    loadSrc: item.image,
-                    objectFit: ImageFit.Cover,
-                    border: {
-                      radius: 6
-                    },
-                    placeholderSrc: $r('app.media.placeholder_video'),
-                    placeholderObjectFit: ImageFit.CENTER
+              if (index === 0) {
+                // 第一个图片添加光源效果 - 使用外层Stack
+                Stack() {
+                  Stack() {
+                    ImageKnifeComponent({
+                      imageKnifeOption: {
+                        loadSrc: item.image,
+                        objectFit: ImageFit.Cover,
+                        border: {
+                          radius: 6
+                        },
+                        placeholderSrc: $r('app.media.placeholder_video'),
+                        placeholderObjectFit: ImageFit.CENTER
+                      }
+                    })
+                      .width(160)
+                      .height(90)
+                      .borderColor($r('app.color.border_1'))
+                      .borderWidth(0.5)
+                      .backgroundColor($r('app.color.bg_2'))
+                    Progress({
+                      value: item.percent || 0,
+                      total: 100,
+                      type: ProgressType.Linear,
+                    })
+                      .height(4)
+                      .layoutWeight(1)
+                      .color('#3B82F6')
                   }
-                })
+                  .alignContent(Alignment.Bottom)
+                  .borderRadius(6)
+                  .clip(true)
                   .width(160)
                   .height(90)
-                  .borderColor($r('app.color.border_1'))
-                  .borderWidth(0.5)
-                  .backgroundColor($r('app.color.bg_2'))
-                Progress({
-                  value: item.percent || 0,
-                  total: 100,
-                  type: ProgressType.Linear,
-                })
-                  .height(4)
-                  .layoutWeight(1)
-                  .color('#3B82F6')
-              }.alignContent(Alignment.Bottom).borderRadius(6).clip(true)
+                  .visualEffect(new hdsEffect.HdsEffectBuilder()
+                    .pointLight({
+                      illuminatedType: this.vm.appUIState.illuminatedType,
+                      options: {
+                        color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
+                        intensity: 15,
+                        height: 90,
+                      }
+                    })
+                    .buildEffect())
+                }
+              } else {
+                // 其他图片不添加光源效果
+                Stack() {
+                  ImageKnifeComponent({
+                    imageKnifeOption: {
+                      loadSrc: item.image,
+                      objectFit: ImageFit.Cover,
+                      border: {
+                        radius: 6
+                      },
+                      placeholderSrc: $r('app.media.placeholder_video'),
+                      placeholderObjectFit: ImageFit.CENTER
+                    }
+                  })
+                    .width(160)
+                    .height(90)
+                    .borderColor($r('app.color.border_1'))
+                    .borderWidth(0.5)
+                    .backgroundColor($r('app.color.bg_2'))
+                  Progress({
+                    value: item.percent || 0,
+                    total: 100,
+                    type: ProgressType.Linear,
+                  })
+                    .height(4)
+                    .layoutWeight(1)
+                    .color('#3B82F6')
+                }.alignContent(Alignment.Bottom).borderRadius(6).clip(true)
+              }
 
               Text(item.name)
                 .fontColor($r('app.color.text_primary'))
@@ -241,26 +298,63 @@ export struct HomeTab {
         .margin({ left: 16 })
       List({ space: 8 }) {
         ListItem().width(8)
-        ForEach(this.ui.nextUpList, (item: VideoItem) => {
+        ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: item.image,
-                  objectFit: ImageFit.Cover,
-                  border: {
-                    radius: 6
-                  },
-                  placeholderSrc: $r('app.media.placeholder_video'),
-                  placeholderObjectFit: ImageFit.CENTER
+              if (index === 0) {
+                // 第一个图片添加光源效果 - 使用外层Stack
+                Stack() {
+                  ImageKnifeComponent({
+                    imageKnifeOption: {
+                      loadSrc: item.image,
+                      objectFit: ImageFit.Cover,
+                      border: {
+                        radius: 6
+                      },
+                      placeholderSrc: $r('app.media.placeholder_video'),
+                      placeholderObjectFit: ImageFit.CENTER
+                    }
+                  })
+                    .width(160)
+                    .height(90)
+                    .borderColor($r('app.color.border_1'))
+                    .borderWidth(0.5)
+                    .borderRadius(6)
+                    .backgroundColor($r('app.color.bg_2'))
                 }
-              })
                 .width(160)
                 .height(90)
-                .borderColor($r('app.color.border_1'))
-                .borderWidth(0.5)
                 .borderRadius(6)
-                .backgroundColor($r('app.color.bg_2'))
+                .visualEffect(new hdsEffect.HdsEffectBuilder()
+                  .pointLight({
+                    illuminatedType: this.vm.appUIState.illuminatedType,
+                    options: {
+                      color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
+                      intensity: 20,
+                      height: 90,
+                    }
+                  })
+                  .buildEffect())
+              } else {
+                // 其他图片不添加光源效果
+                ImageKnifeComponent({
+                  imageKnifeOption: {
+                    loadSrc: item.image,
+                    objectFit: ImageFit.Cover,
+                    border: {
+                      radius: 6
+                    },
+                    placeholderSrc: $r('app.media.placeholder_video'),
+                    placeholderObjectFit: ImageFit.CENTER
+                  }
+                })
+                  .width(160)
+                  .height(90)
+                  .borderColor($r('app.color.border_1'))
+                  .borderWidth(0.5)
+                  .borderRadius(6)
+                  .backgroundColor($r('app.color.bg_2'))
+              }
               Text(item.name)
                 .fontColor($r('app.color.text_primary'))
                 .fontSize(14)
@@ -307,26 +401,63 @@ export struct HomeTab {
         .margin({ left: 16 })
       List({ space: 8 }) {
         ListItem().width(8)
-        ForEach(this.ui.latestMap.get(item.id), (item: VideoItem) => {
+        ForEach(this.ui.latestMap.get(item.id), (item: VideoItem, index: number) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: item.image,
-                  objectFit: ImageFit.Cover,
-                  border: {
-                    radius: 6
-                  },
-                  placeholderSrc: $r('app.media.placeholder_video'),
-                  placeholderObjectFit: ImageFit.CENTER
+              if (index === 0) {
+                // 第一个图片添加光源效果 - 使用外层Stack
+                Stack() {
+                  ImageKnifeComponent({
+                    imageKnifeOption: {
+                      loadSrc: item.image,
+                      objectFit: ImageFit.Cover,
+                      border: {
+                        radius: 6
+                      },
+                      placeholderSrc: $r('app.media.placeholder_video'),
+                      placeholderObjectFit: ImageFit.CENTER
+                    }
+                  })
+                    .width(100)
+                    .height(150)
+                    .borderColor($r('app.color.border_1'))
+                    .borderWidth(0.5)
+                    .borderRadius(6)
+                    .backgroundColor($r('app.color.bg_2'))
                 }
-              })
                 .width(100)
                 .height(150)
-                .borderColor($r('app.color.border_1'))
-                .borderWidth(0.5)
                 .borderRadius(6)
-                .backgroundColor($r('app.color.bg_2'))
+                .visualEffect(new hdsEffect.HdsEffectBuilder()
+                  .pointLight({
+                    illuminatedType: this.vm.appUIState.illuminatedType,
+                    options: {
+                      color: this.ui.edgeColorMap.get(item.id) || '#ffffFF',
+                      intensity: 2,
+                      height: 150,
+                    }
+                  })
+                  .buildEffect())
+              } else {
+                // 其他图片不添加光源效果
+                ImageKnifeComponent({
+                  imageKnifeOption: {
+                    loadSrc: item.image,
+                    objectFit: ImageFit.Cover,
+                    border: {
+                      radius: 6
+                    },
+                    placeholderSrc: $r('app.media.placeholder_video'),
+                    placeholderObjectFit: ImageFit.CENTER
+                  }
+                })
+                  .width(100)
+                  .height(150)
+                  .borderColor($r('app.color.border_1'))
+                  .borderWidth(0.5)
+                  .borderRadius(6)
+                  .backgroundColor($r('app.color.bg_2'))
+              }
               Text(item.name)
                 .fontColor($r('app.color.text_primary'))
                 .fontSize(14)
@@ -417,7 +548,19 @@ export struct HomeTab {
             .withParam(mediaItem)
             .push()
         })
-      }.backgroundColor(generateBeautifulDeepBlueColor())
+      }
+      .backgroundColor(this.ui.allMediaBgColor)
+      .visualEffect(new hdsEffect.HdsEffectBuilder()
+        .pointLight({
+          // sourceType: hdsEffect.PointLightSourceType.BRIGHT,
+          illuminatedType: this.vm.appUIState.illuminatedType,
+          options: {
+            color: this.ui.allMediaBgColor,
+            intensity: 20,
+            height: 60,
+          }
+        })
+        .buildEffect())
       .align(Alignment.BottomEnd)
       .borderRadius(8)
       .clip(true)

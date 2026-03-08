@@ -63,6 +63,14 @@
     {
       "name": "tab",
       "value": "#21FFFFFF"
+    },
+    {
+      "name": "bg_tab",
+      "value": "#15ffffff"
+    },
+    {
+      "name": "bg_tab_item",
+      "value": "#40000000"
     }
   ]
 }
