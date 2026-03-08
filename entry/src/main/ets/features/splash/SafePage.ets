@@ -43,7 +43,8 @@ export struct SafePage {
         sm: ColumnEnum.SM,
         md: ColumnEnum.MD,
         lg: ColumnEnum.LG,
-        xl: ColumnEnum.XL
+        xl: ColumnEnum.XL,
+        xxl: ColumnEnum.XXL
       },
       gutter: {
         x: { sm: $r('app.float.grid_gutter'), md: $r('app.float.grid_gutter'), lg: $r('app.float.grid_gutter') }
@@ -53,12 +54,16 @@ export struct SafePage {
         span: {
           sm: SpanEnum.SM,
           md: SpanEnum.MD,
-          lg: SpanEnum.LG
+          lg: SpanEnum.LG,
+          xl: SpanEnum.XL,
+          xxl: SpanEnum.XXL
         },
         offset: {
           sm: OffsetEnum.SM,
           md: OffsetEnum.MD,
-          lg: OffsetEnum.LG
+          lg: OffsetEnum.LG,
+          xl: OffsetEnum.XL,
+          xxl: OffsetEnum.XXL
         }
       }) {
         Column() {
