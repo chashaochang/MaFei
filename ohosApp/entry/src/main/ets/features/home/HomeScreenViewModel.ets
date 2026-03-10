@@ -90,9 +90,15 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
                 this.datasource.pushData(new PadMenuItem(PadMenuType.TITLE, "媒体库"))
               }
               mediaItems.forEach((item) => {
-                let icon = item.type == BaseItemKind.Video ? $r('app.media.ic_video') : $r('app.media.tv')
-                this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, item.name, icon, icon,
-                  item.childCount))
+                if (item.type == BaseItemKind.Movie) {
+                  this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.ic_video'),
+                    $r('app.media.ic_video'),
+                    item.childCount))
+                } else if (item.type == BaseItemKind.Series) {
+                  this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.tv'),
+                    $r('app.media.tv'),
+                    item.childCount))
+                }
               })
               resolve();
             }).then(() => resolve())
