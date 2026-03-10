@@ -110,7 +110,12 @@ export struct HorizontalVideoCard {
         .textOverflow({
           overflow: TextOverflow.Ellipsis
         })
-      Text(this.subtitle).fontColor(Color.Gray).fontSize(12)
+      Text(this.subtitle)
+        .fontColor(Color.Gray)
+        .fontSize(12)
+        .width('100%')
+        .maxLines(1)
+        .ellipsisMode(EllipsisMode.END)
     }
     .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
     .alignItems(HorizontalAlign.Start)
