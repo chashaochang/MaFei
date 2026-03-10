@@ -271,7 +271,9 @@ export struct HomeTab {
                 .textOverflow({
                   overflow: TextOverflow.Ellipsis
                 })
-            }.width(HORIZONTAL_CARD_WIDTH).alignItems(HorizontalAlign.Start)
+            }
+            .width(HORIZONTAL_CARD_WIDTH.getValue(this.vm.appUIState.currentBreakpoint))
+            .alignItems(HorizontalAlign.Start)
           }.onClick(() => {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
