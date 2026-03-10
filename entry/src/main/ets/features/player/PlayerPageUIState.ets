@@ -17,8 +17,6 @@ export class PlayerPageUIState extends BaseUIState{
   @Trace title: string = ''
   //电视剧名称
   @Trace seriesName?: string | null
-  //简介
-  @Trace overview: string = ''
   //类型
   @Trace genres: string[] = []
   //当前字幕
