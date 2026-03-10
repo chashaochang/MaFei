@@ -87,7 +87,7 @@ export struct AccountPage {
         }
 
         Text((item as ServerUser).server.hostname)
-          .fontSize(12)
+          .fontSize(10)
           .fontColor($r('app.color.text_primary'))
           .textAlign(TextAlign.Start)
           .maxLines(1)

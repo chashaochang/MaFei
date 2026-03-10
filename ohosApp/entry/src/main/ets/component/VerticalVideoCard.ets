@@ -2,8 +2,8 @@ import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
 import {
-  VERTICAL_CARD_HEIGHT,
-  VERTICAL_CARD_WIDTH } from "../common/OneMoreConst";
+  VERTICAL_CARD_HEIGHT, VERTICAL_CARD_WIDTH
+} from "../common/OneMoreConst";
 import { hdsEffect } from "@kit.UIDesignKit";
 import { ColorUtils } from "../utils/ColorUtils";
 
@@ -27,9 +27,11 @@ export struct VerticalVideoCard {
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
     onComplete: () => {
-      ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
-        this.pointLightColor = color
-      })
+      if (this.appUIState.isLargeScreen) {
+        ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
+          this.pointLightColor = color
+        })
+      }
     }
   }
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;

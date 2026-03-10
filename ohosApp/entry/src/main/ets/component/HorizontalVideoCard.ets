@@ -27,9 +27,11 @@ export struct HorizontalVideoCard {
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
     onComplete: () => {
-      ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
-        this.pointLightColor = color
-      })
+      if (this.appUIState.isLargeScreen) {
+        ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
+          this.pointLightColor = color
+        })
+      }
     }
   }
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
@@ -39,40 +41,39 @@ export struct HorizontalVideoCard {
       if (this.index === 0) {
         // 第一个图片添加光源效果 - 使用外层Stack
         Stack() {
-          Stack() {
-            ImageKnifeComponent({
-              imageKnifeOption: this.option
-            })
-              .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-              .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-              .borderColor($r('app.color.border_1'))
-              .borderWidth(0.5)
-              .backgroundColor($r('app.color.bg_2'))
-            Progress({
-              value: this.percent || 0,
-              total: 100,
-              type: ProgressType.Linear,
-            })
-              .height(4)
-              .layoutWeight(1)
-              .color('#3B82F6')
-          }
-          .alignContent(Alignment.Bottom)
-          .borderRadius(6)
-          .clip(true)
-          .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-          .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-          .visualEffect(new hdsEffect.HdsEffectBuilder()
-            .pointLight({
-              illuminatedType: this.appUIState.illuminatedType,
-              options: {
-                color: this.pointLightColor,
-                intensity: 15,
-                height: HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint),
-              }
-            })
-            .buildEffect())
+          ImageKnifeComponent({
+            imageKnifeOption: this.option
+          })
+            .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
+            .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+            .borderColor($r('app.color.border_1'))
+            .borderWidth(0.5)
+            .backgroundColor($r('app.color.bg_2'))
+          Progress({
+            value: this.percent || 0,
+            total: 100,
+            type: ProgressType.Linear,
+          })
+            .height(4)
+            .layoutWeight(1)
+            .color('#3B82F6')
         }
+        .alignContent(Alignment.Bottom)
+        .borderRadius(6)
+        .clip(true)
+        .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
+        .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+        .visualEffect(new hdsEffect.HdsEffectBuilder()
+          .pointLight({
+            illuminatedType: this.appUIState.illuminatedType,
+            options: {
+              color: this.pointLightColor,
+              intensity: 2,
+              height: HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint),
+            }
+          })
+          .buildEffect())
+
       } else {
         Stack() {
           ImageKnifeComponent({
