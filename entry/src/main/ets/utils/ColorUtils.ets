@@ -1,5 +1,4 @@
-import { image } from '@kit.ImageKit';
-import { http } from '@kit.NetworkKit';
+import { ImageKnife, ImageKnifeData } from '@ohos/imageknifepro';
 import Logger from './Logger';
 
 export class ColorUtils {
@@ -9,27 +8,19 @@ export class ColorUtils {
    * @returns Promise<string> 返回十六进制颜色字符串 #RRGGBB
    */
   static async extractLeftEdgeColor(imageUrl: string): Promise<string> {
+
     try {
       // 下载图片
-      const httpRequest = http.createHttp();
-      const response = await httpRequest.request(imageUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER
-      });
-
-      if (response.responseCode !== 200) {
-        Logger.error('ColorUtils', `Failed to download image: ${response.responseCode}`);
+      let imageData: ImageKnifeData | undefined = await ImageKnife.getInstance().getCacheImage(imageUrl)
+      if (!imageData) {
+        Logger.error('ColorUtils', `Failed to find cache image: ${imageUrl}`);
         return '#0000FF'; // 默认蓝色
       }
-
-      // 创建图片源
-      const imageSource = image.createImageSource(response.result as ArrayBuffer);
-
-      // 创建PixelMap（使用较小尺寸以提高性能）
-      const pixelMap = await imageSource.createPixelMap({
-        desiredSize: { width: 100, height: 100 }
-      });
-
+      let pixelMap = imageData.pixelmapList?.[0]
+      if (!pixelMap) {
+        Logger.error('ColorUtils', `Failed to find cache image: ${imageUrl}`);
+        return '#0000FF'; // 默认蓝色
+      }
       const imageInfo = await pixelMap.getImageInfo();
       const width = imageInfo.size.width;
       const height = imageInfo.size.height;
@@ -66,10 +57,9 @@ export class ColorUtils {
 
       // 释放资源
       pixelMap.release();
-      httpRequest.destroy();
 
       if (validPixels === 0) {
-        return '#0000FF'; // 默认蓝色
+        return '#FFFFFF'; // 默认蓝色
       }
 
       // 计算平均颜色
@@ -85,7 +75,7 @@ export class ColorUtils {
       return `#${hexR}${hexG}${hexB}`.toUpperCase();
     } catch (error) {
       Logger.error('ColorUtils', `Error extracting edge color: ${error}`);
-      return '#0000FF'; // 默认蓝色
+      return '#FFFFFF'; // 默认蓝色
     }
   }
 
