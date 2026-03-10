@@ -40,7 +40,7 @@ export struct CustomTab {
     .height(UIConstants.BOTTOM_BAR_HEIGHT)
     .backgroundEffect({
       radius: 12,
-      color: $r('app.color.bg_tab_item') //'rgba(255,255,255,0.7)',
+      color: $r('app.color.bg_tab_item')
     })
     .borderRadius(UIConstants.BOTTOM_BAR_HEIGHT / 2)
     .borderWidth(1.5)

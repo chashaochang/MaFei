@@ -10,6 +10,14 @@ import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { ToastUtil } from "../../../utils/ToastUtil"
 import { RouterConsts } from "../../../common/RouterConsts"
 import { hdsEffect } from "@kit.UIDesignKit"
+import { HorizontalVideoCard } from "../../../component/HorizontalVideoCard"
+import {
+  HORIZONTAL_CARD_LIST_HEIGHT,
+  HORIZONTAL_CARD_SPACE,
+  HORIZONTAL_CARD_WIDTH,
+  VERTICAL_CARD_LIST_HEIGHT
+} from "../../../common/OneMoreConst"
+import { VerticalVideoCard } from "../../../component/VerticalVideoCard"
 
 @ComponentV2
 export struct HomeTab {
@@ -61,9 +69,9 @@ export struct HomeTab {
           ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
-      .padding({
-        left: this.vm.appUIState.currentBreakpoint.includes('l') ? 16 : 0,
-      })
+      // .padding({
+      //   left: this.vm.appUIState.currentBreakpoint.includes('l') ? 16 : 0,
+      // })
       .pullDownRatio(0.3)
       .refreshOffset(64)
       .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
@@ -176,99 +184,18 @@ export struct HomeTab {
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
-        .margin({ left: 16 })
-      List({ space: 8 }) {
-        ListItem().width(8)
+        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
+      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
+        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
         ForEach(this.ui.resumeList, (item: VideoItem, index: number) => {
           ListItem() {
-            Column({ space: 8 }) {
-              if (index === 0) {
-                // 第一个图片添加光源效果 - 使用外层Stack
-                Stack() {
-                  Stack() {
-                    ImageKnifeComponent({
-                      imageKnifeOption: {
-                        loadSrc: item.image,
-                        objectFit: ImageFit.Cover,
-                        border: {
-                          radius: 6
-                        },
-                        placeholderSrc: $r('app.media.placeholder_video'),
-                        placeholderObjectFit: ImageFit.CENTER
-                      }
-                    })
-                      .width(160)
-                      .height(90)
-                      .borderColor($r('app.color.border_1'))
-                      .borderWidth(0.5)
-                      .backgroundColor($r('app.color.bg_2'))
-                    Progress({
-                      value: item.percent || 0,
-                      total: 100,
-                      type: ProgressType.Linear,
-                    })
-                      .height(4)
-                      .layoutWeight(1)
-                      .color('#3B82F6')
-                  }
-                  .alignContent(Alignment.Bottom)
-                  .borderRadius(6)
-                  .clip(true)
-                  .width(160)
-                  .height(90)
-                  .visualEffect(new hdsEffect.HdsEffectBuilder()
-                    .pointLight({
-                      illuminatedType: this.vm.appUIState.illuminatedType,
-                      options: {
-                        color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
-                        intensity: 15,
-                        height: 90,
-                      }
-                    })
-                    .buildEffect())
-                }
-              } else {
-                // 其他图片不添加光源效果
-                Stack() {
-                  ImageKnifeComponent({
-                    imageKnifeOption: {
-                      loadSrc: item.image,
-                      objectFit: ImageFit.Cover,
-                      border: {
-                        radius: 6
-                      },
-                      placeholderSrc: $r('app.media.placeholder_video'),
-                      placeholderObjectFit: ImageFit.CENTER
-                    }
-                  })
-                    .width(160)
-                    .height(90)
-                    .borderColor($r('app.color.border_1'))
-                    .borderWidth(0.5)
-                    .backgroundColor($r('app.color.bg_2'))
-                  Progress({
-                    value: item.percent || 0,
-                    total: 100,
-                    type: ProgressType.Linear,
-                  })
-                    .height(4)
-                    .layoutWeight(1)
-                    .color('#3B82F6')
-                }.alignContent(Alignment.Bottom).borderRadius(6).clip(true)
-              }
-
-              Text(item.name)
-                .fontColor($r('app.color.text_primary'))
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .width('100%')
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({
-                  overflow: TextOverflow.Ellipsis
-                })
-              Text(item.subtitle).fontColor(Color.Gray).fontSize(12)
-            }.width(160).alignItems(HorizontalAlign.Start)
+            HorizontalVideoCard({
+              image: item.image,
+              percent: item.percent,
+              name: item.name,
+              subtitle: item.subtitle,
+              index: index
+            })
           }.onClick(() => {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
@@ -276,7 +203,7 @@ export struct HomeTab {
         ListItem().width(8)
       }
       .width('100%')
-      .height(134)
+      .height(HORIZONTAL_CARD_LIST_HEIGHT)
       .margin({ top: 12 })
       .listDirection(Axis.Horizontal)
       .scrollBar(BarState.Off)
@@ -295,65 +222,35 @@ export struct HomeTab {
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
-        .margin({ left: 16 })
-      List({ space: 8 }) {
-        ListItem().width(8)
+        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
+      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
+        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+
         ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
           ListItem() {
             Column({ space: 8 }) {
               if (index === 0) {
                 // 第一个图片添加光源效果 - 使用外层Stack
-                Stack() {
-                  ImageKnifeComponent({
-                    imageKnifeOption: {
-                      loadSrc: item.image,
-                      objectFit: ImageFit.Cover,
-                      border: {
-                        radius: 6
-                      },
-                      placeholderSrc: $r('app.media.placeholder_video'),
-                      placeholderObjectFit: ImageFit.CENTER
-                    }
-                  })
-                    .width(160)
-                    .height(90)
-                    .borderColor($r('app.color.border_1'))
-                    .borderWidth(0.5)
-                    .borderRadius(6)
-                    .backgroundColor($r('app.color.bg_2'))
-                }
-                .width(160)
-                .height(90)
-                .borderRadius(6)
-                .visualEffect(new hdsEffect.HdsEffectBuilder()
-                  .pointLight({
-                    illuminatedType: this.vm.appUIState.illuminatedType,
-                    options: {
-                      color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
-                      intensity: 20,
-                      height: 90,
-                    }
-                  })
-                  .buildEffect())
+                HorizontalVideoCard({
+                  image: item.image,
+                  percent: item.percent
+                })
+                  .visualEffect(new hdsEffect.HdsEffectBuilder()
+                    .pointLight({
+                      illuminatedType: this.vm.appUIState.illuminatedType,
+                      options: {
+                        color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
+                        intensity: 20,
+                        height: 90,
+                      }
+                    })
+                    .buildEffect())
               } else {
                 // 其他图片不添加光源效果
-                ImageKnifeComponent({
-                  imageKnifeOption: {
-                    loadSrc: item.image,
-                    objectFit: ImageFit.Cover,
-                    border: {
-                      radius: 6
-                    },
-                    placeholderSrc: $r('app.media.placeholder_video'),
-                    placeholderObjectFit: ImageFit.CENTER
-                  }
+                HorizontalVideoCard({
+                  image: item.image,
+                  percent: item.percent
                 })
-                  .width(160)
-                  .height(90)
-                  .borderColor($r('app.color.border_1'))
-                  .borderWidth(0.5)
-                  .borderRadius(6)
-                  .backgroundColor($r('app.color.bg_2'))
               }
               Text(item.name)
                 .fontColor($r('app.color.text_primary'))
@@ -374,7 +271,7 @@ export struct HomeTab {
                 .textOverflow({
                   overflow: TextOverflow.Ellipsis
                 })
-            }.width(160).alignItems(HorizontalAlign.Start)
+            }.width(HORIZONTAL_CARD_WIDTH).alignItems(HorizontalAlign.Start)
           }.onClick(() => {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
@@ -382,7 +279,7 @@ export struct HomeTab {
         ListItem().width(8)
       }
       .width('100%')
-      .height(134)
+      .height(HORIZONTAL_CARD_LIST_HEIGHT)
       .margin({ top: 12 })
       .listDirection(Axis.Horizontal)
       .scrollBar(BarState.Off)
@@ -398,86 +295,18 @@ export struct HomeTab {
   buildLastAddedList(item: MediaItem) {
     Column() {
       Text('最近添加的 ' + item.name).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-        .margin({ left: 16 })
-      List({ space: 8 }) {
-        ListItem().width(8)
+        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
+      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
+        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+
         ForEach(this.ui.latestMap.get(item.id), (item: VideoItem, index: number) => {
           ListItem() {
-            Column({ space: 8 }) {
-              if (index === 0) {
-                // 第一个图片添加光源效果 - 使用外层Stack
-                Stack() {
-                  ImageKnifeComponent({
-                    imageKnifeOption: {
-                      loadSrc: item.image,
-                      objectFit: ImageFit.Cover,
-                      border: {
-                        radius: 6
-                      },
-                      placeholderSrc: $r('app.media.placeholder_video'),
-                      placeholderObjectFit: ImageFit.CENTER
-                    }
-                  })
-                    .width(100)
-                    .height(150)
-                    .borderColor($r('app.color.border_1'))
-                    .borderWidth(0.5)
-                    .borderRadius(6)
-                    .backgroundColor($r('app.color.bg_2'))
-                }
-                .width(100)
-                .height(150)
-                .borderRadius(6)
-                .visualEffect(new hdsEffect.HdsEffectBuilder()
-                  .pointLight({
-                    illuminatedType: this.vm.appUIState.illuminatedType,
-                    options: {
-                      color: this.ui.edgeColorMap.get(item.id) || '#ffffFF',
-                      intensity: 2,
-                      height: 150,
-                    }
-                  })
-                  .buildEffect())
-              } else {
-                // 其他图片不添加光源效果
-                ImageKnifeComponent({
-                  imageKnifeOption: {
-                    loadSrc: item.image,
-                    objectFit: ImageFit.Cover,
-                    border: {
-                      radius: 6
-                    },
-                    placeholderSrc: $r('app.media.placeholder_video'),
-                    placeholderObjectFit: ImageFit.CENTER
-                  }
-                })
-                  .width(100)
-                  .height(150)
-                  .borderColor($r('app.color.border_1'))
-                  .borderWidth(0.5)
-                  .borderRadius(6)
-                  .backgroundColor($r('app.color.bg_2'))
-              }
-              Text(item.name)
-                .fontColor($r('app.color.text_primary'))
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .width('100%')
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({
-                  overflow: TextOverflow.Ellipsis
-                })
-              Text(item.subtitle)
-                .fontColor(Color.Gray)
-                .fontSize(12)
-                .width('100%')
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({
-                  overflow: TextOverflow.Ellipsis
-                })
-            }.width(100).alignItems(HorizontalAlign.Start)
+            VerticalVideoCard({
+              image: item.image,
+              name: item.name,
+              subtitle: item.subtitle,
+              index: index
+            })
           }.onClick(() => {
             HMRouterMgr.to(RouterConsts.VideoDetailPage)
               .withParam({
@@ -488,10 +317,12 @@ export struct HomeTab {
               .push()
           })
         })
-        ListItem().width(8)
+        if (this.vm.appUIState.currentBreakpoint.includes('s')) {
+          ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+        }
       }
       .width('100%')
-      .height(194)
+      .height(VERTICAL_CARD_LIST_HEIGHT.getValue(this.vm.appUIState.currentBreakpoint))
       .margin({ top: 12 })
       .listDirection(Axis.Horizontal)
       .scrollBar(BarState.Off)
