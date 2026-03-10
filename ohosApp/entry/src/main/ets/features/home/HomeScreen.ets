@@ -10,7 +10,9 @@ import {
 import { CustomTab } from "../../component/tabbar/CustomTab";
 import { HomeScreenUIState } from "./HomeScreenUIState";
 import { HomeScreenViewModel } from "./HomeScreenViewModel";
-
+import { getUIAbilityContext } from "../../common/CommonFunc";
+import { HomeBackPressedEvent } from "../../events/Events";
+import { process } from "@kit.ArkTS";
 
 @ComponentV2
 export struct HomeScreen {
@@ -21,6 +23,7 @@ export struct HomeScreen {
   private tabsController = new TabsController()
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
+  private lastTime: number = 0;
 
   @Monitor('appUIState.currentBreakpoint')
   onBreakpointChange() {
@@ -38,10 +41,24 @@ export struct HomeScreen {
       name: "HomeTab"
     })
     this.vm.init()
+    getUIAbilityContext().eventHub.on(HomeBackPressedEvent, () => {
+      //点两次退出
+      let time = new Date().getTime();
+      if (time - this.lastTime > 1000) {
+        this.lastTime = time;
+        this.getUIContext().getPromptAction().showToast({
+          message: '再次返回退出应用',
+          duration: 1000
+        });
+      } else {
+        new process.ProcessManager().exit(0)
+      }
+    })
   }
 
   aboutToDisappear() {
     this.breakpointSystem.unregister();
+    getUIAbilityContext().eventHub.off(HomeBackPressedEvent)
   }
 
   build() {
@@ -248,6 +265,11 @@ export function HomeTabNavDestinationBuilder() {
         }]
       }
     }
+  })
+  .onBackPressed(() => {
+    // 处理返回事件，返回true表示已处理，false表示未处理
+    getUIAbilityContext().eventHub.emit(HomeBackPressedEvent)
+    return true
   })
 
 }
