@@ -311,6 +311,54 @@
     {
       "name": "little_text_size",
       "value": "10fp"
+    },
+    {
+      "name": "horizontal_card_width_lg",
+      "value": "240vp"
+    },
+    {
+      "name": "horizontal_card_width_sm",
+      "value": "160vp"
+    },
+    {
+      "name": "horizontal_card_height_lg",
+      "value": "135vp"
+    },
+    {
+      "name": "horizontal_card_height_sm",
+      "value": "90vp"
+    },
+    {
+      "name": "horizontal_card_list_height_lg",
+      "value": "201vp"
+    },
+    {
+      "name": "horizontal_card_list_height_sm",
+      "value": "134vp"
+    },
+    {
+      "name": "vertical_card_width_lg",
+      "value": "150vp"
+    },
+    {
+      "name": "vertical_card_width_sm",
+      "value": "100vp"
+    },
+    {
+      "name": "vertical_card_height_lg",
+      "value": "225vp"
+    },
+    {
+      "name": "vertical_card_height_sm",
+      "value": "150vp"
+    },
+    {
+      "name": "vertical_card_list_height_lg",
+      "value": "269vp"
+    },
+    {
+      "name": "vertical_card_list_height_sm",
+      "value": "194vp"
     }
   ]
 }
