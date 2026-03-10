@@ -265,9 +265,6 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         if (source.item.Type == BaseItemKind.Episode) { //电视剧
           this.getItems()
           avSessionManager.getSession()?.setAVQueueTitle(source.item.SeriesName ?? source.item.Name ?? "TITLE",)
-          this.getItems(source.item.SeriesId!)
-        } else { //电影
-          this.getItems(source.itemId)
         }
         avSessionManager?.getSession()?.setAVMetadata(source.toMediaMetadata())
         this.reportPlaybackStart(source)
@@ -369,17 +366,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   //获取播放列表信息
-  getItems(id?: string) {
-    if (id) { //剧id
-      this.queueManager.getItem(id).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res.data.Items && res.data.Items.length > 0) {
-          this.ui.overview = res.data.Items[0].Overview ?? ""
-          this.ui.genres = res.data.Items[0].Genres ?? []
-        }
-      }).catch((e: BusinessError) => {
-
-      })
-    } else {
+  getItems() {
       this.queueManager.getItems().then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
         console.log(this.initSource?.itemId)
         console.log(JSON.stringify(res.data.Items));
@@ -420,7 +407,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       }).catch((e: BusinessError) => {
 
       })
-    }
+
   }
 
   release() {
