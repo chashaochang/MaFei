@@ -228,52 +228,13 @@ export struct HomeTab {
 
         ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
           ListItem() {
-            Column({ space: 8 }) {
-              if (index === 0) {
-                // 第一个图片添加光源效果 - 使用外层Stack
-                HorizontalVideoCard({
-                  image: item.image,
-                  percent: item.percent
-                })
-                  .visualEffect(new hdsEffect.HdsEffectBuilder()
-                    .pointLight({
-                      illuminatedType: this.vm.appUIState.illuminatedType,
-                      options: {
-                        color: this.ui.edgeColorMap.get(item.id) || '#0000FF',
-                        intensity: 20,
-                        height: 90,
-                      }
-                    })
-                    .buildEffect())
-              } else {
-                // 其他图片不添加光源效果
-                HorizontalVideoCard({
-                  image: item.image,
-                  percent: item.percent
-                })
-              }
-              Text(item.name)
-                .fontColor($r('app.color.text_primary'))
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .width('100%')
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({
-                  overflow: TextOverflow.Ellipsis
-                })
-              Text(item.subtitle)
-                .fontColor(Color.Gray)
-                .fontSize(12)
-                .width('100%')
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({
-                  overflow: TextOverflow.Ellipsis
-                })
-            }
-            .width(HORIZONTAL_CARD_WIDTH.getValue(this.vm.appUIState.currentBreakpoint))
-            .alignItems(HorizontalAlign.Start)
+            HorizontalVideoCard({
+              image: item.image,
+              percent: item.percent,
+              name: item.name,
+              subtitle: item.subtitle,
+              index: index
+            })
           }.onClick(() => {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })

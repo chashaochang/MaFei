@@ -28,7 +28,7 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
     await this.getMediaList()
     //获取视频数量
     await this.getCounts()
-    //this.ui.isRefreshing = false;
+    this.ui.isLoading = false;
   }
 
   async getFavoriteCount() {
@@ -90,14 +90,18 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
                 this.datasource.pushData(new PadMenuItem(PadMenuType.TITLE, "媒体库"))
               }
               mediaItems.forEach((item) => {
+                let menuItem: PadMenuItem
                 if (item.type == BaseItemKind.Movie) {
-                  this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.ic_video'),
+                  menuItem = new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.ic_video'),
                     $r('app.media.ic_video'),
-                    item.childCount))
+                    item.childCount)
+                  menuItem.extra = item
+                  this.datasource.pushData(menuItem)
                 } else if (item.type == BaseItemKind.Series) {
-                  this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.tv'),
-                    $r('app.media.tv'),
-                    item.childCount))
+                  menuItem = new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.tv'), $r('app.media.tv'),
+                    item.childCount)
+                  menuItem.extra = item
+                  this.datasource.pushData(menuItem)
                 }
               })
               resolve();
@@ -119,23 +123,50 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
       limit: 1
     });
     this.datasource.pushData(new PadMenuItem(PadMenuType.TITLE, "分类"))
-    this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, `全部`, $r('app.media.all'), $r('app.media.all'),
-      totalRes.data.TotalRecordCount || 0))
+    let allMediaItem: MediaItem = {
+      name: '全部影视',
+      id: 'all',
+      image: '',
+      childCount: 0,
+      type: BaseItemKind.Video
+    }
+    let allItem = new PadMenuItem(PadMenuType.ITEM, `全部`, $r('app.media.all'), $r('app.media.all'),
+      totalRes.data.TotalRecordCount || 0)
+    allItem.extra = allMediaItem
+    this.datasource.pushData(allItem)
     const movieRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
       userId: ApiClient.Instance().userId,
       includeItemTypes: ['Movie'],
       recursive: true, // 递归统计所有子目录
       limit: 1
     });
-    this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, `电影`, $r('app.media.movie'), $r('app.media.movie'),
-      movieRes.data.TotalRecordCount || 0))
+    let movieMediaItem: MediaItem = {
+      name: '电影',
+      id: 'movies',
+      image: '',
+      childCount: 0,
+      type: BaseItemKind.Movie
+    }
+    let allMovieItem = new PadMenuItem(PadMenuType.ITEM, `电影`, $r('app.media.movie'), $r('app.media.movie'),
+      movieRes.data.TotalRecordCount || 0)
+    allMovieItem.extra = movieMediaItem
+    this.datasource.pushData(allMovieItem)
     const tvRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
       userId: ApiClient.Instance().userId,
       includeItemTypes: ['Series'],
       recursive: true, // 递归统计所有子目录
       limit: 1
     });
-    this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, `电视剧`, $r('app.media.tv'), $r('app.media.tv'),
-      tvRes.data.TotalRecordCount || 0))
+    let tvMediaItem: MediaItem = {
+      name: '电视节目',
+      id: 'tvs',
+      image: '',
+      childCount: 0,
+      type: BaseItemKind.TvProgram
+    }
+    let allTvItem = new PadMenuItem(PadMenuType.ITEM, `电视剧`, $r('app.media.tv'), $r('app.media.tv'),
+      tvRes.data.TotalRecordCount || 0)
+    allTvItem.extra = tvMediaItem
+    this.datasource.pushData(allTvItem)
   }
 }

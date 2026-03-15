@@ -5,6 +5,9 @@ import { PadMenuItem } from "./HomeScreen"
 @ObservedV2
 export class HomeScreenUIState extends BaseUIState {
   @Trace favoriteCount: number = 0
+  @Trace selectedIndex: number = 0
+  @Trace menuSelectedIndex: number = 0
+  @Trace isLoading: boolean = true
 }
 
 export class PadMenuDataSource extends BaseDataSource<PadMenuItem> {

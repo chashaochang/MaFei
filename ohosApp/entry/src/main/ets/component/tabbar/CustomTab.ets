@@ -6,8 +6,9 @@ export struct CustomTab {
   @Require @Param onItemClick: (index: number) => void
   list: TabItem[] = [
     new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
-    new TabItem('媒体库', $r('app.media.ic_media_sel'), $r('app.media.ic_media_store')),
-    new TabItem('我的', $r('app.media.ic_mine_sel'), $r('app.media.ic_mine')),
+    new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
+    new TabItem('媒体库', $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel')),
+    new TabItem('我的', $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel')),
   ]
 
   build() {
@@ -16,27 +17,22 @@ export struct CustomTab {
         Column({ space: 4 }) {
           Image(this.selectIndex === index ? item.selectedImg : item.normalImg)
             .size({ width: 20, height: 20 })
+            .fillColor(this.selectIndex === index ? $r('app.color.color_main') : $r('app.color.text_primary'))
           Text(item.title)
             .fontSize(14)
             .fontColor(this.selectIndex === index ? $r('app.color.color_main') : $r('app.color.text_primary'))
         }
         .height('100%')
-        .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
         .backgroundColor(this.selectIndex === index ? $r('app.color.bg_tab') : Color.Transparent)
         .borderRadius(UIConstants.BOTTOM_BAR_HEIGHT / 2)
-        .constraintSize({
-          minWidth: 80
-        })
+        .width(70)
         .onClick(() => {
           this.onItemClick(index)
         })
       })
     }
     .padding(3)
-    .constraintSize({
-      minWidth: 300
-    })
     .height(UIConstants.BOTTOM_BAR_HEIGHT)
     .backgroundEffect({
       radius: 12,

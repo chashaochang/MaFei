@@ -13,19 +13,27 @@ import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 import { VideoListViewModel } from "./VideoListViewModel";
 import { BreakpointTypeEnum } from "../../utils/BreakpointSystem";
+import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
 
 @HMRouter({
   pageUrl: RouterConsts.VideoListPage
 })
 @ComponentV2
 export struct VideoListPage {
+  //首页来的要隐藏顶部栏
+  @Param fromHome: boolean = false
+  @Param mediaItem: MediaItem = {} as MediaItem
   @Local ui: VideoListUIState = new VideoListUIState(this.getUIContext())
   @Local vm: VideoListViewModel = new VideoListViewModel(this.ui)
 
   aboutToAppear(): void {
-    let param = HMRouterMgr.getCurrentParam()
-    if (param) {
-      this.vm.init(param as MediaItem)
+    if (this.fromHome && this.mediaItem) {
+      this.vm.init(this.mediaItem)
+    } else {
+      let param = HMRouterMgr.getCurrentParam()
+      if (param) {
+        this.vm.init(param as MediaItem)
+      }
     }
   }
 
@@ -33,9 +41,8 @@ export struct VideoListPage {
     Column() {
       ActionBar({
         title: this.ui.title
-      })
+      }).visibility(this.fromHome ? Visibility.None : Visibility.Visible)
       Column() {
-
         Row() {
           Text(sortOptions[this.ui.selectedSortIndex].label).fontSize(14).fontColor($r('app.color.text_primary'))
             .height(46)
@@ -91,7 +98,7 @@ export struct VideoListPage {
           },
           gridAttribute: (attr) => {
             attr.scrollBar = BarState.Off
-            switch (this.vm.appUIState.currentBreakpoint){
+            switch (this.vm.appUIState.currentBreakpoint) {
               case BreakpointTypeEnum.XS:
                 attr.columnsTemplate = '1fr '.repeat(2)
                 break
@@ -114,7 +121,7 @@ export struct VideoListPage {
                 attr.columnsTemplate = '1fr '.repeat(3)
                 break
             }
-            attr.columnsGap = 8
+            attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
           },
           lazyCachedCount: 10 //缓存
         }).width('100%')
@@ -131,13 +138,15 @@ export struct VideoListPage {
       }
       .width('100%')
       .layoutWeight(1)
-      .backgroundColor($r('app.color.bg_main'))
+      .backgroundColor(this.vm.appUIState.isLargeScreen ? Color.Transparent : $r('app.color.bg_main'))
       .borderRadius({
         topLeft: 20,
         topRight: 20
       })
       .padding({
-        left: 16, right: 16, bottom: this.vm.appUIState.safeBottom
+        left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+        right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+        bottom: this.vm.appUIState.safeBottom
       })
     }.width('100%')
     .height('100%')
