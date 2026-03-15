@@ -22,38 +22,38 @@ export class MediaViewModel {
 
   async init() {
     //获取收藏数量
-    await this.getFavoriteCount()
+    // await this.getFavoriteCount()
     //获取媒体库列表
     await this.getMediaList()
     this.ui.isRefreshing = false;
   }
 
-  async getFavoriteCount() {
-    try {
-      let res: AxiosResponse<ItemCounts> = await getLibraryApi(ApiClient.Instance()).getItemCounts({
-        userId: ApiClient.Instance().userId,
-        isFavorite: true,
-      })
-      if (res.data) {
-        //设置收藏数量
-        this.ui.favoriteCount = 0
-          // (res.data.ArtistCount || 0)
-          // + (res.data.AlbumCount || 0)
-          // + (res.data.ProgramCount || 0)
-          + (res.data.MovieCount || 0)
-          + (res.data.EpisodeCount || 0)
-          + (res.data.SeriesCount || 0)
-          // + (res.data.BookCount || 0)
-          // + (res.data.MusicVideoCount || 0)
-          // + (res.data.TrailerCount || 0)
-          // + (res.data.SongCount || 0)
-          // + (res.data.BoxSetCount || 0)
-          + (res.data.ItemCount || 0);
-      }
-    } catch (e) {
-
-    }
-  }
+  // async getFavoriteCount() {
+  //   try {
+  //     let res: AxiosResponse<ItemCounts> = await getLibraryApi(ApiClient.Instance()).getItemCounts({
+  //       userId: ApiClient.Instance().userId,
+  //       isFavorite: true,
+  //     })
+  //     if (res.data) {
+  //       //设置收藏数量
+  //       this.ui.favoriteCount = 0
+  //         // (res.data.ArtistCount || 0)
+  //         // + (res.data.AlbumCount || 0)
+  //         // + (res.data.ProgramCount || 0)
+  //         + (res.data.MovieCount || 0)
+  //         + (res.data.EpisodeCount || 0)
+  //         + (res.data.SeriesCount || 0)
+  //         // + (res.data.BookCount || 0)
+  //         // + (res.data.MusicVideoCount || 0)
+  //         // + (res.data.TrailerCount || 0)
+  //         // + (res.data.SongCount || 0)
+  //         // + (res.data.BoxSetCount || 0)
+  //         + (res.data.ItemCount || 0);
+  //     }
+  //   } catch (e) {
+  //
+  //   }
+  // }
 
   private async getMediaList(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -63,7 +63,7 @@ export class MediaViewModel {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
             let items: BaseItemDto[] = res.data.Items || [];
-            items = items.filter(e=>e.CollectionType != CollectionType.Livetv)
+            items = items.filter(e => e.CollectionType != CollectionType.Livetv)
             Promise.all(items.map(async (e: BaseItemDto): Promise<MediaItem> => {
               const childRes: AxiosResponse<BaseItemDtoQueryResult> =
                 await getItemsApi(ApiClient.Instance()).getItems({

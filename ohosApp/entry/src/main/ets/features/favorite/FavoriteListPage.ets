@@ -1,12 +1,14 @@
 import { GridView, RefreshLayoutStatus } from '@abner/refresh_v2';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { PageState } from '../../common/base/BaseUIState';
+import { HORIZONTAL_CARD_SPACE } from '../../common/OneMoreConst';
 import { RouterConsts } from '../../common/RouterConsts';
 import { ActionBar } from '../../component/ActionBar';
 import { EmptyView } from '../../component/EmptyView';
 import { FailedView } from '../../component/FailedView';
 import { SkeletonGridView } from '../../component/skeleton/SkeletonGridView';
 import { sortOptions } from '../../entity/SortOption';
+import { BreakpointTypeEnum } from '../../utils/BreakpointSystem';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { FavoriteListUIState } from './FavoriteListUIState';
@@ -17,6 +19,8 @@ import { FavoriteListViewModel } from './FavoriteListViewModel';
 })
 @ComponentV2
 export struct FavoriteListPage {
+  //首页来的要隐藏顶部栏
+  @Param fromHome: boolean = false
   @Local ui: FavoriteListUIState = new FavoriteListUIState(this.getUIContext())
   vm: FavoriteListViewModel = new FavoriteListViewModel(this.ui)
 
@@ -27,12 +31,15 @@ export struct FavoriteListPage {
   build() {
     Column() {
       ActionBar({
-        title: this.ui.title
-      }).backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+        title: this.ui.title,
+        showBackButton: false
+      })
+        .backgroundColor($r('app.color.bg_main'))
+        .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
       Column() {
         Row() {
           Text(sortOptions[this.ui.selectedSortIndex].label).fontSize(14).fontColor($r('app.color.text_primary'))
-            .onClick(()=>{
+            .onClick(() => {
               this.vm.sortDialog.show()
             })
           Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
@@ -84,8 +91,30 @@ export struct FavoriteListPage {
           },
           gridAttribute: (attr) => {
             attr.scrollBar = BarState.Off
-            attr.columnsTemplate = '1fr 1fr 1fr'
-            attr.columnsGap = 8
+            switch (this.vm.appUIState.currentBreakpoint) {
+              case BreakpointTypeEnum.XS:
+                attr.columnsTemplate = '1fr '.repeat(2)
+                break
+              case BreakpointTypeEnum.SM:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+              case BreakpointTypeEnum.MD:
+                attr.columnsTemplate = '1fr '.repeat(4)
+                break
+              case BreakpointTypeEnum.LG:
+                attr.columnsTemplate = '1fr '.repeat(6)
+                break
+              case BreakpointTypeEnum.XL:
+                attr.columnsTemplate = '1fr '.repeat(8)
+                break
+              case BreakpointTypeEnum.XXL:
+                attr.columnsTemplate = '1fr '.repeat(12)
+                break
+              default:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+            }
+            attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
           },
           lazyCachedCount: 10 //缓存
         }).width('100%')
@@ -94,22 +123,24 @@ export struct FavoriteListPage {
           SkeletonGridView()
         }
         if (this.ui.pageState == PageState.Error) {
-          FailedView().onClick(()=>{
+          FailedView().onClick(() => {
             this.vm.refresh()
           })
         }
       }
       .width('100%')
       .layoutWeight(1)
-      .backgroundColor($r('app.color.bg_main'))
-      .borderRadius({
-        topLeft: 20,
-        topRight: 20
-      })
+      .backgroundColor(this.vm.appUIState.isLargeScreen ? Color.Transparent : $r('app.color.bg_main'))
+      // .borderRadius({
+      //   topLeft: 20,
+      //   topRight: 20
+      // })
       .padding({
-        left: 16, right: 16, bottom: this.vm.appUIState.safeBottom
+        left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+        right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+        bottom: this.vm.appUIState.safeBottom
       })
-    }.backgroundColor($r('app.color.bg_main'))
+    }
   }
 
   @Builder
