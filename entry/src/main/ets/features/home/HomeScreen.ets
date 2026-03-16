@@ -18,6 +18,7 @@ import { VideoListPage } from "../videolist/VideoListPage";
 import { LoadingView } from "../../ui/components/LoadingView";
 import { MediaItem } from "./hometab/HomeUIState";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
+import { PadTopTab } from "../../component/tabbar/PadTopTab";
 
 @ComponentV2
 export struct HomeScreen {
@@ -31,19 +32,17 @@ export struct HomeScreen {
 
   @Monitor('appUIState.currentBreakpoint')
   onBreakpointChange() {
-    if (this.appUIState.currentBreakpoint.includes('l')) {
+    if (!this.appUIState.currentBreakpoint.includes('s')) {
       this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER
     } else {
       this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.NONE
     }
-    this.appUIState.isLargeScreen = this.appUIState.currentBreakpoint.includes('l')
+    this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
   }
 
   aboutToAppear() {
     this.breakpointSystem.register(this.getUIContext());
-    this.appUIState.padHomeNavStack.pushPath({
-      name: "HomeTab"
-    })
+    this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
     this.vm.init()
     getUIAbilityContext().eventHub.on(HomeBackPressedEvent, () => {
       //点两次退出
@@ -68,8 +67,7 @@ export struct HomeScreen {
   build() {
     Row() {
       if (this.appUIState.currentBreakpoint != BreakpointTypeEnum.XS &&
-        this.appUIState.currentBreakpoint != BreakpointTypeEnum.SM &&
-        this.appUIState.currentBreakpoint != BreakpointTypeEnum.MD) { // 大于等于LG屏幕尺寸时显示左侧间距栏
+        this.appUIState.currentBreakpoint != BreakpointTypeEnum.SM) { // 大于等于LG屏幕尺寸时显示左侧间距栏
         Stack() {
           Column() {
             Row() {
@@ -157,101 +155,118 @@ export struct HomeScreen {
           top: this.appUIState.safeTop + 12,
           bottom: this.appUIState.safeBottom + 12,
         })
+        .visibility(this.vm.appUIState.currentBreakpoint.includes('l') ? Visibility.Visible : Visibility.None)
 
-        Column() {
-          //大屏顶部导航栏
-          Row({ space: 16 }) {
-            Text(this.vm.datasource.getData(this.ui.menuSelectedIndex).title)
-              .fontSize(24)
-              .fontWeight(FontWeight.Bold)
-              .margin({
-                left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
-              })
-            Blank().layoutWeight(1)
-            Button() {
-              SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                .fontSize(20)
-                .fontColor([$r('app.color.text_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .align(Alignment.Center)
-            .backgroundColor($r('app.color.bg_main'))
+        Stack() {
+          Column() {
+            //大屏顶部导航栏
+            Row({ space: 16 }) {
+              Text(this.vm.datasource.getData(this.ui.menuSelectedIndex).title)
+                .fontSize(24)
+                .fontWeight(FontWeight.Bold)
+                .margin({
+                  left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
+                })
+              Blank().layoutWeight(1)
+              Button() {
+                SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                  .fontSize(20)
+                  .fontColor([$r('app.color.text_primary')])
+              }
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .align(Alignment.Center)
+              .backgroundColor($r('app.color.bg_main'))
 
-            Button() {
-              SymbolGlyph($r('sys.symbol.person'))
-                .fontSize(20)
-                .fontColor([$r('app.color.text_primary')])
-            }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .align(Alignment.Center)
-            .backgroundColor($r('app.color.bg_main'))
+              Button() {
+                SymbolGlyph($r('sys.symbol.person'))
+                  .fontSize(20)
+                  .fontColor([$r('app.color.text_primary')])
+              }
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .align(Alignment.Center)
+              .backgroundColor($r('app.color.bg_main'))
 
-            // Button() {
-            //   SymbolGlyph($r('sys.symbol.gearshape'))
-            //     .fontSize(24)
-            //     .fontColor([$r('app.color.text_primary')])
-            // }
-            // .width(48)
-            // .height(48)
-            // .borderRadius(22)
-            // .align(Alignment.Center)
-            // .backgroundColor($r('app.color.bg_main'))
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-          .height(88)
-          .padding({
-            top: this.vm.appUIState.safeTop,
-            right: 24
-          })
-
-          if (!this.ui.isLoading) {
-            //页面容器
-            Tabs({
-              barPosition: BarPosition.End,
-              controller: this.padTabsController
-            }) {
-              LazyForEach(this.vm.datasource, (item: PadMenuItem, index: number) => {
-                TabContent() {
-                  if (item.type == PadMenuType.TITLE) {
-                    Stack() {
-                      Text(item.title).fontColor($r('app.color.text_1')).fontSize(12)
-                    }.height(0)
-                  } else {
-                    if (item.title === '首页') {
-                      HomeTab()
-                    } else if (item.title === '收藏') {
-                      FavoriteListPage({
-                        fromHome: true,
-                      })
-                    } else if (item.extra) {
-                      VideoListPage({
-                        fromHome: true,
-                        mediaItem: item.extra as MediaItem
-                      })
-                    } else {
-                      Stack() {
-                        Text(item.title).fontSize(20)
-                      }
-                    }
-                  }
-                }.tabBar(this.tabBuilder('首页', index, $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')))
-              })
+              // Button() {
+              //   SymbolGlyph($r('sys.symbol.gearshape'))
+              //     .fontSize(24)
+              //     .fontColor([$r('app.color.text_primary')])
+              // }
+              // .width(48)
+              // .height(48)
+              // .borderRadius(22)
+              // .align(Alignment.Center)
+              // .backgroundColor($r('app.color.bg_main'))
             }
             .width('100%')
-            .layoutWeight(1)
-            .barHeight(0)
-            .barWidth(0)
-            .vertical(true)
-            .scrollable(false)
-          } else {
-            LoadingView()
+            .alignItems(VerticalAlign.Center)
+            .height(88)
+            .padding({
+              top: this.vm.appUIState.safeTop,
+              right: 24
+            })
+
+            if (!this.ui.isLoading) {
+              //页面容器
+              Tabs({
+                barPosition: BarPosition.End,
+                controller: this.padTabsController
+              }) {
+                LazyForEach(this.vm.datasource, (item: PadMenuItem, index: number) => {
+                  TabContent() {
+                    if (item.type == PadMenuType.TITLE) {
+                      Stack() {
+                        Text(item.title).fontColor($r('app.color.text_1')).fontSize(12)
+                      }.height(0)
+                    } else {
+                      if (item.title === '首页') {
+                        HomeTab()
+                      } else if (item.title === '收藏') {
+                        FavoriteListPage({
+                          fromHome: true,
+                        })
+                      } else if (item.extra) {
+                        VideoListPage({
+                          fromHome: true,
+                          mediaItem: item.extra as MediaItem
+                        })
+                      } else {
+                        Stack() {
+                          Text(item.title).fontSize(20)
+                        }
+                      }
+                    }
+                  }.tabBar(new BottomTabBarStyle(item.unselectedIcon, item.title))
+                })
+              }
+              .width('100%')
+              .layoutWeight(1)
+              .barHeight(0)
+              .barWidth(0)
+              .vertical(false)
+              .scrollable(false)
+              .barPosition(BarPosition.Start)
+            } else {
+              LoadingView()
+            }
           }
-        }.layoutWeight(1)
+
+          PadTopTab({
+            selectIndex: this.ui.menuSelectedIndex,
+            onItemClick: (index: number) => {
+              this.ui.menuSelectedIndex = index
+              this.padTabsController.changeIndex(index)
+            }
+          })
+            .margin({
+              top: this.appUIState.safeTop
+            })
+        }
+        .layoutWeight(1)
+        .alignContent(Alignment.Top)
       } else {
         Stack() {
           Tabs({
@@ -315,7 +330,7 @@ export struct HomeScreen {
           }).margin({
             bottom: this.appUIState.safeBottom,
           })
-            .visibility(this.appUIState.isLargeScreen ? Visibility.None : Visibility.Visible)
+            .visibility(this.appUIState.isBigScreen ? Visibility.None : Visibility.Visible)
         }.alignContent(Alignment.Bottom)
       }
     }
@@ -325,8 +340,22 @@ export struct HomeScreen {
   }
 
   @Builder
-  tabBuilder(_title: string, _targetIndex: number, _selectedImg: Resource, _normalImg: Resource) {
-    Stack()
+  tabBuilder(title: string, targetIndex: number, selectedImg: Resource, normalImg: Resource) {
+    Column({ space: 4 }) {
+      Image(this.ui.menuSelectedIndex === targetIndex ? selectedImg : normalImg)
+        .size({ width: 20, height: 20 })
+        .fillColor(this.ui.menuSelectedIndex === targetIndex ? $r('app.color.color_main') :
+          $r('app.color.text_primary'))
+      Text(title)
+        .fontSize(14)
+        .fontColor(this.ui.menuSelectedIndex === targetIndex ? $r('app.color.color_main') :
+          $r('app.color.text_primary'))
+    }
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.ui.menuSelectedIndex === targetIndex ? $r('app.color.bg_tab') : Color.Transparent)
+    .borderRadius(99)
+    .width(70)
   }
 }
 
