@@ -19,18 +19,22 @@ import { MediaItem } from "./hometab/HomeUIState";
 export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
   datasource: PadMenuDataSource = new PadMenuDataSource()
 
-  async init() {
+  init() {
     this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, "首页", $r('app.media.ic_home_sel'),
       $r('app.media.ic_home_unsel')))
-    //获取收藏数量
-    await this.getFavoriteCount()
-    //获取媒体库列表
-    await this.getMediaList()
-    //获取视频数量
-    await this.getCounts()
-    this.ui.isLoading = false;
-    this.ui.lastSelectedMediaIndex = this.datasource.getFirstMediaItemIndex();
-    this.ui.padMenuDataVersion++
+    Promise.all([this.getFavoriteCount(), this.getMediaList(), this.getCounts()])
+      .then(() => {
+        this.ui.isLoading = false;
+        this.ui.lastSelectedMediaIndex = this.datasource.getFirstMediaItemIndex();
+        this.ui.padMenuDataVersion++
+      })
+    // //获取收藏数量
+    // await this.getFavoriteCount()
+    // //获取媒体库列表
+    // await this.getMediaList()
+    // //获取视频数量
+    // await this.getCounts()
+
   }
 
   async getFavoriteCount() {

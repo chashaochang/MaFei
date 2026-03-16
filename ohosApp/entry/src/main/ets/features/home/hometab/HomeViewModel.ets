@@ -11,7 +11,10 @@ import {
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
 import {
   generateBeautifulDeepBlueColor,
-  getItemBackDropImageUrl, getTypeByCollectionType, resolveLatestImageUrl } from "../../../common/CommonFunc";
+  getItemBackDropImageUrl,
+  getTypeByCollectionType,
+  resolveLatestImageUrl
+} from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
 import { ColorUtils } from "../../../utils/ColorUtils";
@@ -20,68 +23,64 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
 
   /**
-   * 异步提取图片的左边缘颜色
-   * @param itemId 视频项ID
-   * @param imageUrl 图片URL
+   * 异步提取图片的左边缘颜色，不阻塞主线程
    */
-  async extractEdgeColorForItem(itemId: string, imageUrl: string) {
+  extractEdgeColorForItem(itemId: string, imageUrl: string): void {
     if (!imageUrl || this.ui.edgeColorMap.has(itemId)) {
-      return; // 如果没有图片URL或已经提取过，则跳过
+      return
     }
-
-    try {
-      const color = await ColorUtils.extractLeftEdgeColor(imageUrl);
-      this.ui.edgeColorMap.set(itemId, color);
-    } catch (error) {
-      // 使用默认颜色
-      this.ui.edgeColorMap.set(itemId, '#0000FF');
-    }
+    ColorUtils.extractLeftEdgeColor(imageUrl).then((color: string) => {
+      this.ui.edgeColorMap.set(itemId, color)
+    }).catch(() => {
+      this.ui.edgeColorMap.set(itemId, '#0000FF')
+    })
   }
 
-  async init() {
+  init(): void {
     this.ui.allMediaBgColor = generateBeautifulDeepBlueColor()
-    try {
-      //获取媒体库列表
-      await this.getMediaList()
-      //获取继续观看列表
-      await this.getResumeList()
-      //获取视频数量
-      await this.getCounts()
-      //获取接下来列表
-      await this.getNextUpList()
-      //获取latest
-      await this.getLatestList()
-      this.ui.isRefreshing = false;
-    } catch (e) {
-      this.ui.isRefreshing = false;
-    }
+    // 使用 Promise 链，init 立即返回不阻塞
+    this.getMediaList().then(() => {
+      return Promise.all([
+        this.getResumeList(),
+        this.getCounts(),
+        this.getNextUpList(),
+        this.getLatestList()
+      ])
+    }).then(() => {
+      this.ui.isRefreshing = false
+    }).catch(() => {
+      this.ui.isRefreshing = false
+    })
   }
 
-  async getCounts() {
-    const totalRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+  private getCounts(): Promise<void> {
+    return getItemsApi(ApiClient.Instance()).getItems({
       userId: ApiClient.Instance().userId,
       includeItemTypes: ['Movie', 'Series'],
-      recursive: true, // 递归统计所有子目录
+      recursive: true,
       limit: 1
-    });
-    this.ui.totalCount = totalRes.data.TotalRecordCount + '' || '--'
-    const movieRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
-      userId: ApiClient.Instance().userId,
-      includeItemTypes: ['Movie'],
-      recursive: true, // 递归统计所有子目录
-      limit: 1
-    });
-    this.ui.movieCount = movieRes.data.TotalRecordCount + '' || '--'
-    const tvRes: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
-      userId: ApiClient.Instance().userId,
-      includeItemTypes: ['Series'],
-      recursive: true, // 递归统计所有子目录
-      limit: 1
-    });
-    this.ui.tvCount = tvRes.data.TotalRecordCount + '' || '--'
+    }).then((totalRes: AxiosResponse<BaseItemDtoQueryResult>): Promise<AxiosResponse<BaseItemDtoQueryResult>> => {
+      this.ui.totalCount = totalRes.data.TotalRecordCount + '' || '--'
+      return getItemsApi(ApiClient.Instance()).getItems({
+        userId: ApiClient.Instance().userId,
+        includeItemTypes: ['Movie'],
+        recursive: true,
+        limit: 1
+      })
+    }).then((movieRes: AxiosResponse<BaseItemDtoQueryResult>): Promise<AxiosResponse<BaseItemDtoQueryResult>> => {
+      this.ui.movieCount = movieRes.data.TotalRecordCount + '' || '--'
+      return getItemsApi(ApiClient.Instance()).getItems({
+        userId: ApiClient.Instance().userId,
+        includeItemTypes: ['Series'],
+        recursive: true,
+        limit: 1
+      })
+    }).then((tvRes: AxiosResponse<BaseItemDtoQueryResult>): void => {
+      this.ui.tvCount = tvRes.data.TotalRecordCount + '' || '--'
+    })
   }
 
-  private async getMediaList(): Promise<void> {
+  private getMediaList(): Promise<void> {
     this.ui.hasLiveTv = false
     return new Promise((resolve, reject) => {
       getUserViewsApi(ApiClient.Instance()).getUserViews({
@@ -90,14 +89,14 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
             this.ui.mediaList = res.data.Items?.map<MediaItem>((e: BaseItemDto) => {
-              if(e.Type == BaseItemKind.TvChannel){
+              if (e.Type == BaseItemKind.TvChannel) {
                 this.ui.hasLiveTv = true
               }
               return {
                 name: e.Name || '',
                 image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary, {
-                    tag: e.ImageTags![0]
-                  }),
+                  tag: e.ImageTags![0]
+                }),
                 id: e.Id || '',
                 childCount: e.ChildCount || 0,
                 type: getTypeByCollectionType(e.CollectionType)
@@ -202,68 +201,63 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     })
   }
 
-  private async getLatestList(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      this.ui.latestMediaList = []
-      this.ui.latestMap.clear()
-      let promises: Promise<void>[] = []
-      for (const item of this.ui.mediaList) {
-        if(item.type != BaseItemKind.LiveTvChannel){
-          let promise = new Promise<void>(async (resolve, reject) => {
-            let list: VideoItem[] = []
-            ///Users/4ce4745330314948b8791958423de149/Items/Latest?Limit=16&Fields=PrimaryImageAspectRatio%2CPath&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&ParentId=66e9b0b6aea8727e12b214521b59c67d
-            try {
-              let res: AxiosResponse<BaseItemDto[]> = await getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-                limit: 16,
-                fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
-                imageTypeLimit: 1,
-                enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
-                parentId: item.id,
-                userId: ApiClient.Instance().userId
-              })
-              if (res.data && res.data.length > 0) {
-                list = res.data.map<VideoItem>((e) => {
-                  let subtitle = ''
-                  if (e.Type === BaseItemKind.Series) {
-                    subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-                  } else if (e.Type === BaseItemKind.Episode) {
-                    subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
-                  } else {
-                    subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-                  }
-                  return {
-                    id: e.Id || '',
-                    name: e.SeriesName || e.Name || '',
-                    image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
-                    subtitle: subtitle,
-                    mediaName: item.name,
-                    type: e.Type
-                  }
-                })
-                this.ui.latestMap.set(item.id, list)
-                this.ui.latestMediaList.push(item)
+  private getLatestList(): Promise<void> {
+    const mediaList = this.ui.mediaList
+    const itemsToFetch = mediaList.filter(item => item.type != BaseItemKind.LiveTvChannel)
+    if (itemsToFetch.length === 0) {
+      return Promise.resolve()
+    }
 
-                // 只提取第一个项目的边缘颜色
-                if (list.length > 0 && list[0].image) {
-                  this.extractEdgeColorForItem(list[0].id, list[0].image);
-                }
-
-                resolve()
-              } else {
-                resolve()
-              }
-            } catch (error) {
-              resolve()
+    const promises = itemsToFetch.map((item): Promise<[MediaItem, VideoItem[]]> => {
+      return getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
+        limit: 16,
+        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+        imageTypeLimit: 1,
+        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
+        parentId: item.id,
+        userId: ApiClient.Instance().userId
+      }).then((res: AxiosResponse<BaseItemDto[]>) => {
+        if (res.data && res.data.length > 0) {
+          const list = res.data.map<VideoItem>((e) => {
+            let subtitle = ''
+            if (e.Type === BaseItemKind.Series) {
+              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+            } else if (e.Type === BaseItemKind.Episode) {
+              subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
+            } else {
+              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
+            }
+            return {
+              id: e.Id || '',
+              name: e.SeriesName || e.Name || '',
+              image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
+              subtitle: subtitle,
+              mediaName: item.name,
+              type: e.Type
             }
           })
-          promises.push(promise)
+          return [item, list] as [MediaItem, VideoItem[]]
+        }
+        return [item, []] as [MediaItem, VideoItem[]]
+      }).catch(() => {
+        return [item, []] as [MediaItem, VideoItem[]]
+      })
+    })
+
+    return Promise.all(promises).then((results) => {
+      const latestMap = new Map<string, VideoItem[]>()
+      const latestMediaList: MediaItem[] = []
+      for (let i = 0; i < results.length; i++) {
+        const item = results[i][0]
+        const list = results[i][1]
+        if (list.length > 0) {
+          latestMap.set(item.id, list)
+          latestMediaList.push(item)
+          this.extractEdgeColorForItem(list[0].id, list[0].image)
         }
       }
-      Promise.all(promises).then(() => {
-        resolve()
-      }).catch(() => {
-        reject()
-      })
+      this.ui.latestMap = latestMap
+      this.ui.latestMediaList = latestMediaList
     })
   }
 }
