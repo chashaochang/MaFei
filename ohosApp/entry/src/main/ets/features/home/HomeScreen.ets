@@ -218,6 +218,9 @@ export struct HomeScreen {
     .borderColor($r('app.color.border'))
     .borderWidth(1)
     .borderRadius(20)
+    .visualEffect(new hdsEffect.HdsEffectBuilder().pointLight({
+      illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
+    }).buildEffect())
   }
 
   @Builder
