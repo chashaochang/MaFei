@@ -11,7 +11,7 @@ import {
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getTypeByCollectionType } from "../../common/CommonFunc";
 import { ApiClient } from "../../network/ApiClient";
-import { PadMenuItem, PadMenuType } from "./HomeScreen";
+import { PadMenuItem, PadMenuType } from "./HomeScreenUIState";
 import { HomeScreenUIState, PadMenuDataSource } from "./HomeScreenUIState";
 import { MediaItem } from "./hometab/HomeUIState";
 
