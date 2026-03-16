@@ -138,7 +138,7 @@ export struct VideoListPage {
       }
       .width('100%')
       .layoutWeight(1)
-      .backgroundColor(this.vm.appUIState.isLargeScreen ? Color.Transparent : $r('app.color.bg_main'))
+      .backgroundColor(this.vm.appUIState.isBigScreen ? Color.Transparent : $r('app.color.bg_main'))
       .borderRadius({
         topLeft: 20,
         topRight: 20
