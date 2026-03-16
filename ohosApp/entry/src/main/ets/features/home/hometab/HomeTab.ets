@@ -38,7 +38,7 @@ export struct HomeTab {
     Stack() {
       Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
         List() {
-          if (!this.vm.appUIState.currentBreakpoint.includes('l')) {
+          if (this.vm.appUIState.currentBreakpoint.includes('s')) {
             ListItem().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
           }
           // if (this.ui.mediaList.length > 0) {
@@ -59,7 +59,7 @@ export struct HomeTab {
 
           ListItem() {
             this.buildAllMediaCount()
-          }.visibility(this.vm.appUIState.isLargeScreen ? Visibility.None : Visibility.Visible)
+          }.visibility(this.vm.appUIState.isBigScreen ? Visibility.None : Visibility.Visible)
 
           ForEach(this.ui.latestMediaList, (item: MediaItem) => {
             ListItem() {
@@ -86,7 +86,7 @@ export struct HomeTab {
         this.vm.init()
       })
 
-      if (!this.vm.appUIState.currentBreakpoint.includes('l')) {
+      if (this.vm.appUIState.currentBreakpoint.includes('s')) {
         //Header
         Row({ space: 12 }) {
           Row() {

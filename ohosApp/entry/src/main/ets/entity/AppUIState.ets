@@ -17,12 +17,11 @@ export class AppUIState {
   @Trace deviceWidth: number = 0
   @Trace deviceHeight: number = 0
   @Trace currentBreakpoint: string = "MD"
-  @Trace isLargeScreen: boolean = false
+  @Trace isBigScreen: boolean = false // 大屏幕设备
   //点光源开关,关闭设置成NONE
   @Trace illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER
   context?: common.UIAbilityContext
   windowClass?: window.Window
   navInstance?: NavigationAttribute
   server?: ServerEntity
-  padHomeNavStack: NavPathStack = new NavPathStack()
 }
