@@ -29,6 +29,8 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
     //获取视频数量
     await this.getCounts()
     this.ui.isLoading = false;
+    this.ui.lastSelectedMediaIndex = this.datasource.getFirstMediaItemIndex();
+    this.ui.padMenuDataVersion++
   }
 
   async getFavoriteCount() {
