@@ -35,6 +35,10 @@ export class HomeScreenUIState extends BaseUIState {
   @Trace isLeftSidebarVisible: boolean = true
   /** Medium screen: whether menu modal is visible (default false) */
   @Trace isMenuModalVisible: boolean = false
+  /** Last selected media item index, used for PadTopTab third slot when 首页/收藏 is selected */
+  @Trace lastSelectedMediaIndex: number = 0
+  /** Incremented when datasource changes, triggers PadTopTab list refresh */
+  @Trace padMenuDataVersion: number = 0
 }
 
 export class PadMenuDataSource extends BaseDataSource<PadMenuItem> {

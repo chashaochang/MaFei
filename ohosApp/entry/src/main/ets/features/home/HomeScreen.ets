@@ -40,6 +40,7 @@ export struct HomeScreen {
     this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
     if (this.appUIState.currentBreakpoint.includes('l')) {
       this.ui.isMenuModalVisible = false
+      this.ui.isLeftSidebarVisible = true
     }
   }
 
@@ -68,12 +69,13 @@ export struct HomeScreen {
   }
 
   private getPadTopTabItems(): TabItem[] {
+    void this.ui.padMenuDataVersion
     const ds = this.vm.datasource
     if (ds.totalCount() < 2) {
       return [
         new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
         new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
-        new TabItem('媒体库', $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel'))
+        new TabItem('全部', $r('app.media.all'), $r('app.media.all'))
       ]
     }
     const thirdIndex = this.getThirdItemDatasourceIndex()
@@ -98,13 +100,17 @@ export struct HomeScreen {
   private getThirdItemDatasourceIndex(): number {
     const ds = this.vm.datasource
     if (this.ui.menuSelectedIndex === 0 || this.ui.menuSelectedIndex === 1) {
+      const lastMedia = this.ui.lastSelectedMediaIndex
+      if (lastMedia >= 2 && lastMedia < ds.totalCount() && ds.getData(lastMedia).type === PadMenuType.ITEM) {
+        return lastMedia
+      }
       return ds.getFirstMediaItemIndex()
     }
     return this.ui.menuSelectedIndex
   }
 
   @Builder
-  leftMenuBuilder(showCloseButton: boolean, onItemSelect: (index: number) => void) {
+  leftMenuBuilder(onItemSelect: (index: number) => void) {
     Column() {
       Row() {
         Row() {
@@ -118,7 +124,7 @@ export struct HomeScreen {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Start)
 
-        if (showCloseButton) {
+        if (this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) {
           Button() {
             SymbolGlyph($r('sys.symbol.close_sidebar'))
               .fontSize(20)
@@ -174,8 +180,9 @@ export struct HomeScreen {
                     $r('app.color.text_primary'))
                   .fontSize(14)
               }
-              .backgroundColor(this.ui.menuSelectedIndex == index ? $r('app.color.component_bg') :
-                Color.Transparent)
+              .backgroundBlurStyle(this.ui.menuSelectedIndex == index ? BlurStyle.Thin : BlurStyle.NONE)
+              .backgroundColor((this.ui.menuSelectedIndex == index &&
+              this.vm.appUIState.currentBreakpoint.includes('l')) ? $r('app.color.menu_item_bg') : Color.Transparent)
               .width('100%')
               .padding(10)
               .borderRadius(8)
@@ -184,6 +191,9 @@ export struct HomeScreen {
                   return
                 }
                 this.ui.menuSelectedIndex = index
+                if (index >= 2 && item.type === PadMenuType.ITEM) {
+                  this.ui.lastSelectedMediaIndex = index
+                }
                 this.padTabsController.changeIndex(index)
                 onItemSelect(index)
               })
@@ -204,14 +214,10 @@ export struct HomeScreen {
       top: 20,
       bottom: 32
     })
-    .backgroundColor($r('app.color.bg_1'))
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+    .backgroundBlurStyle(BlurStyle.Thin)
     .borderColor($r('app.color.border'))
     .borderWidth(1)
     .borderRadius(20)
-    .visualEffect(new hdsEffect.HdsEffectBuilder().pointLight({
-      illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
-    }).buildEffect())
   }
 
   @Builder
@@ -241,179 +247,211 @@ export struct HomeScreen {
         .height('100%')
         .backgroundColor('rgba(0,0,0,0.5)')
         .onClick(() => {
-          this.ui.isMenuModalVisible = false
+          this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+            this.ui.isMenuModalVisible = false
+          })
         })
       Row() {
-        this.leftMenuBuilder(false, () => {
-          this.ui.isMenuModalVisible = false
+        Column() {
+          this.leftMenuBuilder(() => {
+            this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+              this.ui.isMenuModalVisible = false
+            })
+          })
+        }
+        .width(240)
+        .height('100%')
+        .margin({ left: 12 })
+        .padding({
+          top: this.appUIState.safeTop + 12,
+          bottom: this.appUIState.safeBottom + 12,
         })
-        Blank().layoutWeight(1)
+        .transition(TransitionEffect.translate({ x: -240 }).animation({ duration: 300, curve: Curve.FastOutSlowIn }))
+
+        Blank()
+          .layoutWeight(1)
+          .onClick(() => {
+            this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+              this.ui.isMenuModalVisible = false
+            })
+          })
       }
       .width('100%')
       .height('100%')
       .alignItems(VerticalAlign.Top)
+      .justifyContent(FlexAlign.Start)
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Start)
   }
 
   build() {
     Row() {
       if (this.appUIState.currentBreakpoint != BreakpointTypeEnum.XS &&
         this.appUIState.currentBreakpoint != BreakpointTypeEnum.SM) { // MD or LG+ : pad layout
-        Row() {
-          Column() {
-            this.leftMenuBuilder(this.appUIState.currentBreakpoint.includes('l'), () => {
-            })
-          }
-          .width(240)
-          .height('100%')
-          .padding({
-            top: this.appUIState.safeTop + 12,
-            bottom: this.appUIState.safeBottom + 12,
-          })
-          .visibility((this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) ?
-            Visibility.Visible : Visibility.None)
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.scale({ x: 0, y: 0 })
-              .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-              .animation({ duration: 300, curve: Curve.FastOutSlowIn }),
-            TransitionEffect.scale({ x: 0, y: 0 })
-              .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-              .animation({ duration: 300, curve: Curve.FastOutSlowIn })
-          ))
-
-          Stack() {
+        Stack() {
+          Row() {
             Column() {
-              //大屏顶部导航栏
-              Row({ space: 16 }) {
-                Text(this.vm.datasource.getData(this.ui.menuSelectedIndex).title)
-                  .fontSize(24)
-                  .fontWeight(FontWeight.Bold)
-                  .margin({
-                    left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
-                  })
-                Blank().layoutWeight(1)
-                Button() {
-                  SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                    .fontSize(20)
-                    .fontColor([$r('app.color.text_primary')])
-                }
-                .width(40)
-                .height(40)
-                .borderRadius(20)
-                .align(Alignment.Center)
-                .backgroundColor($r('app.color.bg_main'))
-
-                Button() {
-                  SymbolGlyph($r('sys.symbol.person'))
-                    .fontSize(20)
-                    .fontColor([$r('app.color.text_primary')])
-                }
-                .width(40)
-                .height(40)
-                .borderRadius(20)
-                .align(Alignment.Center)
-                .backgroundColor($r('app.color.bg_main'))
-
-                // Button() {
-                //   SymbolGlyph($r('sys.symbol.gearshape'))
-                //     .fontSize(24)
-                //     .fontColor([$r('app.color.text_primary')])
-                // }
-                // .width(48)
-                // .height(48)
-                // .borderRadius(22)
-                // .align(Alignment.Center)
-                // .backgroundColor($r('app.color.bg_main'))
-              }
-              .width('100%')
-              .alignItems(VerticalAlign.Center)
-              .height(88)
-              .padding({
-                top: this.vm.appUIState.safeTop,
-                right: 24
+              this.leftMenuBuilder(() => {
               })
+            }
+            .width(240)
+            .height('100%')
+            .padding({
+              top: this.appUIState.safeTop + 12,
+              bottom: this.appUIState.safeBottom + 12,
+            })
+            .visibility((this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) ?
+              Visibility.Visible : Visibility.None)
+            .transition(TransitionEffect.asymmetric(
+              TransitionEffect.scale({ x: 0, y: 0 })
+                .combine(TransitionEffect.translate({ x: 120, y: -300 }))
+                .animation({ duration: 300, curve: Curve.FastOutSlowIn }),
+              TransitionEffect.scale({ x: 0, y: 0 })
+                .combine(TransitionEffect.translate({ x: 120, y: -300 }))
+                .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+            ))
 
-              if (!this.ui.isLoading) {
-                //页面容器
-                Tabs({
-                  barPosition: BarPosition.End,
-                  controller: this.padTabsController
-                }) {
-                  LazyForEach(this.vm.datasource, (item: PadMenuItem, index: number) => {
-                    TabContent() {
-                      if (item.type == PadMenuType.TITLE) {
-                        Stack() {
-                          Text(item.title).fontColor($r('app.color.text_1')).fontSize(12)
-                        }.height(0)
-                      } else {
-                        if (item.title === '首页') {
-                          HomeTab()
-                        } else if (item.title === '收藏') {
-                          FavoriteListPage({
-                            fromHome: true,
-                          })
-                        } else if (item.extra) {
-                          VideoListPage({
-                            fromHome: true,
-                            mediaItem: item.extra as MediaItem
-                          })
-                        } else {
-                          Stack() {
-                            Text(item.title).fontSize(20)
-                          }
-                        }
-                      }
-                    }.tabBar(new BottomTabBarStyle(item.unselectedIcon, item.title))
-                  })
+            Stack() {
+              Column() {
+                //大屏顶部导航栏
+                Row({ space: 16 }) {
+                  Text(this.vm.datasource.getData(this.ui.menuSelectedIndex).title)
+                    .fontSize(24)
+                    .fontWeight(FontWeight.Bold)
+                    .margin({
+                      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
+                    })
+                  Blank().layoutWeight(1)
+                  Button() {
+                    SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                      .fontSize(20)
+                      .fontColor([$r('app.color.text_primary')])
+                  }
+                  .width(40)
+                  .height(40)
+                  .borderRadius(20)
+                  .align(Alignment.Center)
+                  .backgroundColor($r('app.color.bg_main'))
+
+                  Button() {
+                    SymbolGlyph($r('sys.symbol.person'))
+                      .fontSize(20)
+                      .fontColor([$r('app.color.text_primary')])
+                  }
+                  .width(40)
+                  .height(40)
+                  .borderRadius(20)
+                  .align(Alignment.Center)
+                  .backgroundColor($r('app.color.bg_main'))
+
+                  // Button() {
+                  //   SymbolGlyph($r('sys.symbol.gearshape'))
+                  //     .fontSize(24)
+                  //     .fontColor([$r('app.color.text_primary')])
+                  // }
+                  // .width(48)
+                  // .height(48)
+                  // .borderRadius(22)
+                  // .align(Alignment.Center)
+                  // .backgroundColor($r('app.color.bg_main'))
                 }
                 .width('100%')
-                .layoutWeight(1)
-                .barHeight(0)
-                .barWidth(0)
-                .vertical(false)
-                .scrollable(false)
-                .barPosition(BarPosition.Start)
-              } else {
-                LoadingView()
-              }
-            }
-
-            PadTopTab({
-              list: this.getPadTopTabItems(),
-              selectIndex: this.getPadTopTabSelectIndex(),
-              onItemClick: (index: number) => {
-                const targetIndex = index === 0 ? 0 : index === 1 ? 1 : this.getThirdItemDatasourceIndex()
-                this.ui.menuSelectedIndex = targetIndex
-                this.padTabsController.changeIndex(targetIndex)
-              },
-            onMenuButtonClick: () => {
-              if (this.appUIState.currentBreakpoint.includes('l')) {
-                this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-                  this.ui.isLeftSidebarVisible = true
+                .alignItems(VerticalAlign.Center)
+                .height(88)
+                .padding({
+                  top: this.vm.appUIState.safeTop,
+                  right: 24
                 })
-              } else {
-                this.ui.isMenuModalVisible = true
+
+                if (!this.ui.isLoading) {
+                  //页面容器
+                  Tabs({
+                    barPosition: BarPosition.End,
+                    controller: this.padTabsController
+                  }) {
+                    LazyForEach(this.vm.datasource, (item: PadMenuItem, index: number) => {
+                      TabContent() {
+                        if (item.type == PadMenuType.TITLE) {
+                          Stack() {
+                            Text(item.title).fontColor($r('app.color.text_1')).fontSize(12)
+                          }.height(0)
+                        } else {
+                          if (item.title === '首页') {
+                            HomeTab()
+                          } else if (item.title === '收藏') {
+                            FavoriteListPage({
+                              fromHome: true,
+                            })
+                          } else if (item.extra) {
+                            VideoListPage({
+                              fromHome: true,
+                              mediaItem: item.extra as MediaItem
+                            })
+                          } else {
+                            Stack() {
+                              Text(item.title).fontSize(20)
+                            }
+                          }
+                        }
+                      }.tabBar(new BottomTabBarStyle(item.unselectedIcon, item.title))
+                    })
+                  }
+                  .width('100%')
+                  .layoutWeight(1)
+                  .barHeight(0)
+                  .barWidth(0)
+                  .vertical(false)
+                  .scrollable(false)
+                  .barPosition(BarPosition.Start)
+                } else {
+                  LoadingView()
+                }
               }
-            }
-            })
-              .margin({
-                top: this.appUIState.safeTop
+
+              PadTopTab({
+                list: this.getPadTopTabItems(),
+                selectIndex: this.getPadTopTabSelectIndex(),
+                onItemClick: (index: number) => {
+                  const targetIndex = index === 0 ? 0 : index === 1 ? 1 : this.getThirdItemDatasourceIndex()
+                  this.ui.menuSelectedIndex = targetIndex
+                  if (targetIndex >= 2) {
+                    this.ui.lastSelectedMediaIndex = targetIndex
+                  }
+                  this.padTabsController.changeIndex(targetIndex)
+                },
+                onMenuButtonClick: () => {
+                  if (this.appUIState.currentBreakpoint.includes('l')) {
+                    this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                      this.ui.isLeftSidebarVisible = true
+                    })
+                  } else {
+                    this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                      this.ui.isMenuModalVisible = true
+                    })
+                  }
+                }
               })
-              .visibility((this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) ?
-                Visibility.None : Visibility.Visible)
+                .margin({
+                  top: this.appUIState.safeTop
+                })
+                .visibility((this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) ?
+                  Visibility.None : Visibility.Visible)
+            }
+            .layoutWeight(1)
+            .alignContent(Alignment.Top)
           }
-          .layoutWeight(1)
-          .alignContent(Alignment.Top)
+          .width('100%')
+          .height('100%')
+
+          if (this.ui.isMenuModalVisible && !this.appUIState.currentBreakpoint.includes('l')) {
+            this.menuModalBuilder()
+          }
         }
         .width('100%')
         .height('100%')
-        .bindSheet($$this.ui.isMenuModalVisible, this.menuModalBuilder(), {
-          height: '100%',
-          preferType: SheetType.BOTTOM,
-          showClose: false
-        })
+        .alignContent(Alignment.TopStart)
       } else {
         Stack() {
           Tabs({
