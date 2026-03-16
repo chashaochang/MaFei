@@ -71,6 +71,10 @@
     {
       "name": "bg_tab_item",
       "value": "#40000000"
+    },
+    {
+      "name": "menu_item_bg",
+      "value": "#1F2937"
     }
   ]
 }
