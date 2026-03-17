@@ -20,6 +20,7 @@ import { VideoListPage } from "../videolist/VideoListPage";
 import { LoadingView } from "../../ui/components/LoadingView";
 import { MediaItem } from "./hometab/HomeUIState";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
+import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
 
 @ComponentV2
@@ -126,7 +127,7 @@ export struct HomeScreen {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Start)
 
-        if (this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible) {
+        if (this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc()) {
           Button() {
             SymbolGlyph($r('sys.symbol.close_sidebar'))
               .fontSize(20)
