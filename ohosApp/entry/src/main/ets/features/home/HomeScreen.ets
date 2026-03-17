@@ -11,7 +11,9 @@ import { CustomTab } from "../../component/tabbar/CustomTab";
 import { HomeScreenUIState, PadMenuItem, PadMenuType } from "./HomeScreenUIState";
 import { HomeScreenViewModel } from "./HomeScreenViewModel";
 import { getUIAbilityContext } from "../../common/CommonFunc";
+import { RouterConsts } from "../../common/RouterConsts";
 import { HomeBackPressedEvent } from "../../events/Events";
+import { HMRouterMgr } from "@hadss/hmrouter";
 import { process } from "@kit.ArkTS";
 import { FavoriteListPage } from "../favorite/FavoriteListPage";
 import { VideoListPage } from "../videolist/VideoListPage";
@@ -337,6 +339,9 @@ export struct HomeScreen {
                   .borderRadius(20)
                   .align(Alignment.Center)
                   .backgroundColor($r('app.color.bg_main'))
+                  .onClick(() => {
+                    HMRouterMgr.to(RouterConsts.SearchPage).push()
+                  })
 
                   Button() {
                     SymbolGlyph($r('sys.symbol.person'))
@@ -348,6 +353,9 @@ export struct HomeScreen {
                   .borderRadius(20)
                   .align(Alignment.Center)
                   .backgroundColor($r('app.color.bg_main'))
+                  .onClick(() => {
+                    HMRouterMgr.to(RouterConsts.MinePage).push()
+                  })
 
                   // Button() {
                   //   SymbolGlyph($r('sys.symbol.gearshape'))
