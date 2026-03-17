@@ -8,6 +8,7 @@ import { MineUIState } from "./MineUIState";
 import { bundleManager, common } from "@kit.AbilityKit";
 import { ApiClientController } from "../../../data/ApiClientController";
 import { CustomColorMode } from "../../../entity/CustomColorMode";
+import { PlayerEngineType } from "../../../entity/PlayerEngineType";
 import { AppPreference } from "../../../data/AppPreference";
 import { DBManager } from "../../../data/DBManager";
 
@@ -76,6 +77,14 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
       this.ui.colorModeName = $r('app.string.color_mode_light')
     } else if (this.appUIState.customColorMode == CustomColorMode.Dark) {
       this.ui.colorModeName = $r('app.string.color_mode_dark')
+    }
+  }
+
+  getPlayerEngineName() {
+    if (AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.IJK) {
+      this.ui.playerEngineName = $r('app.string.player_engine_ijk')
+    } else {
+      this.ui.playerEngineName = $r('app.string.player_engine_av')
     }
   }
 

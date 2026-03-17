@@ -19,9 +19,11 @@ export struct MineTab {
   aboutToAppear(): void {
     HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown, () => {
       this.vm.getColorModeName()
+      this.vm.getPlayerEngineName()
     })
     this.vm.init()
     this.vm.getColorModeName()
+    this.vm.getPlayerEngineName()
   }
 
   build() {
@@ -96,6 +98,12 @@ export struct MineTab {
             items: [new BaseGroupItem('外观', $r('app.media.theme'), this.ui.colorModeName)],
             onItemClick: () => {
               HMRouterMgr.to(RouterConsts.ColorModePage).push()
+            }
+          })
+          ListGroup({
+            items: [new BaseGroupItem('播放器引擎', $r('app.media.movie'), this.ui.playerEngineName)],
+            onItemClick: () => {
+              HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()
             }
           })
           ListGroup({

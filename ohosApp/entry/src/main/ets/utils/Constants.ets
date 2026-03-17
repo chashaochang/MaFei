@@ -40,6 +40,7 @@ export class Constants {
   static readonly PREF_USER_NAME = "pref_user_name"
   static readonly PREF_REMEMBER_PW = "pref_remember_pw"
   static readonly PREF_COLOR_MODE = "pref_color_mode"
+  static readonly PREF_PLAYER_ENGINE = "pref_player_engine"
   static readonly PREF_SEARCH_HISTORY = "pref_search_history"
 
   static readonly MAIN_BUNDLE_PATH_REGEX =

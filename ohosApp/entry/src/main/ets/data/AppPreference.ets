@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { CustomColorMode } from '../entity/CustomColorMode';
+import { PlayerEngineType } from '../entity/PlayerEngineType';
 import { Constants } from '../utils/Constants';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
@@ -132,6 +133,18 @@ export class AppPreference {
       return mode
     }
     return CustomColorMode.Auto
+  }
+
+  setPlayerEngineType(type: PlayerEngineType) {
+    this.setValue<PlayerEngineType>(Constants.PREF_PLAYER_ENGINE, type)
+  }
+
+  getPlayerEngineType(): PlayerEngineType {
+    let type = this.getValue<PlayerEngineType>(Constants.PREF_PLAYER_ENGINE)
+    if (type !== null) {
+      return type
+    }
+    return PlayerEngineType.IJK
   }
 
   getSearchHistory(): string[] {
