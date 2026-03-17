@@ -18,5 +18,6 @@ export class RouterConsts {
   static readonly CastDetailPage = 'CastDetailPage';
   static readonly LiveTvChannelListPage = 'LiveTvChannelListPage'
   static readonly LiveTvPage = 'LiveTvPage'
+  static readonly MinePage = 'MinePage'
 
 }
