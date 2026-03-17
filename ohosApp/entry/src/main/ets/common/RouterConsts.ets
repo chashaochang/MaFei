@@ -11,6 +11,7 @@ export class RouterConsts {
   static readonly VideoListPage = 'VideoListPage';
   static readonly FavoriteListPage = 'FavoriteListPage';
   static readonly ColorModePage = 'ColorModePage';
+  static readonly PlayerEnginePage = 'PlayerEnginePage';
   static readonly AccountPage = 'AccountPage';
   static readonly AddAccountPage = 'AddAccountPage';
   static readonly WebITongPage = 'WebITongPage';

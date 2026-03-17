@@ -214,6 +214,18 @@
     {
       "name": "color_mode_dark",
       "value": "深色"
+    },
+    {
+      "name": "player_engine_ijk",
+      "value": "IJKPlayer"
+    },
+    {
+      "name": "player_engine_av",
+      "value": "AVPlayer"
+    },
+    {
+      "name": "player_engine_title",
+      "value": "播放器引擎"
     }
   ]
 }

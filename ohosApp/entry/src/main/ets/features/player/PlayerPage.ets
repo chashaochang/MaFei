@@ -18,6 +18,9 @@ import { ToastUtil } from "../../utils/ToastUtil"
 import { PlayerPageUIState } from "./PlayerPageUIState"
 import { PlayerPageViewModel } from "./PlayerPageViewModel"
 import { PlayerView } from "./PlayerView"
+import { AVPlayerView } from "./AVPlayerView"
+import { AppPreference } from "../../data/AppPreference"
+import { PlayerEngineType } from "../../entity/PlayerEngineType"
 import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
 
@@ -145,28 +148,53 @@ export struct PlayerPage {
     //播放器
     Stack() {
       if (this.ui.url) {
-        PlayerView({
-          videoUrl: this.ui.url,
-          onNext: () => {
-            this.vm.queueManager.next()
-          },
-          onAudioTrackSelected: (stream: MediaStream) => {
-            this.vm.trackSelectionHelper.selectAudioTrack(stream)
-          },
-          onSubtitleSelected: (stream: MediaStream) => {
-            this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
-          },
-          onQualitySelected: (option: QualityOption) => {
-            this.vm.changeBitrate(option.bitrate)
-          },
-          stopCast: () => {
-            this.vm.stopCast()
-          },
-          onEpisodeChange: (index: number) => {
-            this.vm.changeEpisode(index)
-          }
-        }).width('100%')
-          .height('100%')
+        if (AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.AV) {
+          AVPlayerView({
+            videoUrl: this.ui.url,
+            onNext: () => {
+              this.vm.queueManager.next()
+            },
+            onAudioTrackSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectAudioTrack(stream)
+            },
+            onSubtitleSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
+            },
+            onQualitySelected: (option: QualityOption) => {
+              this.vm.changeBitrate(option.bitrate)
+            },
+            stopCast: () => {
+              this.vm.stopCast()
+            },
+            onEpisodeChange: (index: number) => {
+              this.vm.changeEpisode(index)
+            }
+          }).width('100%')
+            .height('100%')
+        } else {
+          PlayerView({
+            videoUrl: this.ui.url,
+            onNext: () => {
+              this.vm.queueManager.next()
+            },
+            onAudioTrackSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectAudioTrack(stream)
+            },
+            onSubtitleSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
+            },
+            onQualitySelected: (option: QualityOption) => {
+              this.vm.changeBitrate(option.bitrate)
+            },
+            stopCast: () => {
+              this.vm.stopCast()
+            },
+            onEpisodeChange: (index: number) => {
+              this.vm.changeEpisode(index)
+            }
+          }).width('100%')
+            .height('100%')
+        }
       }
     }
     .alignContent(Alignment.Top)
