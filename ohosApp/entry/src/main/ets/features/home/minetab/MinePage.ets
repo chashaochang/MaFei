@@ -8,6 +8,8 @@ import { MineTab } from "./MineTab"
 @ComponentV2
 export struct MinePage {
   build() {
-    MineTab()
+    MineTab({
+      fromHome: true
+    })
   }
 }

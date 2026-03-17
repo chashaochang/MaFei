@@ -8,9 +8,11 @@ import { RouterConsts } from "../../../common/RouterConsts"
 import { getUIAbilityContext } from "../../../common/CommonFunc"
 import { wantConstant } from "@kit.AbilityKit"
 import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
+import { ActionBar } from "../../../component/ActionBar"
 
 @ComponentV2
 export struct MineTab {
+  @Param fromHome: boolean = false
   @Local ui: MineUIState = new MineUIState(this.getUIContext())
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
@@ -24,7 +26,10 @@ export struct MineTab {
 
   build() {
     Stack() {
-      Image($r('app.media.bg_mine')).width('100%').objectFit(ImageFit.Contain)
+      Image($r('app.media.bg_mine'))
+        .width('100%')
+        .objectFit(ImageFit.Contain)
+        .visibility(this.vm.appUIState.currentBreakpoint.includes('sm') ? Visibility.Visible : Visibility.None)
       Scroll() {
         Column({ space: 16 }) {
           Blank().height(this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT)
@@ -72,15 +77,15 @@ export struct MineTab {
           })
 
           ListGroup({
-            items: [new BaseGroupItem('切换账号',$r('app.media.ic_account_switch')),
-              new BaseGroupItem('网(Web)易通',$r('app.media.web'))],
+            items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch')),
+              new BaseGroupItem('网(Web)易通', $r('app.media.web'))],
             onItemClick: (index) => {
-              switch (index){
-                case 0:{
+              switch (index) {
+                case 0: {
                   HMRouterMgr.to(RouterConsts.AccountPage).push()
                   break
                 }
-                case 1:{
+                case 1: {
                   HMRouterMgr.to(RouterConsts.WebITongPage).push()
                   break
                 }
@@ -95,7 +100,7 @@ export struct MineTab {
           })
           ListGroup({
             items: [
-              new BaseGroupItem('隐私协议',$r('app.media.ic_yinsi')),
+              new BaseGroupItem('隐私协议', $r('app.media.ic_yinsi')),
               new BaseGroupItem('加入群聊', $r('app.media.add_group')),
               new BaseGroupItem('关于我们', $r('app.media.about'), this.ui.versionName, false)
             ],
@@ -147,12 +152,17 @@ export struct MineTab {
       //Header
       Stack() {
         Image($r('app.media.bg_mine')).width('100%').aspectRatio(780 / 556).backgroundColor($r('app.color.bg_main'))
+          .visibility(this.vm.appUIState.currentBreakpoint.includes('sm') ? Visibility.Visible : Visibility.None)
       }.width('100%').align(Alignment.Top)
       .height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
       .clip(true)
 
       Row() {
-        Blank()
+        ActionBar({
+          title: '我的',
+          showBackButton: true
+        }).visibility(this.fromHome ? Visibility.Visible : Visibility.None)
+        //Blank()
         // Image($r('app.media.ic_setting'))
         //   .width(40)
         //   .height(40)
