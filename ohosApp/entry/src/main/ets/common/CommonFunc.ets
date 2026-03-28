@@ -65,6 +65,13 @@ export function getItemBackDropImageUrl(e: BaseItemDto): string | null {
     }
   }
 
+  if (e.ImageTags) {
+    // 如果有 ImageTags，说明 Jellyfin 端确实有图，尝试用 Primary（通常是剧集/电影主图）
+    if (e.ImageTags[ImageType.Primary]) {
+      return getUrl(e.Id, ImageType.Primary);
+    }
+  }
+
   // 普通条目，尝试多种图片类型优先级
   const preferredTypes: ImageType[] = [
     ImageType.Backdrop,
