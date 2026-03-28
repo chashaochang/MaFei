@@ -8,28 +8,23 @@ export class Constants {
    *  Cast playing initial
    */
   static readonly PLAYBACK_STATE_INITIAL: number = 0;
-
   /**
    *  Cast playing prepare
    */
   static readonly PLAYBACK_STATE_PREPARE: number = 1;
-
   /**
    *  Cast playing pause
    */
   static readonly PLAYBACK_STATE_PAUSE: number = 3;
-
   /**
    *  Cast playing stop
    */
   static readonly PLAYBACK_STATE_STOP: number = 6;
-
   /**
    *  Cast playing play
    */
   static readonly PLAYBACK_STATE_PLAY: number = 2;
-
-  static readonly APP_INFO_NAME = "HomoFin"
+  static readonly APP_INFO_NAME = "马飞"
   // Webapp constants
   static readonly INITIAL_CONNECTION_TIMEOUT = 10000 // 10 seconds
 
@@ -42,7 +37,6 @@ export class Constants {
   static readonly PREF_COLOR_MODE = "pref_color_mode"
   static readonly PREF_PLAYER_ENGINE = "pref_player_engine"
   static readonly PREF_SEARCH_HISTORY = "pref_search_history"
-
   static readonly MAIN_BUNDLE_PATH_REGEX =
     /.*\/main\.[^/\s]+\.bundle\.js/ //new Regex(""".*/main\.[^/\s]+\.bundle\.js""")
   static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'

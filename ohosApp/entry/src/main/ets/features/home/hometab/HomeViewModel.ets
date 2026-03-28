@@ -203,7 +203,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
 
   private getLatestList(): Promise<void> {
     const mediaList = this.ui.mediaList
-    const itemsToFetch = mediaList.filter(item => item.type != BaseItemKind.LiveTvChannel)
+    const itemsToFetch =
+      mediaList.filter(item => (item.type != BaseItemKind.LiveTvChannel && item.type != BaseItemKind.Audio))
     if (itemsToFetch.length === 0) {
       return Promise.resolve()
     }

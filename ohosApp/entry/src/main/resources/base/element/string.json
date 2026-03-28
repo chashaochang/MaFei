@@ -14,7 +14,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "HomoFin"
+      "value": "马飞"
     },
     {
       "name": "Play",
@@ -154,46 +154,15 @@
     },
     {
       "name": "splash_sub_title",
-      "value": "HomoFin"
-    },    {
+      "value": "马飞"
+    },
+    {
       "name": "button_agree",
       "value": "同意"
     },
     {
       "name": "button_cancel",
       "value": "取消"
-    },
-    {
-      "name": "safe_desc1_str1",
-      "value": "本应用需"
-    },
-    {
-      "name": "safe_desc1_str2",
-      "value": "联网"
-    },
-    {
-      "name": "safe_desc1_str3",
-      "value": "调用"
-    },
-    {
-      "name": "safe_desc1_str4",
-      "value": "XX、XX"
-    },
-    {
-      "name": "safe_desc1_str5",
-      "value": ",我们非常重视您的隐私保护,我们将严格遵守相关法律法规,保护您的个人信息安全.请仔细阅读"
-    },
-    {
-      "name": "safe_desc1_str6",
-      "value": "HomoFin隐私政策声明"
-    },
-    {
-      "name": "safe_desc1_str7",
-      "value": "了解我们的隐私保护措施."
-    },
-    {
-      "name": "safe_desc2",
-      "value": "请仔细阅读以上声明。点击\"同意\"，即表示您同意HomoFin隐私协议。"
     },
     {
       "name": "welcome_to_use",

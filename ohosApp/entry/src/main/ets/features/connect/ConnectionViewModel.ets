@@ -8,7 +8,7 @@ import { ApiClient } from "../../network/ApiClient";
 import connectionHelper from "../../setup/ConnectionHelper";
 import { CheckUrlStateType, Pending, Success } from "../../ui/state/CheckUrlState";
 import { ConnectionUIState } from "./ConnectionUIState";
-import { ServerSuggestion, Type } from "./ServerSuggestion";
+import { ServerSuggestion, Type } from "../serverdiscovery/ServerSuggestion";
 import { asset } from "@kit.AssetStoreKit";
 import { stringToArray } from "../../common/CommonFunc";
 import { util } from "@kit.ArkTS";
@@ -40,29 +40,6 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
       this.ui.rememberPwd = username.length > 0 && passwd.length > 0
     }
     this.ui.username = username
-    let previousServers = this.apiClientController.loadPreviouslyUsedServers()
-    // Suggest saved servers
-    this.ui.serverSuggestions = previousServers.map(server => {
-      return {
-        type: Type.SAVED,
-        name: server.hostname,
-        address: server.hostname,
-        timestamp: server.lastUsedTimestamp
-      } as ServerSuggestion
-    })
-    // Prepend discovered servers to suggestions
-    let servers = await connectionHelper.discoverServers()
-    servers.forEach(serverInfo => {
-      this.ui.serverSuggestions = [
-        {
-          type: Type.DISCOVERED,
-          name: serverInfo.Name ?? "",
-          address: serverInfo.Address ?? '',
-          timestamp: new Date().getTime()
-        },
-        ...this.ui.serverSuggestions.filter(existing => existing.address !== serverInfo.Address)
-      ];
-    })
   }
 
   onLogin(isFromAddAccount: boolean) {
@@ -125,7 +102,7 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         Pw: this.ui.password
       }
     }).then((result: AxiosResponse<AuthenticationResult>) => {
-      if(result){
+      if (result) {
         this.ui.loading = false
         AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
         if (this.ui.rememberPwd) {

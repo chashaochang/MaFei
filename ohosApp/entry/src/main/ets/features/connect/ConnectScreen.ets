@@ -4,7 +4,7 @@ import { ActionBar } from "../../component/ActionBar"
 import { ConnectionUIState } from "./ConnectionUIState"
 import { ConnectionViewModel } from "./ConnectionViewModel"
 import { ServerSelectionMode } from "../../ui/state/ServerSelectionMode"
-import { ServerSuggestion } from "./ServerSuggestion"
+import { ServerSuggestion } from "../serverdiscovery/ServerSuggestion"
 import { KeyCode } from "@kit.InputKit"
 import { CheckUrlStateType, Unchecked, Error } from "../../ui/state/CheckUrlState"
 import { inputMethod } from "@kit.IMEKit"
@@ -35,40 +35,25 @@ export struct ConnectScreen {
         })
         LogoHeader()
         Column() {
-          if (this.ui.serverSelectionMode === ServerSelectionMode.ADDRESS) {
-            AddressSelection({
-              text: this.ui.hostname,
-              errorText: this.showExternalConnectionError ? '无法建立连接。 请检查主机名和你的网络连接。' :
-                (this.ui.checkUrlState.type === CheckUrlStateType.Error ? (this.ui.checkUrlState as Error).message :
-                  undefined),
-              loading: this.ui.checkUrlState.type === CheckUrlStateType.Pending,
-              onTextChange: (value: string) => {
-                this.ui.externalError = false
-                this.ui.checkUrlState = new Unchecked()
-                this.ui.hostname = value
-              },
-              onDiscoveryClick: () => {
-                this.ui.externalError = false
-                inputMethod.getController().hideTextInput()
-                this.ui.serverSelectionMode = ServerSelectionMode.AUTO_DISCOVERY
-              },
-              onSubmit: () => {
+          AddressSelection({
+            text: this.ui.hostname,
+            errorText: this.showExternalConnectionError ? '无法建立连接。 请检查主机名和你的网络连接。' :
+              (this.ui.checkUrlState.type === CheckUrlStateType.Error ? (this.ui.checkUrlState as Error).message :
+                undefined),
+            loading: this.ui.checkUrlState.type === CheckUrlStateType.Pending,
+            onTextChange: (value: string) => {
+              this.ui.externalError = false
+              this.ui.checkUrlState = new Unchecked()
+              this.ui.hostname = value
+            },
+            onDiscoveryClick: () => {
+              this.ui.externalError = false
+              inputMethod.getController().hideTextInput()
+            },
+            onSubmit: () => {
 
-              }
-            })
-          } else {
-            ServerDiscoveryList({
-              serverSuggestions: this.ui.serverSuggestions,
-              onGoBack: () => {
-                this.ui.serverSelectionMode = ServerSelectionMode.ADDRESS
-              },
-              onSelectServer: (url: string) => {
-                this.ui.hostname = url
-                this.ui.serverSelectionMode = ServerSelectionMode.ADDRESS
-                //this.onSubmit()
-              },
-            }).height('100%')
-          }
+            }
+          })
         }.alignItems(HorizontalAlign.Start).width('100%').margin({ top: 30 })
         .constraintSize({
           maxWidth: 375,
@@ -112,6 +97,7 @@ export struct ConnectScreen {
           })
 
           if (!this.ui.loading) {
+            Blank().height(20)
             StyledTextButton({
               text: '登录',
               enable: this.ui.username.length > 0 && this.ui.password.length > 0,
@@ -126,6 +112,17 @@ export struct ConnectScreen {
               Text('正在登录...').fontColor(Color.Gray).padding({ left: 12 })
             }.padding({ top: 24 })
           }
+          Text("发现局域网内的设备").fontSize(12).fontColor($r('app.color.text_2')).padding({ top: 24, bottom: 8 })
+            .onClick(() => {
+              HMRouterMgr.to(RouterConsts.ServerDiscoveryPage)
+                .onResult((res) => {
+                  if (res && res.result) {
+                    this.ui.hostname = res.result as string
+                    inputMethod.getController().showTextInput()
+                  }
+                })
+                .push()
+            })
         }.width('100%').alignItems(HorizontalAlign.Start)
         .constraintSize({
           maxWidth: 375,
@@ -135,7 +132,10 @@ export struct ConnectScreen {
       .height('100%')
       .justifyContent(FlexAlign.Start)
       .padding({ left: 16, right: 16 })
-    }.height('100%').width('100%').scrollable(ScrollDirection.Vertical)
+    }
+    .height('100%')
+    .width('100%')
+    .scrollable(ScrollDirection.Vertical)
     .align(Alignment.Top)
     .backgroundColor($r('app.color.bg_main'))
   }
@@ -145,9 +145,9 @@ export struct ConnectScreen {
 export struct LogoHeader {
   build() {
     Column() {
-      Image($r('app.media.app_icon')).height(100)
-      Text($r('app.string.app_name')).fontColor($r('app.color.text_primary')).fontSize(24).fontWeight(FontWeight.Bold)
-    }.padding({ top: 10, bottom: 10 })
+      Image($r('app.media.app_icon')).height(70)
+      Text($r('app.string.app_name')).fontColor($r('app.color.text_primary')).fontSize(18).fontWeight(FontWeight.Medium)
+    }.padding({ bottom: 2 })
   }
 }
 
@@ -213,7 +213,7 @@ export struct StyledTextButton {
       .borderRadius(8)
       .backgroundColor(0x317aff)
       .width('100%')
-      .height(56)
+      .height(48)
       .onClick(() => this.onclick())
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
@@ -304,63 +304,5 @@ struct ServerUrlField {
           }).push()
         })
     }.height(56).alignContent(Alignment.End)
-  }
-}
-
-@ComponentV2
-struct ServerDiscoveryList {
-  @Param @Require serverSuggestions: ServerSuggestion[]
-  @Param @Require onGoBack: () => void
-  @Param @Require onSelectServer: (url: string) => void
-
-  build() {
-    Column() {
-      Row() {
-        Button() {
-          Image($r('app.media.icon_back')).width(40).height(40)
-        }.backgroundColor(Color.Transparent).onClick(() => {
-          this.onGoBack()
-        }).size({ width: 40, height: 40 })
-
-        Text('现有服务器').layoutWeight(1).padding(8).fontColor(Color.White)
-        LoadingProgress().margin({
-          left: 12, right: 12
-        }).width(24).height(24)
-      }
-
-      Blank().height(8)
-      Column() {
-        Repeat<ServerSuggestion>(this.serverSuggestions).each((obj: RepeatItem<ServerSuggestion>) => {
-          ServerDiscoveryItem({
-            serverSuggestion: obj.item,
-            onClickServer: () => {
-              this.onSelectServer(obj.item.address)
-            }
-          })
-        })
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .margin({ bottom: 16 })
-      .backgroundColor('#363636')
-      .borderRadius(4)
-    }.height('100%')
-  }
-}
-
-
-@ComponentV2
-struct ServerDiscoveryItem {
-  @Param @Require serverSuggestion: ServerSuggestion
-  @Param @Require onClickServer: () => void
-
-  build() {
-    Column() {
-      Text(this.serverSuggestion.name).fontColor(Color.White).fontSize(18)
-      Text(this.serverSuggestion.address).fontColor(Color.Gray).fontSize(16)
-    }.width('100%')
-    .padding(10).alignItems(HorizontalAlign.Start).onClick(() => {
-      this.onClickServer()
-    })
   }
 }
