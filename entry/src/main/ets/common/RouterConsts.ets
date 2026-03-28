@@ -1,7 +1,6 @@
 export class RouterConsts {
   static readonly SplashPage = 'SplashPage'
   static readonly IndexPage = 'IndexPage'
-  static readonly SafePage = 'SafePage'
   static readonly AddGroupPage = 'AddGroupPage';
   static readonly PrivacyPage = 'PrivacyPage';
   static readonly AboutPage = 'AboutPage';
@@ -20,5 +19,6 @@ export class RouterConsts {
   static readonly LiveTvChannelListPage = 'LiveTvChannelListPage'
   static readonly LiveTvPage = 'LiveTvPage'
   static readonly MinePage = 'MinePage'
+  static readonly ServerDiscoveryPage = 'ServerDiscoveryPage'
 
 }

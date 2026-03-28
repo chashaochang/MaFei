@@ -1,7 +1,7 @@
 import { BaseUIState } from "../../common/base/BaseUIState";
 import { CheckUrlState, Unchecked } from "../../ui/state/CheckUrlState";
 import { ServerSelectionMode } from "../../ui/state/ServerSelectionMode";
-import { ServerSuggestion } from "./ServerSuggestion";
+import { ServerSuggestion } from "../serverdiscovery/ServerSuggestion";
 
 @ObservedV2
 export class ConnectionUIState extends BaseUIState {
@@ -11,8 +11,6 @@ export class ConnectionUIState extends BaseUIState {
   @Trace errorText: string = ''
   @Trace rememberPwd: boolean = false;
   @Trace hostname: string = ''
-  @Trace serverSelectionMode: ServerSelectionMode = ServerSelectionMode.ADDRESS
   @Trace externalError: boolean = false
   @Trace checkUrlState: CheckUrlState = new Unchecked()
-  @Trace serverSuggestions: ServerSuggestion[] = []
 }

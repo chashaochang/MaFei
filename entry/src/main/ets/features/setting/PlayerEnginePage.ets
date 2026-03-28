@@ -13,13 +13,13 @@ export struct PlayerEnginePage {
   list: Array<PlayerEngineItem> = [
     new PlayerEngineItem(
       PlayerEngineType.IJK,
-      $r('app.media.movie'),
+      $r('app.media.ijk'),
       $r('app.string.player_engine_ijk'),
       '兼容性好，支持更多格式'
     ),
     new PlayerEngineItem(
       PlayerEngineType.AV,
-      $r('app.media.tv'),
+      $r('app.media.hmos'),
       $r('app.string.player_engine_av'),
       '鸿蒙原生播放器'
     )
@@ -45,25 +45,25 @@ export struct PlayerEnginePage {
             GridItem() {
               Column() {
                 Image(item.imageSrc)
-                  .width(74)
+                  .width(48)
                   .objectFit(ImageFit.Contain)
                   .borderRadius(8)
                   .borderWidth(0.5)
                   .borderColor($r('app.color.border_input'))
-                Blank().height(6)
+                  .fillColor($r('app.color.text_primary'))
+                Blank().height(12)
                 Text(item.title).fontSize(14).fontColor($r('app.color.text_primary'))
                 Blank().height(6)
                 Radio({ value: item.type, group: 'playerEngineGroup' }).checked(this.selectIndex == index)
-                  .onChange(() => {
-                    this.selectIndex = index
-                    AppPreference.getInstance().setPlayerEngineType(item.type)
-                  })
-              }
+              }.onClick(() => {
+                this.selectIndex = index
+                AppPreference.getInstance().setPlayerEngineType(item.type)
+              })
             }
           })
         }
         .width('100%')
-        .height(200)
+        .height(150)
         .columnsTemplate('1fr 1fr')
         .backgroundColor($r('app.color.bg_1'))
         .borderRadius(12)
@@ -80,7 +80,7 @@ export struct PlayerEnginePage {
       Text(this.list[this.selectIndex].tip)
         .fontSize(12)
         .fontColor($r('app.color.text_1'))
-        .margin({ top: 10 })
+        .margin({ top: 20 })
     }.width('100%')
     .height('100%')
     .backgroundColor($r('app.color.start_window_background'))
