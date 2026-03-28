@@ -14,10 +14,6 @@ import { RouterConsts } from '../../common/RouterConsts';
 @ComponentV2
 export struct SplashPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-  private preferenceManager: AppPreference = AppPreference.getInstance();
-  isAgreedPrivacy: boolean =
-    HMRouterMgr.getCurrentParam() ? (HMRouterMgr.getCurrentParam() as Record<string, boolean>)['isAgreedPrivacy'] :
-      false
 
   aboutToAppear(): void {
     this.appUIState.customColorMode = AppPreference.getInstance().getCustomColorMode()
@@ -40,29 +36,13 @@ export struct SplashPage {
     } catch (e) {
       console.error('Index', 'onCustomColorModeChanged error:' + e)
     }
-    setTimeout(() => {
-      this.checkAgreedPrivacy();
-    }, 0);
+    this.init()
   }
 
   init(): void {
     setTimeout(() => {
       this.jump();
     }, SplashConstants.LOADING_RESOURCE_DURATION);
-  }
-
-  checkAgreedPrivacy(): void {
-    if (this.isAgreedPrivacy) {
-      this.preferenceManager.setValue('isAgreedPrivacy', true)
-      this.init();
-    } else {
-      let isAgreed = this.preferenceManager.getValue<boolean>('isAgreedPrivacy')
-      if (isAgreed) {
-        this.init();
-      } else {
-        HMRouterMgr.to(RouterConsts.SafePage).replace()
-      }
-    }
   }
 
   jump(): void {
@@ -81,19 +61,6 @@ export struct SplashPage {
         }), TransitionEffect.OPACITY.animation({
           duration: 0
         })))
-
-      Column() {
-        Text($r('app.string.splash_sub_title'))
-          .fontColor($r('app.color.text_primary'))
-          .fontSize($r('app.float.splash_title_text_size'))
-          .fontWeight(SplashConstants.BUTTON_FONT_WEIGHT)
-      }
-      .transition(TransitionEffect.asymmetric(TransitionEffect.OPACITY.animation({
-        duration: SplashConstants.SPLASH_OPACITY_DURATION,
-        curve: Curve.Ease
-      }), TransitionEffect.OPACITY.animation({
-        duration: 0
-      })))
     }
     .justifyContent(FlexAlign.Center)
     .backgroundColor($r('app.color.start_window_background'))

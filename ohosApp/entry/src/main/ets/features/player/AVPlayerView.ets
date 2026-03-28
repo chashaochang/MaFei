@@ -148,6 +148,8 @@ export struct AVPlayerView {
   @Local duration: number = 0
   @Local currentPosition: number = 0
   @Local videoAspectRatio: number = 16 / 9
+  @Local videoWidth: string = '100%'
+  private videoParentAspectRatio: number = 16 / 9
   @Local fullShowLock: boolean = false
   @Local lock: boolean = false
   @Local playSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
@@ -485,6 +487,20 @@ export struct AVPlayerView {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
 
+  private setVideoWH(videoW: number, videoH: number): void {
+    if (!videoW || !videoH || videoH === 0) {
+      return
+    }
+    const va = videoW / videoH
+    this.videoAspectRatio = va
+    const vpa = this.videoParentAspectRatio
+    if (vpa > 0 && vpa > va) {
+      this.videoWidth = (videoW / (videoH * vpa)) * 100 + '%'
+    } else {
+      this.videoWidth = '100%'
+    }
+  }
+
   private setAVPlayerCallbacks(player: media.AVPlayer) {
     player.on('stateChange', async (state: string) => {
       switch (state) {
@@ -497,6 +513,10 @@ export struct AVPlayerView {
           break
         case 'prepared':
           this.ui.playerStatus = PlayerStatus.PREPARED
+          // 用真实视频宽高更新显示区域，避免画面被拉伸变形
+          if (player.width && player.height) {
+            this.setVideoWH(player.width, player.height)
+          }
           this.duration = player.duration
           this.totalTime = this.formatTime(this.duration)
           this.slideEnable = true
@@ -506,6 +526,10 @@ export struct AVPlayerView {
           this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
           this.ui.playerStatus = PlayerStatus.PLAYING
           this.loadingVisible = Visibility.None
+          // 部分流在 prepared 时拿不到宽高，这里再兜底一次
+          if (player.width && player.height) {
+            this.setVideoWH(player.width, player.height)
+          }
           if (this.ui.subtitles.length > 0) {
             this.startSubTitle()
           }
@@ -1180,7 +1204,7 @@ export struct AVPlayerView {
           .onDestroy(() => {
             this.stop()
           })
-          .width('100%')
+          .width(this.videoWidth)
           .aspectRatio(this.videoAspectRatio)
           .id('avplayer_xcomponent')
           .onClick(() => {
@@ -1339,6 +1363,12 @@ export struct AVPlayerView {
     .onAreaChange((_oldValue: Area, newValue: Area) => {
       avChangeWidth = newValue.width as number
       avChangeHeight = newValue.height as number
+      if (avChangeHeight && avChangeHeight > 0) {
+        this.videoParentAspectRatio = avChangeWidth / avChangeHeight
+        if (this.avPlayer && this.avPlayer.width && this.avPlayer.height) {
+          this.setVideoWH(this.avPlayer.width, this.avPlayer.height)
+        }
+      }
       if (this.vm.appUIState.isFullScreen) {
         this.fullShowLock = true
       }

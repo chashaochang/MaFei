@@ -76,7 +76,10 @@ export struct PlayerPage {
     this.vm.ui.playerMenus?.onQueueItemChanged(mediaSource, this.vm.queueManager.hasNext())
   }
 
-  async aboutToAppear(): Promise<void> {
+  aboutToAppear(): void {
+    if (OneMoreUtil.isPc()) {
+      this.options = this.lifecycle.options
+    }
     if (OneMoreUtil.isBigScreen()) {
       if (this.vm.appUIState.orientation == display.Orientation.LANDSCAPE ||
         this.vm.appUIState.orientation == display.Orientation.LANDSCAPE_INVERTED) {

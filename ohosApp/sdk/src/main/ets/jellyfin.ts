@@ -11,11 +11,12 @@ export interface JellyfinParameters {
   clientInfo: ClientInfo,
   deviceInfo: DeviceInfo
 }
+
 /** Class representing the Jellyfin SDK. */
 export class Jellyfin {
   clientInfo: ClientInfo;
-  deviceInfo:DeviceInfo;
-  discovery:DiscoveryService;
+  deviceInfo: DeviceInfo;
+  discovery: DiscoveryService;
 
   constructor(parameters: JellyfinParameters) {
     this.clientInfo = parameters.clientInfo;
@@ -38,7 +39,7 @@ export class Jellyfin {
 // Create a new instance of the SDK
 const jellyfin = new Jellyfin({
   clientInfo: {
-    name: 'HomoFin',
+    name: 'MaFei',
     version: bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName
   },
   deviceInfo: {

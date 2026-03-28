@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.cer",
+          "certpath": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BAB60C1BDA34BF82CBCE481D26EBF5B4F889FC604445C7B9250F21A4C79ABA1252D67BADCB2A218",
-          "profile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p7b",
+          "keyPassword": "0000001BFAF9B39BE8A3F725E6852F32D7111DA79F0430DC015231367B4B1F71FBFA8E6F959990D77CC23F",
+          "profile": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/machunjiang/.ohos/config/default_HomoFin_so9xdL0pTG0ZZ-RUnN_X0jvrFR7TxTAXkR6QQ0QymKA=.p12",
-          "storePassword": "0000001B7142E64B03EBF6EEB32B0346DB678D5444D6C809D3BCB0CEF5E37BF4DA96651E6A9B009C75306F"
+          "storeFile": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.p12",
+          "storePassword": "0000001BFA7DBFB0F1DC54C5D0B5C7A0370B8481D182ED649E355F3F01B2929D153A04018407E0C1D93E18"
         }
       }
     ],
@@ -19,7 +19,7 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "6.0.0(20)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
@@ -27,27 +27,27 @@
             "useNormalizedOHMUrl": true
           }
         },
-        "targetSdkVersion": "6.1.0(23)"
+        "targetSdkVersion": "6.0.0(20)"
       },
       {
         "name": "release",
         "compatibleSdkVersion": "6.0.1(21)",
         "runtimeOS": "HarmonyOS",
-        "bundleName": "cn.xiaobai.jellyfin",
+        "bundleName": "cn.xiaobai.mafei",
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
         "versionCode": 1000009,
         "versionName": "1.0.9",
         "output": {
-          "artifactName": "HomoFin_Release"
+          "artifactName": "Mafei_Release"
         },
         "buildOption": {
           "strictMode": {
             "useNormalizedOHMUrl": true
           }
         },
-        "targetSdkVersion": "6.1.0(23)"
+        "targetSdkVersion": "6.0.0(20)"
       }
     ],
     "buildModeSet": [
