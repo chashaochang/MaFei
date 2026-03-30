@@ -3,7 +3,7 @@ import { QualityOption } from '../../player/qualityoptions/QualityOption'
 import { PlayerPageUIState } from './PlayerPageUIState'
 import { PlayerPageViewModel } from './PlayerPageViewModel'
 import { PlayStatus, PlayerStatus } from './PlayStatus'
-import { MpvNativePlayer } from '../../player/mpv/MpvNative'
+import { MpvNativePlayer } from 'mpvplayer'
 import { AppPreference } from '../../data/AppPreference'
 
 const PROGRESS_MAX_VALUE: number = 100
