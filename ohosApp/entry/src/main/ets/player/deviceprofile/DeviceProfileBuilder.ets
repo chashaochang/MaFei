@@ -283,17 +283,27 @@ export class DeviceProfileBuilder {
     {
       Format: 'vtt',
       Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'pgs',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'pgssub',
+      Method: SubtitleDeliveryMethod.Embed
     }
   ]
 
   private createProfile(nameSuffix: string, directPlayProfiles: Array<DirectPlayProfile>,
-    subtitleProfiles: Array<SubtitleProfile>, transcodingProfiles: Array<TranscodingProfile> = this.commonTranscodingProfiles): DeviceProfile {
+    subtitleProfiles: Array<SubtitleProfile>,
+    transcodingProfiles: Array<TranscodingProfile> = this.commonTranscodingProfiles,
+    codecProfiles: Array<CodecProfile> = []): DeviceProfile {
     return {
       Name: `${Constants.APP_INFO_NAME}-${nameSuffix}`,
       DirectPlayProfiles: directPlayProfiles,
       TranscodingProfiles: transcodingProfiles,
       ContainerProfiles: [],
-      CodecProfiles: [hevcExcludeDOVI],
+      CodecProfiles: codecProfiles,
       SubtitleProfiles: subtitleProfiles,
       MaxStreamingBitrate: MAX_STREAMING_BITRATE,
       MaxStaticBitrate: MAX_STATIC_BITRATE,
@@ -308,7 +318,8 @@ export class DeviceProfileBuilder {
     if (playerEngineType === PlayerEngineType.MPV) {
       return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles)
     }
-    return this.createProfile('ijkplayer', this.ijkDirectPlayProfiles, this.ijkSubtitleProfiles)
+    return this.createProfile('ijkplayer', this.ijkDirectPlayProfiles, this.ijkSubtitleProfiles, this.commonTranscodingProfiles,
+      [hevcExcludeDOVI])
   }
 
   getLiveTvProfile(): DeviceProfile{

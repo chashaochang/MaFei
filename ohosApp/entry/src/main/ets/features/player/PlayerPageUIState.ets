@@ -51,6 +51,7 @@ export class PlayerPageUIState extends BaseUIState{
   playWhenReady: boolean = true
   //初始进度
   initSeek: number = 0
+  @Trace playbackPositionMs: number = 0
   @Trace CONTROL_PlayStatus: number = PlayStatus.INIT;
   @Trace audioTrackIndex?: number | null = null
   @Trace playerStatus: number = PlayerStatus.IDLE

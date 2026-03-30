@@ -73,6 +73,7 @@ napi_value GetSubtitleTracks(napi_env env, napi_callback_info info) {
         int track_id = -1;
         const char *title = nullptr;
         const char *lang = nullptr;
+        const char *codec = nullptr;
         bool external = false;
         
         for (int j = 0; j < map->num; j++) {
@@ -85,28 +86,32 @@ napi_value GetSubtitleTracks(napi_env env, napi_callback_info info) {
                 title = val->u.string;
             } else if (strcmp(key, "lang") == 0 && val->format == MPV_FORMAT_STRING) {
                 lang = val->u.string;
+            } else if (strcmp(key, "codec") == 0 && val->format == MPV_FORMAT_STRING) {
+                codec = val->u.string;
             } else if (strcmp(key, "external") == 0 && val->format == MPV_FORMAT_FLAG) {
                 external = (bool)val->u.flag;
             }
         }
-        
+
         // Set object properties
-        napi_value id_val, title_val, lang_val, external_val;
+        napi_value id_val, title_val, lang_val, codec_val, external_val;
         napi_create_int32(env, track_id, &id_val);
         napi_create_string_utf8(env, title ? title : "", NAPI_AUTO_LENGTH, &title_val);
         napi_create_string_utf8(env, lang ? lang : "unknown", NAPI_AUTO_LENGTH, &lang_val);
+        napi_create_string_utf8(env, codec ? codec : "", NAPI_AUTO_LENGTH, &codec_val);
         napi_get_boolean(env, external, &external_val);
-        
+
         napi_set_named_property(env, subtitle_obj, "id", id_val);
         napi_set_named_property(env, subtitle_obj, "title", title_val);
         napi_set_named_property(env, subtitle_obj, "lang", lang_val);
+        napi_set_named_property(env, subtitle_obj, "codec", codec_val);
         napi_set_named_property(env, subtitle_obj, "external", external_val);
         
         // Add to result array
         napi_set_element(env, result, array_index++, subtitle_obj);
         
-        OH_LOG_INFO(LOG_APP, "[GetSubtitleTracks] Found subtitle: id=%{public}d, lang=%{public}s, title=%{public}s", 
-            track_id, lang ? lang : "unknown", title ? title : "");
+        OH_LOG_INFO(LOG_APP, "[GetSubtitleTracks] Found subtitle: id=%{public}d, lang=%{public}s, codec=%{public}s, title=%{public}s",
+            track_id, lang ? lang : "unknown", codec ? codec : "unknown", title ? title : "");
     }
     
     mpv_free_node_contents(&tracks);

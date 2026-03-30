@@ -40,6 +40,8 @@ import { CommentData, CommentResponseV2 } from "./danmu/CommentResponseV2";
 import { DanDanPlayParser } from "./danmu/DandanPlayParser";
 import { SearchBangumiResponse } from "./danmu/SearchBangumiResponse";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
+import { AppPreference } from "../../data/AppPreference";
+import { PlayerEngineType } from "../../entity/PlayerEngineType";
 
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
@@ -75,10 +77,15 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       .setScaleTextSize(this.appUIState.isFullScreen? 1 : 0.8)
   }
 
+  private isMpvEngine(): boolean {
+    return AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.MPV
+  }
+
   @Monitor('mediaSourceOrNull')
   onMediaSourceChanged() {
     let source = this.mediaSourceOrNull
     if (source) {
+      console.warn(`[PlayerVM] source changed engine=${this.isMpvEngine() ? 'mpv' : 'other'}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}`)
       this.ui.audioTrackIndex = source.audioStreamIndex
       this.ui.title = source.name
       this.ui.seriesName = source.item.SeriesName
@@ -94,7 +101,9 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       } else {
         //qualityButton.isVisible = false
       }
-      this.searchDanmuku()
+      if (!this.isMpvEngine()) {
+        this.searchDanmuku()
+      }
     }
   }
 
@@ -309,7 +318,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     let hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
     let lastPositionTicks =
       hasFinished ? mediaSource.runTimeTicks :
-        IjkMediaPlayer.getInstance().getCurrentPosition() * Constants.TICKS_PER_MILLISECOND
+        (this.isMpvEngine() ? this.ui.playbackPositionMs : IjkMediaPlayer.getInstance().getCurrentPosition()) * Constants.TICKS_PER_MILLISECOND
     let playStateApi = getPlaystateApi(ApiClient.Instance())
     await playStateApi.reportPlaybackStopped({
       playbackStopInfo: {
@@ -345,6 +354,11 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   getSubtitle(source: JellyfinMediaSource) {
+    if (this.isMpvEngine()) {
+      this.ui.currentSubtitle = ''
+      this.ui.subtitles = []
+      return
+    }
     if (source.playMethod == PlayMethod.Transcode) {
       this.ui.currentSubtitle = ''
       this.ui.subtitles = []
@@ -421,6 +435,9 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         'eventName': 'Pause'
       }
     })
+    if (this.isMpvEngine()) {
+      return this.ui.playbackPositionMs
+    }
     return IjkMediaPlayer.getInstance().getCurrentPosition()
   }
 

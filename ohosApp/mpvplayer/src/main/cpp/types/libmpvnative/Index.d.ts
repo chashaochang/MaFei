@@ -36,6 +36,7 @@ declare module 'libmpvnative.so' {
   export const reset: (mpvHandle: number) => void;
   export const command: (mpvHandle: number, args: Array<string>) => void;
   export const isInitialized: () => boolean;
+  export const isDestroying: () => boolean;
   export const loadVideo: (mpvHandle: number, url: string, startPosition?: number) => void;
   export const seek: (mpvHandle: number, seconds: number, exact: boolean) => void;
   export const pause: (playerId: number) => boolean;
