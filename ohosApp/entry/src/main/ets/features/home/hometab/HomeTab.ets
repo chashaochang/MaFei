@@ -98,13 +98,15 @@ export struct HomeTab {
           }
 
           Blank()
-          Image($r('app.media.iptv'))
-            .height(40)
-            .fillColor($r('app.color.text_primary'))
-            .padding(9)
-            .onClick(() => {
-              HMRouterMgr.to(RouterConsts.LiveTvPage).push()
-            })
+          if (this.ui.hasLiveTv) {
+            Image($r('app.media.iptv'))
+              .height(40)
+              .fillColor($r('app.color.text_primary'))
+              .padding(9)
+              .onClick(() => {
+                HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+              })
+          }
           SymbolGlyph($r('sys.symbol.magnifyingglass'))
             .fontSize(24)
             .fontWeight(FontWeight.Medium)
@@ -466,4 +468,3 @@ export struct HomeTab {
     })
   }
 }
-
