@@ -80,7 +80,7 @@ PS:闲暇时间写的,禁止催更!
 ## 代码相关
 
 - 服务器相关操作,把Jellyfin的<a href="https://github.com/jellyfin/jellyfin-sdk-typescript">TypeScript SDK</a>进行鸿蒙化后使用
-- 播放器经过尝试后采用<a href="https://ohpm.openharmony.cn/#/cn/detail/@ohos%2Fijkplayer">ijkPlayer</a>
+- 播放器经过尝试后采用系统 AVPlayer 与 mpv 双引擎方案
 - 播放控制页基于开源库<a href="https://gitee.com/openharmony-tpc/openharmony_tpc_samples/tree/master/GSYVideoPlayer">GSYVideoPlayer</a>修改
 - 弹窗使用<a href="https://github.com/xdd666t/ohos_smart_dialog">ohos_smart_dialog</a>
 

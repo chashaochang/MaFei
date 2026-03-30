@@ -250,20 +250,6 @@ export class DeviceProfileBuilder {
     }
   ]
 
-  private readonly ijkDirectPlayProfiles: Array<DirectPlayProfile> = [
-    {
-      Container: "mp4,m4v,mov,mkv,flv,ts,mpegts,3gp",
-      Type: DlnaProfileType.Video,
-      VideoCodec: "h264,hevc,mpeg4,mpeg2video,h263",
-      AudioCodec: "aac,mp3,ac3,eac3,flac,opus,vorbis",
-    },
-    {
-      Container: "mp3,aac,m4a,ogg,wav,flac",
-      Type: DlnaProfileType.Audio,
-      AudioCodec: "mp3,aac,flac,opus,vorbis,pcm_s16le",
-    }
-  ]
-
   private readonly mpvDirectPlayProfiles: Array<DirectPlayProfile> = [
     {
       Container: "mp4,m4v,mov,mkv,webm,ts,mpegts,flv,avi,3gp",
@@ -282,21 +268,6 @@ export class DeviceProfileBuilder {
     {
       Format: 'srt',
       Method: SubtitleDeliveryMethod.External
-    },
-    {
-      Format: 'vtt',
-      Method: SubtitleDeliveryMethod.External
-    }
-  ]
-
-  private readonly ijkSubtitleProfiles: Array<SubtitleProfile> = [
-    {
-      Format: 'ass',
-      Method: SubtitleDeliveryMethod.Embed
-    },
-    {
-      Format: 'srt',
-      Method: SubtitleDeliveryMethod.Embed
     },
     {
       Format: 'vtt',
@@ -353,12 +324,8 @@ export class DeviceProfileBuilder {
       return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles, this.avTranscodingProfiles,
         this.avCodecProfiles)
     }
-    if (playerEngineType === PlayerEngineType.MPV) {
-      return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles, this.commonTranscodingProfiles,
-        this.mpvCodecProfiles)
-    }
-    return this.createProfile('ijkplayer', this.ijkDirectPlayProfiles, this.ijkSubtitleProfiles, this.commonTranscodingProfiles,
-      [hevcExcludeDOVI])
+    return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles, this.commonTranscodingProfiles,
+      this.mpvCodecProfiles)
   }
 
   getLiveTvProfile(): DeviceProfile{

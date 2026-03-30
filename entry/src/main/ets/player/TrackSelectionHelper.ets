@@ -1,4 +1,3 @@
-import { IjkMediaPlayer } from "@ohos/ijkplayer";
 import {
   MediaStream,
   MediaStreamType,
@@ -69,13 +68,7 @@ export class TrackSelectionHelper {
     if (!mediaSource.selectAudioStream(audioStream)) {
       return false
     }
-    //let embeddedStreamIndex = mediaSource.getEmbeddedStreamIndex(audioStream)
-    if (this.viewModel.ui.audioTrackIndex && this.viewModel.ui.audioTrackIndex > 0) {
-      console.log(TAG,'deselectTrack:'+this.viewModel.ui.audioTrackIndex);
-      IjkMediaPlayer.getInstance().deselectTrack(this.viewModel.ui.audioTrackIndex + '')
-    }
-    console.log(TAG,'selectTrack:' + audioStream.Index);
-    IjkMediaPlayer.getInstance().selectTrack(audioStream.Index + '')
+    this.viewModel.ui.selectedAudioStream = audioStream
     return true
   }
 

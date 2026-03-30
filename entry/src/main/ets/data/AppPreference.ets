@@ -144,7 +144,7 @@ export class AppPreference {
     if (type !== null) {
       return type
     }
-    return PlayerEngineType.IJK
+    return PlayerEngineType.MPV
   }
 
   setMpvUseHardwareDecode(enabled: boolean) {
