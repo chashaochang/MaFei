@@ -21,6 +21,12 @@ import { display, window } from '@kit.ArkUI'
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
 const MPV_OSD_XCOMPONENT_ID: string = 'mpvPlayerOsdSurface'
+const MPV_PROGRESS_VISUAL_TRACK_LEFT_INSET: number = 12
+const MPV_PROGRESS_VISUAL_TRACK_RIGHT_INSET: number = 10
+const MPV_PROGRESS_TRACK_HEIGHT: number = 4
+const MPV_PROGRESS_BASE_COLOR: string = '#261F1F1F'
+const MPV_PROGRESS_CACHE_COLOR: string = '#CCFFFFFF'
+const MPV_PROGRESS_SLIDER_TRACK_COLOR: string = '#01000000'
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
 let mpvUiTime: number = 0
@@ -1398,15 +1404,26 @@ export struct MPVPlayerView {
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
           .margin({ left: 16, right: 8 })
-        Stack() {
+        Stack({ alignContent: Alignment.Center }) {
+          Progress({
+            value: PROGRESS_MAX_VALUE,
+            total: PROGRESS_MAX_VALUE,
+            type: ProgressType.Linear
+          })
+            .height(MPV_PROGRESS_TRACK_HEIGHT)
+            .width('100%')
+            .padding({ left: MPV_PROGRESS_VISUAL_TRACK_LEFT_INSET, right: MPV_PROGRESS_VISUAL_TRACK_RIGHT_INSET })
+            .color(MPV_PROGRESS_BASE_COLOR)
+
           Progress({
             value: this.cacheProgressValue,
             total: PROGRESS_MAX_VALUE,
             type: ProgressType.Linear
           })
-            .height(3)
+            .height(MPV_PROGRESS_TRACK_HEIGHT)
             .width('100%')
-            .color('#80FFFFFF')
+            .padding({ left: MPV_PROGRESS_VISUAL_TRACK_LEFT_INSET, right: MPV_PROGRESS_VISUAL_TRACK_RIGHT_INSET })
+            .color(MPV_PROGRESS_CACHE_COLOR)
 
           Slider({
             value: this.progressValue,
@@ -1415,10 +1432,16 @@ export struct MPVPlayerView {
             step: 1,
             style: SliderStyle.OutSet
           })
+            .width('100%')
+            .height(24)
             .layoutWeight(1)
             .blockColor(Color.White)
-            .trackColor(Color.Gray)
+            .blockSize({ width: 20, height: 20 })
+            .trackColor(MPV_PROGRESS_SLIDER_TRACK_COLOR)
             .selectedColor($r('app.color.color_main'))
+            .trackThickness(MPV_PROGRESS_TRACK_HEIGHT)
+            .trackBorderRadius(MPV_PROGRESS_TRACK_HEIGHT / 2)
+            .selectedBorderRadius(MPV_PROGRESS_TRACK_HEIGHT / 2)
             .showTips(true)
             .onChange((value: number, _mode?: SliderChangeMode) => {
               this.onSeek(value)
@@ -1627,7 +1650,7 @@ export struct MPVPlayerView {
               .height('100%')
               .id(MPV_OSD_XCOMPONENT_ID)
               .backgroundColor(Color.Transparent)
-              .visibility((this.showControls || this.ui.playerMenus?.isShowPlayBackInfo || this.loading || this.playbackCompleted)
+              .visibility((this.loading || this.playbackCompleted)
                 ? Visibility.Hidden
                 : Visibility.Visible)
               .onClick(() => {
