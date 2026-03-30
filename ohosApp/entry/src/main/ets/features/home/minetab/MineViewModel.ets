@@ -82,7 +82,9 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
 
   getPlayerEngineName() {
     const engineType = AppPreference.getInstance().getPlayerEngineType()
-    if (engineType === PlayerEngineType.AV) {
+    if (engineType === PlayerEngineType.AUTO) {
+      this.ui.playerEngineName = $r('app.string.player_engine_auto')
+    } else if (engineType === PlayerEngineType.AV) {
       this.ui.playerEngineName = $r('app.string.player_engine_av')
     } else {
       this.ui.playerEngineName = $r('app.string.player_engine_mpv')

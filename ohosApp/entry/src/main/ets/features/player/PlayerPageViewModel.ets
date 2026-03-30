@@ -41,6 +41,7 @@ import { SearchBangumiResponse } from "./danmu/SearchBangumiResponse";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
+import { PlayerEngineDecision, PlayerEngineResolver } from "../../player/PlayerEngineResolver";
 
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
@@ -76,8 +77,20 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       .setScaleTextSize(this.appUIState.isFullScreen? 1 : 0.8)
   }
 
-  private isMpvEngine(): boolean {
-    return AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.MPV
+  private getConfiguredEngineType(): PlayerEngineType {
+    return AppPreference.getInstance().getPlayerEngineType()
+  }
+
+  getResolvedPlayerEngineDecision(source?: JellyfinMediaSource): PlayerEngineDecision {
+    return PlayerEngineResolver.resolvePlaybackEngine(this.getConfiguredEngineType(), source ?? this.mediaSourceOrNull)
+  }
+
+  getResolvedPlayerEngineType(source?: JellyfinMediaSource): PlayerEngineType {
+    return this.getResolvedPlayerEngineDecision(source).engineType
+  }
+
+  private isMpvEngine(source?: JellyfinMediaSource): boolean {
+    return this.getResolvedPlayerEngineType(source) === PlayerEngineType.MPV
   }
 
   private getCurrentPlaybackPositionMs(): number {
@@ -99,7 +112,12 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   onMediaSourceChanged() {
     let source = this.mediaSourceOrNull
     if (source) {
-      console.warn(`[PlayerVM] source changed engine=${this.isMpvEngine() ? 'mpv' : 'other'}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, videoRange=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}, hdrStrategy=${source.getVideoHdrStrategyLabel()}`)
+      const engineDecision = this.getResolvedPlayerEngineDecision(source)
+      this.ui.effectivePlayerEngine = engineDecision.engineType
+      this.ui.effectivePlayerEngineReason = engineDecision.reason
+      this.ui.forceMpvHardwareDecode = engineDecision.forceMpvHardwareDecode
+      this.ui.forceMpvSoftwareDecode = engineDecision.forceMpvSoftwareDecode
+      console.warn(`[PlayerVM] source changed configuredEngine=${this.getConfiguredEngineType()}, resolvedEngine=${engineDecision.engineType}, reason=${engineDecision.reason}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, videoRange=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}, hdrStrategy=${source.getVideoHdrStrategyLabel()}`)
       this.ui.audioTrackIndex = source.audioStreamIndex
       this.ui.title = source.name
       this.ui.seriesName = source.item.SeriesName
@@ -115,7 +133,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       } else {
         //qualityButton.isVisible = false
       }
-      if (!this.isMpvEngine()) {
+      if (!this.isMpvEngine(source)) {
         this.searchDanmuku()
       }
     }
@@ -368,7 +386,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   getSubtitle(source: JellyfinMediaSource) {
-    if (this.isMpvEngine()) {
+    if (this.isMpvEngine(source)) {
       this.ui.currentSubtitle = ''
       this.ui.subtitles = []
       return
