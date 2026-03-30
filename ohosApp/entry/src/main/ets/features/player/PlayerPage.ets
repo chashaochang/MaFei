@@ -19,7 +19,6 @@ import { PlayerPageUIState } from "./PlayerPageUIState"
 import { PlayerPageViewModel } from "./PlayerPageViewModel"
 import { AVPlayerView } from "./AVPlayerView"
 import { MPVPlayerView } from "./MPVPlayerView"
-import { AppPreference } from "../../data/AppPreference"
 import { PlayerEngineType } from "../../entity/PlayerEngineType"
 import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
@@ -151,7 +150,7 @@ export struct PlayerPage {
     //播放器
     Stack() {
       if (this.ui.url) {
-        if (AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.AV) {
+        if (this.vm.getResolvedPlayerEngineType() === PlayerEngineType.AV) {
           AVPlayerView({
             videoUrl: this.ui.url,
             onNext: () => {

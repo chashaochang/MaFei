@@ -17,6 +17,7 @@ import { ExternalSubtitleStream } from '../../player/source/ExternalSubtitleStre
 import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
 import { OneMoreUtil } from '../../utils/OneMoreUtil'
 import { display, window } from '@kit.ArkUI'
+import { PlayerEngineType } from '../../entity/PlayerEngineType'
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
@@ -252,8 +253,14 @@ export struct MPVPlayerView {
     this.cacheProgressValue = 0
   }
 
+  private shouldUseHardwareDecode(): boolean {
+    return this.ui.forceMpvSoftwareDecode
+      ? false
+      : (this.ui.forceMpvHardwareDecode || AppPreference.getInstance().getMpvUseHardwareDecode())
+  }
+
   private shouldUseSurfacePlayback(): boolean {
-    return !this.vm.mediaSourceOrNull?.isDolbyVisionStream()
+    return this.shouldUseHardwareDecode() && !this.vm.mediaSourceOrNull?.isDolbyVisionStream()
   }
 
   private hasOsdSurfaceSize(): boolean {
@@ -419,10 +426,10 @@ export struct MPVPlayerView {
     this.loading = true
     this.playbackCompleted = false
     this.initializeRequested = false
-    const useHardwareDecode = AppPreference.getInstance().getMpvUseHardwareDecode()
+    const useHardwareDecode = this.shouldUseHardwareDecode()
     const cacheSizeMb = AppPreference.getInstance().getMpvCacheSizeMb()
     const source = this.vm.mediaSourceOrNull
-    const preferSurface = !source?.isDolbyVisionStream()
+    const preferSurface = this.shouldUseSurfacePlayback()
     if (preferSurface && !this.applyOsdSurfaceBinding(true)) {
       this.loading = false
       this.ui.playerStatus = PlayerStatus.ERROR
@@ -434,6 +441,12 @@ export struct MPVPlayerView {
       this.appliedOsdSurfaceKey = ''
     }
     this.mpvPlayer.configurePlayback(useHardwareDecode, cacheSizeMb, preferSurface)
+    if (this.ui.forceMpvHardwareDecode) {
+      this.logMpv('auto mode selected MPV, force hardware decode on')
+    }
+    if (this.ui.forceMpvSoftwareDecode) {
+      this.logMpv('auto mode selected MPV, force software decode on')
+    }
     if (source?.isDolbyVisionStream()) {
       this.logMpv(`dolby vision detected, prefer buffer-hw for tone mapping: range=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}`)
     }
@@ -1285,6 +1298,14 @@ export struct MPVPlayerView {
         .margin({ left: 4 })
         .layoutWeight(1)
         .textOverflow({ overflow: TextOverflow.MARQUEE })
+      Text(this.getEngineBadgeLabel())
+        .fontColor(Color.White)
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor('rgba(255,255,255,0.18)')
+        .borderRadius(999)
+        .margin({ right: 12 })
       AVCastPicker({
         normalColor: Color.White,
       })
@@ -1311,6 +1332,19 @@ export struct MPVPlayerView {
       ]
     })
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  private getEngineBadgeLabel(): string {
+    if (this.ui.effectivePlayerEngine === PlayerEngineType.AV) {
+      return 'AV'
+    }
+    if (this.ui.effectivePlayerEngine === PlayerEngineType.MPV) {
+      const useHardwareDecode = this.ui.forceMpvSoftwareDecode
+        ? false
+        : (this.ui.forceMpvHardwareDecode || AppPreference.getInstance().getMpvUseHardwareDecode())
+      return useHardwareDecode ? 'MPV 硬解' : 'MPV 软解'
+    }
+    return '自动'
   }
 
   @Builder

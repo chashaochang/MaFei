@@ -14,16 +14,22 @@ export struct PlayerEnginePage {
   @Local mpvCacheIndex: number = 1
   list: Array<PlayerEngineItem> = [
     new PlayerEngineItem(
+      PlayerEngineType.AUTO,
+      $r('app.media.movie'),
+      $r('app.string.player_engine_auto'),
+      '默认推荐。能用系统播放器就优先系统播放器；遇到系统播放器不支持的格式、音轨或字幕时，会自动切到 MPV 硬解。'
+    ),
+    new PlayerEngineItem(
       PlayerEngineType.MPV,
       $r('app.media.mpv'),
       $r('app.string.player_engine_mpv'),
-      '推荐日常使用。复杂片源、外挂字幕、HDR 这类情况优先选它。'
+      '始终使用 MPV。适合想手动固定复杂片源、外挂字幕和高兼容播放的人。'
     ),
     new PlayerEngineItem(
       PlayerEngineType.AV,
       $r('app.media.hmos'),
       $r('app.string.player_engine_av'),
-      '系统播放器。普通视频更省心，播放异常时也能拿来兜底。'
+      '始终使用系统播放器。普通视频更省心，也更适合你只想走系统解码的场景。'
     )
   ]
   mpvDecodeList: Array<MpvDecodeItem> = [
@@ -39,11 +45,8 @@ export struct PlayerEnginePage {
 
   aboutToAppear(): void {
     const current = AppPreference.getInstance().getPlayerEngineType()
-    if (current === PlayerEngineType.AV) {
-      this.selectIndex = 1
-    } else {
-      this.selectIndex = 0
-    }
+    const currentIndex = this.list.findIndex((item: PlayerEngineItem) => item.type === current)
+    this.selectIndex = currentIndex >= 0 ? currentIndex : 0
     this.syncMpvSettings()
   }
 
@@ -57,6 +60,26 @@ export struct PlayerEnginePage {
 
   private isMpvSelected(): boolean {
     return this.list[this.selectIndex].type === PlayerEngineType.MPV
+  }
+
+  private isAutoSelected(): boolean {
+    return this.list[this.selectIndex].type === PlayerEngineType.AUTO
+  }
+
+  private shouldShowMpvCacheSettings(): boolean {
+    return this.isAutoSelected() || this.isMpvSelected()
+  }
+
+  private shouldShowManualMpvDecodeSettings(): boolean {
+    return this.isMpvSelected()
+  }
+
+  private selectEngine(index: number): void {
+    if (index < 0 || index >= this.list.length || this.selectIndex === index) {
+      return
+    }
+    this.selectIndex = index
+    AppPreference.getInstance().setPlayerEngineType(this.list[index].type)
   }
 
   private selectDecode(index: number): void {
@@ -90,16 +113,16 @@ export struct PlayerEnginePage {
                 Text(item.title).fontSize(14).fontColor($r('app.color.text_primary'))
                 Blank().height(6)
                 Radio({ value: item.type, group: 'playerEngineGroup' }).checked(this.selectIndex == index)
+                  .hitTestBehavior(HitTestMode.None)
               }.onClick(() => {
-                this.selectIndex = index
-                AppPreference.getInstance().setPlayerEngineType(item.type)
+                this.selectEngine(index)
               })
             }
           })
         }
         .width('100%')
-        .height(150)
-        .columnsTemplate('1fr 1fr')
+        .height(158)
+        .columnsTemplate('1fr 1fr 1fr')
         .backgroundColor($r('app.color.bg_1'))
         .borderRadius(12)
         .padding({
@@ -116,40 +139,51 @@ export struct PlayerEnginePage {
         .fontSize(12)
         .fontColor($r('app.color.text_1'))
         .margin({ top: 20 })
+        .padding({
+          left: 16,
+          right: 16
+        })
 
-      if (this.isMpvSelected()) {
+      if (this.shouldShowMpvCacheSettings()) {
         Column({ space: 16 }) {
-          Column({ space: 10 }) {
-            Text('MPV 解码方式')
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
+          if (this.shouldShowManualMpvDecodeSettings()) {
+            Column({ space: 10 }) {
+              Text('MPV 解码方式')
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
 
-            Row({ space: 12 }) {
-              ForEach(this.mpvDecodeList, (item: MpvDecodeItem, index: number) => {
-                Column({ space: 8 }) {
-                  Text(item.title)
-                    .fontSize(15)
-                    .fontColor(this.mpvDecodeIndex === index ? Color.White : $r('app.color.text_primary'))
-                  Text(item.tip)
-                    .fontSize(11)
-                    .fontColor(this.mpvDecodeIndex === index ? '#E6FFFFFF' : $r('app.color.text_1'))
-                    .maxLines(2)
-                }
-                .layoutWeight(1)
-                .constraintSize({ minHeight: 98 })
-                .alignItems(HorizontalAlign.Start)
-                .padding({ left: 14, right: 14, top: 16, bottom: 16 })
-                .backgroundColor(this.mpvDecodeIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
-                .borderRadius(12)
-                .onClick(() => {
-                  this.selectDecode(index)
+              Row({ space: 12 }) {
+                ForEach(this.mpvDecodeList, (item: MpvDecodeItem, index: number) => {
+                  Column({ space: 8 }) {
+                    Text(item.title)
+                      .fontSize(15)
+                      .fontColor(this.mpvDecodeIndex === index ? Color.White : $r('app.color.text_primary'))
+                    Text(item.tip)
+                      .fontSize(11)
+                      .fontColor(this.mpvDecodeIndex === index ? '#E6FFFFFF' : $r('app.color.text_1'))
+                      .maxLines(3)
+                  }
+                  .layoutWeight(1)
+                  .constraintSize({ minHeight: 108 })
+                  .alignItems(HorizontalAlign.Start)
+                  .padding({
+                    left: 14,
+                    right: 14,
+                    top: 16,
+                    bottom: 16
+                  })
+                  .backgroundColor(this.mpvDecodeIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
+                  .borderRadius(12)
+                  .onClick(() => {
+                    this.selectDecode(index)
+                  })
                 })
-              })
+              }
+              .width('100%')
             }
             .width('100%')
           }
-          .width('100%')
 
           Column({ space: 10 }) {
             Text('MPV 缓存大小')
@@ -172,9 +206,15 @@ export struct PlayerEnginePage {
                 Blank()
 
                 Radio({ value: item.title, group: 'mpvCacheGroup' }).checked(this.mpvCacheIndex === index)
+                  .hitTestBehavior(HitTestMode.None)
               }
               .width('100%')
-              .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+              .padding({
+                left: 14,
+                right: 14,
+                top: 12,
+                bottom: 12
+              })
               .backgroundColor($r('app.color.bg_1'))
               .borderRadius(12)
               .onClick(() => {
@@ -184,9 +224,11 @@ export struct PlayerEnginePage {
           }
           .width('100%')
 
-          Text(this.mpvDecodeIndex === 1
-            ? '当前已选择硬解。它会优先调用手机硬件解码，功耗更低，也更适合 HDR 片源；如果出现黑屏、花屏或颜色不对，再切回软解。'
-            : '当前已选择软解。它由 MPV 自己解码，兼容性更好；如果想让 HDR 片源更省电，或者想试试硬件能力，再切到硬解。')
+          Text(this.isAutoSelected()
+            ? '自动模式下，如果系统播放器吃不下当前片源，会自动切到 MPV，并优先使用硬解；你只需要保留一个合适的 MPV 缓存大小就行。'
+            : this.mpvDecodeIndex === 1
+              ? '当前已选择硬解。它会优先调用手机硬件解码，功耗更低，也更适合 HDR 片源；如果出现黑屏、花屏或颜色不对，再切回软解。'
+              : '当前已选择软解。它由 MPV 自己解码，兼容性更好；如果想让 HDR 片源更省电，或者想试试硬件能力，再切到硬解。')
             .fontSize(12)
             .fontColor($r('app.color.text_1'))
         }

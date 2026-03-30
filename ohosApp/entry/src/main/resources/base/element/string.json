@@ -177,6 +177,10 @@
       "value": "深色"
     },
     {
+      "name": "player_engine_auto",
+      "value": "自动"
+    },
+    {
       "name": "player_engine_av",
       "value": "AVPlayer"
     },

@@ -71,7 +71,8 @@ export class MpvNativePlayer {
   }
 
   configurePlayback(useHardwareDecode: boolean, cacheSizeMb: number, preferSurface: boolean = true): void {
-    setHwdecMode(preferSurface ? HWDEC_MODE_SURFACE : HWDEC_MODE_BUFFER)
+    const useSurfacePlayback = preferSurface && useHardwareDecode
+    setHwdecMode(useSurfacePlayback ? HWDEC_MODE_SURFACE : HWDEC_MODE_BUFFER)
     setDecodeType(useHardwareDecode ? DECODE_TYPE_HW : DECODE_TYPE_SW)
     setCacheSize(cacheSizeMb)
     setAutoBufferFallback(true)

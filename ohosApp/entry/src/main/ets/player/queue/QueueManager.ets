@@ -17,6 +17,7 @@ import { AxiosResponse } from "@ohos/axios";
 import { Constants } from "../../utils/Constants";
 import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
 import { AppPreference } from "../../data/AppPreference";
+import { PlayerEngineResolver } from "../PlayerEngineResolver";
 
 @ObservedV2
 export class QueueManager {
@@ -34,7 +35,9 @@ export class QueueManager {
   private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
 
   private getCurrentDeviceProfile(): DeviceProfile {
-    return this.deviceProfileBuilder.getDeviceProfile(AppPreference.getInstance().getPlayerEngineType())
+    return this.deviceProfileBuilder.getDeviceProfile(
+      PlayerEngineResolver.getRequestProfileEngineType(AppPreference.getInstance().getPlayerEngineType())
+    )
   }
 
   initializePlaybackQueue(options: PlayOptions): PlayerException | null {

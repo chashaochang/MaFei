@@ -214,11 +214,11 @@ export class DeviceProfileBuilder {
     },
   ]
 
-  // OpenHarmony Media Kit documents AVPlayer playback support as:
-  // video: mp4/mkv/ts + H.264/H.265, audio: m4a/aac/mp3/ogg/wav/amr, subtitles: srt/webvtt.
+  // OpenHarmony Media Kit support here is treated conservatively, but mov/m4v
+  // should follow the same path as mp4 in our auto-selection heuristics.
   private readonly avDirectPlayProfiles: Array<DirectPlayProfile> = [
     {
-      Container: "mp4,mkv,ts",
+      Container: "mp4,m4v,mov,mkv,ts",
       Type: DlnaProfileType.Video,
       VideoCodec: "h264,hevc",
       AudioCodec: "aac,mp3",

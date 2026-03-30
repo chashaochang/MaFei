@@ -16,6 +16,8 @@ import { PlayerPageViewModel } from "./PlayerPageViewModel";
 import { SmartDialog } from "ohos_smart_dialog";
 import { DanmakuViewV2 } from "@ohos/danmakuflamemaster";
 import { QueueItem } from "../../entity/QueueItem";
+import { PlayerEngineType } from "../../entity/PlayerEngineType";
+import { AppPreference } from "../../data/AppPreference";
 
 const PROGRESS_MAX_VALUE: number = 100;
 
@@ -501,8 +503,24 @@ export struct AVPlayerView {
     }
   }
 
+  private logAvPlayer(message: string): void {
+    console.info(`[AVPlayer] ${message}`)
+  }
+
+  private logAvSourceDiagnostics(reason: string): void {
+    const source = this.vm.mediaSourceOrNull
+    const videoStream = source?.selectedVideoStream
+    this.logAvPlayer(
+      `${reason}: container=${source?.sourceInfo.Container ?? 'unknown'}, codec=${videoStream?.Codec ?? 'unknown'}, ` +
+      `range=${source?.selectedVideoRangeType ?? 'unknown'}, colorTransfer=${videoStream?.ColorTransfer ?? 'unknown'}, ` +
+      `colorPrimaries=${videoStream?.ColorPrimaries ?? 'unknown'}, bitDepth=${videoStream?.BitDepth ?? 'unknown'}, ` +
+      `pixelFormat=${videoStream?.PixelFormat ?? 'unknown'}, size=${videoStream?.Width ?? 0}x${videoStream?.Height ?? 0}`
+    )
+  }
+
   private setAVPlayerCallbacks(player: media.AVPlayer) {
     player.on('stateChange', async (state: string) => {
+      this.logAvPlayer(`state=${state}, width=${player.width ?? 0}, height=${player.height ?? 0}, duration=${player.duration ?? 0}`)
       switch (state) {
         case 'initialized':
           this.ui.playerStatus = PlayerStatus.INITIALIZED
@@ -513,6 +531,7 @@ export struct AVPlayerView {
           break
         case 'prepared':
           this.ui.playerStatus = PlayerStatus.PREPARED
+          this.logAvSourceDiagnostics('prepared')
           // 用真实视频宽高更新显示区域，避免画面被拉伸变形
           if (player.width && player.height) {
             this.setVideoWH(player.width, player.height)
@@ -526,6 +545,7 @@ export struct AVPlayerView {
           this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
           this.ui.playerStatus = PlayerStatus.PLAYING
           this.loadingVisible = Visibility.None
+          this.logAvSourceDiagnostics('playing')
           // 部分流在 prepared 时拿不到宽高，这里再兜底一次
           if (player.width && player.height) {
             this.setVideoWH(player.width, player.height)
@@ -573,6 +593,7 @@ export struct AVPlayerView {
     })
 
     player.on('error', () => {
+      this.logAvSourceDiagnostics('error')
       this.ui.playerStatus = PlayerStatus.ERROR
       this.loadingVisible = Visibility.None
       this.replayVisible = Visibility.Visible
@@ -597,6 +618,7 @@ export struct AVPlayerView {
     if (!this.videoUrl) {
       return
     }
+    this.logAvSourceDiagnostics('startPlay')
     this.ui.playerStatus = PlayerStatus.IDLE
     this.loadingVisible = Visibility.Visible
     this.replayVisible = Visibility.None
@@ -895,6 +917,14 @@ export struct AVPlayerView {
         .margin({ left: 4 })
         .layoutWeight(1)
         .textOverflow({ overflow: TextOverflow.MARQUEE })
+      Text(this.getEngineBadgeLabel())
+        .fontColor(Color.White)
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor('rgba(255,255,255,0.18)')
+        .borderRadius(999)
+        .margin({ right: 12 })
       AVCastPicker({
         normalColor: Color.White,
       })
@@ -922,6 +952,17 @@ export struct AVPlayerView {
       ]
     })
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  private getEngineBadgeLabel(): string {
+    if (this.ui.effectivePlayerEngine === PlayerEngineType.MPV) {
+      const useHardwareDecode = this.ui.forceMpvHardwareDecode || AppPreference.getInstance().getMpvUseHardwareDecode()
+      return useHardwareDecode ? 'MPV 硬解' : 'MPV 软解'
+    }
+    if (this.ui.effectivePlayerEngine === PlayerEngineType.AV) {
+      return 'AV'
+    }
+    return '自动'
   }
 
   @Builder

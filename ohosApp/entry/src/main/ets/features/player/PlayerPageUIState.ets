@@ -9,6 +9,7 @@ import { PlayerMenus } from "../../player/ui/PlayerMenus"
 import { DanmakuViewV2 } from "@ohos/danmakuflamemaster"
 import { PlayerStatus, PlayStatus } from "./PlayStatus"
 import { BaseUIState } from "../../common/base/BaseUIState"
+import { PlayerEngineType } from "../../entity/PlayerEngineType"
 
 @ObservedV2
 export class PlayerPageUIState extends BaseUIState{
@@ -56,6 +57,10 @@ export class PlayerPageUIState extends BaseUIState{
   @Trace audioTrackIndex?: number | null = null
   @Trace playerStatus: number = PlayerStatus.IDLE
   @Trace hasPrevious: boolean = false
+  @Trace effectivePlayerEngine: PlayerEngineType = PlayerEngineType.AUTO
+  @Trace effectivePlayerEngineReason: string = ''
+  @Trace forceMpvHardwareDecode: boolean = false
+  @Trace forceMpvSoftwareDecode: boolean = false
 
   playerMenus?: PlayerMenus
 

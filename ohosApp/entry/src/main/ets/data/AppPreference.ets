@@ -144,7 +144,7 @@ export class AppPreference {
     if (type !== null) {
       return type
     }
-    return PlayerEngineType.MPV
+    return PlayerEngineType.AUTO
   }
 
   setMpvUseHardwareDecode(enabled: boolean) {
