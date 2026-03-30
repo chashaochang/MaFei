@@ -85,6 +85,10 @@
     {
       "name": "iso_language_codes",
       "srcPath": "./iso_language_codes"
+    },
+    {
+      "name": "mpvplayer",
+      "srcPath": "./mpvplayer"
     }
   ]
 }

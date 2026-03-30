@@ -7,6 +7,7 @@
   "license": "",
   "dependencies": {
     "sdk": "file:../sdk",
+    "mpvplayer": "file:../mpvplayer",
     "@ohos/ijkplayer": "^2.0.7-rc.6",
     "ohos_smart_dialog": "^1.8.8",
     "@ohos/danmakuflamemaster": "2.1.2",
@@ -14,8 +15,7 @@
     "@ohos/lottie": "^2.0.24",
     "@abner/refresh_v2": "^1.0.4",
     "@hw-agconnect/ui-skeleton": "^1.0.0",
-    "iso_language_codes": "file:../iso_language_codes",
-    "libmpvnative.so": "file:./src/main/cpp/types/libmpvnative"
+    "iso_language_codes": "file:../iso_language_codes"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

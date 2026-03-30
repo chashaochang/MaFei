@@ -2,12 +2,16 @@ import { DeviceProfile } from "sdk";
 import {
   CodecProfile,
   CodecType,
+  DirectPlayProfile,
   DlnaProfileType,
   ProfileConditionType,
   ProfileConditionValue,
   SubtitleDeliveryMethod,
+  SubtitleProfile,
+  TranscodingProfile
 } from "sdk/src/main/ets/generated-client/models";
 import { Constants } from "../../utils/Constants";
+import { PlayerEngineType } from "../../entity/PlayerEngineType";
 
 /**
  * Taken from Jellyfin Web:
@@ -121,51 +125,190 @@ const hevcExcludeDOVI: CodecProfile = {
  *
  */
 export class DeviceProfileBuilder {
+  private readonly avTranscodingProfiles: Array<TranscodingProfile> = [
+    {
+      Type: DlnaProfileType.Video,
+      Container: "ts",
+      VideoCodec: "h264",
+      AudioCodec: "aac,mp3",
+      Protocol: "hls",
+      Conditions: [],
+    },
+    {
+      Type: DlnaProfileType.Video,
+      Container: "mp4",
+      VideoCodec: "h264",
+      AudioCodec: "aac,mp3",
+      Protocol: "hls",
+      Conditions: [],
+    },
+    {
+      Type: DlnaProfileType.Audio,
+      Container: "mp3",
+      AudioCodec: "mp3",
+      Protocol: "http",
+      Conditions: [],
+    },
+  ]
 
-  getDeviceProfile(): DeviceProfile {
+  private readonly commonTranscodingProfiles: Array<TranscodingProfile> = [
+    {
+      Type: DlnaProfileType.Video,
+      Container: "ts",
+      VideoCodec: "h264",
+      AudioCodec: "aac,mp3,ac3,eac3",
+      Protocol: "hls",
+      Conditions: [],
+    },
+    {
+      Type: DlnaProfileType.Video,
+      Container: "mp4",
+      VideoCodec: "h264",
+      AudioCodec: "aac,mp3,ac3,eac3",
+      Protocol: "hls",
+      Conditions: [],
+    },
+    {
+      Type: DlnaProfileType.Audio,
+      Container: "mp3",
+      AudioCodec: "mp3",
+      Protocol: "http",
+      Conditions: [],
+    },
+  ]
 
+  // OpenHarmony Media Kit documents AVPlayer playback support as:
+  // video: mp4/mkv/ts + H.264/H.265, audio: m4a/aac/mp3/ogg/wav/amr, subtitles: srt/webvtt.
+  private readonly avDirectPlayProfiles: Array<DirectPlayProfile> = [
+    {
+      Container: "mp4,mkv,ts",
+      Type: DlnaProfileType.Video,
+      VideoCodec: "h264,hevc",
+      AudioCodec: "aac,mp3",
+    },
+    {
+      Container: "m4a,aac",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "aac",
+    },
+    {
+      Container: "mp3",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "mp3",
+    },
+    {
+      Container: "ogg",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "vorbis",
+    },
+    {
+      Container: "wav",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "pcm_s16le",
+    },
+    {
+      Container: "amr",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "amr_nb,amr_wb",
+    }
+  ]
+
+  private readonly ijkDirectPlayProfiles: Array<DirectPlayProfile> = [
+    {
+      Container: "mp4,m4v,mov,mkv,flv,ts,mpegts,3gp",
+      Type: DlnaProfileType.Video,
+      VideoCodec: "h264,hevc,mpeg4,mpeg2video,h263",
+      AudioCodec: "aac,mp3,ac3,eac3,flac,opus,vorbis",
+    },
+    {
+      Container: "mp3,aac,m4a,ogg,wav,flac",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: "mp3,aac,flac,opus,vorbis,pcm_s16le",
+    }
+  ]
+
+  private readonly mpvDirectPlayProfiles: Array<DirectPlayProfile> = [
+    {
+      Container: "mp4,m4v,mov,mkv,webm,ts,mpegts,flv,avi,3gp",
+      Type: DlnaProfileType.Video,
+      VideoCodec: "h264,hevc,mpeg4,mpeg2video,h263,vp8,vp9,av1,vc1,wmv3,theora",
+      AudioCodec: [...PCM_CODECS, "mp1", "mp2", "mp3", "aac", "vorbis", "opus", "flac", "alac", "ac3", "eac3", "dts", "mlp", "truehd"].join(","),
+    },
+    {
+      Container: "mp3,aac,m4a,ogg,opus,wav,flac,webm",
+      Type: DlnaProfileType.Audio,
+      AudioCodec: [...PCM_CODECS, "mp3", "aac", "vorbis", "opus", "flac", "alac", "ac3", "eac3", "dts"].join(","),
+    }
+  ]
+
+  private readonly avSubtitleProfiles: Array<SubtitleProfile> = [
+    {
+      Format: 'srt',
+      Method: SubtitleDeliveryMethod.External
+    },
+    {
+      Format: 'vtt',
+      Method: SubtitleDeliveryMethod.External
+    }
+  ]
+
+  private readonly ijkSubtitleProfiles: Array<SubtitleProfile> = [
+    {
+      Format: 'ass',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'srt',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'vtt',
+      Method: SubtitleDeliveryMethod.External
+    }
+  ]
+
+  private readonly mpvSubtitleProfiles: Array<SubtitleProfile> = [
+    {
+      Format: 'ass',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'ssa',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'srt',
+      Method: SubtitleDeliveryMethod.Embed
+    },
+    {
+      Format: 'vtt',
+      Method: SubtitleDeliveryMethod.Embed
+    }
+  ]
+
+  private createProfile(nameSuffix: string, directPlayProfiles: Array<DirectPlayProfile>,
+    subtitleProfiles: Array<SubtitleProfile>, transcodingProfiles: Array<TranscodingProfile> = this.commonTranscodingProfiles): DeviceProfile {
     return {
-      Name: Constants.APP_INFO_NAME,
-      DirectPlayProfiles: [{ Type:DlnaProfileType.Video },{ Type:DlnaProfileType.Audio }],
-      TranscodingProfiles: [
-        {
-          Type : DlnaProfileType.Video,
-          Container : "ts",
-          VideoCodec : "h264",
-          AudioCodec : "mp1,mp2,mp3,aac,ac3,eac3,dts,mlp,truehd",
-          Protocol : "hls",
-          Conditions : [],
-        },
-        {
-          Type : DlnaProfileType.Video,
-          Container : "mkv",
-          VideoCodec : "h264",
-          AudioCodec : AVAILABLE_AUDIO_CODECS[SUPPORTED_CONTAINER_FORMATS.indexOf("mkv")].join(","),
-          Protocol : "hls",
-          Conditions : [],
-        },
-        {
-          Type : DlnaProfileType.Audio,
-          Container : "mp3",
-          VideoCodec : "",
-          AudioCodec : "mp3",
-          Protocol : "http",
-          Conditions : [],
-        },
-      ],
+      Name: `${Constants.APP_INFO_NAME}-${nameSuffix}`,
+      DirectPlayProfiles: directPlayProfiles,
+      TranscodingProfiles: transcodingProfiles,
       ContainerProfiles: [],
       CodecProfiles: [hevcExcludeDOVI],
-      SubtitleProfiles: [{
-        Format:'ass',
-        Method:SubtitleDeliveryMethod.Embed
-      },{
-        Format:'srt',
-        Method:SubtitleDeliveryMethod.Embed
-      }],
+      SubtitleProfiles: subtitleProfiles,
       MaxStreamingBitrate: MAX_STREAMING_BITRATE,
       MaxStaticBitrate: MAX_STATIC_BITRATE,
       MusicStreamingTranscodingBitrate: MAX_MUSIC_TRANSCODING_BITRATE,
     }
+  }
+
+  getDeviceProfile(playerEngineType: PlayerEngineType): DeviceProfile {
+    if (playerEngineType === PlayerEngineType.AV) {
+      return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles, this.avTranscodingProfiles)
+    }
+    if (playerEngineType === PlayerEngineType.MPV) {
+      return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles)
+    }
+    return this.createProfile('ijkplayer', this.ijkDirectPlayProfiles, this.ijkSubtitleProfiles)
   }
 
   getLiveTvProfile(): DeviceProfile{
