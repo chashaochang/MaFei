@@ -273,7 +273,7 @@ export class MpvNativePlayer {
 
   getCurrentPositionMs(): number {
     if (this.handle <= 0) {
-      return 0
+      return -1
     }
     return getCurrentPosition(this.handle)
   }

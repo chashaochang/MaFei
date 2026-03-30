@@ -250,9 +250,19 @@ export struct MPVPlayerView {
       },
       onEndFile: (reason: number, error: string) => {
         this.logMpv(`end file reason=${reason}, error=${error}`)
+        this.stopProgressTimer()
+        this.loading = false
+        this.shouldResumeOnPageShow = false
         this.ui.CONTROL_PlayStatus = PlayStatus.DONE
         this.ui.playerStatus = PlayerStatus.COMPLETED
         this.playbackCompleted = true
+        if (reason === 0 && this.duration > 0) {
+          this.currentPosition = this.duration
+          this.ui.playbackPositionMs = this.duration
+          this.currentTime = this.formatTime(this.duration)
+          this.progressValue = PROGRESS_MAX_VALUE
+          this.cacheProgressValue = PROGRESS_MAX_VALUE
+        }
       },
       onDurationChanged: (durationMs: number) => {
         if (durationMs > 0) {
@@ -363,6 +373,7 @@ export struct MPVPlayerView {
     this.cacheProgressValue = 0
     this.ui.CONTROL_PlayStatus = this.ui.playWhenReady ? PlayStatus.PLAY : PlayStatus.PAUSE
     this.ui.playerStatus = this.ui.playWhenReady ? PlayerStatus.PLAYING : PlayerStatus.PAUSED
+    this.startProgressTimer()
     const startPositionSeconds = this.ui.initSeek > 0 ? this.ui.initSeek / 1000 : 0
     this.logMpv(`load video with mode=${this.mpvPlayer.getCurrentModeLabel()}`)
     this.mpvPlayer.load(this.videoUrl, startPositionSeconds)
@@ -386,8 +397,9 @@ export struct MPVPlayerView {
       this.pausePlayback()
     } else {
       if (this.playbackCompleted) {
-        this.mpvPlayer.seekToMs(0, true)
-        this.playbackCompleted = false
+        this.ui.initSeek = 0
+        this.loadCurrentVideo()
+        return
       }
       this.resumePlayback()
     }
