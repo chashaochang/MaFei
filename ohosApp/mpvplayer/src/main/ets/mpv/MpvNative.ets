@@ -40,6 +40,7 @@ import {
 } from 'libmpvnative.so'
 
 const HWDEC_MODE_BUFFER: number = 0
+const HWDEC_MODE_SURFACE: number = 1
 const DECODE_TYPE_HW: number = 0
 const DECODE_TYPE_SW: number = 1
 const CREATE_RETRY_DELAY_MS: number = 50
@@ -67,8 +68,8 @@ export class MpvNativePlayer {
     this.listeners = listeners
   }
 
-  configurePlayback(useHardwareDecode: boolean, cacheSizeMb: number): void {
-    setHwdecMode(HWDEC_MODE_BUFFER)
+  configurePlayback(useHardwareDecode: boolean, cacheSizeMb: number, preferSurface: boolean = true): void {
+    setHwdecMode(preferSurface ? HWDEC_MODE_SURFACE : HWDEC_MODE_BUFFER)
     setDecodeType(useHardwareDecode ? DECODE_TYPE_HW : DECODE_TYPE_SW)
     setCacheSize(cacheSizeMb)
     setAutoBufferFallback(true)
