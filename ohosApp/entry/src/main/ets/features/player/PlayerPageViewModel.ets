@@ -85,7 +85,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   onMediaSourceChanged() {
     let source = this.mediaSourceOrNull
     if (source) {
-      console.warn(`[PlayerVM] source changed engine=${this.isMpvEngine() ? 'mpv' : 'other'}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}`)
+      console.warn(`[PlayerVM] source changed engine=${this.isMpvEngine() ? 'mpv' : 'other'}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, videoRange=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}, hdrStrategy=${source.getVideoHdrStrategyLabel()}`)
       this.ui.audioTrackIndex = source.audioStreamIndex
       this.ui.title = source.name
       this.ui.seriesName = source.item.SeriesName

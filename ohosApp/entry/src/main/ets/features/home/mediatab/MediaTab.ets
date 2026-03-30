@@ -39,10 +39,10 @@ export struct MediaTab {
                   e.childCount + '')
               }),
               onItemClick: (index) => {
-                if (this.ui.mediaList[index].type == undefined) {
-                  ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
-                  return;
-                }
+                // if (this.ui.mediaList[index].type == undefined) {
+                //   ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
+                //   return;
+                // }
                 HMRouterMgr.to(RouterConsts.VideoListPage)
                   .withParam(this.ui.mediaList[index])
                   .push()
@@ -64,10 +64,10 @@ export struct MediaTab {
       .refreshOffset(64)
       .maxPullDownDistance(64 + this.appUIState.safeTop)
       .height('100%')
-      .onStateChange((status)=>{
+      .onStateChange((status) => {
         this.ui.refreshStatus = status
       })
-      .onOffsetChange((offset)=>{
+      .onOffsetChange((offset) => {
         this.ui.refreshOffset = offset
       })
       .onRefreshing(() => {

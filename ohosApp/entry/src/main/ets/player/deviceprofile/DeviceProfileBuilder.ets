@@ -121,10 +121,47 @@ const hevcExcludeDOVI: CodecProfile = {
   ],
 };
 
+const HEVC_SAFE_VIDEO_RANGES = 'Unknown|SDR|HDR10|HDR10Plus|HLG'
+const HEVC_MPV_DIRECT_PLAY_VIDEO_RANGES = `${HEVC_SAFE_VIDEO_RANGES}|DOVI|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR`
+
+const avHevcVideoRangeProfile: CodecProfile = {
+  Type: CodecType.Video,
+  Codec: 'hevc',
+  Conditions: [
+    {
+      Condition: ProfileConditionType.EqualsAny,
+      Property: ProfileConditionValue.VideoRangeType,
+      Value: HEVC_SAFE_VIDEO_RANGES,
+      IsRequired: false,
+    }
+  ],
+}
+
+const mpvHevcVideoRangeProfile: CodecProfile = {
+  Type: CodecType.Video,
+  Codec: 'hevc',
+  Conditions: [
+    {
+      Condition: ProfileConditionType.EqualsAny,
+      Property: ProfileConditionValue.VideoRangeType,
+      Value: HEVC_MPV_DIRECT_PLAY_VIDEO_RANGES,
+      IsRequired: false,
+    }
+  ],
+}
+
 /***
  *
  */
 export class DeviceProfileBuilder {
+  private readonly avCodecProfiles: Array<CodecProfile> = [
+    avHevcVideoRangeProfile
+  ]
+
+  private readonly mpvCodecProfiles: Array<CodecProfile> = [
+    mpvHevcVideoRangeProfile
+  ]
+
   private readonly avTranscodingProfiles: Array<TranscodingProfile> = [
     {
       Type: DlnaProfileType.Video,
@@ -313,10 +350,12 @@ export class DeviceProfileBuilder {
 
   getDeviceProfile(playerEngineType: PlayerEngineType): DeviceProfile {
     if (playerEngineType === PlayerEngineType.AV) {
-      return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles, this.avTranscodingProfiles)
+      return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles, this.avTranscodingProfiles,
+        this.avCodecProfiles)
     }
     if (playerEngineType === PlayerEngineType.MPV) {
-      return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles)
+      return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles, this.commonTranscodingProfiles,
+        this.mpvCodecProfiles)
     }
     return this.createProfile('ijkplayer', this.ijkDirectPlayProfiles, this.ijkSubtitleProfiles, this.commonTranscodingProfiles,
       [hevcExcludeDOVI])

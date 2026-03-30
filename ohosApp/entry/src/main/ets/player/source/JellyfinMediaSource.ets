@@ -4,7 +4,8 @@ import {
   MediaStream,
   MediaStreamType,
   PlayMethod,
-  SubtitleDeliveryMethod
+  SubtitleDeliveryMethod,
+  VideoRangeType
 } from 'sdk/src/main/ets/generated-client/models'
 import { Constants } from '../../utils/Constants'
 import { CodecHelpers } from '../deviceprofile/CodecHelpers'
@@ -71,6 +72,38 @@ export class JellyfinMediaSource {
   // If the default should be played, it would be explicitly set above
   get selectedSubtitleStreamIndex(): number {
     return this.selectedSubtitleStream?.Index ?? -1
+  }
+
+  get selectedVideoRangeType(): string {
+    return this.selectedVideoStream?.VideoRangeType ?? VideoRangeType.Unknown
+  }
+
+  get selectedVideoDvProfile(): number | null {
+    return this.selectedVideoStream?.DvProfile ?? null
+  }
+
+  isDolbyVisionStream(): boolean {
+    const range = this.selectedVideoStream?.VideoRangeType
+    return range === VideoRangeType.Dovi ||
+      range === VideoRangeType.DoviWithHdr10 ||
+      range === VideoRangeType.DoviWithHlg ||
+      range === VideoRangeType.DoviWithSdr ||
+      this.selectedVideoDvProfile != null
+  }
+
+  canClientFallbackToHdr(): boolean {
+    const range = this.selectedVideoStream?.VideoRangeType
+    return this.isDolbyVisionStream() ||
+      range === VideoRangeType.DoviWithHdr10 ||
+      range === VideoRangeType.DoviWithHlg ||
+      this.selectedVideoDvProfile === 8
+  }
+
+  getVideoHdrStrategyLabel(): string {
+    if (!this.isDolbyVisionStream()) {
+      return this.selectedVideoRangeType
+    }
+    return `DoVi-P${this.selectedVideoDvProfile ?? '?'} -> MPV direct play preferred`
   }
 
   private normalizeStreamLabel(value?: string | null): string {
@@ -185,6 +218,7 @@ export class JellyfinMediaSource {
     this.subtitleStreams = subtitles
     this.externalSubtitleStreams = externalSubtitles
     console.warn(`[MediaSource] resolved audioSelected=${this.selectedAudioStream?.Index ?? 'none'}, subtitleDefault=${sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, requestedSubtitle=${subtitleStreamIndex ?? 'null'}, subtitleSelected=${this.selectedSubtitleStream?.Index ?? 'none'}, subtitleCount=${subtitles.length}`)
+    console.info(`[MediaSource] video range=${this.selectedVideoRangeType}, dvProfile=${this.selectedVideoDvProfile ?? 'none'}, dolbyVision=${this.isDolbyVisionStream()}, hdrFallback=${this.canClientFallbackToHdr()}, strategy=${this.getVideoHdrStrategyLabel()}`)
     if (subtitles.length > 0) {
       console.info(`[MediaSource] subtitle selection defaultIndex=${sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, requestedIndex=${subtitleStreamIndex ?? 'null'}, selected=${this.selectedSubtitleStream?.Index ?? 'none'}, streams=${subtitles.map((stream) =>
         `${stream.Index}:${stream.DisplayTitle ?? ''}:default=${stream.IsDefault === true}:forced=${stream.IsForced === true}:external=${stream.IsExternal === true}`

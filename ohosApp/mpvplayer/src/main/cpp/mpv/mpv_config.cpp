@@ -503,12 +503,20 @@ bool ConfigureMPV(mpv_handle *mpv) {
     // ========== 视频输出和硬件解码配置 ==========
     if (mode == HWDEC_MODE_BUFFER) {
         SetMpvOption(mpv, "vo", "gpu-next");
+        SetMpvOption(mpv, "gpu-api", "auto");
+        SetMpvOption(mpv, "target-colorspace-hint", "yes");
+        SetMpvOption(mpv, "icc-profile-auto", "yes");
+        SetMpvOption(mpv, "hdr-compute-peak", "yes");
+        SetMpvOption(mpv, "tone-mapping", "bt.2390");
+        SetMpvOption(mpv, "target-trc", "bt.1886");
+        SetMpvOption(mpv, "target-prim", "bt.709");
+        SetMpvOption(mpv, "target-peak", "203");
         if (decode_type == DECODE_TYPE_SW) {
             SetMpvOption(mpv, "hwdec", "no");
-            OH_LOG_INFO(LOG_APP, "[ConfigureMPV] vo=gpu-next, hwdec=no (buffer SW, gpu-api=auto)");
+            OH_LOG_INFO(LOG_APP, "[ConfigureMPV] vo=gpu-next, hwdec=no, hdr-map=bt.2390, target=bt.709/bt.1886@203nit (buffer SW)");
         } else {
             SetMpvOption(mpv, "hwdec", "ohcodec-copy");
-            OH_LOG_INFO(LOG_APP, "[ConfigureMPV] vo=gpu-next, hwdec=ohcodec-copy (buffer HW, gpu-api=auto)");
+            OH_LOG_INFO(LOG_APP, "[ConfigureMPV] vo=gpu-next, hwdec=ohcodec-copy, hdr-map=bt.2390, target=bt.709/bt.1886@203nit (buffer HW)");
         }
     } else {
         // Surface 模式：ohcodec-osd + hwdec=auto

@@ -239,8 +239,13 @@ export struct MPVPlayerView {
     this.initializeRequested = false
     const useHardwareDecode = AppPreference.getInstance().getMpvUseHardwareDecode()
     const cacheSizeMb = AppPreference.getInstance().getMpvCacheSizeMb()
-    this.mpvPlayer.configurePlayback(useHardwareDecode, cacheSizeMb)
-    this.logMpv(`initialize player with ${useHardwareDecode ? 'buffer-hw' : 'buffer-sw'}, cache=${cacheSizeMb}MB`)
+    const source = this.vm.mediaSourceOrNull
+    const preferSurface = !source?.isDolbyVisionStream()
+    this.mpvPlayer.configurePlayback(useHardwareDecode, cacheSizeMb, preferSurface)
+    if (source?.isDolbyVisionStream()) {
+      this.logMpv(`dolby vision detected, prefer buffer-hw for tone mapping: range=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}`)
+    }
+    this.logMpv(`initialize player with ${this.mpvPlayer.getCurrentModeLabel()}, cache=${cacheSizeMb}MB`)
     if (!this.mpvPlayer.initialize()) {
       this.loading = false
       this.ui.playerStatus = PlayerStatus.ERROR
