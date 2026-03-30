@@ -14,22 +14,16 @@ export struct PlayerEnginePage {
   @Local mpvCacheIndex: number = 1
   list: Array<PlayerEngineItem> = [
     new PlayerEngineItem(
-      PlayerEngineType.IJK,
-      $r('app.media.ijk'),
-      $r('app.string.player_engine_ijk'),
-      '兼容性好，支持更多格式'
+      PlayerEngineType.MPV,
+      $r('app.media.mpv'),
+      $r('app.string.player_engine_mpv'),
+      '主力播放器，兼顾高兼容性、字幕能力和 HDR 片源支持'
     ),
     new PlayerEngineItem(
       PlayerEngineType.AV,
       $r('app.media.hmos'),
       $r('app.string.player_engine_av'),
-      '鸿蒙原生播放器'
-    ),
-    new PlayerEngineItem(
-      PlayerEngineType.MPV,
-      $r('app.media.mpv'),
-      $r('app.string.player_engine_mpv'),
-      'MPV 内核，适合高兼容性播放'
+      '系统兜底播放器，适合简单片源'
     )
   ]
   mpvDecodeList: Array<MpvDecodeItem> = [
@@ -45,12 +39,10 @@ export struct PlayerEnginePage {
 
   aboutToAppear(): void {
     const current = AppPreference.getInstance().getPlayerEngineType()
-    if (current === PlayerEngineType.IJK) {
-      this.selectIndex = 0
-    } else if (current === PlayerEngineType.AV) {
+    if (current === PlayerEngineType.AV) {
       this.selectIndex = 1
     } else {
-      this.selectIndex = 2
+      this.selectIndex = 0
     }
     this.syncMpvSettings()
   }
@@ -107,7 +99,7 @@ export struct PlayerEnginePage {
         }
         .width('100%')
         .height(150)
-        .columnsTemplate('1fr 1fr 1fr')
+        .columnsTemplate('1fr 1fr')
         .backgroundColor($r('app.color.bg_1'))
         .borderRadius(12)
         .padding({

@@ -15,7 +15,6 @@ import { Constants } from "../../utils/Constants";
 import axios, { AxiosError, AxiosResponse } from "@ohos/axios";
 import { buffer, uri } from "@kit.ArkTS";
 import { SubtitleManager } from "../../utils/SubtitleManager";
-import { IjkMediaPlayer } from "@ohos/ijkplayer";
 import { QueueItem } from "../../entity/QueueItem";
 import avSessionManager from "../../utils/AVSessionManager";
 import { avSession } from "@kit.AVSessionKit";
@@ -79,6 +78,21 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
 
   private isMpvEngine(): boolean {
     return AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.MPV
+  }
+
+  private getCurrentPlaybackPositionMs(): number {
+    if (this.ui.playbackPositionMs > 0) {
+      return this.ui.playbackPositionMs
+    }
+    return this.mediaSourceOrNull?.startTimeMs ?? 0
+  }
+
+  private getCurrentPlaybackDurationMs(): number {
+    const runtimeTicks = this.mediaSourceOrNull?.runTimeTicks ?? 0
+    if (runtimeTicks > 0) {
+      return runtimeTicks / Constants.TICKS_PER_MILLISECOND
+    }
+    return 0
   }
 
   @Monitor('mediaSourceOrNull')
@@ -318,7 +332,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     let hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
     let lastPositionTicks =
       hasFinished ? mediaSource.runTimeTicks :
-        (this.isMpvEngine() ? this.ui.playbackPositionMs : IjkMediaPlayer.getInstance().getCurrentPosition()) * Constants.TICKS_PER_MILLISECOND
+        this.getCurrentPlaybackPositionMs() * Constants.TICKS_PER_MILLISECOND
     let playStateApi = getPlaystateApi(ApiClient.Instance())
     await playStateApi.reportPlaybackStopped({
       playbackStopInfo: {
@@ -435,10 +449,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         'eventName': 'Pause'
       }
     })
-    if (this.isMpvEngine()) {
-      return this.ui.playbackPositionMs
-    }
-    return IjkMediaPlayer.getInstance().getCurrentPosition()
+    return this.getCurrentPlaybackPositionMs()
   }
 
   changeBitrate(bitrate?: number) {
@@ -472,9 +483,9 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         mediaType: 'VIDEO',
         appName: Constants.APP_INFO_NAME,
         //startPosition为投播当前进度，设置该字段可将本机播放进度同步到远端
-        startPosition: IjkMediaPlayer.getInstance().getCurrentPosition(),
+        startPosition: this.getCurrentPlaybackPositionMs(),
         // 投播资源播放时长，设置该字段可将本机播放时长同步到远端显示
-        duration: IjkMediaPlayer.getInstance().getDuration(),
+        duration: this.getCurrentPlaybackDurationMs(),
       }
     }
 
@@ -543,7 +554,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         //startPosition为投播当前进度，设置该字段可将本机播放进度同步到远端
         startPosition: 0,
         // 投播资源播放时长，设置该字段可将本机播放时长同步到远端显示
-        duration: IjkMediaPlayer.getInstance().getDuration(),
+        duration: this.getCurrentPlaybackDurationMs(),
       }
     }
 
@@ -657,7 +668,7 @@ class Call implements Callback {
 
   public prepared(): void {
     if (this.that.ui.danmuModel) {
-      this.that.ui.danmuModel.start(IjkMediaPlayer.getInstance().getCurrentPosition());
+      this.that.ui.danmuModel.start(this.that.ui.playbackPositionMs);
       this.that.ui.enableDanmu = true
     }
   }

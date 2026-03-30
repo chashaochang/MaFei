@@ -544,6 +544,7 @@ export struct AVPlayerView {
         case 'completed':
           this.ui.CONTROL_PlayStatus = PlayStatus.DONE
           this.ui.playerStatus = PlayerStatus.COMPLETED
+          this.ui.playbackPositionMs = this.duration
           this.replayVisible = Visibility.Visible
           break
         case 'stopped':
@@ -559,6 +560,7 @@ export struct AVPlayerView {
 
     player.on('timeUpdate', (time: number) => {
       this.currentPosition = time
+      this.ui.playbackPositionMs = time
       this.currentTime = this.formatTime(time)
       if (this.duration > 0) {
         this.progressValue = (time / this.duration) * 100

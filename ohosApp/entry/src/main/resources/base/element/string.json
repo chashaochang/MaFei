@@ -53,14 +53,6 @@
       "value": "Honey, the video is playing errant. The system is wandering."
     },
     {
-      "name": "ijkplayer_Audio_player",
-      "value": "ijkplayer Audio player"
-    },
-    {
-      "name": "ijkplayer_Example",
-      "value": "ijkplayer Example"
-    },
-    {
       "name": "Test_address",
       "value": "Test address:"
     },
@@ -183,10 +175,6 @@
     {
       "name": "color_mode_dark",
       "value": "深色"
-    },
-    {
-      "name": "player_engine_ijk",
-      "value": "IJKPlayer"
     },
     {
       "name": "player_engine_av",
