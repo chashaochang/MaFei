@@ -147,6 +147,30 @@ export class AppPreference {
     return PlayerEngineType.IJK
   }
 
+  setMpvUseHardwareDecode(enabled: boolean) {
+    this.setValue<boolean>(Constants.PREF_MPV_HARDWARE_DECODE, enabled)
+  }
+
+  getMpvUseHardwareDecode(): boolean {
+    let enabled = this.getValue<boolean>(Constants.PREF_MPV_HARDWARE_DECODE)
+    if (enabled !== null) {
+      return enabled
+    }
+    return false
+  }
+
+  setMpvCacheSizeMb(sizeMb: number) {
+    this.setValue<number>(Constants.PREF_MPV_CACHE_SIZE_MB, sizeMb)
+  }
+
+  getMpvCacheSizeMb(): number {
+    let sizeMb = this.getValue<number>(Constants.PREF_MPV_CACHE_SIZE_MB)
+    if (sizeMb !== null && sizeMb > 0) {
+      return sizeMb
+    }
+    return 1024
+  }
+
   getSearchHistory(): string[] {
     let history = this.getValue<string[]>(Constants.PREF_SEARCH_HISTORY)
     if (history !== null) {

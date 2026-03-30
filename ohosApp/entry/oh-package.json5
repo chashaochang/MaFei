@@ -14,7 +14,8 @@
     "@ohos/lottie": "^2.0.24",
     "@abner/refresh_v2": "^1.0.4",
     "@hw-agconnect/ui-skeleton": "^1.0.0",
-    "iso_language_codes": "file:../iso_language_codes"
+    "iso_language_codes": "file:../iso_language_codes",
+    "libmpvnative.so": "file:./src/main/cpp/types/libmpvnative"
   },
   "devDependencies": {},
   "dynamicDependencies": {}
