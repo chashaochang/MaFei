@@ -43,6 +43,7 @@ export struct MPVPlayerView {
   @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
 
   @Local progressValue: number = 0
+  @Local cacheProgressValue: number = 0
   @Local currentTime: string = '00:00'
   @Local totalTime: string = '00:00'
   @Local duration: number = 0
@@ -88,6 +89,7 @@ export struct MPVPlayerView {
     this.playbackCompleted = false
     this.currentPosition = 0
     this.progressValue = 0
+    this.cacheProgressValue = 0
     this.currentTime = '00:00'
     this.loadedExternalSubtitleUrls = []
     this.clearPendingSubtitleSelection(false)
@@ -165,6 +167,7 @@ export struct MPVPlayerView {
     this.appliedOsdSurfaceKey = ''
     this.clearPendingSubtitleSelection(false)
     this.ui.playbackPositionMs = 0
+    this.cacheProgressValue = 0
   }
 
   private shouldUseSurfacePlayback(): boolean {
@@ -357,6 +360,7 @@ export struct MPVPlayerView {
     this.sourceLoaded = true
     this.playbackCompleted = false
     this.loading = true
+    this.cacheProgressValue = 0
     this.ui.CONTROL_PlayStatus = this.ui.playWhenReady ? PlayStatus.PLAY : PlayStatus.PAUSE
     this.ui.playerStatus = this.ui.playWhenReady ? PlayerStatus.PLAYING : PlayerStatus.PAUSED
     const startPositionSeconds = this.ui.initSeek > 0 ? this.ui.initSeek / 1000 : 0
@@ -416,6 +420,9 @@ export struct MPVPlayerView {
         this.currentTime = this.formatTime(position)
         if (this.duration > 0) {
           this.progressValue = Math.min(PROGRESS_MAX_VALUE, (position / this.duration) * PROGRESS_MAX_VALUE)
+          const cacheDuration = Math.max(0, this.mpvPlayer.getCacheDurationMs())
+          const bufferedPosition = Math.min(this.duration, position + cacheDuration)
+          this.cacheProgressValue = Math.min(PROGRESS_MAX_VALUE, (bufferedPosition / this.duration) * PROGRESS_MAX_VALUE)
         }
       }
     }, 500)
@@ -1160,20 +1167,32 @@ export struct MPVPlayerView {
           .fontColor(Color.White)
           .fontSize(13)
           .margin({ left: 16, right: 8 })
-        Slider({
-          value: this.progressValue,
-          min: 0,
-          max: PROGRESS_MAX_VALUE,
-          step: 1,
-          style: SliderStyle.OutSet
-        })
-          .layoutWeight(1)
-          .blockColor(Color.White)
-          .trackColor(Color.Gray)
-          .selectedColor($r('app.color.color_main'))
-          .onChange((value: number) => {
-            this.onSeek(value)
+        Stack() {
+          Progress({
+            value: this.cacheProgressValue,
+            total: PROGRESS_MAX_VALUE,
+            type: ProgressType.Linear
           })
+            .height(3)
+            .width('100%')
+            .color('#80FFFFFF')
+
+          Slider({
+            value: this.progressValue,
+            min: 0,
+            max: PROGRESS_MAX_VALUE,
+            step: 1,
+            style: SliderStyle.OutSet
+          })
+            .width('100%')
+            .blockColor(Color.White)
+            .trackColor('#4DFFFFFF')
+            .selectedColor($r('app.color.color_main'))
+            .onChange((value: number) => {
+              this.onSeek(value)
+            })
+        }
+          .layoutWeight(1)
         Text(this.totalTime)
           .fontColor(Color.White)
           .fontSize(13)
