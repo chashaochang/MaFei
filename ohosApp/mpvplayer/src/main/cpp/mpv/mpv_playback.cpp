@@ -117,7 +117,7 @@ napi_value GetCurrentPosition(napi_env env, napi_callback_info info) {
     
     if (ret < 0) {
         OH_LOG_WARN(LOG_APP, "[GetCurrentPosition] Failed to get time-pos: %{public}s", mpv_error_string(ret));
-        time_pos = 0.0;
+        time_pos = -1.0;
     } else {
         OH_LOG_INFO(LOG_APP, "[GetCurrentPosition] time-pos: %{public}.3f seconds", time_pos);
     }

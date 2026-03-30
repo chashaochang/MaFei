@@ -497,7 +497,7 @@ bool ConfigureMPV(mpv_handle *mpv) {
 
     // ========== 通用配置 ==========
     SetMpvOption(mpv, "force-window", "yes");
-    SetMpvOption(mpv, "idle", "once");
+    SetMpvOption(mpv, "idle", "yes");
     SetMpvOption(mpv, "keepaspect", "yes");
 
     // ========== 视频输出和硬件解码配置 ==========
