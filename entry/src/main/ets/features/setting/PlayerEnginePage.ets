@@ -190,7 +190,7 @@ export struct PlayerEnginePage {
           }
           .width('100%')
 
-          Text(this.mpvDecodeIndex === 1 ? '硬解当前走 MPV 的 buffer-hw 路径；如果再次遇到黑屏或花屏，切回软解即可。' : '软解当前走 buffer-sw 路径，兼容性最好，但功耗和 CPU 占用会更高。')
+          Text(this.mpvDecodeIndex === 1 ? '硬解当前走 MPV 的 surface-hw 路径，更适合验证 HDR 输出；如果再次遇到黑屏或花屏，切回软解即可。' : '软解当前优先用于兼容性兜底，但当前 surface 实验分支仍会以 surface 路径初始化 MPV。')
             .fontSize(12)
             .fontColor($r('app.color.text_1'))
         }
