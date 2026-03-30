@@ -73,6 +73,27 @@ export class JellyfinMediaSource {
     return this.selectedSubtitleStream?.Index ?? -1
   }
 
+  private normalizeStreamLabel(value?: string | null): string {
+    if (!value) {
+      return ''
+    }
+    return value.trim().toLowerCase()
+  }
+
+  private pickMarkedSubtitleStream(streams: MediaStream[]): MediaStream | undefined {
+    return streams.find((stream) => stream.IsDefault === true)
+      ?? streams.find((stream) => {
+        const label = this.normalizeStreamLabel(stream.DisplayTitle)
+        return label.includes('default') || label.includes('默认')
+      })
+      ?? streams.find((stream) => stream.IsForced === true)
+      ?? streams.find((stream) => {
+        const label = this.normalizeStreamLabel(stream.DisplayTitle)
+        return label.includes('forced') || label.includes('强制')
+      })
+      ?? streams[0]
+  }
+
 
   constructor(itemId: string,
     item: BaseItemDto,
@@ -108,6 +129,8 @@ export class JellyfinMediaSource {
     this.runTimeTicks = this.sourceInfo.RunTimeTicks ?? 0
     this.runTimeMs = this.runTimeTicks / Constants.TICKS_PER_MILLISECOND
     this.mediaStreams = sourceInfo.MediaStreams ?? []
+    const desiredAudioStreamIndex = audioStreamIndex ?? sourceInfo.DefaultAudioStreamIndex
+    const desiredSubtitleStreamIndex = subtitleStreamIndex ?? sourceInfo.DefaultSubtitleStreamIndex
     let audio: MediaStream[] = []
     let subtitles: MediaStream[] = []
     let externalSubtitles: ExternalSubtitleStream[] = []
@@ -121,13 +144,13 @@ export class JellyfinMediaSource {
           break
         case MediaStreamType.Audio:
           audio.push(mediaStream)
-          if (mediaStream.Index == (audioStreamIndex ?? sourceInfo.DefaultAudioStreamIndex)) {
+          if (mediaStream.Index == desiredAudioStreamIndex) {
             this.selectedAudioStream = mediaStream
           }
           break
         case MediaStreamType.Subtitle:
           subtitles.push(mediaStream)
-          if (mediaStream.Index == (subtitleStreamIndex ?? sourceInfo.DefaultSubtitleStreamIndex)) {
+          if (mediaStream.Index == desiredSubtitleStreamIndex) {
             this.selectedSubtitleStream = mediaStream
           }
           // External subtitles as specified by the deliveryMethod.
@@ -137,9 +160,12 @@ export class JellyfinMediaSource {
             let deliveryUrl = mediaStream.DeliveryUrl
             let mimeType = CodecHelpers.getSubtitleMimeType(mediaStream.Codec)
             if (deliveryUrl != null && mimeType != null) {
+              const subtitleUrl = deliveryUrl.startsWith('http://') || deliveryUrl.startsWith('https://')
+                ? deliveryUrl
+                : ApiClient.Instance().createUrl(deliveryUrl)
               externalSubtitles.push(new ExternalSubtitleStream(
                 mediaStream.Index!,
-                deliveryUrl,
+                subtitleUrl,
                 mimeType,
                 mediaStream.DisplayTitle ?? '',
                 mediaStream.Language ?? Constants.LANGUAGE_UNDEFINED,
@@ -149,9 +175,21 @@ export class JellyfinMediaSource {
           break
       }
     }
+    if (!this.selectedAudioStream) {
+      this.selectedAudioStream = audio.find((stream) => stream.IsDefault === true) ?? audio[0]
+    }
+    if (subtitleStreamIndex !== -1 && !this.selectedSubtitleStream) {
+      this.selectedSubtitleStream = this.pickMarkedSubtitleStream(subtitles)
+    }
     this.audioStreams = audio
     this.subtitleStreams = subtitles
     this.externalSubtitleStreams = externalSubtitles
+    console.warn(`[MediaSource] resolved audioSelected=${this.selectedAudioStream?.Index ?? 'none'}, subtitleDefault=${sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, requestedSubtitle=${subtitleStreamIndex ?? 'null'}, subtitleSelected=${this.selectedSubtitleStream?.Index ?? 'none'}, subtitleCount=${subtitles.length}`)
+    if (subtitles.length > 0) {
+      console.info(`[MediaSource] subtitle selection defaultIndex=${sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, requestedIndex=${subtitleStreamIndex ?? 'null'}, selected=${this.selectedSubtitleStream?.Index ?? 'none'}, streams=${subtitles.map((stream) =>
+        `${stream.Index}:${stream.DisplayTitle ?? ''}:default=${stream.IsDefault === true}:forced=${stream.IsForced === true}:external=${stream.IsExternal === true}`
+      ).join(' | ')}`)
+    }
   }
 
   //private _startTimeMs: number = 0

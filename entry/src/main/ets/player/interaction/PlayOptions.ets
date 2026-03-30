@@ -15,21 +15,24 @@ export class PlayOptions {
     audioStreamIndex?: number | null,
     subtitleStreamIndex?: number | null
   ) {
-    this.ids = ids || []
-    this.mediaSourceId = mediaSourceId || null
+    this.ids = ids ?? []
+    this.mediaSourceId = mediaSourceId ?? null
     this.startIndex = startIndex ?? 0
-    this.startPositionTicks = startPositionTicks || null
-    this.audioStreamIndex = audioStreamIndex || null
-    this.subtitleStreamIndex = subtitleStreamIndex || null
+    this.startPositionTicks = startPositionTicks ?? null
+    this.audioStreamIndex = audioStreamIndex ?? null
+    this.subtitleStreamIndex = subtitleStreamIndex ?? null
   }
 
   static fromJson(json: string): PlayOptions {
     const object: PlayOptions = JSON.parse(json)
-    return object
-    // // 处理 ids 的转换
-    // const ids: string[] = parseUUIDs(json['ids'])
-    // return new PlayOptions(ids, object.mediaSourceId, object.startIndex, object.startPositionTicks,
-    //   object.audioStreamIndex, object.subtitleStreamIndex)
+    return new PlayOptions(
+      object.ids,
+      object.mediaSourceId ?? null,
+      object.startIndex ?? 0,
+      object.startPositionTicks ?? null,
+      object.audioStreamIndex ?? null,
+      object.subtitleStreamIndex ?? null
+    )
   }
 }
 

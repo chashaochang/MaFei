@@ -16,6 +16,7 @@ napi_value Create(napi_env env, napi_callback_info info);
 napi_value Destroy(napi_env env, napi_callback_info info);
 napi_value Command(napi_env env, napi_callback_info info);
 napi_value IsInitialized(napi_env env, napi_callback_info info);
+napi_value IsDestroying(napi_env env, napi_callback_info info);
 napi_value Reset(napi_env env, napi_callback_info info);
 
 // ==================== 全局状态 ====================
