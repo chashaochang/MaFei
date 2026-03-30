@@ -17,6 +17,7 @@ import { ExternalSubtitleStream } from '../../player/source/ExternalSubtitleStre
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
+const MPV_OSD_XCOMPONENT_ID: string = 'mpvPlayerOsdSurface'
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
 
@@ -53,6 +54,7 @@ export struct MPVPlayerView {
   @Local playSpeed: number = 1
 
   private xComponentController: XComponentController = new XComponentController()
+  private osdXComponentController: XComponentController = new XComponentController()
   private mpvPlayer: MpvNativePlayer = new MpvNativePlayer()
   private progressTimer: number = -1
   private diagnosticsTimer: number = -1
@@ -60,12 +62,17 @@ export struct MPVPlayerView {
   private subtitleBootstrapTimer: number = -1
   private sourceLoaded: boolean = false
   private xComponentReady: boolean = false
+  private osdXComponentReady: boolean = false
   private initializeRequested: boolean = false
   private shouldResumeOnPageShow: boolean = false
   private pendingSubtitleSelection?: MediaStream
   private pendingSubtitleSelectionAllowFallback: boolean = false
   private pendingSubtitleSelectionWaitingLogged: boolean = false
   private loadedExternalSubtitleUrls: string[] = []
+  private osdSurfaceId: string = '0'
+  private osdSurfaceWidthPx: number = 0
+  private osdSurfaceHeightPx: number = 0
+  private appliedOsdSurfaceKey: string = ''
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
@@ -142,13 +149,67 @@ export struct MPVPlayerView {
     this.stopDiagnosticsTimer()
     this.stopSubtitleBootstrapTimer()
     this.mpvPlayer.release()
+    this.mpvPlayer.clearOsdSurface()
     this.initialized = false
     this.sourceLoaded = false
     this.xComponentReady = false
+    this.osdXComponentReady = false
     this.initializeRequested = false
     this.loadedExternalSubtitleUrls = []
+    this.osdSurfaceId = '0'
+    this.osdSurfaceWidthPx = 0
+    this.osdSurfaceHeightPx = 0
+    this.appliedOsdSurfaceKey = ''
     this.clearPendingSubtitleSelection(false)
     this.ui.playbackPositionMs = 0
+  }
+
+  private shouldUseSurfacePlayback(): boolean {
+    return !this.vm.mediaSourceOrNull?.isDolbyVisionStream()
+  }
+
+  private updateOsdSurfaceSize(widthPx: number, heightPx: number): void {
+    const normalizedWidth = Math.max(0, Math.round(widthPx))
+    const normalizedHeight = Math.max(0, Math.round(heightPx))
+    if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+      return
+    }
+    this.osdSurfaceWidthPx = normalizedWidth
+    this.osdSurfaceHeightPx = normalizedHeight
+    if (this.shouldUseSurfacePlayback()) {
+      this.applyOsdSurfaceBinding()
+    }
+  }
+
+  private applyOsdSurfaceBinding(force: boolean = false): boolean {
+    if (!this.shouldUseSurfacePlayback()) {
+      if (force) {
+        this.mpvPlayer.clearOsdSurface()
+      }
+      this.appliedOsdSurfaceKey = ''
+      return true
+    }
+    if (!this.osdXComponentReady || this.osdSurfaceId.length === 0 || this.osdSurfaceId === '0') {
+      return false
+    }
+    if (this.osdSurfaceWidthPx <= 0 || this.osdSurfaceHeightPx <= 0) {
+      const windowRect = this.vm.appUIState.windowClass?.getWindowProperties().windowRect
+      if (windowRect) {
+        this.osdSurfaceWidthPx = Math.round(windowRect.width)
+        this.osdSurfaceHeightPx = Math.round(windowRect.height)
+      }
+    }
+    if (this.osdSurfaceWidthPx <= 0 || this.osdSurfaceHeightPx <= 0) {
+      return false
+    }
+    const bindingKey = `${this.osdSurfaceId}:${this.osdSurfaceWidthPx}x${this.osdSurfaceHeightPx}`
+    if (!force && bindingKey === this.appliedOsdSurfaceKey) {
+      return true
+    }
+    this.mpvPlayer.setOsdSurface(this.osdSurfaceId, this.osdSurfaceWidthPx, this.osdSurfaceHeightPx)
+    this.appliedOsdSurfaceKey = bindingKey
+    this.logMpv(`bind osd surface: id=${this.osdSurfaceId}, size=${this.osdSurfaceWidthPx}x${this.osdSurfaceHeightPx}`)
+    return true
   }
 
   private bindPlayerCallbacks(): void {
@@ -215,7 +276,8 @@ export struct MPVPlayerView {
   }
 
   private scheduleInitializePlayer(): void {
-    if (this.initialized || this.initializeRequested || !this.xComponentReady) {
+    const needsOsdSurface = this.shouldUseSurfacePlayback()
+    if (this.initialized || this.initializeRequested || !this.xComponentReady || (needsOsdSurface && !this.osdXComponentReady)) {
       return
     }
     this.initializeRequested = true
@@ -224,7 +286,7 @@ export struct MPVPlayerView {
     // Let the loading UI paint first, then start the native create path.
     this.initializeTimer = setTimeout(() => {
       this.initializeTimer = -1
-      if (!this.xComponentReady || this.initialized) {
+      if (!this.xComponentReady || this.initialized || (this.shouldUseSurfacePlayback() && !this.osdXComponentReady)) {
         this.initializeRequested = false
         return
       }
@@ -241,6 +303,16 @@ export struct MPVPlayerView {
     const cacheSizeMb = AppPreference.getInstance().getMpvCacheSizeMb()
     const source = this.vm.mediaSourceOrNull
     const preferSurface = !source?.isDolbyVisionStream()
+    if (preferSurface && !this.applyOsdSurfaceBinding(true)) {
+      this.loading = false
+      this.ui.playerStatus = PlayerStatus.ERROR
+      console.error('[MPV] osd surface not ready for surface mode')
+      return
+    }
+    if (!preferSurface) {
+      this.mpvPlayer.clearOsdSurface()
+      this.appliedOsdSurfaceKey = ''
+    }
     this.mpvPlayer.configurePlayback(useHardwareDecode, cacheSizeMb, preferSurface)
     if (source?.isDolbyVisionStream()) {
       this.logMpv(`dolby vision detected, prefer buffer-hw for tone mapping: range=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}`)
@@ -1216,6 +1288,36 @@ export struct MPVPlayerView {
           this.showControls = !this.showControls
         })
 
+      if (this.shouldUseSurfacePlayback()) {
+        XComponent({
+          id: MPV_OSD_XCOMPONENT_ID,
+          type: XComponentType.SURFACE,
+          controller: this.osdXComponentController
+        })
+          .onLoad(() => {
+            this.osdSurfaceId = this.osdXComponentController.getXComponentSurfaceId()
+            this.osdXComponentReady = this.osdSurfaceId.length > 0 && this.osdSurfaceId !== '0'
+            this.appliedOsdSurfaceKey = ''
+            if (!this.osdXComponentReady) {
+              console.error('[MPV] osd xcomponent surface id unavailable')
+              return
+            }
+            this.applyOsdSurfaceBinding(true)
+            this.scheduleInitializePlayer()
+          })
+          .onDestroy(() => {
+            this.osdXComponentReady = false
+            this.osdSurfaceId = '0'
+            this.appliedOsdSurfaceKey = ''
+            this.mpvPlayer.clearOsdSurface()
+          })
+          .width('100%')
+          .height('100%')
+          .id(MPV_OSD_XCOMPONENT_ID)
+          .backgroundColor(Color.Transparent)
+          .hitTestBehavior(HitTestMode.None)
+      }
+
       Column() {
         this.centerOverlay()
       }
@@ -1263,5 +1365,11 @@ export struct MPVPlayerView {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      this.updateOsdSurfaceSize(
+        this.getUIContext().vp2px(newValue.width as number),
+        this.getUIContext().vp2px(newValue.height as number)
+      )
+    })
   }
 }

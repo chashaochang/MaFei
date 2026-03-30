@@ -27,6 +27,7 @@ import {
   setDecodeType,
   setHwdecMode,
   setLogLevel,
+  setOsdSurface,
   setOnDurationChangedCallback,
   setOnEndFileCallback,
   setOnFileLoadedCallback,
@@ -74,6 +75,14 @@ export class MpvNativePlayer {
     setCacheSize(cacheSizeMb)
     setAutoBufferFallback(true)
     setLogLevel('warn')
+  }
+
+  setOsdSurface(surfaceId: string, width: number, height: number): void {
+    setOsdSurface(surfaceId, Math.max(0, Math.round(width)), Math.max(0, Math.round(height)))
+  }
+
+  clearOsdSurface(): void {
+    setOsdSurface('0', 0, 0)
   }
 
   initialize(): boolean {
