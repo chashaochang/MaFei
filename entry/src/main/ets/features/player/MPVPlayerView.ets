@@ -52,6 +52,8 @@ export struct MPVPlayerView {
   @Local loading: boolean = true
   @Local playbackCompleted: boolean = false
   @Local playSpeed: number = 1
+  @Local videoAspectRatio: number = 16 / 9
+  @Local videoWidth: string = '100%'
 
   private xComponentController: XComponentController = new XComponentController()
   private osdXComponentController: XComponentController = new XComponentController()
@@ -73,6 +75,7 @@ export struct MPVPlayerView {
   private osdSurfaceWidthPx: number = 0
   private osdSurfaceHeightPx: number = 0
   private appliedOsdSurfaceKey: string = ''
+  private videoParentAspectRatio: number = 16 / 9
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
@@ -168,6 +171,31 @@ export struct MPVPlayerView {
     return !this.vm.mediaSourceOrNull?.isDolbyVisionStream()
   }
 
+  private hasOsdSurfaceSize(): boolean {
+    return this.osdSurfaceWidthPx > 0 && this.osdSurfaceHeightPx > 0
+  }
+
+  private setVideoWH(videoW: number, videoH: number): void {
+    if (!videoW || !videoH || videoH === 0) {
+      return
+    }
+    const videoAspect = videoW / videoH
+    this.videoAspectRatio = videoAspect
+    if (this.videoParentAspectRatio > 0 && this.videoParentAspectRatio > videoAspect) {
+      this.videoWidth = (videoW / (videoH * this.videoParentAspectRatio)) * 100 + '%'
+    } else {
+      this.videoWidth = '100%'
+    }
+  }
+
+  private updateVideoLayoutFromPlayer(): void {
+    const width = this.mpvPlayer.getVideoWidth()
+    const height = this.mpvPlayer.getVideoHeight()
+    if (width > 0 && height > 0) {
+      this.setVideoWH(width, height)
+    }
+  }
+
   private updateOsdSurfaceSize(widthPx: number, heightPx: number): void {
     const normalizedWidth = Math.max(0, Math.round(widthPx))
     const normalizedHeight = Math.max(0, Math.round(heightPx))
@@ -178,6 +206,7 @@ export struct MPVPlayerView {
     this.osdSurfaceHeightPx = normalizedHeight
     if (this.shouldUseSurfacePlayback()) {
       this.applyOsdSurfaceBinding()
+      this.scheduleInitializePlayer()
     }
   }
 
@@ -191,13 +220,6 @@ export struct MPVPlayerView {
     }
     if (!this.osdXComponentReady || this.osdSurfaceId.length === 0 || this.osdSurfaceId === '0') {
       return false
-    }
-    if (this.osdSurfaceWidthPx <= 0 || this.osdSurfaceHeightPx <= 0) {
-      const windowRect = this.vm.appUIState.windowClass?.getWindowProperties().windowRect
-      if (windowRect) {
-        this.osdSurfaceWidthPx = Math.round(windowRect.width)
-        this.osdSurfaceHeightPx = Math.round(windowRect.height)
-      }
     }
     if (this.osdSurfaceWidthPx <= 0 || this.osdSurfaceHeightPx <= 0) {
       return false
@@ -244,6 +266,7 @@ export struct MPVPlayerView {
       },
       onFileLoaded: () => {
         this.loading = false
+        this.updateVideoLayoutFromPlayer()
         this.bootstrapTracksForCurrentSource()
         if (!this.ui.playWhenReady) {
           this.pausePlayback(false)
@@ -277,7 +300,8 @@ export struct MPVPlayerView {
 
   private scheduleInitializePlayer(): void {
     const needsOsdSurface = this.shouldUseSurfacePlayback()
-    if (this.initialized || this.initializeRequested || !this.xComponentReady || (needsOsdSurface && !this.osdXComponentReady)) {
+    if (this.initialized || this.initializeRequested || !this.xComponentReady ||
+      (needsOsdSurface && (!this.osdXComponentReady || !this.hasOsdSurfaceSize()))) {
       return
     }
     this.initializeRequested = true
@@ -286,7 +310,8 @@ export struct MPVPlayerView {
     // Let the loading UI paint first, then start the native create path.
     this.initializeTimer = setTimeout(() => {
       this.initializeTimer = -1
-      if (!this.xComponentReady || this.initialized || (this.shouldUseSurfacePlayback() && !this.osdXComponentReady)) {
+      if (!this.xComponentReady || this.initialized ||
+        (this.shouldUseSurfacePlayback() && (!this.osdXComponentReady || !this.hasOsdSurfaceSize()))) {
         this.initializeRequested = false
         return
       }
@@ -406,6 +431,7 @@ export struct MPVPlayerView {
   private scheduleDiagnostics(reason: string, delayMs: number): void {
     this.stopDiagnosticsTimer()
     this.diagnosticsTimer = setTimeout(() => {
+      this.updateVideoLayoutFromPlayer()
       this.logVideoDiagnostics(reason)
       this.diagnosticsTimer = -1
     }, delayMs)
@@ -1270,53 +1296,72 @@ export struct MPVPlayerView {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      XComponent({
-        id: MPV_XCOMPONENT_ID,
-        type: XComponentType.SURFACE,
-        libraryname: 'mpvnative',
-        controller: this.xComponentController
-      })
-        .onLoad(() => {
-          this.xComponentReady = true
-          this.scheduleInitializePlayer()
-        })
-        .width('100%')
-        .height('100%')
-        .id(MPV_XCOMPONENT_ID)
-        .backgroundColor(Color.Black)
-        .onClick(() => {
-          this.showControls = !this.showControls
-        })
+      Column() {
+        Stack() {
+          XComponent({
+            id: MPV_XCOMPONENT_ID,
+            type: XComponentType.SURFACE,
+            libraryname: 'mpvnative',
+            controller: this.xComponentController
+          })
+            .onLoad(() => {
+              this.xComponentReady = true
+              this.scheduleInitializePlayer()
+            })
+            .width('100%')
+            .height('100%')
+            .id(MPV_XCOMPONENT_ID)
+            .backgroundColor(Color.Black)
+            .onClick(() => {
+              this.showControls = !this.showControls
+            })
 
-      if (this.shouldUseSurfacePlayback()) {
-        XComponent({
-          id: MPV_OSD_XCOMPONENT_ID,
-          type: XComponentType.SURFACE,
-          controller: this.osdXComponentController
+          if (this.shouldUseSurfacePlayback()) {
+            XComponent({
+              id: MPV_OSD_XCOMPONENT_ID,
+              type: XComponentType.SURFACE,
+              controller: this.osdXComponentController
+            })
+              .onLoad(() => {
+                this.osdSurfaceId = this.osdXComponentController.getXComponentSurfaceId()
+                this.osdXComponentReady = this.osdSurfaceId.length > 0 && this.osdSurfaceId !== '0'
+                this.appliedOsdSurfaceKey = ''
+                if (!this.osdXComponentReady) {
+                  console.error('[MPV] osd xcomponent surface id unavailable')
+                  return
+                }
+                this.applyOsdSurfaceBinding(true)
+                this.scheduleInitializePlayer()
+              })
+              .onDestroy(() => {
+                this.osdXComponentReady = false
+                this.osdSurfaceId = '0'
+                this.appliedOsdSurfaceKey = ''
+                this.mpvPlayer.clearOsdSurface()
+              })
+              .width('100%')
+              .height('100%')
+              .id(MPV_OSD_XCOMPONENT_ID)
+              .backgroundColor(Color.Transparent)
+              .hitTestBehavior(HitTestMode.None)
+          }
+        }
+        .width(this.videoWidth)
+        .aspectRatio(this.videoAspectRatio)
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          const width = newValue.width as number
+          const height = newValue.height as number
+          if (width > 0 && height > 0) {
+            this.videoParentAspectRatio = width / height
+          }
+          this.updateOsdSurfaceSize(
+            this.getUIContext().vp2px(width),
+            this.getUIContext().vp2px(height)
+          )
+          this.updateVideoLayoutFromPlayer()
         })
-          .onLoad(() => {
-            this.osdSurfaceId = this.osdXComponentController.getXComponentSurfaceId()
-            this.osdXComponentReady = this.osdSurfaceId.length > 0 && this.osdSurfaceId !== '0'
-            this.appliedOsdSurfaceKey = ''
-            if (!this.osdXComponentReady) {
-              console.error('[MPV] osd xcomponent surface id unavailable')
-              return
-            }
-            this.applyOsdSurfaceBinding(true)
-            this.scheduleInitializePlayer()
-          })
-          .onDestroy(() => {
-            this.osdXComponentReady = false
-            this.osdSurfaceId = '0'
-            this.appliedOsdSurfaceKey = ''
-            this.mpvPlayer.clearOsdSurface()
-          })
-          .width('100%')
-          .height('100%')
-          .id(MPV_OSD_XCOMPONENT_ID)
-          .backgroundColor(Color.Transparent)
-          .hitTestBehavior(HitTestMode.None)
       }
+      .aspectRatio(this.videoAspectRatio)
 
       Column() {
         this.centerOverlay()
@@ -1365,11 +1410,5 @@ export struct MPVPlayerView {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
-    .onAreaChange((_oldValue: Area, newValue: Area) => {
-      this.updateOsdSurfaceSize(
-        this.getUIContext().vp2px(newValue.width as number),
-        this.getUIContext().vp2px(newValue.height as number)
-      )
-    })
   }
 }
