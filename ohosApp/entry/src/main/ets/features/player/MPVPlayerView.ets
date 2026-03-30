@@ -7,19 +7,24 @@ import { MpvNativePlayer } from 'mpvplayer'
 import { AppPreference } from '../../data/AppPreference'
 import { BusinessError, emitter } from '@kit.BasicServicesKit'
 import { Constants } from '../../utils/Constants'
-import { avSession } from '@kit.AVSessionKit'
+import { AVCastPicker, avSession } from '@kit.AVSessionKit'
 import avSessionManager from '../../utils/AVSessionManager'
 import { common } from '@kit.AbilityKit'
 import { SmartDialog } from 'ohos_smart_dialog'
 import { QueueItem } from '../../entity/QueueItem'
 import { JellyfinMediaSource } from '../../player/source/JellyfinMediaSource'
 import { ExternalSubtitleStream } from '../../player/source/ExternalSubtitleStream'
+import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
+import { OneMoreUtil } from '../../utils/OneMoreUtil'
+import { display, window } from '@kit.ArkUI'
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
 const MPV_OSD_XCOMPONENT_ID: string = 'mpvPlayerOsdSurface'
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
+let mpvUiTime: number = 0
+let mpvUiLockTime: number = 0
 
 @Extend(Stack)
 function menuItemStyle() {
@@ -55,6 +60,8 @@ export struct MPVPlayerView {
   @Local playSpeed: number = 1
   @Local videoAspectRatio: number = 16 / 9
   @Local videoWidth: string = '100%'
+  @Local fullShowLock: boolean = false
+  @Local lock: boolean = false
 
   private xComponentController: XComponentController = new XComponentController()
   private osdXComponentController: XComponentController = new XComponentController()
@@ -77,10 +84,79 @@ export struct MPVPlayerView {
   private osdSurfaceHeightPx: number = 0
   private appliedOsdSurfaceKey: string = ''
   private videoParentAspectRatio: number = 16 / 9
+  sec: number = 3
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
     this.sendAVSessionState(this.ui.playerStatus)
+  }
+
+  private changeSystemBar(): void {
+    if (!this.vm.appUIState.isFullScreen && this.showControls) {
+      this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+    } else {
+      this.vm.appUIState.windowClass?.setWindowSystemBarEnable([])
+    }
+  }
+
+  @Monitor('showControls')
+  onControlVisibilityChanged(): void {
+    this.changeSystemBar()
+  }
+
+  @Monitor('vm.appUIState.isFullScreen')
+  onScreenChanged(): void {
+    this.changeSystemBar()
+    if (this.vm.appUIState.isFullScreen) {
+      if (OneMoreUtil.isNormalPhone()) {
+        if (canIUse('SystemCapability.Window.SessionManager')) {
+          this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
+        }
+      }
+    } else {
+      if (OneMoreUtil.isNormalPhone()) {
+        SmartDialog.dismiss()
+        if (canIUse('SystemCapability.Window.SessionManager')) {
+          this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT)
+        }
+      }
+    }
+  }
+
+  @Monitor('lock')
+  onLockChanged(): void {
+    if (this.lock) {
+      if (OneMoreUtil.isNormalPhone()) {
+        this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE)
+      } else if (OneMoreUtil.isBigScreen()) {
+        switch (display.getDefaultDisplaySync().orientation) {
+          case display.Orientation.PORTRAIT:
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT)
+            break
+          case display.Orientation.LANDSCAPE:
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE_INVERTED)
+            break
+          case display.Orientation.PORTRAIT_INVERTED:
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.PORTRAIT_INVERTED)
+            break
+          case display.Orientation.LANDSCAPE_INVERTED:
+            this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.LANDSCAPE)
+            break
+        }
+      }
+    } else {
+      if (OneMoreUtil.isBigScreen()) {
+        this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.AUTO_ROTATION)
+      }
+      this.onScreenChanged()
+    }
+  }
+
+  @Monitor('ui.isCastPlaying')
+  onCastChanged(): void {
+    if (this.ui.isCastPlaying) {
+      this.vm.appUIState.isFullScreen = false
+    }
   }
 
   @Monitor('videoUrl')
@@ -474,6 +550,50 @@ export struct MPVPlayerView {
     if (this.subtitleBootstrapTimer >= 0) {
       clearTimeout(this.subtitleBootstrapTimer)
       this.subtitleBootstrapTimer = -1
+    }
+  }
+
+  private timeCountdown(): void {
+    clearInterval(mpvUiTime)
+    if (!this.lock) {
+      this.showControls = true
+    }
+    if (this.vm.appUIState.isFullScreen) {
+      this.fullShowLock = true
+    }
+    this.sec = 3
+    mpvUiTime = setInterval(() => {
+      if (this.sec <= 0) {
+        clearInterval(mpvUiTime)
+        if (!this.loading && !this.playbackCompleted && !this.ui.playerMenus?.isShowPlayBackInfo) {
+          this.showControls = false
+        }
+        this.fullShowLock = false
+      } else {
+        this.sec--
+      }
+    }, 1000)
+  }
+
+  private timeLockCountdown(): void {
+    clearInterval(mpvUiLockTime)
+    this.fullShowLock = true
+    this.sec = 3
+    mpvUiLockTime = setInterval(() => {
+      if (this.sec <= 0) {
+        clearInterval(mpvUiLockTime)
+        this.fullShowLock = false
+      } else {
+        this.sec--
+      }
+    }, 1000)
+  }
+
+  private startOrStop(): void {
+    if (this.ui.CONTROL_PlayStatus == PlayStatus.PLAY) {
+      this.pausePlayback()
+    } else {
+      this.resumePlayback()
     }
   }
 
@@ -1142,42 +1262,141 @@ export struct MPVPlayerView {
   }
 
   @Builder
+  private topControlView(): void {
+    Row() {
+      Image($r('app.media.ic_back'))
+        .width(44)
+        .height(44)
+        .padding(12)
+        .margin({ left: 16 })
+        .onClick(() => {
+          this.vm.appUIState.isFullScreen = false
+        })
+      Text(this.ui.title)
+        .fontColor(Color.White)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .margin({ left: 4 })
+        .layoutWeight(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+      AVCastPicker({
+        normalColor: Color.White,
+      })
+        .width(24)
+        .height(24)
+        .margin({ right: 32 })
+        .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
+    }
+    .height(this.vm.appUIState.isFullScreen ? 76 : 56 + this.vm.appUIState.safeTop)
+    .width('100%')
+    .justifyContent(FlexAlign.Start)
+    .padding({
+      top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop,
+      left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+      right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+    })
+    .linearGradient({
+      angle: 0,
+      colors: [
+        ['rgba(26, 30, 35, 0.0)', 0],
+        ['rgba(26, 30, 35, 0.2)', 0.3],
+        ['rgba(26, 30, 35, 0.4)', 0.6],
+        ['rgba(26, 30, 35, 0.8)', 1]
+      ]
+    })
+    .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
   private centerOverlay(): void {
     if (this.loading) {
-      Column() {
-        LoadingProgress()
-          .color(Color.White)
-          .width(36)
-          .height(36)
-        Text('MPV 加载中')
-          .fontColor(Color.White)
-          .fontSize(12)
-          .margin({ top: 12 })
-      }
-      .padding(20)
-      .backgroundColor('#66000000')
-      .borderRadius(12)
+      Image($r('app.media.icon_load'))
+        .objectFit(ImageFit.Auto)
+        .width('120px')
+        .height('120px')
     } else if (this.playbackCompleted) {
-      Column() {
-        Button('重新播放')
-          .fontSize(14)
-          .onClick(() => {
-            this.togglePlayback()
-          })
-      }
-      .padding(20)
-      .backgroundColor('#66000000')
-      .borderRadius(12)
+      Image($r('app.media.icon_replay'))
+        .objectFit(ImageFit.Auto)
+        .width('120px')
+        .height('120px')
+        .onClick(() => {
+          this.togglePlayback()
+        })
+    }
+  }
+
+  private onSurfaceTap(): void {
+    if (this.lock) {
+      this.timeLockCountdown()
+      return
+    }
+    if (this.loading) {
+      return
+    }
+    if (OneMoreUtil.isPc()) {
+      this.startOrStop()
+      return
+    }
+    if (this.showControls) {
+      clearInterval(mpvUiTime)
+      this.showControls = false
+      this.fullShowLock = false
+    } else {
+      this.timeCountdown()
+    }
+  }
+
+  private onSingleTap(): void {
+    if (this.lock) {
+      this.timeLockCountdown()
+      return
+    }
+    if (this.loading) {
+      return
+    }
+    if (OneMoreUtil.isPc()) {
+      this.startOrStop()
+      return
+    }
+    if (this.showControls) {
+      this.showControls = false
+      this.fullShowLock = false
+    } else {
+      this.timeCountdown()
+    }
+  }
+
+  private onDoubleTap(): void {
+    if (OneMoreUtil.isPc()) {
+      return
+    }
+    if (this.lock || this.loading || !this.initialized || !this.sourceLoaded) {
+      return
+    }
+    this.togglePlayback()
+  }
+
+  private onOsdSurfaceTap(): void {
+    if (this.lock) {
+      this.timeLockCountdown()
+      return
+    }
+    if (this.loading || OneMoreUtil.isPc()) {
+      return
+    }
+    if (!this.showControls) {
+      this.timeCountdown()
     }
   }
 
   @Builder
   private bottomControls(): void {
     Column() {
-      Row() {
+      Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
         Text(this.currentTime)
           .fontColor(Color.White)
           .fontSize(13)
+          .fontWeight(FontWeight.Bold)
           .margin({ left: 16, right: 8 })
         Stack() {
           Progress({
@@ -1196,11 +1415,12 @@ export struct MPVPlayerView {
             step: 1,
             style: SliderStyle.OutSet
           })
-            .width('100%')
+            .layoutWeight(1)
             .blockColor(Color.White)
-            .trackColor('#4DFFFFFF')
+            .trackColor(Color.Gray)
             .selectedColor($r('app.color.color_main'))
-            .onChange((value: number) => {
+            .showTips(true)
+            .onChange((value: number, _mode?: SliderChangeMode) => {
               this.onSeek(value)
             })
         }
@@ -1208,10 +1428,11 @@ export struct MPVPlayerView {
         Text(this.totalTime)
           .fontColor(Color.White)
           .fontSize(13)
+          .fontWeight(FontWeight.Bold)
           .margin({ left: 8, right: 8 })
         Image($r('app.media.ic_full'))
-          .width(44)
-          .height(44)
+          .width(48)
+          .height(48)
           .padding(12)
           .onClick(() => {
             this.vm.appUIState.isFullScreen = !this.vm.appUIState.isFullScreen
@@ -1267,13 +1488,26 @@ export struct MPVPlayerView {
         .onClick(() => {
           if (this.ui.playerMenus) {
             this.ui.playerMenus.isShowPlayBackInfo = true
+            this.showControls = true
+            clearInterval(mpvUiTime)
           }
         })
-      }
-      .justifyContent(FlexAlign.Center)
-      .width('100%')
-
-      Row() {
+        Button() {
+          Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
+            .width(44)
+            .height(44)
+            .padding(10)
+        }
+        .backgroundColor(Color.Transparent)
+        .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
+        .onClick(() => {
+          this.ui.danmuOpen = !this.ui.danmuOpen
+          if (this.ui.danmuOpen) {
+            this.ui.danmuModel.show()
+          } else {
+            this.ui.danmuModel.hide()
+          }
+        })
         Blank()
           .layoutWeight(1)
 
@@ -1304,7 +1538,7 @@ export struct MPVPlayerView {
           .bindMenu(this.qualityMenu())
         }
 
-        Text(`倍速 ${this.formatSpeedLabel(this.playSpeed)}X`)
+        Text('倍速')
           .fontColor(Color.White)
           .fontSize(16)
           .height('100%')
@@ -1316,17 +1550,36 @@ export struct MPVPlayerView {
               alignment: Alignment.End
             })
           })
+
+        if (OneMoreUtil.isPc()) {
+          Image(this.vm.appUIState.isFullScreen ? $r('app.media.ic_out_fullscreen') : $r('app.media.ic_fullscreen'))
+            .width(44)
+            .height(44)
+            .padding(12)
+            .onClick(() => {
+              this.vm.appUIState.isFullScreen = !this.vm.appUIState.isFullScreen
+              if (this.vm.appUIState.isFullScreen) {
+                OneMoreUtil.maximize()
+              } else {
+                OneMoreUtil.recover()
+              }
+            })
+        }
       }
-      .height(36)
-      .width('100%')
+      .height(44)
+      .padding({ left: 8, right: 8 })
+      .visibility(this.vm.appUIState.isFullScreen ? Visibility.Visible : Visibility.None)
     }
     .width('100%')
-    .padding({ left: 8, right: 8, top: 8, bottom: 16 })
-    .backgroundColor('#66000000')
+    .padding({
+      bottom: this.showControls && !this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeBottom : 10,
+      left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+      right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
+    })
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.Center }) {
       Column() {
         Stack() {
           XComponent({
@@ -1338,13 +1591,13 @@ export struct MPVPlayerView {
             .onLoad(() => {
               this.xComponentReady = true
               this.scheduleInitializePlayer()
-            })
+          })
             .width('100%')
             .height('100%')
             .id(MPV_XCOMPONENT_ID)
             .backgroundColor(Color.Black)
             .onClick(() => {
-              this.showControls = !this.showControls
+              this.onSurfaceTap()
             })
 
           if (this.shouldUseSurfacePlayback()) {
@@ -1374,7 +1627,12 @@ export struct MPVPlayerView {
               .height('100%')
               .id(MPV_OSD_XCOMPONENT_ID)
               .backgroundColor(Color.Transparent)
-              .hitTestBehavior(HitTestMode.None)
+              .visibility((this.showControls || this.ui.playerMenus?.isShowPlayBackInfo || this.loading || this.playbackCompleted)
+                ? Visibility.Hidden
+                : Visibility.Visible)
+              .onClick(() => {
+                this.onOsdSurfaceTap()
+              })
           }
         }
         .width(this.videoWidth)
@@ -1394,17 +1652,60 @@ export struct MPVPlayerView {
       }
       .aspectRatio(this.videoAspectRatio)
 
+      if (this.ui.subtitles.length > 0) {
+        Stack() {
+          Text(this.ui.currentSubtitle)
+            .fontSize(this.vm.appUIState.isFullScreen ? 21 : 13)
+            .fontColor(Color.White)
+            .width('100%')
+            .padding(20)
+            .textAlign(TextAlign.Center)
+            .textShadow({ radius: 2 })
+            .hitTestBehavior(HitTestMode.None)
+        }
+        .height('100%')
+        .alignContent(Alignment.Bottom)
+      }
+
+      DanmakuViewV2({ model: this.ui.danmuModel })
+        .padding({
+          top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
+        })
+        .width('100%')
+        .height('100%')
+        .opacity(0.6)
+        .hitTestBehavior(HitTestMode.None)
+
       Column() {
-        this.centerOverlay()
+        this.topControlView()
+        Blank()
+          .layoutWeight(1)
+          .width('100%')
+          .onClick(() => {
+            this.onSurfaceTap()
+          })
+        this.bottomControls()
       }
       .width('100%')
       .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .hitTestBehavior(HitTestMode.None)
+      .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
 
-      if (this.showControls) {
-        this.bottomControls()
+      if (this.vm.appUIState.isFullScreen && this.fullShowLock && !OneMoreUtil.isPc()) {
+        Stack() {
+          Image(this.lock ? $r('app.media.lock') : $r('app.media.unlock'))
+            .width(20)
+            .height(20)
+            .objectFit(ImageFit.Contain)
+            .margin({ right: 60 })
+            .onClick(() => {
+              this.lock = !this.lock
+              if (this.lock) {
+                this.showControls = false
+              }
+            })
+        }
+        .width('100%')
+        .alignContent(Alignment.End)
       }
 
       Text(this.ui.playerMenus?.playBackInfo)
@@ -1418,6 +1719,7 @@ export struct MPVPlayerView {
         .onClick(() => {
           if (this.ui.playerMenus) {
             this.ui.playerMenus.isShowPlayBackInfo = false
+            this.timeCountdown()
           }
         })
         .margin({
@@ -1437,9 +1739,87 @@ export struct MPVPlayerView {
       .height('100%')
       .backgroundColor(Color.Black)
       .visibility(this.ui.isCastPlaying ? Visibility.Visible : Visibility.Hidden)
+
+      Image($r('app.media.icon_replay'))
+        .objectFit(ImageFit.Auto)
+        .width('120px')
+        .height('120px')
+        .visibility(this.playbackCompleted ? Visibility.Visible : Visibility.Hidden)
+        .onClick(() => {
+          this.togglePlayback()
+        })
+
+      Image($r('app.media.icon_load'))
+        .objectFit(ImageFit.Auto)
+        .width('120px')
+        .height('120px')
+        .visibility(this.loading ? Visibility.Visible : Visibility.Hidden)
+        .border({ width: 0 })
+        .borderStyle(BorderStyle.Dashed)
+
+      Stack({ alignContent: Alignment.Top }) {
+        Row() {
+          Image($r('app.media.ic_speed')).height(20)
+          Text('正在倍速播放')
+            .fontSize(14)
+            .fontColor(Color.White)
+        }
+        .margin({ top: 20 })
+        .padding(4)
+        .backgroundColor(Color.Black)
+        .borderRadius(4)
+        .opacity(0.4)
+      }
+      .width('100%')
+      .height('100%')
+      .visibility(this.ui.isFastSpeed ? Visibility.Visible : Visibility.None)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Color.Black)
+    .backgroundColor('#111111')
+    .clip(true)
+    .onHover((isHover: boolean) => {
+        if (OneMoreUtil.isPc()) {
+          if (isHover) {
+            if (this.loading) {
+              return
+            }
+            if (!this.showControls) {
+              this.timeCountdown()
+            }
+          } else {
+            clearInterval(mpvUiTime)
+            this.showControls = false
+            this.fullShowLock = false
+          }
+        }
+      })
+    .onMouse((event) => {
+      if (this.loading) {
+        return
+      }
+      if (event.action == MouseAction.Move && !this.showControls) {
+        this.timeCountdown()
+      }
+    })
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      const width = newValue.width as number
+      const height = newValue.height as number
+      if (width > 0 && height > 0) {
+        if (this.vm.appUIState.isFullScreen) {
+          this.fullShowLock = true
+        }
+        this.ui.danmuModel.setWidth(this.getUIContext().vp2px(width))
+        this.ui.danmuModel.setHeight(this.getUIContext().vp2px(height))
+      }
+    })
+    .gesture(GestureGroup(GestureMode.Exclusive,
+      TapGesture({ count: 2 }).onAction(() => {
+        this.onDoubleTap()
+      }),
+      TapGesture({ count: 1 }).onAction(() => {
+        this.onSingleTap()
+      })
+    ))
   }
 }
