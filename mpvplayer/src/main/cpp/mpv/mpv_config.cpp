@@ -2,7 +2,7 @@
  * mpv_config.cpp - MPV 配置（支持 Surface 硬解 + OSD 字幕模式）
  * 
  * Surface 模式: vo=ohcodec-osd + hwdec=auto（硬件解码直接渲染到 Surface）
- * Buffer 模式: vo=gpu-next + ohcodec-copy（帧复制到 GPU 缓冲，软件渲染）
+ * Buffer 模式: vo=gpu-next + ohcodec-copy/no（帧复制到 GPU 缓冲，支持硬解或软解）
  */
 
 #include "mpv_config.h"
@@ -489,6 +489,11 @@ bool ConfigureMPV(mpv_handle *mpv) {
         cache_size_mb = g_cache_size_mb;
         osd_level = g_osd_level;
         log_level = g_log_level;
+    }
+
+    if (mode == HWDEC_MODE_SURFACE && decode_type == DECODE_TYPE_SW) {
+        OH_LOG_WARN(LOG_APP, "[ConfigureMPV] surface mode does not support software decode, fallback to buffer-sw");
+        mode = HWDEC_MODE_BUFFER;
     }
 
     OH_LOG_INFO(LOG_APP, "[ConfigureMPV] mode=%{public}s, decode=%{public}s",
