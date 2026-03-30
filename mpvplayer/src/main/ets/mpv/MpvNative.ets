@@ -7,6 +7,7 @@ import {
   getCurrentPosition,
   getCurrentAudioTrack,
   getCurrentSubtitleTrack,
+  getCacheDuration,
   getDuration,
   getHardwareDecoder,
   getHwdecMode,
@@ -282,6 +283,13 @@ export class MpvNativePlayer {
       return 0
     }
     return getDuration(this.handle)
+  }
+
+  getCacheDurationMs(): number {
+    if (this.handle <= 0) {
+      return 0
+    }
+    return getCacheDuration(this.handle)
   }
 
   getVideoWidth(): number {
