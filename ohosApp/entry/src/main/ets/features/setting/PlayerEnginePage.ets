@@ -17,18 +17,18 @@ export struct PlayerEnginePage {
       PlayerEngineType.MPV,
       $r('app.media.mpv'),
       $r('app.string.player_engine_mpv'),
-      '主力播放器，兼顾高兼容性、字幕能力和 HDR 片源支持'
+      '推荐日常使用。复杂片源、外挂字幕、HDR 这类情况优先选它。'
     ),
     new PlayerEngineItem(
       PlayerEngineType.AV,
       $r('app.media.hmos'),
       $r('app.string.player_engine_av'),
-      '系统兜底播放器，适合简单片源'
+      '系统播放器。普通视频更省心，播放异常时也能拿来兜底。'
     )
   ]
   mpvDecodeList: Array<MpvDecodeItem> = [
-    new MpvDecodeItem('软解', '兼容性更好，黑屏或花屏时优先使用', false),
-    new MpvDecodeItem('硬解', '优先使用硬件解码，功耗更低，但个别机型兼容性可能略差', true)
+    new MpvDecodeItem('软解', '由播放器自己解码，兼容性更好，遇到黑屏或花屏先试它。', false),
+    new MpvDecodeItem('硬解', '调用手机硬件解码，更省电，HDR 片源更适合，但少数机型可能有兼容问题。', true)
   ]
   mpvCacheList: Array<MpvCacheItem> = [
     new MpvCacheItem('512 MB', 512, '更省内存，适合局域网或短视频'),
@@ -120,7 +120,7 @@ export struct PlayerEnginePage {
       if (this.isMpvSelected()) {
         Column({ space: 16 }) {
           Column({ space: 10 }) {
-            Text('MPV 解码模式')
+            Text('MPV 解码方式')
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.text_primary'))
@@ -136,9 +136,10 @@ export struct PlayerEnginePage {
                     .fontColor(this.mpvDecodeIndex === index ? '#E6FFFFFF' : $r('app.color.text_1'))
                     .maxLines(2)
                 }
-                .width('50%')
+                .layoutWeight(1)
+                .constraintSize({ minHeight: 98 })
                 .alignItems(HorizontalAlign.Start)
-                .padding(14)
+                .padding({ left: 14, right: 14, top: 16, bottom: 16 })
                 .backgroundColor(this.mpvDecodeIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
                 .borderRadius(12)
                 .onClick(() => {
@@ -146,6 +147,7 @@ export struct PlayerEnginePage {
                 })
               })
             }
+            .width('100%')
           }
           .width('100%')
 
@@ -182,7 +184,9 @@ export struct PlayerEnginePage {
           }
           .width('100%')
 
-          Text(this.mpvDecodeIndex === 1 ? '硬解当前走 MPV 的 surface-hw 路径，更适合验证 HDR 输出；如果再次遇到黑屏或花屏，切回软解即可。' : '软解当前优先用于兼容性兜底，但当前 surface 实验分支仍会以 surface 路径初始化 MPV。')
+          Text(this.mpvDecodeIndex === 1
+            ? '当前已选择硬解。它会优先调用手机硬件解码，功耗更低，也更适合 HDR 片源；如果出现黑屏、花屏或颜色不对，再切回软解。'
+            : '当前已选择软解。它由 MPV 自己解码，兼容性更好；如果想让 HDR 片源更省电，或者想试试硬件能力，再切到硬解。')
             .fontSize(12)
             .fontColor($r('app.color.text_1'))
         }
