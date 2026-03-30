@@ -16,6 +16,7 @@ import { ApiClient } from "../../network/ApiClient";
 import { AxiosResponse } from "@ohos/axios";
 import { Constants } from "../../utils/Constants";
 import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
+import { AppPreference } from "../../data/AppPreference";
 
 @ObservedV2
 export class QueueManager {
@@ -31,7 +32,10 @@ export class QueueManager {
   @Trace currentMediaSourceOrNull?: JellyfinMediaSource
 
   private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
-  private deviceProfile: DeviceProfile = this.deviceProfileBuilder.getDeviceProfile()
+
+  private getCurrentDeviceProfile(): DeviceProfile {
+    return this.deviceProfileBuilder.getDeviceProfile(AppPreference.getInstance().getPlayerEngineType())
+  }
 
   initializePlaybackQueue(options: PlayOptions): PlayerException | null {
     this.currentQueue = options.ids
@@ -65,7 +69,7 @@ export class QueueManager {
     audioStreamIndex: number | null | undefined,
     subtitleStreamIndex: number | null,
     playWhenReady: boolean = true): Promise<PlayerException | null> {
-    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.deviceProfile, maxStreamingBitrate,
+    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.getCurrentDeviceProfile(), maxStreamingBitrate,
       startTimeTicks,
       audioStreamIndex, subtitleStreamIndex, playWhenReady)
     ?.then(async jellyfinMediaSource => {

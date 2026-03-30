@@ -13,6 +13,7 @@ import { JellyfinMediaSource } from "../../player/source/JellyfinMediaSource";
 import { DeviceProfileBuilder } from "../../player/deviceprofile/DeviceProfileBuilder";
 import { PlayOptions } from "../../player/interaction/PlayOptions";
 import { PlayerException } from "../../player/PlayerException";
+import { AppPreference } from "../../data/AppPreference";
 
 @ObservedV2
 export class QueueManager {
@@ -28,7 +29,10 @@ export class QueueManager {
   @Trace currentMediaSourceOrNull?: JellyfinMediaSource
 
   private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
-  private deviceProfile: DeviceProfile = this.deviceProfileBuilder.getLiveTvProfile()
+
+  private getCurrentDeviceProfile(): DeviceProfile {
+    return this.deviceProfileBuilder.getDeviceProfile(AppPreference.getInstance().getPlayerEngineType())
+  }
 
   initializePlaybackQueue(options: PlayOptions): PlayerException | null {
     this.currentQueue = options.ids
@@ -62,7 +66,7 @@ export class QueueManager {
     audioStreamIndex: number | null | undefined,
     subtitleStreamIndex: number | null,
     playWhenReady: boolean = true): Promise<PlayerException | null> {
-    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.deviceProfile, maxStreamingBitrate,
+    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.getCurrentDeviceProfile(), maxStreamingBitrate,
       startTimeTicks,
       audioStreamIndex, subtitleStreamIndex, playWhenReady)
     ?.then(async jellyfinMediaSource => {
