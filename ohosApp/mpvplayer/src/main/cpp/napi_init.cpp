@@ -33,6 +33,7 @@ namespace {
         napi_property_descriptor desc[] = {
             {"create", nullptr, Create, nullptr, nullptr, nullptr, napi_default, nullptr},
             {"isInitialized", nullptr, IsInitialized, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"isDestroying", nullptr, IsDestroying, nullptr, nullptr, nullptr, napi_default, nullptr},
             {"loadVideo", nullptr, LoadVideo, nullptr, nullptr, nullptr, napi_default, nullptr},
             {"destroy", nullptr, Destroy, nullptr, nullptr, nullptr, napi_default, nullptr},
             {"reset", nullptr, Reset, nullptr, nullptr, nullptr, napi_default, nullptr},

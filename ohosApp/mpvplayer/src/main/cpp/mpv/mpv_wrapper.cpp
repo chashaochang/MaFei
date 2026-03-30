@@ -404,6 +404,9 @@ static void* event_thread(void* arg) {
                             cached_pause.store(*(int*)prop->data != 0, std::memory_order_relaxed);
                         }
                     }
+                    else if (strcmp(prop->name, "track-list") == 0) {
+                        notify_js_tracklist_changed();
+                    }
                 }
                 break;
             }
@@ -477,14 +480,8 @@ static void release_all_callbacks() {
 napi_value Create(napi_env env, napi_callback_info info) {
     OH_LOG_INFO(LOG_APP, ">>> [Create] called");
 
-    int wait_ms = 0;
-    while (g_is_destroying.load() && wait_ms < 1000) {
-        usleep(10000);
-        wait_ms += 10;
-    }
-
     if (g_is_destroying.load()) {
-        OH_LOG_ERROR(LOG_APP, "[Create] ERROR: Previous destroy did not finish");
+        OH_LOG_WARN(LOG_APP, "[Create] Previous destroy still running, skip blocking create");
         return nullptr;
     }
 
@@ -549,6 +546,12 @@ napi_value Create(napi_env env, napi_callback_info info) {
 napi_value IsInitialized(napi_env env, napi_callback_info info) {
     napi_value result;
     napi_get_boolean(env, mpv_initialized_flag.load(std::memory_order_acquire), &result);
+    return result;
+}
+
+napi_value IsDestroying(napi_env env, napi_callback_info info) {
+    napi_value result;
+    napi_get_boolean(env, g_is_destroying.load(std::memory_order_acquire), &result);
     return result;
 }
 

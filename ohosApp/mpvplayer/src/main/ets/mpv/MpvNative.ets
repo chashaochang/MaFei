@@ -1,11 +1,17 @@
 import {
+  command,
   create,
   destroy,
+  getAudioTracks,
   getDecodeType,
   getCurrentPosition,
+  getCurrentAudioTrack,
+  getCurrentSubtitleTrack,
   getDuration,
   getHardwareDecoder,
   getHwdecMode,
+  getSubtitleTracks,
+  isDestroying,
   getVideoHeight,
   getVideoWidth,
   isInitialized,
@@ -13,6 +19,9 @@ import {
   pause,
   play,
   seek,
+  selectAudio,
+  selectSubtitle,
+  setSpeed,
   setAutoBufferFallback,
   setCacheSize,
   setDecodeType,
@@ -25,12 +34,15 @@ import {
   setOnInitializedCallback,
   setOnLoadingCallback,
   setOnLogMessageCallback,
-  setOnStartFileCallback
+  setOnTrackListChangedCallback,
+  setOnStartFileCallback,
+  type MpvTrackInfo
 } from 'libmpvnative.so'
 
 const HWDEC_MODE_BUFFER: number = 0
 const DECODE_TYPE_HW: number = 0
 const DECODE_TYPE_SW: number = 1
+const CREATE_RETRY_DELAY_MS: number = 50
 
 export interface MpvNativeListener {
   onInitialized?: () => void
@@ -39,6 +51,7 @@ export interface MpvNativeListener {
   onLoadingChanged?: (loading: boolean) => void
   onStartFile?: () => void
   onFileLoaded?: () => void
+  onTrackListChanged?: () => void
   onHwdecChanged?: (decoder: string) => void
   onLogMessage?: (level: string, prefix: string, text: string) => void
 }
@@ -46,6 +59,9 @@ export interface MpvNativeListener {
 export class MpvNativePlayer {
   private handle: number = 0
   private listeners: MpvNativeListener = {}
+  private createRetryTimer: number = -1
+  private initializePending: boolean = false
+  private released: boolean = false
 
   setListeners(listeners: MpvNativeListener): void {
     this.listeners = listeners
@@ -56,10 +72,15 @@ export class MpvNativePlayer {
     setDecodeType(useHardwareDecode ? DECODE_TYPE_HW : DECODE_TYPE_SW)
     setCacheSize(cacheSizeMb)
     setAutoBufferFallback(true)
-    setLogLevel('info')
+    setLogLevel('warn')
   }
 
   initialize(): boolean {
+    if (this.handle > 0 || this.initializePending) {
+      return true
+    }
+    this.released = false
+    this.initializePending = true
     setOnInitializedCallback(() => {
       if (this.listeners.onInitialized) {
         this.listeners.onInitialized()
@@ -90,6 +111,11 @@ export class MpvNativePlayer {
         this.listeners.onFileLoaded()
       }
     })
+    setOnTrackListChangedCallback(() => {
+      if (this.listeners.onTrackListChanged) {
+        this.listeners.onTrackListChanged()
+      }
+    })
     setOnHwdecChangedCallback((decoder: string) => {
       if (this.listeners.onHwdecChanged) {
         this.listeners.onHwdecChanged(decoder)
@@ -100,13 +126,49 @@ export class MpvNativePlayer {
         this.listeners.onLogMessage(level, prefix, text)
       }
     })
+    return this.tryCreate()
+  }
+
+  private tryCreate(): boolean {
+    if (this.released) {
+      this.initializePending = false
+      return false
+    }
     const result: number | null = create()
     if (result !== null && result > 0) {
       this.handle = result
+      this.initializePending = false
       return true
     }
+    if (isDestroying()) {
+      this.scheduleCreateRetry()
+      return true
+    }
+    this.initializePending = false
     this.handle = 0
     return false
+  }
+
+  private scheduleCreateRetry(): void {
+    if (this.createRetryTimer >= 0 || this.released || this.handle > 0) {
+      return
+    }
+    this.createRetryTimer = setTimeout(() => {
+      this.createRetryTimer = -1
+      if (this.released || this.handle > 0) {
+        return
+      }
+      if (!this.tryCreate()) {
+        console.error('[MPV] create failed after pending destroy finished')
+      }
+    }, CREATE_RETRY_DELAY_MS)
+  }
+
+  private stopCreateRetry(): void {
+    if (this.createRetryTimer >= 0) {
+      clearTimeout(this.createRetryTimer)
+      this.createRetryTimer = -1
+    }
   }
 
   isReady(): boolean {
@@ -144,6 +206,58 @@ export class MpvNativePlayer {
     if (this.handle > 0) {
       seek(this.handle, positionMs / 1000, exact)
     }
+  }
+
+  setPlaybackSpeed(speed: number): void {
+    if (this.handle > 0 && speed > 0) {
+      setSpeed(this.handle, speed)
+    }
+  }
+
+  runCommand(args: string[]): void {
+    if (this.handle > 0 && args.length > 0) {
+      command(this.handle, args)
+    }
+  }
+
+  getAudioTrackList(): MpvTrackInfo[] {
+    if (this.handle <= 0) {
+      return []
+    }
+    return getAudioTracks(this.handle)
+  }
+
+  getSubtitleTrackList(): MpvTrackInfo[] {
+    if (this.handle <= 0) {
+      return []
+    }
+    return getSubtitleTracks(this.handle)
+  }
+
+  selectAudioTrack(trackId: number): void {
+    if (this.handle > 0 && trackId >= 0) {
+      selectAudio(this.handle, trackId)
+    }
+  }
+
+  selectSubtitleTrack(trackId: number): void {
+    if (this.handle > 0) {
+      selectSubtitle(this.handle, trackId)
+    }
+  }
+
+  getCurrentAudioTrackId(): number {
+    if (this.handle <= 0) {
+      return -1
+    }
+    return getCurrentAudioTrack(this.handle)
+  }
+
+  getCurrentSubtitleTrackId(): number {
+    if (this.handle <= 0) {
+      return -1
+    }
+    return getCurrentSubtitleTrack(this.handle)
   }
 
   getCurrentPositionMs(): number {
@@ -191,6 +305,9 @@ export class MpvNativePlayer {
   }
 
   release(): void {
+    this.released = true
+    this.initializePending = false
+    this.stopCreateRetry()
     if (this.handle > 0) {
       destroy(this.handle)
     }

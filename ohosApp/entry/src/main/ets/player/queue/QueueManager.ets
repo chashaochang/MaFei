@@ -288,8 +288,8 @@ export class QueueManager {
       currentMediaSource.id,
       currentMediaSource.maxStreamingBitrate,
       position * Constants.TICKS_PER_MILLISECOND,
+      currentMediaSource.selectedAudioStreamIndex,
       selectedMediaStream?.Index ?? -1,
-      currentMediaSource.selectedSubtitleStreamIndex,
       true,
     )
     return true
