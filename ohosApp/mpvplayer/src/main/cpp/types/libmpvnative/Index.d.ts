@@ -31,6 +31,7 @@ declare module 'libmpvnative.so' {
   export const getAutoBufferFallback: () => boolean;
   export const setCacheSize: (sizeMb: number) => void;
   export const getCacheSize: () => number;
+  export const setOsdSurface: (surfaceId: string, width: number, height: number) => void;
   export const create: () => number | null;
   export const destroy: (mpvHandle: number) => void;
   export const reset: (mpvHandle: number) => void;
