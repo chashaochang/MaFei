@@ -37,8 +37,8 @@
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
-        "versionCode": 1000009,
-        "versionName": "1.0.9",
+        "versionCode": 1000000,
+        "versionName": "1.0.0",
         "output": {
           "artifactName": "Mafei_Release"
         },

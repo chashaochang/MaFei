@@ -193,8 +193,20 @@
       "value": "AVPlayer"
     },
     {
+      "name": "player_engine_mpv",
+      "value": "MPV"
+    },
+    {
       "name": "player_engine_title",
       "value": "播放器引擎"
+    },
+    {
+      "name": "player_engine_mpv_decode",
+      "value": "MPV 解码模式"
+    },
+    {
+      "name": "player_engine_mpv_cache",
+      "value": "MPV 缓存大小"
     }
   ]
 }

@@ -19,6 +19,7 @@ import { PlayerPageUIState } from "./PlayerPageUIState"
 import { PlayerPageViewModel } from "./PlayerPageViewModel"
 import { PlayerView } from "./PlayerView"
 import { AVPlayerView } from "./AVPlayerView"
+import { MPVPlayerView } from "./MPVPlayerView"
 import { AppPreference } from "../../data/AppPreference"
 import { PlayerEngineType } from "../../entity/PlayerEngineType"
 import { RouterConsts } from "../../common/RouterConsts"
@@ -153,6 +154,29 @@ export struct PlayerPage {
       if (this.ui.url) {
         if (AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.AV) {
           AVPlayerView({
+            videoUrl: this.ui.url,
+            onNext: () => {
+              this.vm.queueManager.next()
+            },
+            onAudioTrackSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectAudioTrack(stream)
+            },
+            onSubtitleSelected: (stream: MediaStream) => {
+              this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
+            },
+            onQualitySelected: (option: QualityOption) => {
+              this.vm.changeBitrate(option.bitrate)
+            },
+            stopCast: () => {
+              this.vm.stopCast()
+            },
+            onEpisodeChange: (index: number) => {
+              this.vm.changeEpisode(index)
+            }
+          }).width('100%')
+            .height('100%')
+        } else if (AppPreference.getInstance().getPlayerEngineType() === PlayerEngineType.MPV) {
+          MPVPlayerView({
             videoUrl: this.ui.url,
             onNext: () => {
               this.vm.queueManager.next()

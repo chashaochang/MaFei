@@ -39,7 +39,7 @@ export class Jellyfin {
 // Create a new instance of the SDK
 const jellyfin = new Jellyfin({
   clientInfo: {
-    name: 'MaFei',
+    name: '马飞',
     version: bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName
   },
   deviceInfo: {
