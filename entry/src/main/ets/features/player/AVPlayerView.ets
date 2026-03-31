@@ -1281,13 +1281,15 @@ export struct AVPlayerView {
           .onDestroy(() => {
             this.stop()
           })
-          .width(this.videoWidth)
-          .aspectRatio(this.videoAspectRatio)
+          .width('100%')
+          .height('100%')
           .id('avplayer_xcomponent')
           .onClick(() => {
             this.timeCountdown()
           })
-      }.aspectRatio(this.videoAspectRatio)
+      }
+      .width(this.videoWidth)
+      .aspectRatio(this.videoAspectRatio)
 
       if (this.ui.subtitles.length > 0) {
         Stack() {

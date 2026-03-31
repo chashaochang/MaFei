@@ -52,6 +52,8 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   subtitleManager: SubtitleManager = new SubtitleManager()
   ui: PlayerPageUIState
   danmuContext: DanmakuContext
+  private playbackStopInFlight: boolean = false
+  private playbackStopReportedSessionId?: string
 
   constructor(ui: PlayerPageUIState) {
     super(ui)
@@ -320,6 +322,8 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
 
   load(source: JellyfinMediaSource, url: string[], playWhenReady: boolean) {
     this.initSource = source
+    this.playbackStopInFlight = false
+    this.playbackStopReportedSessionId = undefined
     this.ui.selectedBitrate = source.maxStreamingBitrate
     this.ui.mediaType = source.item.Type!
     this.ui.currentPlayId = this.queueManager.currentQueue[this.queueManager.currentQueueIndex]
@@ -386,25 +390,42 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     if (!mediaSource) {
       return
     }
+    const playSessionId = mediaSource.playSessionId ?? ''
+    if (this.playbackStopInFlight) {
+      return
+    }
+    if (playSessionId.length > 0 && this.playbackStopReportedSessionId === playSessionId) {
+      return
+    }
     let hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
     let lastPositionTicks =
       hasFinished ? mediaSource.runTimeTicks :
         this.getCurrentPlaybackPositionMs() * Constants.TICKS_PER_MILLISECOND
     let playStateApi = getPlaystateApi(ApiClient.Instance())
-    await playStateApi.reportPlaybackStopped({
-      playbackStopInfo: {
-        ItemId: mediaSource.itemId,
-        PositionTicks: lastPositionTicks,
-        PlaySessionId: mediaSource.playSessionId,
-        LiveStreamId: mediaSource.liveStreamId,
-        Failed: false
-      }
-    })
-    // Mark video as watched if playback finished
-    if (hasFinished) {
-      playStateApi.markPlayedItem({
-        itemId: mediaSource.itemId
+    this.playbackStopInFlight = true
+    try {
+      await playStateApi.reportPlaybackStopped({
+        playbackStopInfo: {
+          ItemId: mediaSource.itemId,
+          PositionTicks: lastPositionTicks,
+          PlaySessionId: mediaSource.playSessionId,
+          LiveStreamId: mediaSource.liveStreamId,
+          Failed: false
+        }
       })
+      if (playSessionId.length > 0) {
+        this.playbackStopReportedSessionId = playSessionId
+      }
+      // Mark video as watched if playback finished
+      if (hasFinished) {
+        await playStateApi.markPlayedItem({
+          itemId: mediaSource.itemId
+        })
+      }
+    } catch (error) {
+      console.error(`[PlayerVM] reportPlaybackStop failed: ${JSON.stringify(error)}`)
+    } finally {
+      this.playbackStopInFlight = false
     }
     // Stop active encoding if transcoding
     this.stopTranscoding(mediaSource)
