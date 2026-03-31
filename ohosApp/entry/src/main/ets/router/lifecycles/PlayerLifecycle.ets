@@ -21,7 +21,7 @@ export class PlayerLifecycle implements IHMLifecycle {
   }
 
   onBackPressed(ctx: HMLifecycleContext): boolean {
-    emitter.emit(Constants.PLAYER_EVENT, {
+    emitter.emit(Constants.PLAYER_PAGE_EVENT, {
       data: {
         'eventName': 'onBackPressed'
       }
