@@ -3,6 +3,12 @@ import { ActivityEventType } from '../events/ActivityEvent';
 import { ActivityEventHandler } from '../events/ActivityEventHandler';
 
 const TAG = 'NativeInterface'
+
+function toAsciiAppName(name: string): string {
+  const normalized = name.replace(/[^\x20-\x7E]/g, '')
+  return normalized.length > 0 ? normalized : 'MaFei'
+}
+
 export class NativeInterface {
 
   activityEventHandler:ActivityEventHandler
@@ -18,7 +24,7 @@ export class NativeInterface {
     return JSON.stringify(new Object({
       "deviceId": deviceInfo.id,
       "deviceName": deviceInfo.name,
-      "appName": clientInfo.name,
+      "appName": toAsciiAppName(clientInfo.name),
       "appVersion": clientInfo.version
     }))
   }
@@ -83,4 +89,3 @@ export class NativeInterface {
     this.activityEventHandler.eventHub.emit(event, ...args)
   }
 }
-

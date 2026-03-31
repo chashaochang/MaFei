@@ -56,7 +56,8 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
       if (state.type === CheckUrlStateType.Success) {
         let successData = state as Success
         let successServerAddr = successData.address
-        this.apiClientController.setupServer(successData.address, successData.name, successData.version)
+        this.apiClientController.setupServer(successData.address, successData.name, successData.version,
+          successData.serverId)
         this.ui.hostname = successServerAddr
         let serverEntity = this.apiClientController.loadSavedServer()
         if (serverEntity !== null) {
@@ -105,6 +106,7 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
       if (result) {
         this.ui.loading = false
         AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
+        AppPreference.getInstance().setCurrentServerSystemId(result.data.ServerId || '')
         if (this.ui.rememberPwd) {
           let assetMap: asset.AssetMap = new Map
           assetMap.set(asset.Tag.SECRET, stringToArray(this.ui.password))

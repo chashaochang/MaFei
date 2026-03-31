@@ -8,7 +8,7 @@ import { ConnectScreen } from "../connect/ConnectScreen";
 import { ApiClientController } from "../../data/ApiClientController";
 import { AppPreference } from "../../data/AppPreference";
 import connectionHelper from "../../setup/ConnectionHelper";
-import { CheckUrlStateType } from "../../ui/state/CheckUrlState";
+import { CheckUrlStateType, Success } from "../../ui/state/CheckUrlState";
 import { PublicSystemInfo } from "sdk";
 import { AxiosResponse } from "@ohos/axios";
 import { getSystemApi } from "sdk/src/main/ets/utils/api/system-api";
@@ -54,8 +54,9 @@ export struct IndexPage {
               return
             }
             if (state.type === CheckUrlStateType.Success) {
+              const successState = state as Success
               this.apiClientController.setupServer(serverEntity!.hostname, serverEntity?.servername,
-                serverEntity?.version)
+                serverEntity?.version, successState.serverId)
               this.apiClientController.setupUser(serverEntity!.id, userId, token)
               //数据库升级version1新增字段处理
               if (serverEntity?.servername === '' || serverEntity?.version === '') {

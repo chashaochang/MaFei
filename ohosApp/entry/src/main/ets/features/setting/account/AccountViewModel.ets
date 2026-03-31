@@ -78,7 +78,8 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
     connectionHelper.checkServerUrl(serverUser.server.hostname).then((state) => {
       if (state.type === CheckUrlStateType.Success) {
         let successData = state as Success
-        this.apiClientController.setupServer(successData.address, successData.name, successData.version)
+        this.apiClientController.setupServer(successData.address, successData.name, successData.version,
+          successData.serverId)
         let serverEntity = this.apiClientController.loadSavedServer()
         if (serverEntity !== null) {
           AppStorage.setOrCreate('server', serverEntity)
@@ -132,6 +133,7 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
         }
       }).then((result: AxiosResponse<AuthenticationResult>) => {
         AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
+        AppPreference.getInstance().setCurrentServerSystemId(result.data.ServerId || '')
         this.apiClientController.setupUser(serverEntity!.id, result.data.User!.Id!, result.data.AccessToken!,
           serverUser.user.username)
         HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()

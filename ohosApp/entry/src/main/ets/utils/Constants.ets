@@ -30,6 +30,7 @@ export class Constants {
 
   // Preference keys
   static readonly PREF_SERVER_ID = "pref_server_id"
+  static readonly PREF_SERVER_SYSTEM_ID = "pref_server_system_id"
   static readonly PREF_USER_ID = "pref_user_id"
   static readonly PREF_ACCESS_TOKEN = "pref_access_token"
   static readonly PREF_USER_NAME = "pref_user_name"
