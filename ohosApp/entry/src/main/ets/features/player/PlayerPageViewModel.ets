@@ -304,7 +304,10 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
           this.ui.initSeek = startTime
         }
         if (source.item.Type == BaseItemKind.Episode) { //电视剧
-          this.getItems()
+          this.queueManager.expandEpisodeQueueIfNeeded().then(() => {
+            this.getItems()
+            this.ui.playerMenus?.onQueueItemChanged(source, this.queueManager.hasNext())
+          })
           avSessionManager.getSession()?.setAVQueueTitle(source.item.SeriesName ?? source.item.Name ?? "TITLE",)
         }
         avSessionManager?.getSession()?.setAVMetadata(source.toMediaMetadata())
