@@ -14,7 +14,8 @@ import { SmartDialog } from 'ohos_smart_dialog'
 import { QueueItem } from '../../entity/QueueItem'
 import { JellyfinMediaSource } from '../../player/source/JellyfinMediaSource'
 import { ExternalSubtitleStream } from '../../player/source/ExternalSubtitleStream'
-import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
+// 弹幕功能暂不上线，先注释引用，后续恢复时取消注释即可。
+// import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
 import { OneMoreUtil } from '../../utils/OneMoreUtil'
 import { display, window } from '@kit.ArkUI'
 import { PlayerEngineType } from '../../entity/PlayerEngineType'
@@ -1580,22 +1581,23 @@ export struct MPVPlayerView {
             clearInterval(mpvUiTime)
           }
         })
-        Button() {
-          Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
-            .width(44)
-            .height(44)
-            .padding(10)
-        }
-        .backgroundColor(Color.Transparent)
-        .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
-        .onClick(() => {
-          this.ui.danmuOpen = !this.ui.danmuOpen
-          if (this.ui.danmuOpen) {
-            this.ui.danmuModel.show()
-          } else {
-            this.ui.danmuModel.hide()
-          }
-        })
+        // 弹幕功能暂不上线，先注释播放器工具栏入口。
+        // Button() {
+        //   Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
+        //     .width(44)
+        //     .height(44)
+        //     .padding(10)
+        // }
+        // .backgroundColor(Color.Transparent)
+        // .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
+        // .onClick(() => {
+        //   this.ui.danmuOpen = !this.ui.danmuOpen
+        //   if (this.ui.danmuOpen) {
+        //     this.ui.danmuModel.show()
+        //   } else {
+        //     this.ui.danmuModel.hide()
+        //   }
+        // })
         Blank()
           .layoutWeight(1)
 
@@ -1755,14 +1757,15 @@ export struct MPVPlayerView {
         .alignContent(Alignment.Bottom)
       }
 
-      DanmakuViewV2({ model: this.ui.danmuModel })
-        .padding({
-          top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
-        })
-        .width('100%')
-        .height('100%')
-        .opacity(0.6)
-        .hitTestBehavior(HitTestMode.None)
+      // 弹幕功能暂不上线，先注释弹幕渲染层。
+      // DanmakuViewV2({ model: this.ui.danmuModel })
+      //   .padding({
+      //     top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
+      //   })
+      //   .width('100%')
+      //   .height('100%')
+      //   .opacity(0.6)
+      //   .hitTestBehavior(HitTestMode.None)
 
       Column() {
         this.topControlView()
@@ -1897,8 +1900,9 @@ export struct MPVPlayerView {
         if (this.vm.appUIState.isFullScreen) {
           this.fullShowLock = true
         }
-        this.ui.danmuModel.setWidth(this.getUIContext().vp2px(width))
-        this.ui.danmuModel.setHeight(this.getUIContext().vp2px(height))
+        // 弹幕功能暂不上线，先注释弹幕层尺寸同步。
+        // this.ui.danmuModel.setWidth(this.getUIContext().vp2px(width))
+        // this.ui.danmuModel.setHeight(this.getUIContext().vp2px(height))
       }
     })
     .gesture(GestureGroup(GestureMode.Exclusive,

@@ -46,6 +46,8 @@ import { getItemImageUrl } from "../../common/CommonFunc";
 
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
+  // 弹幕功能暂不上线，后续恢复时改回 true 并取消相关注释即可。
+  private static readonly DANMAKU_ENABLED: boolean = false
   queueManager: QueueManager = new QueueManager(this)
   subtitleManager: SubtitleManager = new SubtitleManager()
   ui: PlayerPageUIState
@@ -55,7 +57,13 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     super(ui)
     this.ui = ui
     this.danmuContext = DanmakuContext.create();
-    this.danmuInit()
+    this.ui.enableDanmu = false
+    this.ui.danmuOpen = false
+    // 弹幕功能暂不上线，先注释初始化。
+    // this.danmuInit()
+    if (PlayerPageViewModel.DANMAKU_ENABLED) {
+      this.danmuInit()
+    }
   }
 
   private formatDuration(runTimeTicks?: number | null): string {
@@ -155,7 +163,13 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       } else {
         //qualityButton.isVisible = false
       }
-      if (!this.isMpvEngine(source)) {
+      this.ui.enableDanmu = false
+      this.ui.danmuOpen = false
+      // 弹幕功能暂不上线，先注释自动搜索。
+      // if (!this.isMpvEngine(source)) {
+      //   this.searchDanmuku()
+      // }
+      if (PlayerPageViewModel.DANMAKU_ENABLED && !this.isMpvEngine(source)) {
         this.searchDanmuku()
       }
     }
@@ -623,6 +637,11 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   async searchDanmuku() {
+    if (!PlayerPageViewModel.DANMAKU_ENABLED) {
+      this.ui.enableDanmu = false
+      this.ui.danmuOpen = false
+      return
+    }
     let that = this
     //先从弹幕插件api获取
     let id = this.mediaSourceOrNull!.itemId
@@ -685,6 +704,11 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   changeDanmuState() {
+    if (!PlayerPageViewModel.DANMAKU_ENABLED) {
+      this.ui.enableDanmu = false
+      this.ui.danmuOpen = false
+      return
+    }
     if (this.appUIState.isFullScreen) {
       this.ui.danmuModel.getConfig().setScaleTextSize(1)
     } else {

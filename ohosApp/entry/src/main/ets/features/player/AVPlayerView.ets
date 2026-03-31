@@ -14,7 +14,8 @@ import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PlayerPageUIState } from "./PlayerPageUIState";
 import { PlayerPageViewModel } from "./PlayerPageViewModel";
 import { SmartDialog } from "ohos_smart_dialog";
-import { DanmakuViewV2 } from "@ohos/danmakuflamemaster";
+// 弹幕功能暂不上线，先注释引用，后续恢复时取消注释即可。
+// import { DanmakuViewV2 } from "@ohos/danmakuflamemaster";
 import { QueueItem } from "../../entity/QueueItem";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { AppPreference } from "../../data/AppPreference";
@@ -554,9 +555,10 @@ export struct AVPlayerView {
           if (this.ui.subtitles.length > 0) {
             this.startSubTitle()
           }
-          if (this.ui.danmuModel.isPrepared()) {
-            this.ui.danmuModel.start()
-          }
+          // 弹幕功能暂不上线，先注释播放时启动弹幕。
+          // if (this.ui.danmuModel.isPrepared()) {
+          //   this.ui.danmuModel.start()
+          // }
           break
         case 'paused':
           this.ui.CONTROL_PlayStatus = PlayStatus.PAUSE
@@ -1095,22 +1097,23 @@ export struct AVPlayerView {
           }
         })
 
-        Button() {
-          Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
-            .width(44)
-            .height(44)
-            .padding(10)
-        }
-        .backgroundColor(Color.Transparent)
-        .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
-        .onClick(() => {
-          this.ui.danmuOpen = !this.ui.danmuOpen
-          if (this.ui.danmuOpen) {
-            this.ui.danmuModel.show()
-          } else {
-            this.ui.danmuModel.hide()
-          }
-        })
+        // 弹幕功能暂不上线，先注释播放器工具栏入口。
+        // Button() {
+        //   Image(this.ui.danmuOpen ? $r('app.media.danmu_open') : $r('app.media.danmu_close'))
+        //     .width(44)
+        //     .height(44)
+        //     .padding(10)
+        // }
+        // .backgroundColor(Color.Transparent)
+        // .visibility(this.ui.enableDanmu ? Visibility.Visible : Visibility.None)
+        // .onClick(() => {
+        //   this.ui.danmuOpen = !this.ui.danmuOpen
+        //   if (this.ui.danmuOpen) {
+        //     this.ui.danmuModel.show()
+        //   } else {
+        //     this.ui.danmuModel.hide()
+        //   }
+        // })
 
         Blank().layoutWeight(1)
         if (this.ui.mediaType == BaseItemKind.Episode) {
@@ -1299,13 +1302,14 @@ export struct AVPlayerView {
         }.height('100%').alignContent(Alignment.Bottom)
       }
 
-      DanmakuViewV2({ model: this.ui.danmuModel })
-        .padding({
-          top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
-        })
-        .width('100%')
-        .height('100%')
-        .opacity(0.6)
+      // 弹幕功能暂不上线，先注释弹幕渲染层。
+      // DanmakuViewV2({ model: this.ui.danmuModel })
+      //   .padding({
+      //     top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop + 10,
+      //   })
+      //   .width('100%')
+      //   .height('100%')
+      //   .opacity(0.6)
 
       Flex({ alignItems: ItemAlign.Center, justifyContent: FlexAlign.SpaceBetween }) {
         this.VolumeUi()
@@ -1446,8 +1450,9 @@ export struct AVPlayerView {
       if (this.vm.appUIState.isFullScreen) {
         this.fullShowLock = true
       }
-      this.ui.danmuModel.setWidth(this.getUIContext().vp2px(avChangeWidth))
-      this.ui.danmuModel.setHeight(this.getUIContext().vp2px(avChangeHeight))
+      // 弹幕功能暂不上线，先注释弹幕层尺寸同步。
+      // this.ui.danmuModel.setWidth(this.getUIContext().vp2px(avChangeWidth))
+      // this.ui.danmuModel.setHeight(this.getUIContext().vp2px(avChangeHeight))
     })
     .gesture(GestureGroup(GestureMode.Exclusive,
       TapGesture({ count: 2 }).onAction(() => {
@@ -1662,9 +1667,10 @@ export struct AVPlayerView {
             this.currentPosition = seekMs
             this.currentTime = this.formatTime(seekMs)
             this.seekToSubtitle()
-            if (this.ui.danmuModel.isPrepared()) {
-              this.ui.danmuModel.seekTo(seekMs)
-            }
+            // 弹幕功能暂不上线，先注释拖动进度时的弹幕同步。
+            // if (this.ui.danmuModel.isPrepared()) {
+            //   this.ui.danmuModel.seekTo(seekMs)
+            // }
           }
           this.isHorizontalDrag = false
           this.showSeekProgressUi = false
