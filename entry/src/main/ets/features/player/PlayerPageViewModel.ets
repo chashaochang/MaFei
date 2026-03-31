@@ -42,6 +42,7 @@ import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { PlayerEngineDecision, PlayerEngineResolver } from "../../player/PlayerEngineResolver";
+import { getItemImageUrl } from "../../common/CommonFunc";
 
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
@@ -55,6 +56,27 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     this.ui = ui
     this.danmuContext = DanmakuContext.create();
     this.danmuInit()
+  }
+
+  private formatDuration(runTimeTicks?: number | null): string {
+    if (!runTimeTicks || runTimeTicks <= 0) {
+      return ''
+    }
+    const totalSeconds = Math.floor(runTimeTicks / Constants.TICKS_PER_MILLISECOND / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    const parts: string[] = []
+    if (hours > 0) {
+      parts.push(`${hours}小时`)
+    }
+    if (minutes > 0) {
+      parts.push(`${minutes}分钟`)
+    }
+    if (seconds > 0 && hours === 0) {
+      parts.push(`${seconds}秒`)
+    }
+    return parts.join('') || '0秒'
   }
 
   danmuInit() {
@@ -431,7 +453,10 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
             let queueItem: QueueItem = {
               id: e,
               playIndex: item?.IndexNumber ?? NaN,
-              name: item?.Name ?? ''
+              name: item?.Name ?? '',
+              image: getItemImageUrl(item),
+              durationText: this.formatDuration(item?.RunTimeTicks),
+              played: item?.UserData?.Played ?? false
             }
             list.push(queueItem)
             let image =
