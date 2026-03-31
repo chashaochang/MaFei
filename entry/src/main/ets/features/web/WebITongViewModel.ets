@@ -20,6 +20,50 @@ export class WebITongViewModel extends BaseViewModel<WebITongUIState> {
   responseWeb: WebResourceResponse = new WebResourceResponse()
   isFirst: boolean = true
 
+  private buildCurrentCredentials(): Credentials | null {
+    const preference = AppPreference.getInstance()
+    const serverId = preference.getCurrentServerId()
+    const serverSystemId = preference.getCurrentServerSystemId()
+    if (serverId == null || !serverSystemId) {
+      return null
+    }
+    const serverEntity = DBManager.getInstance().getServerDao().getServer(serverId)
+    const userId: string = preference.getCurrentUserId()
+    const token: string = preference.getAccessToken()
+    if (!serverEntity || !userId || !token) {
+      return null
+    }
+    return {
+      Servers: [{
+        AccessToken: token,
+        DateLastAccessed: Date.now(),
+        ExchangeToken: null,
+        Id: serverSystemId,
+        LastConnectionMode: 2,
+        LocalAddress: ApiClient.Instance().basePath,
+        ManualAddress: ApiClient.Instance().basePath,
+        Name: serverEntity.servername || '',
+        UserId: userId,
+        manualAddressOnly: true
+      }]
+    }
+  }
+
+  private buildCredentialBootstrapScript(): string {
+    const credentials = this.buildCurrentCredentials()
+    if (!credentials) {
+      return ''
+    }
+    return `(() => {
+      try {
+        window.localStorage.setItem('jellyfin_credentials', JSON.stringify(${JSON.stringify(credentials)}));
+      } catch (error) {
+        console.error('[WebITong] bootstrap credentials failed', error);
+      }
+    })();
+`
+  }
+
   //注册桥接接口
   registerJavaScriptProxy(activityEventHandler: ActivityEventHandler) {
     this.controller.registerJavaScriptProxy(new NativeInterface(activityEventHandler), 'NativeInterface',
@@ -39,38 +83,30 @@ export class WebITongViewModel extends BaseViewModel<WebITongUIState> {
     }
     this.controller.runJavaScript("JSON.parse(window.localStorage.getItem('jellyfin_credentials'))")
       .then(result => {
-        let serverId = AppPreference.getInstance().getCurrentServerId()
-        let serverEntity = DBManager.getInstance().getServerDao().getServer(serverId!)
-        let userId = ApiClient.Instance().userId
-        let token: string = ApiClient.Instance().accessToken
+        const serverId = AppPreference.getInstance().getCurrentServerId()
+        const serverEntity = serverId != null ? DBManager.getInstance().getServerDao().getServer(serverId) : null
+        const preference = AppPreference.getInstance()
+        let userId: string = preference.getCurrentUserId()
+        let token: string = preference.getAccessToken()
         getUserApi(ApiClient.Instance()).getCurrentUser()
           .then((res: AxiosResponse<UserDto>) => {
             let user = res.data
             let credentials: Credentials | null = JSON.parse(result)
-            if (credentials == null || credentials == undefined) {
-              credentials = {
-                Servers: [{
-                  AccessToken: token,
-                  DateLastAccessed: Date.now(),
-                  ExchangeToken: null,
-                  Id: serverId + '',
-                  LastConnectionMode: 2, //0/1/2 代表自动发现、本地直连、手动地址
-                  LocalAddress: "",
-                  ManualAddress: ApiClient.Instance().basePath,
-                  Name: serverEntity?.servername || '',
-                  UserId: userId,
-                  manualAddressOnly: true
-                }]
-              }
+            const currentCredentials = this.buildCurrentCredentials()
+            if (currentCredentials == null) {
+              return
             }
-            let server = credentials.Servers[0]
-            server.UserId = userId
-            server.AccessToken = token
+            AppPreference.getInstance().setCurrentServerSystemId(user.ServerId || currentCredentials.Servers[0].Id)
+            if (credentials == null || credentials == undefined || !credentials.Servers || credentials.Servers.length === 0) {
+              credentials = currentCredentials
+            } else {
+              credentials.Servers[0] = currentCredentials.Servers[0]
+            }
             this.controller.runJavaScript('window.localStorage.setItem("jellyfin_credentials", JSON.stringify(' +
             JSON.stringify(credentials) + '))')
               .then(() => {
                 this.controller.runJavaScript('window.localStorage.setItem("user-' + userId +
-                  '-' + serverId + '", JSON.stringify(' +
+                  '-' + currentCredentials.Servers[0].Id + '", JSON.stringify(' +
                 JSON.stringify(user) + '))')
                   .then(() => {
                     this.controller.refresh()
@@ -94,6 +130,7 @@ export class WebITongViewModel extends BaseViewModel<WebITongUIState> {
         let buffer = getContext().resourceManager.getRawFileContentSync('native/injectionScript.js')
         let decoder = util.TextDecoder.create('utf-8');
         let str = decoder.decodeToString(new Uint8Array(buffer));
+        str = this.buildCredentialBootstrapScript() + str
         this.responseWeb.setResponseData(str)
         this.responseWeb.setResponseMimeType('application/javascript')
         this.responseWeb.setResponseEncoding('utf-8');

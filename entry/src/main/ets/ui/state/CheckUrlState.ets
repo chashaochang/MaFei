@@ -26,12 +26,14 @@ export class Success extends CheckUrlState {
   address: string;
   name: string;
   version: string
+  serverId: string
 
-  constructor(address: string, name: string, version: string) {
+  constructor(address: string, name: string, version: string, serverId: string = '') {
     super();
     this.address = address;
     this.name = name;
     this.version = version
+    this.serverId = serverId
   }
 }
 
