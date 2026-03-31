@@ -142,6 +142,7 @@ export struct PlayerPage {
     if (this.vm.appUIState.isFullScreen) {
       this.vm.appUIState.isFullScreen = false
     } else {
+      this.vm.reportPlaybackStop()
       HMRouterMgr.pop()
     }
   }
