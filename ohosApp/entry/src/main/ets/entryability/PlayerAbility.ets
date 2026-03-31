@@ -14,7 +14,6 @@ export default class PlayerAbility extends UIAbility {
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
     //获取entry传来的播放参数
     let funcAbilityWant = want;
     let playerOptions: PlayOptions = funcAbilityWant?.parameters?.options as PlayOptions
@@ -27,28 +26,24 @@ export default class PlayerAbility extends UIAbility {
     AppStorage.setOrCreate('playerOptions', playerOptions)
     this.windowStage?.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
-        hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
+        hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
         return;
       }
-      hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
     });
   }
 
   onDestroy(): void {
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     this.windowStage = windowStage
     // Main window is created, set main page for this ability
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
     AppStorage.setOrCreate('playerWindowStage', windowStage);
     windowStage.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
-        hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
+        hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
         return;
       }
-      hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
     });
 
     windowStage.getMainWindow().then((windowClass) => {
@@ -65,16 +60,13 @@ export default class PlayerAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
     // Ability has brought to foreground
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
     // Ability has back to background
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
   }
 }

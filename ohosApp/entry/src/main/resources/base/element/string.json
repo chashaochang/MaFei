@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "马飞客户端模块"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "马飞主应用"
     },
     {
       "name": "PlayerAbility_desc",
@@ -54,7 +54,7 @@
     },
     {
       "name": "Test_address",
-      "value": "Test address:"
+      "value": "服务器地址："
     },
     {
       "name": "destroy",

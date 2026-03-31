@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "cn.xiaobai.mafei",
-    "vendor": "example",
+    "vendor": "xiaobaihome",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",

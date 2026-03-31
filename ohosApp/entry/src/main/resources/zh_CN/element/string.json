@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "模块描述"
+      "value": "马飞客户端模块"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "马飞主应用"
     },
     {
       "name": "EntryAbility_label",

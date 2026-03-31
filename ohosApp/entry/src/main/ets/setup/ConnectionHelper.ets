@@ -25,14 +25,10 @@ class ConnectionHelper {
     const server = greatServer ?? goodServers[0]
     if (server) {
       const systemInfo: PublicSystemInfo | undefined = server.systemInfo
-      const serverVersion = systemInfo?.Version
-      console.log(`Found valid server at ${server.address} with rating ${server.score} and version ${serverVersion}`)
       let suc = new Success(server.address, systemInfo?.ServerName || '', systemInfo?.Version || '',
         systemInfo?.Id || '')
       return suc
     }
-    const loggedServers = badServers.map(it => `${it.address}/${it.systemInfo}`).join(', ')
-    console.log(`No valid servers found, invalid candidates were: ${loggedServers}`)
     let error: string | null = null
 
     if (badServers.length > 0) {

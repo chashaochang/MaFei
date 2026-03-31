@@ -23,8 +23,6 @@ export struct LoginPage {
     }
     this.errorText = ''
     this.loading = true
-    // TODO: Implement actual login logic (API call) here
-    // Simulate async delay
     getUserApi(ApiClient.Instance()).authenticateUserByName({
       authenticateUserByName:{
         Username: this.username,
@@ -38,7 +36,6 @@ export struct LoginPage {
         }
       })
     }).catch((e:Error)=>{
-      console.log(e.message);
       this.errorText = '登录失败，用户名或密码错误'
       this.loading = false
     })

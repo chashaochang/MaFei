@@ -41,8 +41,7 @@ export struct WebViewScreen {
     getContext().eventHub.on('webappFunction', (action: string) => {
       this.controller.loadUrl(`javascript:${action}`)
     })
-    // 配置Web开启调试模式
-    webview.WebviewController.setWebDebuggingAccess(true);
+    webview.WebviewController.setWebDebuggingAccess(false);
     this.timeoutId = setTimeout(() => {
       this.handleError()
     }, Constants.INITIAL_CONNECTION_TIMEOUT)
@@ -105,11 +104,9 @@ export struct WebViewScreen {
               this.responseWeb.setResponseMimeType('image/png')
               this.responseWeb.setResponseCode(200);
               this.responseWeb.setReasonMessage('OK');
-              console.log('替换logo'); //为了上架
               resolve("success");
             })
             promise.then(() => {
-              console.log("prepare response ready");
               this.responseWeb.setResponseIsReady(true);
             })
             this.responseWeb.setResponseIsReady(false);
@@ -123,11 +120,9 @@ export struct WebViewScreen {
               this.responseWeb.setResponseMimeType('image/png')
               this.responseWeb.setResponseCode(200);
               this.responseWeb.setReasonMessage('OK');
-              console.log('替换logo'); //为了上架
               resolve("success");
             })
             promise.then(() => {
-              console.log("prepare response ready");
               this.responseWeb.setResponseIsReady(true);
             })
             this.responseWeb.setResponseIsReady(false);
@@ -144,11 +139,9 @@ export struct WebViewScreen {
               this.responseWeb.setResponseEncoding('utf-8');
               this.responseWeb.setResponseCode(200);
               this.responseWeb.setReasonMessage('OK');
-              console.log('注入native/injectionScript.js');
               resolve("success");
             })
             promise.then(() => {
-              console.log("prepare response ready");
               this.responseWeb.setResponseIsReady(true);
             })
             this.responseWeb.setResponseIsReady(false);
@@ -164,11 +157,9 @@ export struct WebViewScreen {
               this.responseWeb.setResponseEncoding('utf-8');
               this.responseWeb.setResponseCode(200);
               this.responseWeb.setReasonMessage('OK');
-              console.log(`注入native/${getLastPathSegment(path)}`);
               resolve("success");
             })
             promise.then(() => {
-              console.log("prepare response ready");
               this.responseWeb.setResponseIsReady(true);
             })
             this.responseWeb.setResponseIsReady(false);
