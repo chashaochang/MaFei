@@ -39,7 +39,7 @@ export class ApiClientController {
     this.userDao.updateDataSync(valueBucket)
   }
 
-  setupServer(hostname: string, serverName?: string, version?: string) {
+  setupServer(hostname: string, serverName?: string, version?: string, serverSystemId?: string) {
     let server = this.serverDao.getServerByHostname(hostname)
     let id: number
     if (!server && serverName !== undefined && version !== undefined) {
@@ -50,6 +50,9 @@ export class ApiClientController {
       id = server.id
     }
     this.appPreference.setCurrentServerId(id)
+    if (serverSystemId && serverSystemId.length > 0) {
+      this.appPreference.setCurrentServerSystemId(serverSystemId)
+    }
     ApiClient.update(hostname)
   }
 
@@ -99,6 +102,7 @@ export class ApiClientController {
     AppPreference.getInstance().setAccessToken('')
     AppPreference.getInstance().setCurrentUserId('')
     AppPreference.getInstance().setUserName('')
+    AppPreference.getInstance().setCurrentServerSystemId('')
     webview.WebviewController.removeAllCache(true)
     // ApiClient.Instance().logout()
   }

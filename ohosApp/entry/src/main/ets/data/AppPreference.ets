@@ -95,6 +95,14 @@ export class AppPreference {
     this.setValue<number>(Constants.PREF_SERVER_ID, id)
   }
 
+  getCurrentServerSystemId(): string {
+    return this.getValue<string>(Constants.PREF_SERVER_SYSTEM_ID) || ''
+  }
+
+  setCurrentServerSystemId(id: string) {
+    this.setValue<string>(Constants.PREF_SERVER_SYSTEM_ID, id)
+  }
+
   getCurrentUserId(): string {
     let id = this.getValue<string>(Constants.PREF_USER_ID)
     if (id && id.length > 0) {
