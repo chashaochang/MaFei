@@ -325,7 +325,8 @@ export struct SeasonDetailPage {
                           })
                       }.width(160)
                       .height(140)
-                      .alignItems(HorizontalAlign.Start).margin({
+                      .alignItems(HorizontalAlign.Start)
+                      .margin({
                         bottom: 8
                       })
                     }.onClick(() => {

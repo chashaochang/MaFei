@@ -18,6 +18,7 @@ import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
 import { OneMoreUtil } from '../../utils/OneMoreUtil'
 import { display, window } from '@kit.ArkUI'
 import { PlayerEngineType } from '../../entity/PlayerEngineType'
+import { ImageKnifeComponent } from '@ohos/imageknifepro'
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
@@ -1119,22 +1120,52 @@ export struct MPVPlayerView {
       List({ space: 8, initialIndex: _this.ui.playList.findIndex((item: QueueItem) => item.id == _this.ui.currentPlayId) }) {
         ForEach(_this.ui.playList, (item: QueueItem, index: number) => {
           ListItem() {
-            Column() {
-              Text(`第 ${item.playIndex} 集  ${item.name == `第 ${item.playIndex} 集` ? '' : item.name}`)
-                .fontColor(_this.ui.currentPlayId == item.id ? $r('app.color.color_main') : Color.White)
-                .fontSize(14)
-                .maxLines(1)
-                .ellipsisMode(EllipsisMode.END)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Row({ space: 12 }) {
+              ImageKnifeComponent({
+                imageKnifeOption: {
+                  loadSrc: item.image,
+                  objectFit: ImageFit.Cover,
+                  border: {
+                    radius: 8
+                  }
+                }
+              })
+                .width(112)
+                .aspectRatio(16 / 9)
+
+              Column({ space: 8 }) {
+                Text(`第 ${item.playIndex} 集`)
+                  .fontColor(_this.ui.currentPlayId == item.id ? $r('app.color.color_main') : Color.White)
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Medium)
+
+                if (item.name != `第 ${item.playIndex} 集`) {
+                  Text(item.name)
+                    .fontColor('#D9FFFFFF')
+                    .fontSize(13)
+                    .maxLines(2)
+                    .ellipsisMode(EllipsisMode.END)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+
+                Row({ space: 12 }) {
+                  Text(item.durationText.length > 0 ? item.durationText : '时长未知')
+                    .fontColor('#B3FFFFFF')
+                    .fontSize(11)
+                  Text(item.played ? '已观看' : '未观看')
+                    .fontColor(item.played ? $r('app.color.color_main') : '#B3FFFFFF')
+                    .fontSize(11)
+                }
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
             }
             .width('100%')
-            .height(40)
-            .alignItems(HorizontalAlign.Start)
-            .justifyContent(FlexAlign.Center)
-            .padding(12)
+            .padding(8)
+            .backgroundColor('rgba(255,255,255,0.08)')
             .borderWidth(1)
-            .borderColor(_this.ui.currentPlayId == item.id ? $r('app.color.color_main') : Color.Gray)
-            .borderRadius(8)
+            .borderColor(_this.ui.currentPlayId == item.id ? $r('app.color.color_main') : 'rgba(255,255,255,0.18)')
+            .borderRadius(12)
             .onClick(() => {
               _this.onEpisodeChange(index)
               SmartDialog.dismiss()
@@ -1148,7 +1179,7 @@ export struct MPVPlayerView {
     .height('100%')
     .padding(20)
     .backgroundColor('rgba(0,0,0,0.8)')
-    .width(300)
+    .width(340)
   }
 
   @Builder
