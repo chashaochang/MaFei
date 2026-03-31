@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BFAF9B39BE8A3F725E6852F32D7111DA79F0430DC015231367B4B1F71FBFA8E6F959990D77CC23F",
+          "keyPassword": "0000001B8ACD45288F1CE00434ABDABBC4346DB8D851A9124E48D217E7E69FE55D1DA8BD4D6255CF13D752",
           "profile": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/machunjiang/.ohos/config/default_ohosApp_YoJuFtV5_IqEdTMFfA-OtXJsB0Jy6sdbBj1wL5Zseqo=.p12",
-          "storePassword": "0000001BFA7DBFB0F1DC54C5D0B5C7A0370B8481D182ED649E355F3F01B2929D153A04018407E0C1D93E18"
+          "storePassword": "0000001BE32C4E2E754329360526025A1D34F8792B2B3D8316A2C1DA114B760B7322E073B17E9973E18F3F"
         }
       }
     ],
@@ -31,7 +31,7 @@
       },
       {
         "name": "release",
-        "compatibleSdkVersion": "6.0.1(21)",
+        "compatibleSdkVersion": "6.0.0(20)",
         "runtimeOS": "HarmonyOS",
         "bundleName": "cn.xiaobai.mafei",
         "icon": "$media:app_icon",
