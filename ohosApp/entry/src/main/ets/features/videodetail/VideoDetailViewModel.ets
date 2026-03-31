@@ -20,6 +20,51 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private originImageHeight: number = 0;
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
+  episodeStartIndex: number = 0
+
+  private formatEpisodePlayText(item: BaseItemDto): string {
+    let seasonName = ''
+    if ((item.SeasonName || '').startsWith('第') && (item.SeasonName || '').endsWith('季')) {
+      seasonName = item.SeasonName!.replace(/\s+/g, '')
+      seasonName = seasonName.replace('第', '第 ').replace('季', ' 季')
+    } else if (item.SeasonName) {
+      seasonName = item.SeasonName
+    }
+    return (seasonName !== '' ? seasonName + '  ' : '') + '第 ' + item.IndexNumber + ' 集'
+  }
+
+  private updateEpisodeQueue(items: BaseItemDto[], startIndex: number) {
+    if (items.length === 0) {
+      this.episodeList = []
+      this.episodeStartIndex = 0
+      return
+    }
+    this.episodeList = items.map<string>((e) => e.Id!)
+    this.episodeStartIndex = Math.min(Math.max(startIndex, 0), this.episodeList.length - 1)
+  }
+
+  private loadEpisodeQueueForEpisode(itemData: BaseItemDto) {
+    if (!itemData.SeriesId) {
+      return
+    }
+    getTvShowsApi(ApiClient.Instance()).getEpisodes({
+      userId: ApiClient.Instance().userId,
+      fields: [ItemFields.Chapters, ItemFields.Trickplay],
+      isMissing: false,
+      seriesId: itemData.SeriesId,
+      seasonId: itemData.SeasonId
+    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
+      if (res.data?.Items && res.data.Items.length > 0) {
+        const episodeItems = res.data.Items
+        const currentIndex = episodeItems.findIndex((episode) => episode.Id === itemData.Id)
+        this.updateEpisodeQueue(episodeItems, currentIndex >= 0 ? currentIndex : 0)
+      }
+    }).catch()
+  }
+
+  hasEpisodeQueue(): boolean {
+    return this.episodeList.length > 0
+  }
 
   getVideoDetail(id: string) {
     getUserLibraryApi(ApiClient.Instance()).getItem({
@@ -42,10 +87,12 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
         if (itemData.Type == BaseItemKind.Episode) {
+          this.ui.episodeName = this.formatEpisodePlayText(itemData)
           this.ui.subtitle = `${itemData.SeriesName} ${itemData.SeasonName} · ${itemData.IndexNumber}集`
           this.ui.info = ` ${itemData.ProductionYear}  /  ${itemData.RunTimeTicks ?
             Math.floor(itemData.RunTimeTicks / 10000000 / 60 / 60) + '小时' +
             Math.floor(itemData.RunTimeTicks / 10000000 / 60 % 60) + '分钟' : ''}`
+          this.loadEpisodeQueueForEpisode(itemData)
         } else {
           this.ui.info =
             `${itemData.OfficialRating ? '/  ' + itemData.OfficialRating + '  ' :
@@ -130,16 +177,16 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
       if (res.data && res.data.Items && res.data.Items.length > 0) {
         let nextUp = res.data.Items[0]
-        this.ui.episodeName = `${nextUp.SeasonName} 第 ${nextUp.IndexNumber} 集`
+        this.ui.episodeName = this.formatEpisodePlayText(nextUp)
         this.ui.playButtonText = this.ui.episodeName
-        this.episodeList = [nextUp.Id!]
+        this.getEpisodes(nextUp.Id!)
       } else {
         this.getEpisodes()
       }
     }).catch()
   }
 
-  getEpisodes() {
+  getEpisodes(preferredEpisodeId?: string) {
     getTvShowsApi(ApiClient.Instance()).getEpisodes({
       userId: ApiClient.Instance().userId,
       fields: [ItemFields.Chapters, ItemFields.Trickplay],
@@ -147,25 +194,23 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       seriesId: this.ui.id,
     }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
       if (res.data && res.data.Items && res.data.Items.length > 0) {
-        let firstEpisode = res.data.Items[0]
-        let seasonName = ''
-        if ((firstEpisode.SeasonName || '').startsWith('第') && (firstEpisode.SeasonName || '').endsWith('季')) {
-          //seasonName去掉第几季的空格并且在第后面和季前面加上空格
-          seasonName = firstEpisode.SeasonName!.replace(/\s+/g, '')
-          seasonName = seasonName.replace('第', '第 ').replace('季', ' 季')
-        }
-        this.ui.episodeName = (seasonName != '' ? seasonName + '  ' : '') + '第 ' + res.data.Items[0].IndexNumber + ' 集'
+        const episodeItems = res.data.Items
+        const preferredIndex = preferredEpisodeId ?
+          episodeItems.findIndex((episode) => episode.Id === preferredEpisodeId) : -1
+        const startIndex = preferredIndex >= 0 ? preferredIndex : 0
+        const targetEpisode = episodeItems[startIndex]
+        this.ui.episodeName = this.formatEpisodePlayText(targetEpisode)
         this.ui.playButtonText = this.ui.episodeName
-        this.episodeList = res.data.Items.map<string>((e) => e.Id!)
+        this.updateEpisodeQueue(episodeItems, startIndex)
       }
     }).catch()
   }
 
   playFirst() {
-    if (this.ui.episodeName == '') {
+    if (this.episodeList.length === 0) {
       return
     }
-    playItems(this.episodeList, getContext())
+    playItems(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
   }
 
   openExternalUrl(url: string) {

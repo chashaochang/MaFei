@@ -4,10 +4,12 @@ import { PlayerException } from "../PlayerException";
 import { JellyfinMediaSource } from "../source/JellyfinMediaSource";
 import { MediaSourceResolver } from "../source/MediaSourceResolver";
 import { BusinessError } from "@kit.BasicServicesKit";
-import { getItemsApi, getVideosApi } from "sdk";
+import { getItemsApi, getTvShowsApi, getVideosApi } from "sdk";
 import {
+  BaseItemKind,
   BaseItemDtoQueryResult,
   DeviceProfile,
+  ItemFields,
   MediaProtocol,
   MediaStream,
   MediaStreamType,
@@ -302,6 +304,40 @@ export class QueueManager {
     return getItemsApi(ApiClient.Instance()).getItems({
       ids: this.currentQueue
     })
+  }
+
+  async expandEpisodeQueueIfNeeded(): Promise<boolean> {
+    const currentMediaSource = this.currentMediaSourceOrNull
+    if (!currentMediaSource) {
+      return false
+    }
+    const currentItem = currentMediaSource.item
+    if (this.currentQueue.length > 1 || currentItem.Type !== BaseItemKind.Episode || !currentItem.SeriesId) {
+      return false
+    }
+
+    return getTvShowsApi(ApiClient.Instance()).getEpisodes({
+      userId: ApiClient.Instance().userId,
+      fields: [ItemFields.Chapters, ItemFields.Trickplay],
+      isMissing: false,
+      seriesId: currentItem.SeriesId,
+    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
+      const episodeItems = res.data?.Items
+      if (!episodeItems || episodeItems.length <= 1) {
+        return false
+      }
+      if (this.currentMediaSourceOrNull?.itemId !== currentMediaSource.itemId) {
+        return false
+      }
+      const ids = episodeItems.map<string>((item) => item.Id!).filter((id) => id.length > 0)
+      const currentIndex = ids.findIndex((id) => id === currentMediaSource.itemId)
+      if (ids.length <= 1 || currentIndex < 0) {
+        return false
+      }
+      this.currentQueue = ids
+      this.currentQueueIndex = currentIndex
+      return true
+    }).catch(() => false)
   }
 
   async getItem(id: string): Promise<AxiosResponse<BaseItemDtoQueryResult>> {

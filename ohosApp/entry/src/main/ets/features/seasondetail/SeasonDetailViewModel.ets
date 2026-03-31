@@ -14,6 +14,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   private originImageHeight: number = 0;
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
+  episodeStartIndex: number = 0
 
   // 将剧集按30个一组分组，并生成组名与视频列表
   private groupEpisodes(items: BaseItemDto[]) {
@@ -128,25 +129,21 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
       seasonId: seasonId
     }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
       if (res.data && res.data.Items && res.data.Items.length > 0) {
-        //遍历没播放的第一个视频
-        let firstNotPlayed = res.data.Items.find((e) => e.UserData?.Played == false)
-        if (firstNotPlayed) {
-          this.ui.episodeName = '第 ' + firstNotPlayed.IndexNumber + ' 集'
-          this.episodeList = [firstNotPlayed.Id!]
-          return
-        }
-        let firstEpisode = res.data.Items[0]
-        this.ui.episodeName = '第 ' + firstEpisode.IndexNumber + ' 集'
-        this.episodeList = res.data.Items.map<string>((e) => e.Id!)
+        const episodeItems = res.data.Items
+        const firstNotPlayedIndex = episodeItems.findIndex((e) => e.UserData?.Played == false)
+        this.episodeStartIndex = firstNotPlayedIndex >= 0 ? firstNotPlayedIndex : 0
+        const targetEpisode = episodeItems[this.episodeStartIndex]
+        this.ui.episodeName = '第 ' + targetEpisode.IndexNumber + ' 集'
+        this.episodeList = episodeItems.map<string>((e) => e.Id!)
       }
     }).catch()
   }
 
   playFirst() {
-    if (this.ui.episodeName == '') {
+    if (this.ui.episodeName == '' || this.episodeList.length === 0) {
       return
     }
-    playItems(this.episodeList, getContext())
+    playItems(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
   }
 
   calculateImageHeight(param: CalculateHeightParam): boolean {

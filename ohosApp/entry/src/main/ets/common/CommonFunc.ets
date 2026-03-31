@@ -381,15 +381,21 @@ export function getTagBase64(tag: VideoTag): string {
 
 export function playItems(ids: string[], context: Context,
   audioStreamIndex?: number,
-  subtitleStreamIndex?: number) {
+  subtitleStreamIndex?: number,
+  startIndex?: number) {
+  if (ids.length === 0) {
+    return
+  }
+  const targetIndex = Math.min(Math.max(startIndex ?? 0, 0), ids.length - 1)
   getUserLibraryApi(ApiClient.Instance()).getItem({
     userId: ApiClient.Instance().userId,
-    itemId: ids[0],
+    itemId: ids[targetIndex],
   }).then((res: AxiosResponse<BaseItemDto>) => {
     if (res.data) {
       let itemData = res.data
       let options: PlayOptions = new PlayOptions()
       options.ids = ids
+      options.startIndex = targetIndex
       options.startPositionTicks = itemData.UserData?.PlaybackPositionTicks || 0
       if (audioStreamIndex !== undefined) {
         options.audioStreamIndex = audioStreamIndex
