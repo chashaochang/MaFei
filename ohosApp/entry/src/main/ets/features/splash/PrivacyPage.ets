@@ -22,7 +22,6 @@ export struct PrivacyPage {
         controller: this.webviewController
       })
         .darkMode(WebDarkMode.Auto)
-        .forceDarkAccess(true)
         .layoutWeight(1)
         .width('100%')
         .onPageBegin((event) => {
