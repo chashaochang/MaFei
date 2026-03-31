@@ -4,6 +4,9 @@ export class Constants {
   static readonly PLAYER_EVENT: emitter.InnerEvent = {
     eventId: 100001
   }
+  static readonly PLAYER_PAGE_EVENT: emitter.InnerEvent = {
+    eventId: 100002
+  }
   /**
    *  Cast playing initial
    */
