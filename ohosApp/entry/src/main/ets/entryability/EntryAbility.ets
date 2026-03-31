@@ -17,7 +17,6 @@ export default class EntryAbility extends UIAbility {
     this.appUIState.context = this.context
     if(this.context.config.colorMode !== undefined)
       this.appUIState.colorMode = this.context.config.colorMode
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
     //预初始化
     webview.WebviewController.initializeWebEngine()
     HMRouterMgr.init({
@@ -30,19 +29,16 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     // Main window is created, set main page for this ability
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
     AppStorage.setOrCreate('windowStage', windowStage);
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
-        hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
+        hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
         return;
       }
-      hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
     });
 
     windowStage.getMainWindow().then((windowClass) => {
@@ -82,18 +78,15 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
     // Ability has brought to foreground
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
     this.context.eventHub.emit('onForeground')
   }
 
   onBackground(): void {
     // Ability has back to background
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
     this.context.eventHub.emit('onBackground')
   }
 

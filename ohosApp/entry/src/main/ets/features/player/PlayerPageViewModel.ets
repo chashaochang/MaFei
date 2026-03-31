@@ -439,8 +439,6 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   //获取播放列表信息
   getItems() {
       this.queueManager.getItems().then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        console.log(this.initSource?.itemId)
-        console.log(JSON.stringify(res.data.Items));
         let items = res.data.Items
         if (this.queueManager.currentQueue.length > 0) {
           let list: QueueItem[] = []
