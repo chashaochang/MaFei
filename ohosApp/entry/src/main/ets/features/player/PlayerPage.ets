@@ -96,7 +96,7 @@ export struct PlayerPage {
     // } catch (exception) {
     //   console.error('PlayerScreen', 'Failed to register callback. Code: ' + JSON.stringify(exception));
     // }
-    emitter.on(Constants.PLAYER_EVENT, (data) => {
+    emitter.on(Constants.PLAYER_PAGE_EVENT, (data) => {
       if (data.data && data.data['eventName']) {
         let name = data.data['eventName'] as string
         switch (name) {
@@ -125,7 +125,7 @@ export struct PlayerPage {
 
   aboutToDisappear() {
     this.vm.reportPlaybackStop()
-    emitter.off(Constants.PLAYER_EVENT.eventId)
+    emitter.off(Constants.PLAYER_PAGE_EVENT.eventId)
     //后台播放音频
     // if (!this.viewModel.notificationHelper.allowBackgroundAudio) {
     //   this.viewModel.pause()
