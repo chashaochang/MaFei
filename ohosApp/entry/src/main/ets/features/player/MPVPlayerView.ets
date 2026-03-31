@@ -94,10 +94,12 @@ export struct MPVPlayerView {
   private appliedOsdSurfaceKey: string = ''
   private videoParentAspectRatio: number = 16 / 9
   sec: number = 3
+  private keepScreenOnState?: boolean
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
     this.sendAVSessionState(this.ui.playerStatus)
+    this.updateWindowKeepScreenOn(this.ui.playerStatus === PlayerStatus.PLAYING)
   }
 
   private changeSystemBar(): void {
@@ -230,6 +232,7 @@ export struct MPVPlayerView {
   }
 
   aboutToDisappear(): void {
+    this.updateWindowKeepScreenOn(false)
     emitter.off(Constants.PLAYER_EVENT.eventId)
     let context = getContext(this) as common.UIAbilityContext
     context.eventHub.off('onForeground')
@@ -253,6 +256,21 @@ export struct MPVPlayerView {
     this.clearPendingSubtitleSelection(false)
     this.ui.playbackPositionMs = 0
     this.cacheProgressValue = 0
+  }
+
+  private updateWindowKeepScreenOn(shouldKeepOn: boolean): void {
+    const windowClass = this.vm.appUIState.windowClass
+    if (!windowClass) {
+      return
+    }
+    if (this.keepScreenOnState === shouldKeepOn) {
+      return
+    }
+    this.keepScreenOnState = shouldKeepOn
+    windowClass.setWindowKeepScreenOn(shouldKeepOn).catch((err: BusinessError) => {
+      this.keepScreenOnState = undefined
+      console.error(`[MPVPlayer] setWindowKeepScreenOn(${shouldKeepOn}) failed: ${JSON.stringify(err)}`)
+    })
   }
 
   private shouldUseHardwareDecode(): boolean {

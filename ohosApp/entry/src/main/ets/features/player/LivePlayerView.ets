@@ -53,6 +53,7 @@ export struct LivePlayerView {
   private mFirst: boolean = true
   private last: number = 0
   private sec: number = 2
+  private keepScreenOnState?: boolean
 
   pipController?: PiPWindow.PiPController
 
@@ -103,6 +104,7 @@ export struct LivePlayerView {
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
     this.sendAVSessionState(this.ui.playerStatus)
+    this.updateWindowKeepScreenOn(this.ui.playerStatus === PlayerStatus.PLAYING)
   }
 
   @Monitor('ui.isCastPlaying')
@@ -173,6 +175,7 @@ export struct LivePlayerView {
   }
 
   aboutToDisappear(): void {
+    this.updateWindowKeepScreenOn(false)
     emitter.off(Constants.PLAYER_EVENT.eventId)
     let context = getContext(this) as common.UIAbilityContext
     context.eventHub.off('onForeground')
@@ -183,6 +186,21 @@ export struct LivePlayerView {
     this.stopProgressTimer()
     this.stop()
     this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+  }
+
+  private updateWindowKeepScreenOn(shouldKeepOn: boolean): void {
+    const windowClass = this.vm.appUIState.windowClass
+    if (!windowClass) {
+      return
+    }
+    if (this.keepScreenOnState === shouldKeepOn) {
+      return
+    }
+    this.keepScreenOnState = shouldKeepOn
+    windowClass.setWindowKeepScreenOn(shouldKeepOn).catch((err: BusinessError) => {
+      this.keepScreenOnState = undefined
+      console.error(`[LivePlayer] setWindowKeepScreenOn(${shouldKeepOn}) failed: ${JSON.stringify(err)}`)
+    })
   }
 
   private setVideoWH(videoW: number, videoH: number): void {
