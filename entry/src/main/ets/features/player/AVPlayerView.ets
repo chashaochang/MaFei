@@ -126,6 +126,7 @@ export struct AVPlayerView {
   @Monitor('ui.playerStatus')
   onPlayerStateChanged() {
     this.sendAVSessionState(this.ui.playerStatus)
+    this.updateWindowKeepScreenOn(this.ui.playerStatus === PlayerStatus.PLAYING)
   }
 
   @Monitor('ui.isCastPlaying')
@@ -182,6 +183,7 @@ export struct AVPlayerView {
   private panOptionSeek: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Horizontal })
   private surfaceId: string = ''
   private xComponentController: XComponentController = new XComponentController()
+  private keepScreenOnState?: boolean
 
   @Consumer() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
   @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
@@ -266,6 +268,7 @@ export struct AVPlayerView {
   }
 
   aboutToDisappear() {
+    this.updateWindowKeepScreenOn(false)
     this.stopSubTitle()
     emitter.off(Constants.PLAYER_EVENT.eventId)
     let context = getContext(this) as common.UIAbilityContext
@@ -273,6 +276,21 @@ export struct AVPlayerView {
     this.pipController?.stopPiP()
     this.stop()
     this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+  }
+
+  private updateWindowKeepScreenOn(shouldKeepOn: boolean): void {
+    const windowClass = this.vm.appUIState.windowClass
+    if (!windowClass) {
+      return
+    }
+    if (this.keepScreenOnState === shouldKeepOn) {
+      return
+    }
+    this.keepScreenOnState = shouldKeepOn
+    windowClass.setWindowKeepScreenOn(shouldKeepOn).catch((err: BusinessError) => {
+      this.keepScreenOnState = undefined
+      console.error(`[AVPlayer] setWindowKeepScreenOn(${shouldKeepOn}) failed: ${JSON.stringify(err)}`)
+    })
   }
 
   private completionNum(num: number): string | number {
