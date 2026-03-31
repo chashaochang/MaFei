@@ -79,11 +79,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 添加页面加载动画
     document.body.style.opacity = '0';
     document.body.style.transition = 'opacity 0.5s ease';
-    
+
     setTimeout(() => {
         document.body.style.opacity = '1';
     }, 100);
-    
+
     // 预加载图片
     const images = document.querySelectorAll('img');
     images.forEach(img => {
@@ -102,7 +102,7 @@ document.addEventListener('mousemove', (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
     isMouseMoving = true;
-    
+
     // 为英雄区域添加视差效果
     const hero = document.querySelector('.hero');
     if (hero) {
@@ -113,7 +113,7 @@ document.addEventListener('mousemove', (e) => {
             hero.style.transform = `translate(${moveX}px, ${moveY}px)`;
         }
     }
-    
+
     setTimeout(() => {
         isMouseMoving = false;
     }, 100);
@@ -126,10 +126,10 @@ document.addEventListener('keydown', (e) => {
         hamburger.classList.remove('active');
         navMenu.classList.remove('active');
     }
-    
+
     // 空格键或回车键激活按钮
     if (e.key === ' ' || e.key === 'Enter') {
-        if (document.activeElement.classList.contains('btn') || 
+        if (document.activeElement.classList.contains('btn') ||
             document.activeElement.classList.contains('download-btn')) {
             e.preventDefault();
             document.activeElement.click();
@@ -140,7 +140,7 @@ document.addEventListener('keydown', (e) => {
 // 性能优化：节流函数
 function throttle(func, limit) {
     let inThrottle;
-    return function() {
+    return function () {
         const args = arguments;
         const context = this;
         if (!inThrottle) {
@@ -182,10 +182,11 @@ document.querySelectorAll('.download-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         e.preventDefault();
         const platform = btn.querySelector('.download-platform').textContent;
-        
+
         // 这里可以添加实际的下载逻辑
-        alert(`即将下载 ${platform} 版本的 HomoFin`);
-        
+        //alert(`即将下载 ${platform} 版本的 马飞`);
+        alert(`敬请期待`);
+
         // 统计下载点击（如果需要）
         if (typeof gtag !== 'undefined') {
             gtag('event', 'download_click', {
