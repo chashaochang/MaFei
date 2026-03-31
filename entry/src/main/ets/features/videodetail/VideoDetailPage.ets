@@ -194,7 +194,7 @@ export struct VideoDetailPage {
                 })
                 .borderRadius(25)
                 .onClick(() => {
-                  if (this.ui.isTvShows) {
+                  if (this.ui.isTvShows || this.vm.hasEpisodeQueue()) {
                     this.vm.playFirst()
                   } else {
                     let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
