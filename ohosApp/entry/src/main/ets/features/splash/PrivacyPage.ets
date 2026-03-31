@@ -18,7 +18,7 @@ export struct PrivacyPage {
 
       // Web内容区域
       Web({
-        src: 'https://jellyfin.xiaobaihome.cn/yinsi.html',
+        src: 'https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1915508141466875008',
         controller: this.webviewController
       })
         .darkMode(WebDarkMode.Auto)
