@@ -6,7 +6,8 @@ import { HMRouterMgr } from '@hadss/hmrouter';
 import { DBManager } from '../data/DBManager';
 import { AppUIState } from '../entity/AppUIState';
 import { OneMoreUtil } from '../utils/OneMoreUtil';
-import { GlobalContext } from '@ohos/danmakuflamemaster';
+// 弹幕功能暂不上线，先注释初始化依赖，后续恢复时取消注释即可。
+// import { GlobalContext } from '@ohos/danmakuflamemaster';
 import { ImageKnife } from '@ohos/imageknifepro';
 
 export default class EntryAbility extends UIAbility {
@@ -23,7 +24,8 @@ export default class EntryAbility extends UIAbility {
       context: this.context
     })
     DBManager.getInstance().init(this.context)
-    GlobalContext.getContext().setValue("path", this.context.filesDir);
+    // 弹幕功能暂不上线，先注释初始化代码。
+    // GlobalContext.getContext().setValue("path", this.context.filesDir);
     // 如果需要用文件缓存，需要提前初始化文件缓存
     await ImageKnife.getInstance().initFileCache(this.context, 1024, 1024 * 1024 * 1024)
   }
