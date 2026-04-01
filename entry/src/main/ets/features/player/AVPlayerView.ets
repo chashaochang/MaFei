@@ -294,7 +294,6 @@ export struct AVPlayerView {
     context.eventHub.off('onForeground')
     this.pipController?.stopPiP()
     this.stop()
-    this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
   }
 
   private updateWindowKeepScreenOn(shouldKeepOn: boolean): void {
@@ -1374,20 +1373,6 @@ export struct AVPlayerView {
   @Builder
   SeekProgressUi() {
     Column({ space: 10 }) {
-      Row({ space: 8 }) {
-        Image(this.mSeekDirectionRes)
-          .objectFit(ImageFit.Contain)
-          .width(18)
-          .height(18)
-        Text('拖动预览')
-          .fontColor('#F5F7FA')
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-      }
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .backgroundColor('rgba(255,255,255,0.14)')
-        .borderRadius(999)
-
       if (this.seekPreviewPixelMap) {
         Stack() {
           Image(this.seekPreviewPixelMap)
@@ -1507,6 +1492,7 @@ export struct AVPlayerView {
         this.BrightnessUi()
       }.width('100%')
       .height('100%')
+      .padding({ left: 36, right: 36 })
 
       Column() {
         this.topControlView()
@@ -1515,7 +1501,13 @@ export struct AVPlayerView {
       }.height('100%')
       .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
 
-      if (this.vm.appUIState.isFullScreen && this.fullShowLock && !OneMoreUtil.isPc()) {
+      if (this.vm.appUIState.isFullScreen &&
+        this.fullShowLock &&
+        this.showControls &&
+        !this.showVolumeUi &&
+        !this.showBrightnessUi &&
+        !this.showSeekProgressUi &&
+        !OneMoreUtil.isPc()) {
         Stack() {
           Image(this.lock ? $r('app.media.lock') : $r('app.media.unlock'))
             .width(20)
@@ -1610,7 +1602,7 @@ export struct AVPlayerView {
     .width('100%')
     .height('100%')
     .alignContent(Alignment.Center)
-    .backgroundColor('#111111')
+    .backgroundColor(Color.Black)
     .clip(true)
     .onHover((isHover: boolean) => {
       if (OneMoreUtil.isPc()) {
@@ -1848,7 +1840,6 @@ export struct AVPlayerView {
           }
           if (this.isHorizontalDrag && this.avPlayer) {
             this.progressValue = this.mSeekTimePosition
-            this.loadingVisible = Visibility.Visible
             this.showControls = false
             let seekMs = this.mSeekTimePosition * (this.duration / 100)
             this.seekTo(seekMs)
