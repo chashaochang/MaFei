@@ -4,7 +4,7 @@ import { WindowUtil } from "../../utils/WindowUtil";
 import { AppStorageV2, display } from "@kit.ArkUI";
 import { AppUIState } from "../../entity/AppUIState";
 import { NavModifier } from "../../pages/Index";
-import { HomeRefreshEvent } from "../../events/Events";
+import { HomeRefreshEvent, VideoDetailRefreshEvent } from "../../events/Events";
 import { RouterConsts } from "../../common/RouterConsts";
 
 @HMInterceptor({ interceptorName: 'jumpInfoInterceptor', global: true })
@@ -20,6 +20,9 @@ export class JumpInfoInterceptor implements IHMInterceptor {
       }
     } else if (info.type === 'pop' && info.srcName === RouterConsts.PlayerPage) {
       info.context.getHostContext()?.eventHub.emit(HomeRefreshEvent)
+      if (info.targetName === RouterConsts.VideoDetailPage) {
+        info.context.getHostContext()?.eventHub.emit(VideoDetailRefreshEvent)
+      }
       if (OneMoreUtil.isNormalPhone()) {//普通手机
         //跳出PlayerView锁定竖屏
         WindowUtil.setMainWindowPortrait(getContext(this))

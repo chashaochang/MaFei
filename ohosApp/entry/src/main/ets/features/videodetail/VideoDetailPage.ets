@@ -17,6 +17,7 @@ import { CastView } from '../../component/CastView';
 import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView';
 import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
 import { VideoInfoDetail } from './components/VideoInfoDetail';
+import { VideoDetailRefreshEvent } from '../../events/Events';
 
 @HMRouter({
   pageUrl: RouterConsts.VideoDetailPage
@@ -36,21 +37,36 @@ export struct VideoDetailPage {
     this.ui.colorFilter = ColorUtils.hexToColorMatrix(color);
   }
 
+  private refreshDetail(): void {
+    if (!this.ui.id) {
+      return
+    }
+    if (this.ui.isTvShows) {
+      this.vm.getTvShowDetail(this.ui.id)
+      this.vm.getNextUp()
+    } else {
+      this.vm.getVideoDetail(this.ui.id)
+    }
+  }
+
   aboutToAppear(): void {
     let param = HMRouterMgr.getCurrentParam() as object
     if (param) {
       this.ui.id = param['id'] as string
       this.ui.mediaName = param['mediaName'] as string
       this.ui.isTvShows = param['isTvShows'] ?? false
-      if (this.ui.isTvShows) {
-        this.vm.getTvShowDetail(this.ui.id)
-        this.vm.getNextUp()
-        this
-      } else {
-        this.vm.getVideoDetail(this.ui.id)
-      }
+      this.refreshDetail()
     }
+    this.getUIContext().getHostContext()?.eventHub.on(VideoDetailRefreshEvent, () => {
+      setTimeout(() => {
+        this.refreshDetail()
+      }, 1000)
+    })
     this.onColorModeChange()
+  }
+
+  aboutToDisappear(): void {
+    this.getUIContext().getHostContext()?.eventHub.off(VideoDetailRefreshEvent)
   }
 
   build() {
