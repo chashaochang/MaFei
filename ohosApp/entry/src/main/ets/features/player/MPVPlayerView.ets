@@ -1,4 +1,6 @@
 import { BaseItemKind, MediaStream, PlayMethod, SubtitleDeliveryMethod } from 'sdk/src/main/ets/generated-client/models'
+import { image } from '@kit.ImageKit'
+import { media } from '@kit.MediaKit'
 import { QualityOption } from '../../player/qualityoptions/QualityOption'
 import { PlayerPageUIState } from './PlayerPageUIState'
 import { PlayerPageViewModel } from './PlayerPageViewModel'
@@ -20,6 +22,7 @@ import { OneMoreUtil } from '../../utils/OneMoreUtil'
 import { display, window } from '@kit.ArkUI'
 import { PlayerEngineType } from '../../entity/PlayerEngineType'
 import { ImageKnifeComponent } from '@ohos/imageknifepro'
+import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
@@ -30,6 +33,9 @@ const MPV_PROGRESS_TRACK_HEIGHT: number = 4
 const MPV_PROGRESS_BASE_COLOR: string = '#261F1F1F'
 const MPV_PROGRESS_CACHE_COLOR: string = '#CCFFFFFF'
 const MPV_PROGRESS_SLIDER_TRACK_COLOR: string = '#01000000'
+const SEEK_SYNC_TOLERANCE_MS: number = 1500
+const SEEK_SYNC_TIMEOUT_MS: number = 1800
+const SEEK_PREVIEW_DEBOUNCE_MS: number = 70
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
 let mpvUiTime: number = 0
@@ -71,6 +77,10 @@ export struct MPVPlayerView {
   @Local videoWidth: string = '100%'
   @Local fullShowLock: boolean = false
   @Local lock: boolean = false
+  @Local showSeekPreviewUi: boolean = false
+  @Local seekPreviewTime: string = '00:00'
+  @Local seekPreviewProgressValue: number = 0
+  @Local seekPreviewPixelMap?: image.PixelMap
 
   private xComponentController: XComponentController = new XComponentController()
   private osdXComponentController: XComponentController = new XComponentController()
@@ -95,6 +105,12 @@ export struct MPVPlayerView {
   private videoParentAspectRatio: number = 16 / 9
   sec: number = 3
   private keepScreenOnState?: boolean
+  private isSeekingWithSlider: boolean = false
+  private pendingSeekTargetMs: number = -1
+  private pendingSeekDeadlineMs: number = 0
+  private seekPreviewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper()
+  private seekPreviewTimer: number = -1
+  private seekPreviewRequestToken: number = 0
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
@@ -172,6 +188,8 @@ export struct MPVPlayerView {
 
   @Monitor('videoUrl')
   onUrlChange(): void {
+    this.resetSeekPreviewState()
+    void this.seekPreviewHelper.release()
     this.sourceLoaded = false
     this.playbackCompleted = false
     this.currentPosition = 0
@@ -180,6 +198,7 @@ export struct MPVPlayerView {
     this.currentTime = '00:00'
     this.loadedExternalSubtitleUrls = []
     this.clearPendingSubtitleSelection(false)
+    this.prepareSeekPreview()
     if (this.initialized) {
       this.loadCurrentVideo()
     }
@@ -232,6 +251,8 @@ export struct MPVPlayerView {
   }
 
   aboutToDisappear(): void {
+    this.resetSeekPreviewState()
+    void this.seekPreviewHelper.release()
     this.updateWindowKeepScreenOn(false)
     emitter.off(Constants.PLAYER_EVENT.eventId)
     let context = getContext(this) as common.UIAbilityContext
@@ -482,6 +503,7 @@ export struct MPVPlayerView {
     if (!this.initialized || this.videoUrl.length === 0) {
       return
     }
+    this.prepareSeekPreview()
     this.sourceLoaded = true
     this.playbackCompleted = false
     this.loading = true
@@ -520,13 +542,32 @@ export struct MPVPlayerView {
     }
   }
 
-  private onSeek(value: number): void {
+  private onSeek(value: number, mode: SliderChangeMode): void {
     if (!this.initialized || this.duration <= 0) {
       return
     }
     const seekMs = (value / PROGRESS_MAX_VALUE) * this.duration
-    this.seekTo(seekMs)
+    this.currentPosition = seekMs
+    this.ui.playbackPositionMs = seekMs
+    this.currentTime = this.formatTime(seekMs)
     this.progressValue = value
+    this.seekPreviewTime = this.formatTime(seekMs)
+    this.seekPreviewProgressValue = value
+    if (mode === SliderChangeMode.Begin) {
+      this.isSeekingWithSlider = true
+      this.showSeekPreviewUi = true
+      this.scheduleSeekPreviewFrame(seekMs, true)
+      return
+    }
+    if (mode === SliderChangeMode.Moving) {
+      this.showSeekPreviewUi = true
+      this.scheduleSeekPreviewFrame(seekMs)
+      return
+    }
+    this.isSeekingWithSlider = false
+    this.showSeekPreviewUi = false
+    this.seekTo(seekMs)
+    this.resetSeekPreviewState()
   }
 
   private startProgressTimer(): void {
@@ -542,6 +583,9 @@ export struct MPVPlayerView {
       }
       const position = this.mpvPlayer.getCurrentPositionMs()
       if (position >= 0) {
+        if (this.shouldIgnorePlaybackProgress(position)) {
+          return
+        }
         this.currentPosition = position
         this.ui.playbackPositionMs = position
         this.currentTime = this.formatTime(position)
@@ -675,9 +719,81 @@ export struct MPVPlayerView {
       return
     }
     this.mpvPlayer.seekToMs(positionMs, false)
+    this.pendingSeekTargetMs = positionMs
+    this.pendingSeekDeadlineMs = Date.now() + SEEK_SYNC_TIMEOUT_MS
     this.currentPosition = positionMs
     this.ui.playbackPositionMs = positionMs
     this.currentTime = this.formatTime(positionMs)
+  }
+
+  private scheduleSeekPreviewFrame(positionMs: number, immediate: boolean = false): void {
+    this.clearSeekPreviewTimer()
+    const requestToken = ++this.seekPreviewRequestToken
+    if (immediate) {
+      void this.loadSeekPreviewFrame(positionMs, requestToken)
+      return
+    }
+    this.seekPreviewTimer = setTimeout(() => {
+      this.seekPreviewTimer = -1
+      void this.loadSeekPreviewFrame(positionMs, requestToken)
+    }, SEEK_PREVIEW_DEBOUNCE_MS)
+  }
+
+  private clearSeekPreviewTimer(): void {
+    if (this.seekPreviewTimer >= 0) {
+      clearTimeout(this.seekPreviewTimer)
+      this.seekPreviewTimer = -1
+    }
+  }
+
+  private async loadSeekPreviewFrame(positionMs: number, requestToken: number): Promise<void> {
+    const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
+    if (requestToken !== this.seekPreviewRequestToken) {
+      pixelMap?.release()
+      return
+    }
+    if (!pixelMap) {
+      return
+    }
+    this.setSeekPreviewPixelMap(pixelMap)
+  }
+
+  private setSeekPreviewPixelMap(pixelMap?: image.PixelMap): void {
+    const previousPixelMap = this.seekPreviewPixelMap
+    this.seekPreviewPixelMap = pixelMap
+    if (previousPixelMap && previousPixelMap !== pixelMap) {
+      previousPixelMap.release()
+    }
+  }
+
+  private resetSeekPreviewState(): void {
+    this.clearSeekPreviewTimer()
+    this.seekPreviewRequestToken++
+    this.showSeekPreviewUi = false
+    this.setSeekPreviewPixelMap(undefined)
+  }
+
+  private prepareSeekPreview(): void {
+    if (this.videoUrl.length === 0) {
+      return
+    }
+    void this.seekPreviewHelper.prepare(this.videoUrl)
+  }
+
+  private shouldIgnorePlaybackProgress(positionMs: number): boolean {
+    if (this.isSeekingWithSlider) {
+      return true
+    }
+    if (this.pendingSeekTargetMs < 0) {
+      return false
+    }
+    if (Date.now() > this.pendingSeekDeadlineMs ||
+      Math.abs(positionMs - this.pendingSeekTargetMs) <= SEEK_SYNC_TOLERANCE_MS) {
+      this.pendingSeekTargetMs = -1
+      this.pendingSeekDeadlineMs = 0
+      return false
+    }
+    return true
   }
 
   private speedFromString(speed: string): number {
@@ -1527,8 +1643,8 @@ export struct MPVPlayerView {
             .trackBorderRadius(MPV_PROGRESS_TRACK_HEIGHT / 2)
             .selectedBorderRadius(MPV_PROGRESS_TRACK_HEIGHT / 2)
             .showTips(true)
-            .onChange((value: number, _mode?: SliderChangeMode) => {
-              this.onSeek(value)
+            .onChange((value: number, mode: SliderChangeMode) => {
+              this.onSeek(value, mode)
             })
         }
           .layoutWeight(1)
@@ -1686,6 +1802,67 @@ export struct MPVPlayerView {
     })
   }
 
+  @Builder
+  private seekPreviewOverlay(): void {
+    Column({ space: 10 }) {
+      Text('拖动预览')
+        .fontColor('#F5F7FA')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .backgroundColor('rgba(255,255,255,0.14)')
+        .borderRadius(999)
+
+      if (this.seekPreviewPixelMap) {
+        Stack() {
+          Image(this.seekPreviewPixelMap)
+            .objectFit(ImageFit.Contain)
+            .width('100%')
+            .height('100%')
+        }
+          .width(172)
+          .height(104)
+          .backgroundColor('#091018')
+          .borderRadius(14)
+          .clip(true)
+      }
+
+      Row() {
+        Text(this.seekPreviewTime)
+          .fontColor($r('app.color.color_main'))
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+        Blank()
+          .layoutWeight(1)
+        Text(this.totalTime)
+          .fontColor('#D7DEE8')
+          .fontSize(13)
+      }
+        .width('100%')
+
+      Row({ space: 8 }) {
+        Text('松手后跳转')
+          .fontColor('#AEB8C4')
+          .fontSize(11)
+
+        Blank()
+          .layoutWeight(1)
+
+        Text(`${Math.round(this.seekPreviewProgressValue)}%`)
+          .fontColor('#8E9AA8')
+          .fontSize(11)
+      }
+        .width('100%')
+    }
+      .padding({ top: 14, bottom: 14, left: 16, right: 16 })
+      .width(220)
+      .backgroundColor('#CC11161D')
+      .borderRadius(20)
+      .border({ width: 1, color: 'rgba(255,255,255,0.10)' })
+      .alignItems(HorizontalAlign.Center)
+      .visibility(this.showSeekPreviewUi ? Visibility.Visible : Visibility.Hidden)
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
       Column() {
@@ -1784,6 +1961,8 @@ export struct MPVPlayerView {
       //   .height('100%')
       //   .opacity(0.6)
       //   .hitTestBehavior(HitTestMode.None)
+
+      this.seekPreviewOverlay()
 
       Column() {
         this.topControlView()

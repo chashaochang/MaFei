@@ -1,4 +1,5 @@
 import { media } from "@kit.MediaKit";
+import { image } from '@kit.ImageKit'
 import { AVCastPicker, avSession } from "@kit.AVSessionKit";
 import { audio } from "@kit.AudioKit";
 import { BusinessError, emitter } from "@kit.BasicServicesKit";
@@ -20,8 +21,12 @@ import { QueueItem } from "../../entity/QueueItem";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { AppPreference } from "../../data/AppPreference";
 import { ImageKnifeComponent } from "@ohos/imageknifepro";
+import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 
 const PROGRESS_MAX_VALUE: number = 100;
+const SEEK_SYNC_TOLERANCE_MS: number = 1500;
+const SEEK_SYNC_TIMEOUT_MS: number = 1800;
+const SEEK_PREVIEW_DEBOUNCE_MS: number = 70;
 
 let avTouchStartX: number = 0
 let avTouchStartY: number = 0
@@ -44,8 +49,11 @@ export struct AVPlayerView {
 
   @Monitor('videoUrl')
   onUrlChange() {
+    this.resetSeekPreviewState()
+    void this.seekPreviewHelper.release()
     this.stop()
     this.startPlay()
+    this.prepareSeekPreview()
   }
 
   @Monitor('ui.subtitles')
@@ -164,6 +172,7 @@ export struct AVPlayerView {
   @Local mSeekTimePosition: number = 0
   @Local mSeekCurrentTime: string = "00:00"
   @Local mSeekDirectionRes: Resource = $r('app.media.video_forward_icon')
+  @Local seekPreviewPixelMap?: image.PixelMap
   @Local mCurrentVolumeValue: number = 0
   @Local mMaxVolumeValue: number = 20
   @Local mCurrentBrightness: number = 10
@@ -184,6 +193,12 @@ export struct AVPlayerView {
   private surfaceId: string = ''
   private xComponentController: XComponentController = new XComponentController()
   private keepScreenOnState?: boolean
+  private isSeekingWithSlider: boolean = false
+  private pendingSeekTargetMs: number = -1
+  private pendingSeekDeadlineMs: number = 0
+  private seekPreviewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper()
+  private seekPreviewTimer: number = -1
+  private seekPreviewRequestToken: number = 0
 
   @Consumer() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
   @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
@@ -268,6 +283,8 @@ export struct AVPlayerView {
   }
 
   aboutToDisappear() {
+    this.resetSeekPreviewState()
+    void this.seekPreviewHelper.release()
     this.updateWindowKeepScreenOn(false)
     this.stopSubTitle()
     emitter.off(Constants.PLAYER_EVENT.eventId)
@@ -600,6 +617,9 @@ export struct AVPlayerView {
     })
 
     player.on('timeUpdate', (time: number) => {
+      if (this.shouldIgnorePlaybackProgress(time)) {
+        return
+      }
       this.currentPosition = time
       this.ui.playbackPositionMs = time
       this.currentTime = this.formatTime(time)
@@ -639,6 +659,7 @@ export struct AVPlayerView {
     if (!this.videoUrl) {
       return
     }
+    this.prepareSeekPreview()
     this.logAvSourceDiagnostics('startPlay')
     this.ui.playerStatus = PlayerStatus.IDLE
     this.loadingVisible = Visibility.Visible
@@ -680,9 +701,114 @@ export struct AVPlayerView {
     if (this.avPlayer) {
       try {
         this.avPlayer.seek(ms, media.SeekMode.SEEK_CLOSEST)
+        this.pendingSeekTargetMs = ms
+        this.pendingSeekDeadlineMs = Date.now() + SEEK_SYNC_TIMEOUT_MS
       } catch (err) {
       }
     }
+  }
+
+  private shouldIgnorePlaybackProgress(positionMs: number): boolean {
+    if (this.isSeekingWithSlider) {
+      return true
+    }
+    if (this.pendingSeekTargetMs < 0) {
+      return false
+    }
+    if (Date.now() > this.pendingSeekDeadlineMs ||
+      Math.abs(positionMs - this.pendingSeekTargetMs) <= SEEK_SYNC_TOLERANCE_MS) {
+      this.pendingSeekTargetMs = -1
+      this.pendingSeekDeadlineMs = 0
+      return false
+    }
+    return true
+  }
+
+  private updateSeekPreview(value: number): number {
+    const seekMs = (value / PROGRESS_MAX_VALUE) * this.duration
+    this.currentPosition = seekMs
+    this.ui.playbackPositionMs = seekMs
+    this.currentTime = this.formatTime(seekMs)
+    this.progressValue = value
+    this.mSeekCurrentTime = this.stringForTime(seekMs)
+    this.mSeekTimePosition = value
+    return seekMs
+  }
+
+  private handleSliderSeek(value: number, mode: SliderChangeMode): void {
+    if (!this.avPlayer || this.duration <= 0) {
+      return
+    }
+    const seekMs = this.updateSeekPreview(value)
+    if (mode === SliderChangeMode.Begin) {
+      this.isSeekingWithSlider = true
+      this.showSeekProgressUi = true
+      this.scheduleSeekPreviewFrame(seekMs, true)
+      return
+    }
+    if (mode === SliderChangeMode.Moving) {
+      this.showSeekProgressUi = true
+      this.scheduleSeekPreviewFrame(seekMs)
+      return
+    }
+    this.isSeekingWithSlider = false
+    this.showSeekProgressUi = false
+    this.seekTo(seekMs)
+    this.seekToSubtitle()
+    this.resetSeekPreviewState()
+  }
+
+  private scheduleSeekPreviewFrame(positionMs: number, immediate: boolean = false): void {
+    this.clearSeekPreviewTimer()
+    const requestToken = ++this.seekPreviewRequestToken
+    if (immediate) {
+      void this.loadSeekPreviewFrame(positionMs, requestToken)
+      return
+    }
+    this.seekPreviewTimer = setTimeout(() => {
+      this.seekPreviewTimer = -1
+      void this.loadSeekPreviewFrame(positionMs, requestToken)
+    }, SEEK_PREVIEW_DEBOUNCE_MS)
+  }
+
+  private clearSeekPreviewTimer(): void {
+    if (this.seekPreviewTimer >= 0) {
+      clearTimeout(this.seekPreviewTimer)
+      this.seekPreviewTimer = -1
+    }
+  }
+
+  private async loadSeekPreviewFrame(positionMs: number, requestToken: number): Promise<void> {
+    const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
+    if (requestToken !== this.seekPreviewRequestToken) {
+      pixelMap?.release()
+      return
+    }
+    if (!pixelMap) {
+      return
+    }
+    this.setSeekPreviewPixelMap(pixelMap)
+  }
+
+  private setSeekPreviewPixelMap(pixelMap?: image.PixelMap): void {
+    const previousPixelMap = this.seekPreviewPixelMap
+    this.seekPreviewPixelMap = pixelMap
+    if (previousPixelMap && previousPixelMap !== pixelMap) {
+      previousPixelMap.release()
+    }
+  }
+
+  private resetSeekPreviewState(): void {
+    this.clearSeekPreviewTimer()
+    this.seekPreviewRequestToken++
+    this.setSeekPreviewPixelMap(undefined)
+  }
+
+  private prepareSeekPreview(): void {
+    if (this.videoUrl.length === 0) {
+      return
+    }
+    void this.seekPreviewHelper.prepare(this.videoUrl)
   }
 
   private speedFromString(s: string): media.PlaybackSpeed {
@@ -1039,17 +1165,7 @@ export struct AVPlayerView {
           .showTips(true)
           .enabled(this.slideEnable)
           .onChange((value: number, mode: SliderChangeMode) => {
-            if ((mode == SliderChangeMode.Moving || mode == 2) && this.avPlayer) {
-              const seekMs = (value / 100) * this.duration
-              try {
-                this.avPlayer.seek(seekMs, media.SeekMode.SEEK_CLOSEST)
-              } catch (err) {
-              }
-              this.currentPosition = seekMs
-              this.currentTime = this.formatTime(seekMs)
-              this.progressValue = value
-              this.seekToSubtitle()
-            }
+            this.handleSliderSeek(value, mode)
           })
         Text(this.totalTime)
           .fontColor(Color.White)
@@ -1235,36 +1351,68 @@ export struct AVPlayerView {
 
   @Builder
   SeekProgressUi() {
-    Column() {
-      Image(this.mSeekDirectionRes)
-        .objectFit(ImageFit.Auto)
-        .width(30)
-        .height(30)
-        .margin({ top: 10 })
-        .alignSelf(ItemAlign.Center)
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Image(this.mSeekDirectionRes)
+          .objectFit(ImageFit.Contain)
+          .width(18)
+          .height(18)
+        Text('拖动预览')
+          .fontColor('#F5F7FA')
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+      }
+        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .backgroundColor('rgba(255,255,255,0.14)')
+        .borderRadius(999)
+
+      if (this.seekPreviewPixelMap) {
+        Stack() {
+          Image(this.seekPreviewPixelMap)
+            .objectFit(ImageFit.Contain)
+            .width('100%')
+            .height('100%')
+        }
+          .width(172)
+          .height(104)
+          .backgroundColor('#091018')
+          .borderRadius(14)
+          .clip(true)
+      }
+
       Row() {
         Text(this.mSeekCurrentTime)
-          .fontColor(Color.Blue)
-          .textAlign(TextAlign.Center)
-        Text('/')
-          .textAlign(TextAlign.Center)
+          .fontColor($r('app.color.color_main'))
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+        Blank()
+          .layoutWeight(1)
         Text(this.totalTime)
-          .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
-      }.margin({ top: 10 })
-      Progress({
-        value: this.mSeekTimePosition,
-        total: 100,
-        type: ProgressType.Linear
-      })
-        .style({ strokeWidth: 5, enableSmoothEffect: false })
-        .padding({ left: 10, right: 10 })
-        .margin({ top: 10, bottom: 10 })
-        .backgroundColor(Color.White)
+          .fontColor('#D7DEE8')
+          .fontSize(13)
+      }
+        .width('100%')
+
+      Row({ space: 8 }) {
+        Text('松手后跳转')
+          .fontColor('#AEB8C4')
+          .fontSize(11)
+
+        Blank()
+          .layoutWeight(1)
+
+        Text(`${Math.round(this.mSeekTimePosition)}%`)
+          .fontColor('#8E9AA8')
+          .fontSize(11)
+      }
+        .width('100%')
     }
     .visibility(this.showSeekProgressUi ? Visibility.Visible : Visibility.Hidden)
-    .width(200)
-    .backgroundColor('#55bcbcbc')
+    .width(220)
+    .padding({ top: 14, bottom: 14, left: 16, right: 16 })
+    .backgroundColor('#CC11161D')
+    .borderRadius(20)
+    .border({ width: 1, color: 'rgba(255,255,255,0.10)' })
     .alignItems(HorizontalAlign.Center)
     .alignSelf(ItemAlign.Center)
   }
@@ -1659,6 +1807,7 @@ export struct AVPlayerView {
             }
             this.mSeekCurrentTime = this.stringForTime(seekTimePosition)
             this.mSeekTimePosition = Number((seekTimePosition / totalTimeDuration).toFixed(2)) * 100
+            this.scheduleSeekPreviewFrame(seekTimePosition, !this.seekPreviewPixelMap)
           }
         })
         .onActionEnd(() => {
@@ -1680,10 +1829,7 @@ export struct AVPlayerView {
             this.loadingVisible = Visibility.Visible
             this.showControls = false
             let seekMs = this.mSeekTimePosition * (this.duration / 100)
-            try {
-              this.avPlayer.seek(seekMs, media.SeekMode.SEEK_CLOSEST)
-            } catch (err) {
-            }
+            this.seekTo(seekMs)
             this.currentPosition = seekMs
             this.currentTime = this.formatTime(seekMs)
             this.seekToSubtitle()
@@ -1694,6 +1840,7 @@ export struct AVPlayerView {
           }
           this.isHorizontalDrag = false
           this.showSeekProgressUi = false
+          this.resetSeekPreviewState()
         }),
       LongPressGesture()
         .onAction(() => {
