@@ -1891,7 +1891,10 @@ export struct MPVPlayerView {
       }
       .height(44)
       .padding({ left: 8, right: 8 })
-      .visibility(this.vm.appUIState.isFullScreen ? Visibility.Visible : Visibility.None)
+      .visibility(
+        this.vm.appUIState.isFullScreen || (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) ?
+          Visibility.Visible : Visibility.None
+      )
     }
     .width('100%')
     .padding({
