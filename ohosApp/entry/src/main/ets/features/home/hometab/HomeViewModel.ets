@@ -17,24 +17,9 @@ import {
 } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
-import { ColorUtils } from "../../../utils/ColorUtils";
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
-
-  /**
-   * 异步提取图片的左边缘颜色，不阻塞主线程
-   */
-  extractEdgeColorForItem(itemId: string, imageUrl: string): void {
-    if (!imageUrl || this.ui.edgeColorMap.has(itemId)) {
-      return
-    }
-    ColorUtils.extractLeftEdgeColor(imageUrl).then((color: string) => {
-      this.ui.edgeColorMap.set(itemId, color)
-    }).catch(() => {
-      this.ui.edgeColorMap.set(itemId, '#0000FF')
-    })
-  }
 
   init(): void {
     this.ui.allMediaBgColor = generateBeautifulDeepBlueColor()
@@ -135,11 +120,6 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
             }) || []
             this.ui.resumeList = list
 
-            // 只提取第一个项目的边缘颜色
-            if (list.length > 0 && list[0].image) {
-              this.extractEdgeColorForItem(list[0].id, list[0].image);
-            }
-
             resolve()
           } else {
             resolve()
@@ -182,11 +162,6 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
               }
             }) || []
             this.ui.nextUpList = list
-
-            // 只提取第一个项目的边缘颜色
-            if (list.length > 0 && list[0].image) {
-              this.extractEdgeColorForItem(list[0].id, list[0].image);
-            }
 
             resolve()
           } else {
@@ -254,7 +229,6 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         if (list.length > 0) {
           latestMap.set(item.id, list)
           latestMediaList.push(item)
-          this.extractEdgeColorForItem(list[0].id, list[0].image)
         }
       }
       this.ui.latestMap = latestMap

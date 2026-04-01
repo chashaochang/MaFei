@@ -27,7 +27,7 @@ export struct VerticalVideoCard {
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
     onComplete: () => {
-      if (this.appUIState.isBigScreen) {
+      if (this.appUIState.isBigScreen && this.index === 0 && this.image.length > 0) {
         ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
           this.pointLightColor = color
         })
