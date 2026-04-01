@@ -146,11 +146,10 @@ export struct PlayerPage {
   onBackPress(): boolean | void {
     if (this.vm.appUIState.isFullScreen) {
       this.vm.appUIState.isFullScreen = false
-    } else {
-      this.restoreSystemBars()
-      this.vm.reportPlaybackStop()
-      HMRouterMgr.pop()
     }
+    this.restoreSystemBars()
+    this.vm.reportPlaybackStop()
+    HMRouterMgr.pop()
   }
 
   build() {
