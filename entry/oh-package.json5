@@ -10,7 +10,7 @@
     "mpvplayer": "file:../mpvplayer",
     "ohos_smart_dialog": "^1.8.8",
     "@ohos/danmakuflamemaster": "2.1.2",
-    "@ohos/imageknifepro": "^1.0.10-rc.1",
+    "@ohos/imageknifepro": "^1.0.13",
     "@ohos/lottie": "^2.0.24",
     "@abner/refresh_v2": "^1.0.4",
     "@hw-agconnect/ui-skeleton": "^1.0.0",
