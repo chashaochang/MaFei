@@ -63,6 +63,11 @@ export class PadMenuDataSource extends BaseDataSource<PadMenuItem> {
     })
   }
 
+  public clearData(): void {
+    this.dataArray = []
+    this.notifyDataReload()
+  }
+
   /** First ITEM index after 收藏 (index 1), for PadTopTab third slot when 首页/收藏 is selected */
   public getFirstMediaItemIndex(): number {
     for (let i = 2; i < this.totalCount(); i++) {
