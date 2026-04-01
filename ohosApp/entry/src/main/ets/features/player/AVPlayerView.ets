@@ -1337,7 +1337,10 @@ export struct AVPlayerView {
             })
         }
       }.height(44).padding({ left: 8, right: 8 })
-      .visibility(this.vm.appUIState.isFullScreen ? Visibility.Visible : Visibility.None)
+      .visibility(
+        this.vm.appUIState.isFullScreen || (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) ?
+          Visibility.Visible : Visibility.None
+      )
     }.padding({
       bottom: this.showControls && !this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeBottom : 10,
       left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
