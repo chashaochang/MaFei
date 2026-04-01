@@ -3,6 +3,7 @@ import { Constants } from '../utils/Constants'
 import { AttributeUpdater } from '@kit.ArkUI';
 import { PlayOptions } from '../player/interaction/PlayOptions';
 import { common } from '@kit.AbilityKit';
+import { RouterConsts } from '../common/RouterConsts';
 
 @Entry
 @Component
@@ -17,19 +18,22 @@ struct PcPlayerPage {
           dialogAnimator: HMDefaultGlobalAnimator.DIALOG_ANIMATOR,
           modifier: this.modifier,
         }
-      }).onAppear(()=>{
+      }).onAppear(() => {
         let context = this.getUIContext().getHostContext() as common.UIAbilityContext; // UIAbilityContext
         let playOptions: PlayOptions | undefined = AppStorage.get<PlayOptions>('playerOptions')
         if (!playOptions) {
           context.terminateSelf()
           return
         }
-        HMRouterMgr.push({ navigationId: Constants.PLAYER_NAVIGATION_ID, pageUrl: '/Player', param: playOptions })
+        HMRouterMgr.push({
+          navigationId: Constants.PLAYER_NAVIGATION_ID,
+          pageUrl: RouterConsts.PlayerPage,
+          param: playOptions
+        })
       })
     }.width('100%')
     .height('100%')
   }
-
 }
 
 export class PlayerNavModifier extends AttributeUpdater<NavigationAttribute> {

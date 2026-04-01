@@ -40,13 +40,13 @@ export struct PlayerPage {
   }
   @Local lifecycle: PlayerLifecycle = HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as PlayerLifecycle;
 
-  @Monitor('lifecycle.options')
-  onNewInstance() {
-    this.options = this.lifecycle.options
-    this.ui = new PlayerPageUIState(this.getUIContext())
-    this.vm = new PlayerPageViewModel(this.ui)
-    this.aboutToAppear()
-  }
+  // @Monitor('lifecycle.options')
+  // onNewInstance() {
+  //   this.options = this.lifecycle.options
+  //   this.ui = new PlayerPageUIState(this.getUIContext())
+  //   this.vm = new PlayerPageViewModel(this.ui)
+  //   this.aboutToAppear()
+  // }
 
   @Monitor('vm.queueManager.currentMediaSourceOrNull')
   onMediaSourceChanged() {
@@ -76,9 +76,9 @@ export struct PlayerPage {
   }
 
   aboutToAppear(): void {
-    if (OneMoreUtil.isPc()) {
-      this.options = this.lifecycle.options
-    }
+    // if (OneMoreUtil.isPc()) {
+    //   this.options = this.lifecycle.options
+    // }
     if (OneMoreUtil.isBigScreen()) {
       if (this.vm.appUIState.orientation == display.Orientation.LANDSCAPE ||
         this.vm.appUIState.orientation == display.Orientation.LANDSCAPE_INVERTED) {

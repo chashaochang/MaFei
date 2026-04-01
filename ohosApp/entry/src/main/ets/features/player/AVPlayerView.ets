@@ -199,6 +199,8 @@ export struct AVPlayerView {
   private seekPreviewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper()
   private seekPreviewTimer: number = -1
   private seekPreviewRequestToken: number = 0
+  private seekPreviewLoading: boolean = false
+  private queuedSeekPreviewPositionMs: number = -1
 
   @Consumer() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
   @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
@@ -760,14 +762,13 @@ export struct AVPlayerView {
 
   private scheduleSeekPreviewFrame(positionMs: number, immediate: boolean = false): void {
     this.clearSeekPreviewTimer()
-    const requestToken = ++this.seekPreviewRequestToken
     if (immediate) {
-      void this.loadSeekPreviewFrame(positionMs, requestToken)
+      this.requestSeekPreviewFrame(positionMs)
       return
     }
     this.seekPreviewTimer = setTimeout(() => {
       this.seekPreviewTimer = -1
-      void this.loadSeekPreviewFrame(positionMs, requestToken)
+      this.requestSeekPreviewFrame(positionMs)
     }, SEEK_PREVIEW_DEBOUNCE_MS)
   }
 
@@ -778,16 +779,35 @@ export struct AVPlayerView {
     }
   }
 
+  private requestSeekPreviewFrame(positionMs: number): void {
+    if (this.seekPreviewLoading) {
+      this.queuedSeekPreviewPositionMs = positionMs
+      return
+    }
+    const requestToken = ++this.seekPreviewRequestToken
+    this.seekPreviewLoading = true
+    void this.loadSeekPreviewFrame(positionMs, requestToken)
+  }
+
   private async loadSeekPreviewFrame(positionMs: number, requestToken: number): Promise<void> {
-    const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
-    if (requestToken !== this.seekPreviewRequestToken) {
-      pixelMap?.release()
-      return
+    try {
+      const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
+      if (requestToken !== this.seekPreviewRequestToken) {
+        pixelMap?.release()
+        return
+      }
+      if (!pixelMap) {
+        return
+      }
+      this.setSeekPreviewPixelMap(pixelMap)
+    } finally {
+      this.seekPreviewLoading = false
+      const nextPositionMs = this.queuedSeekPreviewPositionMs
+      this.queuedSeekPreviewPositionMs = -1
+      if (nextPositionMs >= 0) {
+        this.requestSeekPreviewFrame(nextPositionMs)
+      }
     }
-    if (!pixelMap) {
-      return
-    }
-    this.setSeekPreviewPixelMap(pixelMap)
   }
 
   private setSeekPreviewPixelMap(pixelMap?: image.PixelMap): void {
@@ -801,6 +821,8 @@ export struct AVPlayerView {
   private resetSeekPreviewState(): void {
     this.clearSeekPreviewTimer()
     this.seekPreviewRequestToken++
+    this.seekPreviewLoading = false
+    this.queuedSeekPreviewPositionMs = -1
     this.setSeekPreviewPixelMap(undefined)
   }
 
