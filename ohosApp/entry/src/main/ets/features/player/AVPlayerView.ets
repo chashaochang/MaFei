@@ -577,6 +577,7 @@ export struct AVPlayerView {
           this.duration = player.duration
           this.totalTime = this.formatTime(this.duration)
           this.slideEnable = true
+          this.applyInitialSeekIfNeeded()
           player.play()
           break
         case 'playing':
@@ -640,6 +641,22 @@ export struct AVPlayerView {
       this.loadingVisible = Visibility.None
       this.replayVisible = Visibility.Visible
     })
+  }
+
+  private applyInitialSeekIfNeeded(): void {
+    const initialSeekMs = this.ui.initSeek
+    if (initialSeekMs <= 0) {
+      return
+    }
+    this.seekTo(initialSeekMs)
+    this.currentPosition = initialSeekMs
+    this.ui.playbackPositionMs = initialSeekMs
+    this.currentTime = this.formatTime(initialSeekMs)
+    if (this.duration > 0) {
+      this.progressValue = Math.min(PROGRESS_MAX_VALUE, (initialSeekMs / this.duration) * PROGRESS_MAX_VALUE)
+    }
+    this.ui.initSeek = 0
+    this.logAvPlayer(`applied initial seek: ${initialSeekMs}ms`)
   }
 
   private async initAVPlayer() {
