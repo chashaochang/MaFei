@@ -2,13 +2,38 @@ import { ImageKnife, ImageKnifeData } from '@ohos/imageknifepro';
 import Logger from './Logger';
 
 export class ColorUtils {
+  private static edgeColorCache: Map<string, string> = new Map()
+  private static edgeColorTasks: Map<string, Promise<string>> = new Map()
+
   /**
    * 从图片URL提取左边缘的平均颜色
    * @param imageUrl 图片URL
    * @returns Promise<string> 返回十六进制颜色字符串 #RRGGBB
    */
   static async extractLeftEdgeColor(imageUrl: string): Promise<string> {
+    if (!imageUrl) {
+      return '#FFFFFF'
+    }
+    const cachedColor = ColorUtils.edgeColorCache.get(imageUrl)
+    if (cachedColor) {
+      return cachedColor
+    }
+    const pendingTask = ColorUtils.edgeColorTasks.get(imageUrl)
+    if (pendingTask) {
+      return pendingTask
+    }
 
+    const task = ColorUtils.doExtractLeftEdgeColor(imageUrl).then((color: string) => {
+      ColorUtils.edgeColorCache.set(imageUrl, color)
+      return color
+    }).finally(() => {
+      ColorUtils.edgeColorTasks.delete(imageUrl)
+    })
+    ColorUtils.edgeColorTasks.set(imageUrl, task)
+    return task
+  }
+
+  private static async doExtractLeftEdgeColor(imageUrl: string): Promise<string> {
     try {
       // 下载图片
       let imageData: ImageKnifeData | undefined = await ImageKnife.getInstance().getCacheImage(imageUrl)
