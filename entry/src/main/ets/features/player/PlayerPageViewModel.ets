@@ -387,22 +387,38 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
 
   async reportPlaybackStop() {
     let mediaSource = this.mediaSourceOrNull
+    const currentPositionMs = this.getCurrentPlaybackPositionMs()
+    const totalDurationTicks = mediaSource?.runTimeTicks ?? 0
+    const totalDurationMs = totalDurationTicks > 0 ? Math.floor(totalDurationTicks / Constants.TICKS_PER_MILLISECOND) : 0
+    const totalDurationText = this.formatDuration(totalDurationTicks)
+    const currentPositionText = this.formatDuration(currentPositionMs * Constants.TICKS_PER_MILLISECOND)
+    console.info(
+      `[PlayerVM] reportPlaybackStop called: hasMediaSource=${!!mediaSource}, playStatus=${this.ui.CONTROL_PlayStatus}, currentPositionMs=${currentPositionMs}, currentPosition=${currentPositionText}, totalDurationMs=${totalDurationMs}, totalDuration=${totalDurationText}, inFlight=${this.playbackStopInFlight}`
+    )
     if (!mediaSource) {
+      console.warn('[PlayerVM] reportPlaybackStop skipped: mediaSource is null')
       return
     }
     const playSessionId = mediaSource.playSessionId ?? ''
     if (this.playbackStopInFlight) {
+      console.warn(`[PlayerVM] reportPlaybackStop skipped: request already in flight, itemId=${mediaSource.itemId}, playSessionId=${playSessionId}`)
       return
     }
     if (playSessionId.length > 0 && this.playbackStopReportedSessionId === playSessionId) {
+      console.warn(`[PlayerVM] reportPlaybackStop skipped: session already reported, itemId=${mediaSource.itemId}, playSessionId=${playSessionId}`)
       return
     }
     let hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
     let lastPositionTicks =
       hasFinished ? mediaSource.runTimeTicks :
-        this.getCurrentPlaybackPositionMs() * Constants.TICKS_PER_MILLISECOND
+        currentPositionMs * Constants.TICKS_PER_MILLISECOND
+    const reportedPositionMs = Math.floor(lastPositionTicks / Constants.TICKS_PER_MILLISECOND)
+    const reportedPositionText = this.formatDuration(lastPositionTicks)
     let playStateApi = getPlaystateApi(ApiClient.Instance())
     this.playbackStopInFlight = true
+    console.info(
+      `[PlayerVM] reportPlaybackStop request: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}, hasFinished=${hasFinished}, positionTicks=${lastPositionTicks}, positionMs=${reportedPositionMs}, position=${reportedPositionText}, totalDurationMs=${totalDurationMs}, totalDuration=${totalDurationText}, liveStreamId=${mediaSource.liveStreamId ?? 'none'}`
+    )
     try {
       await playStateApi.reportPlaybackStopped({
         playbackStopInfo: {
@@ -413,6 +429,9 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
           Failed: false
         }
       })
+      console.info(
+        `[PlayerVM] reportPlaybackStop success: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}, hasFinished=${hasFinished}, positionTicks=${lastPositionTicks}, positionMs=${reportedPositionMs}, position=${reportedPositionText}, totalDurationMs=${totalDurationMs}, totalDuration=${totalDurationText}`
+      )
       if (playSessionId.length > 0) {
         this.playbackStopReportedSessionId = playSessionId
       }
@@ -421,6 +440,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         await playStateApi.markPlayedItem({
           itemId: mediaSource.itemId
         })
+        console.info(`[PlayerVM] markPlayedItem success: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}`)
       }
     } catch (error) {
       console.error(`[PlayerVM] reportPlaybackStop failed: ${JSON.stringify(error)}`)
