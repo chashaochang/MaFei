@@ -1,6 +1,7 @@
 import { BaseItemKind, MediaStream, PlayMethod, SubtitleDeliveryMethod } from 'sdk/src/main/ets/generated-client/models'
 import { image } from '@kit.ImageKit'
 import { media } from '@kit.MediaKit'
+import { audio } from '@kit.AudioKit'
 import { QualityOption } from '../../player/qualityoptions/QualityOption'
 import { PlayerPageUIState } from './PlayerPageUIState'
 import { PlayerPageViewModel } from './PlayerPageViewModel'
@@ -8,6 +9,7 @@ import { PlayStatus, PlayerStatus } from './PlayStatus'
 import { MpvNativePlayer } from 'mpvplayer'
 import { AppPreference } from '../../data/AppPreference'
 import { BusinessError, emitter } from '@kit.BasicServicesKit'
+import { settings } from '@kit.BasicServicesKit'
 import { Constants } from '../../utils/Constants'
 import { AVCastPicker, avSession } from '@kit.AVSessionKit'
 import avSessionManager from '../../utils/AVSessionManager'
@@ -38,6 +40,10 @@ const SEEK_SYNC_TIMEOUT_MS: number = 1800
 const SEEK_PREVIEW_DEBOUNCE_MS: number = 70
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
+let mpvTouchStartX: number = 0
+let mpvTouchStartY: number = 0
+let mpvChangeWidth: number = 0
+let mpvChangeHeight: number = 0
 let mpvUiTime: number = 0
 let mpvUiLockTime: number = 0
 
@@ -81,6 +87,11 @@ export struct MPVPlayerView {
   @Local seekPreviewTime: string = '00:00'
   @Local seekPreviewProgressValue: number = 0
   @Local seekPreviewPixelMap?: image.PixelMap
+  @Local showVolumeUi: boolean = false
+  @Local showBrightnessUi: boolean = false
+  @Local mCurrentVolumeValue: number = 0
+  @Local mMaxVolumeValue: number = 20
+  @Local mCurrentBrightness: number = 10
 
   private xComponentController: XComponentController = new XComponentController()
   private osdXComponentController: XComponentController = new XComponentController()
@@ -106,6 +117,10 @@ export struct MPVPlayerView {
   sec: number = 3
   private keepScreenOnState?: boolean
   private isSeekingWithSlider: boolean = false
+  private isVerticalDrag: boolean = false
+  private isHorizontalDrag: boolean = false
+  private gestureSeekPositionMs: number = 0
+  private gestureSeekStartPositionMs: number = 0
   private pendingSeekTargetMs: number = -1
   private pendingSeekDeadlineMs: number = 0
   private seekPreviewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper()
@@ -113,6 +128,9 @@ export struct MPVPlayerView {
   private seekPreviewRequestToken: number = 0
   private seekPreviewLoading: boolean = false
   private queuedSeekPreviewPositionMs: number = -1
+  private mAudioManager: audio.AudioManager | null = null
+  private panOptionBrightAndVolume: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical })
+  private panOptionSeek: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Horizontal })
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
@@ -207,6 +225,21 @@ export struct MPVPlayerView {
   }
 
   aboutToAppear(): void {
+    try {
+      this.mAudioManager = audio.getAudioManager()
+      const volumeManager = this.mAudioManager.getVolumeManager()
+      const groupId = audio.DEFAULT_VOLUME_GROUP_ID
+      const audioVolumeGroupManager = volumeManager.getVolumeGroupManagerSync(groupId)
+      this.mMaxVolumeValue = audioVolumeGroupManager.getMaxVolumeSync(audio.AudioVolumeType.MEDIA)
+      this.mCurrentVolumeValue = audioVolumeGroupManager.getVolumeSync(audio.AudioVolumeType.MEDIA)
+    } catch (err) {
+    }
+    try {
+      if (canIUse('SystemCapability.Applications.Settings.Core')) {
+        this.mCurrentBrightness = Number(settings.getValueSync(getContext(this), settings.display.SCREEN_BRIGHTNESS_STATUS, '10'))
+      }
+    } catch (err) {
+    }
     this.bindPlayerCallbacks()
     emitter.on(Constants.PLAYER_EVENT, async (data) => {
       if (!data.data || !data.data['eventName']) {
@@ -800,6 +833,50 @@ export struct MPVPlayerView {
       return
     }
     void this.seekPreviewHelper.prepare(this.videoUrl)
+  }
+
+  @Builder
+  private volumeOverlay(): void {
+    Column() {
+      Progress({
+        value: Number((this.mCurrentVolumeValue / this.mMaxVolumeValue * 100).toFixed(0)),
+        total: 100,
+        type: ProgressType.Linear
+      })
+        .style({ strokeWidth: 10, enableSmoothEffect: false })
+        .width(100)
+        .rotate({ angle: -90 })
+        .margin({ top: 20, left: -20 })
+        .alignSelf(ItemAlign.Center)
+        .backgroundColor(Color.White)
+      Image($r('app.media.video_volume_icon'))
+        .objectFit(ImageFit.Auto)
+        .margin({ top: 50, left: -15 })
+        .width(30)
+        .height(30)
+        .alignSelf(ItemAlign.Center)
+        .borderStyle(BorderStyle.Dashed)
+    }
+      .visibility(this.showVolumeUi ? Visibility.Visible : Visibility.Hidden)
+      .alignSelf(ItemAlign.Center)
+  }
+
+  @Builder
+  private brightnessOverlay(): void {
+    Column() {
+      Image($r('app.media.video_brightness_6_white_36dp'))
+        .objectFit(ImageFit.Auto)
+        .width(30)
+        .height(30)
+        .alignSelf(ItemAlign.Center)
+      Text((this.mCurrentBrightness / 255 * 100).toFixed(0) + '%')
+        .fontColor(Color.White)
+        .textAlign(TextAlign.Center)
+        .width(80)
+    }
+      .visibility(this.showBrightnessUi ? Visibility.Visible : Visibility.Hidden)
+      .width(80)
+      .alignSelf(ItemAlign.Center)
   }
 
   private shouldIgnorePlaybackProgress(positionMs: number): boolean {
@@ -1827,14 +1904,6 @@ export struct MPVPlayerView {
   @Builder
   private seekPreviewOverlay(): void {
     Column({ space: 10 }) {
-      Text('拖动预览')
-        .fontColor('#F5F7FA')
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .backgroundColor('rgba(255,255,255,0.14)')
-        .borderRadius(999)
-
       if (this.seekPreviewPixelMap) {
         Stack() {
           Image(this.seekPreviewPixelMap)
@@ -1949,6 +2018,8 @@ export struct MPVPlayerView {
           const height = newValue.height as number
           if (width > 0 && height > 0) {
             this.videoParentAspectRatio = width / height
+            mpvChangeWidth = width
+            mpvChangeHeight = height
           }
           this.updateOsdSurfaceSize(
             this.getUIContext().vp2px(width),
@@ -1984,7 +2055,14 @@ export struct MPVPlayerView {
       //   .opacity(0.6)
       //   .hitTestBehavior(HitTestMode.None)
 
-      this.seekPreviewOverlay()
+      Flex({ alignItems: ItemAlign.Center, justifyContent: FlexAlign.SpaceBetween }) {
+        this.volumeOverlay()
+        this.seekPreviewOverlay()
+        this.brightnessOverlay()
+      }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 36, right: 36 })
 
       Column() {
         this.topControlView()
@@ -2000,7 +2078,13 @@ export struct MPVPlayerView {
       .height('100%')
       .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
 
-      if (this.vm.appUIState.isFullScreen && this.fullShowLock && !OneMoreUtil.isPc()) {
+      if (this.vm.appUIState.isFullScreen &&
+        this.fullShowLock &&
+        this.showControls &&
+        !this.showVolumeUi &&
+        !this.showBrightnessUi &&
+        !this.showSeekPreviewUi &&
+        !OneMoreUtil.isPc()) {
         Stack() {
           Image(this.lock ? $r('app.media.lock') : $r('app.media.unlock'))
             .width(20)
@@ -2086,7 +2170,7 @@ export struct MPVPlayerView {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#111111')
+    .backgroundColor(Color.Black)
     .clip(true)
     .onHover((isHover: boolean) => {
         if (OneMoreUtil.isPc()) {
@@ -2130,7 +2214,143 @@ export struct MPVPlayerView {
       }),
       TapGesture({ count: 1 }).onAction(() => {
         this.onSingleTap()
-      })
+      }),
+      PanGesture(this.panOptionBrightAndVolume)
+        .onActionStart((event: GestureEvent | undefined) => {
+          if (OneMoreUtil.isPc() || this.lock || this.loading || this.isHorizontalDrag || this.ui.isFastSpeed) {
+            return
+          }
+          if (event?.fingerList?.[0]) {
+            mpvTouchStartX = event.fingerList[0].localX
+            mpvTouchStartY = event.fingerList[0].localY
+          }
+        })
+        .onActionUpdate((event: GestureEvent | undefined) => {
+          if (OneMoreUtil.isPc() || this.lock || this.loading || this.isHorizontalDrag || this.ui.isFastSpeed) {
+            return
+          }
+          if (event?.fingerList?.[0] && mpvChangeHeight > 0) {
+            this.isVerticalDrag = true
+            const touchY = event.fingerList[0].localY
+            const deltaY = touchY - mpvTouchStartY
+            const percent = -deltaY / mpvChangeHeight
+            if (mpvTouchStartX >= (mpvChangeWidth / 2)) {
+              this.showVolumeUi = true
+              let playerVolumeValue = this.mCurrentVolumeValue + this.mMaxVolumeValue * percent
+              if (playerVolumeValue < 0) {
+                playerVolumeValue = 0
+              }
+              if (playerVolumeValue > this.mMaxVolumeValue) {
+                playerVolumeValue = this.mMaxVolumeValue
+              }
+              this.mCurrentVolumeValue = playerVolumeValue
+              if (this.mAudioManager) {
+                this.mAudioManager.setVolume(audio.AudioVolumeType.MEDIA, playerVolumeValue, (_err: BusinessError) => {
+                })
+              }
+            } else {
+              this.showBrightnessUi = true
+              let brightness = this.mCurrentBrightness + 255 * percent
+              if (brightness < 0) {
+                brightness = 5
+              }
+              if (brightness > 255) {
+                brightness = 255
+              }
+              this.vm.appUIState.windowClass?.setWindowBrightness(brightness / 255)
+              this.mCurrentBrightness = brightness
+            }
+            mpvTouchStartY = touchY
+          }
+        })
+        .onActionEnd(() => {
+          if (OneMoreUtil.isPc()) {
+            return
+          }
+          this.showVolumeUi = false
+          this.showBrightnessUi = false
+          this.isVerticalDrag = false
+        }),
+      PanGesture(this.panOptionSeek)
+        .onActionStart((event: GestureEvent | undefined) => {
+          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading || this.ui.isFastSpeed || this.isVerticalDrag) {
+            return
+          }
+          if (event?.fingerList?.[0]) {
+            this.showControls = false
+            mpvTouchStartX = event.fingerList[0].localX
+            this.gestureSeekStartPositionMs = this.currentPosition
+            this.gestureSeekPositionMs = this.currentPosition
+            this.seekPreviewTime = this.formatTime(this.currentPosition)
+            this.seekPreviewProgressValue = this.progressValue
+          }
+        })
+        .onActionUpdate((event: GestureEvent | undefined) => {
+          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading || this.isVerticalDrag || this.ui.isFastSpeed) {
+            return
+          }
+          if (event?.fingerList?.[0] && mpvChangeWidth > 0 && this.duration > 0) {
+            this.isHorizontalDrag = true
+            this.showSeekPreviewUi = true
+            const touchX = event.fingerList[0].localX
+            const deltaX = touchX - mpvTouchStartX
+            let seekPositionMs = this.gestureSeekStartPositionMs + (deltaX * this.duration / mpvChangeWidth)
+            if (seekPositionMs < 0) {
+              seekPositionMs = 0
+            }
+            if (seekPositionMs > this.duration) {
+              seekPositionMs = this.duration
+            }
+            this.gestureSeekPositionMs = seekPositionMs
+            this.seekPreviewTime = this.formatTime(seekPositionMs)
+            this.seekPreviewProgressValue = this.duration > 0
+              ? (seekPositionMs / this.duration) * PROGRESS_MAX_VALUE
+              : 0
+            this.scheduleSeekPreviewFrame(seekPositionMs, !this.seekPreviewPixelMap)
+          }
+        })
+        .onActionEnd(() => {
+          if (OneMoreUtil.isPc()) {
+            return
+          }
+          if (this.ui.isFastSpeed) {
+            return
+          }
+          if (this.isHorizontalDrag) {
+            this.progressValue = this.seekPreviewProgressValue
+            this.seekTo(this.gestureSeekPositionMs)
+            this.showControls = false
+          }
+          this.isHorizontalDrag = false
+          this.showSeekPreviewUi = false
+          this.resetSeekPreviewState()
+        }),
+      LongPressGesture()
+        .onAction(() => {
+          if (OneMoreUtil.isPc()) {
+            return
+          }
+          if (!this.initialized || !this.sourceLoaded || this.loading || this.lock || this.ui.isCastPlaying) {
+            return
+          }
+          try {
+            this.mpvPlayer.setPlaybackSpeed(3.0)
+            this.ui.isFastSpeed = true
+          } catch (err) {
+          }
+        })
+        .onActionEnd(() => {
+          if (OneMoreUtil.isPc()) {
+            return
+          }
+          if (this.ui.isFastSpeed) {
+            try {
+              this.mpvPlayer.setPlaybackSpeed(this.playSpeed)
+            } catch (err) {
+            }
+            this.ui.isFastSpeed = false
+          }
+        })
     ))
   }
 }

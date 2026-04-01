@@ -40,6 +40,10 @@ export struct PlayerPage {
   }
   @Local lifecycle: PlayerLifecycle = HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as PlayerLifecycle;
 
+  private restoreSystemBars(): void {
+    this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+  }
+
   // @Monitor('lifecycle.options')
   // onNewInstance() {
   //   this.options = this.lifecycle.options
@@ -124,6 +128,7 @@ export struct PlayerPage {
   }
 
   aboutToDisappear() {
+    this.restoreSystemBars()
     this.vm.reportPlaybackStop()
     emitter.off(Constants.PLAYER_PAGE_EVENT.eventId)
     //后台播放音频
@@ -142,6 +147,7 @@ export struct PlayerPage {
     if (this.vm.appUIState.isFullScreen) {
       this.vm.appUIState.isFullScreen = false
     } else {
+      this.restoreSystemBars()
       this.vm.reportPlaybackStop()
       HMRouterMgr.pop()
     }
@@ -203,6 +209,6 @@ export struct PlayerPage {
     .alignContent(Alignment.Top)
     .width('100%')
     .height('100%')
-    .backgroundColor('#111111')
+    .backgroundColor(Color.Black)
   }
 }
