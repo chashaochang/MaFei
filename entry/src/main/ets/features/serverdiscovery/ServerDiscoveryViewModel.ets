@@ -8,28 +8,35 @@ export class ServerDiscoveryViewModel extends BaseViewModel<ServerDiscoveryUISta
   private apiClientController: ApiClientController = new ApiClientController()
 
   async init(){
-    let previousServers = this.apiClientController.loadPreviouslyUsedServers()
-    // Suggest saved servers
-    this.ui.serverSuggestions = previousServers.map(server => {
-      return {
-        type: Type.SAVED,
-        name: server.hostname,
-        address: server.hostname,
-        timestamp: server.lastUsedTimestamp
-      } as ServerSuggestion
-    })
-    // Prepend discovered servers to suggestions
-    let servers = await connectionHelper.discoverServers()
-    servers.forEach(serverInfo => {
-      this.ui.serverSuggestions = [
-        {
-          type: Type.DISCOVERED,
-          name: serverInfo.Name ?? "",
-          address: serverInfo.Address ?? '',
-          timestamp: new Date().getTime()
-        },
-        ...this.ui.serverSuggestions.filter(existing => existing.address !== serverInfo.Address)
-      ];
-    })
+    this.ui.loading = true
+    this.ui.errorText = ''
+    try {
+      let previousServers = this.apiClientController.loadPreviouslyUsedServers()
+      this.ui.serverSuggestions = previousServers.map(server => {
+        return {
+          type: Type.SAVED,
+          name: server.hostname,
+          address: server.hostname,
+          timestamp: server.lastUsedTimestamp
+        } as ServerSuggestion
+      })
+      let servers = await connectionHelper.discoverServers()
+      servers.forEach(serverInfo => {
+        this.ui.serverSuggestions = [
+          {
+            type: Type.DISCOVERED,
+            name: serverInfo.Name ?? "",
+            address: serverInfo.Address ?? '',
+            timestamp: new Date().getTime()
+          },
+          ...this.ui.serverSuggestions.filter(existing => existing.address !== serverInfo.Address)
+        ];
+      })
+    } catch (error) {
+      console.error(`[ServerDiscovery] init failed: ${JSON.stringify(error)}`)
+      this.ui.errorText = '局域网扫描失败，请检查网络权限和当前网络环境'
+    } finally {
+      this.ui.loading = false
+    }
   }
 }

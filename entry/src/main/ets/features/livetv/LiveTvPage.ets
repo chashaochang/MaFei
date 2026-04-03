@@ -24,7 +24,6 @@ export struct LiveTvPage {
     if (!this.vm.queueManager.currentMediaSourceOrNull) {
       return
     }
-    let mediaSource = this.vm.queueManager.currentMediaSourceOrNull!
     //iptv自动横屏
     this.playerFullscreenHelper.enableFullscreen()
   }

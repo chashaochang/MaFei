@@ -74,7 +74,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         if (res.data) {
           if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
             this.ui.mediaList = res.data.Items?.map<MediaItem>((e: BaseItemDto) => {
-              if (e.Type == BaseItemKind.TvChannel) {
+              if (e.CollectionType == CollectionType.Livetv) {
                 this.ui.hasLiveTv = true
               }
               return {
