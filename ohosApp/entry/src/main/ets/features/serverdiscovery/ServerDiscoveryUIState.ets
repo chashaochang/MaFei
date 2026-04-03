@@ -4,4 +4,6 @@ import { ServerSuggestion } from "./ServerSuggestion";
 @ObservedV2
 export class ServerDiscoveryUIState extends BaseUIState{
   @Trace serverSuggestions: ServerSuggestion[] = []
+  @Trace loading: boolean = false
+  @Trace errorText: string = ''
 }

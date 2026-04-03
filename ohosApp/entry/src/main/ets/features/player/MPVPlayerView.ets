@@ -99,6 +99,7 @@ export struct MPVPlayerView {
   private progressTimer: number = -1
   private diagnosticsTimer: number = -1
   private initializeTimer: number = -1
+  private loadingDelayTimer: number = -1
   private subtitleBootstrapTimer: number = -1
   private sourceLoaded: boolean = false
   private xComponentReady: boolean = false
@@ -131,6 +132,8 @@ export struct MPVPlayerView {
   private mAudioManager: audio.AudioManager | null = null
   private panOptionBrightAndVolume: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Vertical })
   private panOptionSeek: PanGestureOptions = new PanGestureOptions({ direction: PanDirection.Horizontal })
+  private playbackStarted: boolean = false
+  private lastPlaybackProgressAt: number = 0
 
   @Monitor('ui.playerStatus')
   onPlayerStateChanged(): void {
@@ -210,8 +213,11 @@ export struct MPVPlayerView {
   onUrlChange(): void {
     this.resetSeekPreviewState()
     void this.seekPreviewHelper.release()
+    this.stopLoadingDelayTimer()
     this.sourceLoaded = false
     this.playbackCompleted = false
+    this.playbackStarted = false
+    this.lastPlaybackProgressAt = 0
     this.currentPosition = 0
     this.progressValue = 0
     this.cacheProgressValue = 0
@@ -296,6 +302,7 @@ export struct MPVPlayerView {
     this.stopInitializeTimer()
     this.stopProgressTimer()
     this.stopDiagnosticsTimer()
+    this.stopLoadingDelayTimer()
     this.stopSubtitleBootstrapTimer()
     this.mpvPlayer.release()
     this.mpvPlayer.clearOsdSurface()
@@ -361,7 +368,44 @@ export struct MPVPlayerView {
     const height = this.mpvPlayer.getVideoHeight()
     if (width > 0 && height > 0) {
       this.setVideoWH(width, height)
+      this.markPlaybackStarted('video-size')
     }
+  }
+
+  private markPlaybackStarted(reason: string): void {
+    if (!this.playbackStarted) {
+      this.logMpv(`playback started via ${reason}`)
+    }
+    this.playbackStarted = true
+    this.lastPlaybackProgressAt = Date.now()
+    this.stopLoadingDelayTimer()
+    if (this.loading) {
+      this.loading = false
+    }
+  }
+
+  private requestLoadingVisible(reason: string, force: boolean = false): void {
+    if (force || !this.playbackStarted) {
+      this.stopLoadingDelayTimer()
+      this.loading = true
+      return
+    }
+    this.stopLoadingDelayTimer()
+    this.loadingDelayTimer = setTimeout(() => {
+      this.loadingDelayTimer = -1
+      if (!this.initialized || this.playbackCompleted) {
+        return
+      }
+      const currentPosition = this.mpvPlayer.getCurrentPositionMs()
+      if (currentPosition > this.currentPosition) {
+        this.markPlaybackStarted('delayed-loading-progress')
+        return
+      }
+      if (Date.now() - this.lastPlaybackProgressAt >= 1200) {
+        this.logMpv(`show loading after delayed confirm: ${reason}`)
+        this.loading = true
+      }
+    }, 800)
   }
 
   private updateOsdSurfaceSize(widthPx: number, heightPx: number): void {
@@ -409,6 +453,8 @@ export struct MPVPlayerView {
         this.initialized = true
         this.ui.playerStatus = PlayerStatus.INITIALIZED
         this.loading = false
+        this.playbackStarted = false
+        this.lastPlaybackProgressAt = 0
         this.mpvPlayer.setPlaybackSpeed(this.playSpeed)
         this.loadCurrentVideo()
         this.startProgressTimer()
@@ -436,14 +482,22 @@ export struct MPVPlayerView {
         }
       },
       onLoadingChanged: (loading: boolean) => {
-        this.loading = loading
+        this.logMpv(`loading changed: ${loading}, started=${this.playbackStarted}`)
+        if (loading) {
+          this.requestLoadingVisible('on-loading-changed')
+        } else {
+          this.stopLoadingDelayTimer()
+          this.loading = false
+        }
       },
       onStartFile: () => {
-        this.loading = true
+        this.playbackStarted = false
+        this.lastPlaybackProgressAt = 0
+        this.requestLoadingVisible('start-file', true)
         this.logMpv(`start file url=${this.videoUrl}`)
       },
       onFileLoaded: () => {
-        this.loading = false
+        this.markPlaybackStarted('file-loaded')
         this.updateVideoLayoutFromPlayer()
         this.bootstrapTracksForCurrentSource()
         if (!this.ui.playWhenReady) {
@@ -541,7 +595,9 @@ export struct MPVPlayerView {
     this.prepareSeekPreview()
     this.sourceLoaded = true
     this.playbackCompleted = false
-    this.loading = true
+    this.playbackStarted = false
+    this.lastPlaybackProgressAt = 0
+    this.requestLoadingVisible('load-current-video', true)
     this.cacheProgressValue = 0
     this.ui.CONTROL_PlayStatus = this.ui.playWhenReady ? PlayStatus.PLAY : PlayStatus.PAUSE
     this.ui.playerStatus = this.ui.playWhenReady ? PlayerStatus.PLAYING : PlayerStatus.PAUSED
@@ -621,6 +677,9 @@ export struct MPVPlayerView {
         if (this.shouldIgnorePlaybackProgress(position)) {
           return
         }
+        if (position > this.currentPosition || position > 0) {
+          this.markPlaybackStarted('progress')
+        }
         this.currentPosition = position
         this.ui.playbackPositionMs = position
         this.currentTime = this.formatTime(position)
@@ -654,6 +713,13 @@ export struct MPVPlayerView {
     if (this.diagnosticsTimer >= 0) {
       clearTimeout(this.diagnosticsTimer)
       this.diagnosticsTimer = -1
+    }
+  }
+
+  private stopLoadingDelayTimer(): void {
+    if (this.loadingDelayTimer >= 0) {
+      clearTimeout(this.loadingDelayTimer)
+      this.loadingDelayTimer = -1
     }
   }
 
