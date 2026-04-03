@@ -50,10 +50,12 @@ export struct LivePlayerView {
   private shouldResumeOnPageShow: boolean = false
   private progressTimer: number = -1
   private initializeTimer: number = -1
+  private loadingWatchdogTimer: number = -1
   private mFirst: boolean = true
   private last: number = 0
   private sec: number = 2
   private keepScreenOnState?: boolean
+  private playbackStarted: boolean = false
 
   pipController?: PiPWindow.PiPController
 
@@ -62,6 +64,7 @@ export struct LivePlayerView {
     this.sourceLoaded = false
     this.playbackCompleted = false
     this.currentPosition = 0
+    this.playbackStarted = false
     if (this.initialized) {
       this.loadCurrentVideo()
     } else {
@@ -221,7 +224,28 @@ export struct LivePlayerView {
     const height = this.mpvPlayer.getVideoHeight()
     if (width > 0 && height > 0) {
       this.setVideoWH(width, height)
+      this.markPlaybackStarted('video-size')
     }
+  }
+
+  private logVideoDiagnostics(reason: string): void {
+    const width = this.mpvPlayer.getVideoWidth()
+    const height = this.mpvPlayer.getVideoHeight()
+    const duration = this.mpvPlayer.getDurationMs()
+    const position = this.mpvPlayer.getCurrentPositionMs()
+    const decoder = this.mpvPlayer.getHardwareDecoder()
+    console.info(
+      `[MPV][live] ${reason}: url=${this.videoUrl}, started=${this.playbackStarted}, ` +
+      `size=${width}x${height}, duration=${duration}, position=${position}, decoder=${decoder}`
+    )
+  }
+
+  private markPlaybackStarted(reason: string): void {
+    if (!this.playbackStarted) {
+      console.info(`[MPV][live] playback started via ${reason}`)
+    }
+    this.playbackStarted = true
+    this.hideLoading()
   }
 
   private bindPlayerCallbacks(): void {
@@ -230,6 +254,7 @@ export struct LivePlayerView {
         this.initialized = true
         this.initializeRequested = false
         this.ui.playerStatus = PlayerStatus.INITIALIZED
+        this.logVideoDiagnostics('initialized')
         this.loadCurrentVideo()
         this.startProgressTimer()
       },
@@ -249,20 +274,30 @@ export struct LivePlayerView {
         }
       },
       onLoadingChanged: (loading: boolean) => {
-        this.loadingVisible = loading ? Visibility.Visible : Visibility.None
+        console.info(`[MPV][live] loading changed: ${loading}, started=${this.playbackStarted}`)
+        if (loading) {
+          if (!this.playbackStarted) {
+            this.showLoading()
+          }
+        } else {
+          this.hideLoading()
+        }
       },
       onStartFile: () => {
+        this.playbackStarted = false
         this.showLoading()
         this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
         this.ui.playerStatus = PlayerStatus.PLAYING
+        this.logVideoDiagnostics('start-file')
       },
       onFileLoaded: () => {
         this.sourceLoaded = true
         this.playbackCompleted = false
-        this.hideLoading()
+        this.markPlaybackStarted('file-loaded')
         this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
         this.ui.playerStatus = PlayerStatus.PLAYING
         this.updateVideoLayoutFromPlayer()
+        this.logVideoDiagnostics('file-loaded')
       },
       onHwdecChanged: (decoder: string) => {
         console.info(`[MPV][live] hwdec changed: ${decoder}`)
@@ -302,6 +337,7 @@ export struct LivePlayerView {
     this.ui.playerStatus = PlayerStatus.IDLE
     this.initializeRequested = false
     this.playbackCompleted = false
+    this.playbackStarted = false
     const useHardwareDecode = AppPreference.getInstance().getMpvUseHardwareDecode()
     const cacheSizeMb = AppPreference.getInstance().getMpvCacheSizeMb()
     this.mpvPlayer.configurePlayback(useHardwareDecode, cacheSizeMb, true)
@@ -317,11 +353,13 @@ export struct LivePlayerView {
     if (!this.initialized || this.videoUrl.length === 0) {
       return
     }
-    this.sourceLoaded = true
+    this.sourceLoaded = false
     this.playbackCompleted = false
+    this.playbackStarted = false
     this.showLoading()
     this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
     this.ui.playerStatus = PlayerStatus.PLAYING
+    this.logVideoDiagnostics('load-current-video')
     this.mpvPlayer.load(this.videoUrl)
     this.startProgressTimer()
   }
@@ -368,11 +406,13 @@ export struct LivePlayerView {
   private stop(): void {
     this.stopProgressTimer()
     this.stopInitializeTimer()
+    this.stopLoadingWatchdog()
     this.mpvPlayer.release()
     this.initialized = false
     this.initializeRequested = false
     this.sourceLoaded = false
     this.playbackCompleted = false
+    this.playbackStarted = false
     this.currentPosition = 0
     this.ui.CONTROL_PlayStatus = PlayStatus.INIT
     this.ui.playerStatus = PlayerStatus.RELEASED
@@ -383,11 +423,13 @@ export struct LivePlayerView {
   private showLoading(): void {
     this.loadingVisible = Visibility.Visible
     this.replayVisible = Visibility.None
+    this.scheduleLoadingWatchdog()
   }
 
   private hideLoading(): void {
     this.loadingVisible = Visibility.None
     this.replayVisible = Visibility.None
+    this.stopLoadingWatchdog()
   }
 
   private timeCountdown(): void {
@@ -423,6 +465,9 @@ export struct LivePlayerView {
       const position = this.mpvPlayer.getCurrentPositionMs()
       if (position >= 0) {
         this.currentPosition = position
+        if (position > 0) {
+          this.markPlaybackStarted('position')
+        }
       }
       this.updateVideoLayoutFromPlayer()
     }, 500)
@@ -439,6 +484,29 @@ export struct LivePlayerView {
     if (this.initializeTimer >= 0) {
       clearTimeout(this.initializeTimer)
       this.initializeTimer = -1
+    }
+  }
+
+  private scheduleLoadingWatchdog(delayMs: number = 8000): void {
+    this.stopLoadingWatchdog()
+    this.loadingWatchdogTimer = setTimeout(() => {
+      this.loadingWatchdogTimer = -1
+      if (!this.initialized || this.loadingVisible !== Visibility.Visible || this.playbackCompleted) {
+        return
+      }
+      this.updateVideoLayoutFromPlayer()
+      this.logVideoDiagnostics('loading-watchdog')
+      if (!this.playbackStarted) {
+        console.warn('[MPV][live] loading watchdog fired, hide overlay to avoid UI lock')
+        this.hideLoading()
+      }
+    }, delayMs)
+  }
+
+  private stopLoadingWatchdog(): void {
+    if (this.loadingWatchdogTimer >= 0) {
+      clearTimeout(this.loadingWatchdogTimer)
+      this.loadingWatchdogTimer = -1
     }
   }
 
@@ -773,7 +841,6 @@ export struct LivePlayerView {
         const width = newValue.width as number
         const height = newValue.height as number
         if (width > 0 && height > 0) {
-          this.videoParentAspectRatio = width / height
           this.updateVideoLayoutFromPlayer()
         }
       })
@@ -832,14 +899,20 @@ export struct LivePlayerView {
         .borderStyle(BorderStyle.Dashed)
     }
     .width('100%')
+    .height('100%')
     .backgroundColor($r('sys.color.black'))
     .clip(true)
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      const width = newValue.width as number
+      const height = newValue.height as number
+      if (width > 0 && height > 0) {
+        this.videoParentAspectRatio = width / height
+        this.updateVideoLayoutFromPlayer()
+      }
+    })
     .onHover((isHover: boolean) => {
       if (OneMoreUtil.isPc()) {
         if (isHover) {
-          if (this.loadingVisible == Visibility.Visible) {
-            return
-          }
           if (!this.showControls) {
             this.timeCountdown()
           }
@@ -850,9 +923,6 @@ export struct LivePlayerView {
       }
     })
     .onMouse((event) => {
-      if (this.loadingVisible == Visibility.Visible) {
-        return
-      }
       if (event.action == MouseAction.Move && !this.showControls) {
         this.timeCountdown()
       }
