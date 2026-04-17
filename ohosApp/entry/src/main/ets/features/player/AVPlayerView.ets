@@ -1123,7 +1123,7 @@ export struct AVPlayerView {
         .padding(12)
         .margin({ left: 16 })
         .onClick(() => {
-          this.vm.appUIState.isFullScreen = false
+          this.handleTopBackClick()
         })
       Text(this.ui.title)
         .fontColor(Color.White)
@@ -1132,6 +1132,25 @@ export struct AVPlayerView {
         .margin({ left: 4 })
         .layoutWeight(1)
         .textOverflow({ overflow: TextOverflow.MARQUEE })
+      Text(this.getReportButtonText())
+        .fontColor(this.ui.isContentReported ? 'rgba(255,255,255,0.72)' : Color.White)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .backgroundColor(this.ui.isContentReported ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)')
+        .borderRadius(999)
+        .margin({ right: 8 })
+        .onClick(() => {
+          this.vm.showReportComposer()
+        })
+        .bindSheet($$this.ui.isReportSheetVisible, this.reportSheetBuilder(), {
+          height: 360,
+          preferType: SheetType.BOTTOM,
+          title: { title: '内容举报' },
+          onDisappear: () => {
+            this.ui.isReportSheetVisible = false
+          }
+        })
       Text(this.getEngineBadgeLabel())
         .fontColor(Color.White)
         .fontSize(10)
@@ -1167,6 +1186,98 @@ export struct AVPlayerView {
       ]
     })
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  private getReportButtonText(): string {
+    if (this.ui.isReportSubmitting) {
+      return '提交中'
+    }
+    if (this.ui.isContentReported) {
+      return '已举报'
+    }
+    return '举报'
+  }
+
+  @Builder
+  private reportSheetBuilder(): void {
+    Column({ space: 12 }) {
+      Text('请填写举报原因，最多 100 字。')
+        .fontSize(13)
+        .fontColor('rgba(255,255,255,0.72)')
+        .width('100%')
+      TextInput({
+        text: this.ui.reportContentDraft,
+        placeholder: '请输入举报内容',
+      })
+        .onChange((value: string) => {
+          this.vm.updateReportContentDraft(value)
+        })
+        .maxLines(4)
+        .height(120)
+        .align(Alignment.TopStart)
+        .padding(12)
+        .fontSize(14)
+        .fontColor(Color.White)
+        .placeholderColor('rgba(255,255,255,0.35)')
+        .backgroundColor('rgba(255,255,255,0.08)')
+        .borderRadius(12)
+      Text(`${this.vm.getReportDescriptionLength()}/${this.vm.getReportDescriptionMaxLength()}`)
+        .fontSize(12)
+        .fontColor('rgba(255,255,255,0.52)')
+        .width('100%')
+        .textAlign(TextAlign.End)
+      Row({ space: 12 }) {
+        Row() {
+          Text('取消')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .fontWeight(FontWeight.Medium)
+        }
+        .layoutWeight(1)
+        .height(44)
+        .borderRadius(22)
+        .backgroundColor('rgba(255,255,255,0.12)')
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.vm.hideReportComposer(false)
+        })
+        Row() {
+          Text(this.ui.isReportSubmitting ? '提交中' : '确认举报')
+            .fontSize(14)
+            .fontColor(this.vm.canSubmitReport() ? '#111111' : 'rgba(17,17,17,0.45)')
+            .fontWeight(FontWeight.Bold)
+        }
+        .layoutWeight(1)
+        .height(44)
+        .borderRadius(22)
+        .backgroundColor(this.vm.canSubmitReport() ? '#FFFFFF' : 'rgba(255,255,255,0.35)')
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          if (!this.vm.canSubmitReport()) {
+            if (!this.ui.isReportSubmitting) {
+              this.vm.submitContentReport()
+            }
+            return
+          }
+          this.vm.submitContentReport()
+        })
+      }
+      .width('100%')
+    }
+    .padding({ left: 16, right: 16, top: 8, bottom: 24 + this.vm.appUIState.safeBottom })
+    .backgroundColor('#1A1A1A')
+  }
+
+  private handleTopBackClick(): void {
+    if (this.vm.appUIState.isFullScreen) {
+      this.vm.appUIState.isFullScreen = false
+      return
+    }
+    emitter.emit(Constants.PLAYER_PAGE_EVENT, {
+      data: {
+        eventName: 'onBackPressed'
+      }
+    })
   }
 
   private getEngineBadgeLabel(): string {

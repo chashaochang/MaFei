@@ -42,12 +42,16 @@ import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { PlayerEngineDecision, PlayerEngineResolver } from "../../player/PlayerEngineResolver";
-import { getItemImageUrl } from "../../common/CommonFunc";
+import { getItemImageUrl, openUrlByBrowser } from "../../common/CommonFunc";
+import { ToastUtil } from "../../utils/ToastUtil";
+import { ReportPayload, ReportService } from "../../network/ReportService";
 
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   // 弹幕功能暂不上线，后续恢复时改回 true 并取消相关注释即可。
   private static readonly DANMAKU_ENABLED: boolean = false
+  private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
+  private static readonly REPORT_DESCRIPTION_MAX_LENGTH: number = 100
   queueManager: QueueManager = new QueueManager(this)
   subtitleManager: SubtitleManager = new SubtitleManager()
   ui: PlayerPageUIState
@@ -65,6 +69,67 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     // this.danmuInit()
     if (PlayerPageViewModel.DANMAKU_ENABLED) {
       this.danmuInit()
+    }
+    this.syncContentReportState()
+  }
+
+  private buildContentReportPayload(description: string): ReportPayload {
+    const mediaSource = this.mediaSourceOrNull
+    return {
+      title: mediaSource?.name || this.ui.title || '未知视频',
+      itemId: mediaSource?.itemId || this.ui.currentPlayId || '',
+      serverUrl: String(ApiClient.Instance().basePath || 'unknown'),
+      source: 'player',
+      description,
+      playSessionId: mediaSource?.playSessionId || '',
+      client: 'mafei-ohos',
+      reporterId: AppPreference.getInstance().getCurrentUserId(),
+      reporterName: AppPreference.getInstance().getUserName()
+    }
+  }
+
+  syncContentReportState(): void {
+    const payload = this.buildContentReportPayload('')
+    this.ui.isContentReported = ReportService.hasReported(payload.itemId, payload.serverUrl)
+  }
+
+  updateReportContentDraft(value: string): void {
+    if (value.length > PlayerPageViewModel.REPORT_DESCRIPTION_MAX_LENGTH) {
+      this.ui.reportContentDraft = value.substring(0, PlayerPageViewModel.REPORT_DESCRIPTION_MAX_LENGTH)
+      return
+    }
+    this.ui.reportContentDraft = value
+  }
+
+  getReportDescriptionMaxLength(): number {
+    return PlayerPageViewModel.REPORT_DESCRIPTION_MAX_LENGTH
+  }
+
+  getReportDescriptionLength(): number {
+    return this.ui.reportContentDraft.length
+  }
+
+  canSubmitReport(): boolean {
+    return !this.ui.isReportSubmitting && !this.ui.isContentReported && this.ui.reportContentDraft.trim().length > 0
+  }
+
+  showReportComposer(): void {
+    if (this.ui.isReportSubmitting) {
+      ToastUtil.showToast(this.ui.context, '举报提交中，请勿重复操作')
+      return
+    }
+    this.syncContentReportState()
+    if (this.ui.isContentReported) {
+      ToastUtil.showToast(this.ui.context, '该内容已举报过')
+      return
+    }
+    this.ui.isReportSheetVisible = true
+  }
+
+  hideReportComposer(clearDraft: boolean): void {
+    this.ui.isReportSheetVisible = false
+    if (clearDraft) {
+      this.ui.reportContentDraft = ''
     }
   }
 
@@ -140,6 +205,62 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     return 0
   }
 
+  private openContentReportFallback(
+    mediaTitle: string,
+    itemId: string,
+    server: string,
+    playSessionId: string,
+  ): void {
+    const body = [
+      '请描述您要举报的问题内容：',
+      '',
+      `影片名称：${mediaTitle}`,
+      `媒体 ID：${itemId}`,
+      `播放会话：${playSessionId}`,
+      `服务器地址：${server}`,
+    ].join('\n')
+    const mailto =
+      `mailto:${PlayerPageViewModel.CONTENT_REPORT_EMAIL}` +
+      `?subject=${encodeURIComponent(`马飞内容举报：${mediaTitle}`)}` +
+      `&body=${encodeURIComponent(body)}`
+    openUrlByBrowser(mailto)
+    ToastUtil.showToast(this.ui.context, '未配置举报服务，已打开邮件举报')
+  }
+
+  async submitContentReport(): Promise<void> {
+    const reportContent = this.ui.reportContentDraft.trim()
+    if (reportContent.length === 0) {
+      ToastUtil.showToast(this.ui.context, '请输入举报内容')
+      return
+    }
+    const payload = this.buildContentReportPayload(reportContent)
+    if (this.ui.isReportSubmitting) {
+      ToastUtil.showToast(this.ui.context, '举报提交中，请勿重复操作')
+      return
+    }
+    if (ReportService.hasReported(payload.itemId, payload.serverUrl)) {
+      this.ui.isContentReported = true
+      ToastUtil.showToast(this.ui.context, '该内容已举报过')
+      return
+    }
+    if (!ReportService.isEnabled()) {
+      this.openContentReportFallback(payload.title, payload.itemId || 'unknown', payload.serverUrl || 'unknown',
+        payload.playSessionId || 'unknown')
+      return
+    }
+    this.ui.isReportSubmitting = true
+    try {
+      const result = await ReportService.submitReport(payload)
+      if (result.ok || result.alreadyReported) {
+        this.ui.isContentReported = true
+        this.hideReportComposer(true)
+      }
+      ToastUtil.showToast(this.ui.context, result.message)
+    } finally {
+      this.ui.isReportSubmitting = false
+    }
+  }
+
   @Monitor('mediaSourceOrNull')
   onMediaSourceChanged() {
     let source = this.mediaSourceOrNull
@@ -175,6 +296,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
         this.searchDanmuku()
       }
     }
+    this.syncContentReportState()
   }
 
   @Monitor('mediaSourceOrNull._selectedAudioStream')

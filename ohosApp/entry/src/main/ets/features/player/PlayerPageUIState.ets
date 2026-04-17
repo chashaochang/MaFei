@@ -61,6 +61,10 @@ export class PlayerPageUIState extends BaseUIState{
   @Trace effectivePlayerEngineReason: string = ''
   @Trace forceMpvHardwareDecode: boolean = false
   @Trace forceMpvSoftwareDecode: boolean = false
+  @Trace isReportSubmitting: boolean = false
+  @Trace isContentReported: boolean = false
+  @Trace isReportSheetVisible: boolean = false
+  @Trace reportContentDraft: string = ''
 
   playerMenus?: PlayerMenus
 
