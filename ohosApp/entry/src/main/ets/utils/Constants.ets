@@ -43,6 +43,7 @@ export class Constants {
   static readonly PREF_MPV_HARDWARE_DECODE = "pref_mpv_hardware_decode"
   static readonly PREF_MPV_CACHE_SIZE_MB = "pref_mpv_cache_size_mb"
   static readonly PREF_SEARCH_HISTORY = "pref_search_history"
+  static readonly PREF_REPORTED_CONTENT_IDS = "pref_reported_content_ids"
   static readonly MAIN_BUNDLE_PATH_REGEX =
     /.*\/main\.[^/\s]+\.bundle\.js/ //new Regex(""".*/main\.[^/\s]+\.bundle\.js""")
   static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'

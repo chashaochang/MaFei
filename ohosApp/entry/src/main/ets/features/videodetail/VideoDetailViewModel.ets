@@ -8,28 +8,46 @@ import {
   ItemFields
 } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
-import { getItemImageUrl, getTagBase64, getVideoTagsByStreams, playItems } from "../../common/CommonFunc";
+import { getItemImageUrl, getTagBase64, getVideoTagsByStreams, openUrlByBrowser, playItems } from "../../common/CommonFunc";
 import { ApiClient } from "../../network/ApiClient";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { VideoDetailUIState } from "./VideoDetailUIState";
 import { common, Want } from "@kit.AbilityKit";
 import { curves } from '@kit.ArkUI';
 import { ToastUtil } from "../../utils/ToastUtil";
+import { ReportService } from "../../network/ReportService";
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
+  private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
   private originImageHeight: number = 0;
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
   episodeStartIndex: number = 0
 
-  private formatEpisodePlayText(item: BaseItemDto): string {
-    let seasonName = ''
-    if ((item.SeasonName || '').startsWith('第') && (item.SeasonName || '').endsWith('季')) {
-      seasonName = item.SeasonName!.replace(/\s+/g, '')
-      seasonName = seasonName.replace('第', '第 ').replace('季', ' 季')
-    } else if (item.SeasonName) {
-      seasonName = item.SeasonName
+  private normalizeSeasonName(seasonName?: string | null): string {
+    const value = (seasonName || '').trim()
+    if (value.length === 0) {
+      return ''
     }
+    const compact = value.replace(/\s+/g, ' ').trim()
+    if (/season\s*unknown/i.test(compact) || /unknown/i.test(compact)) {
+      return ''
+    }
+    const englishSeason = compact.match(/^season\s*(\d+)$/i)
+    if (englishSeason) {
+      return `第 ${englishSeason[1]} 季`
+    }
+    if (/^specials?$/i.test(compact)) {
+      return '特别篇'
+    }
+    if (compact.startsWith('第') && compact.endsWith('季')) {
+      return compact.replace(/\s+/g, '').replace('第', '第 ').replace('季', ' 季')
+    }
+    return compact
+  }
+
+  private formatEpisodePlayText(item: BaseItemDto): string {
+    const seasonName = this.normalizeSeasonName(item.SeasonName)
     return (seasonName !== '' ? seasonName + '  ' : '') + '第 ' + item.IndexNumber + ' 集'
   }
 
@@ -87,8 +105,10 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
         if (itemData.Type == BaseItemKind.Episode) {
+          const normalizedSeasonName = this.normalizeSeasonName(itemData.SeasonName)
           this.ui.episodeName = this.formatEpisodePlayText(itemData)
-          this.ui.subtitle = `${itemData.SeriesName} ${itemData.SeasonName} · ${itemData.IndexNumber}集`
+          this.ui.subtitle =
+            `${itemData.SeriesName || ''}${normalizedSeasonName ? ' ' + normalizedSeasonName : ''} · ${itemData.IndexNumber}集`
           this.ui.info = ` ${itemData.ProductionYear}  /  ${itemData.RunTimeTicks ?
             Math.floor(itemData.RunTimeTicks / 10000000 / 60 / 60) + '小时' +
             Math.floor(itemData.RunTimeTicks / 10000000 / 60 % 60) + '分钟' : ''}`
