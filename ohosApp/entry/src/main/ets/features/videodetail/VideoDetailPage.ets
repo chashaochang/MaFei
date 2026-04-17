@@ -203,9 +203,7 @@ export struct VideoDetailPage {
                       .fontWeight(FontWeight.Medium)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .layoutWeight(1)
                   }
-                  .width('100%')
                   .padding({ left: 18, right: 18 })
                 }
                 .height(50)
