@@ -49,7 +49,7 @@ import { ReportPayload, ReportService } from "../../network/ReportService";
 @ObservedV2
 export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   // 弹幕功能暂不上线，后续恢复时改回 true 并取消相关注释即可。
-  private static readonly DANMAKU_ENABLED: boolean = false
+  private static readonly DANMAKU_ENABLED: boolean = true
   private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
   private static readonly REPORT_DESCRIPTION_MAX_LENGTH: number = 100
   queueManager: QueueManager = new QueueManager(this)
