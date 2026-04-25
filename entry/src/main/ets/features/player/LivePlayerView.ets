@@ -890,13 +890,18 @@ export struct LivePlayerView {
           })
       ))
 
-      Image($r('app.media.icon_load'))
-        .objectFit(ImageFit.Auto)
-        .width('120px')
-        .height('120px')
-        .visibility(this.loadingVisible)
-        .border({ width: 0 })
-        .borderStyle(BorderStyle.Dashed)
+      Stack({ alignContent: Alignment.Center }) {
+        Image($r('app.media.icon_load'))
+          .objectFit(ImageFit.Auto)
+          .width('120px')
+          .height('120px')
+          .visibility(this.loadingVisible)
+          .border({ width: 0 })
+          .borderStyle(BorderStyle.Dashed)
+      }
+      .width('100%')
+      .height('100%')
+      .visibility(this.loadingVisible)
     }
     .width('100%')
     .height('100%')

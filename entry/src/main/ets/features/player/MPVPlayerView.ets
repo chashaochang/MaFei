@@ -1,4 +1,4 @@
-import { BaseItemKind, MediaStream, PlayMethod, SubtitleDeliveryMethod } from 'sdk/src/main/ets/generated-client/models'
+import { BaseItemKind, MediaStream, MediaStreamType, PlayMethod, SubtitleDeliveryMethod } from 'sdk/src/main/ets/generated-client/models'
 import { image } from '@kit.ImageKit'
 import { media } from '@kit.MediaKit'
 import { audio } from '@kit.AudioKit'
@@ -25,6 +25,8 @@ import { display, window } from '@kit.ArkUI'
 import { PlayerEngineType } from '../../entity/PlayerEngineType'
 import { ImageKnifeComponent } from '@ohos/imageknifepro'
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
+import { PlaybackInfoCard } from '../../player/ui/PlaybackInfoCard'
+import type { MpvTrackInfo } from 'libmpvnative.so'
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
@@ -38,6 +40,7 @@ const MPV_PROGRESS_SLIDER_TRACK_COLOR: string = '#01000000'
 const SEEK_SYNC_TOLERANCE_MS: number = 1500
 const SEEK_SYNC_TIMEOUT_MS: number = 1800
 const SEEK_PREVIEW_DEBOUNCE_MS: number = 70
+const STARTUP_END_FILE_ERROR_CONFIRM_MS: number = 1800
 const SUBTITLE_SELECTION_RETRY_DELAYS_MS: number[] = [150, 300, 600, 1000, 1500]
 const SUBTITLE_SELECTION_BACKGROUND_RETRY_MS: number = 2000
 let mpvTouchStartX: number = 0
@@ -92,6 +95,7 @@ export struct MPVPlayerView {
   @Local mCurrentVolumeValue: number = 0
   @Local mMaxVolumeValue: number = 20
   @Local mCurrentBrightness: number = 10
+  @Local waitingForStartupLandscapeReady: boolean = false
 
   private xComponentController: XComponentController = new XComponentController()
   private osdXComponentController: XComponentController = new XComponentController()
@@ -100,6 +104,7 @@ export struct MPVPlayerView {
   private diagnosticsTimer: number = -1
   private initializeTimer: number = -1
   private loadingDelayTimer: number = -1
+  private startupEndFileErrorTimer: number = -1
   private subtitleBootstrapTimer: number = -1
   private sourceLoaded: boolean = false
   private xComponentReady: boolean = false
@@ -156,6 +161,9 @@ export struct MPVPlayerView {
 
   @Monitor('vm.appUIState.isFullScreen')
   onScreenChanged(): void {
+    if (this.vm.appUIState.isFullScreen) {
+      this.waitingForStartupLandscapeReady = false
+    }
     this.changeSystemBar()
     if (this.vm.appUIState.isFullScreen) {
       if (OneMoreUtil.isNormalPhone()) {
@@ -303,6 +311,7 @@ export struct MPVPlayerView {
     this.stopProgressTimer()
     this.stopDiagnosticsTimer()
     this.stopLoadingDelayTimer()
+    this.stopStartupEndFileErrorTimer()
     this.stopSubtitleBootstrapTimer()
     this.mpvPlayer.release()
     this.mpvPlayer.clearOsdSurface()
@@ -316,6 +325,7 @@ export struct MPVPlayerView {
     this.osdSurfaceWidthPx = 0
     this.osdSurfaceHeightPx = 0
     this.appliedOsdSurfaceKey = ''
+    this.waitingForStartupLandscapeReady = false
     this.clearPendingSubtitleSelection(false)
     this.ui.playbackPositionMs = 0
     this.cacheProgressValue = 0
@@ -340,6 +350,19 @@ export struct MPVPlayerView {
     return this.ui.forceMpvSoftwareDecode
       ? false
       : (this.ui.forceMpvHardwareDecode || AppPreference.getInstance().getMpvUseHardwareDecode())
+  }
+
+  private shouldUseStartupLandscapeMask(): boolean {
+    return OneMoreUtil.isNormalPhone() &&
+      !this.ui.isCastPlaying &&
+      this.vm.mediaSourceOrNull?.isIsoStaticPlaybackFallback() === true
+  }
+
+  private shouldShowStartupLandscapeLoading(): boolean {
+    return this.waitingForStartupLandscapeReady &&
+      !this.vm.appUIState.isFullScreen &&
+      !this.playbackCompleted &&
+      !this.ui.isCastPlaying
   }
 
   private shouldUseSurfacePlayback(): boolean {
@@ -373,6 +396,7 @@ export struct MPVPlayerView {
   }
 
   private markPlaybackStarted(reason: string): void {
+    this.stopStartupEndFileErrorTimer()
     if (!this.playbackStarted) {
       this.logMpv(`playback started via ${reason}`)
     }
@@ -461,19 +485,34 @@ export struct MPVPlayerView {
       },
       onEndFile: (reason: number, error: string) => {
         this.logMpv(`end file reason=${reason}, error=${error}`)
-        this.stopProgressTimer()
-        this.loading = false
-        this.shouldResumeOnPageShow = false
-        this.ui.CONTROL_PlayStatus = PlayStatus.DONE
-        this.ui.playerStatus = PlayerStatus.COMPLETED
-        this.playbackCompleted = true
         if (reason === 0 && this.duration > 0) {
+          this.stopProgressTimer()
+          this.stopStartupEndFileErrorTimer()
+          this.loading = false
+          this.shouldResumeOnPageShow = false
+          this.ui.CONTROL_PlayStatus = PlayStatus.DONE
+          this.ui.playerStatus = PlayerStatus.COMPLETED
+          this.playbackCompleted = true
           this.currentPosition = this.duration
           this.ui.playbackPositionMs = this.duration
           this.currentTime = this.formatTime(this.duration)
           this.progressValue = PROGRESS_MAX_VALUE
           this.cacheProgressValue = PROGRESS_MAX_VALUE
+          return
         }
+        if (!this.playbackStarted) {
+          this.shouldResumeOnPageShow = false
+          this.requestLoadingVisible(`startup-end-file-${reason}`, true)
+          this.scheduleStartupEndFileError(reason, error)
+          return
+        }
+        this.stopStartupEndFileErrorTimer()
+        this.stopProgressTimer()
+        this.loading = false
+        this.shouldResumeOnPageShow = false
+        this.ui.CONTROL_PlayStatus = PlayStatus.DONE
+        this.ui.playerStatus = PlayerStatus.ERROR
+        this.playbackCompleted = true
       },
       onDurationChanged: (durationMs: number) => {
         if (durationMs > 0) {
@@ -491,15 +530,21 @@ export struct MPVPlayerView {
         }
       },
       onStartFile: () => {
+        this.stopStartupEndFileErrorTimer()
+        this.playbackCompleted = false
         this.playbackStarted = false
         this.lastPlaybackProgressAt = 0
+        this.waitingForStartupLandscapeReady = this.shouldUseStartupLandscapeMask() &&
+          !this.vm.appUIState.isFullScreen
         this.requestLoadingVisible('start-file', true)
         this.logMpv(`start file url=${this.videoUrl}`)
       },
       onFileLoaded: () => {
         this.markPlaybackStarted('file-loaded')
+        this.startProgressTimer()
         this.updateVideoLayoutFromPlayer()
         this.bootstrapTracksForCurrentSource()
+        this.syncNativeTracksToUi()
         if (!this.ui.playWhenReady) {
           this.pausePlayback(false)
         }
@@ -507,6 +552,7 @@ export struct MPVPlayerView {
         this.scheduleDiagnostics('delayed-file-loaded', 1500)
       },
       onTrackListChanged: () => {
+        this.syncNativeTracksToUi()
         if (!this.pendingSubtitleSelection) {
           return
         }
@@ -721,6 +767,28 @@ export struct MPVPlayerView {
       clearTimeout(this.loadingDelayTimer)
       this.loadingDelayTimer = -1
     }
+  }
+
+  private stopStartupEndFileErrorTimer(): void {
+    if (this.startupEndFileErrorTimer >= 0) {
+      clearTimeout(this.startupEndFileErrorTimer)
+      this.startupEndFileErrorTimer = -1
+    }
+  }
+
+  private scheduleStartupEndFileError(reason: number, error: string): void {
+    this.stopStartupEndFileErrorTimer()
+    this.startupEndFileErrorTimer = setTimeout(() => {
+      this.startupEndFileErrorTimer = -1
+      if (this.playbackStarted || this.playbackCompleted || !this.sourceLoaded) {
+        return
+      }
+      this.loading = false
+      this.ui.CONTROL_PlayStatus = PlayStatus.DONE
+      this.ui.playerStatus = PlayerStatus.ERROR
+      this.playbackCompleted = true
+      this.logMpv(`confirm startup end-file error after delay: reason=${reason}, error=${error}`)
+    }, STARTUP_END_FILE_ERROR_CONFIRM_MS)
   }
 
   private stopInitializeTimer(): void {
@@ -1072,6 +1140,93 @@ export struct MPVPlayerView {
     this.applyInitialTrackSelections()
   }
 
+  private syncNativeTracksToUi(): void {
+    const source = this.vm.mediaSourceOrNull
+    if (!source) {
+      return
+    }
+    const nativeAudioTracks = this.mpvPlayer.getAudioTrackList().filter((track) => track.id >= 0)
+    const nativeSubtitleTracks = this.mpvPlayer.getSubtitleTrackList().filter((track) => track.id >= 0)
+
+    if (source.audioStreams.length === 0 && nativeAudioTracks.length > 0) {
+      source.audioStreams = nativeAudioTracks.map((track, index) => this.createNativeTrackStream(track, false, index))
+    }
+    if (source.subtitleStreams.length === 0 && nativeSubtitleTracks.length > 0) {
+      source.subtitleStreams = nativeSubtitleTracks.map((track, index) => this.createNativeTrackStream(track, true, index))
+    }
+
+    this.ui.audioStreams = [...source.audioStreams]
+    this.ui.subtitleStreams = [...source.subtitleStreams]
+
+    const selectedAudioTrackId = this.mpvPlayer.getCurrentAudioTrackId()
+    const selectedAudioStream = this.resolveSelectedStreamFromNativeTrack(
+      source.audioStreams,
+      nativeAudioTracks,
+      selectedAudioTrackId,
+      false
+    )
+    if (selectedAudioStream) {
+      source.selectAudioStream(selectedAudioStream)
+      this.ui.selectedAudioStream = source.selectedAudioStream ?? selectedAudioStream
+    }
+
+    const selectedSubtitleTrackId = this.mpvPlayer.getCurrentSubtitleTrackId()
+    const selectedSubtitleStream = this.resolveSelectedStreamFromNativeTrack(
+      source.subtitleStreams,
+      nativeSubtitleTracks,
+      selectedSubtitleTrackId,
+      true
+    )
+    if (selectedSubtitleStream) {
+      source.selectSubtitleStream(selectedSubtitleStream)
+      this.ui.selectedSubtitleStream = source.selectedSubtitleStream ?? selectedSubtitleStream
+    }
+
+    this.logMpv(
+      `sync native tracks: audio=${source.audioStreams.length}, subtitle=${source.subtitleStreams.length}, ` +
+      `selectedAudio=${this.ui.selectedAudioStream?.Index ?? 'none'}, selectedSubtitle=${this.ui.selectedSubtitleStream?.Index ?? 'none'}`
+    )
+  }
+
+  private createNativeTrackStream(track: MpvTrackInfo, isSubtitle: boolean, index: number): MediaStream {
+    const title = track.title?.trim()
+    const language = track.lang?.trim()
+    const codec = track.codec?.trim()
+    const displayTitle = title && title.length > 0
+      ? title
+      : `${isSubtitle ? '字幕' : '音轨'} ${index + 1}${language ? ` (${language})` : ''}`
+    return {
+      Type: isSubtitle ? MediaStreamType.Subtitle : MediaStreamType.Audio,
+      Index: track.id,
+      DisplayTitle: displayTitle,
+      Language: language,
+      Codec: codec,
+      IsDefault: track.selected === true,
+      IsExternal: track.external === true,
+      DeliveryMethod: isSubtitle
+        ? (track.external === true ? SubtitleDeliveryMethod.External : SubtitleDeliveryMethod.Embed)
+        : undefined,
+    } as MediaStream
+  }
+
+  private resolveSelectedStreamFromNativeTrack(
+    streams: MediaStream[],
+    nativeTracks: MpvTrackInfo[],
+    selectedTrackId: number,
+    isSubtitle: boolean
+  ): MediaStream | undefined {
+    if (streams.length === 0 || nativeTracks.length === 0) {
+      return undefined
+    }
+    const nativeTrack = nativeTracks.find((track) => track.id === selectedTrackId) ??
+      nativeTracks.find((track) => track.selected === true)
+    if (!nativeTrack) {
+      return undefined
+    }
+    return streams.find((stream) => stream.Index === nativeTrack.id) ??
+      streams.find((stream) => this.findTrackIdByStream(stream, isSubtitle) === nativeTrack.id)
+  }
+
   private loadExternalSubtitles(source: JellyfinMediaSource | undefined): void {
     if (!source) {
       return
@@ -1180,7 +1335,7 @@ export struct MPVPlayerView {
     if (!source) {
       return false
     }
-    return source.playMethod == PlayMethod.Transcode ||
+    return source.usesServerTranscoding() ||
       stream.DeliveryMethod == SubtitleDeliveryMethod.Encode
   }
 
@@ -1268,7 +1423,7 @@ export struct MPVPlayerView {
 
   private selectAudioTrack(stream: MediaStream, allowFallback: boolean = true): boolean {
     const source = this.vm.mediaSourceOrNull
-    if (!source || source.playMethod == PlayMethod.Transcode || stream.IsExternal === true) {
+    if (!source || source.usesServerTranscoding() || stream.IsExternal === true) {
       if (allowFallback) {
         this.onAudioTrackSelected(stream)
       }
@@ -1812,7 +1967,7 @@ export struct MPVPlayerView {
       this.timeLockCountdown()
       return
     }
-    if (this.loading) {
+    if (this.loading || this.shouldShowStartupLandscapeLoading()) {
       return
     }
     if (OneMoreUtil.isPc()) {
@@ -1833,7 +1988,7 @@ export struct MPVPlayerView {
       this.timeLockCountdown()
       return
     }
-    if (this.loading) {
+    if (this.loading || this.shouldShowStartupLandscapeLoading()) {
       return
     }
     if (OneMoreUtil.isPc()) {
@@ -1852,7 +2007,7 @@ export struct MPVPlayerView {
     if (OneMoreUtil.isPc()) {
       return
     }
-    if (this.lock || this.loading || !this.initialized || !this.sourceLoaded) {
+    if (this.lock || this.loading || this.shouldShowStartupLandscapeLoading() || !this.initialized || !this.sourceLoaded) {
       return
     }
     this.togglePlayback()
@@ -1863,7 +2018,7 @@ export struct MPVPlayerView {
       this.timeLockCountdown()
       return
     }
-    if (this.loading || OneMoreUtil.isPc()) {
+    if (this.loading || this.shouldShowStartupLandscapeLoading() || OneMoreUtil.isPc()) {
       return
     }
     if (!this.showControls) {
@@ -2183,7 +2338,7 @@ export struct MPVPlayerView {
               .height('100%')
               .id(MPV_OSD_XCOMPONENT_ID)
               .backgroundColor(Color.Transparent)
-              .visibility((this.loading || this.playbackCompleted)
+              .visibility((this.loading || this.playbackCompleted || this.shouldShowStartupLandscapeLoading())
                 ? Visibility.Hidden
                 : Visibility.Visible)
               .onClick(() => {
@@ -2256,7 +2411,9 @@ export struct MPVPlayerView {
       }
       .width('100%')
       .height('100%')
-      .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
+      .visibility(this.showControls && !this.shouldShowStartupLandscapeLoading()
+        ? Visibility.Visible
+        : Visibility.Hidden)
 
       if (this.vm.appUIState.isFullScreen &&
         this.fullShowLock &&
@@ -2282,26 +2439,17 @@ export struct MPVPlayerView {
         .alignContent(Alignment.End)
       }
 
-      Text(this.ui.playerMenus?.playBackInfo)
-        .backgroundColor($r('sys.color.mask_primary'))
-        .borderRadius(16)
-        .fontColor(Color.White)
-        .fontSize(12)
-        .position({ x: 0, y: 0 })
-        .padding(16)
-        .visibility(this.ui.playerMenus?.isShowPlayBackInfo ? Visibility.Visible : Visibility.None)
-        .onClick(() => {
-          if (this.ui.playerMenus) {
-            this.ui.playerMenus.isShowPlayBackInfo = false
-            this.timeCountdown()
+      if (this.ui.playerMenus?.isShowPlayBackInfo) {
+        PlaybackInfoCard({
+          menus: this.ui.playerMenus,
+          onDismiss: () => {
+            if (this.ui.playerMenus) {
+              this.ui.playerMenus.isShowPlayBackInfo = false
+              this.timeCountdown()
+            }
           }
         })
-        .margin({
-          top: 48,
-          bottom: 96,
-          left: 12,
-          right: 12
-        })
+      }
 
       Stack() {
         Button('退出投屏')
@@ -2323,13 +2471,22 @@ export struct MPVPlayerView {
           this.togglePlayback()
         })
 
-      Image($r('app.media.icon_load'))
-        .objectFit(ImageFit.Auto)
-        .width('120px')
-        .height('120px')
-        .visibility(this.loading ? Visibility.Visible : Visibility.Hidden)
-        .border({ width: 0 })
-        .borderStyle(BorderStyle.Dashed)
+      Stack({ alignContent: Alignment.Center }) {
+        Image($r('app.media.icon_load'))
+          .objectFit(ImageFit.Auto)
+          .width('120px')
+          .height('120px')
+          .visibility((this.loading || this.shouldShowStartupLandscapeLoading())
+            ? Visibility.Visible
+            : Visibility.Hidden)
+          .border({ width: 0 })
+          .borderStyle(BorderStyle.Dashed)
+      }
+      .width('100%')
+      .height('100%')
+      .visibility((this.loading || this.shouldShowStartupLandscapeLoading())
+        ? Visibility.Visible
+        : Visibility.Hidden)
 
       Stack({ alignContent: Alignment.Top }) {
         Row() {
@@ -2355,7 +2512,7 @@ export struct MPVPlayerView {
     .onHover((isHover: boolean) => {
         if (OneMoreUtil.isPc()) {
           if (isHover) {
-            if (this.loading) {
+            if (this.loading || this.shouldShowStartupLandscapeLoading()) {
               return
             }
             if (!this.showControls) {
@@ -2369,7 +2526,7 @@ export struct MPVPlayerView {
         }
       })
     .onMouse((event) => {
-      if (this.loading) {
+      if (this.loading || this.shouldShowStartupLandscapeLoading()) {
         return
       }
       if (event.action == MouseAction.Move && !this.showControls) {
@@ -2397,7 +2554,8 @@ export struct MPVPlayerView {
       }),
       PanGesture(this.panOptionBrightAndVolume)
         .onActionStart((event: GestureEvent | undefined) => {
-          if (OneMoreUtil.isPc() || this.lock || this.loading || this.isHorizontalDrag || this.ui.isFastSpeed) {
+          if (OneMoreUtil.isPc() || this.lock || this.loading || this.shouldShowStartupLandscapeLoading() ||
+            this.isHorizontalDrag || this.ui.isFastSpeed) {
             return
           }
           if (event?.fingerList?.[0]) {
@@ -2406,7 +2564,8 @@ export struct MPVPlayerView {
           }
         })
         .onActionUpdate((event: GestureEvent | undefined) => {
-          if (OneMoreUtil.isPc() || this.lock || this.loading || this.isHorizontalDrag || this.ui.isFastSpeed) {
+          if (OneMoreUtil.isPc() || this.lock || this.loading || this.shouldShowStartupLandscapeLoading() ||
+            this.isHorizontalDrag || this.ui.isFastSpeed) {
             return
           }
           if (event?.fingerList?.[0] && mpvChangeHeight > 0) {
@@ -2453,7 +2612,8 @@ export struct MPVPlayerView {
         }),
       PanGesture(this.panOptionSeek)
         .onActionStart((event: GestureEvent | undefined) => {
-          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading || this.ui.isFastSpeed || this.isVerticalDrag) {
+          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading ||
+            this.shouldShowStartupLandscapeLoading() || this.ui.isFastSpeed || this.isVerticalDrag) {
             return
           }
           if (event?.fingerList?.[0]) {
@@ -2466,7 +2626,8 @@ export struct MPVPlayerView {
           }
         })
         .onActionUpdate((event: GestureEvent | undefined) => {
-          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading || this.isVerticalDrag || this.ui.isFastSpeed) {
+          if (OneMoreUtil.isPc() || !this.initialized || !this.sourceLoaded || this.lock || this.loading ||
+            this.shouldShowStartupLandscapeLoading() || this.isVerticalDrag || this.ui.isFastSpeed) {
             return
           }
           if (event?.fingerList?.[0] && mpvChangeWidth > 0 && this.duration > 0) {
@@ -2510,7 +2671,8 @@ export struct MPVPlayerView {
           if (OneMoreUtil.isPc()) {
             return
           }
-          if (!this.initialized || !this.sourceLoaded || this.loading || this.lock || this.ui.isCastPlaying) {
+          if (!this.initialized || !this.sourceLoaded || this.loading || this.shouldShowStartupLandscapeLoading() ||
+            this.lock || this.ui.isCastPlaying) {
             return
           }
           try {

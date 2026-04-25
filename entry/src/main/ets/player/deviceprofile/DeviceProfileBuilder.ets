@@ -34,7 +34,7 @@ const MAX_MUSIC_TRANSCODING_BITRATE = 384000
 /**
  * List of PCM codecs supported by default
  */
-const  PCM_CODECS: Array<string> = [
+const PCM_CODECS: Array<string> = [
   "pcm_s8",
   "pcm_s16be",
   "pcm_s16le",
@@ -49,8 +49,8 @@ const  PCM_CODECS: Array<string> = [
  * IMPORTANT: Must have same length as SUPPORTED_CONTAINER_FORMATS,
  * as it maps the codecs to the containers with the same index!
  */
-const  AVAILABLE_AUDIO_CODECS: Array<Array<string>> = [
-// mp4
+const AVAILABLE_AUDIO_CODECS: Array<Array<string>> = [
+  // mp4
   ["mp1", "mp2", "mp3", "aac", "alac", "ac3", "opus"],
 
   // fmp4
@@ -112,8 +112,18 @@ const hevcExcludeDOVI: CodecProfile = {
   Type: CodecType.Video,
   Codec: 'hevc',
   Conditions: [
-    { Condition: ProfileConditionType.Equals, Property: ProfileConditionValue.VideoBitDepth, Value: '8', IsRequired: true },
-    { Condition: ProfileConditionType.NotEquals, Property: ProfileConditionValue.VideoRangeType, Value: 'DOVI', IsRequired: true },
+    {
+      Condition: ProfileConditionType.Equals,
+      Property: ProfileConditionValue.VideoBitDepth,
+      Value: '8',
+      IsRequired: true
+    },
+    {
+      Condition: ProfileConditionType.NotEquals,
+      Property: ProfileConditionValue.VideoRangeType,
+      Value: 'DOVI',
+      IsRequired: true
+    },
     // 可选：再要求 SDR 或 Unknown
     // { Condition: ProfileConditionType.EqualsAny, Property: ProfileConditionValue.VideoRangeType, Value: 'SDR,Unknown', IsRequired: true },
     // 可选：排除 dvhe
@@ -157,11 +167,9 @@ export class DeviceProfileBuilder {
   private readonly avCodecProfiles: Array<CodecProfile> = [
     avHevcVideoRangeProfile
   ]
-
   private readonly mpvCodecProfiles: Array<CodecProfile> = [
     mpvHevcVideoRangeProfile
   ]
-
   private readonly avTranscodingProfiles: Array<TranscodingProfile> = [
     {
       Type: DlnaProfileType.Video,
@@ -187,7 +195,6 @@ export class DeviceProfileBuilder {
       Conditions: [],
     },
   ]
-
   private readonly commonTranscodingProfiles: Array<TranscodingProfile> = [
     {
       Type: DlnaProfileType.Video,
@@ -213,7 +220,6 @@ export class DeviceProfileBuilder {
       Conditions: [],
     },
   ]
-
   // OpenHarmony Media Kit support here is treated conservatively, but mov/m4v
   // should follow the same path as mp4 in our auto-selection heuristics.
   private readonly avDirectPlayProfiles: Array<DirectPlayProfile> = [
@@ -249,13 +255,17 @@ export class DeviceProfileBuilder {
       AudioCodec: "amr_nb,amr_wb",
     }
   ]
-
   private readonly mpvDirectPlayProfiles: Array<DirectPlayProfile> = [
+    {
+      Container: "iso",
+      Type: DlnaProfileType.Video,
+    },
     {
       Container: "mp4,m4v,mov,mkv,webm,ts,mpegts,flv,avi,3gp",
       Type: DlnaProfileType.Video,
       VideoCodec: "h264,hevc,mpeg4,mpeg2video,h263,vp8,vp9,av1,vc1,wmv3,theora",
-      AudioCodec: [...PCM_CODECS, "mp1", "mp2", "mp3", "aac", "vorbis", "opus", "flac", "alac", "ac3", "eac3", "dts", "mlp", "truehd"].join(","),
+      AudioCodec: [...PCM_CODECS, "mp1", "mp2", "mp3", "aac", "vorbis", "opus", "flac", "alac", "ac3", "eac3", "dts",
+        "mlp", "truehd"].join(","),
     },
     {
       Container: "mp3,aac,m4a,ogg,opus,wav,flac,webm",
@@ -263,7 +273,6 @@ export class DeviceProfileBuilder {
       AudioCodec: [...PCM_CODECS, "mp3", "aac", "vorbis", "opus", "flac", "alac", "ac3", "eac3", "dts"].join(","),
     }
   ]
-
   private readonly avSubtitleProfiles: Array<SubtitleProfile> = [
     {
       Format: 'srt',
@@ -274,7 +283,6 @@ export class DeviceProfileBuilder {
       Method: SubtitleDeliveryMethod.External
     }
   ]
-
   private readonly mpvSubtitleProfiles: Array<SubtitleProfile> = [
     {
       Format: 'ass',
@@ -321,14 +329,16 @@ export class DeviceProfileBuilder {
 
   getDeviceProfile(playerEngineType: PlayerEngineType): DeviceProfile {
     if (playerEngineType === PlayerEngineType.AV) {
-      return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles, this.avTranscodingProfiles,
+      return this.createProfile('avplayer', this.avDirectPlayProfiles, this.avSubtitleProfiles,
+        this.avTranscodingProfiles,
         this.avCodecProfiles)
     }
-    return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles, this.commonTranscodingProfiles,
+    return this.createProfile('mpv', this.mpvDirectPlayProfiles, this.mpvSubtitleProfiles,
+      this.commonTranscodingProfiles,
       this.mpvCodecProfiles)
   }
 
-  getLiveTvProfile(): DeviceProfile{
+  getLiveTvProfile(): DeviceProfile {
     return {
       "MaxStreamingBitrate": 120000000,
       "MaxStaticBitrate": 100000000,
@@ -670,5 +680,4 @@ export class DeviceProfileBuilder {
       ],
     }
   }
-
 }

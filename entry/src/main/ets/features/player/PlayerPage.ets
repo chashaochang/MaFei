@@ -155,7 +155,16 @@ export struct PlayerPage {
   build() {
     //播放器
     Stack() {
-      if (this.ui.url) {
+      if (!this.ui.url) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.icon_load'))
+            .objectFit(ImageFit.Auto)
+            .width('120px')
+            .height('120px')
+        }
+        .width('100%')
+        .height('100%')
+      } else {
         if (this.vm.getResolvedPlayerEngineType() === PlayerEngineType.AV) {
           AVPlayerView({
             videoUrl: this.ui.url,

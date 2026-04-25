@@ -20,6 +20,7 @@ import { Constants } from "../../utils/Constants";
 import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineResolver } from "../PlayerEngineResolver";
+import { PlayerEngineType } from "../../entity/PlayerEngineType";
 
 @ObservedV2
 export class QueueManager {
@@ -40,6 +41,26 @@ export class QueueManager {
     return this.deviceProfileBuilder.getDeviceProfile(
       PlayerEngineResolver.getRequestProfileEngineType(AppPreference.getInstance().getPlayerEngineType())
     )
+  }
+
+  private shouldUseIsoStaticStreamFallback(source: JellyfinMediaSource): boolean {
+    const configuredEngine = AppPreference.getInstance().getPlayerEngineType()
+    const container = source.sourceInfo.Container?.trim().toLowerCase()
+    return configuredEngine !== PlayerEngineType.AV &&
+      source.sourceInfo.Protocol == MediaProtocol.File &&
+      container === 'iso'
+  }
+
+  private async createIsoStaticStreamUrl(source: JellyfinMediaSource): Promise<string> {
+    const sourceInfo = source.sourceInfo
+    return await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
+      itemId: source.itemId,
+      container: 'iso',
+      _static: true,
+      playSessionId: source.playSessionId,
+      mediaSourceId: sourceInfo.Id,
+      deviceId: ApiClient.Instance().deviceInfo.id,
+    })
   }
 
   initializePlaybackQueue(options: PlayOptions): PlayerException | null {
@@ -202,17 +223,37 @@ export class QueueManager {
 
   async createVideoMediaSource(source: JellyfinMediaSource): Promise<string> {
     let sourceInfo = source.sourceInfo
+    if (this.shouldUseIsoStaticStreamFallback(source)) {
+      const isoStaticUrl = await this.createIsoStaticStreamUrl(source)
+      console.info(
+        `[PlaybackUrl] playMethod=IsoStaticFallback, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
+        `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
+        `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${isoStaticUrl}`
+      )
+      return isoStaticUrl
+    }
     switch (source.playMethod) {
       case PlayMethod.DirectPlay:
         if (sourceInfo.Protocol == MediaProtocol.File) {
-          return await getVideosApi(ApiClient.Instance()).getVideoStream({
+          const staticUrl = await getVideosApi(ApiClient.Instance()).getVideoStream({
             itemId: source.itemId,
             _static: true,
             playSessionId: source.playSessionId,
             mediaSourceId: sourceInfo.Id,
             deviceId: ApiClient.Instance().deviceInfo.id,
           })
+          console.info(
+            `[PlaybackUrl] playMethod=DirectPlay/File, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
+            `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
+            `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${staticUrl}`
+          )
+          return staticUrl
         } else if (sourceInfo.Protocol == MediaProtocol.Http) {
+          console.info(
+            `[PlaybackUrl] playMethod=DirectPlay/Http, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
+            `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
+            `finalUrl=${sourceInfo.Path ?? 'none'}`
+          )
           return sourceInfo.Path!
         } else {
           throw new Error(`Unsupported protocol ${sourceInfo.Protocol}`)
@@ -220,13 +261,19 @@ export class QueueManager {
       case PlayMethod.DirectStream:
         let container = sourceInfo.Container
         if (container) {
-          return await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
+          const directStreamUrl = await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
             itemId: source.itemId,
             container: container,
             playSessionId: source.playSessionId,
             mediaSourceId: source.id,
             deviceId: ApiClient.Instance().deviceInfo.id,
           })
+          console.info(
+            `[PlaybackUrl] playMethod=DirectStream, itemId=${source.itemId}, mediaSourceId=${source.id}, ` +
+            `container=${container}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
+            `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${directStreamUrl}`
+          )
+          return directStreamUrl
         } else {
           throw new Error('Missing direct stream container')
         }
@@ -236,6 +283,11 @@ export class QueueManager {
           let protocol = sourceInfo.TranscodingSubProtocol
           if (protocol == 'hls') {
             let transcodingUrl = ApiClient.Instance().createUrl(transcodingPath)
+            console.info(
+              `[PlaybackUrl] playMethod=Transcode, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
+              `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
+              `sourcePath=${sourceInfo.Path ?? 'none'}, transcodingPath=${transcodingPath}, finalUrl=${transcodingUrl}`
+            )
             return transcodingUrl
           } else {
             throw new Error(`Unsupported transcode protocol "${protocol}"`)

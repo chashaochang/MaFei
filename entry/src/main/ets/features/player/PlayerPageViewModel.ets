@@ -481,7 +481,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
   }
 
   stopTranscoding(mediaSource: JellyfinMediaSource) {
-    if (mediaSource.playMethod == PlayMethod.Transcode) {
+    if (mediaSource.usesServerTranscoding()) {
       getHlsSegmentApi(ApiClient.Instance()).stopEncodingProcess({
         deviceId: ApiClient.Instance().deviceInfo.id,
         playSessionId: mediaSource.playSessionId,
@@ -493,7 +493,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     getPlaystateApi(ApiClient.Instance()).reportPlaybackStart({
       playbackStartInfo: {
         ItemId: mediaSource.itemId,
-        PlayMethod: mediaSource.playMethod,
+        PlayMethod: mediaSource.getEffectivePlayMethod(),
         PlaySessionId: mediaSource.playSessionId,
         AudioStreamIndex: mediaSource.selectedAudioStream?.Index,
         SubtitleStreamIndex: mediaSource.selectedSubtitleStream?.Index,
@@ -593,7 +593,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       this.ui.subtitles = []
       return
     }
-    if (source.playMethod == PlayMethod.Transcode) {
+    if (source.usesServerTranscoding()) {
       this.ui.currentSubtitle = ''
       this.ui.subtitles = []
       return

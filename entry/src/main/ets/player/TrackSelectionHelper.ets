@@ -46,7 +46,7 @@ export class TrackSelectionHelper {
     }
 
     // For transcoding and external streams, we need to restart playback
-    if (mediaSource.playMethod == PlayMethod.Transcode || selectedMediaStream.IsExternal) {
+    if (mediaSource.usesServerTranscoding() || selectedMediaStream.IsExternal) {
       return this.viewModel.queueManager.selectAudioStreamAndRestartPlayback(selectedMediaStream)
     }
     let success = this.selectPlayerAudioTrack(mediaSource, selectedMediaStream, false)
@@ -58,7 +58,7 @@ export class TrackSelectionHelper {
 
   private selectPlayerAudioTrack(mediaSource: JellyfinMediaSource, audioStream: MediaStream,
     initial: boolean): boolean {
-    if (mediaSource.playMethod == PlayMethod.Transcode) {
+    if (mediaSource.usesServerTranscoding()) {
       // Transcoding does not require explicit audio selection
       return true
     }
