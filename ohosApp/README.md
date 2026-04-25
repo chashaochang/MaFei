@@ -92,7 +92,8 @@
 
 ## 鸣谢
 
-- 感谢 `hosplayer`作者`5en`大佬提供 `mpv` 相关源码支持，帮助当前 HarmonyOS 播放能力落地,希望大家也能支持 `hosplayer` 
+- 感谢 `hosplayer` 作者 `5en` 大佬提供 `mpv` 相关源码支持，帮助当前 HarmonyOS 播放能力落地。也欢迎关注他的项目：`hosplayer / mpv`
+  https://github.com/dex2oat/mpv
 - 感谢 Jellyfin、OpenHarmony 与相关开源项目作者提供的基础能力与参考实现
 
 ## 联系方式
