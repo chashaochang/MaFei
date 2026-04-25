@@ -114,7 +114,7 @@ export struct AboutPage{
               this.InfoItem('版本号', this.versionName)
               // Divider().color('#333333').margin({ left: 16, right: 16 })
               //
-              // this.InfoItem('开源许可证', 'GPL-2.0')
+              // this.InfoItem('开源许可证', 'GPL-3.0-or-later')
             }
             .backgroundColor('#1a1a1a')
             .borderRadius(12)
@@ -142,7 +142,7 @@ export struct AboutPage{
                 .width('100%')
                 .margin({ bottom: 8 })
                 
-                Text('https://github.com/chashaochang/JellyFin_HarmonyOS')
+                Text('https://github.com/chashaochang/MaFei')
                   .fontSize(14)
                   .fontColor('#007AFF')
                   .width('100%')
@@ -150,7 +150,7 @@ export struct AboutPage{
                   .maxLines(2)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .onClick(() => {
-                    this.openUrl('https://github.com/chashaochang/JellyFin_HarmonyOS');
+                    this.openUrl('https://github.com/chashaochang/MaFei');
                   })
               }
               .width('100%')

@@ -1,99 +1,97 @@
-<h1 align="center">JellyFin HarmonyOS</h1>
-<h3 align="center">Unofficial client of the <a href="https://jellyfin.org">Jellyfin Project</a></h3>
+<h1 align="center">MaFei for HarmonyOS</h1>
+<h3 align="center">HarmonyOS implementation of the MaFei Jellyfin third-party client</h3>
 
 ---
 
 <p align="center">
-<img alt="Logo Banner" src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/banner-logo-solid.svg?sanitize=true"/>
+<img alt="MaFei App Icon" src="AppScope/resources/base/media/app_icon.png" width="160"/>
 <br/>
 <br/>
-<a href="https://github.com/chashaochang/JellyFin_HarmonyOS">
-<img alt="GPL 2.0 License" src="https://img.shields.io/github/license/jellyfin/jellyfin-android.svg"/>
+<a href="https://github.com/chashaochang/MaFei">
+<img alt="GPL 3.0 or later License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg"/>
 </a>
 
-Jellyfin_HarmonyOS 是一款 HarmonyOS 应用，可连接到 Jellyfin 实例并与官方 Web 客户端集成。具体功能实现参考了安卓端开源代码
+`ohosApp` 是 `MaFei` 仓库中的 HarmonyOS 客户端工程，用于连接 Jellyfin 服务器并在 HarmonyOS 设备上完成媒体浏览、剧集选播和双引擎播放。
 
-## 简单说两句
-写这个东西是出于学习的目的,为了提高自己的鸿蒙开发能力,为了小众圈子能用上鸿蒙版的软件,也为了促进鸿蒙生态发展出一份力.
+## 项目关系
 
-PS:闲暇时间写的,禁止催更!
+- 当前仓库：`MaFei`
+  https://github.com/chashaochang/MaFei
+- 早期独立 HarmonyOS 项目：`JellyFin_HarmonyOS`
+  https://github.com/chashaochang/JellyFin_HarmonyOS
 
-## 进度
-由于本人对项目不太了解,具体都有什么功能也说不准,并且没开发过音视频类,大概率会有很多bug
+`ohosApp` 的实现是基于早期 `JellyFin_HarmonyOS` 项目持续演进而来，当前已经并入 `MaFei` 仓库，作为 `MaFei 1.x` 阶段的 HarmonyOS 客户端实现继续维护。
 
-### 已完成
+## 下载
 
-- 连接到服务器
-- 切换服务器
-- 发现本地设备
-- 简单的播放
-- 记录播放进度
-- 支持ass/srt字幕
-- 播放器控制(音量,亮度,进度)
-- 倍速
-- 播放默认选中的音轨/字幕
+- 华为应用市场  
+  https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei
+
+## 已实现
+
+### 连接与账号
+
+- Jellyfin 服务器连接
+- 服务器切换
+- 局域网设备发现
+- 登录与基础账号状态管理
+
+### 媒体浏览
+
+- 首页内容展示
+- 收藏页
+- 媒体库浏览
+- 搜索
+- 视频详情页
+- 选季选集
+- 视频信息展示
+
+### 播放能力
+
+- 系统 `AVPlayer` 与 `mpv` 双引擎播放
+- 直播播放
+- 播放进度记录与续播
 - 下一集
-- 通知栏播放卡片(AVSession播控)
-- 切换音轨
-- 切换字幕
-- 切换清晰度
+- 长按三倍速与常规倍速
+- 音量、亮度、进度手势控制
 - 全屏锁
-- 投屏(AVCast)
-- 选集
-- 视频信息
-- 长按三倍速
-- 平板/pc适配
-- 支持小雅JellyFin(目前可以正常登录加载,支持http://xiaoya.host资源的播放,外网域名需要映射和内网一样的端口,有的视频因jellyfin版本太老取不到地址还在研究)
+- 横竖屏 / 平板 / PC 形态适配
 
-### 未完成/规划中
+### 字幕、音轨与清晰度
 
-#### 待排期
-- 画中画(字幕外挂问题需要解决)
-- 下载
-- 设置
-- 更多字幕支持
-- ...
+- `ass / srt` 字幕支持
+- 默认音轨 / 默认字幕选择
+- 音轨切换
+- 字幕切换
+- 清晰度切换
 
-🧬 效果图
-------------
+### 系统集成
 
-|                            连接到服务器                            |                              现有服务器                              |                              播控                               |
-|:------------------------------------------------------------:|:---------------------------------------------------------------:|:-------------------------------------------------------------:|
-| <img src="screenshots/connect.jpg" width="200" alt="连接到服务器"> | <img src="screenshots/findserver.jpg" width="200" alt="现有服务器"> | <img src="screenshots/avsession.jpg" width="200" alt="播控"> |
+- 通知栏播放卡片（AVSession）
+- 投屏（AVCast）
 
-|                            视频播放竖屏                            |                            视频播放横屏                             |
-|:------------------------------------------------------------:|:-------------------------------------------------------------:|
-| <img src="screenshots/shuping.jpg" width="200" alt="视频播放竖屏"> | <img src="screenshots/hengping.jpg" width="400" alt="视频播放横屏"> |
+### 特殊场景
 
-|                             平板首页横屏                              |                             平板播放分栏                              |
-|:---------------------------------------------------------------:|:---------------------------------------------------------------:|
-| <img src="screenshots/pad_shouye.png" width="400" alt="视频播放竖屏"> | <img src="screenshots/pad_fenlan.png" width="400" alt="视频播放横屏"> |
+- 小雅 Jellyfin 基础支持
 
-|                              PC播放窗口                               |                              PC播放全屏                              |
-|:-----------------------------------------------------------------:|:----------------------------------------------------------------:|
-| <img src="screenshots/pc_chuangkou.png" width="400" alt="视频播放竖屏"> | <img src="screenshots/pc_quanping.png" width="400" alt="视频播放横屏"> |
+## 展示图
 
-|                            小雅首页                             |                             小雅视频播放横屏                             |
-|:-----------------------------------------------------------:|:----------------------------------------------------------------:|
-| <img src="screenshots/xiaoya.jpg" width="200" alt="小雅首页"> | <img src="screenshots/xiaoya_play.jpg" width="400" alt="视频播放横屏"> |
+| 首页 | 详情页 | 媒体库 | 收藏 |
+|:---:|:---:|:---:|:---:|
+| <img src="store-assets/appgallery-portrait-submit/01-home.jpg" width="220" alt="首页"> | <img src="store-assets/appgallery-portrait-submit/02-detail.jpg" width="220" alt="详情页"> | <img src="store-assets/appgallery-portrait-submit/03-library.jpg" width="220" alt="媒体库"> | <img src="store-assets/appgallery-portrait-submit/04-favorite.jpg" width="220" alt="收藏"> |
 
-## 代码相关
+## 技术说明
 
-- 服务器相关操作,把Jellyfin的<a href="https://github.com/jellyfin/jellyfin-sdk-typescript">TypeScript SDK</a>进行鸿蒙化后使用
-- 播放器经过尝试后采用系统 AVPlayer 与 mpv 双引擎方案
-- 播放控制页基于开源库<a href="https://gitee.com/openharmony-tpc/openharmony_tpc_samples/tree/master/GSYVideoPlayer">GSYVideoPlayer</a>修改
-- 弹窗使用<a href="https://github.com/xdd666t/ohos_smart_dialog">ohos_smart_dialog</a>
+- 服务器相关能力基于 Jellyfin 的 <a href="https://github.com/jellyfin/jellyfin-sdk-typescript">TypeScript SDK</a> 做了 HarmonyOS 适配
+- 播放器采用系统 `AVPlayer` 与 `mpv` 双引擎方案
+- 部分播放控制页实现参考了 <a href="https://gitee.com/openharmony-tpc/openharmony_tpc_samples/tree/master/GSYVideoPlayer">GSYVideoPlayer</a>
+- 弹窗使用 <a href="https://github.com/xdd666t/ohos_smart_dialog">ohos_smart_dialog</a>
 
-感谢开源大佬们的无私奉献!
+## 鸣谢
 
-## 打赏
-
-|                                                         |                                                    |
-|:-------------------------------------------------------:|:--------------------------------------------------:|
-| <img src="screenshots/shoukuan.jpg" width="200" alt=""> | <img src="screenshots/v50.jpg" width="200" alt=""> |
-
-- 如果你觉得这个项目帮助到了你，你可以V作者50请他吃顿KFC
+- 感谢 `hosplayer`作者`5en`大佬提供 `mpv` 相关源码支持，帮助当前 HarmonyOS 播放能力落地,希望大家也能支持 `hosplayer` 
+- 感谢 Jellyfin、OpenHarmony 与相关开源项目作者提供的基础能力与参考实现
 
 ## 联系方式
 
-- QQ群:991893385
+- QQ群：991893385
