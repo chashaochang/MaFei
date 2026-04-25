@@ -22,6 +22,7 @@ import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { AppPreference } from "../../data/AppPreference";
 import { ImageKnifeComponent } from "@ohos/imageknifepro";
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
+import { PlaybackInfoCard } from "../../player/ui/PlaybackInfoCard";
 
 const PROGRESS_MAX_VALUE: number = 100;
 const SEEK_SYNC_TOLERANCE_MS: number = 1500;
@@ -1655,25 +1656,16 @@ export struct AVPlayerView {
         .alignContent(Alignment.End)
       }
 
-      Text(this.ui.playerMenus?.playBackInfo)
-        .backgroundColor($r('sys.color.mask_primary'))
-        .borderRadius(16)
-        .fontColor(Color.White)
-        .fontSize(12)
-        .position({ x: 0, y: 0 })
-        .padding(16)
-        .visibility(this.ui.playerMenus?.isShowPlayBackInfo ? Visibility.Visible : Visibility.None)
-        .onClick(() => {
-          if (this.ui.playerMenus) {
-            this.ui.playerMenus.isShowPlayBackInfo = false
+      if (this.ui.playerMenus?.isShowPlayBackInfo) {
+        PlaybackInfoCard({
+          menus: this.ui.playerMenus,
+          onDismiss: () => {
+            if (this.ui.playerMenus) {
+              this.ui.playerMenus.isShowPlayBackInfo = false
+            }
           }
         })
-        .margin({
-          top: 48,
-          bottom: 96,
-          left: 12,
-          right: 12
-        })
+      }
 
       Stack() {
         Button('退出投屏')

@@ -131,6 +131,31 @@ export class JellyfinMediaSource {
     return normalizedValue
   }
 
+  isIsoStaticPlaybackFallback(): boolean {
+    return this.playMethod === PlayMethod.Transcode &&
+      this.sourceInfo.Protocol != null &&
+      this.sourceInfo.Protocol === 'File' &&
+      this.normalizeContainer(this.sourceInfo.Container) === 'iso'
+  }
+
+  usesServerTranscoding(): boolean {
+    return this.playMethod === PlayMethod.Transcode && !this.isIsoStaticPlaybackFallback()
+  }
+
+  getEffectivePlayMethod(): PlayMethod {
+    if (this.isIsoStaticPlaybackFallback()) {
+      return PlayMethod.DirectPlay
+    }
+    return this.playMethod
+  }
+
+  getEffectivePlayMethodLabel(): string {
+    if (this.isIsoStaticPlaybackFallback()) {
+      return 'DirectPlay'
+    }
+    return `${this.playMethod}`
+  }
+
   private normalizePixelFormat(value?: string | null): string {
     return this.normalizeStreamLabel(value)
       .replace(/[^a-z0-9]/g, '')
@@ -399,10 +424,18 @@ export class JellyfinMediaSource {
    */
   selectAudioStream(stream: MediaStream): boolean {
     if(stream.Type !== MediaStreamType.Audio) return false
-    if (this.mediaStreams[stream.Index!] !== stream) {
+    const matchedStream = this.audioStreams.find((item) => item.Index === stream.Index) ??
+      this.mediaStreams.find((item) => item.Type === MediaStreamType.Audio && item.Index === stream.Index)
+    if (matchedStream) {
+      this.selectedAudioStream = matchedStream
+      return true
+    }
+    if (!this.isIsoStaticPlaybackFallback()) {
       return false
     }
-
+    if (!this.audioStreams.some((item) => item.Index === stream.Index)) {
+      this.audioStreams = [...this.audioStreams, stream]
+    }
     this.selectedAudioStream = stream
     return true
   }
@@ -413,8 +446,17 @@ export class JellyfinMediaSource {
       return true
     }
     if (stream.Type == MediaStreamType.Subtitle) {
-      if (this.mediaStreams[stream.Index!] !== stream) {
+      const matchedStream = this.subtitleStreams.find((item) => item.Index === stream.Index) ??
+        this.mediaStreams.find((item) => item.Type === MediaStreamType.Subtitle && item.Index === stream.Index)
+      if (matchedStream) {
+        this.selectedSubtitleStream = matchedStream
+        return true
+      }
+      if (!this.isIsoStaticPlaybackFallback()) {
         return false
+      }
+      if (!this.subtitleStreams.some((item) => item.Index === stream.Index)) {
+        this.subtitleStreams = [...this.subtitleStreams, stream]
       }
       this.selectedSubtitleStream = stream
       return true

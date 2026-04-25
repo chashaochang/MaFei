@@ -17,10 +17,21 @@ const SPEED_MENU_STEP_SIZE = 0.25
 const SPEED_MENU_STEP_MIN = 2 // → 0.5x
 const SPEED_MENU_STEP_MAX = 8 // → 2x
 
+export class PlaybackInfoEntry {
+  label: string
+  value: string
+
+  constructor(label: string, value: string) {
+    this.label = label
+    this.value = value
+  }
+}
+
 @ObservedV2
 export class PlayerMenus {
   //视频信息
   @Trace playBackInfo: string = ''
+  @Trace playBackInfoEntries: PlaybackInfoEntry[] = []
   @Trace isShowPlayBackInfo: boolean = false
   @Trace hasNext: boolean = false
   private subtitleCount = 0
@@ -57,39 +68,9 @@ export class PlayerMenus {
     // } else {
     //   qualityButton.isVisible = false
     // }
-    let playMethod =
-      getContext().resourceManager.getStringSync($r('app.string.playback_info_play_method')) + mediaSource.playMethod
-    let videoTracksInfo = this.buildMediaStreamsInfo(
-      videoStream ? [videoStream] : [],
-      $r('app.string.playback_info_video_streams'),
-      MAX_VIDEO_STREAMS_DISPLAY,
-      (stream: MediaStream) => {
-        if (stream.BitRate) {
-          return " (" + this.formatBitrate(stream.BitRate) + ")"
-        }
-        return ''
-      }
-    )
-    let audioTracksInfo = this.buildMediaStreamsInfo(
-      audioStreams,
-      $r('app.string.playback_info_audio_streams'),
-      MAX_AUDIO_STREAMS_DISPLAY,
-      (stream: MediaStream) => {
-        if (stream.Language) {
-          return " (" + stream.Language + ")"
-        }
-        return ''
-      }
-    )
-    // 创建字符串数组，过滤掉空值
-    const infoItems: string[] = [
-      playMethod,
-      videoTracksInfo,
-      audioTracksInfo
-    ].filter(item => item && item.length > 0);
-
-    // 使用双换行符连接
-    this.playBackInfo = infoItems.join('\n\n');
+    const infoEntries = this.buildPlaybackInfoEntries(mediaSource, videoStream)
+    this.playBackInfoEntries = infoEntries
+    this.playBackInfo = infoEntries.map((item) => `${item.label}：${item.value}`).join('\n')
   }
 
   /**
@@ -126,6 +107,59 @@ export class PlayerMenus {
     }
 
     return formatted + unit;
+  }
+
+  private formatFrameRate(frameRate?: number | null): string {
+    if (!frameRate || frameRate <= 0) {
+      return '--'
+    }
+    const formatted = frameRate.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+    return `${formatted} fps`
+  }
+
+  private formatResolution(stream?: MediaStream): string {
+    const width = stream?.Width
+    const height = stream?.Height
+    if (!width || !height) {
+      return '--'
+    }
+    return `${width}x${height}`
+  }
+
+  private normalizeValue(value?: string | null): string {
+    if (!value) {
+      return '--'
+    }
+    const text = `${value}`.trim()
+    return text.length > 0 ? text : '--'
+  }
+
+  private buildDisplayTitle(mediaSource: JellyfinMediaSource): string {
+    const seriesName = mediaSource.item.SeriesName?.trim()
+    const title = mediaSource.name.trim()
+    if (seriesName && seriesName.length > 0 && seriesName !== title) {
+      return `${seriesName} - ${title}`
+    }
+    return title
+  }
+
+  private buildPlaybackInfoEntries(mediaSource: JellyfinMediaSource, videoStream?: MediaStream): PlaybackInfoEntry[] {
+    const frameRate = videoStream?.ReferenceFrameRate ?? videoStream?.AverageFrameRate ?? videoStream?.RealFrameRate
+    const colorSpace = videoStream?.ColorPrimaries ?? videoStream?.ColorSpace
+    const entries: PlaybackInfoEntry[] = [
+      new PlaybackInfoEntry('标题', this.buildDisplayTitle(mediaSource)),
+      new PlaybackInfoEntry('协议', this.normalizeValue(mediaSource.sourceInfo.Protocol)),
+      new PlaybackInfoEntry('容器格式', this.normalizeValue(mediaSource.sourceInfo.Container)),
+      new PlaybackInfoEntry('比特率', videoStream?.BitRate ? this.formatBitrate(videoStream.BitRate) : '--'),
+      new PlaybackInfoEntry('编码器', this.normalizeValue(videoStream?.Codec)),
+      new PlaybackInfoEntry('位深度', videoStream?.BitDepth ? `${videoStream.BitDepth}` : '--'),
+      new PlaybackInfoEntry('分辨率', this.formatResolution(videoStream)),
+      new PlaybackInfoEntry('帧率', this.formatFrameRate(frameRate)),
+      new PlaybackInfoEntry('动态范围', this.normalizeValue(mediaSource.selectedVideoRangeType)),
+      new PlaybackInfoEntry('色域', this.normalizeValue(colorSpace)),
+      new PlaybackInfoEntry('像素格式', this.normalizeValue(videoStream?.PixelFormat))
+    ]
+    return entries.filter((item) => item.value !== '--' || item.label === '标题' || item.label === '协议' || item.label === '容器格式')
   }
 
 
