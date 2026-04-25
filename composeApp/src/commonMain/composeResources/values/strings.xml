@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<resources>
+    <string name="app_title">MaFei</string>
+    <string name="page_splash_login">Splash / Login</string>
+    <string name="page_home">Home</string>
+    <string name="page_updates">Updates</string>
+    <string name="page_detail">Detail</string>
+    <string name="page_player">Player</string>
+    <string name="section_continue_watching">Continue Watching</string>
+    <string name="section_recent_updates">Recently Updated</string>
+</resources>

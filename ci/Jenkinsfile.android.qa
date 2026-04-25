@@ -1,0 +1,172 @@
+/*
+ * 第一阶段 Android QA 流水线（可落地版）
+ *
+ * 覆盖范围：
+ * - release/*、bugfix/*：构建 Android QA 包并上传蒲公英
+ * - feature/*、develop：可选编译校验
+ *
+ * Jenkins 准备项：
+ * - 使用 Multibranch Pipeline（推荐）
+ * - Credentials（Secret Text）：PGY_API_KEY
+ */
+
+pipeline {
+  agent { label 'android' }
+
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    timeout(time: 45, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  parameters {
+    string(name: 'APP_VERSION_NAME', defaultValue: '0.0.0', description: '测试包版本名（用于包命名）')
+    choice(name: 'ANDROID_VARIANT', choices: ['Debug', 'Release'], description: '构建变体，第一阶段建议 Debug')
+    text(name: 'RELEASE_NOTES', defaultValue: '', description: '蒲公英更新说明（为空则取最新提交信息）')
+    string(name: 'PGY_BUILD_INSTALL_TYPE', defaultValue: '2', description: '蒲公英安装类型（1 公开安装，2 密码安装，3 邀请安装）')
+    password(name: 'PGY_INSTALL_PASSWORD', defaultValue: '', description: '蒲公英安装密码（当 buildInstallType=2 时建议填写）')
+    string(name: 'PGY_UPLOAD_ENDPOINT', defaultValue: 'https://www.pgyer.com/apiv2/app/upload', description: '蒲公英上传地址')
+    string(name: 'PGY_UPLOAD_RETRY', defaultValue: '2', description: '蒲公英上传失败重试次数')
+    booleanParam(name: 'ENABLE_COMPILE_CHECK', defaultValue: true, description: '是否对 feature/develop 执行编译校验')
+    booleanParam(name: 'SKIP_PGY_UPLOAD', defaultValue: false, description: '是否跳过蒲公英上传（首次联调可临时开启）')
+  }
+
+  environment {
+    APP_NAME = 'MaFei'
+    ANDROID_MODULE = 'composeApp'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh '''
+          set -e
+          git rev-parse --short HEAD
+          chmod +x gradlew || true
+          chmod +x ci/scripts/android_qa_build.sh ci/scripts/pgyer_upload.sh
+          mkdir -p ci/out
+        '''
+      }
+    }
+
+    stage('Compile Check (feature/develop)') {
+      when {
+        expression {
+          def branch = (env.CHANGE_BRANCH ?: env.BRANCH_NAME ?: env.GIT_BRANCH ?: '')
+            .replaceFirst(/^origin\//, '')
+            .replaceFirst(/^refs\/heads\//, '')
+          def target = (env.CHANGE_TARGET ?: '').replaceFirst(/^origin\//, '')
+          return params.ENABLE_COMPILE_CHECK && (
+            branch == 'develop' ||
+            branch.startsWith('feature/') ||
+            target == 'develop'
+          )
+        }
+      }
+      steps {
+        sh '''
+          set -e
+          bash ci/scripts/android_qa_build.sh --compile-only
+        '''
+      }
+    }
+
+    stage('Build Android QA (release/bugfix)') {
+      when {
+        expression {
+          def branch = (env.CHANGE_BRANCH ?: env.BRANCH_NAME ?: env.GIT_BRANCH ?: '')
+            .replaceFirst(/^origin\//, '')
+            .replaceFirst(/^refs\/heads\//, '')
+          def target = (env.CHANGE_TARGET ?: '').replaceFirst(/^origin\//, '')
+          return branch.startsWith('release/') ||
+            branch.startsWith('bugfix/') ||
+            target.startsWith('release/')
+        }
+      }
+      steps {
+        sh '''
+          set -e
+          export ANDROID_VARIANT="${ANDROID_VARIANT}"
+          export APP_VERSION_NAME="${APP_VERSION_NAME}"
+          bash ci/scripts/android_qa_build.sh
+        '''
+      }
+    }
+
+    stage('Upload To Pgyer (release/bugfix)') {
+      when {
+        expression {
+          if (params.SKIP_PGY_UPLOAD) {
+            return false
+          }
+          def branch = (env.CHANGE_BRANCH ?: env.BRANCH_NAME ?: env.GIT_BRANCH ?: '')
+            .replaceFirst(/^origin\//, '')
+            .replaceFirst(/^refs\/heads\//, '')
+          def target = (env.CHANGE_TARGET ?: '').replaceFirst(/^origin\//, '')
+          return branch.startsWith('release/') ||
+            branch.startsWith('bugfix/') ||
+            target.startsWith('release/')
+        }
+      }
+      steps {
+        withCredentials([
+          string(credentialsId: 'PGY_API_KEY', variable: 'PGY_API_KEY')
+        ]) {
+          retry(2) {
+            sh '''
+              set -e
+              . ci/out/artifact.env
+              export RELEASE_NOTES="${RELEASE_NOTES}"
+              export PGY_BUILD_INSTALL_TYPE="${PGY_BUILD_INSTALL_TYPE}"
+              export PGY_INSTALL_PASSWORD="${PGY_INSTALL_PASSWORD}"
+              export PGY_UPLOAD_ENDPOINT="${PGY_UPLOAD_ENDPOINT}"
+              export PGY_UPLOAD_RETRY="${PGY_UPLOAD_RETRY}"
+              bash ci/scripts/pgyer_upload.sh "${APK_PATH}"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Summary') {
+      steps {
+        sh '''
+          set +e
+          if [ -f ci/out/artifact.env ]; then
+            echo "----- artifact.env -----"
+            cat ci/out/artifact.env
+          fi
+          if [ -f ci/out/pgyer.env ]; then
+            echo "----- pgyer.env -----"
+            cat ci/out/pgyer.env
+          fi
+          true
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'ci/out/**', allowEmptyArchive: true
+    }
+    success {
+      script {
+        if (fileExists('ci/out/pgyer.env')) {
+          def installUrl = sh(
+            script: "awk -F= '/^PGYER_INSTALL_URL=/{print \$2}' ci/out/pgyer.env",
+            returnStdout: true
+          ).trim()
+          echo "Android QA pipeline succeeded. Pgyer URL: ${installUrl}"
+        } else {
+          echo 'Android QA pipeline succeeded.'
+        }
+      }
+    }
+    failure {
+      echo 'Android QA pipeline failed. Check logs and ci/out metadata.'
+    }
+  }
+}
