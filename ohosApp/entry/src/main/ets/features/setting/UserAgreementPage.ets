@@ -77,7 +77,7 @@ export struct UserAgreementPage{
           this.SectionContent('您理解并同意：\n• 您对通过本应用访问的所有内容负责\n• 您必须拥有或获得适当的许可来访问和播放媒体内容\n• 我们不对您服务器上的内容承担任何责任\n• 您应遵守当地法律法规关于媒体内容的规定')
           
           this.SectionTitle('5. 开源许可')
-          this.SectionContent('本应用基于GPL-2.0许可证开源发布。您可以：\n• 自由使用、修改和分发本应用\n• 查看和研究源代码\n• 贡献代码改进\n\n但必须遵守GPL-2.0许可证的条款。')
+          this.SectionContent('本应用基于GPL-3.0-or-later许可证开源发布。您可以：\n• 自由使用、修改和分发本应用\n• 查看和研究源代码\n• 贡献代码改进\n\n但必须遵守GPL-3.0-or-later许可证的条款。')
           
           this.SectionTitle('6. 免责声明')
           this.SectionContent('本应用按"现状"提供，不提供任何明示或暗示的保证。我们不保证：\n• 应用的持续可用性\n• 应用完全无错误\n• 应用满足您的特定需求\n• 数据不会丢失\n\n您使用本应用的风险由您自行承担。')
