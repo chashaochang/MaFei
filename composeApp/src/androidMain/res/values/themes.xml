@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MaFei" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">#F6F3EE</item>
+        <item name="android:windowDisablePreview">false</item>
+    </style>
+</resources>

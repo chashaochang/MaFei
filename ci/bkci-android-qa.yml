@@ -1,0 +1,112 @@
+# 蓝盾流水线模板（第一阶段 Android QA）
+# 用途：
+# - release/*、bugfix/*：构建 Android QA 包并上传蒲公英
+# - feature/*、develop：执行基础编译校验（可选）
+#
+# 注意：
+# - 该文件已按“可落地模板”整理，需在蓝盾 UI 中替换插件 ID/执行机标签后导入。
+# - 核心构建与上传逻辑集中在 ci/scripts/*.sh，平台迁移成本可控。
+
+version: "v1"
+name: "mafei-android-qa-v1"
+description: "Android QA CI（构建 + 蒲公英上传）"
+
+variables:
+  APP_NAME: "MaFei"
+  APP_VERSION_NAME: "0.0.0"
+  ANDROID_MODULE: "composeApp"
+  ANDROID_VARIANT: "Debug"
+  ENABLE_COMPILE_CHECK: "true"
+  PGY_UPLOAD_ENDPOINT: "https://www.pgyer.com/apiv2/app/upload"
+  PGY_BUILD_INSTALL_TYPE: "2"
+  PGY_INSTALL_PASSWORD: ""
+  PGY_UPLOAD_RETRY: "2"
+  RELEASE_NOTES: ""
+  # 以下变量请在 蓝盾变量中心 配置为敏感变量（此处不填明文）
+  PGY_API_KEY: "${{ secrets.PGY_API_KEY }}"
+
+triggers:
+  push:
+    branches:
+      include:
+        - "feature/*"
+        - "develop"
+        - "release/*"
+        - "bugfix/*"
+  merge_request:
+    target_branches:
+      include:
+        - "develop"
+        - "release/*"
+
+stages:
+  - id: "compile_check"
+    name: "feature/develop 编译校验"
+    # 按蓝盾实际版本调整表达式函数名（如 startsWith）
+    condition: "${{ vars.ENABLE_COMPILE_CHECK == 'true' && (startsWith(ci.branch, 'feature/') || ci.branch == 'develop' || ci.mr.targetBranch == 'develop') }}"
+    jobs:
+      - id: "compile_android"
+        name: "Compile Android"
+        runs_on: "linux-android"
+        steps:
+          # 请替换为你们 蓝盾代码拉取 插件 ID（示例：CodeGit）
+          - task: "checkout"
+          # 请替换为你们 蓝盾脚本执行 插件 ID（示例：linuxScript）
+          - task: "bash"
+            name: "Gradle Compile"
+            script: |
+              set -euo pipefail
+              chmod +x ci/scripts/android_qa_build.sh
+              bash ci/scripts/android_qa_build.sh --compile-only
+          # 请替换为你们 蓝盾制品归档 插件 ID（示例：archiveArtifacts）
+          - task: "archive"
+            name: "Archive Compile Logs"
+            inputs:
+              paths:
+                - "ci/out/**"
+
+  - id: "build_and_upload"
+    name: "release/bugfix Android QA 发包"
+    condition: "${{ startsWith(ci.branch, 'release/') || startsWith(ci.branch, 'bugfix/') || startsWith(ci.mr.targetBranch, 'release/') }}"
+    jobs:
+      - id: "build_android_qa"
+        name: "Build Android QA"
+        runs_on: "linux-android"
+        steps:
+          - task: "checkout"
+          - task: "bash"
+            name: "Build APK"
+            script: |
+              set -euo pipefail
+              chmod +x ci/scripts/android_qa_build.sh ci/scripts/pgyer_upload.sh
+              export APP_NAME="${APP_NAME}"
+              export APP_VERSION_NAME="${APP_VERSION_NAME}"
+              export ANDROID_MODULE="${ANDROID_MODULE}"
+              export ANDROID_VARIANT="${ANDROID_VARIANT}"
+              bash ci/scripts/android_qa_build.sh
+          - task: "bash"
+            name: "Upload To Pgyer"
+            script: |
+              set -euo pipefail
+              source ci/out/artifact.env
+              export PGY_API_KEY="${PGY_API_KEY}"
+              export RELEASE_NOTES="${RELEASE_NOTES}"
+              export PGY_BUILD_INSTALL_TYPE="${PGY_BUILD_INSTALL_TYPE}"
+              export PGY_INSTALL_PASSWORD="${PGY_INSTALL_PASSWORD}"
+              export PGY_UPLOAD_ENDPOINT="${PGY_UPLOAD_ENDPOINT}"
+              export PGY_UPLOAD_RETRY="${PGY_UPLOAD_RETRY}"
+              bash ci/scripts/pgyer_upload.sh "${APK_PATH}"
+          - task: "archive"
+            name: "Archive CI Output"
+            inputs:
+              paths:
+                - "ci/out/**"
+
+notifications:
+  # 推荐对接企业微信/钉钉机器人：成功发下载链接，失败发日志入口
+  on_success:
+    - type: "webhook"
+      enabled: false
+  on_failure:
+    - type: "webhook"
+      enabled: false
