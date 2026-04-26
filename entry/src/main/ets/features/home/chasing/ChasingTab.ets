@@ -1,0 +1,335 @@
+import { HMRouterMgr } from "@hadss/hmrouter"
+import { ImageKnifeComponent } from "@ohos/imageknifepro"
+import { PageState } from "../../../common/base/BaseUIState"
+import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
+import { HORIZONTAL_CARD_LIST_HEIGHT, HORIZONTAL_CARD_SPACE } from "../../../common/OneMoreConst"
+import { playItems } from "../../../common/CommonFunc"
+import { UIConstants } from "../../../common/UIConstants"
+import { ActionBar } from "../../../component/ActionBar"
+import { EmptyView } from "../../../component/EmptyView"
+import { FailedView } from "../../../component/FailedView"
+import { HorizontalVideoCard } from "../../../component/HorizontalVideoCard"
+import { RouterConsts } from "../../../common/RouterConsts"
+import { VideoItem } from "../hometab/HomeUIState"
+import { ChaseSection, ChasingUIState } from "./ChasingUIState"
+import { ChasingViewModel } from "./ChasingViewModel"
+
+@ComponentV2
+export struct ChasingTab {
+  @Param fromHome: boolean = false
+  @Local ui: ChasingUIState = new ChasingUIState(this.getUIContext())
+  @Local vm: ChasingViewModel = new ChasingViewModel(this.ui)
+  @Local selectedFilterIndex: number = 0
+
+  aboutToAppear(): void {
+    this.vm.refresh()
+  }
+
+  private getSectionCount(kind: string): number {
+    const section = this.ui.sections.find((item: ChaseSection) => item.kind === kind)
+    return section ? section.items.length : 0
+  }
+
+  private getSectionItems(kind: string): VideoItem[] {
+    const section = this.ui.sections.find((item: ChaseSection) => item.kind === kind)
+    return section ? section.items : []
+  }
+
+  private getAllItems(): VideoItem[] {
+    const merged: VideoItem[] = []
+    this.appendUniqueItems(merged, this.getSectionItems('nextUp'))
+    this.appendUniqueItems(merged, this.getSectionItems('continue'))
+    return merged
+  }
+
+  private getFilteredItems(): VideoItem[] {
+    if (this.selectedFilterIndex === 0) {
+      return this.getSectionItems('nextUp')
+    }
+    if (this.selectedFilterIndex === 1) {
+      return this.getSectionItems('continue')
+    }
+    if (this.selectedFilterIndex === 2) {
+      return []
+    }
+    return this.getAllItems()
+  }
+
+  private appendUniqueItems(target: VideoItem[], incoming: VideoItem[]): void {
+    incoming.forEach((item: VideoItem) => {
+      const key = item.seriesId || item.id
+      if (target.findIndex((current: VideoItem) => (current.seriesId || current.id) === key) < 0) {
+        target.push(item)
+      }
+    })
+  }
+
+  private openItem(item: VideoItem): void {
+    if (item.type === 'Episode') {
+      playItems([item.id], this.getUIContext().getHostContext()!)
+      return
+    }
+    HMRouterMgr.to(RouterConsts.VideoDetailPage)
+      .withParam({
+        id: item.seriesId || item.id,
+        isTvShows: true
+      })
+      .push()
+  }
+
+  build() {
+    Stack() {
+      Column() {
+        ActionBar({
+          title: '追剧',
+          showBackButton: false
+        })
+          .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+          .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+
+        Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
+          List() {
+            if (this.ui.followedCount > 0 || this.ui.totalCount > 0) {
+              ListItem() {
+                this.filterRow()
+              }
+            }
+            if (this.getSectionItems('nextUp').length > 0) {
+              ListItem() {
+                this.featuredUpdate(this.getSectionItems('nextUp')[0])
+              }
+            }
+            if (this.getSectionItems('continue').length > 0) {
+              ListItem() {
+                this.sectionList('继续观看', `${this.getSectionItems('continue').length} 个内容可继续播放`,
+                  this.getSectionItems('continue'), 'continue')
+              }
+            }
+            if (this.getFilteredItems().length > 0) {
+              ListItem() {
+                this.sectionList('全部追剧', this.getFilterSubtitle(), this.getFilteredItems(), 'all')
+              }
+            }
+            ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
+          }
+          .width('100%')
+          .height('100%')
+          .listDirection(Axis.Vertical)
+          .scrollBar(BarState.Off)
+        }
+        .pullDownRatio(0.3)
+        .refreshOffset(64)
+        .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
+        .layoutWeight(1)
+        .onStateChange((status) => {
+          this.ui.refreshStatus = status
+        })
+        .onOffsetChange((offset) => {
+          this.ui.refreshOffset = offset
+        })
+        .onRefreshing(() => {
+          this.vm.refresh()
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(this.vm.appUIState.isBigScreen ? Color.Transparent : $r('app.color.bg_main'))
+
+      if (this.ui.pageState === PageState.Loading) {
+        LoadingProgress()
+          .width(42)
+          .height(42)
+          .align(Alignment.Center)
+      }
+      if (this.ui.pageState === PageState.Error) {
+        FailedView()
+          .onClick(() => {
+            this.vm.refresh()
+          })
+      }
+      if (this.ui.pageState === PageState.Content && this.ui.totalCount === 0) {
+        EmptyView({ title: this.ui.followedCount > 0 ? '已关注剧集暂无待看内容' : '暂无追剧，去剧集详情页添加' })
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .alignContent(Alignment.Top)
+  }
+
+  private getFilterSubtitle(): string {
+    if (this.selectedFilterIndex === 0) {
+      return '按下一集优先展示'
+    }
+    if (this.selectedFilterIndex === 1) {
+      return '只看已有播放进度'
+    }
+    if (this.selectedFilterIndex === 2) {
+      return '暂无新内容但仍保持关注'
+    }
+    return '全部已关注剧集'
+  }
+
+  @Builder
+  filterRow() {
+    Row({ space: 8 }) {
+      ForEach(['待看', '继续看', '已看完', '全部'], (label: string, index: number) => {
+        Text(label)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.selectedFilterIndex === index ? Color.White : $r('app.color.text_1'))
+          .textAlign(TextAlign.Center)
+          .layoutWeight(1)
+          .height(36)
+          .padding({ left: 8, right: 8 })
+          .backgroundColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
+          .borderColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.border'))
+          .borderWidth(0.5)
+          .borderRadius(18)
+          .onClick(() => {
+            this.selectedFilterIndex = index
+          })
+      })
+    }
+    .width('calc(100% - 32vp)')
+    .margin({
+      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      top: 12
+    })
+  }
+
+  @Builder
+  featuredUpdate(item: VideoItem) {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: item.image,
+          objectFit: ImageFit.Cover,
+          placeholderSrc: $r('app.media.placeholder_video'),
+          placeholderObjectFit: ImageFit.CENTER
+        }
+      })
+        .width('100%')
+        .height('100%')
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 180,
+          colors: [[Color.Transparent, 0.0], ['rgba(0,0,0,0.70)', 1.0]]
+        })
+      Column({ space: 8 }) {
+        Text('下一集待看')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .backgroundColor($r('app.color.color_main'))
+          .borderRadius(99)
+        Text(item.name)
+          .fontSize(21)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(item.subtitle)
+          .fontSize(13)
+          .fontColor('rgba(255,255,255,0.82)')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .padding(16)
+      .width('100%')
+    }
+    .width('calc(100% - 32vp)')
+    .height(148)
+    .borderRadius(22)
+    .clip(true)
+    .margin({
+      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      top: 14
+    })
+    .onClick(() => {
+      this.openItem(item)
+    })
+  }
+
+  @Builder
+  sectionList(title: string, subtitle: string, items: VideoItem[], kind: string) {
+    Column() {
+      Row() {
+        Column({ space: 3 }) {
+          Text(title)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+          Text(subtitle)
+            .fontSize(12)
+            .fontColor($r('app.color.text_2'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank().layoutWeight(1)
+        Text(items.length.toString())
+          .fontSize(12)
+          .fontColor($r('app.color.text_2'))
+          .padding({
+            left: 8,
+            right: 8,
+            top: 3,
+            bottom: 3
+          })
+          .backgroundColor($r('app.color.bg_1'))
+          .borderRadius(99)
+      }
+      .width('100%')
+      .padding({
+        left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+        right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
+      })
+
+      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
+        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+        ForEach(items, (item: VideoItem, index: number) => {
+          ListItem() {
+            HorizontalVideoCard({
+              image: item.image,
+              percent: item.percent,
+              name: item.name,
+              subtitle: item.subtitle,
+              index: index
+            })
+          }.onClick(() => {
+            if (kind === 'continue' || item.type === 'Episode') {
+              playItems([item.id], this.getUIContext().getHostContext()!)
+              return
+            }
+            HMRouterMgr.to(RouterConsts.VideoDetailPage)
+              .withParam({
+                id: item.id,
+                isTvShows: item.type === 'Series'
+              })
+              .push()
+          })
+        })
+        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+      }
+      .width('100%')
+      .height(HORIZONTAL_CARD_LIST_HEIGHT)
+      .margin({ top: 12 })
+      .listDirection(Axis.Horizontal)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .margin({ top: 22 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  customRefreshComponent() {
+    CustomRefreshComponent({
+      refreshOffset: this.ui.refreshOffset,
+      refreshStatus: this.ui.refreshStatus
+    })
+  }
+}

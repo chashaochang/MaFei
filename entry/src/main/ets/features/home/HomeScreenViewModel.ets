@@ -11,6 +11,7 @@ import {
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getTypeByCollectionType } from "../../common/CommonFunc";
 import { ApiClient } from "../../network/ApiClient";
+import { AppPreference } from "../../data/AppPreference";
 import { PadMenuItem, PadMenuType } from "./HomeScreenUIState";
 import { HomeScreenUIState, PadMenuDataSource } from "./HomeScreenUIState";
 import { MediaItem } from "./hometab/HomeUIState";
@@ -23,10 +24,15 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
     this.datasource.clearData()
     this.ui.isLoading = true
     this.ui.favoriteCount = 0
+    this.ui.chasingCount = AppPreference.getInstance().getChasingSeriesIds().length
     this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, "首页", $r('app.media.ic_home_sel'),
       $r('app.media.ic_home_unsel')))
+    this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, "追剧", $r('app.media.history'),
+      $r('app.media.history'), this.ui.chasingCount))
     try {
       await this.getFavoriteCount()
+      this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, `收藏`, $r('app.media.ic_unlike'),
+        $r('app.media.ic_unlike'), this.ui.favoriteCount))
       await this.getCounts()
       await this.getMediaList()
     } catch (e) {
@@ -59,8 +65,6 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
           // + (res.data.SongCount || 0)
           // + (res.data.BoxSetCount || 0)
           + (res.data.ItemCount || 0);
-        this.datasource.pushData(new PadMenuItem(PadMenuType.ITEM, `收藏`, $r('app.media.ic_unlike'),
-          $r('app.media.ic_unlike'), this.ui.favoriteCount))
       }
     } catch (e) {
 

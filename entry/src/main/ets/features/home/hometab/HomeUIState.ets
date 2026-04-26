@@ -37,6 +37,7 @@ export interface VideoItem {
   id: string,
   name: string,
   image: string,
+  seriesId?: string,
   mediaName?: string,
   type?: string,
   percent?: number,

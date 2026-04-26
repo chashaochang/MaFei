@@ -1,0 +1,6 @@
+{
+  "name": "libmafeisharedbridge.so",
+  "types": "./Index.d.ts",
+  "version": "0.0.1",
+  "description": "MaFei KMP shared bridge"
+}

@@ -193,67 +193,143 @@ export struct VideoDetailPage {
                 }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 16, right: 16 })
               }
               Blank().height(16)
-              Row({ space: 8 }) {
-                Button() {
-                  Row() {
-                    Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                    Text(this.ui.playButtonText)
-                      .fontSize(16)
-                      .fontColor(Color.White)
-                      .fontWeight(FontWeight.Medium)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+              if (this.ui.isTvShows) {
+                Column({ space: 10 }) {
+                  Button() {
+                    Row() {
+                      Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                      Text(this.ui.playButtonText)
+                        .fontSize(16)
+                        .fontColor(Color.White)
+                        .fontWeight(FontWeight.Medium)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    }
+                    .padding({ left: 20, right: 20 })
+                    .width('100%')
+                    .justifyContent(FlexAlign.Center)
                   }
-                  .padding({ left: 18, right: 18 })
-                }
-                .height(50)
-                .layoutWeight(1)
-                .margin({
-                  right: 12
-                })
-                .borderRadius(25)
-                .onClick(() => {
-                  if (this.ui.isTvShows || this.vm.hasEpisodeQueue()) {
+                  .height(50)
+                  .borderRadius(25)
+                  .onClick(() => {
                     this.vm.playFirst()
-                  } else {
+                  })
+
+                  Row({ space: 10 }) {
+                    Button() {
+                      Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                        .fillColor($r('app.color.text_1'))
+                        .width(20)
+                        .height(20)
+                    }
+                    .width(44)
+                    .height(44)
+                    .borderWidth(1)
+                    .borderColor($r('app.color.border'))
+                    .borderRadius(22)
+                    .backgroundColor($r('app.color.bg_2'))
+                    .onClick(() => {
+                      this.vm.changeFavorite()
+                    })
+
+                    Button() {
+                      Image(this.ui.isChasing ? $r('app.media.history') : $r('app.media.add'))
+                        .fillColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.text_1'))
+                        .width(20)
+                        .height(20)
+                    }
+                    .width(44)
+                    .height(44)
+                    .borderWidth(1)
+                    .borderColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.border'))
+                    .borderRadius(22)
+                    .backgroundColor($r('app.color.bg_2'))
+                    .onClick(() => {
+                      this.vm.changeChasingState()
+                    })
+
+                    Button() {
+                      Image($r('app.media.ic_check'))
+                        .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+                        .width(20)
+                        .height(20)
+                    }
+                    .width(44)
+                    .height(44)
+                    .borderWidth(1)
+                    .borderColor($r('app.color.border'))
+                    .borderRadius(22)
+                    .backgroundColor($r('app.color.bg_2'))
+                    .onClick(() => {
+                      this.vm.changePlayedState()
+                    })
+                  }
+                  .width('100%')
+                  .justifyContent(FlexAlign.End)
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16 })
+              } else {
+                Row({ space: 8 }) {
+                  Button() {
+                    Row() {
+                      Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                      Text(this.ui.playButtonText)
+                        .fontSize(16)
+                        .fontColor(Color.White)
+                        .fontWeight(FontWeight.Medium)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    }
+                    .padding({ left: 18, right: 18 })
+                  }
+                  .height(50)
+                  .layoutWeight(1)
+                  .margin({
+                    right: 12
+                  })
+                  .borderRadius(25)
+                  .onClick(() => {
                     let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
                     playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
                       this.ui.selectedSubtitle?.Index)
+                  })
+
+                  Button() {
+                    Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                      .fillColor($r('app.color.text_1'))
+                      .width(22)
+                      .height(22)
                   }
-                })
+                  .width(50)
+                  .height(50)
+                  .borderWidth(1)
+                  .borderColor($r('app.color.border'))
+                  .borderRadius(25)
+                  .backgroundColor($r('app.color.bg_2'))
+                  .onClick(() => {
+                    this.vm.changeFavorite()
+                  })
 
-                Button() {
-                  Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                    .fillColor($r('app.color.text_1'))
-                    .width(22)
-                    .height(22)
+                  Button() {
+                    Image($r('app.media.ic_check'))
+                      .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+                      .width(22)
+                      .height(22)
+                  }
+                  .width(50)
+                  .height(50)
+                  .borderWidth(1)
+                  .borderColor($r('app.color.border'))
+                  .borderRadius(25)
+                  .backgroundColor($r('app.color.bg_2'))
+                  .onClick(() => {
+                    this.vm.changePlayedState()
+                  })
                 }
-                .width(50)
-                .height(50)
-                .borderWidth(1)
-                .borderColor($r('app.color.border'))
-                .borderRadius(25)
-                .backgroundColor($r('app.color.bg_2'))
-                .onClick(() => {
-                  this.vm.changeFavorite()
-                })
-
-                Button() {
-                  Image($r('app.media.ic_check'))
-                    .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
-                    .width(22)
-                    .height(22)
-                }
-                .width(50)
-                .height(50)
-                .borderWidth(1)
-                .borderColor($r('app.color.border'))
-                .borderRadius(25)
-                .backgroundColor($r('app.color.bg_2'))
-                .onClick(() => {
-                  this.vm.changePlayedState()
-                })
-              }.width('100%').padding({ left: 16, right: 16 })
+                .width('100%')
+                .padding({ left: 16, right: 16 })
+              }
 
 
               // TextExpandView({

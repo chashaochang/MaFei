@@ -1,5 +1,6 @@
 import { AppUIState } from "../../entity/AppUIState";
 import { HomeTab } from "./hometab/HomeTab";
+import { ChasingTab } from "./chasing/ChasingTab";
 import { MediaTab } from "./mediatab/MediaTab";
 import { MineTab } from "./minetab/MineTab";
 import { AppStorageV2 } from "@kit.ArkUI";
@@ -74,9 +75,10 @@ export struct HomeScreen {
   private getPadTopTabItems(): TabItem[] {
     void this.ui.padMenuDataVersion
     const ds = this.vm.datasource
-    if (ds.totalCount() < 2) {
+    if (ds.totalCount() < 3) {
       return [
         new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
+        new TabItem('追剧', $r('app.media.history'), $r('app.media.history')),
         new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
         new TabItem('全部', $r('app.media.all'), $r('app.media.all'))
       ]
@@ -85,6 +87,7 @@ export struct HomeScreen {
     const thirdItem = ds.getData(thirdIndex)
     return [
       new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
+      new TabItem('追剧', $r('app.media.history'), $r('app.media.history')),
       new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
       new TabItem(thirdItem.title, thirdItem.selectedIcon as Resource, thirdItem.unselectedIcon as Resource)
     ]
@@ -97,14 +100,18 @@ export struct HomeScreen {
     if (this.ui.menuSelectedIndex === 1) {
       return 1
     }
-    return 2
+    if (this.ui.menuSelectedIndex === 2) {
+      return 2
+    }
+    return 3
   }
 
   private getThirdItemDatasourceIndex(): number {
     const ds = this.vm.datasource
-    if (this.ui.menuSelectedIndex === 0 || this.ui.menuSelectedIndex === 1) {
+    if (this.ui.menuSelectedIndex === 0 || this.ui.menuSelectedIndex === 1 || this.ui.menuSelectedIndex === 2) {
       const lastMedia = this.ui.lastSelectedMediaIndex
-      if (lastMedia >= 2 && lastMedia < ds.totalCount() && ds.getData(lastMedia).type === PadMenuType.ITEM) {
+      if (lastMedia >= 0 && lastMedia < ds.totalCount() && ds.getData(lastMedia).type === PadMenuType.ITEM &&
+        ds.getData(lastMedia).extra) {
         return lastMedia
       }
       return ds.getFirstMediaItemIndex()
@@ -194,7 +201,7 @@ export struct HomeScreen {
                   return
                 }
                 this.ui.menuSelectedIndex = index
-                if (index >= 2 && item.type === PadMenuType.ITEM) {
+                if (item.extra) {
                   this.ui.lastSelectedMediaIndex = index
                 }
                 this.padTabsController.changeIndex(index)
@@ -392,6 +399,10 @@ export struct HomeScreen {
                         } else {
                           if (item.title === '首页') {
                             HomeTab()
+                          } else if (item.title === '追剧') {
+                            ChasingTab({
+                              fromHome: true,
+                            })
                           } else if (item.title === '收藏') {
                             FavoriteListPage({
                               fromHome: true,
@@ -426,9 +437,12 @@ export struct HomeScreen {
                 list: this.getPadTopTabItems(),
                 selectIndex: this.getPadTopTabSelectIndex(),
                 onItemClick: (index: number) => {
-                  const targetIndex = index === 0 ? 0 : index === 1 ? 1 : this.getThirdItemDatasourceIndex()
+                  const targetIndex = index === 0 ? 0 : index === 1 ? 1 : index === 2 ? 2 : this.getThirdItemDatasourceIndex()
+                  if (targetIndex < 0 || targetIndex >= this.vm.datasource.totalCount()) {
+                    return
+                  }
                   this.ui.menuSelectedIndex = targetIndex
-                  if (targetIndex >= 2) {
+                  if (this.vm.datasource.getData(targetIndex)?.extra) {
                     this.ui.lastSelectedMediaIndex = targetIndex
                   }
                   this.padTabsController.changeIndex(targetIndex)
@@ -476,13 +490,18 @@ export struct HomeScreen {
             .tabBar(this.tabBuilder('首页', 0, $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')))
 
             TabContent() {
+              ChasingTab()
+            }
+            .tabBar(this.tabBuilder('追剧', 1, $r('app.media.history'), $r('app.media.history')))
+
+            TabContent() {
               FavoriteListPage()
             }
-            .tabBar(this.tabBuilder('收藏', 1, $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')))
+            .tabBar(this.tabBuilder('收藏', 2, $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')))
 
             TabContent() {
               MediaTab()
-            }.tabBar(this.tabBuilder('媒体库', 2, $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel')))
+            }.tabBar(this.tabBuilder('媒体库', 3, $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel')))
             .padding({
               left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
             })
@@ -490,7 +509,7 @@ export struct HomeScreen {
             TabContent() {
               MineTab()
             }
-            .tabBar(this.tabBuilder('我', 3, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel')))
+            .tabBar(this.tabBuilder('我', 4, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel')))
             .padding({
               left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
             })
@@ -520,6 +539,7 @@ export struct HomeScreen {
 
           CustomTab({
             selectIndex: this.ui.selectedIndex,
+            chasingBadgeCount: this.ui.chasingCount,
             onItemClick: (index: number) => {
               this.ui.selectedIndex = index
               this.tabsController.changeIndex(index)

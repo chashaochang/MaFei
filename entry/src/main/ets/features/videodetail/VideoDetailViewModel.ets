@@ -16,6 +16,7 @@ import { common, Want } from "@kit.AbilityKit";
 import { curves } from '@kit.ArkUI';
 import { ToastUtil } from "../../utils/ToastUtil";
 import { ReportService } from "../../network/ReportService";
+import { AppPreference } from "../../data/AppPreference";
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
@@ -104,6 +105,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.score = itemData.CommunityRating ? itemData.CommunityRating : 0
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
+        this.ui.isChasing = false
         if (itemData.Type == BaseItemKind.Episode) {
           const normalizedSeasonName = this.normalizeSeasonName(itemData.SeasonName)
           this.ui.episodeName = this.formatEpisodePlayText(itemData)
@@ -159,6 +161,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         //this.ui.people = itemData.People || []
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
         this.ui.played = itemData.UserData?.Played || false
+        this.ui.isChasing = AppPreference.getInstance().isChasingSeries(id)
         getTvShowsApi(ApiClient.Instance()).getSeasons({
           userId: ApiClient.Instance().userId,
           seriesId: id,
@@ -187,6 +190,14 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }).catch(() => {
       this.ui.firstLoading = false
     })
+  }
+
+  changeChasingState() {
+    if (!this.ui.isTvShows || this.ui.id.length === 0) {
+      return
+    }
+    this.ui.isChasing = AppPreference.getInstance().toggleChasingSeries(this.ui.id)
+    ToastUtil.showToast(this.ui.context, this.ui.isChasing ? '已加入追剧' : '已取消追剧')
   }
 
   getNextUp() {

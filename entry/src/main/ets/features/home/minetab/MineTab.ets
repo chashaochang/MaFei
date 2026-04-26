@@ -132,9 +132,9 @@ export struct MineTab {
                   }
                   break
                 case 2:
-                  // HMRouterMgr.push({
-                  //   pageUrl: RouterConsts.AboutPage
-                  // })
+                  HMRouterMgr.push({
+                    pageUrl: RouterConsts.AboutPage
+                  })
                   break
               }
             }

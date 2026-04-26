@@ -28,6 +28,7 @@ export class PadMenuItem {
 @ObservedV2
 export class HomeScreenUIState extends BaseUIState {
   @Trace favoriteCount: number = 0
+  @Trace chasingCount: number = 0
   @Trace selectedIndex: number = 0
   @Trace menuSelectedIndex: number = 0
   @Trace isLoading: boolean = true
@@ -35,7 +36,7 @@ export class HomeScreenUIState extends BaseUIState {
   @Trace isLeftSidebarVisible: boolean = true
   /** Medium screen: whether menu modal is visible (default false) */
   @Trace isMenuModalVisible: boolean = false
-  /** Last selected media item index, used for PadTopTab third slot when 首页/收藏 is selected */
+  /** Last selected media item index, used for PadTopTab media slot when fixed tabs are selected */
   @Trace lastSelectedMediaIndex: number = 0
   /** Incremented when datasource changes, triggers PadTopTab list refresh */
   @Trace padMenuDataVersion: number = 0
@@ -68,10 +69,10 @@ export class PadMenuDataSource extends BaseDataSource<PadMenuItem> {
     this.notifyDataReload()
   }
 
-  /** First ITEM index after 收藏 (index 1), for PadTopTab third slot when 首页/收藏 is selected */
+  /** First real media item index, excluding fixed tabs like 首页/追剧/收藏 */
   public getFirstMediaItemIndex(): number {
-    for (let i = 2; i < this.totalCount(); i++) {
-      if (this.getData(i).type === PadMenuType.ITEM) {
+    for (let i = 0; i < this.totalCount(); i++) {
+      if (this.getData(i).type === PadMenuType.ITEM && this.getData(i).extra) {
         return i
       }
     }

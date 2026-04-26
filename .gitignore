@@ -18,3 +18,4 @@
 
 # MPV 二进制不进入版本控制
 **/libmpv.so.2
+**/libmafei_shared.so
