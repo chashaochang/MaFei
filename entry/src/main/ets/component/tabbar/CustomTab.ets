@@ -1,14 +1,10 @@
 import { UIConstants } from '../../common/UIConstants'
-import { AppStorageV2 } from '@kit.ArkUI'
-import { AppUIState } from '../../entity/AppUIState'
-import { AppThemeTokens } from '../../theme/AppThemeTokens'
 
 @ComponentV2
 export struct CustomTab {
   @Require @Param selectIndex: number
   @Require @Param onItemClick: (index: number) => void
   @Param chasingBadgeCount: number = 0
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   list: TabItem[] = [
     new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
     new TabItem('追剧', $r('app.media.history'), $r('app.media.history')),
@@ -52,10 +48,8 @@ export struct CustomTab {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor(this.selectIndex === index ?
-          (AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-            $r('app.color.primary_light_hover') : $r('app.color.bg_tab')) : Color.Transparent)
-        .borderRadius(AppThemeTokens.navigationItemRadius(this.appUIState.themeStyle))
+        .backgroundColor(this.selectIndex === index ? $r('app.color.bg_tab') : Color.Transparent)
+        .borderRadius(24)
         .onClick(() => {
           this.onItemClick(index)
         })
@@ -68,11 +62,11 @@ export struct CustomTab {
       radius: 12,
       color: $r('app.color.bg_tab_item')
     })
-    .borderRadius(AppThemeTokens.navigationRadius(this.appUIState.themeStyle))
-    .borderWidth(AppThemeTokens.isNative(this.appUIState.themeStyle) ? 1 : 1.5)
+    .borderRadius(28)
+    .borderWidth(1.5)
     .borderColor($r('app.color.tab'))
     .shadow({
-      radius: AppThemeTokens.isNative(this.appUIState.themeStyle) ? 24 : 50,
+      radius: 50,
       color: $r('app.color.border'),
     })
   }

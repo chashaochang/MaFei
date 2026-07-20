@@ -18,6 +18,7 @@ import {
   VERTICAL_CARD_LIST_HEIGHT
 } from "../../../common/OneMoreConst"
 import { VerticalVideoCard } from "../../../component/VerticalVideoCard"
+import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 
 @ComponentV2
 export struct HomeTab {
@@ -89,11 +90,13 @@ export struct HomeTab {
       if (this.vm.appUIState.currentBreakpoint.includes('s')) {
         //Header
         Row({ space: 12 }) {
-          Row() {
-            Image($r('app.media.app_icon')).height(40)
+          Row({ space: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 8 : 0 }) {
+            Image($r('app.media.app_icon'))
+              .height(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 32 : 40)
             Text($r('app.string.app_name'))
-              .fontColor($r('app.color.text_primary'))
-              .fontSize(18)
+              .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                $r('sys.color.font_primary') : $r('app.color.text_primary'))
+              .fontSize(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 22 : 18)
               .fontWeight(FontWeight.Bold)
           }
 
@@ -101,7 +104,8 @@ export struct HomeTab {
           if (this.ui.hasLiveTv) {
             Image($r('app.media.iptv'))
               .height(40)
-              .fillColor($r('app.color.text_primary'))
+              .fillColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                $r('sys.color.icon_primary') : $r('app.color.text_primary'))
               .padding(9)
               .onClick(() => {
                 HMRouterMgr.to(RouterConsts.LiveTvPage).push()
@@ -112,14 +116,17 @@ export struct HomeTab {
             .fontWeight(FontWeight.Medium)
             .align(Alignment.Center)
             .height(40)
-            .fontColor([$r('app.color.text_primary')])
+            .fontColor([AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+              $r('sys.color.icon_primary') : $r('app.color.text_primary')])
             .onClick(() => {
               HMRouterMgr.to(RouterConsts.SearchPage).push()
             })
         }.width('100%').height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
         .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
         .padding({
-          left: 8, right: 16, top: this.vm.appUIState.safeTop
+          left: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 16 : 8,
+          right: 16,
+          top: this.vm.appUIState.safeTop
         })
       }
     }

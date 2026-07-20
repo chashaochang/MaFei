@@ -47,11 +47,12 @@ export struct MineTab {
                 },
                 placeholderSrc: $r('app.media.default_avatar')
               }
-            }).width(64).height(64).margin({ left: 12 })
+            }).width(64).height(64)
             Column({ space: 4 }) {
               Row({ space: 12 }) {
                 Text(this.ui.userName)
-                  .fontColor($r('app.color.text_primary'))
+                  .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                    $r('sys.color.font_primary') : $r('app.color.text_primary'))
                   .fontSize(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 20 : 24)
                   .fontWeight(FontWeight.Medium)
                 Text(this.ui.userPolicy)
@@ -68,11 +69,13 @@ export struct MineTab {
               }
 
               Text(this.ui.serverName)
-                .fontColor($r('app.color.text_1'))
+                .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                  $r('sys.color.font_secondary') : $r('app.color.text_1'))
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
               Text(this.ui.serverVersion)
-                .fontColor($r('app.color.text_2'))
+                .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                  $r('sys.color.font_tertiary') : $r('app.color.text_2'))
                 .fontSize(12)
                 .fontWeight(FontWeight.Medium)
             }.alignItems(HorizontalAlign.Start)
@@ -84,7 +87,7 @@ export struct MineTab {
             bottom: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 14 : 8
           })
           .backgroundColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-            $r('app.color.bg_1') : Color.Transparent)
+            $r('sys.color.comp_background_secondary') : Color.Transparent)
           .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
 
           ListGroup({
@@ -159,9 +162,13 @@ export struct MineTab {
               this.vm.logout()
             }
           })
-        }.padding({
+        }
+        .width('100%')
+        .constraintSize({ maxWidth: 680 })
+        .padding({
           left: 16,
-          right: 16
+          right: 16,
+          bottom: this.vm.appUIState.safeBottom + UIConstants.BOTTOM_BAR_HEIGHT + 16
         })
       }
       .width('100%')
@@ -203,9 +210,6 @@ export struct MineTab {
       }
       .width('100%')
       .height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
-      .padding({
-        left: 8, right: 16, top: this.vm.appUIState.safeTop
-      })
       .justifyContent(FlexAlign.Center)
     }
     .backgroundColor($r('app.color.bg_main'))

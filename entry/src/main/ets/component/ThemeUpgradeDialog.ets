@@ -5,29 +5,53 @@ export struct ThemeUpgradeDialog {
   @Require @Param onDismiss: () => void
 
   @Builder
-  themePreview(title: ResourceStr, nativeStyle: boolean) {
-    Column({ space: 8 }) {
-      Text(title)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
+  previewCard(highlight: boolean) {
+    Column({ space: 5 }) {
+      Row()
         .width('100%')
-      Column({ space: 5 }) {
-        Row().height(7).width('100%').borderRadius(4).backgroundColor($r('app.color.text_2'))
-        Row().height(7).width('68%').borderRadius(4).backgroundColor($r('app.color.text_2'))
-      }
-      .width('100%')
-      .padding(8)
-      .borderRadius(nativeStyle ? 14 : 7)
-      .backgroundColor($r('app.color.component_bg'))
+        .aspectRatio(2 / 3)
+        .backgroundColor(highlight ? $r('app.color.primary_light_hover') :
+          $r('sys.color.comp_background_tertiary'))
+        .borderRadius(10)
+      Row()
+        .height(5)
+        .width('78%')
+        .backgroundColor($r('sys.color.font_secondary'))
+        .borderRadius(3)
     }
     .layoutWeight(1)
-    .padding(10)
-    .borderRadius(nativeStyle ? 18 : 8)
-    .borderWidth(1)
-    .borderColor($r('app.color.border'))
-    .backgroundColor($r('app.color.bg_1'))
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  nativeThemePreview() {
+    Column() {
+      Row() {
+        Column({ space: 5 }) {
+          Row().height(8).width(86).borderRadius(4).backgroundColor($r('sys.color.font_primary'))
+          Row().height(6).width(132).borderRadius(3).backgroundColor($r('sys.color.font_secondary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank()
+        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_primary')])
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      Row({ space: 8 }) {
+        this.previewCard(true)
+        this.previewCard(false)
+        this.previewCard(false)
+      }
+      .width('100%')
+      .margin({ top: 14 })
+    }
+    .width('100%')
+    .height(150)
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor($r('sys.color.comp_background_secondary'))
   }
 
   build() {
@@ -43,12 +67,8 @@ export struct ThemeUpgradeDialog {
           .fontSize(14)
           .fontColor($r('app.color.text_1'))
           .width('100%')
-        Row({ space: 10 }) {
-          this.themePreview($r('app.string.theme_feiniu_name'), false)
-          this.themePreview($r('app.string.theme_native_name'), true)
-        }
-        .width('100%')
-        Button($r('app.string.theme_prompt_feiniu_action'), { type: ButtonType.Normal })
+        this.nativeThemePreview()
+        Button($r('app.string.theme_prompt_native_action'), { type: ButtonType.Normal })
           .width('100%')
           .height(44)
           .fontSize(15)
@@ -57,9 +77,9 @@ export struct ThemeUpgradeDialog {
           .backgroundColor($r('app.color.color_main'))
           .borderRadius(14)
           .onClick(() => {
-            this.onSelectFeiniu()
+            this.onSelectNative()
           })
-        Button($r('app.string.theme_prompt_native_action'), { type: ButtonType.Normal })
+        Button($r('app.string.theme_prompt_feiniu_action'), { type: ButtonType.Normal })
           .width('100%')
           .height(44)
           .fontSize(15)
@@ -68,24 +88,24 @@ export struct ThemeUpgradeDialog {
           .backgroundColor($r('app.color.component_bg'))
           .borderRadius(14)
           .onClick(() => {
-            this.onSelectNative()
+            this.onSelectFeiniu()
           })
       }
       .width('100%')
       .padding(20)
-      .backgroundColor($r('app.color.bg_1'))
+      .backgroundColor($r('sys.color.comp_background_primary'))
       .borderRadius(24)
       .alignItems(HorizontalAlign.Start)
 
       Button({ type: ButtonType.Circle }) {
         SymbolGlyph($r('sys.symbol.xmark'))
           .fontSize(16)
-          .fontColor([$r('app.color.text_1')])
+          .fontColor([$r('sys.color.icon_secondary')])
       }
       .width(36)
       .height(36)
       .margin({ top: 12, right: 12 })
-      .backgroundColor($r('app.color.component_bg'))
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
       .onClick(() => {
         this.onDismiss()
       })

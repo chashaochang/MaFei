@@ -6,11 +6,11 @@ export class AppThemeTokens {
   }
 
   static groupRadius(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 20 : 8
+    return AppThemeTokens.isNative(style) ? 16 : 8
   }
 
   static groupSpacing(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 14 : 8
+    return AppThemeTokens.isNative(style) ? 12 : 8
   }
 
   static listRowHeight(style: ThemeStyle): number {
@@ -18,11 +18,11 @@ export class AppThemeTokens {
   }
 
   static iconWellSize(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 38 : 18
+    return AppThemeTokens.isNative(style) ? 36 : 18
   }
 
   static iconWellRadius(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 12 : 0
+    return AppThemeTokens.isNative(style) ? 10 : 0
   }
 
   static profileRadius(style: ThemeStyle): number {
@@ -38,7 +38,7 @@ export class AppThemeTokens {
   }
 
   static mediaRadius(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 10 : 6
+    return AppThemeTokens.isNative(style) ? 12 : 6
   }
 
   static showMineBackground(style: ThemeStyle): boolean {
@@ -54,6 +54,21 @@ export class AppThemeTokens {
   }
 
   static useMediaShadow(style: ThemeStyle): boolean {
-    return AppThemeTokens.isNative(style)
+    return false
+  }
+
+  static actionSize(style: ThemeStyle): number {
+    return AppThemeTokens.isNative(style) ? 40 : 48
+  }
+
+  static titleSize(style: ThemeStyle): number {
+    return AppThemeTokens.isNative(style) ? 20 : 18
+  }
+
+  static pageHorizontalPadding(style: ThemeStyle, isBigScreen: boolean): number {
+    if (!AppThemeTokens.isNative(style)) {
+      return 0
+    }
+    return isBigScreen ? 24 : 16
   }
 }

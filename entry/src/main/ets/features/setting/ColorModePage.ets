@@ -59,20 +59,24 @@ export struct ColorModePage {
   themePreview(style: ThemeStyle) {
     Column({ space: 5 }) {
       Row().height(8).width('100%')
-        .backgroundColor($r('app.color.text_2'))
+        .backgroundColor(style === ThemeStyle.Native ?
+          $r('sys.color.font_secondary') : $r('app.color.text_2'))
         .borderRadius(4)
       Row().height(8).width('82%')
-        .backgroundColor($r('app.color.text_2'))
+        .backgroundColor(style === ThemeStyle.Native ?
+          $r('sys.color.font_secondary') : $r('app.color.text_2'))
         .borderRadius(4)
       Row().height(8).width('58%')
-        .backgroundColor($r('app.color.text_2'))
+        .backgroundColor(style === ThemeStyle.Native ?
+          $r('sys.color.font_secondary') : $r('app.color.text_2'))
         .borderRadius(4)
     }
     .width(72)
     .height(54)
     .padding(8)
     .justifyContent(FlexAlign.Center)
-    .backgroundColor($r('app.color.primary_light_hover'))
+    .backgroundColor(style === ThemeStyle.Native ?
+      $r('sys.color.comp_background_tertiary') : $r('app.color.primary_light_hover'))
     .borderRadius(AppThemeTokens.groupRadius(style))
   }
 
@@ -84,10 +88,12 @@ export struct ColorModePage {
         Text(title)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .fontColor(style === ThemeStyle.Native ?
+            $r('sys.color.font_primary') : $r('app.color.text_primary'))
         Text(description)
           .fontSize(12)
-          .fontColor($r('app.color.text_1'))
+          .fontColor(style === ThemeStyle.Native ?
+            $r('sys.color.font_secondary') : $r('app.color.text_1'))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -102,7 +108,8 @@ export struct ColorModePage {
     .width('100%')
     .height(86)
     .padding(12)
-    .backgroundColor($r('app.color.bg_1'))
+    .backgroundColor(style === ThemeStyle.Native ?
+      $r('sys.color.comp_background_secondary') : $r('app.color.bg_1'))
     .borderRadius(AppThemeTokens.groupRadius(style))
     .borderWidth(this.selectedTheme === style ? 2 : 1)
     .borderColor(this.selectedTheme === style ? $r('app.color.color_main') : $r('app.color.border'))
@@ -119,7 +126,9 @@ export struct ColorModePage {
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.selectedColorMode === item.mode ?
-            $r('app.color.on_primary') : $r('app.color.text_1'))
+            $r('app.color.on_primary') :
+            (AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+              $r('sys.color.font_secondary') : $r('app.color.text_1')))
           .backgroundColor(this.selectedColorMode === item.mode ?
             $r('app.color.color_main') : Color.Transparent)
           .borderRadius(11)
@@ -133,7 +142,8 @@ export struct ColorModePage {
     .width('100%')
     .padding(5)
     .borderRadius(16)
-    .backgroundColor($r('app.color.component_bg'))
+    .backgroundColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.comp_background_secondary') : $r('app.color.component_bg'))
   }
 
   build() {
@@ -146,7 +156,8 @@ export struct ColorModePage {
           Text($r('app.string.theme_style_title'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_1'))
+            .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+              $r('sys.color.font_secondary') : $r('app.color.text_1'))
             .width('100%')
             .margin({ left: 4 })
           this.themeChoice(
@@ -162,13 +173,15 @@ export struct ColorModePage {
           Text($r('app.string.color_mode_title'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_1'))
+            .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+              $r('sys.color.font_secondary') : $r('app.color.text_1'))
             .width('100%')
             .margin({ top: 10, left: 4 })
           this.colorModeSelector()
           Text($r('app.string.color_mode_auto_desc'))
             .fontSize(12)
-            .fontColor($r('app.color.text_2'))
+            .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+              $r('sys.color.font_tertiary') : $r('app.color.text_2'))
             .width('100%')
             .margin({ left: 4 })
             .visibility(this.selectedColorMode === CustomColorMode.Auto ?

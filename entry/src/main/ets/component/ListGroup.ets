@@ -11,7 +11,8 @@ export struct ListGroup {
 
   @Styles
   pressedStyles(): void {
-    .backgroundColor($r('app.color.bg_hover'))
+    .backgroundColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.comp_background_tertiary') : $r('app.color.bg_hover'))
   }
 
   @Styles
@@ -29,17 +30,18 @@ export struct ListGroup {
                 .width(18)
                 .height(18)
                 .fillColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
-                  $r('app.color.color_main') : $r('app.color.text_primary'))
+                  $r('sys.color.icon_primary') : $r('app.color.text_primary'))
             }
             .width(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
             .height(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
             .borderRadius(AppThemeTokens.iconWellRadius(this.appUIState.themeStyle))
             .backgroundColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
-              $r('app.color.primary_light_hover') : Color.Transparent)
+              $r('sys.color.comp_background_tertiary') : Color.Transparent)
             .visibility(item.icon != '' ? Visibility.Visible : Visibility.None)
             Column({ space: 3 }) {
               Text(item.name)
-                .fontColor($r('app.color.text_primary'))
+                .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+                  $r('sys.color.font_primary') : $r('app.color.text_primary'))
                 .fontSize(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ? 14 : 13)
                 .fontWeight(FontWeight.Medium)
                 .width('100%')
@@ -47,7 +49,7 @@ export struct ListGroup {
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               if (item.description !== '' && AppThemeTokens.showIconWell(this.appUIState.themeStyle)) {
                 Text(item.description)
-                  .fontColor($r('app.color.text_1'))
+                  .fontColor($r('sys.color.font_secondary'))
                   .fontSize(12)
                   .width('100%')
                   .maxLines(1)
@@ -58,12 +60,14 @@ export struct ListGroup {
             .alignItems(HorizontalAlign.Start)
             .justifyContent(FlexAlign.Center)
             Text(item.rightText)
-              .fontColor($r('app.color.text_1'))
+              .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+                $r('sys.color.font_secondary') : $r('app.color.text_1'))
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
             SymbolGlyph($r('sys.symbol.chevron_right'))
               .fontSize(13)
-              .fontColor([$r('app.color.text_primary')])
+              .fontColor([AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+                $r('sys.color.icon_secondary') : $r('app.color.text_primary')])
               .fontWeight(FontWeight.Bold)
               .visibility(item.showArrow ? Visibility.Visible : Visibility.None)
           }
@@ -83,14 +87,16 @@ export struct ListGroup {
           if (index < this.items.length - 1) {
             Divider()
               .height('0.5px')
-              .backgroundColor($r('app.color.border'))
+              .backgroundColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+                $r('sys.color.comp_divider') : $r('app.color.border'))
               .margin({
                 left: 16,
                 right: 16
               })
           }
         })
-      }.backgroundColor($r('app.color.bg_1'))
+      }.backgroundColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+        $r('sys.color.comp_background_secondary') : $r('app.color.bg_1'))
       .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
     }
   }

@@ -137,10 +137,6 @@ export struct BaseItemCard {
       .aspectRatio(2 / 3)
       .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
       .clip(true)
-      .shadow({
-        radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
-        color: $r('app.color.border')
-      })
 
       Text(this.title)
         .fontColor($r('app.color.text_primary'))

@@ -2,9 +2,9 @@ import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
 import { HORIZONTAL_CARD_HEIGHT, HORIZONTAL_CARD_WIDTH } from "../common/OneMoreConst";
+import { AppThemeTokens } from "../theme/AppThemeTokens";
 import { hdsEffect } from "@kit.UIDesignKit";
 import { ColorUtils } from "../utils/ColorUtils";
-import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct HorizontalVideoCard {
@@ -16,7 +16,7 @@ export struct HorizontalVideoCard {
   @Param subtitle: string = ''
   //进度
   @Param percent?: number = undefined
-  //第几个用于展示点光源
+  //第几个卡片
   @Param index?: number = 0
   @Local pointLightColor: string = '#FFFFFF'
   @Local option: ImageKnifeOption = {
@@ -28,7 +28,8 @@ export struct HorizontalVideoCard {
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
     onComplete: () => {
-      if (this.appUIState.isBigScreen && this.index === 0 && this.image.length > 0) {
+      if (!AppThemeTokens.isNative(this.appUIState.themeStyle) && this.appUIState.isBigScreen &&
+        this.index === 0 && this.image.length > 0) {
         ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
           this.pointLightColor = color
         })
@@ -39,75 +40,40 @@ export struct HorizontalVideoCard {
 
   build() {
     Column({ space: 8 }) {
-      if (this.index === 0) {
-        // 第一个图片添加光源效果 - 使用外层Stack
-        Stack() {
-          ImageKnifeComponent({
-            imageKnifeOption: this.option
-          })
-            .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-            .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-            .borderColor($r('app.color.border_1'))
-            .borderWidth(0.5)
-            .backgroundColor($r('app.color.bg_2'))
-          Progress({
-            value: this.percent || 0,
-            total: 100,
-            type: ProgressType.Linear,
-          })
-            .height(4)
-            .layoutWeight(1)
-            .color('#3B82F6')
-        }
-        .alignContent(Alignment.Bottom)
-        .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
-        .clip(true)
-        .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-        .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-        .visualEffect(new hdsEffect.HdsEffectBuilder()
-          .pointLight({
-            illuminatedType: this.appUIState.illuminatedType,
-            options: {
-              color: this.pointLightColor,
-              intensity: 2,
-              height: HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint),
-            }
-          })
-          .buildEffect())
-        .shadow({
-          radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
-          color: $r('app.color.border')
+      Stack() {
+        ImageKnifeComponent({
+          imageKnifeOption: this.option
         })
-
-      } else {
-        Stack() {
-          ImageKnifeComponent({
-            imageKnifeOption: this.option
-          })
-            .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-            .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-            .borderColor($r('app.color.border_1'))
-            .borderWidth(0.5)
-            .backgroundColor($r('app.color.bg_2'))
-          Progress({
-            value: this.percent || 0,
-            total: 100,
-            type: ProgressType.Linear,
-          })
-            .height(4)
-            .layoutWeight(1)
-            .color('#3B82F6')
-        }
-        .alignContent(Alignment.Bottom)
-        .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
-        .clip(true)
-        .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-        .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-        .shadow({
-          radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
-          color: $r('app.color.border')
+          .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
+          .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+          .borderColor($r('app.color.border_1'))
+          .borderWidth(0.5)
+          .backgroundColor($r('app.color.bg_2'))
+        Progress({
+          value: this.percent || 0,
+          total: 100,
+          type: ProgressType.Linear,
         })
+          .height(4)
+          .layoutWeight(1)
+          .color('#3B82F6')
       }
+      .alignContent(Alignment.Bottom)
+      .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
+      .clip(true)
+      .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
+      .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+      .visualEffect(new hdsEffect.HdsEffectBuilder()
+        .pointLight({
+          illuminatedType: !AppThemeTokens.isNative(this.appUIState.themeStyle) && this.index === 0 ?
+            this.appUIState.illuminatedType : hdsEffect.PointLightIlluminatedType.NONE,
+          options: {
+            color: this.pointLightColor,
+            intensity: 2,
+            height: HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint),
+          }
+        })
+        .buildEffect())
 
       Text(this.name)
         .fontColor($r('app.color.text_primary'))

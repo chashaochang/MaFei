@@ -6,7 +6,12 @@ import { MineTab } from "./minetab/MineTab";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { BreakpointSystem, BreakpointTypeEnum } from "../../utils/BreakpointSystem";
 import {
-  hdsEffect
+  DividerMode,
+  hdsEffect,
+  hdsMaterial,
+  HdsTabs,
+  HdsTabsController,
+  HdsTabsModifier
 } from "@kit.UIDesignKit";
 import { CustomTab } from "../../component/tabbar/CustomTab";
 import { HomeScreenUIState, PadMenuItem, PadMenuType } from "./HomeScreenUIState";
@@ -21,18 +26,22 @@ import { VideoListPage } from "../videolist/VideoListPage";
 import { LoadingView } from "../../ui/components/LoadingView";
 import { MediaItem } from "./hometab/HomeUIState";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
+import { UIConstants } from "../../common/UIConstants";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
 import { ThemeUpgradeDialog } from "../../component/ThemeUpgradeDialog";
 import { ThemeStyle } from "../../entity/ThemeStyle";
 import { ThemePromptService } from "../../theme/ThemePromptService";
+import { AppThemeTokens } from "../../theme/AppThemeTokens";
+import { HdsUiCapability } from "../../theme/HdsUiCapability";
 
 @ComponentV2
 export struct HomeScreen {
   private breakpointSystem: BreakpointSystem = new BreakpointSystem();
   @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-  private tabsController = new TabsController()
+  private tabsController: HdsTabsController = new HdsTabsController()
   private padTabsController = new TabsController()
+  private nativeTabsModifier: HdsTabsModifier = new HdsTabsModifier()
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
   private lastTime: number = 0;
@@ -43,11 +52,7 @@ export struct HomeScreen {
 
   @Monitor('appUIState.currentBreakpoint')
   onBreakpointChange() {
-    if (!this.appUIState.currentBreakpoint.includes('s')) {
-      this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER
-    } else {
-      this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.NONE
-    }
+    this.updateIlluminatedType()
     this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
     if (this.appUIState.currentBreakpoint.includes('l')) {
       this.ui.isMenuModalVisible = false
@@ -55,9 +60,50 @@ export struct HomeScreen {
     }
   }
 
+  @Monitor('appUIState.themeStyle')
+  onThemeStyleChange() {
+    this.updateIlluminatedType()
+    this.configureNativeTabs()
+  }
+
+  @Monitor('appUIState.safeBottom')
+  onSafeBottomChange() {
+    this.configureNativeTabs()
+  }
+
+  private useNativeTabs(): boolean {
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) && HdsUiCapability.supportsSystemMaterial()
+  }
+
+  private updateIlluminatedType(): void {
+    if (!this.appUIState.currentBreakpoint.includes('s')) {
+      this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER
+      return
+    }
+    this.appUIState.illuminatedType = hdsEffect.PointLightIlluminatedType.NONE
+  }
+
+  private configureNativeTabs(): void {
+    this.nativeTabsModifier = new HdsTabsModifier()
+    this.nativeTabsModifier
+      .vertical(false)
+      .barPosition(BarPosition.End)
+      .barHeight(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)
+      .barFloatingStyle({
+        adaptToHandedness: true,
+        barBottomMargin: this.appUIState.safeBottom,
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
+        },
+      })
+  }
+
   aboutToAppear() {
     this.breakpointSystem.register(this.getUIContext());
     this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
+    this.updateIlluminatedType()
+    this.configureNativeTabs()
     this.vm.init()
     getUIAbilityContext().eventHub.on(HomeBackPressedEvent, () => {
       //点两次退出
@@ -309,26 +355,45 @@ export struct HomeScreen {
     .borderWidth(1)
     .borderRadius(20)
     .visualEffect(new hdsEffect.HdsEffectBuilder().pointLight({
-      illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
+      illuminatedType: this.appUIState.illuminatedType,
     }).buildEffect())
   }
 
   @Builder
-  tabBuilder(title: string, targetIndex: number, selectedImg: Resource, normalImg: Resource) {
+  tabBuilder(title: string, targetIndex: number, selectedImg: Resource, normalImg: Resource,
+    badgeCount: number = 0) {
     Column({ space: 4 }) {
-      Image(this.ui.selectedIndex === targetIndex ? selectedImg : normalImg)
-        .size({ width: 20, height: 20 })
-        .fillColor(this.ui.selectedIndex === targetIndex ? $r('app.color.color_main') :
-          $r('app.color.text_primary'))
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Image(this.ui.selectedIndex === targetIndex ? selectedImg : normalImg)
+          .size({ width: 20, height: 20 })
+          .fillColor(this.ui.selectedIndex === targetIndex ? $r('app.color.color_main') :
+            (this.useNativeTabs() ? $r('sys.color.icon_primary') : $r('app.color.text_primary')))
+        if (badgeCount > 0) {
+          Text(badgeCount > 99 ? '99+' : badgeCount.toString())
+            .fontSize(9)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .height(14)
+            .width(badgeCount > 9 ? 22 : 14)
+            .padding({ left: 4, right: 4 })
+            .backgroundColor('#ff4d4f')
+            .borderRadius(7)
+            .translate({ x: 8, y: -5 })
+        }
+      }
+      .width(32)
+      .height(22)
+      .alignContent(Alignment.Center)
       Text(title)
         .fontSize(14)
         .fontColor(this.ui.selectedIndex === targetIndex ? $r('app.color.color_main') :
-          $r('app.color.text_primary'))
+          (this.useNativeTabs() ? $r('sys.color.font_primary') : $r('app.color.text_primary')))
     }
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.ui.selectedIndex === targetIndex ? $r('app.color.bg_tab') : Color.Transparent)
-    .borderRadius(99)
+    .backgroundColor(this.ui.selectedIndex === targetIndex && !this.useNativeTabs() ?
+      $r('app.color.bg_tab') : Color.Transparent)
+    .borderRadius(this.useNativeTabs() ? 0 : 99)
     .width(70)
   }
 
@@ -560,7 +625,7 @@ export struct HomeScreen {
         .alignContent(Alignment.TopStart)
       } else {
         Stack() {
-          Tabs({
+          HdsTabs({
             barPosition: BarPosition.End,
             controller: this.tabsController
           }) {
@@ -572,7 +637,8 @@ export struct HomeScreen {
             TabContent() {
               ChasingTab()
             }
-            .tabBar(this.tabBuilder('追剧', 1, $r('app.media.history'), $r('app.media.history')))
+            .tabBar(this.tabBuilder('追剧', 1, $r('app.media.history'), $r('app.media.history'),
+              this.ui.chasingCount))
 
             TabContent() {
               FavoriteListPage()
@@ -594,17 +660,13 @@ export struct HomeScreen {
               left: this.appUIState.currentBreakpoint.includes('l') ? 97 : 0
             })
           }
-          .barHeight(0)
-          // .barHeight(this.appUIState.currentBreakpoint.includes('l') ? '100%' : 0)
-          // .barWidth(this.appUIState.currentBreakpoint.includes('l') ? 0 : '')
-          .barMode(this.appUIState.currentBreakpoint.includes('l') ? BarMode.Scrollable : BarMode.Fixed,
-            { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })
-          .vertical(this.appUIState.currentBreakpoint.includes('l'))
-          // .barBackgroundColor(Color.Transparent)
-          // .barOverlap(true)
-          // .onChange((index: number) => {
-          //   this.selectedIndex = index
-          // })
+          .barHeight(this.useNativeTabs() ? UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom : 0)
+          .barMode(BarMode.Fixed, { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })
+          .vertical(false)
+          .divider({ mode: DividerMode.NONE })
+          .barOverlap(true)
+          .animationDuration(0)
+          .attributeModifier(this.useNativeTabs() ? this.nativeTabsModifier : undefined)
           .onAnimationStart((index: number, targetIndex: number, event: TabsAnimationEvent) => {
             if (index === targetIndex) {
               return
@@ -627,7 +689,8 @@ export struct HomeScreen {
           }).margin({
             bottom: this.appUIState.safeBottom,
           })
-            .visibility(this.appUIState.isBigScreen ? Visibility.None : Visibility.Visible)
+            .visibility(this.appUIState.isBigScreen || this.useNativeTabs() ?
+              Visibility.None : Visibility.Visible)
         }.alignContent(Alignment.Bottom)
       }
     }
