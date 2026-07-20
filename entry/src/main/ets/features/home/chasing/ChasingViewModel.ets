@@ -1,5 +1,4 @@
 import { AxiosResponse } from "@ohos/axios";
-import { ChasePlanner } from "sharedbridge";
 import { getItemsApi, getTvShowsApi, ImageUrlsApi } from "sdk";
 import {
   BaseItemDto,
@@ -14,7 +13,8 @@ import { getItemBackDropImageUrl } from "../../../common/CommonFunc";
 import { AppPreference } from "../../../data/AppPreference";
 import { ApiClient } from "../../../network/ApiClient";
 import { VideoItem } from "../hometab/HomeUIState";
-import { ChasePlanResult, ChaseSection, ChasingUIState } from "./ChasingUIState";
+import { ChasingUIState } from "./ChasingUIState";
+import { ChasePlanner } from "./ChasePlanner";
 
 export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
   private imageApi: ImageUrlsApi = new ImageUrlsApi()
@@ -96,31 +96,10 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
   private applyPlan(continueItems: VideoItem[], nextUpItems: VideoItem[]): void {
     this.ui.continueCount = continueItems.length
     this.ui.nextUpCount = nextUpItems.length
-    const input = JSON.stringify({
-      continueItems,
-      nextUpItems
-    })
-    const planner = new ChasePlanner()
-    try {
-      const result = JSON.parse(planner.plan(input)) as ChasePlanResult
-      if (result.ok) {
-        this.ui.summary = result.summary
-        this.ui.totalCount = result.totalCount
-        this.ui.sections = result.sections
-        return
-      }
-      console.warn(`[ChasingVM] KMP planner returned failed result: ${result.summary}`)
-    } catch (e) {
-      console.error(`[ChasingVM] KMP planner failed: ${JSON.stringify(e)}`)
-    } finally {
-      planner.dispose()
-    }
-    this.ui.summary = `继续观看 ${continueItems.length} · 接下来 ${nextUpItems.length}`
-    this.ui.totalCount = continueItems.length + nextUpItems.length
-    this.ui.sections = [
-      { kind: 'continue', title: '继续观看', subtitle: `${continueItems.length} 个内容可继续播放`, items: continueItems },
-      { kind: 'nextUp', title: '接下来', subtitle: `${nextUpItems.length} 集等待播放`, items: nextUpItems }
-    ] as ChaseSection[]
+    const result = new ChasePlanner().plan(continueItems, nextUpItems)
+    this.ui.summary = result.summary
+    this.ui.totalCount = result.totalCount
+    this.ui.sections = result.sections
   }
 
   private mapResumeItem(item: BaseItemDto): VideoItem {

@@ -201,11 +201,11 @@ export struct AboutPage{
             this.SectionTitle('2.0 方向')
 
             Column() {
-              this.InfoItem('重构方向', 'Kotlin Multiplatform 共享逻辑层')
+              this.InfoItem('产品方向', '完善 HarmonyOS 原生 Jellyfin 管理与播放体验')
               Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('当前阶段', 'HarmonyOS 1.x 稳定维护，2.0 跨平台开发中')
+              this.InfoItem('当前阶段', 'HarmonyOS 1.x 稳定维护，2.0 管理功能增强')
               Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('共享边界', '业务规则下沉到 shared，端侧 UI 保持原生实现')
+              this.InfoItem('开发重点', '主题系统先行，逐步补齐服务器管理能力')
             }
             .backgroundColor('#1a1a1a')
             .borderRadius(12)

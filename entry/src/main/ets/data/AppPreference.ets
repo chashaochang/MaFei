@@ -3,22 +3,14 @@ import { preferences } from '@kit.ArkData';
 import { CustomColorMode } from '../entity/CustomColorMode';
 import { PlayerEngineType } from '../entity/PlayerEngineType';
 import { Constants } from '../utils/Constants';
-import { ChaseFollowStore } from 'sharedbridge';
 import { ThemeStyle } from '../entity/ThemeStyle';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
-
-interface ChaseFollowResult {
-  ok: boolean,
-  following: boolean,
-  ids: string[],
-}
 
 export class AppPreference {
   private preferences?: preferences.Preferences;
   private context = getContext(this) as common.UIAbilityContext;
   private static instance: AppPreference;
-  private chaseFollowStore: ChaseFollowStore = new ChaseFollowStore();
 
   private constructor() {
     this.initPreference(PREFERENCES_NAME);
@@ -224,18 +216,21 @@ export class AppPreference {
     const serverSystemId = this.getCurrentServerSystemId()
     const serverId = this.getCurrentServerId()
     const userId = this.getCurrentUserId()
-    return this.chaseFollowStore.preferenceKey(serverSystemId, serverId !== null ? serverId.toString() : '', userId)
+    const serverKey = serverSystemId.trim().length > 0 ? serverSystemId :
+      (serverId !== null ? serverId.toString() : 'default')
+    const userKey = userId.trim().length > 0 ? userId : 'default'
+    return `${Constants.PREF_CHASING_SERIES_IDS}_${serverKey}_${userKey}`
   }
 
-  private parseChaseFollowResult(resultJson: string): ChaseFollowResult {
-    try {
-      const result = JSON.parse(resultJson) as ChaseFollowResult
-      if (result.ok && result.ids) {
-        return result
+  private normalizeChasingSeriesIds(ids: string[]): string[] {
+    const result: string[] = []
+    ids.forEach((item: string) => {
+      const id = item.trim()
+      if (id.length > 0 && result.indexOf(id) < 0) {
+        result.push(id)
       }
-    } catch (error) {
-    }
-    return { ok: false, following: false, ids: [] }
+    })
+    return result
   }
 
   getChasingSeriesIds(): string[] {
@@ -243,37 +238,37 @@ export class AppPreference {
     if (ids === null) {
       return []
     }
-    return this.parseChaseFollowResult(this.chaseFollowStore.normalize(JSON.stringify(ids))).ids
+    return this.normalizeChasingSeriesIds(ids)
   }
 
   setChasingSeriesIds(ids: string[]) {
-    const normalizedIds = this.parseChaseFollowResult(this.chaseFollowStore.normalize(JSON.stringify(ids))).ids
-    this.setValue<string[]>(this.getChasingSeriesIdsKey(), normalizedIds)
+    this.setValue<string[]>(this.getChasingSeriesIdsKey(), this.normalizeChasingSeriesIds(ids))
   }
 
   isChasingSeries(seriesId: string): boolean {
     if (seriesId.length === 0) {
       return false
     }
-    return this.chaseFollowStore.contains(JSON.stringify(this.getChasingSeriesIds()), seriesId)
+    return this.getChasingSeriesIds().indexOf(seriesId) >= 0
   }
 
   setChasingSeries(seriesId: string, chasing: boolean): boolean {
-    if (seriesId.length === 0) {
+    const normalizedId = seriesId.trim()
+    if (normalizedId.length === 0) {
       return false
     }
-    const result = this.parseChaseFollowResult(
-      this.chaseFollowStore.setFollowing(JSON.stringify(this.getChasingSeriesIds()), seriesId, chasing)
-    )
-    this.setChasingSeriesIds(result.ids)
-    return result.following
+    const currentIds = this.getChasingSeriesIds()
+    const nextIds = chasing ? currentIds.concat([normalizedId]) :
+      currentIds.filter((id: string): boolean => id !== normalizedId)
+    this.setChasingSeriesIds(nextIds)
+    return chasing
   }
 
   toggleChasingSeries(seriesId: string): boolean {
-    const result = this.parseChaseFollowResult(
-      this.chaseFollowStore.toggleFollowing(JSON.stringify(this.getChasingSeriesIds()), seriesId)
-    )
-    this.setChasingSeriesIds(result.ids)
-    return result.following
+    const normalizedId = seriesId.trim()
+    if (normalizedId.length === 0) {
+      return false
+    }
+    return this.setChasingSeries(normalizedId, !this.isChasingSeries(normalizedId))
   }
 }
