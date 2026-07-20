@@ -11,6 +11,70 @@
     {
       "name": "EntryAbility_label",
       "value": "马飞"
+    },
+    {
+      "name": "appearance_title",
+      "value": "Appearance & Theme"
+    },
+    {
+      "name": "theme_style_title",
+      "value": "Theme style"
+    },
+    {
+      "name": "theme_native_name",
+      "value": "Native theme"
+    },
+    {
+      "name": "theme_native_desc",
+      "value": "Roomier system hierarchy and rounded components"
+    },
+    {
+      "name": "theme_feiniu_name",
+      "value": "Feiniu theme"
+    },
+    {
+      "name": "theme_feiniu_desc",
+      "value": "Keep MaFei's current compact layout"
+    },
+    {
+      "name": "color_mode_title",
+      "value": "Color mode"
+    },
+    {
+      "name": "color_mode_auto_desc",
+      "value": "Follow the device light and dark setting"
+    },
+    {
+      "name": "theme_prompt_title",
+      "value": "Choose your theme"
+    },
+    {
+      "name": "theme_prompt_content",
+      "value": "Try the new Native theme or keep the familiar Feiniu theme."
+    },
+    {
+      "name": "theme_prompt_feiniu_action",
+      "value": "Keep Feiniu theme"
+    },
+    {
+      "name": "theme_prompt_native_action",
+      "value": "Try Native theme"
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "Could not save the theme. Try again."
+    },
+    {
+      "name": "account_switch_desc",
+      "value": "Manage servers and signed-in users"
+    },
+    {
+      "name": "web_itong_desc",
+      "value": "Open the server Web page"
+    },
+    {
+      "name": "player_engine_desc",
+      "value": "Choose the player and decoding mode"
     }
   ]
 }

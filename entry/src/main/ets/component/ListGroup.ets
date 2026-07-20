@@ -1,8 +1,13 @@
+import { AppStorageV2 } from '@kit.ArkUI';
+import { AppUIState } from '../entity/AppUIState';
+import { AppThemeTokens } from '../theme/AppThemeTokens';
+
 @ComponentV2
 export struct ListGroup {
   @Param items: Array<BaseGroupItem> = []
   @Param onItemClick: (index: number) => void = (_index: number) => {
   }
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   @Styles
   pressedStyles(): void {
@@ -15,20 +20,43 @@ export struct ListGroup {
   }
 
   build() {
-    Column({ space: 8 }) {
+    Column({ space: AppThemeTokens.groupSpacing(this.appUIState.themeStyle) }) {
       Column() {
         ForEach(this.items, (item: BaseGroupItem, index) => {
           Row({ space: 10 }) {
-            Image(item.icon)
-              .width(18)
-              .height(18)
-              .fillColor($r('app.color.text_primary'))
-              .visibility(item.icon != '' ? Visibility.Visible : Visibility.None)
-            Text(item.name)
-              .fontColor($r('app.color.text_primary'))
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .layoutWeight(1)
+            Stack() {
+              Image(item.icon)
+                .width(18)
+                .height(18)
+                .fillColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
+                  $r('app.color.color_main') : $r('app.color.text_primary'))
+            }
+            .width(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
+            .height(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
+            .borderRadius(AppThemeTokens.iconWellRadius(this.appUIState.themeStyle))
+            .backgroundColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
+              $r('app.color.primary_light_hover') : Color.Transparent)
+            .visibility(item.icon != '' ? Visibility.Visible : Visibility.None)
+            Column({ space: 3 }) {
+              Text(item.name)
+                .fontColor($r('app.color.text_primary'))
+                .fontSize(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ? 14 : 13)
+                .fontWeight(FontWeight.Medium)
+                .width('100%')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              if (item.description !== '' && AppThemeTokens.showIconWell(this.appUIState.themeStyle)) {
+                Text(item.description)
+                  .fontColor($r('app.color.text_1'))
+                  .fontSize(12)
+                  .width('100%')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+            .justifyContent(FlexAlign.Center)
             Text(item.rightText)
               .fontColor($r('app.color.text_1'))
               .fontSize(13)
@@ -40,7 +68,7 @@ export struct ListGroup {
               .visibility(item.showArrow ? Visibility.Visible : Visibility.None)
           }
           .width('100%')
-          .height(52)
+          .height(AppThemeTokens.listRowHeight(this.appUIState.themeStyle))
           .padding({
             top: 12,
             bottom: 12,
@@ -55,7 +83,7 @@ export struct ListGroup {
           if (index < this.items.length - 1) {
             Divider()
               .height('0.5px')
-              .backgroundColor('rgba(255,255,255,0.1)')
+              .backgroundColor($r('app.color.border'))
               .margin({
                 left: 16,
                 right: 16
@@ -63,21 +91,24 @@ export struct ListGroup {
           }
         })
       }.backgroundColor($r('app.color.bg_1'))
-      .borderRadius(8)
+      .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
     }
   }
 }
 
 export class BaseGroupItem {
   icon: ResourceStr = ''
-  name: string = ''
+  name: ResourceStr = ''
   rightText: ResourceStr = ''
   showArrow: boolean = true
+  description: ResourceStr = ''
 
-  constructor(name: string, icon: ResourceStr = '', rightText: ResourceStr = '', showArrow: boolean = true) {
+  constructor(name: ResourceStr, icon: ResourceStr = '', rightText: ResourceStr = '', showArrow: boolean = true,
+    description: ResourceStr = '') {
     this.name = name
     this.icon = icon
     this.rightText = rightText
     this.showArrow = showArrow
+    this.description = description
   }
 }

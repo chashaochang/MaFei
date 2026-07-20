@@ -5,6 +5,10 @@
       "value": "#101010"
     },
     {
+      "name": "on_primary",
+      "value": "#FFFFFF"
+    },
+    {
       "name": "reload_title_color",
       "value": "#99000000"
     },

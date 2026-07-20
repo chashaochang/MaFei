@@ -17,6 +17,7 @@ export struct SplashPage {
 
   aboutToAppear(): void {
     this.appUIState.customColorMode = AppPreference.getInstance().getCustomColorMode()
+    this.appUIState.themeStyle = AppPreference.getInstance().getThemeStyle()
     let context = this.getUIContext().getHostContext()!
     try {
       if (this.appUIState.customColorMode === CustomColorMode.Light) {

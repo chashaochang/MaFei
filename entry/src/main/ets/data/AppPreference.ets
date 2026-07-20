@@ -4,6 +4,7 @@ import { CustomColorMode } from '../entity/CustomColorMode';
 import { PlayerEngineType } from '../entity/PlayerEngineType';
 import { Constants } from '../utils/Constants';
 import { ChaseFollowStore } from 'sharedbridge';
+import { ThemeStyle } from '../entity/ThemeStyle';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
 
@@ -149,6 +150,26 @@ export class AppPreference {
       return mode
     }
     return CustomColorMode.Auto
+  }
+
+  setThemeStyle(style: ThemeStyle) {
+    this.setValue<ThemeStyle>(Constants.PREF_THEME_STYLE, style)
+  }
+
+  getThemeStyle(): ThemeStyle {
+    const style = this.getValue<ThemeStyle>(Constants.PREF_THEME_STYLE)
+    if (style === ThemeStyle.Native || style === ThemeStyle.Feiniu) {
+      return style
+    }
+    return ThemeStyle.Feiniu
+  }
+
+  setThemePromptVersion(version: string) {
+    this.setValue<string>(Constants.PREF_THEME_PROMPT_VERSION, version)
+  }
+
+  getThemePromptVersion(): string {
+    return this.getValue<string>(Constants.PREF_THEME_PROMPT_VERSION) || ''
   }
 
   setPlayerEngineType(type: PlayerEngineType) {

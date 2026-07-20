@@ -23,6 +23,9 @@ import { MediaItem } from "./hometab/HomeUIState";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
+import { ThemeUpgradeDialog } from "../../component/ThemeUpgradeDialog";
+import { ThemeStyle } from "../../entity/ThemeStyle";
+import { ThemePromptService } from "../../theme/ThemePromptService";
 
 @ComponentV2
 export struct HomeScreen {
@@ -33,6 +36,10 @@ export struct HomeScreen {
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
   private lastTime: number = 0;
+  private themePromptChecked: boolean = false
+  private themePromptCompleted: boolean = false
+  private themePromptTimer: number = -1
+  private themeDialogId: number = -1
 
   @Monitor('appUIState.currentBreakpoint')
   onBreakpointChange() {
@@ -65,11 +72,84 @@ export struct HomeScreen {
         new process.ProcessManager().exit(0)
       }
     })
+    this.themePromptTimer = setTimeout(() => {
+      this.showThemePromptIfNeeded()
+    }, 350)
   }
 
   aboutToDisappear() {
+    if (this.themePromptTimer >= 0) {
+      clearTimeout(this.themePromptTimer)
+      this.themePromptTimer = -1
+    }
     this.breakpointSystem.unregister();
     getUIAbilityContext().eventHub.off(HomeBackPressedEvent)
+  }
+
+  private showThemePromptIfNeeded(): void {
+    if (this.themePromptChecked || !ThemePromptService.shouldShow()) {
+      return
+    }
+    this.themePromptChecked = true
+    this.themePromptCompleted = false
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: () => {
+        this.themePromptDialogBuilder()
+      },
+      alignment: DialogAlignment.Center,
+      autoCancel: true,
+      backgroundColor: Color.Transparent,
+      onWillDismiss: (action: DismissDialogAction) => {
+        if (!this.themePromptCompleted) {
+          this.saveThemePrompt(ThemeStyle.Feiniu, false)
+        }
+        this.themeDialogId = -1
+        action.dismiss()
+      }
+    }).then((dialogId: number) => {
+      this.themeDialogId = dialogId
+      if (this.themePromptCompleted) {
+        try {
+          this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+          this.themeDialogId = -1
+        } catch (error) {
+        }
+      }
+    }).catch(() => {
+      this.themePromptChecked = false
+      this.themePromptCompleted = false
+    })
+  }
+
+  private saveThemePrompt(style: ThemeStyle, closeDialog: boolean = true): void {
+    try {
+      ThemePromptService.complete(style)
+      this.appUIState.themeStyle = style
+      this.themePromptCompleted = true
+      if (closeDialog && this.themeDialogId >= 0) {
+        this.getUIContext().getPromptAction().closeCustomDialog(this.themeDialogId)
+        this.themeDialogId = -1
+      }
+    } catch (error) {
+      this.getUIContext().getPromptAction().showToast({
+        message: $r('app.string.theme_save_failed')
+      })
+    }
+  }
+
+  @Builder
+  themePromptDialogBuilder() {
+    ThemeUpgradeDialog({
+      onSelectFeiniu: () => {
+        this.saveThemePrompt(ThemeStyle.Feiniu)
+      },
+      onSelectNative: () => {
+        this.saveThemePrompt(ThemeStyle.Native)
+      },
+      onDismiss: () => {
+        this.saveThemePrompt(ThemeStyle.Feiniu)
+      }
+    })
   }
 
   private getPadTopTabItems(): TabItem[] {

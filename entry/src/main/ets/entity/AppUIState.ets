@@ -3,6 +3,7 @@ import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { CustomColorMode } from "./CustomColorMode";
 import ServerEntity from "../data/ServerEntity";
 import { hdsEffect } from "@kit.UIDesignKit";
+import { ThemeStyle } from "./ThemeStyle";
 
 @ObservedV2
 export class AppUIState {
@@ -10,6 +11,7 @@ export class AppUIState {
   @Trace isFullScreen: boolean = false
   @Trace colorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
   @Trace customColorMode: CustomColorMode = CustomColorMode.Auto
+  @Trace themeStyle: ThemeStyle = ThemeStyle.Feiniu
   @Trace safeTop: number = 0
   @Trace safeBottom: number = 0
   @Trace isLogin: boolean = false

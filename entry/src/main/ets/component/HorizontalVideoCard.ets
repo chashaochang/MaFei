@@ -4,6 +4,7 @@ import { AppUIState } from "../entity/AppUIState";
 import { HORIZONTAL_CARD_HEIGHT, HORIZONTAL_CARD_WIDTH } from "../common/OneMoreConst";
 import { hdsEffect } from "@kit.UIDesignKit";
 import { ColorUtils } from "../utils/ColorUtils";
+import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct HorizontalVideoCard {
@@ -22,7 +23,7 @@ export struct HorizontalVideoCard {
     loadSrc: this.image,
     objectFit: ImageFit.Cover,
     border: {
-      radius: 6
+      radius: 10
     },
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
@@ -59,7 +60,7 @@ export struct HorizontalVideoCard {
             .color('#3B82F6')
         }
         .alignContent(Alignment.Bottom)
-        .borderRadius(6)
+        .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
         .clip(true)
         .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
         .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
@@ -73,6 +74,10 @@ export struct HorizontalVideoCard {
             }
           })
           .buildEffect())
+        .shadow({
+          radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
+          color: $r('app.color.border')
+        })
 
       } else {
         Stack() {
@@ -94,10 +99,14 @@ export struct HorizontalVideoCard {
             .color('#3B82F6')
         }
         .alignContent(Alignment.Bottom)
-        .borderRadius(6)
+        .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
         .clip(true)
         .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
         .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+        .shadow({
+          radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
+          color: $r('app.color.border')
+        })
       }
 
       Text(this.name)

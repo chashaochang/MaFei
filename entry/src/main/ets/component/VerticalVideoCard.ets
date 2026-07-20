@@ -6,6 +6,7 @@ import {
 } from "../common/OneMoreConst";
 import { hdsEffect } from "@kit.UIDesignKit";
 import { ColorUtils } from "../utils/ColorUtils";
+import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct VerticalVideoCard {
@@ -22,7 +23,7 @@ export struct VerticalVideoCard {
     loadSrc: this.image,
     objectFit: ImageFit.Cover,
     border: {
-      radius: 6
+      radius: 10
     },
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
@@ -48,12 +49,12 @@ export struct VerticalVideoCard {
             .height(VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
             .borderColor($r('app.color.border_1'))
             .borderWidth(0.5)
-            .borderRadius(6)
+            .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
             .backgroundColor($r('app.color.bg_2'))
         }
         .width(VERTICAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
         .height(VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-        .borderRadius(6)
+        .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
         .visualEffect(new hdsEffect.HdsEffectBuilder()
           .pointLight({
             illuminatedType: this.appUIState.illuminatedType,
@@ -64,6 +65,10 @@ export struct VerticalVideoCard {
             }
           })
           .buildEffect())
+        .shadow({
+          radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
+          color: $r('app.color.border')
+        })
       } else {
         // 其他图片不添加光源效果
         ImageKnifeComponent({
@@ -73,8 +78,12 @@ export struct VerticalVideoCard {
           .height(VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
           .borderColor($r('app.color.border_1'))
           .borderWidth(0.5)
-          .borderRadius(6)
+          .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
           .backgroundColor($r('app.color.bg_2'))
+          .shadow({
+            radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
+            color: $r('app.color.border')
+          })
       }
       Text(this.name)
         .fontColor($r('app.color.text_primary'))

@@ -11,6 +11,7 @@ import { CustomColorMode } from "../../../entity/CustomColorMode";
 import { PlayerEngineType } from "../../../entity/PlayerEngineType";
 import { AppPreference } from "../../../data/AppPreference";
 import { DBManager } from "../../../data/DBManager";
+import { ThemeStyle } from "../../../entity/ThemeStyle";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
   apiClientController: ApiClientController = new ApiClientController()
@@ -70,14 +71,22 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
     }
   }
 
-  getColorModeName() {
-    if (this.appUIState.customColorMode == CustomColorMode.Auto) {
-      this.ui.colorModeName = $r('app.string.color_mode_auto')
-    } else if (this.appUIState.customColorMode == CustomColorMode.Light) {
-      this.ui.colorModeName = $r('app.string.color_mode_light')
-    } else if (this.appUIState.customColorMode == CustomColorMode.Dark) {
-      this.ui.colorModeName = $r('app.string.color_mode_dark')
+  getAppearanceName() {
+    const resourceManager = this.ui.context.getHostContext()?.resourceManager
+    if (!resourceManager) {
+      this.ui.appearanceName = ''
+      return
     }
+    const themeName = this.appUIState.themeStyle === ThemeStyle.Native ?
+      resourceManager.getStringByNameSync('theme_native_name') :
+      resourceManager.getStringByNameSync('theme_feiniu_name')
+    let colorModeName = resourceManager.getStringByNameSync('color_mode_auto')
+    if (this.appUIState.customColorMode === CustomColorMode.Light) {
+      colorModeName = resourceManager.getStringByNameSync('color_mode_light')
+    } else if (this.appUIState.customColorMode === CustomColorMode.Dark) {
+      colorModeName = resourceManager.getStringByNameSync('color_mode_dark')
+    }
+    this.ui.appearanceName = `${themeName} · ${colorModeName}`
   }
 
   getPlayerEngineName() {

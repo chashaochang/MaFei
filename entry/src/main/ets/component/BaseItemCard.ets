@@ -3,16 +3,20 @@ import { ImageUrlsApi } from "sdk";
 import { BaseItemDto, BaseItemKind } from "sdk/src/main/ets/generated-client/models";
 import { resolveLatestImageUrl } from "../common/CommonFunc";
 import { ApiClient } from "../network/ApiClient";
+import { AppStorageV2 } from "@kit.ArkUI";
+import { AppUIState } from "../entity/AppUIState";
+import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct BaseItemCard {
   @Param @Require item: BaseItemDto;
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   @Local image: string = ''
   @Local option: ImageKnifeOption = {
     loadSrc: this.image,
     objectFit: ImageFit.Cover,
     border: {
-      radius: 6
+      radius: 10
     },
     placeholderSrc: this.item.Type == BaseItemKind.Season ? $r('app.media.placeholder_folder') :
       $r('app.media.placeholder_video'),
@@ -64,7 +68,7 @@ export struct BaseItemCard {
           .width('100%')
           .borderColor($r('app.color.border_1'))
           .borderWidth(0.5)
-          .borderRadius(6)
+          .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
           .backgroundColor('#CBD2D3')
         // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         if (this.score) {
@@ -128,7 +132,15 @@ export struct BaseItemCard {
           })
           .margin(4)
         }
-      }.width('100%').aspectRatio(2 / 3)
+      }
+      .width('100%')
+      .aspectRatio(2 / 3)
+      .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
+      .clip(true)
+      .shadow({
+        radius: AppThemeTokens.useMediaShadow(this.appUIState.themeStyle) ? 10 : 0,
+        color: $r('app.color.border')
+      })
 
       Text(this.title)
         .fontColor($r('app.color.text_primary'))

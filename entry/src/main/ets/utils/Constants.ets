@@ -39,6 +39,8 @@ export class Constants {
   static readonly PREF_USER_NAME = "pref_user_name"
   static readonly PREF_REMEMBER_PW = "pref_remember_pw"
   static readonly PREF_COLOR_MODE = "pref_color_mode"
+  static readonly PREF_THEME_STYLE = "pref_theme_style"
+  static readonly PREF_THEME_PROMPT_VERSION = "pref_theme_prompt_version"
   static readonly PREF_PLAYER_ENGINE = "pref_player_engine"
   static readonly PREF_MPV_HARDWARE_DECODE = "pref_mpv_hardware_decode"
   static readonly PREF_MPV_CACHE_SIZE_MB = "pref_mpv_cache_size_mb"

@@ -199,6 +199,70 @@
     {
       "name": "player_engine_mpv_cache",
       "value": "MPV 缓存大小"
+    },
+    {
+      "name": "appearance_title",
+      "value": "外观与主题"
+    },
+    {
+      "name": "theme_style_title",
+      "value": "主题风格"
+    },
+    {
+      "name": "theme_native_name",
+      "value": "原生主题"
+    },
+    {
+      "name": "theme_native_desc",
+      "value": "更舒展的系统层级与圆角组件"
+    },
+    {
+      "name": "theme_feiniu_name",
+      "value": "飞牛主题"
+    },
+    {
+      "name": "theme_feiniu_desc",
+      "value": "延续当前 MaFei 的紧凑布局"
+    },
+    {
+      "name": "color_mode_title",
+      "value": "颜色模式"
+    },
+    {
+      "name": "color_mode_auto_desc",
+      "value": "跟随设备的系统设置切换深浅色"
+    },
+    {
+      "name": "theme_prompt_title",
+      "value": "选择你喜欢的主题"
+    },
+    {
+      "name": "theme_prompt_content",
+      "value": "新增原生主题，你也可以继续使用熟悉的飞牛主题。"
+    },
+    {
+      "name": "theme_prompt_feiniu_action",
+      "value": "继续使用飞牛主题"
+    },
+    {
+      "name": "theme_prompt_native_action",
+      "value": "体验原生主题"
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "主题保存失败，请重试"
+    },
+    {
+      "name": "account_switch_desc",
+      "value": "管理服务器与登录用户"
+    },
+    {
+      "name": "web_itong_desc",
+      "value": "打开服务器 Web 页面"
+    },
+    {
+      "name": "player_engine_desc",
+      "value": "选择播放器与解码方式"
     }
   ]
 }

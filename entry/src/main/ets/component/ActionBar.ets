@@ -2,10 +2,11 @@ import { HMRouterMgr } from "@hadss/hmrouter"
 import { UIConstants } from "../common/UIConstants"
 import { AppUIState } from "../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
+import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct ActionBar {
-  @Param title: string = ""
+  @Param title: ResourceStr = ""
   @Param showBackButton: boolean = true
   @Param onBackClick: () => void = () => {
     HMRouterMgr.pop()
@@ -26,6 +27,9 @@ export struct ActionBar {
           .width(48)
           .height(48)
           .padding(16)
+          .borderRadius(20)
+          .backgroundColor(AppThemeTokens.useActionButtonSurface(this.appUIState.themeStyle) ?
+            $r('app.color.component_bg') : Color.Transparent)
           .onClick(() => {
             this.onBackClick()
           })
@@ -36,6 +40,9 @@ export struct ActionBar {
             .width(48)
             .height(48)
             .padding(16)
+            .borderRadius(20)
+            .backgroundColor(AppThemeTokens.useActionButtonSurface(this.appUIState.themeStyle) ?
+              $r('app.color.component_bg') : Color.Transparent)
             .fillColor($r('app.color.text_primary'))
             .onClick(() => {
               this.onRightBtnClick && this.onRightBtnClick()
