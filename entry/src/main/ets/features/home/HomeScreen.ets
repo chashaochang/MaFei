@@ -31,9 +31,10 @@ import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
 import { ThemeUpgradeDialog } from "../../component/ThemeUpgradeDialog";
 import { ThemeStyle } from "../../entity/ThemeStyle";
-import { ThemePromptService } from "../../theme/ThemePromptService";
+import { themePromptService, ThemeWriteStatus } from "../../theme/ThemePromptService";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
 import { HdsUiCapability } from "../../theme/HdsUiCapability";
+import { nativeThemeCapability } from "../../theme/NativeThemeCapability";
 
 @ComponentV2
 export struct HomeScreen {
@@ -41,7 +42,7 @@ export struct HomeScreen {
   @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private tabsController: HdsTabsController = new HdsTabsController()
   private padTabsController = new TabsController()
-  private nativeTabsModifier: HdsTabsModifier = new HdsTabsModifier()
+  private nativeTabsModifier?: HdsTabsModifier
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
   private lastTime: number = 0;
@@ -72,7 +73,7 @@ export struct HomeScreen {
   }
 
   private useNativeTabs(): boolean {
-    return AppThemeTokens.isNative(this.appUIState.themeStyle) && HdsUiCapability.supportsSystemMaterial()
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) && HdsUiCapability.supportsNativeTheme()
   }
 
   private updateIlluminatedType(): void {
@@ -84,8 +85,12 @@ export struct HomeScreen {
   }
 
   private configureNativeTabs(): void {
-    this.nativeTabsModifier = new HdsTabsModifier()
-    this.nativeTabsModifier
+    this.nativeTabsModifier = undefined
+    if (!HdsUiCapability.supportsNativeTheme()) {
+      return
+    }
+    const modifier: HdsTabsModifier = new HdsTabsModifier()
+    modifier
       .vertical(false)
       .barPosition(BarPosition.End)
       .barHeight(UIConstants.BOTTOM_BAR_HEIGHT + this.appUIState.safeBottom)
@@ -97,6 +102,7 @@ export struct HomeScreen {
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
         },
       })
+    this.nativeTabsModifier = modifier
   }
 
   aboutToAppear() {
@@ -133,7 +139,7 @@ export struct HomeScreen {
   }
 
   private showThemePromptIfNeeded(): void {
-    if (this.themePromptChecked || !ThemePromptService.shouldShow()) {
+    if (this.themePromptChecked || !themePromptService.shouldShow()) {
       return
     }
     this.themePromptChecked = true
@@ -146,8 +152,8 @@ export struct HomeScreen {
       autoCancel: true,
       backgroundColor: Color.Transparent,
       onWillDismiss: (action: DismissDialogAction) => {
-        if (!this.themePromptCompleted) {
-          this.saveThemePrompt(ThemeStyle.Feiniu, false)
+        if (!this.themePromptCompleted && !this.saveThemePrompt(ThemeStyle.Feiniu, false)) {
+          return
         }
         this.themeDialogId = -1
         action.dismiss()
@@ -167,19 +173,25 @@ export struct HomeScreen {
     })
   }
 
-  private saveThemePrompt(style: ThemeStyle, closeDialog: boolean = true): void {
+  private saveThemePrompt(style: ThemeStyle, closeDialog: boolean = true): boolean {
     try {
-      ThemePromptService.complete(style)
-      this.appUIState.themeStyle = style
+      const result = themePromptService.completePrompt(style, nativeThemeCapability.current())
+      if (result.status !== ThemeWriteStatus.Success) {
+        throw new Error(result.status)
+      }
+      this.appUIState.themeStyle = result.effectiveTheme
+      this.appUIState.themePromptPending = false
       this.themePromptCompleted = true
       if (closeDialog && this.themeDialogId >= 0) {
         this.getUIContext().getPromptAction().closeCustomDialog(this.themeDialogId)
         this.themeDialogId = -1
       }
+      return true
     } catch (error) {
       this.getUIContext().getPromptAction().showToast({
         message: $r('app.string.theme_save_failed')
       })
+      return false
     }
   }
 

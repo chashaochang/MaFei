@@ -8,6 +8,9 @@ import { ThemeStyle } from '../../entity/ThemeStyle';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { HdsUiCapability } from '../../theme/HdsUiCapability';
+import { nativeThemeCapability } from '../../theme/NativeThemeCapability';
+import { themePromptService, ThemeWriteStatus } from '../../theme/ThemePromptService';
 import { setAutoColorMode, setDarkColorMode, setLightColorMode } from './ColorModeChangeFunctions';
 
 @HMRouter({
@@ -31,10 +34,20 @@ export struct ColorModePage {
   }
 
   private selectTheme(style: ThemeStyle): void {
+    if (style === ThemeStyle.Native && !HdsUiCapability.supportsNativeTheme()) {
+      return
+    }
     try {
-      AppPreference.getInstance().setThemeStyle(style)
-      this.selectedTheme = style
-      this.appUIState.themeStyle = style
+      const result = themePromptService.saveTheme(
+        style,
+        this.appUIState.themeStyle,
+        nativeThemeCapability.current()
+      )
+      if (result.status !== ThemeWriteStatus.Success) {
+        throw new Error(result.status)
+      }
+      this.selectedTheme = result.effectiveTheme
+      this.appUIState.themeStyle = result.effectiveTheme
     } catch (error) {
       this.getUIContext().getPromptAction().showToast({
         message: $r('app.string.theme_save_failed')
@@ -153,23 +166,25 @@ export struct ColorModePage {
       })
       Scroll() {
         Column({ space: 12 }) {
-          Text($r('app.string.theme_style_title'))
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-              $r('sys.color.font_secondary') : $r('app.color.text_1'))
-            .width('100%')
-            .margin({ left: 4 })
-          this.themeChoice(
-            ThemeStyle.Native,
-            $r('app.string.theme_native_name'),
-            $r('app.string.theme_native_desc')
-          )
-          this.themeChoice(
-            ThemeStyle.Feiniu,
-            $r('app.string.theme_feiniu_name'),
-            $r('app.string.theme_feiniu_desc')
-          )
+          if (HdsUiCapability.supportsNativeTheme()) {
+            Text($r('app.string.theme_style_title'))
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+                $r('sys.color.font_secondary') : $r('app.color.text_1'))
+              .width('100%')
+              .margin({ left: 4 })
+            this.themeChoice(
+              ThemeStyle.Native,
+              $r('app.string.theme_native_name'),
+              $r('app.string.theme_native_desc')
+            )
+            this.themeChoice(
+              ThemeStyle.Feiniu,
+              $r('app.string.theme_feiniu_name'),
+              $r('app.string.theme_feiniu_desc')
+            )
+          }
           Text($r('app.string.color_mode_title'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
@@ -194,6 +209,7 @@ export struct ColorModePage {
       }
       .width('100%')
       .layoutWeight(1)
+      .align(Alignment.Top)
       .scrollBar(BarState.Off)
     }
     .width('100%')

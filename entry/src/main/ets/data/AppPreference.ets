@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { CustomColorMode } from '../entity/CustomColorMode';
 import { PlayerEngineType } from '../entity/PlayerEngineType';
 import { Constants } from '../utils/Constants';
@@ -7,13 +8,74 @@ import { ThemeStyle } from '../entity/ThemeStyle';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
 
+export interface AppPreferenceBackend {
+  has(key: string): boolean
+  read(key: string): string
+  write(key: string, value: string): void
+  remove(key: string): void
+  flush(): void
+}
+
+export interface AppPreferenceBackendFactory {
+  open(): AppPreferenceBackend
+}
+
+class HarmonyPreferenceBackend implements AppPreferenceBackend {
+  private preference: preferences.Preferences
+
+  constructor(preference: preferences.Preferences) {
+    this.preference = preference
+  }
+
+  has(key: string): boolean {
+    return this.preference.hasSync(key)
+  }
+
+  read(key: string): string {
+    const value = this.preference.getSync(key, '')
+    return typeof value === 'string' ? value : ''
+  }
+
+  write(key: string, value: string): void {
+    this.preference.putSync(key, value)
+  }
+
+  remove(key: string): void {
+    this.preference.deleteSync(key)
+  }
+
+  flush(): void {
+    this.preference.flushSync()
+  }
+}
+
+class HarmonyPreferenceBackendFactory implements AppPreferenceBackendFactory {
+  private context: common.UIAbilityContext
+  private storeName: string
+
+  constructor(context: common.UIAbilityContext, storeName: string) {
+    this.context = context
+    this.storeName = storeName
+  }
+
+  open(): AppPreferenceBackend {
+    return new HarmonyPreferenceBackend(preferences.getPreferencesSync(
+      this.context,
+      { name: this.storeName }
+    ))
+  }
+}
+
 export class AppPreference {
-  private preferences?: preferences.Preferences;
-  private context = getContext(this) as common.UIAbilityContext;
+  private backend?: AppPreferenceBackend
+  private backendFactory: AppPreferenceBackendFactory
   private static instance: AppPreference;
 
-  private constructor() {
-    this.initPreference(PREFERENCES_NAME);
+  private constructor(factory?: AppPreferenceBackendFactory) {
+    this.backendFactory = factory ?? new HarmonyPreferenceBackendFactory(
+      getContext(this) as common.UIAbilityContext,
+      PREFERENCES_NAME
+    )
   }
 
   public static getInstance(): AppPreference {
@@ -23,62 +85,96 @@ export class AppPreference {
     return AppPreference.instance;
   }
 
-  initPreference(storeName: string) {
-    try {
-      this.preferences = preferences.getPreferencesSync(this.context, { name: storeName })
-    } catch (error) {
-
-    }
+  static createForTest(factory: AppPreferenceBackendFactory): AppPreference {
+    return new AppPreference(factory)
   }
 
-  setValue<T>(key: string, value: T) {
-    if (this.preferences) {
-      this.preferences.putSync(key, JSON.stringify(value))
-      this.saveUserData();
-    } else {
-      this.initPreference(PREFERENCES_NAME)
-      this.setValue<T>(key, value);
+  private getBackend(): AppPreferenceBackend | undefined {
+    if (this.backend) {
+      return this.backend
+    }
+    try {
+      this.backend = this.backendFactory.open()
+      return this.backend
+    } catch (error) {
+      return undefined
     }
   }
 
   getValue<T>(key: string): T | null {
-    if (this.preferences) {
-      let value: T | null = null;
-      let res = this.preferences.getSync(key, '')
-      if (res) {
-        value = JSON.parse(res as string) as T;
-      }
-      return value;
-    } else {
-      this.initPreference(PREFERENCES_NAME)
-      return this.getValue<T>(key);
+    const backend = this.getBackend()
+    if (!backend) {
+      return null
+    }
+    try {
+      const raw = backend.read(key)
+      return raw.length > 0 ? JSON.parse(raw) as T : null
+    } catch (error) {
+      return null
+    }
+  }
+
+  setValue<T>(key: string, value: T): void {
+    if (!this.trySetValue<T>(key, value)) {
+      throw new Error('Failed to persist preference value')
     }
   }
 
   hasValue(key: string): boolean {
-    if (this.preferences) {
-      return this.preferences.hasSync(key);
-    } else {
-      this.initPreference(PREFERENCES_NAME)
-      return this.hasValue(key);
+    const backend = this.getBackend()
+    if (!backend) {
+      return false
     }
-  }
-
-  deleteValue(key: string) {
-    if (this.preferences) {
-      this.preferences.deleteSync(key)
-      this.saveUserData();
-    } else {
-      this.initPreference(PREFERENCES_NAME)
-      this.deleteValue(key);
-    }
-  }
-
-  saveUserData() {
     try {
-      this.preferences?.flushSync();
+      return backend.has(key)
     } catch (error) {
+      return false
+    }
+  }
 
+  deleteValue(key: string): void {
+    const backend = this.getBackend()
+    if (!backend) {
+      return
+    }
+    try {
+      backend.remove(key)
+      backend.flush()
+    } catch (error) {
+      // Preserve the existing best-effort delete contract without recursion.
+    }
+  }
+
+  private trySetValue<T>(key: string, value: T): boolean {
+    const backend = this.getBackend()
+    if (!backend) {
+      return false
+    }
+    let writeApplied = false
+    let hadPrevious = false
+    let previous = ''
+    try {
+      hadPrevious = backend.has(key)
+      previous = hadPrevious ? backend.read(key) : ''
+      backend.write(key, JSON.stringify(value))
+      writeApplied = true
+      backend.flush()
+      return true
+    } catch (error) {
+      if (writeApplied) {
+        try {
+          if (hadPrevious) {
+            backend.write(key, previous)
+          } else {
+            backend.remove(key)
+          }
+        } catch (rollbackError) {
+          hilog.error(0x0000, 'Mafei',
+            'Failed to roll back preference key %{public}s: %{public}s',
+            key, String(rollbackError))
+        }
+      }
+      return false
     }
   }
 
@@ -144,8 +240,18 @@ export class AppPreference {
     return CustomColorMode.Auto
   }
 
-  setThemeStyle(style: ThemeStyle) {
-    this.setValue<ThemeStyle>(Constants.PREF_THEME_STYLE, style)
+  trySetThemeStyle(style: ThemeStyle): boolean {
+    return this.trySetValue<ThemeStyle>(Constants.PREF_THEME_STYLE, style)
+  }
+
+  trySetThemePromptVersion(version: string): boolean {
+    return this.trySetValue<string>(Constants.PREF_THEME_PROMPT_VERSION, version)
+  }
+
+  setThemeStyle(style: ThemeStyle): void {
+    if (!this.trySetThemeStyle(style)) {
+      throw new Error('Failed to persist theme style')
+    }
   }
 
   getThemeStyle(): ThemeStyle {
@@ -156,8 +262,10 @@ export class AppPreference {
     return ThemeStyle.Feiniu
   }
 
-  setThemePromptVersion(version: string) {
-    this.setValue<string>(Constants.PREF_THEME_PROMPT_VERSION, version)
+  setThemePromptVersion(version: string): void {
+    if (!this.trySetThemePromptVersion(version)) {
+      throw new Error('Failed to persist theme prompt version')
+    }
   }
 
   getThemePromptVersion(): string {
