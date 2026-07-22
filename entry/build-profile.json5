@@ -23,6 +23,9 @@
     },
     {
       "name": "release",
+    },
+    {
+      "name": "ohosTest"
     }
   ]
 }
