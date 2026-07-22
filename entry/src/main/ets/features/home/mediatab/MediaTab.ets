@@ -9,12 +9,18 @@ import { AppUIState } from "../../../entity/AppUIState";
 import { ToastUtil } from "../../../utils/ToastUtil";
 import { MediaUIState } from "./MediaUIState";
 import { MediaViewModel } from "./MediaViewModel";
+import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
 
 @ComponentV2
 export struct MediaTab {
+  @Param contentBottomInset?: number = undefined
   @Local ui: MediaUIState = new MediaUIState()
   @Local vm: MediaViewModel = new MediaViewModel(this.ui)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  private scrollTail(): number {
+    return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.appUIState.safeBottom)
+  }
 
   aboutToAppear(): void {
     this.vm.init()
@@ -48,12 +54,11 @@ export struct MediaTab {
                   .push()
               }
             }).margin({ top: 12 })
-            Blank().height(this.appUIState.safeBottom + UIConstants.BOTTOM_BAR_HEIGHT)
+            Blank().height(this.scrollTail())
           }.alignItems(HorizontalAlign.Start)
           .padding({
             left: 16,
-            right: 16,
-            bottom: 20
+            right: 16
           })
         }
         .width('100%')

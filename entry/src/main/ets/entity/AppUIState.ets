@@ -4,6 +4,7 @@ import { CustomColorMode } from "./CustomColorMode";
 import ServerEntity from "../data/ServerEntity";
 import { hdsEffect } from "@kit.UIDesignKit";
 import { ThemeStyle } from "./ThemeStyle";
+import { BreakpointTypeEnum } from "../utils/BreakpointPolicy";
 
 @ObservedV2
 export class AppUIState {
@@ -21,7 +22,7 @@ export class AppUIState {
   @Trace isConnecting: boolean = false
   @Trace deviceWidth: number = 0
   @Trace deviceHeight: number = 0
-  @Trace currentBreakpoint: string = "MD"
+  @Trace currentBreakpoint: string = BreakpointTypeEnum.MD
   @Trace isBigScreen: boolean = false // 大屏幕设备
   //点光源开关,关闭设置成NONE
   @Trace illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER

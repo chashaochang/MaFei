@@ -10,12 +10,18 @@ import { wantConstant } from "@kit.AbilityKit"
 import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 import { ActionBar } from "../../../component/ActionBar"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
+import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 
 @ComponentV2
 export struct MineTab {
   @Param fromHome: boolean = false
+  @Param contentBottomInset?: number = undefined
   @Local ui: MineUIState = new MineUIState(this.getUIContext())
   @Local vm: MineViewModel = new MineViewModel(this.ui)
+
+  private scrollTail(): number {
+    return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
+  }
 
   aboutToAppear(): void {
     HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown, () => {
@@ -168,7 +174,7 @@ export struct MineTab {
         .padding({
           left: 16,
           right: 16,
-          bottom: this.vm.appUIState.safeBottom + UIConstants.BOTTOM_BAR_HEIGHT + 16
+          bottom: this.scrollTail()
         })
       }
       .width('100%')

@@ -4,7 +4,6 @@ import { PageState } from "../../../common/base/BaseUIState"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { HORIZONTAL_CARD_LIST_HEIGHT, HORIZONTAL_CARD_SPACE } from "../../../common/OneMoreConst"
 import { playItems } from "../../../common/CommonFunc"
-import { UIConstants } from "../../../common/UIConstants"
 import { ActionBar } from "../../../component/ActionBar"
 import { EmptyView } from "../../../component/EmptyView"
 import { FailedView } from "../../../component/FailedView"
@@ -13,13 +12,19 @@ import { RouterConsts } from "../../../common/RouterConsts"
 import { VideoItem } from "../hometab/HomeUIState"
 import { ChaseSection, ChasingUIState } from "./ChasingUIState"
 import { ChasingViewModel } from "./ChasingViewModel"
+import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 
 @ComponentV2
 export struct ChasingTab {
   @Param fromHome: boolean = false
+  @Param contentBottomInset?: number = undefined
   @Local ui: ChasingUIState = new ChasingUIState(this.getUIContext())
   @Local vm: ChasingViewModel = new ChasingViewModel(this.ui)
   @Local selectedFilterIndex: number = 0
+
+  private scrollTail(): number {
+    return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
+  }
 
   aboutToAppear(): void {
     this.vm.refresh()
@@ -110,7 +115,7 @@ export struct ChasingTab {
                 this.sectionList('全部追剧', this.getFilterSubtitle(), this.getFilteredItems(), 'all')
               }
             }
-            ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
+            ListItem().height(this.scrollTail())
           }
           .width('100%')
           .height('100%')

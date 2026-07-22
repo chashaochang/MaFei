@@ -19,11 +19,17 @@ import {
 } from "../../../common/OneMoreConst"
 import { VerticalVideoCard } from "../../../component/VerticalVideoCard"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
+import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 
 @ComponentV2
 export struct HomeTab {
+  @Param contentBottomInset?: number = undefined
   @Local ui: HomeUIState = new HomeUIState(this.getUIContext())
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
+
+  private scrollTail(): number {
+    return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
+  }
 
   aboutToAppear(): void {
     //监听刷新事件
@@ -67,7 +73,7 @@ export struct HomeTab {
               this.buildLastAddedList(item)
             }
           })
-          ListItem().height(UIConstants.BOTTOM_BAR_HEIGHT + this.vm.appUIState.safeBottom + 20)
+          ListItem().height(this.scrollTail())
         }.width('100%').height('100%').listDirection(Axis.Vertical).scrollBar(BarState.Off)
       }
       // .padding({

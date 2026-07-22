@@ -13,6 +13,7 @@ import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
 import { FavoriteListUIState } from './FavoriteListUIState';
 import { FavoriteListViewModel } from './FavoriteListViewModel';
+import { HomeInsetsPolicy } from '../home/HomeInsetsPolicy';
 
 @HMRouter({
   pageUrl: RouterConsts.FavoriteListPage
@@ -21,8 +22,13 @@ import { FavoriteListViewModel } from './FavoriteListViewModel';
 export struct FavoriteListPage {
   //首页来的要隐藏顶部栏
   @Param fromHome: boolean = false
+  @Param contentBottomInset?: number = undefined
   @Local ui: FavoriteListUIState = new FavoriteListUIState(this.getUIContext())
   vm: FavoriteListViewModel = new FavoriteListViewModel(this.ui)
+
+  private scrollTail(): number {
+    return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
+  }
 
   aboutToAppear(): void {
     this.vm.refresh()
@@ -138,7 +144,7 @@ export struct FavoriteListPage {
       .padding({
         left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
         right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-        bottom: this.vm.appUIState.safeBottom
+        bottom: this.scrollTail()
       })
     }
   }

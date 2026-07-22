@@ -1,6 +1,7 @@
 import { BaseUIState } from "../../common/base/BaseUIState"
 import { BaseDataSource } from "../../data/BaseDataSource"
 import { MediaItem } from "./hometab/HomeUIState"
+import { HomeDestination } from "./HomeDestination"
 
 export enum PadMenuType {
   TITLE,
@@ -29,8 +30,7 @@ export class PadMenuItem {
 export class HomeScreenUIState extends BaseUIState {
   @Trace favoriteCount: number = 0
   @Trace chasingCount: number = 0
-  @Trace selectedIndex: number = 0
-  @Trace menuSelectedIndex: number = 0
+  @Trace selectedDestination: HomeDestination = HomeDestination.Home
   @Trace isLoading: boolean = true
   /** Large screen: whether left sidebar is visible (default true) */
   @Trace isLeftSidebarVisible: boolean = true

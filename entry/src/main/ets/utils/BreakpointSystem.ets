@@ -13,18 +13,9 @@
  * limitations under the License.
  */
 
-import { AppStorageV2, mediaquery } from '@kit.ArkUI';
-import { AppUIState } from '../entity/AppUIState';
-import { WindowUtil } from './WindowUtil';
+import { BreakpointTypeEnum } from './BreakpointPolicy';
 
-export enum BreakpointTypeEnum {
-  XS = 'xs',
-  SM = 'sm',
-  MD = 'md',
-  LG = 'lg',
-  XL = 'xl',
-  XXL = 'xxl',
-}
+export { BreakpointTypeEnum } from './BreakpointPolicy';
 
 export interface BreakpointTypes<T> {
   xs: T;
@@ -69,94 +60,5 @@ export class BreakpointType<T> {
       return this.xxl;
     }
     return this.xs;
-  }
-}
-
-export class BreakpointSystem {
-  private currentBreakpoint: string = BreakpointTypeEnum.MD;
-  private xsListener: mediaquery.MediaQueryListener | undefined;
-  private smListener: mediaquery.MediaQueryListener | undefined;
-  private mdListener: mediaquery.MediaQueryListener | undefined;
-  private lgListener: mediaquery.MediaQueryListener | undefined;
-  private xlListener: mediaquery.MediaQueryListener | undefined;
-  private xxlListener: mediaquery.MediaQueryListener | undefined;
-  private appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-
-  private updateCurrentBreakpoint(breakpoint: BreakpointTypeEnum) {
-    WindowUtil.getDeviceSize(getContext(this));
-    if (this.currentBreakpoint !== breakpoint) {
-      this.currentBreakpoint = breakpoint;
-      this.appUIState.currentBreakpoint = this.currentBreakpoint;
-    }
-  }
-
-  private isBreakpointXS = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.SM);
-    }
-  }
-  private isBreakpointSM = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.SM);
-    }
-  }
-  private isBreakpointMD = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.MD);
-    }
-  }
-  private isBreakpointLG = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.LG);
-    }
-  }
-  private isBreakpointXL = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.LG);
-    }
-  }
-  private isBreakpointXXL = (mediaQueryResult: mediaquery.MediaQueryResult) => {
-    if (mediaQueryResult.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.LG);
-    }
-  }
-
-  public register(uiContext: UIContext) {
-    this.xsListener = uiContext.getMediaQuery().matchMediaSync('(0vp<width<320vp)');
-    if (this.xsListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.XS);
-    }
-    this.xsListener?.on('change', this.isBreakpointXS);
-    this.smListener = uiContext.getMediaQuery().matchMediaSync('(320vp<=width<600vp)');
-    if (this.smListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.SM);
-    }
-    this.smListener?.on('change', this.isBreakpointSM);
-    this.mdListener = uiContext.getMediaQuery().matchMediaSync('(600vp<=width<840vp)');
-    if (this.mdListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.MD);
-    }
-    this.mdListener?.on('change', this.isBreakpointMD);
-    this.lgListener = uiContext.getMediaQuery().matchMediaSync('(840vp<=width<1440vp)');
-    if (this.lgListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.LG);
-    }
-    this.lgListener?.on('change', this.isBreakpointLG);
-    this.xlListener = uiContext.getMediaQuery().matchMediaSync('(1440vp<=width<1920vp)');
-    if (this.xlListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.XL);
-    }
-    this.xlListener?.on('change', this.isBreakpointXL);
-    this.xxlListener = uiContext.getMediaQuery().matchMediaSync('(1920vp<=width)');
-    if (this.xxlListener?.matches) {
-      this.updateCurrentBreakpoint(BreakpointTypeEnum.XXL);
-    }
-    this.xxlListener?.on('change', this.isBreakpointXXL);
-  }
-
-  public unregister() {
-    this.smListener?.off('change', this.isBreakpointSM);
-    this.mdListener?.off('change', this.isBreakpointMD);
-    this.lgListener?.off('change', this.isBreakpointLG);
   }
 }

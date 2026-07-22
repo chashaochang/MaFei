@@ -8,6 +8,7 @@ import { AppUIState } from '../entity/AppUIState';
 import { ThemeStyle } from '../entity/ThemeStyle';
 import { nativeThemeCapability } from '../theme/NativeThemeCapability';
 import { themePromptService } from '../theme/ThemePromptService';
+import { BreakpointPolicy, BreakpointTypeEnum } from '../utils/BreakpointPolicy';
 import { OneMoreUtil } from '../utils/OneMoreUtil';
 // 弹幕功能暂不上线，先注释初始化依赖，后续恢复时取消注释即可。
 // import { GlobalContext } from '@ohos/danmakuflamemaster';
@@ -17,6 +18,24 @@ export default class EntryAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private initializationPromise?: Promise<void>
+  private mainWindow?: window.Window
+  private contentLoadStarted: boolean = false
+
+  private windowSizeChangeCallback = (_size: window.Size): void => {
+    if (this.mainWindow) {
+      this.refreshWindowMetrics(this.mainWindow)
+    }
+  }
+
+  private avoidAreaChangeCallback = (options: window.AvoidAreaOptions): void => {
+    if (!this.mainWindow) {
+      return
+    }
+    if (options.type === window.AvoidAreaType.TYPE_SYSTEM ||
+      options.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
+      this.refreshWindowMetrics(this.mainWindow)
+    }
+  }
 
   onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.appUIState.context = this.context
@@ -77,41 +96,155 @@ export default class EntryAbility extends UIAbility {
     await ImageKnife.getInstance().initFileCache(this.context, 1024, 1024 * 1024 * 1024)
   }
 
-  private loadWindowStage(windowStage: window.WindowStage): void {
-    // Main window is created, set main page for this ability
-    AppStorage.setOrCreate('windowStage', windowStage);
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
-        return;
-      }
-    });
+  private refreshWindowMetrics(windowClass: window.Window): void {
+    const uiContext = windowClass.getUIContext()
+    const properties = windowClass.getWindowProperties()
+    const systemArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
+    const navigationArea = windowClass.getWindowAvoidArea(
+      window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
+    )
+    const deviceWidth = uiContext.px2vp(properties.windowRect.width)
 
-    windowStage.getMainWindow().then((windowClass) => {
-      this.appUIState.windowClass = windowClass
+    this.appUIState.deviceHeight = uiContext.px2vp(properties.windowRect.height)
+    this.appUIState.deviceWidth = deviceWidth
+    this.appUIState.currentBreakpoint = BreakpointPolicy.fromWidth(deviceWidth)
+    this.appUIState.safeTop = uiContext.px2vp(Math.max(0, systemArea.topRect.height))
+    this.appUIState.safeBottom = uiContext.px2vp(Math.max(
+      0,
+      systemArea.bottomRect.height,
+      navigationArea.bottomRect.height
+    ))
+  }
+
+  private resetWindowState(): void {
+    this.appUIState.windowClass = undefined
+    this.appUIState.deviceWidth = 0
+    this.appUIState.deviceHeight = 0
+    this.appUIState.safeTop = 0
+    this.appUIState.safeBottom = 0
+    this.appUIState.currentBreakpoint = BreakpointTypeEnum.MD
+    this.appUIState.orientation = display.Orientation.PORTRAIT
+  }
+
+  private clearMainWindowBindings(): void {
+    const listener = this.listener
+    const mainWindow = this.mainWindow
+    this.listener = undefined
+    this.mainWindow = undefined
+
+    if (listener) {
       try {
-        windowClass.on('windowSizeChange', () => {
-          const properties = windowClass.getWindowProperties();
-          this.appUIState.deviceHeight = windowClass.getUIContext().px2vp(properties.windowRect.height);
-          this.appUIState.deviceWidth = windowClass.getUIContext().px2vp(properties.windowRect.width);
-        })
-        windowClass.setWindowLayoutFullScreen(true).catch()
-        const avoidAreaType = window.AvoidAreaType.TYPE_SYSTEM; // 系统默认区域，包括状态栏，导航栏
-        const avoidAreaTop = windowClass.getWindowAvoidArea(avoidAreaType);
-        const topHeight = avoidAreaTop.topRect.height;
-        let avoidArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
-        this.appUIState.safeTop = windowClass.getUIContext().px2vp(topHeight)
-        this.appUIState.safeBottom = windowClass.getUIContext().px2vp(avoidArea.bottomRect.height)
-        this.listener = windowClass.getUIContext().getMediaQuery().matchMediaSync('(orientation: landscape)');
-        this.listener.on('change', this.onPortrait)
-        //一多适配放开了旋转,这里判断手机端锁定
-        if (OneMoreUtil.isNormalPhone()) {
-          windowClass.setPreferredOrientation(window.Orientation.PORTRAIT).catch()
-        }
-      } catch (e) {
-
+        listener.off('change', this.onPortrait)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to remove orientation listener: %{public}s', String(error))
       }
-    }).catch()
+    }
+    if (mainWindow) {
+      try {
+        mainWindow.off('windowSizeChange', this.windowSizeChangeCallback)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to remove window-size listener: %{public}s', String(error))
+      }
+      try {
+        mainWindow.off('avoidAreaChange', this.avoidAreaChangeCallback)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to remove avoid-area listener: %{public}s', String(error))
+      }
+    }
+    this.resetWindowState()
+  }
+
+  private initializeMainWindow(windowClass: window.Window): boolean {
+    this.clearMainWindowBindings()
+    try {
+      this.mainWindow = windowClass
+      windowClass.setWindowLayoutFullScreen(true).catch(() => undefined)
+      this.refreshWindowMetrics(windowClass)
+      windowClass.on('windowSizeChange', this.windowSizeChangeCallback)
+      windowClass.on('avoidAreaChange', this.avoidAreaChangeCallback)
+
+      this.listener = windowClass.getUIContext()
+        .getMediaQuery()
+        .matchMediaSync('(orientation: landscape)')
+      this.appUIState.orientation = this.listener.matches ?
+        display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
+      this.listener.on('change', this.onPortrait)
+
+      if (OneMoreUtil.isNormalPhone()) {
+        windowClass.setPreferredOrientation(window.Orientation.PORTRAIT)
+          .catch(() => undefined)
+      }
+      this.appUIState.windowClass = windowClass
+      return true
+    } catch (error) {
+      this.clearMainWindowBindings()
+      hilog.error(0x0000, 'Mafei',
+        'Failed to initialize the main window: %{public}s', String(error))
+      return false
+    }
+  }
+
+  private loadContent(windowStage: window.WindowStage): void {
+    if (this.contentLoadStarted) {
+      hilog.warn(0x0000, 'Mafei', 'Ignoring duplicate content load request.')
+      return
+    }
+    this.contentLoadStarted = true
+    try {
+      AppStorage.setOrCreate('windowStage', windowStage)
+      windowStage.loadContent('pages/Index', (error) => {
+        if (error.code) {
+          hilog.error(0x0000, 'Mafei',
+            'Failed to load the content. Cause: %{public}s',
+            JSON.stringify(error) ?? '')
+        }
+      })
+    } catch (error) {
+      this.contentLoadStarted = false
+      throw new Error(String(error))
+    }
+  }
+
+  private loadMainWindowAsync(windowStage: window.WindowStage): void {
+    try {
+      windowStage.getMainWindow().then((windowClass: window.Window) => {
+        if (!this.initializeMainWindow(windowClass)) {
+          return
+        }
+        this.loadContent(windowStage)
+      }).catch((error: Error) => {
+        hilog.error(0x0000, 'Mafei',
+          'Failed to load the asynchronous main window: %{public}s', error.message)
+      })
+    } catch (error) {
+      hilog.error(0x0000, 'Mafei',
+        'Failed to request the main window: %{public}s', String(error))
+    }
+  }
+
+  private loadWindowStage(windowStage: window.WindowStage): void {
+    let windowClass: window.Window
+    try {
+      windowClass = windowStage.getMainWindowSync()
+    } catch (error) {
+      hilog.warn(0x0000, 'Mafei',
+        'Synchronous main-window lookup failed: %{public}s', String(error))
+      this.loadMainWindowAsync(windowStage)
+      return
+    }
+
+    if (!this.initializeMainWindow(windowClass)) {
+      return
+    }
+    try {
+      this.loadContent(windowStage)
+    } catch (error) {
+      hilog.error(0x0000, 'Mafei',
+        'Failed to load content on the synchronous main window: %{public}s', String(error))
+    }
   }
 
   onPortrait = (mediaQueryResult: mediaquery.MediaQueryResult) => { // 当满足媒体查询条件时，触发回调
@@ -123,7 +256,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
-    // Main window is destroyed, release UI related resources
+    this.contentLoadStarted = false
+    this.clearMainWindowBindings()
   }
 
   onForeground(): void {
