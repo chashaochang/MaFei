@@ -133,10 +133,6 @@ export class ThemePromptService {
   shouldShow(): boolean {
     return this.resolveLaunch(nativeThemeCapability.current()).shouldShowPrompt
   }
-
-  static resolveLaunchTheme(): ThemeStyle {
-    return themePromptService.resolveLaunch(nativeThemeCapability.current()).effectiveTheme
-  }
 }
 
 export const themePromptService: ThemePromptService = new ThemePromptService()

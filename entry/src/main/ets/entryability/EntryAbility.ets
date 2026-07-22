@@ -5,6 +5,9 @@ import { webview } from '@kit.ArkWeb';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import { DBManager } from '../data/DBManager';
 import { AppUIState } from '../entity/AppUIState';
+import { ThemeStyle } from '../entity/ThemeStyle';
+import { nativeThemeCapability } from '../theme/NativeThemeCapability';
+import { themePromptService } from '../theme/ThemePromptService';
 import { OneMoreUtil } from '../utils/OneMoreUtil';
 // 弹幕功能暂不上线，先注释初始化依赖，后续恢复时取消注释即可。
 // import { GlobalContext } from '@ohos/danmakuflamemaster';
@@ -13,9 +16,11 @@ import { ImageKnife } from '@ohos/imageknifepro';
 export default class EntryAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  private initializationPromise?: Promise<void>
 
-  async onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam) {
+  onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.appUIState.context = this.context
+    this.initializeThemeState()
     if(this.context.config.colorMode !== undefined)
       this.appUIState.colorMode = this.context.config.colorMode
     //预初始化
@@ -23,17 +28,56 @@ export default class EntryAbility extends UIAbility {
     HMRouterMgr.init({
       context: this.context
     })
-    DBManager.getInstance().init(this.context)
+    const initializationPromise = this.initializeApplication().catch((error: Error) => {
+      hilog.error(0x0000, 'Mafei',
+        'Application initialization failed; loading content with degraded services. Cause: %{public}s', error.message)
+    })
+    this.initializationPromise = initializationPromise
+  }
+
+  onDestroy(): void {
+  }
+
+  private initializeThemeState(): void {
+    try {
+      const capability = nativeThemeCapability.initialize()
+      const launchState = themePromptService.resolveLaunch(capability)
+      this.appUIState.nativeThemeAvailable = launchState.nativeThemeAvailable
+      this.appUIState.themePromptPending = launchState.shouldShowPrompt
+      this.appUIState.themeStyle = launchState.effectiveTheme
+    } catch (error) {
+      this.appUIState.nativeThemeAvailable = false
+      this.appUIState.themePromptPending = false
+      this.appUIState.themeStyle = ThemeStyle.Feiniu
+      hilog.error(0x0000, 'Mafei',
+        'Failed to initialize theme state: %{public}s', String(error))
+    } finally {
+      this.appUIState.themeStateReady = true
+    }
+  }
+
+  onWindowStageCreate(windowStage: window.WindowStage): void {
+    const initializationPromise = this.initializationPromise
+    if (!initializationPromise) {
+      hilog.error(0x0000, 'Mafei', 'Application initialization was not started.')
+      return
+    }
+    initializationPromise.then(() => {
+      this.loadWindowStage(windowStage)
+    }).catch((error: Error) => {
+      hilog.error(0x0000, 'Mafei', 'Failed to create the window stage. Cause: %{public}s', error.message)
+    })
+  }
+
+  private async initializeApplication(): Promise<void> {
+    await DBManager.getInstance().init(this.context)
     // 弹幕功能暂不上线，先注释初始化代码。
     // GlobalContext.getContext().setValue("path", this.context.filesDir);
     // 如果需要用文件缓存，需要提前初始化文件缓存
     await ImageKnife.getInstance().initFileCache(this.context, 1024, 1024 * 1024 * 1024)
   }
 
-  onDestroy(): void {
-  }
-
-  onWindowStageCreate(windowStage: window.WindowStage): void {
+  private loadWindowStage(windowStage: window.WindowStage): void {
     // Main window is created, set main page for this ability
     AppStorage.setOrCreate('windowStage', windowStage);
     windowStage.loadContent('pages/Index', (err) => {
