@@ -7,9 +7,9 @@ import { BackController } from '../webapp/BackController';
 import { OhosSmartDialog } from 'ohos_smart_dialog';
 import { OneMoreUtil } from '../utils/OneMoreUtil';
 import { AppUIState } from '../entity/AppUIState';
-import { ThemeStyle } from '../entity/ThemeStyle';
 import { WindowUtil } from '../utils/WindowUtil';
 import { RouterConsts } from '../common/RouterConsts';
+import { AppThemeSurfaceResolver } from '../theme/AppThemeSurfaceResolver';
 
 @Entry
 @ComponentV2
@@ -21,14 +21,6 @@ struct Index {
   modifier: NavModifier = new NavModifier();
   backController?: BackController
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-
-  private appCanvasBackground(ready: boolean, effectiveTheme: ThemeStyle): ResourceColor {
-    if (!ready) {
-      return $r('app.color.start_window_background')
-    }
-    return effectiveTheme === ThemeStyle.Native ?
-      $r('sys.color.comp_background_primary') : $r('app.color.bg_main')
-  }
 
   @Monitor('appUIState.orientation')
   onBreakpointChanged() {
@@ -88,7 +80,7 @@ struct Index {
     }
     .height('100%')
     .width('100%')
-    .backgroundColor(this.appCanvasBackground(
+    .backgroundColor(AppThemeSurfaceResolver.appCanvasBackground(
       this.appUIState.themeStateReady,
       this.appUIState.themeStyle
     ))
