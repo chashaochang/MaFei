@@ -20,6 +20,7 @@ export default class EntryAbility extends UIAbility {
   private initializationPromise?: Promise<void>
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
+  private systemDensityChangeListenerRegistered: boolean = false
 
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
@@ -33,6 +34,12 @@ export default class EntryAbility extends UIAbility {
     }
     if (options.type === window.AvoidAreaType.TYPE_SYSTEM ||
       options.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
+      this.refreshWindowMetrics(this.mainWindow)
+    }
+  }
+
+  private systemDensityChangeCallback = (_density: number): void => {
+    if (this.mainWindow) {
       this.refreshWindowMetrics(this.mainWindow)
     }
   }
@@ -96,24 +103,51 @@ export default class EntryAbility extends UIAbility {
     await ImageKnife.getInstance().initFileCache(this.context, 1024, 1024 * 1024 * 1024)
   }
 
+  private resolveWindowDensity(windowClass: window.Window): number {
+    try {
+      const densityInfo = windowClass.getWindowDensityInfo()
+      if (densityInfo.customDensity > 0) {
+        return densityInfo.customDensity
+      }
+      if (densityInfo.systemDensity > 0) {
+        return densityInfo.systemDensity
+      }
+      if (densityInfo.defaultDensity > 0) {
+        return densityInfo.defaultDensity
+      }
+    } catch (error) {
+      hilog.warn(0x0000, 'Mafei',
+        'Failed to resolve window density; falling back to display density. Cause: %{public}s', String(error))
+    }
+    try {
+      return Math.max(display.getDefaultDisplaySync().densityPixels, 1)
+    } catch (error) {
+      hilog.warn(0x0000, 'Mafei',
+        'Failed to resolve display density; falling back to raw pixels. Cause: %{public}s', String(error))
+      return 1
+    }
+  }
+
   private refreshWindowMetrics(windowClass: window.Window): void {
-    const uiContext = windowClass.getUIContext()
     const properties = windowClass.getWindowProperties()
     const systemArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
     const navigationArea = windowClass.getWindowAvoidArea(
       window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
     )
-    const deviceWidth = uiContext.px2vp(properties.windowRect.width)
+    const density = this.resolveWindowDensity(windowClass)
+    const deviceWidth = properties.windowRect.width / density
 
-    this.appUIState.deviceHeight = uiContext.px2vp(properties.windowRect.height)
+    this.appUIState.deviceHeight = properties.windowRect.height / density
     this.appUIState.deviceWidth = deviceWidth
     this.appUIState.currentBreakpoint = BreakpointPolicy.fromWidth(deviceWidth)
-    this.appUIState.safeTop = uiContext.px2vp(Math.max(0, systemArea.topRect.height))
-    this.appUIState.safeBottom = uiContext.px2vp(Math.max(
+    this.appUIState.safeTop = Math.max(0, systemArea.topRect.height) / density
+    this.appUIState.safeBottom = Math.max(
       0,
       systemArea.bottomRect.height,
       navigationArea.bottomRect.height
-    ))
+    ) / density
+    this.appUIState.orientation = properties.windowRect.width > properties.windowRect.height ?
+      display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
   }
 
   private resetWindowState(): void {
@@ -129,8 +163,10 @@ export default class EntryAbility extends UIAbility {
   private clearMainWindowBindings(): void {
     const listener = this.listener
     const mainWindow = this.mainWindow
+    const systemDensityChangeListenerRegistered = this.systemDensityChangeListenerRegistered
     this.listener = undefined
     this.mainWindow = undefined
+    this.systemDensityChangeListenerRegistered = false
 
     if (listener) {
       try {
@@ -153,6 +189,14 @@ export default class EntryAbility extends UIAbility {
         hilog.warn(0x0000, 'Mafei',
           'Failed to remove avoid-area listener: %{public}s', String(error))
       }
+      if (systemDensityChangeListenerRegistered) {
+        try {
+          mainWindow.off('systemDensityChange', this.systemDensityChangeCallback)
+        } catch (error) {
+          hilog.warn(0x0000, 'Mafei',
+            'Failed to remove system-density listener: %{public}s', String(error))
+        }
+      }
     }
     this.resetWindowState()
   }
@@ -165,13 +209,13 @@ export default class EntryAbility extends UIAbility {
       this.refreshWindowMetrics(windowClass)
       windowClass.on('windowSizeChange', this.windowSizeChangeCallback)
       windowClass.on('avoidAreaChange', this.avoidAreaChangeCallback)
-
-      this.listener = windowClass.getUIContext()
-        .getMediaQuery()
-        .matchMediaSync('(orientation: landscape)')
-      this.appUIState.orientation = this.listener.matches ?
-        display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
-      this.listener.on('change', this.onPortrait)
+      try {
+        windowClass.on('systemDensityChange', this.systemDensityChangeCallback)
+        this.systemDensityChangeListenerRegistered = true
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'System-density listener is unavailable; continuing without it. Cause: %{public}s', String(error))
+      }
 
       if (OneMoreUtil.isNormalPhone()) {
         windowClass.setPreferredOrientation(window.Orientation.PORTRAIT)
@@ -187,7 +231,34 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  private loadContent(windowStage: window.WindowStage): void {
+  private initializeContentBindings(windowClass: window.Window): void {
+    if (this.mainWindow !== windowClass) {
+      return
+    }
+    let listener: mediaquery.MediaQueryListener | undefined
+    try {
+      listener = windowClass.getUIContext()
+        .getMediaQuery()
+        .matchMediaSync('(orientation: landscape)')
+      listener.on('change', this.onPortrait)
+      this.listener = listener
+      this.appUIState.orientation = listener.matches ?
+        display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
+    } catch (error) {
+      if (listener) {
+        try {
+          listener.off('change', this.onPortrait)
+        } catch (cleanupError) {
+          hilog.warn(0x0000, 'Mafei',
+            'Failed to remove partial orientation listener: %{public}s', String(cleanupError))
+        }
+      }
+      hilog.error(0x0000, 'Mafei',
+        'Failed to initialize window content bindings: %{public}s', String(error))
+    }
+  }
+
+  private loadContent(windowStage: window.WindowStage, windowClass: window.Window): void {
     if (this.contentLoadStarted) {
       hilog.warn(0x0000, 'Mafei', 'Ignoring duplicate content load request.')
       return
@@ -200,7 +271,9 @@ export default class EntryAbility extends UIAbility {
           hilog.error(0x0000, 'Mafei',
             'Failed to load the content. Cause: %{public}s',
             JSON.stringify(error) ?? '')
+          return
         }
+        this.initializeContentBindings(windowClass)
       })
     } catch (error) {
       this.contentLoadStarted = false
@@ -214,7 +287,7 @@ export default class EntryAbility extends UIAbility {
         if (!this.initializeMainWindow(windowClass)) {
           return
         }
-        this.loadContent(windowStage)
+        this.loadContent(windowStage, windowClass)
       }).catch((error: Error) => {
         hilog.error(0x0000, 'Mafei',
           'Failed to load the asynchronous main window: %{public}s', error.message)
@@ -240,7 +313,7 @@ export default class EntryAbility extends UIAbility {
       return
     }
     try {
-      this.loadContent(windowStage)
+      this.loadContent(windowStage, windowClass)
     } catch (error) {
       hilog.error(0x0000, 'Mafei',
         'Failed to load content on the synchronous main window: %{public}s', String(error))
