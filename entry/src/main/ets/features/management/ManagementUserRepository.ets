@@ -177,13 +177,14 @@ export class ManagementUserRepository {
     }
   }
 
-  async deleteUser(userId: string, currentUserId: string): Promise<ManagementUserActionResult> {
+  async deleteUser(userId: string): Promise<ManagementUserActionResult> {
     try {
+      const currentUser = await this.service.getCurrentUser()
       const users = await this.service.getUsers()
       const target = await this.service.getUser(userId)
       const protection = ManagementUserPolicy.canDelete(
         userId,
-        currentUserId,
+        currentUser.Id || '',
         target.Policy?.IsAdministrator === true,
         target.Policy?.IsDisabled !== true,
         ManagementUserPolicy.countEnabledAdministrators(users)
