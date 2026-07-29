@@ -1,6 +1,6 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { AppStorageV2, display, mediaquery, window } from '@kit.ArkUI';
+import { AppStorageV2, display, KeyboardAvoidMode, mediaquery, window } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import { AppPreference } from '../data/AppPreference';
@@ -280,6 +280,7 @@ export default class EntryAbility extends UIAbility {
             JSON.stringify(error) ?? '')
           return
         }
+        windowClass.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
         this.initializeContentBindings(windowClass)
       })
     } catch (error) {

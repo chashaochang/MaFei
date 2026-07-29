@@ -22,6 +22,23 @@ function validSources() {
   for (const path of Object.values(managementUserPaths)) {
     sources.set(path, '')
   }
+  sources.set(managementUserPaths.entryAbility, [
+    "import { KeyboardAvoidMode } from '@kit.ArkUI'",
+    'class EntryAbility {',
+    '  loadContent(windowStage, windowClass): void {',
+    "    windowStage.loadContent('pages/Index', (error) => {",
+    '      if (error.code) return',
+    '      windowClass.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)',
+    '      this.initializeContentBindings(windowClass)',
+    '    })',
+    '  }',
+    '}'
+  ].join('\n'))
+  sources.set(managementUserPaths.breakpointPolicy, [
+    'if (width < 600) return BreakpointTypeEnum.SM',
+    'if (width < 840) return BreakpointTypeEnum.MD',
+    'return BreakpointTypeEnum.LG'
+  ].join('\n'))
   sources.set(managementUserPaths.router, [
     'ManagementUsersPage',
     'ManagementUserDetailPage',
@@ -104,7 +121,11 @@ function validSources() {
     'ManagementUserPasswordSection',
     'AppThemeSurfaceResolver',
     'embeddedUserId',
-    'deviceWidth >= 840',
+    'left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
+    'right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
+    'bottom: this.showSaveBar() ? 104 : 24',
+    'Stack({ alignContent: Alignment.Bottom })',
+    'bottom: this.vm.appUIState.safeBottom + 10',
     'showUnsavedDialog()',
     'deleteProtected currentUserId enabledAdministratorCount',
     'onDeleted management_user_delete_impact'
@@ -175,11 +196,13 @@ function validSources() {
     'management_user_parental_admin_schedule_hidden'
   ].join('\n'))
   sources.set(managementUserPaths.listPage,
-    'AppThemeSurfaceResolver\nif (deviceWidth >= 840) userList(300)\n' +
+    'AppThemeSurfaceResolver\nif (deviceWidth >= 840) userPane(300)\n' +
+      '.width(44)\n.height(44)\n.constraintSize({ minHeight: 72 })\n' +
       'deleteProtected currentUserId enabledAdministratorCount\n' +
       'onDeleted refresh(false)')
   sources.set(managementUserPaths.listViewModel,
-    'async deleteUser() { const result = await repository.deleteUser(); await refresh(false) }')
+    'if (!selectedExists && this.appUIState.deviceWidth >= 840) selectedUserId = users[0].id\n' +
+      'async deleteUser() { const result = await repository.deleteUser(); await refresh(false) }')
   sources.set(managementUserPaths.createState, [
     'name: string',
     'password: string',
@@ -199,6 +222,8 @@ function validSources() {
   ].join('\n'))
   sources.set(managementUserPaths.createPage, [
     'AppThemeSurfaceResolver',
+    'left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
+    'right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
     'enabledFolderIds',
     'enabledChannelIds',
     'partialSuccess',
@@ -217,6 +242,70 @@ test('accepts the complete user-management contract', () => {
 test('derives the workspace root from the scripts directory', () => {
   const scriptsDirectory = dirname(fileURLToPath(import.meta.url))
   assert.equal(defaultWorkspaceRoot(), resolve(scriptsDirectory, '..'))
+})
+
+test('requires RESIZE keyboard avoidance after content loads', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.entryAbility,
+    sources.get(managementUserPaths.entryAbility)
+      .replace('KeyboardAvoidMode.RESIZE', 'KeyboardAvoidMode.OFFSET'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /RESIZE keyboard avoidance must be enabled after content loads/
+  )
+})
+
+test('requires the exact 599/600 and 839/840 breakpoint boundaries', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.breakpointPolicy,
+    sources.get(managementUserPaths.breakpointPolicy)
+      .replace('width < 600', 'width <= 600'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /599\/600 breakpoint boundary/
+  )
+
+  const largeBoundarySources = validSources()
+  largeBoundarySources.set(managementUserPaths.breakpointPolicy,
+    largeBoundarySources.get(managementUserPaths.breakpointPolicy)
+      .replace('width < 840', 'width <= 840'))
+  assert.throws(
+    () => validateManagementUserContracts(largeBoundarySources),
+    /839\/840 breakpoint boundary/
+  )
+})
+
+test('requires medium-width editor padding to begin at 600vp', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.detailPage,
+    sources.get(managementUserPaths.detailPage)
+      .replaceAll('deviceWidth >= 600', 'deviceWidth >= 840'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /600vp editor left padding boundary/
+  )
+})
+
+test('rejects duplicate bottom safe-area ownership in the detail editor', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.detailPage,
+    sources.get(managementUserPaths.detailPage) +
+      '\nbottom: this.vm.appUIState.safeBottom + 24')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /must not apply the bottom safe-area inset twice/
+  )
+})
+
+test('requires stable user row dimensions', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.listPage,
+    sources.get(managementUserPaths.listPage)
+      .replace('minHeight: 72', 'minHeight: 68'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /stable user row dimensions/
+  )
 })
 
 test('rejects policy writes without a fresh server reload', () => {

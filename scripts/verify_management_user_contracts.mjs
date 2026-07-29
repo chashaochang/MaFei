@@ -3,6 +3,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const managementUserPaths = Object.freeze({
+  entryAbility: 'entry/src/main/ets/entryability/EntryAbility.ets',
+  breakpointPolicy: 'entry/src/main/ets/utils/BreakpointPolicy.ets',
   router: 'entry/src/main/ets/common/RouterConsts.ets',
   dashboardModels: 'entry/src/main/ets/features/management/ManagementModels.ets',
   dashboardState: 'entry/src/main/ets/features/management/ManagementDashboardUIState.ets',
@@ -65,6 +67,14 @@ function rejectPattern(sources, path, pattern, message) {
   }
 }
 
+function requireMatchCount(sources, path, pattern, expected, message) {
+  const source = requiredSource(sources, path)
+  const matches = source.match(pattern) || []
+  if (matches.length !== expected) {
+    throw new Error(`${message}; expected ${expected}, got ${matches.length}: ${path}`)
+  }
+}
+
 function methodBlock(source, methodName) {
   const match = new RegExp('\\b' + methodName + '\\s*\\([^)]*\\)\\s*(?::\\s*[^\\{]+)?\\s*\\{')
     .exec(source)
@@ -115,6 +125,20 @@ function requireFreshPolicyWrite(repository, methodName, patchMethod) {
   if (loadIndex < 0 || cloneIndex < 0 || writeIndex < 0 || reloadIndex <= writeIndex ||
     loadIndex > cloneIndex || cloneIndex > writeIndex) {
     throw new Error(methodName + ' must use a fresh user policy, patch it, submit it, and reload')
+  }
+}
+
+function requireResizeKeyboardAvoidance(entryAbility) {
+  const body = methodBlock(entryAbility, 'loadContent')
+  const loadIndex = body.indexOf("windowStage.loadContent('pages/Index'")
+  const errorIndex = body.indexOf('if (error.code)', loadIndex)
+  const resizeIndex = body.indexOf(
+    'setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)', loadIndex)
+  const bindingsIndex = body.indexOf(
+    'this.initializeContentBindings(windowClass)', loadIndex)
+  if (loadIndex < 0 || errorIndex < 0 || resizeIndex <= errorIndex ||
+    bindingsIndex <= resizeIndex) {
+    throw new Error('RESIZE keyboard avoidance must be enabled after content loads')
   }
 }
 
@@ -169,6 +193,11 @@ export function validateManagementUserContracts(sources) {
     requiredSource(sources, path)
   }
 
+  requirePattern(sources, managementUserPaths.entryAbility,
+    /import\s*\{[^}]*KeyboardAvoidMode[^}]*\}\s*from\s*'@kit\.ArkUI'/,
+    'EntryAbility must import KeyboardAvoidMode from ArkUI')
+  requireResizeKeyboardAvoidance(requiredSource(sources, managementUserPaths.entryAbility))
+
   for (const routeName of routeNames) {
     requirePattern(sources, managementUserPaths.router, new RegExp('\\b' + routeName + '\\b'),
       'missing user management route')
@@ -215,7 +244,7 @@ export function validateManagementUserContracts(sources) {
       throw new Error('editor dirty state must compare the current draft with its baseline')
     }
   }
-  for (const editorShellBoundary of [/embeddedUserId/, /840/, /showUnsavedDialog/]) {
+  for (const editorShellBoundary of [/embeddedUserId/, /showUnsavedDialog/]) {
     requirePattern(sources, managementUserPaths.detailPage, editorShellBoundary,
       'responsive editor shell or unsaved prompt is missing')
   }
@@ -403,6 +432,42 @@ export function validateManagementUserContracts(sources) {
     'large-screen user pane width is missing')
   requirePattern(sources, managementUserPaths.listPage, /840/,
     'large-screen breakpoint is missing')
+
+  requirePattern(sources, managementUserPaths.breakpointPolicy,
+    /width\s*<\s*600[\s\S]*BreakpointTypeEnum\.SM/,
+    '599/600 breakpoint boundary is missing')
+  requirePattern(sources, managementUserPaths.breakpointPolicy,
+    /width\s*<\s*840[\s\S]*BreakpointTypeEnum\.MD/,
+    '839/840 breakpoint boundary is missing')
+  requirePattern(sources, managementUserPaths.listPage,
+    /deviceWidth\s*>=\s*840[\s\S]*userPane\(300\)/,
+    '840vp split layout or 300vp list pane is missing')
+  requirePattern(sources, managementUserPaths.listViewModel,
+    /!selectedExists\s*&&\s*this\.appUIState\.deviceWidth\s*>=\s*840/,
+    '840vp large-screen selection ownership is missing')
+  for (const pagePath of [managementUserPaths.detailPage, managementUserPaths.createPage]) {
+    requirePattern(sources, pagePath,
+      /left:\s*this\.vm\.appUIState\.deviceWidth\s*>=\s*600\s*\?\s*24\s*:\s*16/,
+      '600vp editor left padding boundary is missing')
+    requirePattern(sources, pagePath,
+      /right:\s*this\.vm\.appUIState\.deviceWidth\s*>=\s*600\s*\?\s*24\s*:\s*16/,
+      '600vp editor right padding boundary is missing')
+  }
+  requirePattern(sources, managementUserPaths.listPage,
+    /\.width\(44\)[\s\S]*\.height\(44\)[\s\S]*constraintSize\(\{\s*minHeight:\s*72\s*\}\)/,
+    'stable user row dimensions are missing')
+  requirePattern(sources, managementUserPaths.detailPage,
+    /Stack\(\{\s*alignContent:\s*Alignment\.Bottom\s*\}\)/,
+    'save bar must remain bottom-aligned')
+  requirePattern(sources, managementUserPaths.detailPage,
+    /bottom:\s*this\.showSaveBar\(\)\s*\?\s*104\s*:\s*24/,
+    'editor content must reserve save-bar space')
+  requirePattern(sources, managementUserPaths.detailPage,
+    /bottom:\s*this\.vm\.appUIState\.safeBottom\s*\+\s*10/,
+    'save bar must own the bottom safe-area inset')
+  requireMatchCount(sources, managementUserPaths.detailPage,
+    /this\.vm\.appUIState\.safeBottom/g, 1,
+    'detail page must not apply the bottom safe-area inset twice')
 
   requireSameLocaleKeys(sources)
 }

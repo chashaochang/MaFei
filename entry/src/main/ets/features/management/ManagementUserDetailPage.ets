@@ -715,8 +715,8 @@ export struct ManagementUserDetailPage {
       .width('100%')
       .constraintSize({ maxWidth: 900 })
       .padding({
-        left: this.vm.appUIState.deviceWidth >= 840 ? 24 : 16,
-        right: this.vm.appUIState.deviceWidth >= 840 ? 24 : 16,
+        left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+        right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
         top: 12,
         bottom: this.showSaveBar() ? 104 : 24
       })
