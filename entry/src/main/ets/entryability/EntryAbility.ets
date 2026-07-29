@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppStorageV2, display, mediaquery, window } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { HMRouterMgr } from '@hadss/hmrouter';
+import { AppPreference } from '../data/AppPreference';
 import { DBManager } from '../data/DBManager';
 import { AppUIState } from '../entity/AppUIState';
 import { ThemeStyle } from '../entity/ThemeStyle';
@@ -21,13 +22,11 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
   private systemDensityChangeListenerRegistered: boolean = false
-
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
       this.refreshWindowMetrics(this.mainWindow)
     }
   }
-
   private avoidAreaChangeCallback = (options: window.AvoidAreaOptions): void => {
     if (!this.mainWindow) {
       return
@@ -37,7 +36,6 @@ export default class EntryAbility extends UIAbility {
       this.refreshWindowMetrics(this.mainWindow)
     }
   }
-
   private systemDensityChangeCallback = (_density: number): void => {
     if (this.mainWindow) {
       this.refreshWindowMetrics(this.mainWindow)
@@ -45,10 +43,12 @@ export default class EntryAbility extends UIAbility {
   }
 
   onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+    AppPreference.initialize(this.context.getApplicationContext())
     this.appUIState.context = this.context
     this.initializeThemeState()
-    if(this.context.config.colorMode !== undefined)
+    if (this.context.config.colorMode !== undefined) {
       this.appUIState.colorMode = this.context.config.colorMode
+    }
     //预初始化
     webview.WebviewController.initializeWebEngine()
     HMRouterMgr.init({
@@ -88,9 +88,7 @@ export default class EntryAbility extends UIAbility {
       hilog.error(0x0000, 'Mafei', 'Application initialization was not started.')
       return
     }
-    initializationPromise.then(() => {
-      this.loadWindowStage(windowStage)
-    }).catch((error: Error) => {
+    initializationPromise.then(() => this.loadWindowStage(windowStage)).catch((error: Error) => {
       hilog.error(0x0000, 'Mafei', 'Failed to create the window stage. Cause: %{public}s', error.message)
     })
   }
@@ -201,11 +199,20 @@ export default class EntryAbility extends UIAbility {
     this.resetWindowState()
   }
 
-  private initializeMainWindow(windowClass: window.Window): boolean {
+  private async initializeMainWindow(windowClass: window.Window): Promise<boolean> {
     this.clearMainWindowBindings()
     try {
       this.mainWindow = windowClass
-      windowClass.setWindowLayoutFullScreen(true).catch(() => undefined)
+      try {
+        await windowClass.setWindowLayoutFullScreen(true)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to enable full-screen layout before content load; using default safe-area layout. Cause: %{public}s',
+          String(error))
+      }
+      if (this.mainWindow !== windowClass) {
+        return false
+      }
       this.refreshWindowMetrics(windowClass)
       windowClass.on('windowSizeChange', this.windowSizeChangeCallback)
       windowClass.on('avoidAreaChange', this.avoidAreaChangeCallback)
@@ -283,8 +290,8 @@ export default class EntryAbility extends UIAbility {
 
   private loadMainWindowAsync(windowStage: window.WindowStage): void {
     try {
-      windowStage.getMainWindow().then((windowClass: window.Window) => {
-        if (!this.initializeMainWindow(windowClass)) {
+      windowStage.getMainWindow().then(async (windowClass: window.Window) => {
+        if (!await this.initializeMainWindow(windowClass)) {
           return
         }
         this.loadContent(windowStage, windowClass)
@@ -298,7 +305,7 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  private loadWindowStage(windowStage: window.WindowStage): void {
+  private async loadWindowStage(windowStage: window.WindowStage): Promise<void> {
     let windowClass: window.Window
     try {
       windowClass = windowStage.getMainWindowSync()
@@ -309,7 +316,7 @@ export default class EntryAbility extends UIAbility {
       return
     }
 
-    if (!this.initializeMainWindow(windowClass)) {
+    if (!await this.initializeMainWindow(windowClass)) {
       return
     }
     try {

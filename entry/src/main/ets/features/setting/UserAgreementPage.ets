@@ -1,16 +1,37 @@
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
+import { AppStorageV2 } from '@kit.ArkUI';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppUIState } from '../../entity/AppUIState';
+import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
-  pageUrl:'/UserAgreement'
+  pageUrl: '/UserAgreement',
+  useNavDst: true
 })
 @ComponentV2
 export struct UserAgreementPage{
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  private primaryTextColor(): ResourceColor {
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.font_primary') : Color.White
+  }
+
+  private secondaryTextColor(): ResourceColor {
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.font_secondary') : '#CCCCCC'
+  }
+
+  private tertiaryTextColor(): ResourceColor {
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.font_tertiary') : '#999999'
+  }
   
   @Builder
   SectionTitle(title: string) {
     Text(title)
       .fontSize(18)
-      .fontColor(Color.White)
+      .fontColor(this.primaryTextColor())
       .fontWeight(FontWeight.Medium)
       .width('100%')
       .textAlign(TextAlign.Start)
@@ -21,37 +42,39 @@ export struct UserAgreementPage{
   SectionContent(content: string) {
     Text(content)
       .fontSize(14)
-      .fontColor('#CCCCCC')
+      .fontColor(this.secondaryTextColor())
       .lineHeight(22)
       .width('100%')
       .textAlign(TextAlign.Start)
   }
 
-  build() {
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Column(){
-      // 顶部导航栏
-      Row() {
-        Image($r('app.media.ic_back'))
-          .width(44)
-          .height(44)
-          .padding(12)
-          .onClick(() => {
-            HMRouterMgr.pop()
-          })
-        Text('用户协议').fontColor(Color.White).fontSize(16).margin({left:16})
-        Blank().layoutWeight(1)
+      if (showLegacyActionBar) {
+        Row() {
+          Image($r('app.media.ic_back'))
+            .width(44)
+            .height(44)
+            .padding(12)
+            .onClick(() => {
+              HMRouterMgr.pop()
+            })
+          Text('用户协议').fontColor(this.primaryTextColor()).fontSize(16).margin({left:16})
+          Blank().layoutWeight(1)
+        }
+        .height(56)
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+        .backgroundColor('#202020')
       }
-      .height(56)
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
-      .backgroundColor('#202020')
       
       // 内容区域
       Scroll() {
         Column() {
           Text('用户使用协议')
             .fontSize(24)
-            .fontColor(Color.White)
+            .fontColor(this.primaryTextColor())
             .fontWeight(FontWeight.Bold)
             .width('100%')
             .textAlign(TextAlign.Center)
@@ -59,7 +82,7 @@ export struct UserAgreementPage{
           
           Text('最后更新时间：2024年12月1日')
             .fontSize(12)
-            .fontColor('#999999')
+            .fontColor(this.tertiaryTextColor())
             .width('100%')
             .textAlign(TextAlign.Center)
             .margin({ bottom: 24 })
@@ -101,6 +124,8 @@ export struct UserAgreementPage{
           this.SectionContent('如果您对本协议有任何疑问，请联系我们：\n• QQ群：991893385\n• GitHub：在项目仓库中提交问题')
           
         }
+        .width('100%')
+        .constraintSize({ maxWidth: showLegacyActionBar ? '100%' : 720 })
         .padding({ left: 16, right: 16, bottom: 32 })
       }
       .layoutWeight(1)
@@ -108,7 +133,19 @@ export struct UserAgreementPage{
       
     }.width('100%')
     .height('100%')
-    .backgroundColor('#101010')
+    .backgroundColor(showLegacyActionBar ? '#101010' : Color.Transparent)
     .expandSafeArea([SafeAreaType.SYSTEM],[SafeAreaEdge.BOTTOM])
+  }
+
+  build() {
+    AppRouteDestination({
+      title: '用户协议',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 }

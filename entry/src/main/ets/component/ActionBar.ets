@@ -2,19 +2,31 @@ import { HMRouterMgr } from "@hadss/hmrouter"
 import { UIConstants } from "../common/UIConstants"
 import { AppUIState } from "../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
 export struct ActionBar {
   @Param title: ResourceStr = ""
   @Param showBackButton: boolean = true
+  @Param floating: boolean = false
   @Param onBackClick: () => void = () => {
     HMRouterMgr.pop()
   }
   @Param rightBtnIcon?: Resource = undefined
+  @Param rightBtnAccessibilityText?: Resource = undefined
   @Param onRightBtnClick?: () => void = () => {
   }
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  private rightButtonAccessibilityText(): Resource {
+    return this.rightBtnAccessibilityText || $r('app.string.app_name')
+  }
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
+  }
 
   @Builder
   nativeActionButton(icon: Resource, onClick: () => void) {
@@ -31,35 +43,41 @@ export struct ActionBar {
   }
 
   @Builder
-  nativeBar() {
+  nativeBarItems() {
+    if (this.showBackButton) {
+      this.nativeActionButton($r('sys.symbol.chevron_backward'), () => {
+        this.onBackClick()
+      })
+    }
+    Text(this.title)
+      .fontSize(AppThemeTokens.titleSize(this.appUIState.themeStyle))
+      .fontColor($r('sys.color.font_primary'))
+      .fontWeight(FontWeight.Bold)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .layoutWeight(1)
+    if (this.rightBtnIcon) {
+      Button() {
+        Image(this.rightBtnIcon)
+          .width(20)
+          .height(20)
+          .fillColor($r('sys.color.icon_primary'))
+      }
+      .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+      .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+      .borderRadius(20)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(this.rightButtonAccessibilityText())
+      .onClick(() => {
+        this.onRightBtnClick && this.onRightBtnClick()
+      })
+    }
+  }
+
+  @Builder
+  nativeBarContent() {
     Row({ space: 4 }) {
-      if (this.showBackButton) {
-        this.nativeActionButton($r('sys.symbol.chevron_backward'), () => {
-          this.onBackClick()
-        })
-      }
-      Text(this.title)
-        .fontSize(AppThemeTokens.titleSize(this.appUIState.themeStyle))
-        .fontColor($r('sys.color.font_primary'))
-        .fontWeight(FontWeight.Bold)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      if (this.rightBtnIcon) {
-        Button() {
-          Image(this.rightBtnIcon)
-            .width(20)
-            .height(20)
-            .fillColor($r('sys.color.icon_primary'))
-        }
-        .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-        .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-        .borderRadius(20)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.onRightBtnClick && this.onRightBtnClick()
-        })
-      }
+      this.nativeBarItems()
     }
     .width('100%')
     .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
@@ -69,8 +87,27 @@ export struct ActionBar {
       right: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen)
     })
     .alignItems(VerticalAlign.Center)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-    .renderGroup(true)
+  }
+
+  @Builder
+  nativeBar() {
+    if (this.floating) {
+      Row({ space: 4 }) {
+        this.nativeBarItems()
+      }
+      .width('100%')
+      .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
+      .padding({
+        top: this.appUIState.safeTop,
+        left: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen),
+        right: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen)
+      })
+      .alignItems(VerticalAlign.Center)
+      .renderGroup(true)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+    } else {
+      this.nativeBarContent()
+    }
   }
 
   @Builder
@@ -100,6 +137,7 @@ export struct ActionBar {
             .borderRadius(20)
             .backgroundColor(Color.Transparent)
             .fillColor($r('app.color.text_primary'))
+            .accessibilityText(this.rightButtonAccessibilityText())
             .onClick(() => {
               this.onRightBtnClick && this.onRightBtnClick()
             })
@@ -120,7 +158,7 @@ export struct ActionBar {
   }
 
   build() {
-    if (AppThemeTokens.isNative(this.appUIState.themeStyle)) {
+    if (this.useNativeSurface()) {
       this.nativeBar()
     } else {
       this.feiniuBar()

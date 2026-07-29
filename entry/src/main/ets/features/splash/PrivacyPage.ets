@@ -1,20 +1,25 @@
-import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
+import { HMRouter } from "@hadss/hmrouter";
 import { webview } from '@kit.ArkWeb';
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
+import { AppRouteDestination } from "../../component/AppRouteDestination";
 
 @HMRouter({
-  pageUrl: RouterConsts.PrivacyPage
+  pageUrl: RouterConsts.PrivacyPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct PrivacyPage {
   webviewController: webview.WebviewController = new webview.WebviewController();
 
-  build() {
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Column() {
-      ActionBar({
-        title: '隐私协议'
-      })
+      if (showLegacyActionBar) {
+        ActionBar({
+          title: '隐私协议'
+        })
+      }
 
       // Web内容区域
       Web({
@@ -36,7 +41,19 @@ export struct PrivacyPage {
 
     }.width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.start_window_background'))
+    .backgroundColor(showLegacyActionBar ? $r('app.color.start_window_background') : Color.Transparent)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  build() {
+    AppRouteDestination({
+      title: '隐私协议',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 }

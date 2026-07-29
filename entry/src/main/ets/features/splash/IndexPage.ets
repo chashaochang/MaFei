@@ -1,4 +1,4 @@
-import { HMRouter } from "@hadss/hmrouter";
+import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { RouterConsts } from "../../common/RouterConsts";
 import { AppUIState } from "../../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
@@ -15,15 +15,18 @@ import { getSystemApi } from "sdk/src/main/ets/utils/api/system-api";
 import { ApiClient } from "../../network/ApiClient";
 import { emitter } from "@kit.BasicServicesKit";
 import { TokenExpiredEvent } from "../../events/Events";
+import { AppRouteDestination } from "../../component/AppRouteDestination";
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
-  singleton: true
+  singleton: true,
+  useNavDst: true
 })
 @ComponentV2
 export struct IndexPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   apiClientController: ApiClientController = new ApiClientController()
+  private readonly homeScroller: Scroller = new Scroller()
   //是否点了取消登录
   @Local isCancel: boolean = false
 
@@ -88,14 +91,37 @@ export struct IndexPage {
     emitter.off(TokenExpiredEvent)
   }
 
-  build() {
+  private rootNavigationMenus(): Array<NavigationMenuItem> {
+    let menus: Array<NavigationMenuItem> = []
+    if (!this.appUIState.rootNavigationHomeActionsVisible) {
+      return menus
+    }
+    if (this.appUIState.rootNavigationLiveTvAvailable) {
+      menus.push({
+        value: '电视直播',
+        icon: $r('app.media.iptv'),
+        action: () => {
+          HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+        }
+      })
+    }
+    menus.push({
+      value: '搜索',
+      icon: $r('app.media.ic_search'),
+      action: () => {
+        HMRouterMgr.to(RouterConsts.SearchPage).push()
+      }
+    })
+    return menus
+  }
+
+  @Builder
+  private pageContent() {
     Stack() {
       if (this.appUIState.isLogin) {
-        HomeScreen()
+        HomeScreen({ homeScroller: this.homeScroller })
       } else {
-        if (!this.appUIState.isConnecting) {
-          ConnectScreen()
-        }
+        ConnectScreen()
         ConnectingScreen({
           onLogoutClick: () => {
             this.isCancel = true
@@ -118,5 +144,21 @@ export struct IndexPage {
           ))
       }
     }.width('100%').height('100%')
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.appUIState.rootNavigationTitle,
+      titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,
+      backButtonVisible: false,
+      menus: this.rootNavigationMenus(),
+      scrollControllers: [this.homeScroller],
+      contentBuilder: () => {
+        this.pageContent()
+      },
+      legacyContentBuilder: () => {
+        this.pageContent()
+      }
+    })
   }
 }

@@ -50,10 +50,10 @@ class HarmonyPreferenceBackend implements AppPreferenceBackend {
 }
 
 class HarmonyPreferenceBackendFactory implements AppPreferenceBackendFactory {
-  private context: common.UIAbilityContext
+  private context: common.Context
   private storeName: string
 
-  constructor(context: common.UIAbilityContext, storeName: string) {
+  constructor(context: common.Context, storeName: string) {
     this.context = context
     this.storeName = storeName
   }
@@ -69,20 +69,25 @@ class HarmonyPreferenceBackendFactory implements AppPreferenceBackendFactory {
 export class AppPreference {
   private backend?: AppPreferenceBackend
   private backendFactory: AppPreferenceBackendFactory
-  private static instance: AppPreference;
+  private static instance?: AppPreference
 
-  private constructor(factory?: AppPreferenceBackendFactory) {
-    this.backendFactory = factory ?? new HarmonyPreferenceBackendFactory(
-      getContext(this) as common.UIAbilityContext,
-      PREFERENCES_NAME
-    )
+  private constructor(factory: AppPreferenceBackendFactory) {
+    this.backendFactory = factory
+  }
+
+  public static initialize(context: common.Context): void {
+    if (!AppPreference.instance) {
+      AppPreference.instance = new AppPreference(
+        new HarmonyPreferenceBackendFactory(context, PREFERENCES_NAME)
+      )
+    }
   }
 
   public static getInstance(): AppPreference {
     if (!AppPreference.instance) {
-      AppPreference.instance = new AppPreference();
+      throw new Error('AppPreference has not been initialized')
     }
-    return AppPreference.instance;
+    return AppPreference.instance
   }
 
   static createForTest(factory: AppPreferenceBackendFactory): AppPreference {

@@ -15,8 +15,8 @@ import {
   ManagementProfileDraft
 } from './ManagementUserModels';
 
-const CURRENT_ADMINISTRATOR_PROTECTED: string = 'current_administrator_protected'
-const LAST_ADMINISTRATOR_PROTECTED: string = 'last_enabled_administrator_protected'
+const CURRENT_ADMINISTRATOR_PROTECTED: string = 'management_user_protect_current_admin'
+const LAST_ADMINISTRATOR_PROTECTED: string = 'management_user_protect_last_admin'
 
 export class ManagementUserPolicy {
   static clonePolicy(policy: UserPolicy): UserPolicy {
@@ -88,11 +88,11 @@ export class ManagementUserPolicy {
     const blocked = ManagementUserPolicy.normalizeTags(draft.blockedTags)
     const conflicts = allowed.filter((tag: string) => blocked.includes(tag))
     if (conflicts.length > 0) {
-      return 'conflicting_tags'
+      return 'management_user_parental_conflicting_tags'
     }
     const invalidSchedule = draft.schedules.some((schedule: ManagementAccessScheduleItem) =>
       schedule.startHour < 0 || schedule.endHour > 24 || schedule.startHour >= schedule.endHour)
-    return invalidSchedule ? 'invalid_schedule' : ''
+    return invalidSchedule ? 'management_user_parental_invalid_schedule' : ''
   }
 
   static normalizeTags(tags: string[]): string[] {

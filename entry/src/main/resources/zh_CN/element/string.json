@@ -75,6 +75,1206 @@
     {
       "name": "player_engine_desc",
       "value": "选择播放器与解码方式"
+    },
+    {
+      "name": "management_title",
+      "value": "服务器控制台"
+    },
+    {
+      "name": "management_entry_desc",
+      "value": "查看状态、会话与服务器任务"
+    },
+    {
+      "name": "management_online",
+      "value": "服务器在线"
+    },
+    {
+      "name": "management_offline",
+      "value": "服务器离线"
+    },
+    {
+      "name": "management_server_unknown",
+      "value": "未知服务器"
+    },
+    {
+      "name": "management_movies",
+      "value": "电影"
+    },
+    {
+      "name": "management_series",
+      "value": "剧集"
+    },
+    {
+      "name": "management_episodes",
+      "value": "单集"
+    },
+    {
+      "name": "management_scan_library",
+      "value": "扫描媒体库"
+    },
+    {
+      "name": "management_scan_starting",
+      "value": "正在启动扫描"
+    },
+    {
+      "name": "management_scan_running",
+      "value": "媒体库正在扫描"
+    },
+    {
+      "name": "management_scan_started",
+      "value": "已开始扫描媒体库"
+    },
+    {
+      "name": "management_scan_failed",
+      "value": "启动扫描失败，请重试"
+    },
+    {
+      "name": "management_scan_unsupported",
+      "value": "当前服务器未提供媒体库扫描任务"
+    },
+    {
+      "name": "management_scan_confirm_title",
+      "value": "扫描媒体库"
+    },
+    {
+      "name": "management_scan_confirm_content",
+      "value": "确定要触发 Jellyfin 服务器扫描全部媒体库吗？"
+    },
+    {
+      "name": "management_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "management_confirm",
+      "value": "开始扫描"
+    },
+    {
+      "name": "management_running_tasks",
+      "value": "正在运行的任务"
+    },
+    {
+      "name": "management_active_sessions",
+      "value": "当前播放会话"
+    },
+    {
+      "name": "management_recent_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "management_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_tasks_empty",
+      "value": "当前没有正在运行的任务"
+    },
+    {
+      "name": "management_sessions_empty",
+      "value": "当前没有播放中的会话"
+    },
+    {
+      "name": "management_activity_empty",
+      "value": "暂无活动记录"
+    },
+    {
+      "name": "management_tasks_failed",
+      "value": "任务信息加载失败"
+    },
+    {
+      "name": "management_sessions_failed",
+      "value": "会话信息加载失败"
+    },
+    {
+      "name": "management_stale_result",
+      "value": "刷新失败，正在显示上次结果"
+    },
+    {
+      "name": "management_activity_failed",
+      "value": "活动记录加载失败"
+    },
+    {
+      "name": "management_counts_failed",
+      "value": "媒体数量加载失败"
+    },
+    {
+      "name": "management_server_failed",
+      "value": "服务器信息加载失败"
+    },
+    {
+      "name": "management_session_detail_title",
+      "value": "会话详情"
+    },
+    {
+      "name": "management_task_detail_title",
+      "value": "任务详情"
+    },
+    {
+      "name": "management_detail_unavailable",
+      "value": "信息已失效，请返回后重试"
+    },
+    {
+      "name": "management_detail_unknown",
+      "value": "未提供"
+    },
+    {
+      "name": "management_detail_playing",
+      "value": "播放中"
+    },
+    {
+      "name": "management_detail_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "management_detail_running",
+      "value": "运行中"
+    },
+    {
+      "name": "management_detail_cancelling",
+      "value": "正在取消"
+    },
+    {
+      "name": "management_detail_user",
+      "value": "用户"
+    },
+    {
+      "name": "management_detail_status",
+      "value": "状态"
+    },
+    {
+      "name": "management_detail_position",
+      "value": "播放位置"
+    },
+    {
+      "name": "management_detail_device",
+      "value": "设备"
+    },
+    {
+      "name": "management_detail_device_type",
+      "value": "设备类型"
+    },
+    {
+      "name": "management_detail_client",
+      "value": "客户端"
+    },
+    {
+      "name": "management_detail_app_version",
+      "value": "客户端版本"
+    },
+    {
+      "name": "management_detail_remote_endpoint",
+      "value": "网络地址"
+    },
+    {
+      "name": "management_detail_play_method",
+      "value": "播放方式"
+    },
+    {
+      "name": "management_detail_direct_play",
+      "value": "直接播放"
+    },
+    {
+      "name": "management_detail_direct_stream",
+      "value": "直接串流"
+    },
+    {
+      "name": "management_detail_transcode",
+      "value": "转码"
+    },
+    {
+      "name": "management_detail_volume",
+      "value": "音量"
+    },
+    {
+      "name": "management_detail_muted",
+      "value": "已静音"
+    },
+    {
+      "name": "management_detail_audio_stream",
+      "value": "音轨索引"
+    },
+    {
+      "name": "management_detail_subtitle_stream",
+      "value": "字幕索引"
+    },
+    {
+      "name": "management_detail_seekable",
+      "value": "支持拖动"
+    },
+    {
+      "name": "management_detail_media_control",
+      "value": "媒体控制"
+    },
+    {
+      "name": "management_detail_remote_control",
+      "value": "远程控制"
+    },
+    {
+      "name": "management_detail_supported",
+      "value": "支持"
+    },
+    {
+      "name": "management_detail_unsupported",
+      "value": "不支持"
+    },
+    {
+      "name": "management_detail_last_activity",
+      "value": "最后活动"
+    },
+    {
+      "name": "management_detail_task_name",
+      "value": "任务名称"
+    },
+    {
+      "name": "management_detail_category",
+      "value": "分类"
+    },
+    {
+      "name": "management_detail_progress",
+      "value": "进度"
+    },
+    {
+      "name": "management_detail_description",
+      "value": "说明"
+    },
+    {
+      "name": "management_detail_task_key",
+      "value": "任务标识"
+    },
+    {
+      "name": "management_detail_last_start",
+      "value": "上次开始"
+    },
+    {
+      "name": "management_detail_last_end",
+      "value": "上次结束"
+    },
+    {
+      "name": "management_detail_last_result",
+      "value": "上次结果"
+    },
+    {
+      "name": "management_detail_last_error",
+      "value": "上次错误"
+    },
+    {
+      "name": "management_section_unsupported",
+      "value": "当前服务器版本不支持此信息"
+    },
+    {
+      "name": "management_permission_denied",
+      "value": "当前账号不是服务器管理员"
+    },
+    {
+      "name": "management_permission_check_failed",
+      "value": "无法确认管理员权限，请检查服务器连接"
+    },
+    {
+      "name": "management_access_no_server",
+      "value": "当前没有可用的服务器连接"
+    },
+    {
+      "name": "management_access_offline",
+      "value": "无法连接当前服务器，请检查网络后重试"
+    },
+    {
+      "name": "management_user_title",
+      "value": "用户管理"
+    },
+    {
+      "name": "management_user_summary_total",
+      "value": "用户总数"
+    },
+    {
+      "name": "management_user_summary_administrators",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_summary_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_load_failed",
+      "value": "无法加载用户，请重试"
+    },
+    {
+      "name": "management_user_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "management_user_filter_administrators",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_filter_standard",
+      "value": "普通用户"
+    },
+    {
+      "name": "management_user_filter_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_filter_hidden",
+      "value": "已隐藏"
+    },
+    {
+      "name": "management_user_role_administrator",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_role_standard",
+      "value": "普通用户"
+    },
+    {
+      "name": "management_user_status_enabled",
+      "value": "已启用"
+    },
+    {
+      "name": "management_user_status_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_status_hidden",
+      "value": "登录页隐藏"
+    },
+    {
+      "name": "management_user_never",
+      "value": "从未"
+    },
+    {
+      "name": "management_user_last_login",
+      "value": "登录"
+    },
+    {
+      "name": "management_user_last_activity",
+      "value": "活动"
+    },
+    {
+      "name": "management_user_search_placeholder",
+      "value": "搜索用户名"
+    },
+    {
+      "name": "management_user_menu_profile",
+      "value": "资料"
+    },
+    {
+      "name": "management_user_menu_access",
+      "value": "访问"
+    },
+    {
+      "name": "management_user_menu_parental",
+      "value": "家长控制"
+    },
+    {
+      "name": "management_user_password_set",
+      "value": "已设置密码"
+    },
+    {
+      "name": "management_user_password_not_set",
+      "value": "未设置密码"
+    },
+    {
+      "name": "management_user_more_actions",
+      "value": "更多用户操作"
+    },
+    {
+      "name": "management_user_empty",
+      "value": "服务器没有可管理用户"
+    },
+    {
+      "name": "management_user_create",
+      "value": "新建用户"
+    },
+    {
+      "name": "management_user_name_required",
+      "value": "请输入用户名"
+    },
+    {
+      "name": "management_user_initial_password",
+      "value": "初始密码（可选）"
+    },
+    {
+      "name": "management_user_create_failed",
+      "value": "创建用户失败"
+    },
+    {
+      "name": "management_user_created_policy_pending",
+      "value": "用户已创建，但访问配置未完整保存"
+    },
+    {
+      "name": "management_user_create_retry_access",
+      "value": "重试访问配置"
+    },
+    {
+      "name": "management_user_retry_access_failed",
+      "value": "访问配置仍未保存，请重试"
+    },
+    {
+      "name": "management_user_create_success",
+      "value": "用户已创建"
+    },
+    {
+      "name": "management_user_no_results",
+      "value": "没有符合条件的用户"
+    },
+    {
+      "name": "management_user_clear_filters",
+      "value": "清除条件"
+    },
+    {
+      "name": "management_user_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_user_stale",
+      "value": "当前显示上次获取的数据"
+    },
+    {
+      "name": "management_user_open_details",
+      "value": "打开用户详情"
+    },
+    {
+      "name": "management_user_select_hint",
+      "value": "选择一个用户以查看详情"
+    },
+    {
+      "name": "management_user_delete_title",
+      "value": "删除用户"
+    },
+    {
+      "name": "management_user_delete_message",
+      "value": "此操作无法撤销。确认删除用户："
+    },
+    {
+      "name": "management_user_delete_impact",
+      "value": "删除后该用户将无法登录，相关个人数据可能无法恢复"
+    },
+    {
+      "name": "management_user_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "management_user_delete",
+      "value": "删除"
+    },
+    {
+      "name": "management_user_delete_success",
+      "value": "用户已删除"
+    },
+    {
+      "name": "management_user_delete_failed",
+      "value": "删除用户失败"
+    },
+    {
+      "name": "management_user_invalid_parameter",
+      "value": "用户参数无效"
+    },
+    {
+      "name": "management_user_tab_profile",
+      "value": "资料"
+    },
+    {
+      "name": "management_user_tab_access",
+      "value": "访问"
+    },
+    {
+      "name": "management_user_tab_parental",
+      "value": "家长控制"
+    },
+    {
+      "name": "management_user_tab_password",
+      "value": "密码"
+    },
+    {
+      "name": "management_user_password_mismatch",
+      "value": "两次输入的密码不一致"
+    },
+    {
+      "name": "management_user_operation_in_progress",
+      "value": "已有用户操作正在进行"
+    },
+    {
+      "name": "management_user_save_failed",
+      "value": "保存失败，请重试"
+    },
+    {
+      "name": "management_user_unsaved_title",
+      "value": "有未保存的修改"
+    },
+    {
+      "name": "management_user_unsaved_message",
+      "value": "保存当前修改、放弃修改，或继续编辑。"
+    },
+    {
+      "name": "management_user_discard",
+      "value": "放弃"
+    },
+    {
+      "name": "management_user_continue_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "management_user_save",
+      "value": "保存"
+    },
+    {
+      "name": "management_user_profile_placeholder",
+      "value": "基本资料和权限设置将在此处编辑"
+    },
+    {
+      "name": "management_user_access_placeholder",
+      "value": "媒体库、频道和设备访问范围将在此处编辑"
+    },
+    {
+      "name": "management_user_parental_placeholder",
+      "value": "分级、标签和访问时间计划将在此处编辑"
+    },
+    {
+      "name": "management_user_password_placeholder",
+      "value": "用户密码将在此处安全更新"
+    },
+    {
+      "name": "management_user_password_required",
+      "value": "请输入新密码"
+    },
+    {
+      "name": "management_user_current_password_required",
+      "value": "修改当前账号密码时必须输入当前密码"
+    },
+    {
+      "name": "management_user_password_update_failed",
+      "value": "密码更新失败"
+    },
+    {
+      "name": "management_user_password_group_update",
+      "value": "设置密码"
+    },
+    {
+      "name": "management_user_password_group_update_self_desc",
+      "value": "验证当前密码后，为当前管理员设置新密码"
+    },
+    {
+      "name": "management_user_password_group_update_other_desc",
+      "value": "管理员可直接为此用户设置新密码"
+    },
+    {
+      "name": "management_user_current_password",
+      "value": "当前密码"
+    },
+    {
+      "name": "management_user_current_password_placeholder",
+      "value": "输入当前密码"
+    },
+    {
+      "name": "management_user_new_password",
+      "value": "新密码"
+    },
+    {
+      "name": "management_user_new_password_placeholder",
+      "value": "输入新密码"
+    },
+    {
+      "name": "management_user_confirm_password",
+      "value": "确认新密码"
+    },
+    {
+      "name": "management_user_confirm_password_placeholder",
+      "value": "再次输入新密码"
+    },
+    {
+      "name": "management_user_set_password",
+      "value": "设置密码"
+    },
+    {
+      "name": "management_user_password_updated",
+      "value": "密码已更新"
+    },
+    {
+      "name": "management_user_password_group_danger",
+      "value": "密码危险操作"
+    },
+    {
+      "name": "management_user_password_group_danger_desc",
+      "value": "重置或清除密码前会再次确认"
+    },
+    {
+      "name": "management_user_reset_password",
+      "value": "重置密码"
+    },
+    {
+      "name": "management_user_reset_password_title",
+      "value": "确认重置密码"
+    },
+    {
+      "name": "management_user_reset_password_message",
+      "value": "服务器将重置此用户的密码状态。此操作不会显示任何密码内容。"
+    },
+    {
+      "name": "management_user_password_reset_success",
+      "value": "密码已重置"
+    },
+    {
+      "name": "management_user_clear_password",
+      "value": "清除密码"
+    },
+    {
+      "name": "management_user_clear_password_title",
+      "value": "确认清除密码"
+    },
+    {
+      "name": "management_user_clear_password_message",
+      "value": "清除后，此用户无需密码即可登录。"
+    },
+    {
+      "name": "management_user_password_clear_success",
+      "value": "密码已清除"
+    },
+    {
+      "name": "management_user_change_avatar",
+      "value": "更换头像"
+    },
+    {
+      "name": "management_user_remove_avatar",
+      "value": "移除头像"
+    },
+    {
+      "name": "management_user_remove_avatar_title",
+      "value": "确认移除头像"
+    },
+    {
+      "name": "management_user_remove_avatar_message",
+      "value": "将恢复为默认用户头像。"
+    },
+    {
+      "name": "management_user_avatar_updated",
+      "value": "头像已更新"
+    },
+    {
+      "name": "management_user_avatar_removed",
+      "value": "头像已移除"
+    },
+    {
+      "name": "management_user_avatar_unsupported_type",
+      "value": "仅支持 JPEG、PNG 或 WebP 图片"
+    },
+    {
+      "name": "management_user_avatar_empty",
+      "value": "所选图片为空"
+    },
+    {
+      "name": "management_user_avatar_too_large",
+      "value": "头像图片不能超过 10 MiB"
+    },
+    {
+      "name": "management_user_avatar_read_failed",
+      "value": "无法读取所选图片"
+    },
+    {
+      "name": "management_user_unsaved_short",
+      "value": "当前分区有未保存修改"
+    },
+    {
+      "name": "management_user_saving",
+      "value": "保存中"
+    },
+    {
+      "name": "management_user_loading",
+      "value": "正在加载用户"
+    },
+    {
+      "name": "management_user_group_identity",
+      "value": "身份与登录"
+    },
+    {
+      "name": "management_user_group_identity_desc",
+      "value": "设置用户名、登录提供程序和登录页可见性"
+    },
+    {
+      "name": "management_user_name",
+      "value": "用户名"
+    },
+    {
+      "name": "management_user_name_placeholder",
+      "value": "输入用户名"
+    },
+    {
+      "name": "management_user_auth_provider",
+      "value": "认证提供程序"
+    },
+    {
+      "name": "management_user_password_reset_provider",
+      "value": "密码重置提供程序"
+    },
+    {
+      "name": "management_user_hidden",
+      "value": "在登录页隐藏"
+    },
+    {
+      "name": "management_user_hidden_desc",
+      "value": "用户仍可通过手动输入用户名登录"
+    },
+    {
+      "name": "management_user_group_privileges",
+      "value": "管理权限"
+    },
+    {
+      "name": "management_user_group_privileges_desc",
+      "value": "授予服务器内容和服务的管理能力"
+    },
+    {
+      "name": "management_user_privilege_collections",
+      "value": "管理合集"
+    },
+    {
+      "name": "management_user_privilege_collections_desc",
+      "value": "允许创建和修改合集"
+    },
+    {
+      "name": "management_user_privilege_subtitles",
+      "value": "管理字幕"
+    },
+    {
+      "name": "management_user_privilege_subtitles_desc",
+      "value": "允许编辑和下载字幕"
+    },
+    {
+      "name": "management_user_privilege_lyrics",
+      "value": "管理歌词"
+    },
+    {
+      "name": "management_user_privilege_lyrics_desc",
+      "value": "允许编辑和下载歌词"
+    },
+    {
+      "name": "management_user_privilege_live_tv",
+      "value": "管理电视直播"
+    },
+    {
+      "name": "management_user_privilege_live_tv_desc",
+      "value": "允许管理电视直播和录制设置"
+    },
+    {
+      "name": "management_user_group_playback",
+      "value": "播放与转码"
+    },
+    {
+      "name": "management_user_group_playback_desc",
+      "value": "控制媒体播放、转码和下载能力"
+    },
+    {
+      "name": "management_user_playback_media",
+      "value": "播放媒体"
+    },
+    {
+      "name": "management_user_playback_media_desc",
+      "value": "允许播放服务器中的媒体"
+    },
+    {
+      "name": "management_user_playback_live_tv",
+      "value": "播放电视直播"
+    },
+    {
+      "name": "management_user_playback_live_tv_desc",
+      "value": "允许观看电视直播和录制内容"
+    },
+    {
+      "name": "management_user_transcode_audio",
+      "value": "音频转码"
+    },
+    {
+      "name": "management_user_transcode_audio_desc",
+      "value": "允许服务器转换音频格式"
+    },
+    {
+      "name": "management_user_transcode_video",
+      "value": "视频转码"
+    },
+    {
+      "name": "management_user_transcode_video_desc",
+      "value": "允许服务器转换视频格式"
+    },
+    {
+      "name": "management_user_playback_remux",
+      "value": "重新封装媒体"
+    },
+    {
+      "name": "management_user_playback_remux_desc",
+      "value": "允许在不转码的情况下更换容器"
+    },
+    {
+      "name": "management_user_force_remote_transcode",
+      "value": "强制远程源转码"
+    },
+    {
+      "name": "management_user_force_remote_transcode_desc",
+      "value": "远程媒体源播放时始终经过服务器转码"
+    },
+    {
+      "name": "management_user_content_download",
+      "value": "下载媒体"
+    },
+    {
+      "name": "management_user_content_download_desc",
+      "value": "允许将媒体保存到客户端设备"
+    },
+    {
+      "name": "management_user_group_remote",
+      "value": "远程访问与删除"
+    },
+    {
+      "name": "management_user_group_remote_desc",
+      "value": "控制外网访问、设备控制和内容删除"
+    },
+    {
+      "name": "management_user_remote_access",
+      "value": "允许远程访问"
+    },
+    {
+      "name": "management_user_remote_access_desc",
+      "value": "允许从服务器局域网以外连接"
+    },
+    {
+      "name": "management_user_remote_control",
+      "value": "控制其他用户"
+    },
+    {
+      "name": "management_user_remote_control_desc",
+      "value": "允许向其他用户的播放会话发送控制命令"
+    },
+    {
+      "name": "management_user_shared_device_control",
+      "value": "控制共享设备"
+    },
+    {
+      "name": "management_user_shared_device_control_desc",
+      "value": "允许控制电视等共享播放设备"
+    },
+    {
+      "name": "management_user_delete_all_content",
+      "value": "删除所有媒体库内容"
+    },
+    {
+      "name": "management_user_delete_all_content_desc",
+      "value": "关闭后可单独选择允许删除的媒体库"
+    },
+    {
+      "name": "management_user_delete_folders",
+      "value": "允许删除的媒体库"
+    },
+    {
+      "name": "management_user_group_limits",
+      "value": "限制与 SyncPlay"
+    },
+    {
+      "name": "management_user_group_limits_desc",
+      "value": "设置远程码率、登录保护和并发会话"
+    },
+    {
+      "name": "management_user_remote_bitrate",
+      "value": "远程码率上限（Mbps）"
+    },
+    {
+      "name": "management_user_remote_bitrate_desc",
+      "value": "0 表示不限制远程客户端码率"
+    },
+    {
+      "name": "management_user_lockout_attempts",
+      "value": "锁定前失败次数"
+    },
+    {
+      "name": "management_user_lockout_attempts_desc",
+      "value": "0 表示使用服务器默认设置"
+    },
+    {
+      "name": "management_user_max_sessions",
+      "value": "最大并发会话"
+    },
+    {
+      "name": "management_user_max_sessions_desc",
+      "value": "0 表示不限制同时活动的会话"
+    },
+    {
+      "name": "management_user_sync_play",
+      "value": "SyncPlay 权限"
+    },
+    {
+      "name": "management_user_sync_play_none",
+      "value": "不可使用"
+    },
+    {
+      "name": "management_user_sync_play_join",
+      "value": "仅加入群组"
+    },
+    {
+      "name": "management_user_sync_play_create",
+      "value": "创建和加入群组"
+    },
+    {
+      "name": "management_user_group_status",
+      "value": "账号状态"
+    },
+    {
+      "name": "management_user_group_status_desc",
+      "value": "管理员权限和停用操作受安全保护"
+    },
+    {
+      "name": "management_user_administrator",
+      "value": "服务器管理员"
+    },
+    {
+      "name": "management_user_administrator_desc",
+      "value": "允许访问和修改服务器全部管理设置"
+    },
+    {
+      "name": "management_user_disabled",
+      "value": "停用此用户"
+    },
+    {
+      "name": "management_user_disabled_desc",
+      "value": "阻止该用户继续登录服务器"
+    },
+    {
+      "name": "management_user_protect_current_admin",
+      "value": "当前管理员不能移除自己的权限或停用自己"
+    },
+    {
+      "name": "management_user_protect_last_admin",
+      "value": "服务器必须保留至少一个已启用管理员"
+    },
+    {
+      "name": "management_user_access_folders",
+      "value": "媒体库访问"
+    },
+    {
+      "name": "management_user_access_folders_desc",
+      "value": "选择此用户可以浏览的媒体库"
+    },
+    {
+      "name": "management_user_access_all_folders",
+      "value": "允许访问全部媒体库"
+    },
+    {
+      "name": "management_user_access_all_folders_desc",
+      "value": "关闭后使用下方的媒体库列表"
+    },
+    {
+      "name": "management_user_access_channels",
+      "value": "频道访问"
+    },
+    {
+      "name": "management_user_access_channels_desc",
+      "value": "选择此用户可以访问的频道"
+    },
+    {
+      "name": "management_user_access_all_channels",
+      "value": "允许访问全部频道"
+    },
+    {
+      "name": "management_user_access_all_channels_desc",
+      "value": "关闭后使用下方的频道列表"
+    },
+    {
+      "name": "management_user_access_devices",
+      "value": "设备访问"
+    },
+    {
+      "name": "management_user_access_devices_desc",
+      "value": "选择允许该用户登录的客户端设备"
+    },
+    {
+      "name": "management_user_access_all_devices",
+      "value": "允许所有设备"
+    },
+    {
+      "name": "management_user_access_all_devices_desc",
+      "value": "关闭后仅允许下方选中的设备"
+    },
+    {
+      "name": "management_user_access_empty",
+      "value": "服务器没有返回可选项目"
+    },
+    {
+      "name": "management_user_access_options_failed",
+      "value": "无法加载此分组的可选项目"
+    },
+    {
+      "name": "management_user_parental_rating",
+      "value": "内容分级"
+    },
+    {
+      "name": "management_user_parental_rating_desc",
+      "value": "限制高于指定分级的内容"
+    },
+    {
+      "name": "management_user_parental_max_rating",
+      "value": "最高允许分级"
+    },
+    {
+      "name": "management_user_parental_rating_unrestricted",
+      "value": "不限制"
+    },
+    {
+      "name": "management_user_parental_unrated",
+      "value": "未分级内容"
+    },
+    {
+      "name": "management_user_parental_unrated_desc",
+      "value": "阻止未提供分级信息的指定内容类型"
+    },
+    {
+      "name": "management_user_unrated_movie",
+      "value": "电影"
+    },
+    {
+      "name": "management_user_unrated_trailer",
+      "value": "预告片"
+    },
+    {
+      "name": "management_user_unrated_series",
+      "value": "剧集"
+    },
+    {
+      "name": "management_user_unrated_music",
+      "value": "音乐"
+    },
+    {
+      "name": "management_user_unrated_book",
+      "value": "图书"
+    },
+    {
+      "name": "management_user_unrated_live_tv_channel",
+      "value": "电视直播频道"
+    },
+    {
+      "name": "management_user_unrated_live_tv_program",
+      "value": "电视直播节目"
+    },
+    {
+      "name": "management_user_unrated_channel_content",
+      "value": "频道内容"
+    },
+    {
+      "name": "management_user_unrated_other",
+      "value": "其他内容"
+    },
+    {
+      "name": "management_user_parental_tags",
+      "value": "标签规则"
+    },
+    {
+      "name": "management_user_parental_tags_desc",
+      "value": "按媒体标签明确允许或阻止内容"
+    },
+    {
+      "name": "management_user_parental_allowed_tags",
+      "value": "允许的标签"
+    },
+    {
+      "name": "management_user_parental_blocked_tags",
+      "value": "阻止的标签"
+    },
+    {
+      "name": "management_user_parental_add_tag",
+      "value": "添加标签"
+    },
+    {
+      "name": "management_user_parental_no_tags",
+      "value": "尚未设置标签"
+    },
+    {
+      "name": "management_user_parental_add_allowed_tag",
+      "value": "添加允许标签"
+    },
+    {
+      "name": "management_user_parental_add_blocked_tag",
+      "value": "添加阻止标签"
+    },
+    {
+      "name": "management_user_parental_tag_placeholder",
+      "value": "输入媒体标签"
+    },
+    {
+      "name": "management_user_parental_add",
+      "value": "添加"
+    },
+    {
+      "name": "management_user_parental_conflicting_tags",
+      "value": "同一标签不能同时允许和阻止"
+    },
+    {
+      "name": "management_user_parental_schedule",
+      "value": "访问时间计划"
+    },
+    {
+      "name": "management_user_parental_schedule_desc",
+      "value": "限制用户可以登录和访问服务器的时间"
+    },
+    {
+      "name": "management_user_parental_admin_schedule_hidden",
+      "value": "管理员账号不应用访问时间限制"
+    },
+    {
+      "name": "management_user_parental_add_schedule",
+      "value": "添加时间计划"
+    },
+    {
+      "name": "management_user_parental_remove_schedule",
+      "value": "删除时间计划"
+    },
+    {
+      "name": "management_user_parental_start_hour",
+      "value": "开始小时"
+    },
+    {
+      "name": "management_user_parental_end_hour",
+      "value": "结束小时"
+    },
+    {
+      "name": "management_user_parental_invalid_schedule",
+      "value": "结束小时必须晚于开始小时，范围为 0 至 24"
+    },
+    {
+      "name": "management_user_day_everyday",
+      "value": "每天"
+    },
+    {
+      "name": "management_user_day_weekday",
+      "value": "工作日"
+    },
+    {
+      "name": "management_user_day_weekend",
+      "value": "周末"
+    },
+    {
+      "name": "management_user_day_sunday",
+      "value": "星期日"
+    },
+    {
+      "name": "management_user_day_monday",
+      "value": "星期一"
+    },
+    {
+      "name": "management_user_day_tuesday",
+      "value": "星期二"
+    },
+    {
+      "name": "management_user_day_wednesday",
+      "value": "星期三"
+    },
+    {
+      "name": "management_user_day_thursday",
+      "value": "星期四"
+    },
+    {
+      "name": "management_user_day_friday",
+      "value": "星期五"
+    },
+    {
+      "name": "management_user_day_saturday",
+      "value": "星期六"
     }
   ]
 }

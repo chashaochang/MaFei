@@ -19,7 +19,7 @@ export class AppThemeSurfaceResolver {
       return $r('app.color.start_window_background')
     }
     return effectiveTheme === ThemeStyle.Native ?
-      $r('sys.color.comp_background_primary') : $r('app.color.bg_main')
+      $r('sys.color.comp_background_gray') : $r('app.color.bg_main')
   }
 
   static routeBackground(style: ThemeStyle, available: boolean): ResourceColor {
@@ -37,12 +37,40 @@ export class AppThemeSurfaceResolver {
       $r('sys.color.interactive_pressed') : $r('app.color.primary_light_hover')
   }
 
+  static mediaPlaceholderBackground(style: ThemeStyle, available: boolean): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ?
+      $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2')
+  }
+
+  static contentOutline(style: ThemeStyle, available: boolean): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ?
+      Color.Transparent : $r('app.color.border')
+  }
+
+  static mediaOutline(style: ThemeStyle, available: boolean): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ?
+      Color.Transparent : $r('app.color.border_1')
+  }
+
+  static outlineWidth(style: ThemeStyle, available: boolean, feiniuWidth: number): number {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ? 0 : feiniuWidth
+  }
+
+  static contentDivider(style: ThemeStyle, available: boolean): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ?
+      $r('sys.color.comp_divider') : $r('app.color.border')
+  }
+
+  static contentGroupBackground(): ResourceColor {
+    return $r('sys.color.comp_background_primary')
+  }
+
   static material(role: AppThemeMaterialRole): uiMaterial.Material {
     if (role === AppThemeMaterialRole.ContentGroup) {
       if (!AppThemeSurfaceResolver.contentGroup) {
         AppThemeSurfaceResolver.contentGroup = new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.THIN,
-          materialColor: Color.Transparent,
+          materialColor: $r('sys.color.comp_background_primary'),
           colorInvert: false,
           applyShadow: false,
           interactive: false

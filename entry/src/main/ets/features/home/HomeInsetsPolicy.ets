@@ -7,7 +7,7 @@ export class HomeInsetsPolicy {
   }
 
   static navigationChromeInset(shell: HomeShellKind, safeBottom: number): number {
-    if (shell === HomeShellKind.PhoneStandard || shell === HomeShellKind.PhoneNativeHds) {
+    if (shell === HomeShellKind.PhoneStandard) {
       return UIConstants.BOTTOM_BAR_HEIGHT + HomeInsetsPolicy.nonNegative(safeBottom)
     }
     return 0

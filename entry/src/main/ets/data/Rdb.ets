@@ -1,69 +1,129 @@
 import { relationalStore } from '@kit.ArkData';
-import { RdbConstants } from './RdbConstants';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { RdbConstants } from './RdbConstants';
 
 export default class Rdb {
-  private rdbStore: relationalStore.RdbStore | null = null;
+  private static initializationPromise?: Promise<relationalStore.RdbStore>;
+  private rdbStore: relationalStore.RdbStore;
   private tableName: string;
-  private sqlCreateTable: string;
   private columns: Array<string>;
 
-  constructor(tableName: string, sqlCreateTable: string, columns: Array<string>) {
+  constructor(rdbStore: relationalStore.RdbStore, tableName: string, columns: Array<string>) {
+    this.rdbStore = rdbStore;
     this.tableName = tableName;
-    this.sqlCreateTable = sqlCreateTable;
     this.columns = columns;
   }
 
-  getRdbStore(context: Context) {
-    const STORE_CONFIG: relationalStore.StoreConfig = {
-      name: RdbConstants.DB_NAME, // 数据库文件名
-      securityLevel: relationalStore.SecurityLevel.S1 // 数据库安全级别
-    };
-
-    relationalStore.getRdbStore(context, STORE_CONFIG, async (err, rdb) => {
-      if (err) {
-        console.error(`Get RdbStore failed, code is ${err.code},message is ${err.message}`);
-        return;
-      }
-      this.rdbStore = rdb;
-      let storeVersion = rdb.version;
-      // 当数据库创建时，数据库默认版本为0
-      if (storeVersion === 0) {
-        try {
-          await this.rdbStore.executeSql(this.sqlCreateTable);
-          console.info(`Get ${RdbConstants.DB_NAME}.${this.tableName} RdbStore successfully.`);
-        } catch (e) {
-          const err = e as BusinessError;
-          console.error(`Failed to execute sql. Code:${err.code}, message:${err.message}`);
-        }
-        // version = 1
-        try {
-          await rdb.execute(`ALTER TABLE Server ADD COLUMN server_name TEXT NOT NULL DEFAULT ""`);
-          await rdb.execute(`ALTER TABLE Server ADD COLUMN version TEXT NOT NULL DEFAULT ""`);
-          await rdb.execute(`ALTER TABLE User ADD COLUMN user_name TEXT NOT NULL DEFAULT ""`);
-          storeVersion = 1;
-          console.info("Upgrade store version from 0 to 1 success.")
-        } catch (e) {
-          const err = e as BusinessError;
-          console.error(`Failed to execute sql. Code:${err.code}, message:${err.message}`);
-        }
-      }
-      // 版本变化时，会触发Upgrade
-      rdb.version = storeVersion;
-    });
+  static initialize(context: Context): Promise<relationalStore.RdbStore> {
+    if (!Rdb.initializationPromise) {
+      const initialization = Rdb.openAndMigrate(context);
+      Rdb.initializationPromise = initialization.then((rdbStore: relationalStore.RdbStore) => rdbStore,
+        (error: Error) => {
+          Rdb.initializationPromise = undefined;
+          throw error;
+        });
+    }
+    return Rdb.initializationPromise;
   }
 
-  private deleteRdbStore(callback: Function = () => {}) {
-    let context: Context = getContext(this) as Context;
-
-    relationalStore.deleteRdbStore(context, RdbConstants.DB_NAME, (err: BusinessError) => {
-      if (err) {
-        console.error(`Delete RdbStore failed, code is ${err.code},message is ${err.message}`);
-        return;
+  private static async openAndMigrate(context: Context): Promise<relationalStore.RdbStore> {
+    const storeConfig: relationalStore.StoreConfig = {
+      name: RdbConstants.DB_NAME,
+      securityLevel: relationalStore.SecurityLevel.S1
+    };
+    let stage = 'open';
+    let rdbStore: relationalStore.RdbStore | null = null;
+    let transactionStarted = false;
+    try {
+      rdbStore = await relationalStore.getRdbStore(context, storeConfig);
+      stage = 'version-check';
+      if (rdbStore.version > RdbConstants.VERSION) {
+        throw new Error(`Database version ${rdbStore.version} is newer than supported version ${RdbConstants.VERSION}.`);
       }
-      this.rdbStore = null;
-      console.info('Delete RdbStore successfully.');
-    })
+
+      stage = 'begin';
+      rdbStore.beginTransaction();
+      transactionStarted = true;
+
+      stage = 'query-server';
+      const serverColumns = Rdb.getTableColumns(rdbStore, RdbConstants.TABLE_SERVER.tableName);
+      stage = 'query-user';
+      const userColumns = Rdb.getTableColumns(rdbStore, RdbConstants.TABLE_USER.tableName);
+
+      stage = 'create-server';
+      rdbStore.executeSync(RdbConstants.TABLE_SERVER.sqlCreate);
+      stage = 'create-user';
+      rdbStore.executeSync(RdbConstants.TABLE_USER.sqlCreate);
+
+      if (serverColumns.length > 0 && serverColumns.indexOf('server_name') === -1) {
+        stage = 'alter-server-name';
+        rdbStore.executeSync("ALTER TABLE Server ADD COLUMN server_name TEXT NOT NULL DEFAULT ''");
+      }
+      if (serverColumns.length > 0 && serverColumns.indexOf('version') === -1) {
+        stage = 'alter-server-version';
+        rdbStore.executeSync("ALTER TABLE Server ADD COLUMN version TEXT NOT NULL DEFAULT ''");
+      }
+
+      if (userColumns.length > 0 && userColumns.indexOf('user_name') === -1) {
+        stage = 'alter-user-name';
+        rdbStore.executeSync("ALTER TABLE `User` ADD COLUMN user_name TEXT NOT NULL DEFAULT ''");
+      }
+
+      stage = 'commit';
+      rdbStore.commit();
+      transactionStarted = false;
+
+      stage = 'verify-server';
+      const migratedServerColumns = Rdb.getTableColumns(rdbStore, RdbConstants.TABLE_SERVER.tableName);
+      Rdb.assertTableColumns(RdbConstants.TABLE_SERVER.tableName, migratedServerColumns,
+        RdbConstants.TABLE_SERVER.columns);
+      stage = 'verify-user';
+      const migratedUserColumns = Rdb.getTableColumns(rdbStore, RdbConstants.TABLE_USER.tableName);
+      Rdb.assertTableColumns(RdbConstants.TABLE_USER.tableName, migratedUserColumns,
+        RdbConstants.TABLE_USER.columns);
+
+      stage = 'set-version';
+      if (rdbStore.version < RdbConstants.VERSION) {
+        rdbStore.version = RdbConstants.VERSION;
+      }
+      console.info(`Initialized ${RdbConstants.DB_NAME} at version ${RdbConstants.VERSION}.`);
+      return rdbStore;
+    } catch (error) {
+      const initializationError = error as BusinessError;
+      const throwableError = error as Error;
+      if (transactionStarted && rdbStore) {
+        try {
+          rdbStore.rollBack();
+        } catch (rollbackError) {
+          console.error(`Failed to roll back ${RdbConstants.DB_NAME}: ${JSON.stringify(rollbackError)}`);
+        }
+      }
+      console.error(`Database initialization failed at ${stage}. Code:${initializationError.code}, ` +
+        `message:${initializationError.message}`);
+      throw throwableError;
+    }
+  }
+
+  private static getTableColumns(rdbStore: relationalStore.RdbStore, tableName: string): Array<string> {
+    const resultSet = rdbStore.querySqlSync(`PRAGMA table_info(\`${tableName}\`)`);
+    const columns: Array<string> = [];
+    try {
+      const nameColumnIndex = resultSet.getColumnIndex('name');
+      while (resultSet.goToNextRow()) {
+        columns.push(resultSet.getString(nameColumnIndex));
+      }
+    } finally {
+      resultSet.close();
+    }
+    return columns;
+  }
+
+  private static assertTableColumns(tableName: string, actualColumns: Array<string>,
+    expectedColumns: Array<string>): void {
+    const missingColumns = expectedColumns.filter((column: string) => actualColumns.indexOf(column) === -1);
+    if (missingColumns.length > 0) {
+      throw new Error(`${tableName} is missing required columns: ${missingColumns.join(', ')}`);
+    }
   }
 
   insertData(data: relationalStore.ValuesBucket, callback: Function = () => {}) {

@@ -1,6 +1,7 @@
 import { AppUIState } from "../../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
 import lottie, { AnimationItem } from "@ohos/lottie";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 
 @ComponentV2
 export struct ConnectingScreen {
@@ -18,50 +19,83 @@ export struct ConnectingScreen {
     lottie.destroy();
   }
 
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
+  }
+
+  private primaryTextColor(): ResourceColor {
+    return this.useNativeSurface() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(): ResourceColor {
+    return this.useNativeSurface() ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  @Builder
+  private connectingContent() {
+    Blank().layoutWeight(1.5)
+    Text('正在连接...')
+      .fontColor(this.primaryTextColor())
+      .fontSize(20)
+    Blank().layoutWeight(1.5)
+    Image($r('app.media.nas'))
+      .height(160)
+    Blank().layoutWeight(0.5)
+    Canvas(this.canvasRenderingContext)
+      .width(160)
+      .height(90)
+      .onReady(() => {
+        if (this.animateItem != null) {
+          this.animateItem?.resize();
+        } else {
+          this.canvasRenderingContext.imageSmoothingEnabled = true;
+          this.canvasRenderingContext.imageSmoothingQuality = 'medium';
+          this.loadAnimation();
+        }
+      })
+    Blank().layoutWeight(1.5)
+    Text('退出登录')
+      .fontColor(this.secondaryTextColor())
+      .fontSize(16)
+      .padding(20)
+      .onClick(() => {
+        this.onLogoutClick()
+      })
+    Blank().layoutWeight(0.5)
+  }
+
+  @Builder
+  private nativeConnectingContent() {
+    Column() {
+      this.connectingContent()
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private feiniuConnectingContent() {
+    Column() {
+      this.connectingContent()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundImage($r('app.media.bg_zhezhao'))
+    .backgroundImageSize(ImageSize.Cover)
+  }
+
   build() {
     Stack() {
-      Column() {
-        Blank().layoutWeight(1.5)
-        Text('正在连接...')
-          .fontColor($r('app.color.text_primary'))
-          .fontSize(20)
-        Blank().layoutWeight(1.5)
-        Image($r('app.media.nas'))
-          .height(160)
-        Blank().layoutWeight(0.5)
-        // 关联画布
-        Canvas(this.canvasRenderingContext)
-          .width(160)
-          .height(90)
-          .onReady(() => {
-            // 加载动画
-            if (this.animateItem != null) {
-              // 可在此生命回调周期中加载动画，可以保证动画尺寸正确
-              this.animateItem?.resize();
-            } else {
-              // 抗锯齿的设置
-              this.canvasRenderingContext.imageSmoothingEnabled = true;
-              this.canvasRenderingContext.imageSmoothingQuality = 'medium';
-              this.loadAnimation();
-            }
-          })
-        Blank().layoutWeight(1.5)
-        Text('退出登录')
-          .fontColor($r('app.color.text_1'))
-          .fontSize(16)
-          .padding(20)
-          .onClick(() => {
-            this.onLogoutClick()
-          })
-        Blank().layoutWeight(0.5)
+      if (this.useNativeSurface()) {
+        this.nativeConnectingContent()
+      } else {
+        this.feiniuConnectingContent()
       }
-      .width('100%')
-      .height('100%')
-      .backgroundImage($r('app.media.bg_zhezhao'))
-      .backgroundImageSize(ImageSize.Cover)
     }.width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.bg_main'))
+    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
   }
 
   loadAnimation() {

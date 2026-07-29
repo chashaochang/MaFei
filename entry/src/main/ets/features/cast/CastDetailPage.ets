@@ -2,6 +2,7 @@ import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImageKnifeComponent } from "@ohos/imageknifepro";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
+import { AppRouteDestination } from "../../component/AppRouteDestination";
 import { LengthUnit } from "@kit.ArkUI";
 import { CastDetailUIState } from "./CastDetailUIState";
 import { CastDetailViewModel } from "./CastDetailViewModel";
@@ -9,14 +10,112 @@ import { TextExpandView } from "../../component/textexpand/TextExpand";
 import { LastSpanAttribute, TextSectionAttribute } from "../../component/textexpand/Model";
 import { BaseItemDto } from "sdk/src/main/ets/generated-client/models";
 import { BaseItemCard } from "../../component/BaseItemCard";
+import { deviceInfo } from '@kit.BasicServicesKit';
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
+import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
-  pageUrl: RouterConsts.CastDetailPage
+  pageUrl: RouterConsts.CastDetailPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct CastDetailPage {
   @Local ui: CastDetailUIState = new CastDetailUIState(this.getUIContext())
   @Local vm: CastDetailViewModel = new CastDetailViewModel(this.ui)
+  @Local showActionBar: boolean = false
+  private scroller: Scroller = new Scroller()
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private secondarySurfaceBackground(): ResourceColor {
+    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2')
+  }
+
+  private sheetMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      deviceInfo.sdkApiVersion >= 26,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  @Builder
+  private nativeProfileGroupSurface() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .constraintSize({ maxWidth: 720 })
+      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuActionBar() {
+    ActionBar()
+      .backgroundColor($r('app.color.component_bg'))
+  }
+
+  @Builder
+  private overviewTriggerContent() {
+    TextExpandView({
+      text: this.ui.overview,
+      onMoreClick: () => {
+        this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+      },
+      lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+    })
+  }
+
+  @Builder
+  private overviewSheetTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    }
+  }
 
   aboutToAppear(): void {
     let id = HMRouterMgr.getCurrentParam() as string
@@ -24,22 +123,31 @@ export struct CastDetailPage {
     this.vm.getCastDetail()
   }
 
-  build() {
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Stack() {
-      List(){
-        ListItem(){
-          ActionBar().visibility(Visibility.Hidden)
+      List({ scroller: this.scroller }){
+        if (showLegacyActionBar) {
+          ListItem(){
+            ActionBar().visibility(Visibility.Hidden)
+          }
         }
         ListItem(){
-          Row({ space: 16 }) {
+          Stack() {
+            if (this.useNativeSurface()) {
+              this.nativeProfileGroupSurface()
+            }
+            Row({ space: 16 }) {
             ImageKnifeComponent({
               imageKnifeOption: {
                 loadSrc: this.ui.image,
-                objectFit: ImageFit.Fill,
-                border: {
-                  width: 0.5,
-                  radius: 12,
-                  color: $r('app.color.border_1')
+              objectFit: ImageFit.Fill,
+              border: {
+                width: AppThemeSurfaceResolver.outlineWidth(
+                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
+                radius: 12,
+                  color: AppThemeSurfaceResolver.mediaOutline(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
                 }
               }
             })
@@ -52,17 +160,7 @@ export struct CastDetailPage {
               Text(this.ui.sortName).fontColor($r('app.color.text_primary')).fontSize(14)
               if (this.ui.overview.length > 0) {
                 Blank().height(10)
-                TextExpandView({
-                  text: this.ui.overview,
-                  onMoreClick: () => {
-                    this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
-                  },
-                  lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
-                }).bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
-                  height: 420,
-                  preferType: SheetType.BOTTOM,
-                  title: { title: '简介' },
-                }).width('100%')
+                this.overviewSheetTrigger()
               }
               Blank().height(10)
               Button() {
@@ -73,22 +171,30 @@ export struct CastDetailPage {
               }
               .width(50)
               .height(50)
-              .borderWidth(1)
-              .borderColor($r('app.color.border'))
+              .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+              .borderColor(AppThemeSurfaceResolver.contentOutline(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
               .borderRadius(25)
-              .backgroundColor($r('app.color.bg_2'))
+              .backgroundColor(this.secondarySurfaceBackground())
               .onClick(() => {
                 this.vm.changeFavorite()
               })
             }.alignItems(HorizontalAlign.Start)
             .height('100%')
             .layoutWeight(1)
-          }.height(200)
-          .padding({
-            top: 10,
-            left: 16,
-            right: 16
-          })
+            }.height(200)
+            .width('100%')
+            .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+            .padding({
+              top: 10,
+              left: 16,
+              right: 16
+            })
+          }
+          .width('100%')
+          .height(200)
+          .alignContent(Alignment.Top)
         }
         if(this.ui.movieCount > 0){
           ListItem(){
@@ -195,8 +301,28 @@ export struct CastDetailPage {
       }.width('100%')
       .height('100%')
       .listDirection(Axis.Vertical)
-      ActionBar().backgroundColor($r('app.color.component_bg'))
-    }.align(Alignment.Top)
+      .onDidScroll(() => {
+        this.showActionBar = this.scroller.currentOffset().yOffset > 0
+      })
+      if (showLegacyActionBar) {
+        this.feiniuActionBar()
+      }
+    }
+    .align(Alignment.Top)
+    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.showActionBar ? this.ui.name : '',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 
   @Builder

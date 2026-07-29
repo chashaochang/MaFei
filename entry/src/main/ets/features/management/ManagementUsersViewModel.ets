@@ -61,10 +61,14 @@ export class ManagementUsersViewModel extends BaseViewModel<ManagementUsersUISta
     this.ui.message = ''
     try {
       const users = await this.repository.loadUsers()
+      const currentUserId = await this.repository.loadCurrentUserId()
       if (!this.isActive(generation)) {
         return
       }
       this.ui.users = users
+      this.ui.currentUserId = currentUserId
+      this.ui.enabledAdministratorCount = users.filter((user: ManagementUserItem) =>
+        user.administrator && !user.disabled).length
       this.ui.hasStaleData = false
       this.ui.status = users.length > 0 ? ManagementSectionStatus.Content :
         ManagementSectionStatus.Empty
@@ -73,7 +77,7 @@ export class ManagementUsersViewModel extends BaseViewModel<ManagementUsersUISta
       if (!this.isActive(generation)) {
         return
       }
-      this.ui.message = 'management_users_load_failed'
+      this.ui.message = 'management_user_load_failed'
       if (this.ui.users.length > 0) {
         this.ui.hasStaleData = true
         this.ui.status = ManagementSectionStatus.Content

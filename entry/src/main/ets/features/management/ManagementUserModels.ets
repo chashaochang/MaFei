@@ -209,6 +209,8 @@ export class ManagementUserEditorSnapshot {
   currentUserId: string = ''
   /** Edited user summary. */
   user: ManagementUserItem = new ManagementUserItem()
+  /** Number of administrators that are both enabled and able to sign in. */
+  enabledAdministratorCount: number = 0
   /** Profile-section draft. */
   profile: ManagementProfileDraft = new ManagementProfileDraft()
   /** Access-section draft. */
@@ -221,10 +223,16 @@ export class ManagementUserEditorSnapshot {
   passwordResetProviders: ManagementUserOption[] = []
   /** Media folder options. */
   folders: ManagementUserOption[] = []
+  /** Independent media-folder option loading result. */
+  foldersStatus: ManagementUserOperationStatus = ManagementUserOperationStatus.Idle
   /** Channel options. */
   channels: ManagementUserOption[] = []
+  /** Independent channel option loading result. */
+  channelsStatus: ManagementUserOperationStatus = ManagementUserOperationStatus.Idle
   /** Device options. */
   devices: ManagementUserOption[] = []
+  /** Independent device option loading result. */
+  devicesStatus: ManagementUserOperationStatus = ManagementUserOperationStatus.Idle
   /** Parental rating options. */
   parentalRatings: ManagementParentalRatingOption[] = []
 }

@@ -4,14 +4,10 @@ import { relationalStore } from "@kit.ArkData";
 import ServerEntity from "./ServerEntity";
 
 export class ServerDao {
-  private serverTable = new Rdb(
-    RdbConstants.TABLE_SERVER.tableName,
-    RdbConstants.TABLE_SERVER.sqlCreate,
-    RdbConstants.TABLE_SERVER.columns
-  )
+  private serverTable: Rdb
 
-  constructor(context: Context) {
-    this.serverTable.getRdbStore(context)
+  constructor(rdbStore: relationalStore.RdbStore) {
+    this.serverTable = new Rdb(rdbStore, RdbConstants.TABLE_SERVER.tableName, RdbConstants.TABLE_SERVER.columns)
   }
 
   insertDataSync(valuesBucket: relationalStore.ValuesBucket): number {

@@ -6,6 +6,7 @@ import { ApiClient } from "../network/ApiClient";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
+import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 
 @ComponentV2
 export struct BaseItemCard {
@@ -66,10 +67,15 @@ export struct BaseItemCard {
         })
           .aspectRatio(2 / 3)
           .width('100%')
-          .borderColor($r('app.color.border_1'))
-          .borderWidth(0.5)
+          .borderColor(AppThemeSurfaceResolver.mediaOutline(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+          .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 0.5))
           .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
-          .backgroundColor('#CBD2D3')
+          .backgroundColor(AppThemeSurfaceResolver.useNativeSurface(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+            AppThemeSurfaceResolver.mediaPlaceholderBackground(
+              this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : '#CBD2D3')
         // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         if (this.score) {
           Text(this.score.toFixed(1) + '')

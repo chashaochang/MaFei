@@ -4,10 +4,14 @@ import { ImageUrlsApi } from "sdk"
 import { BaseItemPerson, ImageType, PersonKind } from "sdk/src/main/ets/generated-client/models"
 import { RouterConsts } from "../common/RouterConsts"
 import { ApiClient } from "../network/ApiClient"
+import { AppStorageV2 } from "@kit.ArkUI"
+import { AppUIState } from "../entity/AppUIState"
+import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
 export struct CastView {
   @Param @Require peopleList: Array<BaseItemPerson>
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
   imageUrlsApi: ImageUrlsApi = new ImageUrlsApi()
 
   build() {
@@ -36,7 +40,8 @@ export struct CastView {
                 .width(66)
                 .height(66)
                 .borderRadius(33)
-                .backgroundColor($r('app.color.bg_2'))
+                .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
+                  this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
               Text(item.Name)
                 .fontColor($r('app.color.text_primary'))

@@ -13,10 +13,12 @@ import { VideoItem } from "../hometab/HomeUIState"
 import { ChaseSection, ChasingUIState } from "./ChasingUIState"
 import { ChasingViewModel } from "./ChasingViewModel"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
+import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
 export struct ChasingTab {
   @Param fromHome: boolean = false
+  @Param contentTopInset: number = 0
   @Param contentBottomInset?: number = undefined
   @Local ui: ChasingUIState = new ChasingUIState(this.getUIContext())
   @Local vm: ChasingViewModel = new ChasingViewModel(this.ui)
@@ -24,6 +26,22 @@ export struct ChasingTab {
 
   private scrollTail(): number {
     return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
+  }
+
+  private ownedContentTopInset(): number {
+    return this.fromHome ? Math.max(0, this.contentTopInset) : 0
+  }
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private pageBackground(): ResourceColor {
+    if (this.vm.appUIState.isBigScreen) {
+      return Color.Transparent
+    }
+    return AppThemeSurfaceResolver.routeBackground(this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
   aboutToAppear(): void {
@@ -82,15 +100,28 @@ export struct ChasingTab {
       .push()
   }
 
+  @Builder
+  private topBar() {
+    if (this.useNativeSurface()) {
+      ActionBar({
+        title: '追剧',
+        showBackButton: false
+      })
+        .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+    } else {
+      ActionBar({
+        title: '追剧',
+        showBackButton: false
+      })
+        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+        .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+    }
+  }
+
   build() {
     Stack() {
       Column() {
-        ActionBar({
-          title: '追剧',
-          showBackButton: false
-        })
-          .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-          .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+        this.topBar()
 
         Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
           List() {
@@ -138,7 +169,8 @@ export struct ChasingTab {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(this.vm.appUIState.isBigScreen ? Color.Transparent : $r('app.color.bg_main'))
+      .padding({ top: this.ownedContentTopInset() })
+      .backgroundColor(this.pageBackground())
 
       if (this.ui.pageState === PageState.Loading) {
         LoadingProgress()
@@ -178,21 +210,11 @@ export struct ChasingTab {
   filterRow() {
     Row({ space: 8 }) {
       ForEach(['待看', '继续看', '已看完', '全部'], (label: string, index: number) => {
-        Text(label)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.selectedFilterIndex === index ? Color.White : $r('app.color.text_1'))
-          .textAlign(TextAlign.Center)
-          .layoutWeight(1)
-          .height(36)
-          .padding({ left: 8, right: 8 })
-          .backgroundColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
-          .borderColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.border'))
-          .borderWidth(0.5)
-          .borderRadius(18)
-          .onClick(() => {
-            this.selectedFilterIndex = index
-          })
+        if (this.useNativeSurface()) {
+          this.nativeFilterChip(label, index)
+        } else {
+          this.feiniuFilterChip(label, index)
+        }
       })
     }
     .width('calc(100% - 32vp)')
@@ -201,6 +223,86 @@ export struct ChasingTab {
       right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
       top: 12
     })
+  }
+
+  @Builder
+  private nativeFilterChip(label: string, index: number) {
+    if (this.selectedFilterIndex === index) {
+      Text(label)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+        .textAlign(TextAlign.Center)
+        .layoutWeight(1)
+        .height(36)
+        .padding({ left: 8, right: 8 })
+        .backgroundColor($r('app.color.color_main'))
+        .borderRadius(18)
+        .onClick(() => {
+          this.selectedFilterIndex = index
+        })
+    } else {
+      Text(label)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_secondary'))
+        .textAlign(TextAlign.Center)
+        .layoutWeight(1)
+        .height(36)
+        .padding({ left: 8, right: 8 })
+        .borderRadius(18)
+        .onClick(() => {
+          this.selectedFilterIndex = index
+        })
+    }
+  }
+
+  @Builder
+  private feiniuFilterChip(label: string, index: number) {
+    Text(label)
+      .fontSize(13)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.selectedFilterIndex === index ? Color.White : $r('app.color.text_1'))
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(36)
+      .padding({ left: 8, right: 8 })
+      .backgroundColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
+      .borderColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.border'))
+      .borderWidth(0.5)
+      .borderRadius(18)
+      .onClick(() => {
+        this.selectedFilterIndex = index
+      })
+  }
+
+  @Builder
+  private nativeSectionCount(count: number) {
+    Text(count.toString())
+      .fontSize(12)
+      .fontColor($r('sys.color.font_secondary'))
+      .padding({
+        left: 8,
+        right: 8,
+        top: 3,
+        bottom: 3
+      })
+      .borderRadius(99)
+  }
+
+  @Builder
+  private feiniuSectionCount(count: number) {
+    Text(count.toString())
+      .fontSize(12)
+      .fontColor($r('app.color.text_2'))
+      .padding({
+        left: 8,
+        right: 8,
+        top: 3,
+        bottom: 3
+      })
+      .backgroundColor($r('app.color.bg_1'))
+      .borderRadius(99)
   }
 
   @Builder
@@ -275,17 +377,11 @@ export struct ChasingTab {
         }
         .alignItems(HorizontalAlign.Start)
         Blank().layoutWeight(1)
-        Text(items.length.toString())
-          .fontSize(12)
-          .fontColor($r('app.color.text_2'))
-          .padding({
-            left: 8,
-            right: 8,
-            top: 3,
-            bottom: 3
-          })
-          .backgroundColor($r('app.color.bg_1'))
-          .borderRadius(99)
+        if (this.useNativeSurface()) {
+          this.nativeSectionCount(items.length)
+        } else {
+          this.feiniuSectionCount(items.length)
+        }
       }
       .width('100%')
       .padding({

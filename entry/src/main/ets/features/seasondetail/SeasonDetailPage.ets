@@ -1,6 +1,7 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
 import { SeasonDetailViewModel } from './SeasonDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
@@ -11,15 +12,142 @@ import { RouterConsts } from '../../common/RouterConsts';
 import { CalculateHeightParam } from '../videodetail/VideoDetailViewModel';
 import { CastView } from '../../component/CastView';
 import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView';
+import { deviceInfo } from '@kit.BasicServicesKit';
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
+import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
-  pageUrl: RouterConsts.SeasonDetailPage
+  pageUrl: RouterConsts.SeasonDetailPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct SeasonDetailPage {
   @Local ui: SeasonDetailUIState = new SeasonDetailUIState(this.getUIContext())
   vm: SeasonDetailViewModel = new SeasonDetailViewModel(this.ui)
   @Local isShowSheet: boolean = false;
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private secondarySurfaceBackground(): ResourceColor {
+    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2')
+  }
+
+  private sheetMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      deviceInfo.sdkApiVersion >= 26,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  @Builder
+  private nativeBackdrop() {
+    ImageKnifeComponent({
+      imageKnifeOption: {
+        loadSrc: this.ui.backgroundImage,
+        objectFit: ImageFit.Cover,
+      }
+    })
+      .width('100%')
+      .height(this.ui.imageHeight - 100)
+  }
+
+  @Builder
+  private feiniuBackdrop() {
+    ImageKnifeComponent({
+      imageKnifeOption: {
+        loadSrc: this.ui.backgroundImage,
+        objectFit: ImageFit.Cover,
+      }
+    })
+      .width('100%')
+      .height(this.ui.imageHeight - 100)
+      .blur(this.ui.blur)
+  }
+
+  @Builder
+  private nativeDetailContentGroupSurface() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .constraintSize({ maxWidth: 720 })
+      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuActionBar() {
+    ActionBar({
+      title: this.ui.showActionBar ? this.ui.title : ''
+    })
+      .backgroundColor('rgba(18,22,24,' + this.ui.actionBarOpacity + ')')
+      .backdropBlur((this.ui.blur - 20) * 10)
+  }
+
+  @Builder
+  private overviewTriggerContent() {
+    TextExpandView({
+      text: this.ui.overview,
+      onMoreClick: () => {
+        this.isShowSheet = !this.isShowSheet;
+      },
+      lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 14, $r('app.color.color_main'))
+    })
+  }
+
+  @Builder
+  private overviewSheetTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    }
+  }
 
   aboutToAppear(): void {
     let param = HMRouterMgr.getCurrentParam() as object
@@ -34,7 +162,8 @@ export struct SeasonDetailPage {
     }
   }
 
-  build() {
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Stack() {
       if (this.ui.firstLoading) {
         SkeletonDetailView()
@@ -43,14 +172,11 @@ export struct SeasonDetailPage {
           Column() {
             Stack() {
               //背景图
-              ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: this.ui.backgroundImage,
-                  objectFit: ImageFit.Cover,
-                }
-              }).width('100%')
-                .height(this.ui.imageHeight - 100)
-                .blur(this.ui.blur)
+              if (this.useNativeSurface()) {
+                this.nativeBackdrop()
+              } else {
+                this.feiniuBackdrop()
+              }
               //渐变遮罩
               Stack().width('100%')
                 .height(this.ui.imageHeight - 100)
@@ -72,9 +198,11 @@ export struct SeasonDetailPage {
                       loadSrc: this.ui.image,
                       objectFit: ImageFit.Fill,
                       border: {
-                        width: 0.5,
+                        width: AppThemeSurfaceResolver.outlineWidth(
+                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
                         radius: 12,
-                        color: $r('app.color.border_1')
+                        color: AppThemeSurfaceResolver.mediaOutline(
+                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
                       }
                     }
                   })
@@ -110,8 +238,12 @@ export struct SeasonDetailPage {
             .height(this.ui.imageHeight)
             .alignContent(Alignment.Top)
 
-            Column() {
-              Row({ space: 8 }) {
+            Stack() {
+              if (this.useNativeSurface()) {
+                this.nativeDetailContentGroupSurface()
+              }
+              Column() {
+                Row({ space: 8 }) {
                 Button() {
                   Row() {
                     Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
@@ -139,10 +271,12 @@ export struct SeasonDetailPage {
                 }
                 .width(50)
                 .height(50)
-                .borderWidth(1)
-                .borderColor($r('app.color.border'))
+                .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                .borderColor(AppThemeSurfaceResolver.contentOutline(
+                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                 .borderRadius(25)
-                .backgroundColor($r('app.color.bg_2'))
+                .backgroundColor(this.secondarySurfaceBackground())
                 .onClick(() => {
                   this.vm.changePlayedState()
                 })
@@ -151,18 +285,7 @@ export struct SeasonDetailPage {
 
               if (this.ui.overview.length > 0) {
                 Blank().height(20)
-                TextExpandView({
-                  text: this.ui.overview,
-                  onMoreClick: () => {
-                    this.isShowSheet = !this.isShowSheet;
-                  },
-                  lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 14, $r('app.color.color_main'))
-                }).padding({ left: 16, right: 16 })
-                  .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
-                    height: 420,
-                    preferType: SheetType.BOTTOM,
-                    title: { title: '简介' },
-                  })
+                this.overviewSheetTrigger()
               }
               //Text(this.ui.overview).width('100%').fontSize(14).fontColor($r('app.color.text_1')).textAlign(TextAlign.Start)
 
@@ -243,8 +366,10 @@ export struct SeasonDetailPage {
                           })
                             .aspectRatio(16 / 9)
                             .width('100%')
-                            .borderColor($r('app.color.border_1'))
-                            .borderWidth(0.5)
+                            .borderColor(AppThemeSurfaceResolver.mediaOutline(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
                             .borderRadius(6)
                           if (item.tags && item.tags.length > 0) {
                             Row({ space: 4 }) {
@@ -354,10 +479,15 @@ export struct SeasonDetailPage {
 
               Blank().height(30 + this.vm.appUIState.safeBottom)
 
-            }.alignItems(HorizontalAlign.Start).padding({
-              top: 20
-            })
-            .align(Alignment.Top)
+              }.alignItems(HorizontalAlign.Start).padding({
+                top: 20
+              })
+              .width('100%')
+              .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+              .align(Alignment.Top)
+            }
+            .width('100%')
+            .alignContent(Alignment.Top)
 
           }.constraintSize({
             minHeight: 850
@@ -389,12 +519,25 @@ export struct SeasonDetailPage {
           }
         })
       }
-      ActionBar({
-        title: this.ui.showActionBar ? this.ui.title : ''
-      })
-        .backgroundColor('rgba(18,22,24,' + this.ui.actionBarOpacity + ')')
-        .backdropBlur((this.ui.blur - 20) * 10)
-    }.backgroundColor($r('app.color.bg_main')).alignContent(Alignment.Top)
+      if (showLegacyActionBar) {
+        this.feiniuActionBar()
+      }
+    }
+    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+    .alignContent(Alignment.Top)
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.ui.showActionBar ? this.ui.title : '',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 
   @Builder

@@ -11,8 +11,12 @@ export class ManagementUsersUIState extends BaseUIState {
   @Trace query: string = ''
   @Trace filter: ManagementUserFilter = ManagementUserFilter.All
   @Trace isRefreshing: boolean = false
+  @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
+  @Trace refreshOffset: number = 0
   @Trace hasStaleData: boolean = false
   @Trace selectedUserId: string = ''
+  @Trace currentUserId: string = ''
+  @Trace enabledAdministratorCount: number = 0
   @Trace deletingUserId: string = ''
   @Trace message: string = ''
 

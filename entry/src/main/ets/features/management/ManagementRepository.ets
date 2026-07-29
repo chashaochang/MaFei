@@ -1,0 +1,354 @@
+import {
+  ActivityLogEntry,
+  ItemCounts,
+  LogLevel,
+  SessionInfoDto,
+  SystemInfo,
+  TaskInfo,
+  TaskState,
+  UserDto
+} from 'sdk/src/main/ets/generated-client/models';
+import { ManagementApiService } from './ManagementApiService';
+import {
+  ManagementActionResult,
+  ManagementActionCode,
+  ManagementActivityItem,
+  ManagementActivitySeverity,
+  ManagementDashboardSnapshot,
+  ManagementErrorCode,
+  ManagementMediaCounts,
+  ManagementSectionKind,
+  ManagementSectionResult,
+  ManagementSectionStatus,
+  ManagementServerOverview,
+  ManagementSessionItem,
+  ManagementTaskItem,
+  ManagementUserSummary
+} from './ManagementModels';
+
+const REFRESH_LIBRARY_TASK_KEY: string = 'RefreshLibrary'
+
+interface ManagementServerErrorPayload {
+  Message?: string
+  message?: string
+  Error?: string
+  error?: string
+  Detail?: string
+  detail?: string
+  Title?: string
+  title?: string
+}
+
+interface ManagementHttpResponse {
+  status: number
+  data: string | ManagementServerErrorPayload
+}
+
+interface ManagementHttpError {
+  isAxiosError?: boolean
+  response?: ManagementHttpResponse
+}
+
+export class ManagementRepository {
+  private service: ManagementApiService = new ManagementApiService()
+
+  isApiClientInitialized(): boolean {
+    return this.service.isApiClientInitialized()
+  }
+
+  async isCurrentUserAdministrator(): Promise<boolean> {
+    const user = await this.service.getCurrentUser()
+    return user.Policy?.IsAdministrator === true
+  }
+
+  async checkCurrentUserAccess(): Promise<ManagementErrorCode> {
+    try {
+      return await this.isCurrentUserAdministrator() ? ManagementErrorCode.None :
+        ManagementErrorCode.PermissionDenied
+    } catch (error) {
+      return this.classifyError(error as Object)
+    }
+  }
+
+  async loadDashboard(): Promise<ManagementDashboardSnapshot> {
+    const results: ManagementSectionResult[] = await Promise.all([
+      this.loadServerSection(),
+      this.loadCountsSection(),
+      this.loadUsersSection(),
+      this.loadSessionsSection(),
+      this.loadTasksSection(),
+      this.loadActivitiesSection()
+    ])
+    const snapshot = new ManagementDashboardSnapshot()
+    snapshot.serverResult = results[0]
+    snapshot.countsResult = results[1]
+    snapshot.usersResult = results[2]
+    snapshot.sessionsResult = results[3]
+    snapshot.tasksResult = results[4]
+    snapshot.activitiesResult = results[5]
+    return snapshot
+  }
+
+  async loadSessionsSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Sessions)
+    try {
+      const sessions = await this.service.getSessions()
+      result.sessions = sessions
+        .filter((item: SessionInfoDto) => item.IsActive !== false && item.NowPlayingItem !== undefined)
+        .map((item: SessionInfoDto) => this.mapSession(item))
+      result.status = result.sessions.length > 0 ? ManagementSectionStatus.Content : ManagementSectionStatus.Empty
+    } catch (error) {
+      this.applyError(result, error)
+    }
+    return result
+  }
+
+  async loadTasksSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Tasks)
+    try {
+      const tasks = await this.service.getScheduledTasks()
+      result.tasks = tasks
+        .filter((item: TaskInfo) => item.IsHidden !== true && this.isTaskBusy(item))
+        .map((item: TaskInfo) => this.mapTask(item))
+      result.status = result.tasks.length > 0 ? ManagementSectionStatus.Content : ManagementSectionStatus.Empty
+    } catch (error) {
+      this.applyError(result, error, true)
+    }
+    return result
+  }
+
+  async startLibraryScan(): Promise<ManagementActionResult> {
+    const result = new ManagementActionResult()
+    try {
+      const tasks = await this.service.getScheduledTasks()
+      const scanTask = tasks.find((task: TaskInfo) => task.Key === REFRESH_LIBRARY_TASK_KEY)
+      if (!scanTask || !scanTask.Id) {
+        result.code = ManagementActionCode.ScanTaskUnavailable
+        return result
+      }
+      if (this.isTaskBusy(scanTask)) {
+        result.code = ManagementActionCode.ScanAlreadyRunning
+        return result
+      }
+      if (scanTask.State !== TaskState.Idle) {
+        result.code = ManagementActionCode.ScanTaskUnavailable
+        return result
+      }
+      await this.service.startScheduledTask(scanTask.Id)
+      result.ok = true
+      result.code = ManagementActionCode.ScanStarted
+      return result
+    } catch (error) {
+      const status = this.getHttpStatus(error)
+      if (status === 401) {
+        result.code = ManagementActionCode.AuthenticationExpired
+      } else if (status === 403) {
+        result.code = ManagementActionCode.PermissionDenied
+      } else {
+        result.code = ManagementActionCode.ScanStartFailed
+      }
+      result.message = this.getServerErrorMessage(error)
+      return result
+    }
+  }
+
+  async loadServerSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Server)
+    try {
+      result.server = this.mapServer(await this.service.getSystemInfo())
+      result.status = ManagementSectionStatus.Content
+    } catch (error) {
+      this.applyError(result, error)
+    }
+    return result
+  }
+
+  async loadCountsSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Counts)
+    try {
+      result.counts = this.mapCounts(await this.service.getItemCounts())
+      result.status = ManagementSectionStatus.Content
+    } catch (error) {
+      this.applyError(result, error)
+    }
+    return result
+  }
+
+  async loadUsersSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Users)
+    try {
+      result.users = this.mapUserSummary(await this.service.getUsers())
+      result.status = ManagementSectionStatus.Content
+    } catch (error) {
+      this.applyError(result, error)
+    }
+    return result
+  }
+
+  async loadActivitiesSection(): Promise<ManagementSectionResult> {
+    const result = this.createResult(ManagementSectionKind.Activities)
+    try {
+      const response = await this.service.getActivityLog()
+      result.activities = (response.Items || []).slice(0, 6)
+        .map((item: ActivityLogEntry) => this.mapActivity(item))
+      result.status = result.activities.length > 0 ? ManagementSectionStatus.Content : ManagementSectionStatus.Empty
+    } catch (error) {
+      this.applyError(result, error, true)
+    }
+    return result
+  }
+
+  private createResult(kind: ManagementSectionKind): ManagementSectionResult {
+    const result = new ManagementSectionResult()
+    result.kind = kind
+    return result
+  }
+
+  private applyError(result: ManagementSectionResult, error: Object, unsupportedOn404: boolean = false): void {
+    const status = this.getHttpStatus(error)
+    result.message = this.getServerErrorMessage(error)
+    if (unsupportedOn404 && status === 404) {
+      result.status = ManagementSectionStatus.Unsupported
+      result.errorCode = ManagementErrorCode.Unsupported
+      return
+    }
+    result.status = ManagementSectionStatus.Error
+    result.errorCode = this.classifyError(error)
+  }
+
+  private getHttpStatus(error: Object): number | undefined {
+    return (error as ManagementHttpError).response?.status
+  }
+
+  private classifyError(error: Object): ManagementErrorCode {
+    const status = this.getHttpStatus(error)
+    if (status === 401) {
+      return ManagementErrorCode.AuthenticationExpired
+    }
+    if (status === 403) {
+      return ManagementErrorCode.PermissionDenied
+    }
+    return this.isOfflineError(error) ? ManagementErrorCode.Offline : ManagementErrorCode.RequestFailed
+  }
+
+  private isOfflineError(error: Object): boolean {
+    const httpError = error as ManagementHttpError
+    return httpError.isAxiosError === true && httpError.response === undefined
+  }
+
+  private getServerErrorMessage(error: Object): string {
+    const data = (error as ManagementHttpError).response?.data
+    if (typeof data === 'string') {
+      return this.normalizeServerMessage(data)
+    }
+    if (data) {
+      return this.normalizeServerMessage(data.Message || data.message || data.Error || data.error ||
+        data.Detail || data.detail || data.Title || data.title)
+    }
+    return ''
+  }
+
+  private normalizeServerMessage(message: string | undefined): string {
+    if (!message) {
+      return ''
+    }
+    const normalized = message.replace(/\s+/g, ' ').trim()
+    const lowerCase = normalized.toLowerCase()
+    if (lowerCase.includes('<html') || lowerCase.includes('<!doctype')) {
+      return ''
+    }
+    return normalized.length > 240 ? `${normalized.slice(0, 237)}...` : normalized
+  }
+
+  private mapServer(info: SystemInfo): ManagementServerOverview {
+    const server = new ManagementServerOverview()
+    server.name = info.ServerName || ''
+    server.version = info.Version || ''
+    server.productName = info.ProductName || 'Jellyfin'
+    server.operatingSystem = info.OperatingSystemDisplayName || info.OperatingSystem || ''
+    server.address = info.LocalAddress || ''
+    server.online = !info.IsShuttingDown
+    server.pendingRestart = info.HasPendingRestart === true
+    return server
+  }
+
+  private mapCounts(counts: ItemCounts): ManagementMediaCounts {
+    const result = new ManagementMediaCounts()
+    result.movies = counts.MovieCount || 0
+    result.series = counts.SeriesCount || 0
+    result.episodes = counts.EpisodeCount || 0
+    result.total = counts.ItemCount || result.movies + result.series + result.episodes
+    return result
+  }
+
+  private mapUserSummary(users: UserDto[]): ManagementUserSummary {
+    const summary = new ManagementUserSummary()
+    summary.total = users.length
+    summary.administrators = users.filter((user: UserDto) =>
+      user.Policy?.IsAdministrator === true).length
+    summary.disabled = users.filter((user: UserDto) => user.Policy?.IsDisabled === true).length
+    return summary
+  }
+
+  private mapSession(session: SessionInfoDto): ManagementSessionItem {
+    const result = new ManagementSessionItem()
+    result.id = session.Id || ''
+    result.userName = session.UserName || ''
+    result.client = session.Client || ''
+    result.deviceName = session.DeviceName || session.DeviceType || ''
+    result.deviceType = session.DeviceType || ''
+    result.applicationVersion = session.ApplicationVersion || ''
+    result.remoteEndPoint = session.RemoteEndPoint || ''
+    result.itemName = session.NowPlayingItem?.Name || ''
+    result.paused = session.PlayState?.IsPaused === true
+    result.muted = session.PlayState?.IsMuted === true
+    result.canSeek = session.PlayState?.CanSeek === true
+    result.volumeLevel = session.PlayState?.VolumeLevel ?? -1
+    result.audioStreamIndex = session.PlayState?.AudioStreamIndex ?? -1
+    result.subtitleStreamIndex = session.PlayState?.SubtitleStreamIndex ?? -1
+    result.playMethod = session.PlayState?.PlayMethod || ''
+    result.mediaSourceId = session.PlayState?.MediaSourceId || ''
+    result.supportsMediaControl = session.SupportsMediaControl === true
+    result.supportsRemoteControl = session.SupportsRemoteControl === true
+    result.positionTicks = session.PlayState?.PositionTicks || 0
+    result.lastActivityDate = session.LastActivityDate || ''
+    return result
+  }
+
+  private mapTask(task: TaskInfo): ManagementTaskItem {
+    const result = new ManagementTaskItem()
+    result.id = task.Id || ''
+    result.key = task.Key || ''
+    result.name = task.Name || ''
+    result.description = task.Description || ''
+    result.category = task.Category || ''
+    result.state = task.State || ''
+    result.running = task.State === TaskState.Running
+    result.busy = this.isTaskBusy(task)
+    result.progress = Math.max(0, Math.min(100, task.CurrentProgressPercentage || 0))
+    result.lastExecutionStart = task.LastExecutionResult?.StartTimeUtc || ''
+    result.lastExecutionEnd = task.LastExecutionResult?.EndTimeUtc || ''
+    result.lastExecutionStatus = task.LastExecutionResult?.Status || ''
+    result.lastExecutionError = task.LastExecutionResult?.ErrorMessage ||
+      task.LastExecutionResult?.LongErrorMessage || ''
+    return result
+  }
+
+  private isTaskBusy(task: TaskInfo): boolean {
+    return task.State === TaskState.Running || task.State === TaskState.Cancelling
+  }
+
+  private mapActivity(activity: ActivityLogEntry): ManagementActivityItem {
+    const result = new ManagementActivityItem()
+    result.id = (activity.Id || 0).toString()
+    result.title = activity.Name || ''
+    result.overview = activity.ShortOverview || activity.Overview || ''
+    result.date = activity.Date || ''
+    if (activity.Severity === LogLevel.Error || activity.Severity === LogLevel.Critical) {
+      result.severity = ManagementActivitySeverity.Error
+    } else if (activity.Severity === LogLevel.Warning) {
+      result.severity = ManagementActivitySeverity.Warning
+    }
+    return result
+  }
+}

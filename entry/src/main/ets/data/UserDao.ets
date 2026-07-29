@@ -7,14 +7,10 @@ import { when } from "@ohos/hypium";
 import { ApiClient } from "../network/ApiClient";
 
 export class UserDao {
-  private userTable = new Rdb(
-    RdbConstants.TABLE_USER.tableName,
-    RdbConstants.TABLE_USER.sqlCreate,
-    RdbConstants.TABLE_USER.columns
-  )
+  private userTable: Rdb
 
-  constructor(context: Context) {
-    this.userTable.getRdbStore(context)
+  constructor(rdbStore: relationalStore.RdbStore) {
+    this.userTable = new Rdb(rdbStore, RdbConstants.TABLE_USER.tableName, RdbConstants.TABLE_USER.columns)
   }
 
   insertDataSync(valuesBucket: relationalStore.ValuesBucket): number {

@@ -5,17 +5,19 @@ import common from '@ohos.app.ability.common';
 import Want from '@ohos.app.ability.Want';
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
+import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 
 @HMRouter({
-  pageUrl: RouterConsts.AboutPage
+  pageUrl: RouterConsts.AboutPage,
+  useNavDst: true
 })
 @Component
 export struct AboutPage{
-  @State versionName: string = 'v1.0.0';
+  @State versionName: string = '';
   private readonly githubUrl: string = 'https://github.com/chashaochang/MaFei';
-  private readonly websiteUrl: string = 'https://mafei.hmos.site/';
   private readonly appGalleryUrl: string = 'https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei';
-  private readonly mpvUrl: string = 'https://github.com/dex2oat/mpv';
+  private readonly contentScroller: Scroller = new Scroller();
   
   aboutToAppear() {
     this.getAppVersion();
@@ -27,7 +29,10 @@ export struct AboutPage{
       
       bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
         .then((bundleInfo) => {
-          this.versionName = `v${bundleInfo.versionName}`;
+          const resolvedVersionName = bundleInfo.versionName.trim();
+          if (resolvedVersionName.length > 0) {
+            this.versionName = `v${resolvedVersionName}`;
+          }
         })
         .catch((error: BusinessError) => {
           console.error('Failed to get bundle info:', error);
@@ -54,19 +59,31 @@ export struct AboutPage{
       console.error('Failed to open URL:', error);
     }
   }
+
+  private primaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_primary') : Color.White
+  }
+
+  private secondaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_secondary') : '#999999'
+  }
+
+  private dividerColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.comp_divider') : '#333333'
+  }
   
   @Builder
-  InfoItem(title: string, content: string) {
+  InfoItem(title: string, content: string, native: boolean) {
     Row() {
       Text(title)
         .fontSize(15)
-        .fontColor('#999999')
+        .fontColor(this.secondaryTextColor(native))
         .width(96)
         .textAlign(TextAlign.Start)
       
       Text(content)
         .fontSize(15)
-        .fontColor(Color.White)
+        .fontColor(this.primaryTextColor(native))
         .layoutWeight(1)
         .textAlign(TextAlign.Start)
         .maxLines(2)
@@ -79,12 +96,12 @@ export struct AboutPage{
   }
 
   @Builder
-  LinkItem(title: string, content: string, url: string) {
+  LinkItem(title: string, content: string, url: string, native: boolean) {
     Column() {
       Row() {
         Text(title)
           .fontSize(15)
-          .fontColor('#999999')
+          .fontColor(this.secondaryTextColor(native))
           .textAlign(TextAlign.Start)
         Blank()
       }
@@ -108,27 +125,147 @@ export struct AboutPage{
   }
 
   @Builder
-  SectionTitle(title: string) {
+  SectionTitle(title: string, native: boolean) {
     Text(title)
       .fontSize(20)
-      .fontColor(Color.White)
+      .fontColor(this.primaryTextColor(native))
       .fontWeight(FontWeight.Medium)
       .width('100%')
       .textAlign(TextAlign.Start)
-      .margin({ left: 20, bottom: 20 })
+      .margin({ left: 4, bottom: 12 })
   }
 
-  build() {
+  @Builder
+  private relatedLinksContent(native: boolean) {
+    Column() {
+      this.LinkItem('华为应用市场', this.appGalleryUrl, this.appGalleryUrl, native)
+      Divider().color(this.dividerColor(native)).margin({ left: 16, right: 16 })
+      this.LinkItem('GitHub', this.githubUrl, this.githubUrl, native)
+    }
+  }
+
+  @Builder
+  private nativeRelatedLinksGroup() {
+    Column() {
+      this.relatedLinksContent(true)
+    }
+    .width('100%')
+    .borderRadius(16)
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuRelatedLinksGroup() {
+    Column() {
+      this.relatedLinksContent(false)
+    }
+    .width('100%')
+    .backgroundColor('#1a1a1a')
+    .borderRadius(12)
+  }
+
+  @Builder
+  private relatedLinksGroup(native: boolean) {
+    if (native) {
+      this.nativeRelatedLinksGroup()
+    } else {
+      this.feiniuRelatedLinksGroup()
+    }
+  }
+
+  @Builder
+  private licenseContent(native: boolean) {
+    Column() {
+      this.InfoItem('许可证', 'GPL-3.0-or-later', native)
+    }
+  }
+
+  @Builder
+  private nativeLicenseGroup() {
+    Column() {
+      this.licenseContent(true)
+    }
+    .width('100%')
+    .borderRadius(16)
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuLicenseGroup() {
+    Column() {
+      this.licenseContent(false)
+    }
+    .width('100%')
+    .backgroundColor('#1a1a1a')
+    .borderRadius(12)
+  }
+
+  @Builder
+  private licenseGroup(native: boolean) {
+    if (native) {
+      this.nativeLicenseGroup()
+    } else {
+      this.feiniuLicenseGroup()
+    }
+  }
+
+  @Builder
+  private acknowledgementsContent(native: boolean) {
+    Column() {
+      this.InfoItem('Jellyfin', '感谢 Jellyfin 开源项目', native)
+      Divider().color(this.dividerColor(native)).margin({ left: 16, right: 16 })
+      this.InfoItem('mpv', '感谢 mpv 开源项目', native)
+      Divider().color(this.dividerColor(native)).margin({ left: 16, right: 16 })
+      this.InfoItem('OpenHarmony', '感谢 OpenHarmony 开源项目', native)
+    }
+  }
+
+  @Builder
+  private nativeAcknowledgementsGroup() {
+    Column() {
+      this.acknowledgementsContent(true)
+    }
+    .width('100%')
+    .borderRadius(16)
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuAcknowledgementsGroup() {
+    Column() {
+      this.acknowledgementsContent(false)
+    }
+    .width('100%')
+    .backgroundColor('#1a1a1a')
+    .borderRadius(12)
+  }
+
+  @Builder
+  private acknowledgementsGroup(native: boolean) {
+    if (native) {
+      this.nativeAcknowledgementsGroup()
+    } else {
+      this.feiniuAcknowledgementsGroup()
+    }
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Column(){
-      ActionBar({
-        title: '关于马飞'
-      })
+      if (showLegacyActionBar) {
+        ActionBar({
+          title: '关于马飞'
+        })
+      }
       
       // 内容区域
-      Scroll() {
+      Scroll(this.contentScroller) {
         Column({ space: 20 }) {
           // 应用图标和名称
-          Column({ space: 16 }) {
+          Column({ space: 12 }) {
             Image($r('app.media.app_icon'))
               .width(88)
               .height(88)
@@ -136,101 +273,60 @@ export struct AboutPage{
             
             Text($r('app.string.app_name'))
               .fontSize(18)
-              .fontColor(Color.White)
+              .fontColor(this.primaryTextColor(!showLegacyActionBar))
               .fontWeight(FontWeight.Medium)
-            
-            Text('HarmonyOS Jellyfin 第三方客户端')
-              .fontSize(15)
-              .fontColor('#999999')
 
-            Text('连接你自己的 Jellyfin 服务器，在鸿蒙设备上完成媒体浏览、剧集选播和播放控制。')
+            if (this.versionName.length > 0) {
+              Text(this.versionName)
+                .fontSize(14)
+                .fontColor(this.secondaryTextColor(!showLegacyActionBar))
+            }
+
+            Text('HarmonyOS 平台的 Jellyfin 第三方客户端')
               .fontSize(14)
-              .fontColor('#999999')
+              .fontColor(this.secondaryTextColor(!showLegacyActionBar))
               .textAlign(TextAlign.Center)
-              .lineHeight(22)
-              .padding({ left: 28, right: 28 })
           }
           .width('100%')
-          .padding({ top: 40, bottom: 8 })
-          
-          // 应用信息
+          .padding({ top: 36, bottom: 12 })
+
           Column({ space: 0 }) {
-            this.SectionTitle('应用信息')
-            
-            Column() {
-              this.InfoItem('版本号', this.versionName)
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('当前版本', 'HarmonyOS 1.x 稳定维护中')
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('开源协议', 'GPL-3.0-or-later')
-            }
-            .backgroundColor('#1a1a1a')
-            .borderRadius(12)
+            this.SectionTitle('相关链接', !showLegacyActionBar)
+            this.relatedLinksGroup(!showLegacyActionBar)
           }
 
           Column({ space: 0 }) {
-            this.SectionTitle('核心能力')
-
-            Column() {
-              this.InfoItem('媒体浏览', '首页、收藏、媒体库、搜索、详情页')
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('播放能力', 'AVPlayer / mpv 双引擎、续播、字幕音轨、清晰度切换')
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('设备适配', '手机、平板与 PC 形态适配中')
-            }
-            .backgroundColor('#1a1a1a')
-            .borderRadius(12)
-          }
-          
-          // 项目信息
-          Column({ space: 0 }) {
-            this.SectionTitle('项目链接')
-            
-            Column() {
-              this.LinkItem('GitHub', this.githubUrl, this.githubUrl)
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.LinkItem('官网', this.websiteUrl, this.websiteUrl)
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.LinkItem('华为应用市场', this.appGalleryUrl, this.appGalleryUrl)
-            }
-            .backgroundColor('#1a1a1a')
-            .borderRadius(12)
+            this.SectionTitle('开源许可', !showLegacyActionBar)
+            this.licenseGroup(!showLegacyActionBar)
           }
 
           Column({ space: 0 }) {
-            this.SectionTitle('2.0 方向')
-
-            Column() {
-              this.InfoItem('产品方向', '完善 HarmonyOS 原生 Jellyfin 管理与播放体验')
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('当前阶段', 'HarmonyOS 1.x 稳定维护，2.0 管理功能增强')
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('开发重点', '主题系统先行，逐步补齐服务器管理能力')
-            }
-            .backgroundColor('#1a1a1a')
-            .borderRadius(12)
+            this.SectionTitle('鸣谢', !showLegacyActionBar)
+            this.acknowledgementsGroup(!showLegacyActionBar)
           }
-
-          Column({ space: 0 }) {
-            this.SectionTitle('鸣谢')
-
-            Column() {
-              this.LinkItem('mpv 源码支持', '感谢 hosplayer 作者 5en 提供 mpv 相关源码支持', this.mpvUrl)
-              Divider().color('#333333').margin({ left: 16, right: 16 })
-              this.InfoItem('开源生态', '感谢 Jellyfin、OpenHarmony 及相关开源项目')
-            }
-            .backgroundColor('#1a1a1a')
-            .borderRadius(12)
-          }
-          
         }
-        .padding({ bottom: 32 })
+        .width('100%')
+        .constraintSize({ maxWidth: showLegacyActionBar ? '100%' : 560 })
+        .padding({ left: 16, right: 16, bottom: 32 })
       }
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       
     }.width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.bg_main'))
+    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
+  }
+
+  build() {
+    AppRouteDestination({
+      title: '关于马飞',
+      scrollControllers: [this.contentScroller],
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 }

@@ -10,6 +10,7 @@ import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { LiveTvChannelListUIState } from "./LiveTvChannelListUIState";
 
@@ -26,7 +27,8 @@ export class LiveTvChannelListViewModel extends BaseViewModel<LiveTvChannelListU
     this.startIndex = 0
     this.getChannelList()
     this.sortDialog.dismiss()
-  })
+  }, () => AppThemeSurfaceResolver.useNativeSurface(
+    this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
   init() {
     this.refresh()

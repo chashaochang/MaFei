@@ -2,6 +2,16 @@ import { MediaSourceInfo, MediaStream, MediaStreamType } from 'sdk/src/main/ets/
 import { AppUIState } from '../../../entity/AppUIState'
 import { LanguageUtil } from '../../../utils/LanguageUtil'
 import { AppStorageV2 } from '@kit.ArkUI'
+import { deviceInfo } from '@kit.BasicServicesKit'
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../../theme/AppThemeSurfaceResolver'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy'
 
 @ComponentV2
 export struct AudioSubtitleSelector {
@@ -17,6 +27,32 @@ export struct AudioSubtitleSelector {
   @Local audios: Array<MediaStream> = []
   @Event onSelectSubtitle: (subtitle: MediaStream) => void = (subtitle: MediaStream) => {}
   @Event onSelectAudio: (audio: MediaStream) => void = (audio: MediaStream) => {}
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
+  }
+
+  private sheetMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.appUIState.themeStyle,
+      deviceInfo.sdkApiVersion >= 26,
+      this.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private showSubtitleOptions(): void {
+    if (this.subtitles.length > 1) {
+      this.isShowingSubtitleOptions = true
+    }
+  }
+
+  private showAudioOptions(): void {
+    if (this.audios.length > 1) {
+      this.isShowingAudioOptions = true
+    }
+  }
 
   @Monitor('source')
   onSourceChange() {
@@ -65,52 +101,118 @@ export struct AudioSubtitleSelector {
     }
   }
 
-  build() {
-    Row({ space: 16 }) {
+  @Builder
+  private subtitleTriggerContent() {
+    Text(this.getShowName(0)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
+    SymbolGlyph(this.isShowingSubtitleOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor([$r('app.color.text_primary')])
+      .visibility(this.subtitles.length > 1 ? Visibility.Visible : Visibility.Hidden)
+  }
+
+  @Builder
+  private subtitleTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
       Row() {
-        Text(this.getShowName(0)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
-        SymbolGlyph(this.isShowingSubtitleOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor([$r('app.color.text_primary')])
-          .visibility(this.subtitles.length > 1 ? Visibility.Visible : Visibility.Hidden)
-      }.onClick(() => {
-        if (this.subtitles.length > 1) {
-          this.isShowingSubtitleOptions = true
-        }
-      }).bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(), {
+        this.subtitleTriggerContent()
+      }
+      .onClick(() => this.showSubtitleOptions())
+      .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(false), {
         preferType: SheetType.BOTTOM,
         height: SheetSize.FIT_CONTENT,
         title: { title: '字幕' },
       })
-
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Row() {
-        Text(this.getShowName(1)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
-        SymbolGlyph(this.isShowingAudioOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor([$r('app.color.text_primary')])
-          .visibility(this.audios.length > 1 ? Visibility.Visible : Visibility.Hidden)
-      }.onClick(() => {
-        if (this.audios.length > 1) {
-          this.isShowingAudioOptions = true
-        }
-      }).bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(), {
+        this.subtitleTriggerContent()
+      }
+      .onClick(() => this.showSubtitleOptions())
+      .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(true), {
         preferType: SheetType.BOTTOM,
         height: SheetSize.FIT_CONTENT,
-        title: { title: '音频' },
+        title: { title: '字幕' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row() {
+        this.subtitleTriggerContent()
+      }
+      .onClick(() => this.showSubtitleOptions())
+      .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(false), {
+        preferType: SheetType.BOTTOM,
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '字幕' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     }
   }
 
   @Builder
-  buildSubtitleOptions() {
+  private audioTriggerContent() {
+    Text(this.getShowName(1)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
+    SymbolGlyph(this.isShowingAudioOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor([$r('app.color.text_primary')])
+      .visibility(this.audios.length > 1 ? Visibility.Visible : Visibility.Hidden)
+  }
+
+  @Builder
+  private audioTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
+      Row() {
+        this.audioTriggerContent()
+      }
+      .onClick(() => this.showAudioOptions())
+      .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(false), {
+        preferType: SheetType.BOTTOM,
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '音频' },
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Row() {
+        this.audioTriggerContent()
+      }
+      .onClick(() => this.showAudioOptions())
+      .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(true), {
+        preferType: SheetType.BOTTOM,
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '音频' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row() {
+        this.audioTriggerContent()
+      }
+      .onClick(() => this.showAudioOptions())
+      .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(false), {
+        preferType: SheetType.BOTTOM,
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '音频' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    }
+  }
+
+  build() {
+    Row({ space: 16 }) {
+      this.subtitleTrigger()
+      this.audioTrigger()
+    }
+  }
+
+  @Builder
+  buildSubtitleOptions(native: boolean) {
     Scroll() {
       Column({ space: 12 }) {
         ForEach(this.subtitles, (subtitle: MediaStream, index) => {
           SheetListItem({
             item: subtitle,
             isSelected: this.selectedSubtitleIndex === index,
+            native: native
           }).hitTestBehavior(HitTestMode.Block)
             .onClick(() => {
             this.selectedSubtitleIndex = index
@@ -135,13 +237,14 @@ export struct AudioSubtitleSelector {
   }
 
   @Builder
-  buildAudioOptions() {
+  buildAudioOptions(native: boolean) {
     Scroll() {
       Column({ space: 12 }) {
         ForEach(this.audios, (audio: MediaStream, index) => {
           SheetListItem({
             item: audio,
             isSelected: this.selectedAudioIndex === index,
+            native: native
           }).hitTestBehavior(HitTestMode.Block)
             .onClick(() => {
             this.selectedAudioIndex = index
@@ -170,6 +273,7 @@ export struct AudioSubtitleSelector {
 struct SheetListItem {
   @Param @Require item: MediaStream
   @Param @Require isSelected: boolean = false
+  @Param native: boolean = false
 
   build() {
     Row() {
@@ -194,7 +298,7 @@ struct SheetListItem {
     }
     .width('100%')
     .height(66)
-    .backgroundColor($r('app.color.bg_2'))
+    .backgroundColor(this.native ? Color.Transparent : $r('app.color.bg_2'))
     .borderRadius(8)
     .padding({
       left: 16,

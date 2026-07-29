@@ -17,6 +17,14 @@
       "value": "#FF3E50"
     },
     {
+      "name": "status_success",
+      "value": "#34C759"
+    },
+    {
+      "name": "status_warning",
+      "value": "#FF9F0A"
+    },
+    {
       "name": "reload_title_color",
       "value": "#99000000"
     },

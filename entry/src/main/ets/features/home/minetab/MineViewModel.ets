@@ -17,6 +17,7 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   apiClientController: ApiClientController = new ApiClientController()
 
   init() {
+    this.ui.isAdministrator = false
     this.ui.userName = AppPreference.getInstance().getUserName()
     this.getServerInfo()
     this.getAppVersion()
@@ -38,9 +39,12 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
             tag: user.PrimaryImageTag,
             quality: 90
           })
-        this.ui.userPolicy = user.Policy?.IsAdministrator ? '管理员' : '普通用户'
+        this.ui.isAdministrator = user.Policy?.IsAdministrator === true
+        this.ui.userPolicy = this.ui.isAdministrator ? '管理员' : '普通用户'
       }
-    }).catch()
+    }).catch(() => {
+      this.ui.isAdministrator = false
+    })
   }
 
   getServerInfo() {

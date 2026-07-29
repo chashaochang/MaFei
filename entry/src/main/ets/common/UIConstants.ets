@@ -1,6 +1,7 @@
 export class UIConstants {
 
   static readonly ACTION_BAR_HEIGHT = 56
+  static readonly NATIVE_TITLE_MASK_HEIGHT = 16
   static readonly BOTTOM_BAR_HEIGHT = 60
   static readonly PAD_TOP_BAR_HEIGHT = 40
 

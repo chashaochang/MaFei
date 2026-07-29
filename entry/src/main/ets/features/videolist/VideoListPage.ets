@@ -5,6 +5,7 @@ import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
+import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { EmptyView } from "../../component/EmptyView";
 import { FailedView } from "../../component/FailedView";
 import { SkeletonGridView } from "../../component/skeleton/SkeletonGridView";
@@ -14,9 +15,13 @@ import { VideoListUIState } from "./VideoListUIState";
 import { VideoListViewModel } from "./VideoListViewModel";
 import { BreakpointTypeEnum } from "../../utils/BreakpointSystem";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
+import { AppStorageV2 } from "@kit.ArkUI";
+import { AppUIState } from "../../entity/AppUIState";
 
 @HMRouter({
-  pageUrl: RouterConsts.VideoListPage
+  pageUrl: RouterConsts.VideoListPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct VideoListPage {
@@ -25,6 +30,22 @@ export struct VideoListPage {
   @Param mediaItem: MediaItem = {} as MediaItem
   @Local ui: VideoListUIState = new VideoListUIState(this.getUIContext())
   @Local vm: VideoListViewModel = new VideoListViewModel(this.ui)
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private pageBackground(): ResourceColor {
+    if (this.vm.appUIState.isBigScreen) {
+      return Color.Transparent
+    }
+    return AppThemeSurfaceResolver.routeBackground(this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private primaryTextColor(nativeSurface: boolean): ResourceColor {
+    return nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
 
   aboutToAppear(): void {
     if (this.fromHome && this.mediaItem) {
@@ -37,119 +58,181 @@ export struct VideoListPage {
     }
   }
 
-  build() {
-    Column() {
-      ActionBar({
-        title: this.ui.title
-      }).visibility(this.fromHome ? Visibility.None : Visibility.Visible)
-      Column() {
-        Row() {
-          Text(sortOptions[this.ui.selectedSortIndex].label).fontSize(14).fontColor($r('app.color.text_primary'))
-            .height(46)
-            .onClick(() => {
-              this.vm.sortDialog.show()
-            })
-          Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
-            .width(16)
-            .height(16)
-            .fillColor($r('app.color.text_primary'))
-            .margin({ left: 6 })
-            .onClick(() => {
-              if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
-                this.ui.isDesc = !this.ui.isDesc
-                this.vm.refresh()
-              }
-            })
-          Text(this.ui.totalCount)
-            .fontSize(12)
-            .fontColor($r('app.color.text_1'))
-            .backgroundColor($r('app.color.bg_1'))
-            .padding({
-              left: 6,
-              right: 6,
-              top: 4,
-              bottom: 4
-            })
-            .margin({
-              left: 12
-            })
-            .borderRadius(4)
-          Blank().layoutWeight(1)
-        }
-        .width('100%')
-        .height(46)
+  @Builder
+  private nativeCountLabel() {
+    Text(this.ui.totalCount)
+      .fontSize(12)
+      .fontColor($r('sys.color.font_secondary'))
+      .padding({
+        left: 6,
+        right: 6,
+        top: 4,
+        bottom: 4
+      })
+      .margin({
+        left: 12
+      })
+      .borderRadius(4)
+  }
 
-        GridView({
-          lazyDataSource: this.vm.dataSource,
-          onLazyDataSource: (dataSource) => {
-            this.vm.dataSource = dataSource
-          },
-          itemLayout: (item, index) => this.itemLayout(item, index), //条目布局
-          emptyLayout: () => this.emptyLayout(),
-          showEmptyLayout: this.ui.totalCount === '0',
-          controller: this.vm.controller, //控制器，负责关闭下拉和上拉
-          onRefresh: () => {
-            //下拉刷新
-            this.vm.refresh()
-          },
-          onLoadMore: () => {
-            //上拉加载
-            this.vm.loadMore()
-          },
-          gridAttribute: (attr) => {
-            attr.scrollBar = BarState.Off
-            switch (this.vm.appUIState.currentBreakpoint) {
-              case BreakpointTypeEnum.XS:
-                attr.columnsTemplate = '1fr '.repeat(2)
-                break
-              case BreakpointTypeEnum.SM:
-                attr.columnsTemplate = '1fr '.repeat(3)
-                break
-              case BreakpointTypeEnum.MD:
-                attr.columnsTemplate = '1fr '.repeat(4)
-                break
-              case BreakpointTypeEnum.LG:
-                attr.columnsTemplate = '1fr '.repeat(6)
-                break
-              case BreakpointTypeEnum.XL:
-                attr.columnsTemplate = '1fr '.repeat(8)
-                break
-              case BreakpointTypeEnum.XXL:
-                attr.columnsTemplate = '1fr '.repeat(12)
-                break
-              default:
-                attr.columnsTemplate = '1fr '.repeat(3)
-                break
-            }
-            attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
-          },
-          lazyCachedCount: 10 //缓存
-        }).width('100%')
-          .layoutWeight(1)
-        if (this.ui.pageState == PageState.Loading) {
-          SkeletonGridView()
-        }
-        if (this.ui.pageState == PageState.Error) {
-          FailedView()
-            .onClick(() => {
+  @Builder
+  private feiniuCountLabel() {
+    Text(this.ui.totalCount)
+      .fontSize(12)
+      .fontColor($r('app.color.text_1'))
+      .backgroundColor($r('app.color.bg_1'))
+      .padding({
+        left: 6,
+        right: 6,
+        top: 4,
+        bottom: 4
+      })
+      .margin({
+        left: 12
+      })
+      .borderRadius(4)
+  }
+
+  @Builder
+  private listContent(nativeSurface: boolean) {
+    Column() {
+      Row() {
+        Text(sortOptions[this.ui.selectedSortIndex].label)
+          .fontSize(14)
+          .fontColor(this.primaryTextColor(nativeSurface))
+          .height(46)
+          .onClick(() => {
+            this.vm.sortDialog.show()
+          })
+        Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+          .width(16)
+          .height(16)
+          .fillColor(this.primaryTextColor(nativeSurface))
+          .margin({ left: 6 })
+          .onClick(() => {
+            if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+              this.ui.isDesc = !this.ui.isDesc
               this.vm.refresh()
-            })
+            }
+          })
+        if (nativeSurface) {
+          this.nativeCountLabel()
+        } else {
+          this.feiniuCountLabel()
         }
+        Blank().layoutWeight(1)
       }
       .width('100%')
-      .layoutWeight(1)
-      .backgroundColor(this.vm.appUIState.isBigScreen ? Color.Transparent : $r('app.color.bg_main'))
-      .borderRadius({
-        topLeft: 20,
-        topRight: 20
-      })
-      .padding({
-        left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-        right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-        bottom: this.vm.appUIState.safeBottom
-      })
-    }.width('100%')
+      .height(46)
+
+      GridView({
+        lazyDataSource: this.vm.dataSource,
+        onLazyDataSource: (dataSource) => {
+          this.vm.dataSource = dataSource
+        },
+        itemLayout: (item, index) => this.itemLayout(item, index),
+        emptyLayout: () => this.emptyLayout(),
+        showEmptyLayout: this.ui.totalCount === '0',
+        controller: this.vm.controller,
+        onRefresh: () => {
+          this.vm.refresh()
+        },
+        onLoadMore: () => {
+          this.vm.loadMore()
+        },
+        gridAttribute: (attr) => {
+          attr.scrollBar = BarState.Off
+          switch (this.vm.appUIState.currentBreakpoint) {
+            case BreakpointTypeEnum.XS:
+              attr.columnsTemplate = '1fr '.repeat(2)
+              break
+            case BreakpointTypeEnum.SM:
+              attr.columnsTemplate = '1fr '.repeat(3)
+              break
+            case BreakpointTypeEnum.MD:
+              attr.columnsTemplate = '1fr '.repeat(4)
+              break
+            case BreakpointTypeEnum.LG:
+              attr.columnsTemplate = '1fr '.repeat(6)
+              break
+            case BreakpointTypeEnum.XL:
+              attr.columnsTemplate = '1fr '.repeat(8)
+              break
+            case BreakpointTypeEnum.XXL:
+              attr.columnsTemplate = '1fr '.repeat(12)
+              break
+            default:
+              attr.columnsTemplate = '1fr '.repeat(3)
+              break
+          }
+          attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
+        },
+        lazyCachedCount: 10
+      }).width('100%')
+        .layoutWeight(1)
+      if (this.ui.pageState == PageState.Loading) {
+        SkeletonGridView()
+      }
+      if (this.ui.pageState == PageState.Error) {
+        FailedView()
+          .onClick(() => {
+            this.vm.refresh()
+          })
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .backgroundColor(nativeSurface ? Color.Transparent : this.pageBackground())
+    .borderRadius({
+      topLeft: 20,
+      topRight: 20
+    })
+    .padding({
+      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
+      bottom: this.vm.appUIState.safeBottom
+    })
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
+    Column() {
+      if (showLegacyActionBar) {
+        ActionBar({
+          title: this.ui.title
+        })
+      }
+      this.listContent(!showLegacyActionBar)
+    }
+    .width('100%')
     .height('100%')
+    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
+  }
+
+  @Builder
+  private embeddedContent() {
+    Column() {
+      this.listContent(this.useNativeSurface())
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.pageBackground())
+  }
+
+  build() {
+    if (this.fromHome) {
+      this.embeddedContent()
+    } else {
+      AppRouteDestination({
+        title: this.ui.title,
+        contentBuilder: () => {
+          this.pageContent(false)
+        },
+        legacyContentBuilder: () => {
+          this.pageContent(true)
+        }
+      })
+    }
   }
 
   @Builder
@@ -177,6 +260,7 @@ export struct VideoListPage {
 export struct VideoCard {
   @Param @Require item: VideoItem
   @Param textAlign: TextAlign = TextAlign.Start
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
   build() {
     Column() {
@@ -195,10 +279,15 @@ export struct VideoCard {
         })
           .aspectRatio(2 / 3)
           .width('100%')
-          .borderColor($r('app.color.border_1'))
-          .borderWidth(0.5)
+          .borderColor(AppThemeSurfaceResolver.mediaOutline(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+          .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 0.5))
           .borderRadius(6)
-          .backgroundColor('#CBD2D3')
+          .backgroundColor(AppThemeSurfaceResolver.useNativeSurface(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+            AppThemeSurfaceResolver.mediaPlaceholderBackground(
+              this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : '#CBD2D3')
         // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         if (this.item.score) {
           Text(this.item.score.toFixed(1) + '')

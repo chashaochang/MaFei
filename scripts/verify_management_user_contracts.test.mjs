@@ -27,22 +27,39 @@ function validSources() {
     'ManagementUserDetailPage',
     'ManagementUserCreatePage'
   ].join('\n'))
+  sources.set(managementUserPaths.dashboardModels,
+    'enum ManagementSectionKind { Users }\nclass ManagementUserSummary {}')
+  sources.set(managementUserPaths.dashboardState,
+    'usersStatus = ManagementSectionStatus.Loading\nusers: ManagementUserSummary | null = null')
+  sources.set(managementUserPaths.dashboardViewModel,
+    'async refreshUsers() { await this.repository.loadUsersSection() }')
+  sources.set(managementUserPaths.dashboardPage,
+    'HMRouterMgr.to(RouterConsts.ManagementUsersPage).push()')
   sources.set(managementUserPaths.models, [
     'enableAllFolders',
     'enableAllChannels',
-    'enableAllDevices'
+    'enableAllDevices',
+    'export class ManagementPasswordDraft { currentPassword: string = "" }',
+    'export class ManagementUserCreateDraft { password: string = "" }'
   ].join('\n'))
   sources.set(managementUserPaths.policy, [
     'clonePolicy',
     'targetId === currentUserId',
-    'enabledAdministrators.length <= 1'
+    'enabledAdministrators.length <= 1',
+    'static patchParental(policy, draft) {',
+    '  next.AllowedTags = draft.allowedTags',
+    '  next.BlockedTags = draft.blockedTags',
+    '  next.AccessSchedules = draft.schedules',
+    '}',
+    'validateParental normalizeTags conflicts startHour endHour'
   ].join('\n'))
   sources.set(managementUserPaths.service, [
     "authenticatedGet('/Channels')",
     "authenticatedGet('/Devices')",
     "authenticatedGet('/Localization/ParentalRatings')",
     "authenticatedGet('/System/Configuration/network')",
-    'postUserImage({ userId, body })'
+    'postUserImage({ userId, body })',
+    'NewPw: newPassword'
   ].join('\n'))
   sources.set(managementUserPaths.repository, [
     'async saveProfile(userId: string) {',
@@ -68,6 +85,16 @@ function validSources() {
     '  const latest = await this.service.getUser(created.Id)',
     '  await this.service.updatePolicy(created.Id, latest.Policy)',
     '  return CreatedPolicyPending',
+    '}',
+    'async uploadAvatar(bytes, contentType) {',
+    '  if (!SUPPORTED_AVATAR_MIME_TYPES.includes(contentType)) return',
+    '  if (bytes.byteLength > MAX_AVATAR_BYTES) return',
+    '  await this.service.uploadUserImage(userId, bytes, contentType)',
+    '}',
+    'async retryCreateAccess(userId) {',
+    '  const current = await this.service.getUser(userId)',
+    '  const next = ManagementUserPolicy.patchAccess(current.Policy)',
+    '  await this.service.updatePolicy(userId, next)',
     '}'
   ].join('\n'))
   sources.set(managementUserPaths.detailPage, [
@@ -75,11 +102,101 @@ function validSources() {
     'ManagementUserAccessSection',
     'ManagementUserParentalSection',
     'ManagementUserPasswordSection',
-    'AppThemeSurfaceResolver'
+    'AppThemeSurfaceResolver',
+    'embeddedUserId',
+    'deviceWidth >= 840',
+    'showUnsavedDialog()',
+    'deleteProtected currentUserId enabledAdministratorCount',
+    'onDeleted management_user_delete_impact'
+  ].join('\n'))
+  sources.set(managementUserPaths.detailState,
+    'profileDirty\naccessDirty\nparentalDirty\npasswordDirty\ndeleteStatus')
+  sources.set(managementUserPaths.detailViewModel, [
+    'generation',
+    'checkCurrentUserAccess()',
+    'loadEditor()',
+    'saveCurrentTab()',
+    'async deleteUser() { await this.repository.deleteUser() }',
+    'canLeave()',
+    'discardCurrentTab()',
+    'setPassword resetPassword clearPassword runPasswordAction',
+    'new photoAccessHelper.PhotoViewPicker()',
+    'photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE',
+    'options.maxSelectNumber = 1',
+    'fileIo.openSync(uri)',
+    'image.createImageSource(file.fd)',
+    'SUPPORTED_AVATAR_MIME_TYPES',
+    'MAX_AVATAR_BYTES'
+  ].join('\n'))
+  sources.set(managementUserPaths.passwordSection, [
+    'ManagementPasswordDraft',
+    'InputType.Password',
+    'showPasswordIcon(true)',
+    'onSetPassword',
+    'onResetPassword',
+    'onClearPassword'
+  ].join('\n'))
+  sources.set(managementUserPaths.profileSection, [
+    'authenticationProviderId',
+    'enableCollectionManagement',
+    'enableMediaPlayback',
+    'enableRemoteAccess',
+    'remoteClientBitrateLimitMbps',
+    'syncPlayAccess',
+    'isAdministrator',
+    'isDisabled',
+    'enabledAdministratorCount'
+  ].join('\n'))
+  sources.set(managementUserPaths.accessSection, [
+    'enableAllFolders',
+    'enabledFolderIds',
+    'enableAllChannels',
+    'enabledChannelIds',
+    'enableAllDevices',
+    'enabledDeviceIds',
+    'foldersStatus',
+    'channelsStatus',
+    'devicesStatus'
+  ].join('\n'))
+  sources.set(managementUserPaths.parentalSection, [
+    'maxParentalRating',
+    'blockedUnratedItems',
+    'allowedTags',
+    'blockedTags',
+    'schedules',
+    'if (this.ui.profile.isAdministrator)',
+    'management_user_parental_admin_schedule_hidden'
   ].join('\n'))
   sources.set(managementUserPaths.listPage,
-    'AppThemeSurfaceResolver\nif (deviceWidth >= 840) userList(300)')
-  sources.set(managementUserPaths.createPage, 'AppThemeSurfaceResolver')
+    'AppThemeSurfaceResolver\nif (deviceWidth >= 840) userList(300)\n' +
+      'deleteProtected currentUserId enabledAdministratorCount\n' +
+      'onDeleted refresh(false)')
+  sources.set(managementUserPaths.listViewModel,
+    'async deleteUser() { const result = await repository.deleteUser(); await refresh(false) }')
+  sources.set(managementUserPaths.createState, [
+    'name: string',
+    'password: string',
+    'confirmPassword: string',
+    'access: ManagementAccessDraft',
+    'saving: boolean',
+    'createdUserId: string',
+    'partialSuccess: boolean'
+  ].join('\n'))
+  sources.set(managementUserPaths.createViewModel, [
+    'if (this.ui.saving || !this.validate()) return',
+    'await this.repository.createUser()',
+    'CreatedPolicyPending',
+    'async retryAccess() { await this.repository.retryCreateAccess() }',
+    'this.ui.password = ""',
+    'this.ui.confirmPassword = ""'
+  ].join('\n'))
+  sources.set(managementUserPaths.createPage, [
+    'AppThemeSurfaceResolver',
+    'enabledFolderIds',
+    'enabledChannelIds',
+    'partialSuccess',
+    'management_user_create_retry_access'
+  ].join('\n'))
   sources.set(managementUserPaths.baseStrings, localeSource())
   sources.set(managementUserPaths.zhStrings, localeSource())
   sources.set(managementUserPaths.enStrings, localeSource())
@@ -129,10 +246,119 @@ test('rejects removal of the last enabled administrator protection', () => {
 test('rejects password persistence or logging', () => {
   const sources = validSources()
   sources.set(managementUserPaths.passwordSection,
-    'AppPreference.getInstance().setValue("password", password)')
+    sources.get(managementUserPaths.passwordSection) +
+      '\nAppPreference.getInstance().setValue("password", password)')
   assert.throws(
     () => validateManagementUserContracts(sources),
     /password secret/
+  )
+})
+
+test('rejects password fields outside password and create drafts', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.models,
+    sources.get(managementUserPaths.models) +
+      '\nexport class ManagementUserItem { password: string = "" }')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /password secret fields/
+  )
+})
+
+test('requires avatar MIME validation before upload', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.repository,
+    sources.get(managementUserPaths.repository)
+      .replace('SUPPORTED_AVATAR_MIME_TYPES.includes(contentType)', 'true'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /avatar MIME and byte-size validation/
+  )
+})
+
+test('requires avatar byte-size validation before upload', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.repository,
+    sources.get(managementUserPaths.repository)
+      .replace('bytes.byteLength > MAX_AVATAR_BYTES', 'false'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /avatar MIME and byte-size validation/
+  )
+})
+
+test('requires password clearing to submit an empty NewPw value', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.service,
+    sources.get(managementUserPaths.service)
+      .replace('NewPw: newPassword', 'NewPw: newPassword || null'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /empty NewPw/
+  )
+})
+
+test('requires partial create access to be retryable with a fresh policy', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.repository,
+    sources.get(managementUserPaths.repository)
+      .replace('async retryCreateAccess(userId) {\n  const current = await this.service.getUser(userId)',
+        'async retryCreateAccess(userId) {\n  const current = cachedUser'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /partial create access retry/
+  )
+})
+
+test('requires create submission locking and validation', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.createViewModel,
+    sources.get(managementUserPaths.createViewModel).replace('this.ui.saving', 'false'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /create submit lock/
+  )
+})
+
+test('requires create password fields to clear after server acceptance', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.createViewModel,
+    sources.get(managementUserPaths.createViewModel)
+      .replace('this.ui.password = ""', 'this.ui.password = draft.password'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /password clearing/
+  )
+})
+
+test('requires deletion to reload the user list', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.listViewModel,
+    sources.get(managementUserPaths.listViewModel).replace('await refresh(false)', 'return result'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /reload the user list/
+  )
+})
+
+test('requires detail deletion to use the repository', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.detailViewModel,
+    sources.get(managementUserPaths.detailViewModel)
+      .replace('async deleteUser() { await this.repository.deleteUser() }', ''))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /detail delete action ownership/
+  )
+})
+
+test('requires embedded detail deletion to refresh the list', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.listPage,
+    sources.get(managementUserPaths.listPage).replace('onDeleted refresh(false)', ''))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /embedded detail deletion/
   )
 })
 
@@ -153,5 +379,65 @@ test('requires identical user-management locale keys', () => {
   assert.throws(
     () => validateManagementUserContracts(sources),
     /locale keys differ/
+  )
+})
+
+test('requires dashboard-owned user navigation without page HTTP', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.dashboardPage,
+    'getUserApi(ApiClient.Instance()).getUsers({})')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /dashboard user navigation|dashboard page must not own user HTTP/
+  )
+})
+
+test('requires guarded editor lifecycle and independent dirty state', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.detailState, 'profileDirty')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /independent editor dirty state/
+  )
+})
+
+test('rejects access-array ownership in the profile section', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.profileSection,
+    sources.get(managementUserPaths.profileSection) + '\nenabledFolderIds')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /profile section must not own access arrays/
+  )
+})
+
+test('rejects profile or password ownership in the access section', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.accessSection,
+    sources.get(managementUserPaths.accessSection) + '\nupdatePassword')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /access section must not own profile or password settings/
+  )
+})
+
+test('requires administrators to hide access schedules', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.parentalSection,
+    sources.get(managementUserPaths.parentalSection)
+      .replace('this.ui.profile.isAdministrator', 'false'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /administrator schedule hiding/
+  )
+})
+
+test('rejects access-array or password ownership in parental controls', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.parentalSection,
+    sources.get(managementUserPaths.parentalSection) + '\nenabledDeviceIds')
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /parental section must not own access arrays or passwords/
   )
 })

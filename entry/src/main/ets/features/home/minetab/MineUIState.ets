@@ -12,6 +12,7 @@ export class MineUIState extends BaseUIState {
   userAvatar: string = ''
   @Trace
   userPolicy: string = ''
+  @Trace isAdministrator: boolean = false
   @Trace versionName: string = ''
   @Trace appearanceName: string = ''
   @Trace playerEngineName: ResourceStr = $r('app.string.player_engine_auto')

@@ -8,6 +8,7 @@ import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { FavoriteListUIState } from "./FavoriteListUIState";
 
@@ -23,7 +24,8 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
     this.startIndex = 0
     this.getFavoriteList()
     this.sortDialog.dismiss()
-  })
+  }, () => AppThemeSurfaceResolver.useNativeSurface(
+    this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
   queryTypes: BaseItemKind[] = [
     BaseItemKind.Movie,
     BaseItemKind.Series,

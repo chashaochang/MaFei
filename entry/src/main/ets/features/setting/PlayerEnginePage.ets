@@ -1,11 +1,14 @@
 import { HMRouter } from '@hadss/hmrouter';
 import { RouterConsts } from '../../common/RouterConsts';
 import { ActionBar } from '../../component/ActionBar';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppPreference } from '../../data/AppPreference';
 import { PlayerEngineType } from '../../entity/PlayerEngineType';
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 
 @HMRouter({
-  pageUrl: RouterConsts.PlayerEnginePage
+  pageUrl: RouterConsts.PlayerEnginePage,
+  useNavDst: true
 })
 @ComponentV2
 export struct PlayerEnginePage {
@@ -92,153 +95,256 @@ export struct PlayerEnginePage {
     AppPreference.getInstance().setMpvCacheSizeMb(this.mpvCacheList[index].sizeMb)
   }
 
-  build() {
-    Column() {
-      ActionBar({
-        title: getContext().resourceManager.getStringSync($r('app.string.player_engine_title'))
-      })
-      Stack() {
-        Grid() {
-          ForEach(this.list, (item: PlayerEngineItem, index: number) => {
-            GridItem() {
-              Column() {
-                Image(item.imageSrc)
-                  .width(48)
-                  .objectFit(ImageFit.Contain)
-                  .borderRadius(8)
-                  .borderWidth(0.5)
-                  .borderColor($r('app.color.border_input'))
-                  .fillColor($r('app.color.text_primary'))
-                Blank().height(12)
-                Text(item.title).fontSize(14).fontColor($r('app.color.text_primary'))
-                Blank().height(6)
-                Radio({ value: item.type, group: 'playerEngineGroup' }).checked(this.selectIndex == index)
-                  .hitTestBehavior(HitTestMode.None)
-              }.onClick(() => {
-                this.selectEngine(index)
+  private primaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private dividerColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.comp_divider') : $r('app.color.border_input')
+  }
+
+  @Builder
+  private engineChoices(native: boolean) {
+    ForEach(this.list, (item: PlayerEngineItem, index: number) => {
+      GridItem() {
+        Column() {
+          Image(item.imageSrc)
+            .width(48)
+            .objectFit(ImageFit.Contain)
+            .borderRadius(8)
+            .borderWidth(native ? 0 : 0.5)
+            .borderColor(this.dividerColor(native))
+            .fillColor(this.primaryTextColor(native))
+          Blank().height(12)
+          Text(item.title)
+            .fontSize(14)
+            .fontColor(this.primaryTextColor(native))
+          Blank().height(6)
+          Radio({ value: item.type, group: 'playerEngineGroup' })
+            .checked(this.selectIndex == index)
+            .hitTestBehavior(HitTestMode.None)
+        }
+        .onClick(() => {
+          this.selectEngine(index)
+        })
+      }
+    })
+  }
+
+  @Builder
+  private engineGroup() {
+    Stack() {
+      Grid() {
+        this.engineChoices(true)
+      }
+      .width('100%')
+      .height(158)
+      .columnsTemplate('1fr 1fr 1fr')
+      .borderRadius(16)
+      .clip(true)
+      .padding({ top: 20, left: 16, right: 16 })
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    }
+    .width('100%')
+    .constraintSize({ maxWidth: 560 })
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private feiniuEngineGroup() {
+    Stack() {
+      Grid() {
+        this.engineChoices(false)
+      }
+      .width('100%')
+      .height(158)
+      .columnsTemplate('1fr 1fr 1fr')
+      .backgroundColor($r('app.color.bg_1'))
+      .borderRadius(12)
+      .padding({ top: 20, left: 16, right: 16 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private engineGroupSurface(native: boolean) {
+    if (native) {
+      this.engineGroup()
+    } else {
+      this.feiniuEngineGroup()
+    }
+  }
+
+  @Builder
+  private mpvSettingsContent(native: boolean) {
+    Column({ space: 16 }) {
+      if (this.shouldShowManualMpvDecodeSettings()) {
+        Column({ space: 10 }) {
+          Text('MPV 解码方式')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.primaryTextColor(native))
+
+          Row({ space: 12 }) {
+            ForEach(this.mpvDecodeList, (item: MpvDecodeItem, index: number) => {
+              Column({ space: 8 }) {
+                Text(item.title)
+                  .fontSize(15)
+                  .fontColor(this.mpvDecodeIndex === index ? Color.White : this.primaryTextColor(native))
+                Text(item.tip)
+                  .fontSize(11)
+                  .fontColor(this.mpvDecodeIndex === index ? '#E6FFFFFF' : this.secondaryTextColor(native))
+                  .maxLines(3)
+              }
+              .layoutWeight(1)
+              .constraintSize({ minHeight: 108 })
+              .alignItems(HorizontalAlign.Start)
+              .padding({ left: 14, right: 14, top: 16, bottom: 16 })
+              .backgroundColor(this.mpvDecodeIndex === index ?
+                $r('app.color.color_main') : (native ? Color.Transparent : $r('app.color.bg_1')))
+              .borderRadius(12)
+              .onClick(() => {
+                this.selectDecode(index)
               })
-            }
-          })
+            })
+          }
+          .width('100%')
         }
         .width('100%')
-        .height(158)
-        .columnsTemplate('1fr 1fr 1fr')
-        .backgroundColor($r('app.color.bg_1'))
-        .borderRadius(12)
-        .padding({
-          top: 20,
-          left: 16,
-          right: 16
+      }
+
+      Column({ space: native ? 0 : 10 }) {
+        Text('MPV 缓存大小')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor(native))
+          .margin({ bottom: native ? 6 : 0 })
+
+        ForEach(this.mpvCacheList, (item: MpvCacheItem, index: number) => {
+          Row() {
+            Column({ space: 4 }) {
+              Text(item.title)
+                .fontSize(15)
+                .fontColor(this.primaryTextColor(native))
+              Text(item.tip)
+                .fontSize(11)
+                .fontColor(this.secondaryTextColor(native))
+            }
+            .alignItems(HorizontalAlign.Start)
+
+            Blank()
+
+            Radio({ value: item.title, group: 'mpvCacheGroup' })
+              .checked(this.mpvCacheIndex === index)
+              .hitTestBehavior(HitTestMode.None)
+          }
+          .width('100%')
+          .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+          .backgroundColor(native ? Color.Transparent : $r('app.color.bg_1'))
+          .borderRadius(12)
+          .onClick(() => {
+            this.selectCache(index)
+          })
+
+          if (native && index < this.mpvCacheList.length - 1) {
+            Divider()
+              .color(this.dividerColor(true))
+              .margin({ left: 14, right: 14 })
+          }
         })
-      }.padding({
-        left: 16,
-        right: 16
-      })
+      }
+      .width('100%')
+
+      Text(this.isAutoSelected()
+        ? '自动模式下，如果系统播放器吃不下当前片源，会自动切到 MPV，并优先使用硬解；你只需要保留一个合适的 MPV 缓存大小就行。'
+        : this.mpvDecodeIndex === 1
+          ? '当前已选择硬解。它会优先调用手机硬件解码，功耗更低，也更适合 HDR 片源；如果出现黑屏、花屏或颜色不对，再切回软解。'
+          : '当前已选择软解。它由 MPV 自己解码，兼容性更好；如果想让 HDR 片源更省电，或者想试试硬件能力，再切到硬解。')
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor(native))
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private mpvSettingsGroup() {
+    Stack() {
+      Column() {
+        this.mpvSettingsContent(true)
+      }
+      .width('100%')
+      .padding(16)
+      .borderRadius(16)
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    }
+    .width('100%')
+    .constraintSize({ maxWidth: 560 })
+    .padding({ left: 16, right: 16, top: 20 })
+  }
+
+  @Builder
+  private feiniuMpvSettingsGroup() {
+    Column() {
+      this.mpvSettingsContent(false)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 20 })
+  }
+
+  @Builder
+  private mpvSettingsSurface(native: boolean) {
+    if (native) {
+      this.mpvSettingsGroup()
+    } else {
+      this.feiniuMpvSettingsGroup()
+    }
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
+    Column() {
+      if (showLegacyActionBar) {
+        ActionBar({
+          title: $r('app.string.player_engine_title')
+        })
+      }
+      this.engineGroupSurface(!showLegacyActionBar)
 
       Text(this.list[this.selectIndex].tip)
         .fontSize(12)
-        .fontColor($r('app.color.text_1'))
+        .fontColor(this.secondaryTextColor(!showLegacyActionBar))
         .margin({ top: 20 })
         .padding({
           left: 16,
           right: 16
         })
+        .constraintSize({ maxWidth: showLegacyActionBar ? '100%' : 560 })
 
       if (this.shouldShowMpvCacheSettings()) {
-        Column({ space: 16 }) {
-          if (this.shouldShowManualMpvDecodeSettings()) {
-            Column({ space: 10 }) {
-              Text('MPV 解码方式')
-                .fontSize(16)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-
-              Row({ space: 12 }) {
-                ForEach(this.mpvDecodeList, (item: MpvDecodeItem, index: number) => {
-                  Column({ space: 8 }) {
-                    Text(item.title)
-                      .fontSize(15)
-                      .fontColor(this.mpvDecodeIndex === index ? Color.White : $r('app.color.text_primary'))
-                    Text(item.tip)
-                      .fontSize(11)
-                      .fontColor(this.mpvDecodeIndex === index ? '#E6FFFFFF' : $r('app.color.text_1'))
-                      .maxLines(3)
-                  }
-                  .layoutWeight(1)
-                  .constraintSize({ minHeight: 108 })
-                  .alignItems(HorizontalAlign.Start)
-                  .padding({
-                    left: 14,
-                    right: 14,
-                    top: 16,
-                    bottom: 16
-                  })
-                  .backgroundColor(this.mpvDecodeIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
-                  .borderRadius(12)
-                  .onClick(() => {
-                    this.selectDecode(index)
-                  })
-                })
-              }
-              .width('100%')
-            }
-            .width('100%')
-          }
-
-          Column({ space: 10 }) {
-            Text('MPV 缓存大小')
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-
-            ForEach(this.mpvCacheList, (item: MpvCacheItem, index: number) => {
-              Row() {
-                Column({ space: 4 }) {
-                  Text(item.title)
-                    .fontSize(15)
-                    .fontColor($r('app.color.text_primary'))
-                  Text(item.tip)
-                    .fontSize(11)
-                    .fontColor($r('app.color.text_1'))
-                }
-                .alignItems(HorizontalAlign.Start)
-
-                Blank()
-
-                Radio({ value: item.title, group: 'mpvCacheGroup' }).checked(this.mpvCacheIndex === index)
-                  .hitTestBehavior(HitTestMode.None)
-              }
-              .width('100%')
-              .padding({
-                left: 14,
-                right: 14,
-                top: 12,
-                bottom: 12
-              })
-              .backgroundColor($r('app.color.bg_1'))
-              .borderRadius(12)
-              .onClick(() => {
-                this.selectCache(index)
-              })
-            })
-          }
-          .width('100%')
-
-          Text(this.isAutoSelected()
-            ? '自动模式下，如果系统播放器吃不下当前片源，会自动切到 MPV，并优先使用硬解；你只需要保留一个合适的 MPV 缓存大小就行。'
-            : this.mpvDecodeIndex === 1
-              ? '当前已选择硬解。它会优先调用手机硬件解码，功耗更低，也更适合 HDR 片源；如果出现黑屏、花屏或颜色不对，再切回软解。'
-              : '当前已选择软解。它由 MPV 自己解码，兼容性更好；如果想让 HDR 片源更省电，或者想试试硬件能力，再切到硬解。')
-            .fontSize(12)
-            .fontColor($r('app.color.text_1'))
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 20 })
+        this.mpvSettingsSurface(!showLegacyActionBar)
       }
     }.width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.start_window_background'))
+    .backgroundColor(showLegacyActionBar ? $r('app.color.start_window_background') : Color.Transparent)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  build() {
+    AppRouteDestination({
+      title: $r('app.string.player_engine_title'),
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 }
 

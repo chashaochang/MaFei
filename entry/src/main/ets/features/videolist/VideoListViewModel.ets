@@ -8,6 +8,7 @@ import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import { VideoListUIState } from "./VideoListUIState";
 
@@ -24,7 +25,8 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     this.startIndex = 0
     this.getVideoList()
     this.sortDialog.dismiss()
-  })
+  }, () => AppThemeSurfaceResolver.useNativeSurface(
+    this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
   init(mediaItem: MediaItem) {
     this.ui.title = mediaItem.name

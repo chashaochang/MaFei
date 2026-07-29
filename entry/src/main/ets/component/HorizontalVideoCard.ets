@@ -3,8 +3,9 @@ import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
 import { HORIZONTAL_CARD_HEIGHT, HORIZONTAL_CARD_WIDTH } from "../common/OneMoreConst";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
-import { hdsEffect } from "@kit.UIDesignKit";
 import { ColorUtils } from "../utils/ColorUtils";
+import { FeiniuPointLightModifier } from "../theme/FeiniuPointLightModifier";
+import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 
 @ComponentV2
 export struct HorizontalVideoCard {
@@ -19,6 +20,8 @@ export struct HorizontalVideoCard {
   //第几个卡片
   @Param index?: number = 0
   @Local pointLightColor: string = '#FFFFFF'
+  private imageLoadCompleted: boolean = false
+  private pointLightColorSource: string = ''
   @Local option: ImageKnifeOption = {
     loadSrc: this.image,
     objectFit: ImageFit.Cover,
@@ -28,15 +31,35 @@ export struct HorizontalVideoCard {
     placeholderSrc: $r('app.media.placeholder_video'),
     placeholderObjectFit: ImageFit.CENTER,
     onComplete: () => {
-      if (!AppThemeTokens.isNative(this.appUIState.themeStyle) && this.appUIState.isBigScreen &&
-        this.index === 0 && this.image.length > 0) {
-        ColorUtils.extractLeftEdgeColor(this.image).then((color) => {
-          this.pointLightColor = color
-        })
-      }
+      this.imageLoadCompleted = true
+      this.refreshPointLightColor()
     }
   }
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  @Monitor('appUIState.feiniuPointLightEnabled')
+  onPointLightEnabledChange(): void {
+    if (this.appUIState.feiniuPointLightEnabled && this.imageLoadCompleted) {
+      this.refreshPointLightColor()
+    }
+  }
+
+  private refreshPointLightColor(): void {
+    if (!this.imageLoadCompleted || !this.appUIState.feiniuPointLightEnabled ||
+      this.index !== 0 || this.image.length === 0) {
+      return
+    }
+    const image = this.image
+    if (this.pointLightColorSource === image) {
+      return
+    }
+    this.pointLightColorSource = image
+    ColorUtils.extractLeftEdgeColor(image).then((color) => {
+      if (this.image === image) {
+        this.pointLightColor = color
+      }
+    })
+  }
 
   build() {
     Column({ space: 8 }) {
@@ -46,9 +69,12 @@ export struct HorizontalVideoCard {
         })
           .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
           .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-          .borderColor($r('app.color.border_1'))
-          .borderWidth(0.5)
-          .backgroundColor($r('app.color.bg_2'))
+          .borderColor(AppThemeSurfaceResolver.mediaOutline(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+          .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 0.5))
+          .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
         Progress({
           value: this.percent || 0,
           total: 100,
@@ -63,17 +89,12 @@ export struct HorizontalVideoCard {
       .clip(true)
       .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
       .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-      .visualEffect(new hdsEffect.HdsEffectBuilder()
-        .pointLight({
-          illuminatedType: !AppThemeTokens.isNative(this.appUIState.themeStyle) && this.index === 0 ?
-            this.appUIState.illuminatedType : hdsEffect.PointLightIlluminatedType.NONE,
-          options: {
-            color: this.pointLightColor,
-            intensity: 2,
-            height: HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint),
-          }
-        })
-        .buildEffect())
+      .visualEffect(FeiniuPointLightModifier.build({
+        enabled: this.appUIState.feiniuPointLightEnabled && this.index === 0,
+        color: this.pointLightColor,
+        intensity: 2,
+        height: HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint)
+      }))
 
       Text(this.name)
         .fontColor($r('app.color.text_primary'))

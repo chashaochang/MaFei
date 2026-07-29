@@ -1,13 +1,16 @@
-import { HMLifecycleState, HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { RouterConsts } from '../../common/RouterConsts';
 import { UIConstants } from '../../common/UIConstants';
 import { WebITongUIState } from './WebITongUIState';
 import { WebITongViewModel } from './WebITongViewModel';
 import { ApiClient } from '../../network/ApiClient';
 import { ActivityEventHandler } from '../../events/ActivityEventHandler';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 
 @HMRouter({
-  pageUrl: RouterConsts.WebITongPage
+  pageUrl: RouterConsts.WebITongPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct WebITongPage {
@@ -16,23 +19,29 @@ export struct WebITongPage {
   @Consumer() activityEventHandler: ActivityEventHandler =
     new ActivityEventHandler(this.vm.appUIState.context!.eventHub)
 
-  aboutToAppear(): void {
-    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onBackPressed, () => {
-      if (this.vm.controller?.accessBackward()) {
-        this.vm.controller?.backward()
-        return true
-      }
-      return false
-    })
+  private routeTitle(): string {
+    return this.ui.pageTitle.length > 0 ? this.ui.pageTitle : '网(Web)易通'
   }
 
-  build() {
+  private handleRouteBack(): boolean {
+    if (this.vm.controller?.accessBackward()) {
+      this.vm.controller?.backward()
+      return true
+    }
+    return false
+  }
+
+  @Builder
+  private pageContent(showLegacyTopInset: boolean) {
     Stack() {
       Column() {
-        Stack()
-          .width('100%')
-          .height(this.vm.appUIState.safeTop)
-          .backgroundColor(this.ui.progress === 100 ? $r('app.color.start_window_background') : Color.Transparent)
+        if (showLegacyTopInset) {
+          Stack()
+            .width('100%')
+            .height(this.vm.appUIState.safeTop)
+            .backgroundColor(this.ui.progress === 100 ?
+              $r('app.color.start_window_background') : Color.Transparent)
+        }
         Progress({
           value: this.ui.progress
         }).visibility(this.ui.progress === 100 && !this.vm.isFirst ? Visibility.None : Visibility.Visible)
@@ -162,7 +171,8 @@ export struct WebITongPage {
           })
           .layoutWeight(1)
           .height(40)
-          .borderWidth(1)
+          .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
           .borderColor($r('app.color.border'))
           .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
           .borderRadius(6)
@@ -221,5 +231,18 @@ export struct WebITongPage {
     }.width('100%')
     .height('100%')
     .align(Alignment.Bottom)
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.routeTitle(),
+      beforeBack: () => this.handleRouteBack(),
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 }

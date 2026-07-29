@@ -75,6 +75,1206 @@
     {
       "name": "player_engine_desc",
       "value": "Choose the player and decoding mode"
+    },
+    {
+      "name": "management_title",
+      "value": "Server Console"
+    },
+    {
+      "name": "management_entry_desc",
+      "value": "View status, sessions, and server tasks"
+    },
+    {
+      "name": "management_online",
+      "value": "Server online"
+    },
+    {
+      "name": "management_offline",
+      "value": "Server offline"
+    },
+    {
+      "name": "management_server_unknown",
+      "value": "Unknown server"
+    },
+    {
+      "name": "management_movies",
+      "value": "Movies"
+    },
+    {
+      "name": "management_series",
+      "value": "Series"
+    },
+    {
+      "name": "management_episodes",
+      "value": "Episodes"
+    },
+    {
+      "name": "management_scan_library",
+      "value": "Scan libraries"
+    },
+    {
+      "name": "management_scan_starting",
+      "value": "Starting scan"
+    },
+    {
+      "name": "management_scan_running",
+      "value": "Library scan in progress"
+    },
+    {
+      "name": "management_scan_started",
+      "value": "Library scan started"
+    },
+    {
+      "name": "management_scan_failed",
+      "value": "Could not start the scan"
+    },
+    {
+      "name": "management_scan_unsupported",
+      "value": "The server did not provide a library scan task"
+    },
+    {
+      "name": "management_scan_confirm_title",
+      "value": "Scan libraries"
+    },
+    {
+      "name": "management_scan_confirm_content",
+      "value": "Start a full Jellyfin library scan?"
+    },
+    {
+      "name": "management_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "management_confirm",
+      "value": "Start scan"
+    },
+    {
+      "name": "management_running_tasks",
+      "value": "Running tasks"
+    },
+    {
+      "name": "management_active_sessions",
+      "value": "Active playback sessions"
+    },
+    {
+      "name": "management_recent_activity",
+      "value": "Recent activity"
+    },
+    {
+      "name": "management_refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "management_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "management_tasks_empty",
+      "value": "No tasks are running"
+    },
+    {
+      "name": "management_sessions_empty",
+      "value": "No active playback sessions"
+    },
+    {
+      "name": "management_activity_empty",
+      "value": "No recent activity"
+    },
+    {
+      "name": "management_tasks_failed",
+      "value": "Could not load tasks"
+    },
+    {
+      "name": "management_sessions_failed",
+      "value": "Could not load sessions"
+    },
+    {
+      "name": "management_stale_result",
+      "value": "Refresh failed. Showing the previous result"
+    },
+    {
+      "name": "management_activity_failed",
+      "value": "Could not load activity"
+    },
+    {
+      "name": "management_counts_failed",
+      "value": "Could not load media counts"
+    },
+    {
+      "name": "management_server_failed",
+      "value": "Could not load server information"
+    },
+    {
+      "name": "management_session_detail_title",
+      "value": "Session details"
+    },
+    {
+      "name": "management_task_detail_title",
+      "value": "Task details"
+    },
+    {
+      "name": "management_detail_unavailable",
+      "value": "This information is no longer available"
+    },
+    {
+      "name": "management_detail_unknown",
+      "value": "Not provided"
+    },
+    {
+      "name": "management_detail_playing",
+      "value": "Playing"
+    },
+    {
+      "name": "management_detail_paused",
+      "value": "Paused"
+    },
+    {
+      "name": "management_detail_running",
+      "value": "Running"
+    },
+    {
+      "name": "management_detail_cancelling",
+      "value": "Cancelling"
+    },
+    {
+      "name": "management_detail_user",
+      "value": "User"
+    },
+    {
+      "name": "management_detail_status",
+      "value": "Status"
+    },
+    {
+      "name": "management_detail_position",
+      "value": "Position"
+    },
+    {
+      "name": "management_detail_device",
+      "value": "Device"
+    },
+    {
+      "name": "management_detail_device_type",
+      "value": "Device type"
+    },
+    {
+      "name": "management_detail_client",
+      "value": "Client"
+    },
+    {
+      "name": "management_detail_app_version",
+      "value": "Client version"
+    },
+    {
+      "name": "management_detail_remote_endpoint",
+      "value": "Network address"
+    },
+    {
+      "name": "management_detail_play_method",
+      "value": "Play method"
+    },
+    {
+      "name": "management_detail_direct_play",
+      "value": "Direct play"
+    },
+    {
+      "name": "management_detail_direct_stream",
+      "value": "Direct stream"
+    },
+    {
+      "name": "management_detail_transcode",
+      "value": "Transcode"
+    },
+    {
+      "name": "management_detail_volume",
+      "value": "Volume"
+    },
+    {
+      "name": "management_detail_muted",
+      "value": "Muted"
+    },
+    {
+      "name": "management_detail_audio_stream",
+      "value": "Audio stream"
+    },
+    {
+      "name": "management_detail_subtitle_stream",
+      "value": "Subtitle stream"
+    },
+    {
+      "name": "management_detail_seekable",
+      "value": "Seeking"
+    },
+    {
+      "name": "management_detail_media_control",
+      "value": "Media control"
+    },
+    {
+      "name": "management_detail_remote_control",
+      "value": "Remote control"
+    },
+    {
+      "name": "management_detail_supported",
+      "value": "Supported"
+    },
+    {
+      "name": "management_detail_unsupported",
+      "value": "Not supported"
+    },
+    {
+      "name": "management_detail_last_activity",
+      "value": "Last activity"
+    },
+    {
+      "name": "management_detail_task_name",
+      "value": "Task name"
+    },
+    {
+      "name": "management_detail_category",
+      "value": "Category"
+    },
+    {
+      "name": "management_detail_progress",
+      "value": "Progress"
+    },
+    {
+      "name": "management_detail_description",
+      "value": "Description"
+    },
+    {
+      "name": "management_detail_task_key",
+      "value": "Task key"
+    },
+    {
+      "name": "management_detail_last_start",
+      "value": "Last start"
+    },
+    {
+      "name": "management_detail_last_end",
+      "value": "Last end"
+    },
+    {
+      "name": "management_detail_last_result",
+      "value": "Last result"
+    },
+    {
+      "name": "management_detail_last_error",
+      "value": "Last error"
+    },
+    {
+      "name": "management_section_unsupported",
+      "value": "This server version does not support this section"
+    },
+    {
+      "name": "management_permission_denied",
+      "value": "The current account is not a server administrator"
+    },
+    {
+      "name": "management_permission_check_failed",
+      "value": "Could not verify administrator access"
+    },
+    {
+      "name": "management_access_no_server",
+      "value": "No server is currently available"
+    },
+    {
+      "name": "management_access_offline",
+      "value": "Could not reach the current server. Check the connection and try again."
+    },
+    {
+      "name": "management_user_title",
+      "value": "User management"
+    },
+    {
+      "name": "management_user_summary_total",
+      "value": "Users"
+    },
+    {
+      "name": "management_user_summary_administrators",
+      "value": "Administrators"
+    },
+    {
+      "name": "management_user_summary_disabled",
+      "value": "Disabled"
+    },
+    {
+      "name": "management_user_load_failed",
+      "value": "Could not load users. Try again."
+    },
+    {
+      "name": "management_user_filter_all",
+      "value": "All"
+    },
+    {
+      "name": "management_user_filter_administrators",
+      "value": "Administrators"
+    },
+    {
+      "name": "management_user_filter_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "management_user_filter_disabled",
+      "value": "Disabled"
+    },
+    {
+      "name": "management_user_filter_hidden",
+      "value": "Hidden"
+    },
+    {
+      "name": "management_user_role_administrator",
+      "value": "Administrator"
+    },
+    {
+      "name": "management_user_role_standard",
+      "value": "Standard user"
+    },
+    {
+      "name": "management_user_status_enabled",
+      "value": "Enabled"
+    },
+    {
+      "name": "management_user_status_disabled",
+      "value": "Disabled"
+    },
+    {
+      "name": "management_user_status_hidden",
+      "value": "Hidden from login"
+    },
+    {
+      "name": "management_user_never",
+      "value": "Never"
+    },
+    {
+      "name": "management_user_last_login",
+      "value": "Login"
+    },
+    {
+      "name": "management_user_last_activity",
+      "value": "Activity"
+    },
+    {
+      "name": "management_user_search_placeholder",
+      "value": "Search users"
+    },
+    {
+      "name": "management_user_menu_profile",
+      "value": "Profile"
+    },
+    {
+      "name": "management_user_menu_access",
+      "value": "Access"
+    },
+    {
+      "name": "management_user_menu_parental",
+      "value": "Parental control"
+    },
+    {
+      "name": "management_user_password_set",
+      "value": "Password set"
+    },
+    {
+      "name": "management_user_password_not_set",
+      "value": "No password"
+    },
+    {
+      "name": "management_user_more_actions",
+      "value": "More user actions"
+    },
+    {
+      "name": "management_user_empty",
+      "value": "This server has no manageable users"
+    },
+    {
+      "name": "management_user_create",
+      "value": "Create user"
+    },
+    {
+      "name": "management_user_name_required",
+      "value": "Enter a username"
+    },
+    {
+      "name": "management_user_initial_password",
+      "value": "Initial password (optional)"
+    },
+    {
+      "name": "management_user_create_failed",
+      "value": "Could not create user"
+    },
+    {
+      "name": "management_user_created_policy_pending",
+      "value": "User created, but access settings were not fully saved"
+    },
+    {
+      "name": "management_user_create_retry_access",
+      "value": "Retry access settings"
+    },
+    {
+      "name": "management_user_retry_access_failed",
+      "value": "Access settings are still unsaved"
+    },
+    {
+      "name": "management_user_create_success",
+      "value": "User created"
+    },
+    {
+      "name": "management_user_no_results",
+      "value": "No users match these filters"
+    },
+    {
+      "name": "management_user_clear_filters",
+      "value": "Clear filters"
+    },
+    {
+      "name": "management_user_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "management_user_stale",
+      "value": "Showing the last successfully loaded data"
+    },
+    {
+      "name": "management_user_open_details",
+      "value": "Open user details"
+    },
+    {
+      "name": "management_user_select_hint",
+      "value": "Select a user to view details"
+    },
+    {
+      "name": "management_user_delete_title",
+      "value": "Delete user"
+    },
+    {
+      "name": "management_user_delete_message",
+      "value": "This cannot be undone. Delete user:"
+    },
+    {
+      "name": "management_user_delete_impact",
+      "value": "This user will no longer be able to sign in, and personal data may not be recoverable"
+    },
+    {
+      "name": "management_user_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "management_user_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "management_user_delete_success",
+      "value": "User deleted"
+    },
+    {
+      "name": "management_user_delete_failed",
+      "value": "Could not delete user"
+    },
+    {
+      "name": "management_user_invalid_parameter",
+      "value": "Invalid user parameter"
+    },
+    {
+      "name": "management_user_tab_profile",
+      "value": "Profile"
+    },
+    {
+      "name": "management_user_tab_access",
+      "value": "Access"
+    },
+    {
+      "name": "management_user_tab_parental",
+      "value": "Parental control"
+    },
+    {
+      "name": "management_user_tab_password",
+      "value": "Password"
+    },
+    {
+      "name": "management_user_password_mismatch",
+      "value": "Passwords do not match"
+    },
+    {
+      "name": "management_user_operation_in_progress",
+      "value": "Another user operation is in progress"
+    },
+    {
+      "name": "management_user_save_failed",
+      "value": "Could not save changes"
+    },
+    {
+      "name": "management_user_unsaved_title",
+      "value": "Unsaved changes"
+    },
+    {
+      "name": "management_user_unsaved_message",
+      "value": "Save the current changes, discard them, or continue editing."
+    },
+    {
+      "name": "management_user_discard",
+      "value": "Discard"
+    },
+    {
+      "name": "management_user_continue_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "management_user_save",
+      "value": "Save"
+    },
+    {
+      "name": "management_user_profile_placeholder",
+      "value": "Profile and privilege controls will appear here"
+    },
+    {
+      "name": "management_user_access_placeholder",
+      "value": "Library, channel, and device access will appear here"
+    },
+    {
+      "name": "management_user_parental_placeholder",
+      "value": "Ratings, tags, and access schedules will appear here"
+    },
+    {
+      "name": "management_user_password_placeholder",
+      "value": "Update this user's password securely here"
+    },
+    {
+      "name": "management_user_password_required",
+      "value": "Enter a new password"
+    },
+    {
+      "name": "management_user_current_password_required",
+      "value": "Enter the current password to change your own password"
+    },
+    {
+      "name": "management_user_password_update_failed",
+      "value": "Could not update the password"
+    },
+    {
+      "name": "management_user_password_group_update",
+      "value": "Set password"
+    },
+    {
+      "name": "management_user_password_group_update_self_desc",
+      "value": "Verify the current password before setting a new administrator password"
+    },
+    {
+      "name": "management_user_password_group_update_other_desc",
+      "value": "Administrators can set a new password directly for this user"
+    },
+    {
+      "name": "management_user_current_password",
+      "value": "Current password"
+    },
+    {
+      "name": "management_user_current_password_placeholder",
+      "value": "Enter the current password"
+    },
+    {
+      "name": "management_user_new_password",
+      "value": "New password"
+    },
+    {
+      "name": "management_user_new_password_placeholder",
+      "value": "Enter a new password"
+    },
+    {
+      "name": "management_user_confirm_password",
+      "value": "Confirm new password"
+    },
+    {
+      "name": "management_user_confirm_password_placeholder",
+      "value": "Enter the new password again"
+    },
+    {
+      "name": "management_user_set_password",
+      "value": "Set password"
+    },
+    {
+      "name": "management_user_password_updated",
+      "value": "Password updated"
+    },
+    {
+      "name": "management_user_password_group_danger",
+      "value": "Dangerous password actions"
+    },
+    {
+      "name": "management_user_password_group_danger_desc",
+      "value": "Resetting or clearing a password requires confirmation"
+    },
+    {
+      "name": "management_user_reset_password",
+      "value": "Reset password"
+    },
+    {
+      "name": "management_user_reset_password_title",
+      "value": "Reset password?"
+    },
+    {
+      "name": "management_user_reset_password_message",
+      "value": "The server will reset this user's password state. No password value will be shown."
+    },
+    {
+      "name": "management_user_password_reset_success",
+      "value": "Password reset"
+    },
+    {
+      "name": "management_user_clear_password",
+      "value": "Clear password"
+    },
+    {
+      "name": "management_user_clear_password_title",
+      "value": "Clear password?"
+    },
+    {
+      "name": "management_user_clear_password_message",
+      "value": "This user will be able to sign in without a password."
+    },
+    {
+      "name": "management_user_password_clear_success",
+      "value": "Password cleared"
+    },
+    {
+      "name": "management_user_change_avatar",
+      "value": "Change avatar"
+    },
+    {
+      "name": "management_user_remove_avatar",
+      "value": "Remove avatar"
+    },
+    {
+      "name": "management_user_remove_avatar_title",
+      "value": "Remove avatar?"
+    },
+    {
+      "name": "management_user_remove_avatar_message",
+      "value": "The default user avatar will be restored."
+    },
+    {
+      "name": "management_user_avatar_updated",
+      "value": "Avatar updated"
+    },
+    {
+      "name": "management_user_avatar_removed",
+      "value": "Avatar removed"
+    },
+    {
+      "name": "management_user_avatar_unsupported_type",
+      "value": "Use a JPEG, PNG, or WebP image"
+    },
+    {
+      "name": "management_user_avatar_empty",
+      "value": "The selected image is empty"
+    },
+    {
+      "name": "management_user_avatar_too_large",
+      "value": "Avatar images must be 10 MiB or smaller"
+    },
+    {
+      "name": "management_user_avatar_read_failed",
+      "value": "Could not read the selected image"
+    },
+    {
+      "name": "management_user_unsaved_short",
+      "value": "This section has unsaved changes"
+    },
+    {
+      "name": "management_user_saving",
+      "value": "Saving"
+    },
+    {
+      "name": "management_user_loading",
+      "value": "Loading user"
+    },
+    {
+      "name": "management_user_group_identity",
+      "value": "Identity and sign-in"
+    },
+    {
+      "name": "management_user_group_identity_desc",
+      "value": "Set the user name, sign-in providers, and login-screen visibility"
+    },
+    {
+      "name": "management_user_name",
+      "value": "User name"
+    },
+    {
+      "name": "management_user_name_placeholder",
+      "value": "Enter a user name"
+    },
+    {
+      "name": "management_user_auth_provider",
+      "value": "Authentication provider"
+    },
+    {
+      "name": "management_user_password_reset_provider",
+      "value": "Password reset provider"
+    },
+    {
+      "name": "management_user_hidden",
+      "value": "Hide on the login screen"
+    },
+    {
+      "name": "management_user_hidden_desc",
+      "value": "The user can still sign in by entering the name manually"
+    },
+    {
+      "name": "management_user_group_privileges",
+      "value": "Management privileges"
+    },
+    {
+      "name": "management_user_group_privileges_desc",
+      "value": "Grant management access to server content and services"
+    },
+    {
+      "name": "management_user_privilege_collections",
+      "value": "Manage collections"
+    },
+    {
+      "name": "management_user_privilege_collections_desc",
+      "value": "Create and modify collections"
+    },
+    {
+      "name": "management_user_privilege_subtitles",
+      "value": "Manage subtitles"
+    },
+    {
+      "name": "management_user_privilege_subtitles_desc",
+      "value": "Edit and download subtitles"
+    },
+    {
+      "name": "management_user_privilege_lyrics",
+      "value": "Manage lyrics"
+    },
+    {
+      "name": "management_user_privilege_lyrics_desc",
+      "value": "Edit and download lyrics"
+    },
+    {
+      "name": "management_user_privilege_live_tv",
+      "value": "Manage Live TV"
+    },
+    {
+      "name": "management_user_privilege_live_tv_desc",
+      "value": "Manage Live TV and recording settings"
+    },
+    {
+      "name": "management_user_group_playback",
+      "value": "Playback and transcoding"
+    },
+    {
+      "name": "management_user_group_playback_desc",
+      "value": "Control media playback, transcoding, and downloads"
+    },
+    {
+      "name": "management_user_playback_media",
+      "value": "Play media"
+    },
+    {
+      "name": "management_user_playback_media_desc",
+      "value": "Play media stored on this server"
+    },
+    {
+      "name": "management_user_playback_live_tv",
+      "value": "Play Live TV"
+    },
+    {
+      "name": "management_user_playback_live_tv_desc",
+      "value": "Watch Live TV and recordings"
+    },
+    {
+      "name": "management_user_transcode_audio",
+      "value": "Audio transcoding"
+    },
+    {
+      "name": "management_user_transcode_audio_desc",
+      "value": "Allow the server to convert audio formats"
+    },
+    {
+      "name": "management_user_transcode_video",
+      "value": "Video transcoding"
+    },
+    {
+      "name": "management_user_transcode_video_desc",
+      "value": "Allow the server to convert video formats"
+    },
+    {
+      "name": "management_user_playback_remux",
+      "value": "Media remuxing"
+    },
+    {
+      "name": "management_user_playback_remux_desc",
+      "value": "Change the container without transcoding"
+    },
+    {
+      "name": "management_user_force_remote_transcode",
+      "value": "Force remote-source transcoding"
+    },
+    {
+      "name": "management_user_force_remote_transcode_desc",
+      "value": "Always transcode media coming from remote sources"
+    },
+    {
+      "name": "management_user_content_download",
+      "value": "Download media"
+    },
+    {
+      "name": "management_user_content_download_desc",
+      "value": "Save media to client devices"
+    },
+    {
+      "name": "management_user_group_remote",
+      "value": "Remote access and deletion"
+    },
+    {
+      "name": "management_user_group_remote_desc",
+      "value": "Control external access, devices, and content deletion"
+    },
+    {
+      "name": "management_user_remote_access",
+      "value": "Allow remote access"
+    },
+    {
+      "name": "management_user_remote_access_desc",
+      "value": "Connect from outside the server's local network"
+    },
+    {
+      "name": "management_user_remote_control",
+      "value": "Control other users"
+    },
+    {
+      "name": "management_user_remote_control_desc",
+      "value": "Send playback commands to other user sessions"
+    },
+    {
+      "name": "management_user_shared_device_control",
+      "value": "Control shared devices"
+    },
+    {
+      "name": "management_user_shared_device_control_desc",
+      "value": "Control shared playback devices such as televisions"
+    },
+    {
+      "name": "management_user_delete_all_content",
+      "value": "Delete content from all libraries"
+    },
+    {
+      "name": "management_user_delete_all_content_desc",
+      "value": "Turn off to select individual libraries below"
+    },
+    {
+      "name": "management_user_delete_folders",
+      "value": "Libraries allowed for deletion"
+    },
+    {
+      "name": "management_user_group_limits",
+      "value": "Limits and SyncPlay"
+    },
+    {
+      "name": "management_user_group_limits_desc",
+      "value": "Set remote bitrate, login protection, and concurrent sessions"
+    },
+    {
+      "name": "management_user_remote_bitrate",
+      "value": "Remote bitrate limit (Mbps)"
+    },
+    {
+      "name": "management_user_remote_bitrate_desc",
+      "value": "0 leaves remote client bitrate unlimited"
+    },
+    {
+      "name": "management_user_lockout_attempts",
+      "value": "Failures before lockout"
+    },
+    {
+      "name": "management_user_lockout_attempts_desc",
+      "value": "0 uses the server default"
+    },
+    {
+      "name": "management_user_max_sessions",
+      "value": "Maximum active sessions"
+    },
+    {
+      "name": "management_user_max_sessions_desc",
+      "value": "0 allows unlimited concurrent sessions"
+    },
+    {
+      "name": "management_user_sync_play",
+      "value": "SyncPlay access"
+    },
+    {
+      "name": "management_user_sync_play_none",
+      "value": "No access"
+    },
+    {
+      "name": "management_user_sync_play_join",
+      "value": "Join groups only"
+    },
+    {
+      "name": "management_user_sync_play_create",
+      "value": "Create and join groups"
+    },
+    {
+      "name": "management_user_group_status",
+      "value": "Account status"
+    },
+    {
+      "name": "management_user_group_status_desc",
+      "value": "Administrator and disable actions are protected"
+    },
+    {
+      "name": "management_user_administrator",
+      "value": "Server administrator"
+    },
+    {
+      "name": "management_user_administrator_desc",
+      "value": "Access and change all server administration settings"
+    },
+    {
+      "name": "management_user_disabled",
+      "value": "Disable this user"
+    },
+    {
+      "name": "management_user_disabled_desc",
+      "value": "Prevent this user from signing in"
+    },
+    {
+      "name": "management_user_protect_current_admin",
+      "value": "The current administrator cannot demote or disable their own account"
+    },
+    {
+      "name": "management_user_protect_last_admin",
+      "value": "The server must keep at least one enabled administrator"
+    },
+    {
+      "name": "management_user_access_folders",
+      "value": "Library access"
+    },
+    {
+      "name": "management_user_access_folders_desc",
+      "value": "Choose the media libraries this user can browse"
+    },
+    {
+      "name": "management_user_access_all_folders",
+      "value": "Allow all libraries"
+    },
+    {
+      "name": "management_user_access_all_folders_desc",
+      "value": "Turn off to use the library list below"
+    },
+    {
+      "name": "management_user_access_channels",
+      "value": "Channel access"
+    },
+    {
+      "name": "management_user_access_channels_desc",
+      "value": "Choose the channels this user can access"
+    },
+    {
+      "name": "management_user_access_all_channels",
+      "value": "Allow all channels"
+    },
+    {
+      "name": "management_user_access_all_channels_desc",
+      "value": "Turn off to use the channel list below"
+    },
+    {
+      "name": "management_user_access_devices",
+      "value": "Device access"
+    },
+    {
+      "name": "management_user_access_devices_desc",
+      "value": "Choose the client devices this user may sign in from"
+    },
+    {
+      "name": "management_user_access_all_devices",
+      "value": "Allow all devices"
+    },
+    {
+      "name": "management_user_access_all_devices_desc",
+      "value": "Turn off to allow only the devices selected below"
+    },
+    {
+      "name": "management_user_access_empty",
+      "value": "The server returned no available items"
+    },
+    {
+      "name": "management_user_access_options_failed",
+      "value": "Could not load options for this group"
+    },
+    {
+      "name": "management_user_parental_rating",
+      "value": "Content rating"
+    },
+    {
+      "name": "management_user_parental_rating_desc",
+      "value": "Restrict content above a selected rating"
+    },
+    {
+      "name": "management_user_parental_max_rating",
+      "value": "Maximum allowed rating"
+    },
+    {
+      "name": "management_user_parental_rating_unrestricted",
+      "value": "Unrestricted"
+    },
+    {
+      "name": "management_user_parental_unrated",
+      "value": "Unrated content"
+    },
+    {
+      "name": "management_user_parental_unrated_desc",
+      "value": "Block selected content types when rating information is missing"
+    },
+    {
+      "name": "management_user_unrated_movie",
+      "value": "Movies"
+    },
+    {
+      "name": "management_user_unrated_trailer",
+      "value": "Trailers"
+    },
+    {
+      "name": "management_user_unrated_series",
+      "value": "Series"
+    },
+    {
+      "name": "management_user_unrated_music",
+      "value": "Music"
+    },
+    {
+      "name": "management_user_unrated_book",
+      "value": "Books"
+    },
+    {
+      "name": "management_user_unrated_live_tv_channel",
+      "value": "Live TV channels"
+    },
+    {
+      "name": "management_user_unrated_live_tv_program",
+      "value": "Live TV programs"
+    },
+    {
+      "name": "management_user_unrated_channel_content",
+      "value": "Channel content"
+    },
+    {
+      "name": "management_user_unrated_other",
+      "value": "Other content"
+    },
+    {
+      "name": "management_user_parental_tags",
+      "value": "Tag rules"
+    },
+    {
+      "name": "management_user_parental_tags_desc",
+      "value": "Explicitly allow or block content by media tag"
+    },
+    {
+      "name": "management_user_parental_allowed_tags",
+      "value": "Allowed tags"
+    },
+    {
+      "name": "management_user_parental_blocked_tags",
+      "value": "Blocked tags"
+    },
+    {
+      "name": "management_user_parental_add_tag",
+      "value": "Add tag"
+    },
+    {
+      "name": "management_user_parental_no_tags",
+      "value": "No tags configured"
+    },
+    {
+      "name": "management_user_parental_add_allowed_tag",
+      "value": "Add allowed tag"
+    },
+    {
+      "name": "management_user_parental_add_blocked_tag",
+      "value": "Add blocked tag"
+    },
+    {
+      "name": "management_user_parental_tag_placeholder",
+      "value": "Enter a media tag"
+    },
+    {
+      "name": "management_user_parental_add",
+      "value": "Add"
+    },
+    {
+      "name": "management_user_parental_conflicting_tags",
+      "value": "A tag cannot be both allowed and blocked"
+    },
+    {
+      "name": "management_user_parental_schedule",
+      "value": "Access schedule"
+    },
+    {
+      "name": "management_user_parental_schedule_desc",
+      "value": "Limit when this user can sign in and access the server"
+    },
+    {
+      "name": "management_user_parental_admin_schedule_hidden",
+      "value": "Access schedules do not apply to administrator accounts"
+    },
+    {
+      "name": "management_user_parental_add_schedule",
+      "value": "Add schedule"
+    },
+    {
+      "name": "management_user_parental_remove_schedule",
+      "value": "Remove schedule"
+    },
+    {
+      "name": "management_user_parental_start_hour",
+      "value": "Start hour"
+    },
+    {
+      "name": "management_user_parental_end_hour",
+      "value": "End hour"
+    },
+    {
+      "name": "management_user_parental_invalid_schedule",
+      "value": "End hour must be later than start hour and both must be between 0 and 24"
+    },
+    {
+      "name": "management_user_day_everyday",
+      "value": "Every day"
+    },
+    {
+      "name": "management_user_day_weekday",
+      "value": "Weekdays"
+    },
+    {
+      "name": "management_user_day_weekend",
+      "value": "Weekends"
+    },
+    {
+      "name": "management_user_day_sunday",
+      "value": "Sunday"
+    },
+    {
+      "name": "management_user_day_monday",
+      "value": "Monday"
+    },
+    {
+      "name": "management_user_day_tuesday",
+      "value": "Tuesday"
+    },
+    {
+      "name": "management_user_day_wednesday",
+      "value": "Wednesday"
+    },
+    {
+      "name": "management_user_day_thursday",
+      "value": "Thursday"
+    },
+    {
+      "name": "management_user_day_friday",
+      "value": "Friday"
+    },
+    {
+      "name": "management_user_day_saturday",
+      "value": "Saturday"
     }
   ]
 }

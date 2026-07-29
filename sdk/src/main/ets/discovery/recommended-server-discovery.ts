@@ -104,7 +104,11 @@ export class RecommendedServerDiscovery {
 		const api = this.jellyfin.createApi(address);
 		const startTime = Date.now();
 
-		return getSystemApi(api).getPublicSystemInfo({ timeout: HTTP_TIMEOUT })
+		return getSystemApi(api).getPublicSystemInfo({
+			timeout: HTTP_TIMEOUT,
+			connectTimeout: HTTP_TIMEOUT,
+			readTimeout: HTTP_TIMEOUT
+		})
 			.then(response => ({
 				address,
 				response,

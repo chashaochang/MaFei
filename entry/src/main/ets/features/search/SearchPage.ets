@@ -8,9 +8,13 @@ import { SearchViewModel } from "./SearchViewModel";
 import { GridView } from "@abner/refresh_v2";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { AlertDialogV2, AdvancedDialogV2Button } from '@kit.ArkUI';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
+import { AppThemeTokens } from "../../theme/AppThemeTokens";
 
 @HMRouter({
-  pageUrl: RouterConsts.SearchPage
+  pageUrl: RouterConsts.SearchPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct SearchPage {
@@ -34,166 +38,262 @@ export struct SearchPage {
     }
   }
 
-  build() {
-    Column({ space: 10 }) {
-      Row() {
-        Search({
-          value: this.ui.searchText,
-          placeholder: "搜索"
-        })
-          .backgroundColor($r('app.color.bg_1'))
-          .border({ width: 2, color: this.ui.focus ? $r('app.color.color_main') : Color.Transparent })
-          .borderRadius(8)
-          .margin({
-            top: 4,
-            left: 16,
-            bottom: 4
-          })
-          .layoutWeight(1)
-          .height(40)
-          .onFocus(() => {
-            this.ui.focus = true
-          })
-          .onBlur(() => {
-            this.ui.focus = false
-          })
-          .onChange((value: string) => {
-            this.ui.searchText = value
-            if (value.trim() == '') {
-              this.ui.searchResults = []
-            }
-            this.vm.search(value)
-          })
-          .onSubmit((value: string) => {
-            this.ui.searchText = value
-            if (value.trim() == '') {
-              this.ui.searchResults = []
-            }
-            this.vm.search(value, true)
-          })
-        Text('取消')
-          .fontSize(16)
-          .fontColor($r('app.color.text_primary'))
-          .padding({ left: 20, right: 20 })
-          .onClick(() => {
-            HMRouterMgr.pop()
-          })
-          .height('100%')
-      }.height(48)
+  private primaryTextColor(nativeSurface: boolean): ResourceColor {
+    return nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
 
+  private secondaryTextColor(nativeSurface: boolean): ResourceColor {
+    return nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  @Builder
+  private searchBarContent(nativeSurface: boolean, showCancelAction: boolean) {
+    Search({
+      value: this.ui.searchText,
+      placeholder: "搜索"
+    })
+      .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_1'))
+      .border({ width: 2, color: this.ui.focus ? $r('app.color.color_main') : Color.Transparent })
+      .borderRadius(8)
+      .margin({
+        top: 4,
+        left: 16,
+        right: showCancelAction ? 0 : 16,
+        bottom: 4
+      })
+      .layoutWeight(1)
+      .height(40)
+      .onFocus(() => {
+        this.ui.focus = true
+      })
+      .onBlur(() => {
+        this.ui.focus = false
+      })
+      .onChange((value: string) => {
+        this.ui.searchText = value
+        if (value.trim() == '') {
+          this.ui.searchResults = []
+        }
+        this.vm.search(value)
+      })
+      .onSubmit((value: string) => {
+        this.ui.searchText = value
+        if (value.trim() == '') {
+          this.ui.searchResults = []
+        }
+        this.vm.search(value, true)
+      })
+    if (showCancelAction) {
+      Text('取消')
+        .fontSize(16)
+        .fontColor(this.primaryTextColor(nativeSurface))
+        .padding({ left: 20, right: 20 })
+        .onClick(() => {
+          HMRouterMgr.pop()
+        })
+        .height('100%')
+    }
+  }
+
+  @Builder
+  private nativeSearchForm() {
+    Row() {
+      this.searchBarContent(true, false)
+    }
+    .width('100%')
+    .height(48)
+    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuSearchBar() {
+    Row() {
+      this.searchBarContent(false, true)
+    }
+    .height(48)
+  }
+
+  @Builder
+  private searchResultsContent(nativeSurface: boolean) {
+    Row() {
+      Text(this.ui.totalCount + '个搜索结果')
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor(nativeSurface))
+        .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
+        .padding({
+          left: 6,
+          right: 6,
+          top: 4,
+          bottom: 4
+        })
+        .borderRadius(4)
+      Blank().layoutWeight(1)
+    }
+    .width('100%')
+    .height(46)
+
+    GridView({
+      lazyDataSource: this.vm.dataSource,
+      onLazyDataSource: (dataSource) => {
+        this.vm.dataSource = dataSource
+      },
+      itemLayout: (item, index) => this.itemLayout(item, index),
+      emptyLayout: () => this.emptyLayout(),
+      showEmptyLayout: this.ui.totalCount === '0',
+      enableRefresh: false,
+      enableLoadMore: false,
+      gridAttribute: (attr) => {
+        attr.scrollBar = BarState.Off
+        this.ui.gridAttr = attr
+        OneMoreUtil.setResponsiveGridColumnsAttr(this.vm.appUIState, this.ui.gridAttr)
+      },
+      lazyCachedCount: 10
+    }).width('100%')
+      .height('100%')
+  }
+
+  @Builder
+  private nativeSearchResults() {
+    Column() {
+      this.searchResultsContent(true)
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private feiniuSearchResults() {
+    Column() {
+      this.searchResultsContent(false)
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .backgroundColor($r('app.color.bg_1'))
+    .borderRadius({
+      topLeft: 20,
+      topRight: 20
+    })
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private searchHistoryContent(nativeSurface: boolean) {
+    Row() {
+      Text('搜索历史')
+        .fontSize(14)
+        .fontColor(this.primaryTextColor(nativeSurface))
+      Blank().layoutWeight(1)
+      Text('清除')
+        .fontSize(14)
+        .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
+        .onClick(() => {
+          let uiContext: UIContext = this.getUIContext();
+          uiContext.getPromptAction().openCustomDialog({
+            builder: () => {
+              this.dialogBuilder();
+            },
+          }).catch(() => {
+
+          });
+        })
+    }.padding({ top: 12 })
+
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(this.ui.histories, (item: string) => {
+        Text(item)
+          .fontSize(12)
+          .padding({
+            left: 12,
+            right: 12,
+            top: 6,
+            bottom: 6
+          })
+          .margin({
+            top: 10,
+            right: 10
+          })
+          .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
+          .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_1'))
+          .borderRadius(8)
+          .onClick(() => {
+            this.ui.searchText = item
+            this.vm.search(item)
+          })
+      })
+    }
+  }
+
+  @Builder
+  private nativeSearchHistory() {
+    Column() {
+      this.searchHistoryContent(true)
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .padding({ left: 16, right: 16 })
+    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private feiniuSearchHistory() {
+    Column() {
+      this.searchHistoryContent(false)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16 })
+    .backgroundColor($r('app.color.bg_main'))
+    .borderRadius({
+      topLeft: 20,
+      topRight: 20
+    })
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
+    Column({ space: 10 }) {
+      if (showLegacyActionBar) {
+        this.feiniuSearchBar()
+      } else {
+        this.nativeSearchForm()
+      }
 
       if (this.ui.searchText.trim() != '') {
-        Column() {
-          Row() {
-            Text(this.ui.totalCount + '个搜索结果')
-              .fontSize(12)
-              .fontColor($r('app.color.text_1'))
-              .backgroundColor($r('app.color.bg_main'))
-              .padding({
-                left: 6,
-                right: 6,
-                top: 4,
-                bottom: 4
-              })
-              .borderRadius(4)
-            Blank().layoutWeight(1)
-          }
-          .width('100%')
-          .height(46)
-
-          GridView({
-            lazyDataSource: this.vm.dataSource,
-            onLazyDataSource: (dataSource) => {
-              this.vm.dataSource = dataSource
-            },
-            itemLayout: (item, index) => this.itemLayout(item, index), //条目布局
-            emptyLayout: () => this.emptyLayout(),
-            showEmptyLayout: this.ui.totalCount === '0',
-            enableRefresh: false,
-            enableLoadMore: false,
-            gridAttribute: (attr) => {
-              attr.scrollBar = BarState.Off
-              this.ui.gridAttr = attr
-              OneMoreUtil.setResponsiveGridColumnsAttr(this.vm.appUIState, this.ui.gridAttr)
-            },
-            lazyCachedCount: 10 //缓存
-          }).width('100%')
-            .height('100%')
+        if (showLegacyActionBar) {
+          this.feiniuSearchResults()
+        } else {
+          this.nativeSearchResults()
         }
-        .width('100%')
-        .layoutWeight(1)
-        .backgroundColor($r('app.color.bg_1'))
-        .borderRadius({
-          topLeft: 20,
-          topRight: 20
-        })
-        .padding({
-          left: 16, right: 16
-        })
       } else if (this.ui.histories.length > 0) {
-        Column() {
-          Row() {
-            Text('搜索历史')
-              .fontSize(14)
-              .fontColor($r('app.color.text_primary'))
-            Blank().layoutWeight(1)
-            Text('清除')
-              .fontSize(14)
-              .fontColor($r('app.color.text_2'))
-              .onClick(() => {
-                let uiContext: UIContext = this.getUIContext();
-                uiContext.getPromptAction().openCustomDialog({
-                  builder: () => {
-                    this.dialogBuilder();
-                  },
-                }).catch(() => {
-
-                });
-              })
-          }.padding({
-            top: 12,
-          })
-
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.ui.histories, (item: string) => {
-              Text(item)
-                .fontSize(12)
-                .padding({
-                  left: 12,
-                  right: 12,
-                  top: 6,
-                  bottom: 6
-                })
-                .margin({
-                  top: 10,
-                  right: 10
-                })
-                .fontColor($r('app.color.text_2'))
-                .backgroundColor($r('app.color.bg_1'))
-                .borderRadius(8)
-                .onClick(() => {
-                  this.ui.searchText = item
-                  this.vm.search(item)
-                })
-            })
-          }
-        }.width('100%')
-        .height('100%')
-        .padding({
-          left: 16, right: 16
-        })
-        .backgroundColor($r('app.color.bg_main'))
-        .borderRadius({
-          topLeft: 20,
-          topRight: 20
-        })
+        if (showLegacyActionBar) {
+          this.feiniuSearchHistory()
+        } else {
+          this.nativeSearchHistory()
+        }
       }
     }.width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.bg_main'))
+    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
     .padding({
-      top: this.vm.appUIState.safeTop,
+      top: showLegacyActionBar ? this.vm.appUIState.safeTop : 0,
       bottom: this.vm.appUIState.safeBottom
+    })
+  }
+
+  build() {
+    AppRouteDestination({
+      title: '搜索',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
     })
   }
 

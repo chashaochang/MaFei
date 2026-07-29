@@ -20,5 +20,11 @@ export class RouterConsts {
   static readonly LiveTvPage = 'LiveTvPage'
   static readonly MinePage = 'MinePage'
   static readonly ServerDiscoveryPage = 'ServerDiscoveryPage'
+  static readonly ManagementDashboardPage = 'ManagementDashboardPage'
+  static readonly ManagementSessionDetailPage = 'ManagementSessionDetailPage'
+  static readonly ManagementTaskDetailPage = 'ManagementTaskDetailPage'
+  static readonly ManagementUsersPage = 'ManagementUsersPage'
+  static readonly ManagementUserDetailPage = 'ManagementUserDetailPage'
+  static readonly ManagementUserCreatePage = 'ManagementUserCreatePage'
 
 }

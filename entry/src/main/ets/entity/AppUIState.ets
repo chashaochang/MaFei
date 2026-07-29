@@ -2,7 +2,6 @@ import { display, window } from "@kit.ArkUI";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { CustomColorMode } from "./CustomColorMode";
 import ServerEntity from "../data/ServerEntity";
-import { hdsEffect } from "@kit.UIDesignKit";
 import { ThemeStyle } from "./ThemeStyle";
 import { BreakpointTypeEnum } from "../utils/BreakpointPolicy";
 
@@ -24,8 +23,11 @@ export class AppUIState {
   @Trace deviceHeight: number = 0
   @Trace currentBreakpoint: string = BreakpointTypeEnum.MD
   @Trace isBigScreen: boolean = false // 大屏幕设备
-  //点光源开关,关闭设置成NONE
-  @Trace illuminatedType = hdsEffect.PointLightIlluminatedType.DEFAULT_FEATHERING_BORDER
+  @Trace feiniuPointLightEnabled: boolean = false
+  @Trace rootNavigationTitle: string = '马飞'
+  @Trace rootNavigationTitleBarVisible: boolean = false
+  @Trace rootNavigationHomeActionsVisible: boolean = false
+  @Trace rootNavigationLiveTvAvailable: boolean = false
   context?: common.UIAbilityContext
   windowClass?: window.Window
   navInstance?: NavigationAttribute

@@ -1029,8 +1029,6 @@ export struct AVPlayerView {
             .width('100%')
             .padding(8)
             .backgroundColor('rgba(255,255,255,0.08)')
-            .borderWidth(1)
-            .borderColor(_this.ui.currentPlayId == item.id ? $r('app.color.color_main') : 'rgba(255,255,255,0.18)')
             .borderRadius(12)
             .onClick(() => {
               _this.onEpisodeChange(index)

@@ -22,9 +22,17 @@ import {
   ManagementUserCreateDraft,
   ManagementUserEditorSnapshot,
   ManagementUserItem,
+  ManagementUserOperationStatus,
   ManagementUserOption
 } from './ManagementUserModels';
 import { ManagementUserPolicy } from './ManagementUserPolicy';
+
+export const MAX_AVATAR_BYTES: number = 10 * 1024 * 1024
+export const SUPPORTED_AVATAR_MIME_TYPES: string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+]
 
 interface ManagementUserHttpResponse {
   status: number
@@ -73,18 +81,59 @@ export class ManagementUserRepository {
     return users.map((user: UserDto) => this.mapUser(user))
   }
 
+  async loadUser(userId: string): Promise<ManagementUserItem> {
+    return this.mapUser(await this.service.getUser(userId))
+  }
+
+  async loadCurrentUserId(): Promise<string> {
+    const current = await this.service.getCurrentUser()
+    return current.Id || ''
+  }
+
+  async loadFolderOptions(): Promise<ManagementUserOption[]> {
+    return this.mapItemOptions(await this.service.getMediaFolders())
+  }
+
+  async loadChannelOptions(): Promise<ManagementUserOption[]> {
+    return this.mapItemOptions(await this.service.getChannels())
+  }
+
   async loadEditor(userId: string): Promise<ManagementUserEditorSnapshot> {
     const currentUser = await this.service.getCurrentUser()
     const user = await this.service.getUser(userId)
+    const users = await this.service.getUsers()
     const snapshot = this.mapEditor(currentUser.Id || '', user)
+    snapshot.enabledAdministratorCount = ManagementUserPolicy.countEnabledAdministrators(users)
     snapshot.authenticationProviders = this.mapNameOptions(await this.service.getAuthProviders())
     snapshot.passwordResetProviders = this.mapNameOptions(
       await this.service.getPasswordResetProviders())
-    snapshot.folders = this.mapItemOptions(await this.service.getMediaFolders())
-    snapshot.channels = this.mapItemOptions(await this.service.getChannels())
-    snapshot.devices = this.mapDeviceOptions(await this.service.getDevices())
+    await this.loadAccessOptions(snapshot)
     snapshot.parentalRatings = this.mapParentalRatings(await this.service.getParentalRatings())
     return snapshot
+  }
+
+  private async loadAccessOptions(snapshot: ManagementUserEditorSnapshot): Promise<void> {
+    try {
+      snapshot.folders = await this.loadFolderOptions()
+      snapshot.foldersStatus = ManagementUserOperationStatus.Success
+    } catch (error) {
+      snapshot.folders = []
+      snapshot.foldersStatus = ManagementUserOperationStatus.Error
+    }
+    try {
+      snapshot.channels = await this.loadChannelOptions()
+      snapshot.channelsStatus = ManagementUserOperationStatus.Success
+    } catch (error) {
+      snapshot.channels = []
+      snapshot.channelsStatus = ManagementUserOperationStatus.Error
+    }
+    try {
+      snapshot.devices = this.mapDeviceOptions(await this.service.getDevices())
+      snapshot.devicesStatus = ManagementUserOperationStatus.Success
+    } catch (error) {
+      snapshot.devices = []
+      snapshot.devicesStatus = ManagementUserOperationStatus.Error
+    }
   }
 
   async saveProfile(userId: string, currentUserId: string,
@@ -158,6 +207,15 @@ export class ManagementUserRepository {
 
   async uploadAvatar(userId: string, bytes: ArrayBuffer,
     contentType: string): Promise<ManagementUserActionResult> {
+    if (!SUPPORTED_AVATAR_MIME_TYPES.includes(contentType)) {
+      return this.failureResult(ManagementUserActionCode.ValidationFailed, userId,
+        'management_user_avatar_unsupported_type')
+    }
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) {
+      return this.failureResult(ManagementUserActionCode.ValidationFailed, userId,
+        bytes.byteLength === 0 ? 'management_user_avatar_empty' :
+          'management_user_avatar_too_large')
+    }
     try {
       await this.service.uploadUserImage(userId, bytes, contentType)
       await this.service.getUser(userId)
@@ -204,7 +262,8 @@ export class ManagementUserRepository {
   async createUser(draft: ManagementUserCreateDraft): Promise<ManagementUserActionResult> {
     const name = draft.name.trim()
     if (name.length === 0) {
-      return this.failureResult(ManagementUserActionCode.ValidationFailed, '', 'user_name_required')
+      return this.failureResult(ManagementUserActionCode.ValidationFailed, '',
+        'management_user_name_required')
     }
     let created: UserDto
     try {
@@ -212,19 +271,36 @@ export class ManagementUserRepository {
     } catch (error) {
       return this.errorResult(error as Object, '')
     }
-    const userId = created.Id || ''
-    if (userId.length === 0) {
+    if (!created.Id) {
       return this.failureResult(ManagementUserActionCode.RequestFailed, '')
     }
+    const userId = created.Id
     try {
-      const latest = await this.service.getUser(created.Id!)
+      const latest = await this.service.getUser(created.Id)
       const policy = ManagementUserPolicy.patchAccess(this.requirePolicy(latest), draft.access)
-      await this.service.updatePolicy(created.Id!, policy)
-      await this.service.getUser(created.Id!)
+      await this.service.updatePolicy(created.Id, policy)
+      await this.service.getUser(created.Id)
       return this.successResult(ManagementUserActionCode.Created, userId)
     } catch (error) {
       return this.failureResult(ManagementUserActionCode.CreatedPolicyPending,
         userId, this.getServerErrorMessage(error as Object))
+    }
+  }
+
+  async retryCreateAccess(userId: string,
+    access: ManagementAccessDraft): Promise<ManagementUserActionResult> {
+    if (userId.length === 0) {
+      return this.failureResult(ManagementUserActionCode.ValidationFailed, userId,
+        'management_user_invalid_parameter')
+    }
+    try {
+      const current = await this.service.getUser(userId)
+      const nextPolicy = ManagementUserPolicy.patchAccess(this.requirePolicy(current), access)
+      await this.service.updatePolicy(userId, nextPolicy)
+      await this.service.getUser(userId)
+      return this.successResult(ManagementUserActionCode.Created, userId)
+    } catch (error) {
+      return this.errorResult(error as Object, userId)
     }
   }
 

@@ -1,6 +1,7 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
+import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { VideoDetailUIState } from './VideoDetailUIState';
 import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
@@ -18,9 +19,21 @@ import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView'
 import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
 import { VideoInfoDetail } from './components/VideoInfoDetail';
 import { VideoDetailRefreshEvent } from '../../events/Events';
+import { deviceInfo } from '@kit.BasicServicesKit';
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
+import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
-  pageUrl: RouterConsts.VideoDetailPage
+  pageUrl: RouterConsts.VideoDetailPage,
+  useNavDst: true
 })
 @ComponentV2
 export struct VideoDetailPage {
@@ -28,6 +41,63 @@ export struct VideoDetailPage {
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private secondarySurfaceBackground(): ResourceColor {
+    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2')
+  }
+
+  private sheetMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      deviceInfo.sdkApiVersion >= 26,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  @Builder
+  private nativeHeroBackdrop() {
+    Column() {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.ui.image,
+          objectFit: ImageFit.Cover
+        }
+      }).width('100%')
+        .height('100%')
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private feiniuHeroBackdrop() {
+    Column() {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.ui.image,
+          objectFit: ImageFit.Cover
+        }
+      }).width('100%')
+        .height('100%')
+        .blur(this.ui.blur)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private feiniuActionBar() {
+    ActionBar({
+      title: this.ui.showActionBar ? this.ui.title : ''
+    })
+      .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
+  }
 
   @Monitor('vm.appUIState.colorMode')
   onColorModeChange(): void {
@@ -69,7 +139,123 @@ export struct VideoDetailPage {
     this.getUIContext().getHostContext()?.eventHub.off(VideoDetailRefreshEvent)
   }
 
-  build() {
+  @Builder
+  private overviewTriggerContent() {
+    TextExpandView({
+      text: this.ui.overview,
+      onMoreClick: () => {
+        this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+      },
+      lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+    })
+  }
+
+  @Builder
+  private overviewSheetTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    }
+  }
+
+  @Builder
+  private videoInfoTriggerContent() {
+    Text('查看全部')
+      .fontColor($r('app.color.text_1'))
+      .fontSize(12)
+      .fontWeight(FontWeight.Medium)
+      .layoutWeight(1)
+    SymbolGlyph($r('sys.symbol.chevron_right'))
+      .fontSize(16)
+      .fontColor([$r('app.color.text_1')])
+      .fontWeight(FontWeight.Bold)
+  }
+
+  @Builder
+  private videoInfoSheetTrigger() {
+    if (deviceInfo.sdkApiVersion < 26) {
+      Row({ space: 10 }) {
+        this.videoInfoTriggerContent()
+      }
+      .width('100%')
+      .padding({ top: 4, left: 4, bottom: 8 })
+      .onClick(() => {
+        this.ui.isShowVideoInfoSheet = true
+      })
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+        height: '100%',
+        preferType: SheetType.BOTTOM,
+        title: { title: '文件媒体信息' },
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Row({ space: 10 }) {
+        this.videoInfoTriggerContent()
+      }
+      .width('100%')
+      .padding({ top: 4, left: 4, bottom: 8 })
+      .onClick(() => {
+        this.ui.isShowVideoInfoSheet = true
+      })
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+        height: '100%',
+        preferType: SheetType.BOTTOM,
+        title: { title: '文件媒体信息' },
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else {
+      Row({ space: 10 }) {
+        this.videoInfoTriggerContent()
+      }
+      .width('100%')
+      .padding({ top: 4, left: 4, bottom: 8 })
+      .onClick(() => {
+        this.ui.isShowVideoInfoSheet = true
+      })
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+        height: '100%',
+        preferType: SheetType.BOTTOM,
+        title: { title: '文件媒体信息' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    }
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
     Stack() {
       if (this.ui.firstLoading) {
         SkeletonDetailView()
@@ -77,17 +263,11 @@ export struct VideoDetailPage {
         Scroll(this.ui.scroller) {
           Column() {
             Stack() {
-              Column() {
-                ImageKnifeComponent({
-                  imageKnifeOption: {
-                    loadSrc: this.ui.image,
-                    objectFit: ImageFit.Cover
-                  }
-                }).width('100%')
-                  .height('100%')
-                  .blur(this.ui.blur)
-              }.width('100%')
-              .height('100%')
+              if (this.useNativeSurface()) {
+                this.nativeHeroBackdrop()
+              } else {
+                this.feiniuHeroBackdrop()
+              }
 
               Stack().width('100%')
                 .height('100%')
@@ -138,8 +318,9 @@ export struct VideoDetailPage {
             .height(this.ui.imageHeight)
             .alignContent(Alignment.BottomStart)
 
-            Column() {
-              //信息
+            Stack() {
+              Column() {
+                //信息
               Text() {
                 if (!this.ui.isTvShows && this.ui.score > 0) {
                   Span(this.ui.score + '分  ').fontColor($r('app.color.text_score'))
@@ -224,10 +405,12 @@ export struct VideoDetailPage {
                     }
                     .width(44)
                     .height(44)
-                    .borderWidth(1)
-                    .borderColor($r('app.color.border'))
+                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                    .borderColor(AppThemeSurfaceResolver.contentOutline(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                     .borderRadius(22)
-                    .backgroundColor($r('app.color.bg_2'))
+                    .backgroundColor(this.secondarySurfaceBackground())
                     .onClick(() => {
                       this.vm.changeFavorite()
                     })
@@ -240,10 +423,13 @@ export struct VideoDetailPage {
                     }
                     .width(44)
                     .height(44)
-                    .borderWidth(1)
-                    .borderColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.border'))
+                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                    .borderColor(this.ui.isChasing ? $r('app.color.color_main') :
+                      AppThemeSurfaceResolver.contentOutline(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                     .borderRadius(22)
-                    .backgroundColor($r('app.color.bg_2'))
+                    .backgroundColor(this.secondarySurfaceBackground())
                     .onClick(() => {
                       this.vm.changeChasingState()
                     })
@@ -256,10 +442,12 @@ export struct VideoDetailPage {
                     }
                     .width(44)
                     .height(44)
-                    .borderWidth(1)
-                    .borderColor($r('app.color.border'))
+                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                    .borderColor(AppThemeSurfaceResolver.contentOutline(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                     .borderRadius(22)
-                    .backgroundColor($r('app.color.bg_2'))
+                    .backgroundColor(this.secondarySurfaceBackground())
                     .onClick(() => {
                       this.vm.changePlayedState()
                     })
@@ -303,10 +491,12 @@ export struct VideoDetailPage {
                   }
                   .width(50)
                   .height(50)
-                  .borderWidth(1)
-                  .borderColor($r('app.color.border'))
+                  .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                  .borderColor(AppThemeSurfaceResolver.contentOutline(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                   .borderRadius(25)
-                  .backgroundColor($r('app.color.bg_2'))
+                  .backgroundColor(this.secondarySurfaceBackground())
                   .onClick(() => {
                     this.vm.changeFavorite()
                   })
@@ -319,10 +509,12 @@ export struct VideoDetailPage {
                   }
                   .width(50)
                   .height(50)
-                  .borderWidth(1)
-                  .borderColor($r('app.color.border'))
+                  .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                  .borderColor(AppThemeSurfaceResolver.contentOutline(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                   .borderRadius(25)
-                  .backgroundColor($r('app.color.bg_2'))
+                  .backgroundColor(this.secondarySurfaceBackground())
                   .onClick(() => {
                     this.vm.changePlayedState()
                   })
@@ -352,9 +544,11 @@ export struct VideoDetailPage {
                           right: 12
                         })
                         .height(32)
-                        .borderWidth(1)
+                        .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
                         .borderColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
-                          $r('app.color.border'))
+                          AppThemeSurfaceResolver.contentOutline(
+                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
                         .borderRadius(4)
                         .onClick(() => {
                           this.ui.selectedMediaSourceIndex = index
@@ -370,20 +564,7 @@ export struct VideoDetailPage {
               }
               if (this.ui.overview.length > 0) {
                 Blank().height(16)
-                Row() {
-                  TextExpandView({
-                    text: this.ui.overview,
-                    onMoreClick: () => {
-                      this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
-                    },
-                    lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
-                  }).bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
-                    height: 420,
-                    preferType: SheetType.BOTTOM,
-                    title: { title: '简介' },
-                  }).width('100%')
-                }.width('100%')
-                .padding({ left: 16, right: 16 })
+                this.overviewSheetTrigger()
               }
 
               if (this.ui.isTvShows) {
@@ -448,7 +629,7 @@ export struct VideoDetailPage {
                     // Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
                   }
                   .width('100%')
-                  .backgroundColor($r('app.color.bg_2'))
+                  .backgroundColor(this.secondarySurfaceBackground())
                   .borderRadius(12)
                   .padding(12)
                   .alignItems(HorizontalAlign.Start)
@@ -490,36 +671,13 @@ export struct VideoDetailPage {
                       .alignItems(HorizontalAlign.Start)
                     }
 
-                    Divider().height(0.5).color($r('app.color.border'))
+                    Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
 
-                    Row({ space: 10 }) {
-                      Text('查看全部')
-                        .fontColor($r('app.color.text_1'))
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Medium)
-                        .layoutWeight(1)
-                      SymbolGlyph($r('sys.symbol.chevron_right'))
-                        .fontSize(16)
-                        .fontColor([$r('app.color.text_1')])
-                        .fontWeight(FontWeight.Bold)
-                    }
-                    .width('100%')
-                    .padding({
-                      top: 4,
-                      left: 4,
-                      bottom: 8,
-                    })
-                    .onClick(() => {
-                      this.ui.isShowVideoInfoSheet = true
-                    })
-                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
-                      height: '100%',
-                      preferType: SheetType.BOTTOM,
-                      title: { title: '文件媒体信息' },
-                    })
+                    this.videoInfoSheetTrigger()
                   }
                   .width('100%')
-                  .backgroundColor($r('app.color.bg_2'))
+                  .backgroundColor(this.secondarySurfaceBackground())
                   .borderRadius(12)
                   .padding(12)
                   .margin({ top: 12 })
@@ -539,7 +697,7 @@ export struct VideoDetailPage {
                     Text(item.Name)
                       .fontSize(12)
                       .fontColor($r('app.color.text_1'))
-                      .backgroundColor($r('app.color.bg_2'))
+                      .backgroundColor(this.secondarySurfaceBackground())
                       .borderRadius(4)
                       .padding({
                         left: 12,
@@ -555,10 +713,15 @@ export struct VideoDetailPage {
               }
               Blank().height(30 + this.vm.appUIState.safeBottom)
 
-            }.alignItems(HorizontalAlign.Start).padding({
-              top: 12
-            })
-            .align(Alignment.Top)
+              }.alignItems(HorizontalAlign.Start).padding({
+                top: 12
+              })
+              .width('100%')
+              .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+              .align(Alignment.Top)
+            }
+            .width('100%')
+            .alignContent(Alignment.Top)
 
           }.constraintSize({
             minHeight: 850
@@ -591,11 +754,25 @@ export struct VideoDetailPage {
         })
       }
 
-      ActionBar({
-        title: this.ui.showActionBar ? this.ui.title : ''
-      })
-        .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
-    }.backgroundColor($r('app.color.bg_main')).alignContent(Alignment.Top)
+      if (showLegacyActionBar) {
+        this.feiniuActionBar()
+      }
+    }
+    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+    .alignContent(Alignment.Top)
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.ui.showActionBar ? this.ui.title : '',
+      contentBuilder: () => {
+        this.pageContent(false)
+      },
+      legacyContentBuilder: () => {
+        this.pageContent(true)
+      }
+    })
   }
 
   @Builder

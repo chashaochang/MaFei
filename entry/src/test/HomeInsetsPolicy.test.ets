@@ -5,7 +5,7 @@ import { HomeShellKind } from '../main/ets/features/home/HomeShellPolicy'
 
 export default function homeInsetsPolicyTest() {
   describe('HomeInsetsPolicy', () => {
-    it('ownsNavigationChromeAndContentInsetForPhones', 0, () => {
+    it('ownsOverlayChromeOnlyForStandardPhoneAndContentInsetForBothPhones', 0, () => {
       const expected = UIConstants.BOTTOM_BAR_HEIGHT + 24
       expect(HomeInsetsPolicy.navigationChromeInset(
         HomeShellKind.PhoneStandard,
@@ -14,9 +14,13 @@ export default function homeInsetsPolicyTest() {
       expect(HomeInsetsPolicy.navigationChromeInset(
         HomeShellKind.PhoneNativeHds,
         24
-      )).assertEqual(expected)
+      )).assertEqual(0)
       expect(HomeInsetsPolicy.contentBottomInset(
         HomeShellKind.PhoneStandard,
+        24
+      )).assertEqual(expected)
+      expect(HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.PhoneNativeHds,
         24
       )).assertEqual(expected)
     })

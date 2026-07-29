@@ -1,4 +1,4 @@
-import { AxiosResponse } from "@ohos/axios";
+import { AxiosError, AxiosResponse } from "@ohos/axios";
 import { AuthenticationResult } from "sdk/src/main/ets/generated-client/models";
 import { getUserApi } from "sdk/src/main/ets/utils/api/user-api";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
@@ -6,9 +6,8 @@ import { ApiClientController } from "../../data/ApiClientController";
 import { AppPreference } from "../../data/AppPreference";
 import { ApiClient } from "../../network/ApiClient";
 import connectionHelper from "../../setup/ConnectionHelper";
-import { CheckUrlStateType, Pending, Success } from "../../ui/state/CheckUrlState";
+import { CheckUrlStateType, Error as CheckUrlError, Pending, Success } from "../../ui/state/CheckUrlState";
 import { ConnectionUIState } from "./ConnectionUIState";
-import { ServerSuggestion, Type } from "../serverdiscovery/ServerSuggestion";
 import { asset } from "@kit.AssetStoreKit";
 import { stringToArray } from "../../common/CommonFunc";
 import { util } from "@kit.ArkTS";
@@ -16,6 +15,10 @@ import { HMRouterMgr } from "@hadss/hmrouter";
 import { RouterConsts } from "../../common/RouterConsts";
 import ServerEntity from "../../data/ServerEntity";
 import { DBManager } from "../../data/DBManager";
+
+const CONNECTION_ERROR_TEXT: string = '无法建立连接。 请检查主机名和你的网络连接。'
+const INVALID_CREDENTIALS_TEXT: string = '登录失败，用户名或密码错误'
+const LOGIN_FAILED_TEXT: string = '登录失败'
 
 export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
   private apiClientController: ApiClientController = new ApiClientController()
@@ -28,8 +31,7 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
     let username = AppPreference.getInstance().getUserName()
     let query: asset.AssetMap = new Map();
     query.set(asset.Tag.ALIAS, stringToArray(server?.hostname + '_' + username));
-    // 如果只需要返回关键资产的属性，可以将RETURN_TYPE设置为ATTRIBUTES。返回属性不需解密，查询时间较短。
-    query.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL); // 此处表示需要返回关键资产的所有信息，即属性+明文。返回明文需要解密，查询时间较长。
+    query.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL);
     let res: Array<asset.AssetMap> = asset.querySync(query);
     if (res.length > 0) {
       let re = res[0]
@@ -63,19 +65,18 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         if (serverEntity !== null) {
           this.appUIState.isConnecting = true
           this.appUIState.server = serverEntity
-          // AppStorage.setOrCreate('server', serverEntity)
-          // let token = AppPreference.getInstance().getAccessToken()
-          // if (token.length > 0) {
-          //   this.loginByAccessToken(isFromAddAccount, serverEntity, token)
-          // } else {
           this.loginByPwd(isFromAddAccount, serverEntity)
-          // }
         }
       } else {
         this.ui.loading = false
         this.ui.externalError = true
         this.appUIState.isConnecting = false
       }
+    }).catch(() => {
+      this.ui.checkUrlState = new CheckUrlError(CONNECTION_ERROR_TEXT)
+      this.ui.loading = false
+      this.ui.externalError = true
+      this.appUIState.isConnecting = false
     })
   }
 
@@ -104,38 +105,42 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
       }
     }).then((result: AxiosResponse<AuthenticationResult>) => {
       if (result) {
-        this.ui.loading = false
-        AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
-        AppPreference.getInstance().setCurrentServerSystemId(result.data.ServerId || '')
+        const preference = AppPreference.getInstance()
+        preference.setCurrentServerSystemId(result.data.ServerId || '')
         if (this.ui.rememberPwd) {
           let assetMap: asset.AssetMap = new Map
           assetMap.set(asset.Tag.SECRET, stringToArray(this.ui.password))
-          assetMap.set(asset.Tag.ALIAS, stringToArray(serverEntity!.hostname + '_' + this.ui.username))
+          assetMap.set(asset.Tag.ALIAS, stringToArray(serverEntity.hostname + '_' + this.ui.username))
           assetMap.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_UNLOCKED)
           try {
             asset.addSync(assetMap)
-          } catch (error) {
-            //保存密码失败
-            console.log("保存密码失败：" + (error as Error).message);
+          } catch (_error) {
           }
         }
-        this.apiClientController.setupUser(AppPreference.getInstance().getCurrentServerId()!, result.data.User!.Id!,
-          result.data.AccessToken!,
-          this.ui.username)
+        this.apiClientController.setupUser(preference.getCurrentServerId()!, result.data.User!.Id!,
+          result.data.AccessToken!, this.ui.username)
+        // A stored token marks the point at which all other login state has committed.
+        preference.setAccessToken(result.data.AccessToken!)
         this.appUIState.isLogin = true
         if (isFromAddAccount) {
           HMRouterMgr.getCurrentPathStack()?.clear()
           HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
         }
-        this.appUIState.isConnecting = false
       } else {
-        this.ui.errorText = '登录失败'
-        this.ui.loading = false
-        this.appUIState.isConnecting = false
+        this.ui.errorText = LOGIN_FAILED_TEXT
       }
-    }).catch((e: Error) => {
-      console.log(e.message);
-      this.ui.errorText = '登录失败，用户名或密码错误'
+      this.ui.loading = false
+      this.appUIState.isConnecting = false
+    }).catch((error: Error) => {
+      const axiosError = error as AxiosError<Object, Object>
+      const status = axiosError.response?.status
+      if (status === 400 || status === 401) {
+        this.ui.errorText = INVALID_CREDENTIALS_TEXT
+      } else if (axiosError.isAxiosError === true && !axiosError.response) {
+        this.ui.errorText = CONNECTION_ERROR_TEXT
+      } else {
+        this.ui.errorText = LOGIN_FAILED_TEXT
+      }
       this.ui.loading = false
       this.appUIState.isConnecting = false
     })

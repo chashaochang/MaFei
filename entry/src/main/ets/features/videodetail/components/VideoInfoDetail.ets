@@ -1,5 +1,8 @@
 import { MediaSourceInfo, MediaStream, MediaStreamType } from "sdk/src/main/ets/generated-client/models"
 import { LanguageUtil } from "../../../utils/LanguageUtil"
+import { AppStorageV2 } from '@kit.ArkUI'
+import { AppUIState } from '../../../entity/AppUIState'
+import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 
 @ComponentV2
 export struct VideoInfoDetail {
@@ -7,6 +10,13 @@ export struct VideoInfoDetail {
   @Local videos: MediaStream[] = []
   @Local audios: MediaStream[] = []
   @Local subtitles: MediaStream[] = []
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
+
+  private groupBackground(): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+      Color.Transparent : $r('app.color.bg_2')
+  }
 
   @Monitor('source')
   onSourceChange() {
@@ -136,7 +146,7 @@ export struct VideoInfoDetail {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .backgroundColor($r('app.color.bg_2'))
+        .backgroundColor(this.groupBackground())
         .borderRadius(12)
         .padding(12)
         .margin({ top: 4 })
@@ -202,7 +212,7 @@ export struct VideoInfoDetail {
           .width('100%')
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .backgroundColor($r('app.color.bg_2'))
+          .backgroundColor(this.groupBackground())
           .borderRadius(12)
           .padding(12)
           .margin({ top: 8 })
@@ -251,13 +261,15 @@ export struct VideoInfoDetail {
           .width('100%')
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .backgroundColor($r('app.color.bg_2'))
+          .backgroundColor(this.groupBackground())
           .borderRadius(12)
           .padding(12)
           .margin({ top: 8 })
         })
       }
     }.width('100%')
+    .constraintSize({ maxWidth: 720 })
+    .alignSelf(ItemAlign.Center)
     .alignItems(HorizontalAlign.Start)
   }
 }
