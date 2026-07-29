@@ -217,9 +217,11 @@ export struct ManagementDashboardPage {
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
-          SymbolGlyph($r('sys.symbol.externaldrive'))
-            .fontSize(30)
-            .fontColor([$r('app.color.color_main')])
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.externaldrive'))
+              .fontSize(30)
+              .fontColor([$r('app.color.color_main')])
+          }
             .width(48)
             .height(48)
             .backgroundColor(AppThemeSurfaceResolver.iconWellBackground(this.vm.appUIState.themeStyle))

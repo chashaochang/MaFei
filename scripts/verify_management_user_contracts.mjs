@@ -203,6 +203,18 @@ export function validateManagementUserContracts(sources) {
     requirePattern(sources, managementUserPaths.detailViewModel, new RegExp('\\b' + editorMethod + '\\b'),
       'editor lifecycle ownership is missing')
   }
+  const detailViewModel = requiredSource(sources, managementUserPaths.detailViewModel)
+  const dirtyTracking = methodBlock(detailViewModel, 'markCurrentTabDirty')
+  for (const dirtyComparison of [
+    /profileDirty\s*=\s*JSON\.stringify\(this\.ui\.profile\)\s*!==\s*JSON\.stringify\(this\.baselineProfile\)/,
+    /accessDirty\s*=\s*JSON\.stringify\(this\.ui\.access\)\s*!==\s*JSON\.stringify\(this\.baselineAccess\)/,
+    /parentalDirty\s*=\s*JSON\.stringify\(this\.ui\.parental\)\s*!==\s*[\s\S]*JSON\.stringify\(this\.baselineParental\)/,
+    /passwordDirty\s*=\s*[\s\S]*currentPassword[\s\S]*newPassword[\s\S]*confirmPassword/
+  ]) {
+    if (!dirtyComparison.test(dirtyTracking)) {
+      throw new Error('editor dirty state must compare the current draft with its baseline')
+    }
+  }
   for (const editorShellBoundary of [/embeddedUserId/, /840/, /showUnsavedDialog/]) {
     requirePattern(sources, managementUserPaths.detailPage, editorShellBoundary,
       'responsive editor shell or unsaved prompt is missing')

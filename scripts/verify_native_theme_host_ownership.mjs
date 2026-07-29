@@ -80,7 +80,7 @@ const NAV_SAFE_AREA_INITIALIZER =
 const THEME_SAFE_AREA_REFRESH =
   /this\.modifier\.updateLayoutSafeArea\s*\(\s*this\.appUIState\s*\)/
 const NATIVE_FROM_HOME_TOP_INSET =
-  /private\s+get\s+nativeFromHomeTopInset\s*\(\s*\)\s*:\s*number\s*\{\s*return\s+this\.shell\s*===\s*HomeShellKind\.PhoneNativeHds\s*\?\s*Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)\s*:\s*0\s*;?\s*\}/
+  /private\s+get\s+nativeFromHomeTopInset\s*\(\s*\)\s*:\s*number\s*\{\s*return\s+0\s*;?\s*\}/
 const FROM_HOME_TOP_INSET_BODY =
   /^\s*return\s+this\.fromHome\s*\?\s*Math\.max\s*\(\s*0\s*,\s*this\.contentTopInset\s*\)\s*:\s*0\s*;?\s*$/
 const CONTENT_TOP_INSET_PARAM =
@@ -451,7 +451,7 @@ export function validateNativeThemeHostOwnership(sources) {
     throw new Error('HomeScreen must clear root destination chrome when leaving the page')
   }
   if (!NATIVE_FROM_HOME_TOP_INSET.test(homeScreen)) {
-    throw new Error('HomeScreen must derive the from-home top inset only from native safeTop')
+    throw new Error('HomeScreen must not duplicate the root destination top inset')
   }
 
   const syncLiveTv = methodBlock(homeTab, 'syncRootNavigationLiveTvAvailability')
@@ -579,8 +579,8 @@ export function validateNativeThemeHostOwnership(sources) {
   }
   const mediaTopSpacer = methodBlock(mediaTab, 'contentTopSpacer')
   if (!/const\s+safeTop\s*=\s*Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)/.test(mediaTopSpacer) ||
-    !/return\s+this\.rootTitleBarOwned\s*\?\s*safeTop\s*:\s*safeTop\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(mediaTopSpacer)) {
-    throw new Error('MediaTab must remove only the custom ActionBar spacer in the phone Native shell')
+    !/return\s+this\.rootTitleBarOwned\s*\?\s*0\s*:\s*safeTop\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(mediaTopSpacer)) {
+    throw new Error('MediaTab must leave all Native top-inset ownership to the root destination')
   }
   const mediaTopBar = methodBlock(mediaTab, 'topBar')
   const mediaTitleGuard = /\bif\s*\(\s*!\s*this\.rootTitleBarOwned\s*\)\s*\{/.exec(mediaTopBar)

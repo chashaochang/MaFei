@@ -58,8 +58,7 @@ function validHomeScreen() {
     "  this.publishRootNavigationChrome(false, '马飞', false)",
     '}',
     'private get nativeFromHomeTopInset(): number {',
-    '  return this.shell === HomeShellKind.PhoneNativeHds ?',
-    '    Math.max(0, this.appUIState.safeTop) : 0',
+    '  return 0',
     '}',
     '@Builder',
     'private homeTabContent() { HomeTab({ contentBottomInset: this.contentBottomInset }) }',
@@ -306,7 +305,7 @@ function validSources() {
       '@Param rootTitleBarOwned: boolean = false',
       'private contentTopSpacer(): number {',
       '  const safeTop = Math.max(0, this.appUIState.safeTop)',
-      '  return this.rootTitleBarOwned ? safeTop : safeTop + UIConstants.ACTION_BAR_HEIGHT',
+      '  return this.rootTitleBarOwned ? 0 : safeTop + UIConstants.ACTION_BAR_HEIGHT',
       '}',
       'private topBar() {',
       '  if (!this.rootTitleBarOwned) {',
@@ -627,13 +626,21 @@ test('requires five arrow closures that preserve the parent HomeScreen context',
   )
 })
 
-test('routes native safeTop only to the from-home chasing and favorite pages', () => {
+test('keeps the root destination as the only native top-inset owner', () => {
   const missingOwnerSources = validSources()
   missingOwnerSources.set(homeScreenPath, validHomeScreen()
     .replace('private get nativeFromHomeTopInset(): number {', 'private get otherInset(): number {'))
   assert.throws(
     () => validateNativeThemeHostOwnership(missingOwnerSources),
-    /derive the from-home top inset only from native safeTop/
+    /must not duplicate the root destination top inset/
+  )
+
+  const duplicateInsetSources = validSources()
+  duplicateInsetSources.set(homeScreenPath, validHomeScreen()
+    .replace('  return 0', '  return Math.max(0, this.appUIState.safeTop)'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(duplicateInsetSources),
+    /must not duplicate the root destination top inset/
   )
 
   const missingChasingSources = validSources()
@@ -675,12 +682,12 @@ test('lets only the phone Native destination own the MediaTab title and ActionBa
   const legacySpacerRegressionSources = validSources()
   legacySpacerRegressionSources.set(mediaTabPath, validSources().get(mediaTabPath)
     .replace(
-      'return this.rootTitleBarOwned ? safeTop : safeTop + UIConstants.ACTION_BAR_HEIGHT',
+      'return this.rootTitleBarOwned ? 0 : safeTop + UIConstants.ACTION_BAR_HEIGHT',
       'return safeTop'
     ))
   assert.throws(
     () => validateNativeThemeHostOwnership(legacySpacerRegressionSources),
-    /remove only the custom ActionBar spacer/
+    /leave all Native top-inset ownership to the root destination/
   )
 })
 

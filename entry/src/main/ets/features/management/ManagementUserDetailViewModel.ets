@@ -74,13 +74,15 @@ export class ManagementUserDetailViewModel extends BaseViewModel<ManagementUserD
 
   markCurrentTabDirty(): void {
     if (this.ui.selectedTab === ManagementUserTab.Access) {
-      this.ui.accessDirty = true
+      this.ui.accessDirty = JSON.stringify(this.ui.access) !== JSON.stringify(this.baselineAccess)
     } else if (this.ui.selectedTab === ManagementUserTab.Parental) {
-      this.ui.parentalDirty = true
+      this.ui.parentalDirty = JSON.stringify(this.ui.parental) !==
+        JSON.stringify(this.baselineParental)
     } else if (this.ui.selectedTab === ManagementUserTab.Password) {
-      this.ui.passwordDirty = true
+      this.ui.passwordDirty = this.ui.password.currentPassword.length > 0 ||
+        this.ui.password.newPassword.length > 0 || this.ui.password.confirmPassword.length > 0
     } else {
-      this.ui.profileDirty = true
+      this.ui.profileDirty = JSON.stringify(this.ui.profile) !== JSON.stringify(this.baselineProfile)
     }
   }
 

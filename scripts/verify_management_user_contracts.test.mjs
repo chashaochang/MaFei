@@ -115,6 +115,13 @@ function validSources() {
     'generation',
     'checkCurrentUserAccess()',
     'loadEditor()',
+    'markCurrentTabDirty() {',
+    'this.ui.profileDirty = JSON.stringify(this.ui.profile) !== JSON.stringify(this.baselineProfile)',
+    'this.ui.accessDirty = JSON.stringify(this.ui.access) !== JSON.stringify(this.baselineAccess)',
+    'this.ui.parentalDirty = JSON.stringify(this.ui.parental) !== JSON.stringify(this.baselineParental)',
+    'this.ui.passwordDirty = this.ui.password.currentPassword.length > 0 ||',
+    'this.ui.password.newPassword.length > 0 || this.ui.password.confirmPassword.length > 0',
+    '}',
     'saveCurrentTab()',
     'async deleteUser() { await this.repository.deleteUser() }',
     'canLeave()',
@@ -398,6 +405,18 @@ test('requires guarded editor lifecycle and independent dirty state', () => {
   assert.throws(
     () => validateManagementUserContracts(sources),
     /independent editor dirty state/
+  )
+})
+
+test('requires editor dirty state to ignore unchanged control callbacks', () => {
+  const sources = validSources()
+  sources.set(managementUserPaths.detailViewModel,
+    sources.get(managementUserPaths.detailViewModel).replace(
+      'this.ui.profileDirty = JSON.stringify(this.ui.profile) !== JSON.stringify(this.baselineProfile)',
+      'this.ui.profileDirty = true'))
+  assert.throws(
+    () => validateManagementUserContracts(sources),
+    /current draft with its baseline/
   )
 })
 
