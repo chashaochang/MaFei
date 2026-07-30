@@ -1,6 +1,8 @@
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
+import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
 import { EmptyView } from "../../component/EmptyView";
+import { FailedView } from "../../component/FailedView";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { VideoCard } from "../videolist/VideoListPage";
 import { SearchUIState } from "./SearchUIState";
@@ -33,9 +35,7 @@ export struct SearchPage {
   }
 
   aboutToDisappear(): void {
-    if (this.ui.searchText.trim() != '') {
-      this.vm.saveHistory(this.ui.searchText)
-    }
+    this.vm.cancelPendingSearch()
   }
 
   private primaryTextColor(nativeSurface: boolean): ResourceColor {
@@ -71,16 +71,10 @@ export struct SearchPage {
       })
       .onChange((value: string) => {
         this.ui.searchText = value
-        if (value.trim() == '') {
-          this.ui.searchResults = []
-        }
         this.vm.search(value)
       })
       .onSubmit((value: string) => {
         this.ui.searchText = value
-        if (value.trim() == '') {
-          this.ui.searchResults = []
-        }
         this.vm.search(value, true)
       })
     if (showCancelAction) {
@@ -117,41 +111,58 @@ export struct SearchPage {
 
   @Builder
   private searchResultsContent(nativeSurface: boolean) {
-    Row() {
-      Text(this.ui.totalCount + '个搜索结果')
-        .fontSize(12)
-        .fontColor(this.secondaryTextColor(nativeSurface))
-        .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
-        .padding({
-          left: 6,
-          right: 6,
-          top: 4,
-          bottom: 4
-        })
-        .borderRadius(4)
-      Blank().layoutWeight(1)
-    }
-    .width('100%')
-    .height(46)
-
-    GridView({
-      lazyDataSource: this.vm.dataSource,
-      onLazyDataSource: (dataSource) => {
-        this.vm.dataSource = dataSource
-      },
-      itemLayout: (item, index) => this.itemLayout(item, index),
-      emptyLayout: () => this.emptyLayout(),
-      showEmptyLayout: this.ui.totalCount === '0',
-      enableRefresh: false,
-      enableLoadMore: false,
-      gridAttribute: (attr) => {
-        attr.scrollBar = BarState.Off
-        this.ui.gridAttr = attr
-        OneMoreUtil.setResponsiveGridColumnsAttr(this.vm.appUIState, this.ui.gridAttr)
-      },
-      lazyCachedCount: 10
-    }).width('100%')
+    if (this.ui.pageState === PageState.Loading) {
+      Column() {
+        LoadingProgress()
+          .width(40)
+          .height(40)
+      }
+      .width('100%')
       .height('100%')
+      .justifyContent(FlexAlign.Center)
+    } else if (this.ui.pageState === PageState.Error) {
+      FailedView()
+        .onClick(() => {
+          this.vm.retrySearch()
+        })
+    } else {
+      Row() {
+        Text(this.ui.totalCount + '个搜索结果')
+          .fontSize(12)
+          .fontColor(this.secondaryTextColor(nativeSurface))
+          .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
+          .padding({
+            left: 6,
+            right: 6,
+            top: 4,
+            bottom: 4
+          })
+          .borderRadius(4)
+        Blank().layoutWeight(1)
+      }
+      .width('100%')
+      .height(46)
+
+      GridView({
+        lazyDataSource: this.vm.dataSource,
+        onLazyDataSource: (dataSource) => {
+          this.vm.dataSource = dataSource
+        },
+        itemLayout: (item, index) => this.itemLayout(item, index),
+        emptyLayout: () => this.emptyLayout(),
+        showEmptyLayout: this.ui.totalCount === '0',
+        enableRefresh: false,
+        enableLoadMore: false,
+        gridAttribute: (attr) => {
+          attr.scrollBar = BarState.Off
+          this.ui.gridAttr = attr
+          OneMoreUtil.setResponsiveGridColumnsAttr(this.vm.appUIState, this.ui.gridAttr)
+        },
+        lazyCachedCount: 10
+      })
+        .width('100%')
+        .height('100%')
+    }
   }
 
   @Builder
