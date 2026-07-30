@@ -8,6 +8,7 @@ import {
   ImageType,
   ItemCounts,
 } from "sdk/src/main/ets/generated-client/models";
+import { PageState } from "../../../common/base/BaseUIState";
 import { getTypeByCollectionType } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { MediaItem } from "../hometab/HomeUIState";
@@ -20,12 +21,21 @@ export class MediaViewModel {
     this.ui = ui
   }
 
-  async init() {
-    //获取收藏数量
-    // await this.getFavoriteCount()
-    //获取媒体库列表
-    await this.getMediaList()
-    this.ui.isRefreshing = false;
+  async init(): Promise<void> {
+    this.ui.pageState = PageState.Loading
+    try {
+      //获取收藏数量
+      // await this.getFavoriteCount()
+      //获取媒体库列表
+      this.ui.mediaList = await this.getMediaList()
+      this.ui.pageState = PageState.Content
+    } catch (_error) {
+      console.error('[MediaVM] init failed')
+      this.ui.mediaList = []
+      this.ui.pageState = PageState.Error
+    } finally {
+      this.ui.isRefreshing = false
+    }
   }
 
   // async getFavoriteCount() {
@@ -55,41 +65,30 @@ export class MediaViewModel {
   //   }
   // }
 
-  private async getMediaList(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      getUserViewsApi(ApiClient.Instance()).getUserViews({
+  private async getMediaList(): Promise<MediaItem[]> {
+    const response: AxiosResponse<BaseItemDtoQueryResult> =
+      await getUserViewsApi(ApiClient.Instance()).getUserViews({
         userId: ApiClient.Instance().userId
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res.data) {
-          if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
-            let items: BaseItemDto[] = res.data.Items || [];
-            items = items.filter(e => e.CollectionType != CollectionType.Livetv)
-            Promise.all(items.map(async (e: BaseItemDto): Promise<MediaItem> => {
-              const childRes: AxiosResponse<BaseItemDtoQueryResult> =
-                await getItemsApi(ApiClient.Instance()).getItems({
-                  userId: ApiClient.Instance().userId,
-                  parentId: e.Id,
-                });
-              return {
-                name: e.Name || '',
-                image: ApiClient.Instance().basePath + new ImageUrlsApi()
-                  .getItemImageUrlById(e.Id, ImageType.Primary, {
-                    tag: e.ImageTags![0]
-                  }),
-                id: e.Id || '',
-                childCount: childRes.data?.TotalRecordCount || 0,
-                type: getTypeByCollectionType(e.CollectionType)
-              } as MediaItem;
-            })).then(mediaItems => {
-              this.ui.mediaList = mediaItems;
-              resolve();
-            }).catch(() => reject());
-            resolve()
-          }
-        }
-      }).catch(() => {
-        reject()
       })
-    })
+    const views: BaseItemDto[] = (response.data?.Items || [])
+      .filter((item: BaseItemDto): boolean => item.CollectionType !== CollectionType.Livetv)
+
+    return Promise.all(views.map(async (item: BaseItemDto): Promise<MediaItem> => {
+      const childResponse: AxiosResponse<BaseItemDtoQueryResult> =
+        await getItemsApi(ApiClient.Instance()).getItems({
+          userId: ApiClient.Instance().userId,
+          parentId: item.Id,
+        })
+      return {
+        name: item.Name || '',
+        image: ApiClient.Instance().basePath + new ImageUrlsApi()
+          .getItemImageUrlById(item.Id, ImageType.Primary, {
+            tag: item.ImageTags![0]
+          }),
+        id: item.Id || '',
+        childCount: childResponse.data?.TotalRecordCount || 0,
+        type: getTypeByCollectionType(item.CollectionType)
+      } as MediaItem
+    }))
   }
 }

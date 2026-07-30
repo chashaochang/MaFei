@@ -1,9 +1,11 @@
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { AppStorageV2 } from "@kit.ArkUI";
+import { PageState } from "../../../common/base/BaseUIState";
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent";
 import { RouterConsts } from "../../../common/RouterConsts";
 import { UIConstants } from "../../../common/UIConstants";
 import { ActionBar } from "../../../component/ActionBar";
+import { FailedView } from "../../../component/FailedView";
 import { BaseGroupItem, ListGroup } from "../../../component/ListGroup";
 import { AppUIState } from "../../../entity/AppUIState";
 import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver";
@@ -16,7 +18,7 @@ import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
 export struct MediaTab {
   @Param contentBottomInset?: number = undefined
   @Param rootTitleBarOwned: boolean = false
-  @Local ui: MediaUIState = new MediaUIState()
+  @Local ui: MediaUIState = new MediaUIState(this.getUIContext())
   @Local vm: MediaViewModel = new MediaViewModel(this.ui)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
@@ -58,56 +60,71 @@ export struct MediaTab {
 
   build() {
     Stack() {
-      Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
-        Scroll() {
-          Column() {
-            Blank().height(this.contentTopSpacer())
-            // ListGroup({
-            //   items: [new BaseGroupItem('收藏', $r('app.media.ic_unlike'), this.ui.favoriteCount + '')],
-            //   onItemClick: (_index) => {
-            //     HMRouterMgr.to(RouterConsts.FavoriteListPage).push()
-            //   }
-            // }).margin({ top: 12 })
-            // Text('媒体库').fontColor($r('app.color.text_primary')).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
-            ListGroup({
-              items: this.ui.mediaList.map((e) => {
-                return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'),
-                  e.childCount + '')
-              }),
-              onItemClick: (index) => {
-                // if (this.ui.mediaList[index].type == undefined) {
-                //   ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
-                //   return;
-                // }
-                HMRouterMgr.to(RouterConsts.VideoListPage)
-                  .withParam(this.ui.mediaList[index])
-                  .push()
-              }
-            }).margin({ top: 12 })
-            Blank().height(this.scrollTail())
-          }.alignItems(HorizontalAlign.Start)
-          .padding({
-            left: 16,
-            right: 16
-          })
+      if (this.ui.pageState === PageState.Content) {
+        Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
+          Scroll() {
+            Column() {
+              Blank().height(this.contentTopSpacer())
+              // ListGroup({
+              //   items: [new BaseGroupItem('收藏', $r('app.media.ic_unlike'), this.ui.favoriteCount + '')],
+              //   onItemClick: (_index) => {
+              //     HMRouterMgr.to(RouterConsts.FavoriteListPage).push()
+              //   }
+              // }).margin({ top: 12 })
+              // Text('媒体库').fontColor($r('app.color.text_primary')).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
+              ListGroup({
+                items: this.ui.mediaList.map((e) => {
+                  return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'),
+                    e.childCount + '')
+                }),
+                onItemClick: (index) => {
+                  // if (this.ui.mediaList[index].type == undefined) {
+                  //   ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
+                  //   return;
+                  // }
+                  HMRouterMgr.to(RouterConsts.VideoListPage)
+                    .withParam(this.ui.mediaList[index])
+                    .push()
+                }
+              }).margin({ top: 12 })
+              Blank().height(this.scrollTail())
+            }.alignItems(HorizontalAlign.Start)
+            .padding({
+              left: 16,
+              right: 16
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .align(Alignment.Top)
         }
+        .pullDownRatio(0.3)
+        .refreshOffset(64)
+        .maxPullDownDistance(64 + this.appUIState.safeTop)
         .width('100%')
         .height('100%')
-        .align(Alignment.Top)
+        .onStateChange((status) => {
+          this.ui.refreshStatus = status
+        })
+        .onOffsetChange((offset) => {
+          this.ui.refreshOffset = offset
+        })
+        .onRefreshing(() => {
+          this.vm.init()
+        })
       }
-      .pullDownRatio(0.3)
-      .refreshOffset(64)
-      .maxPullDownDistance(64 + this.appUIState.safeTop)
-      .height('100%')
-      .onStateChange((status) => {
-        this.ui.refreshStatus = status
-      })
-      .onOffsetChange((offset) => {
-        this.ui.refreshOffset = offset
-      })
-      .onRefreshing(() => {
-        this.vm.init()
-      })
+      if (this.ui.pageState === PageState.Loading) {
+        LoadingProgress()
+          .width(42)
+          .height(42)
+          .align(Alignment.Center)
+      }
+      if (this.ui.pageState === PageState.Error) {
+        FailedView()
+          .onClick(() => {
+            this.vm.init()
+          })
+      }
 
       this.topBar()
     }
