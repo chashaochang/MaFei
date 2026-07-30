@@ -24,9 +24,10 @@ export class AppUIState {
   @Trace currentBreakpoint: string = BreakpointTypeEnum.MD
   @Trace isBigScreen: boolean = false // 大屏幕设备
   @Trace feiniuPointLightEnabled: boolean = false
-  @Trace rootNavigationTitle: string = '马飞'
+  @Trace rootNavigationTitle: string = '首页'
   @Trace rootNavigationTitleBarVisible: boolean = false
   @Trace rootNavigationHomeActionsVisible: boolean = false
+  @Trace rootNavigationHomeHeroVisible: boolean = false
   @Trace rootNavigationLiveTvAvailable: boolean = false
   context?: common.UIAbilityContext
   windowClass?: window.Window

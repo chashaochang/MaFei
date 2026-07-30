@@ -13,7 +13,7 @@ import { VideoItem } from "../hometab/HomeUIState"
 import { ChaseSection, ChasingUIState } from "./ChasingUIState"
 import { ChasingViewModel } from "./ChasingViewModel"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
-import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
 export struct ChasingTab {
@@ -42,6 +42,14 @@ export struct ChasingTab {
       return Color.Transparent
     }
     return AppThemeSurfaceResolver.routeBackground(this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private primaryTextColor(): ResourceColor {
+    return this.useNativeSurface() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(): ResourceColor {
+    return this.useNativeSurface() ? $r('sys.color.font_secondary') : $r('app.color.text_2')
   }
 
   aboutToAppear(): void {
@@ -228,33 +236,44 @@ export struct ChasingTab {
   @Builder
   private nativeFilterChip(label: string, index: number) {
     if (this.selectedFilterIndex === index) {
-      Text(label)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .textAlign(TextAlign.Center)
-        .layoutWeight(1)
-        .height(36)
-        .padding({ left: 8, right: 8 })
-        .backgroundColor($r('app.color.color_main'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.selectedFilterIndex = index
-        })
+      this.nativeSelectedFilterChip(label, index)
     } else {
-      Text(label)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_secondary'))
-        .textAlign(TextAlign.Center)
-        .layoutWeight(1)
-        .height(36)
-        .padding({ left: 8, right: 8 })
-        .borderRadius(18)
-        .onClick(() => {
-          this.selectedFilterIndex = index
-        })
+      this.nativeUnselectedFilterChip(label, index)
     }
+  }
+
+  @Builder
+  private nativeSelectedFilterChip(label: string, index: number) {
+    Text(label)
+      .fontSize(13)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(Color.White)
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(36)
+      .padding({ left: 8, right: 8 })
+      .backgroundColor($r('app.color.color_main'))
+      .borderRadius(18)
+      .onClick(() => {
+        this.selectedFilterIndex = index
+      })
+  }
+
+  @Builder
+  private nativeUnselectedFilterChip(label: string, index: number) {
+    Text(label)
+      .fontSize(13)
+      .fontWeight(FontWeight.Medium)
+      .fontColor($r('sys.color.font_secondary'))
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(36)
+      .padding({ left: 8, right: 8 })
+      .borderRadius(18)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .onClick(() => {
+        this.selectedFilterIndex = index
+      })
   }
 
   @Builder
@@ -370,10 +389,10 @@ export struct ChasingTab {
           Text(title)
             .fontSize(15)
             .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+            .fontColor(this.primaryTextColor())
           Text(subtitle)
             .fontSize(12)
-            .fontColor($r('app.color.text_2'))
+            .fontColor(this.secondaryTextColor())
         }
         .alignItems(HorizontalAlign.Start)
         Blank().layoutWeight(1)

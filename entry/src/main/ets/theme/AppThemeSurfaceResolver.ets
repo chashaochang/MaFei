@@ -3,12 +3,17 @@ import { ThemeStyle } from '../entity/ThemeStyle'
 
 export enum AppThemeMaterialRole {
   ContentGroup = 'content_group',
-  Floating = 'floating'
+  Floating = 'floating',
+  InteractiveFloating = 'interactive_floating'
 }
 
 export class AppThemeSurfaceResolver {
   private static contentGroup?: uiMaterial.Material
   private static floating?: uiMaterial.Material
+  private static interactiveFloating?: uiMaterial.Material
+  private static interactiveLightEffect: uiMaterial.LightEffectOptions = {
+    color: Color.White
+  }
 
   static useNativeSurface(style: ThemeStyle, available: boolean): boolean {
     return style === ThemeStyle.Native && available
@@ -19,7 +24,7 @@ export class AppThemeSurfaceResolver {
       return $r('app.color.start_window_background')
     }
     return effectiveTheme === ThemeStyle.Native ?
-      $r('sys.color.comp_background_gray') : $r('app.color.bg_main')
+      $r('app.color.native_canvas_background') : $r('app.color.bg_main')
   }
 
   static routeBackground(style: ThemeStyle, available: boolean): ResourceColor {
@@ -77,6 +82,19 @@ export class AppThemeSurfaceResolver {
         })
       }
       return AppThemeSurfaceResolver.contentGroup
+    }
+    if (role === AppThemeMaterialRole.InteractiveFloating) {
+      if (!AppThemeSurfaceResolver.interactiveFloating) {
+        AppThemeSurfaceResolver.interactiveFloating = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: 'rgba(255,255,255,0.14)',
+          colorInvert: false,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+        })
+      }
+      return AppThemeSurfaceResolver.interactiveFloating
     }
     if (!AppThemeSurfaceResolver.floating) {
       AppThemeSurfaceResolver.floating = new uiMaterial.ImmersiveMaterial({

@@ -161,7 +161,6 @@ export struct SearchPage {
     }
     .width('100%')
     .layoutWeight(1)
-    .padding({ left: 16, right: 16 })
   }
 
   @Builder
@@ -280,6 +279,8 @@ export struct SearchPage {
     .height('100%')
     .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
     .padding({
+      left: showLegacyActionBar ? 0 : 16,
+      right: showLegacyActionBar ? 0 : 16,
       top: showLegacyActionBar ? this.vm.appUIState.safeTop : 0,
       bottom: this.vm.appUIState.safeBottom
     })

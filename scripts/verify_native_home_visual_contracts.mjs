@@ -50,8 +50,8 @@ export function validateNativeHomeVisualContracts(sources) {
   const canvas = methodBlock(resolver, 'appCanvasBackground')
   const material = methodBlock(resolver, 'material')
 
-  if (!/effectiveTheme\s*===\s*ThemeStyle\.Native[\s\S]*comp_background_gray/.test(canvas)) {
-    throw new Error('Native app canvas must use the system gray background')
+  if (!/effectiveTheme\s*===\s*ThemeStyle\.Native[\s\S]*app\.color\.native_canvas_background/.test(canvas)) {
+    throw new Error('Native app canvas must use the dedicated adaptive background')
   }
   if (!/app\.color\.bg_main/.test(canvas)) {
     throw new Error('Feiniu app canvas must keep bg_main')
@@ -90,6 +90,43 @@ export function validateNativeHomeVisualContracts(sources) {
   }
   if (!/\.width\s*\(\s*286\s*\)[\s\S]*\.height\s*\(\s*60\s*\)/.test(group)) {
     throw new Error('Native media group must reserve a stable 286x60 layout')
+  }
+
+  const homeRefresh = methodBlock(homeTab, 'homeRefreshContent')
+  if (!/if\s*\(\s*this\.vm\.appUIState\.currentBreakpoint\.includes\s*\(\s*['"]s['"]\s*\)\s*&&\s*\(\s*!\s*this\.useNativeSurface\s*\(\s*\)\s*\|\|\s*!\s*this\.showNativeHero\s*\(\s*\)\s*\)\s*\)\s*\{\s*ListItem\s*\(\s*\)\s*\.height\s*\(\s*this\.phoneContentTopInset\s*\(\s*\)\s*\)/.test(
+    homeRefresh)) {
+    throw new Error('HomeTab must own the Native empty-Hero top inset inside the stable root content branch')
+  }
+
+  const progress = methodBlock(homeTab, 'nativeHomeHeroProgressIndicator')
+  if (!/\.color\s*\(\s*\$r\s*\(\s*['"]sys\.color\.icon_primary['"]\s*\)\s*\)/.test(progress) ||
+    !/\.backgroundColor\s*\(\s*\$r\s*\(\s*['"]sys\.color\.icon_secondary['"]\s*\)\s*\)/.test(progress)) {
+    throw new Error('Native Hero progress must use adaptive system colors over the canvas transition')
+  }
+
+  const readabilityScrim = methodBlock(homeTab, 'nativeHomeHeroReadabilityScrim')
+  if (!/rgba\(0,0,0,0\.08\)/.test(readabilityScrim) ||
+    !/rgba\(0,0,0,0\.88\)/.test(readabilityScrim) ||
+    /native_canvas_background/.test(readabilityScrim)) {
+    throw new Error('Native Hero readability scrim must remain a dedicated dark layer')
+  }
+
+  const canvasTransition = methodBlock(homeTab, 'nativeHomeHeroCanvasTransition')
+  if (!/\.height\s*\(\s*96\s*\)/.test(canvasTransition) ||
+    !/\[\s*Color\.Transparent\s*,\s*0(?:\.0)?\s*\]/.test(canvasTransition) ||
+    !/\[\s*\$r\s*\(\s*['"]app\.color\.native_canvas_background['"]\s*\)\s*,\s*1(?:\.0)?\s*\]/.test(
+      canvasTransition)) {
+    throw new Error('Native Hero canvas transition must end in the adaptive canvas color')
+  }
+
+  const hero = methodBlock(homeTab, 'nativeHomeHero')
+  const readabilityIndex = hero.indexOf('this.nativeHomeHeroReadabilityScrim()')
+  const transitionIndex = hero.indexOf('this.nativeHomeHeroCanvasTransition()')
+  const contentIndex = hero.indexOf('Column({ space: 8 })')
+  if (readabilityIndex < 0 || transitionIndex <= readabilityIndex ||
+    contentIndex <= transitionIndex ||
+    !/\.height\s*\(\s*430\s*\)/.test(hero)) {
+    throw new Error('Native Hero must keep separate readability and canvas transition layers')
   }
 }
 

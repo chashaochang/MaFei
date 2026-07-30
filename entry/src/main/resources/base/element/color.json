@@ -5,6 +5,10 @@
       "value": "#efefef"
     },
     {
+      "name": "native_canvas_background",
+      "value": "#F1F2F4"
+    },
+    {
       "name": "color_main",
       "value": "#2173df"
     },

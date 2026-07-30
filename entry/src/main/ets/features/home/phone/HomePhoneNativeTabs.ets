@@ -145,7 +145,7 @@ export struct HomePhoneNativeTabs {
     .scrollable(false)
     .width('100%')
     .height('100%')
-    .onChange((index: number) => {
+    .onTabBarClick((index: number) => {
       this.notifySelectedIndexChange(index)
     })
   }

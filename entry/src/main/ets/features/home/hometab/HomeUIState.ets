@@ -7,6 +7,8 @@ export class HomeUIState extends BaseUIState{
   @Trace mediaList: MediaItem[] = []
   //继续观看列表
   @Trace resumeList: VideoItem[] = []
+  //首页推荐轮播
+  @Trace recommendationList: VideoItem[] = []
   //接下啦列表
   @Trace nextUpList: VideoItem[] = []
   //媒体库列表
@@ -42,6 +44,7 @@ export interface VideoItem {
   type?: string,
   percent?: number,
   subtitle?: string,
+  description?: string,
   score?: number,//评分
   tags?: string[],//都有什么分辨率的
   time?: string,//时长

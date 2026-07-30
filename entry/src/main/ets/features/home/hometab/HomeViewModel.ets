@@ -1,4 +1,4 @@
-import { AxiosError, AxiosResponse } from "@ohos/axios";
+import { AxiosError, AxiosInstance, AxiosResponse } from "@ohos/axios";
 import { getItemsApi, getTvShowsApi, getUserLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
 import {
   BaseItemDto,
@@ -7,6 +7,7 @@ import {
   CollectionType,
   ImageType,
   ItemFields,
+  RecommendationDto,
 } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
 import {
@@ -26,6 +27,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     // 使用 Promise 链，init 立即返回不阻塞
     this.getMediaList().then(() => {
       return Promise.all([
+        this.getRecommendationList(),
         this.getResumeList(),
         this.getCounts(),
         this.getNextUpList(),
@@ -35,6 +37,36 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       this.ui.isRefreshing = false
     }).catch(() => {
       this.ui.isRefreshing = false
+    })
+  }
+
+  private getRecommendationList(): Promise<void> {
+    const api = ApiClient.Instance()
+    const axiosInstance = api.axiosInstance as AxiosInstance
+    const requestUrl = `${api.basePath}/Movies/Recommendations?userId=${encodeURIComponent(api.userId)}` +
+      '&categoryLimit=4&itemLimit=4&fields=Overview%2CPrimaryImageAspectRatio'
+    return axiosInstance.get<RecommendationDto[]>(requestUrl, {
+      headers: { Authorization: api.authorizationHeader }
+    }).then((res: AxiosResponse<RecommendationDto[]>) => {
+      const recommendations: VideoItem[] = []
+      const seenIds: Set<string> = new Set<string>()
+      const groups: RecommendationDto[] = res.data || []
+      for (let groupIndex = 0; groupIndex < groups.length && recommendations.length < 6; groupIndex++) {
+        const items: BaseItemDto[] = groups[groupIndex].Items || []
+        for (let itemIndex = 0; itemIndex < items.length && recommendations.length < 6; itemIndex++) {
+          const mapped = mapRecommendationItem(items[itemIndex], this.imageApi)
+          if (mapped && !seenIds.has(mapped.id)) {
+            seenIds.add(mapped.id)
+            recommendations.push(mapped)
+          }
+        }
+      }
+      this.ui.recommendationList = recommendations
+      const heroVisible = recommendations.length > 0
+      if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {
+        this.appUIState.rootNavigationHomeHeroVisible = heroVisible
+      }
+    }).catch(() => {
     })
   }
 
@@ -319,7 +351,38 @@ function mapResumeItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem {
     name,
     subtitle,
     image: getItemBackDropImageUrl(e) || resolveImageUrl(e, new ImageUrlsApi()),
+    seriesId: e.SeriesId || undefined,
     type: e.Type,
     percent: e.UserData?.PlayedPercentage ? Math.round(e.UserData.PlayedPercentage) : 0
   };
+}
+
+function mapRecommendationItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem | undefined {
+  if (!e.Id || e.Type !== BaseItemKind.Movie) {
+    return undefined
+  }
+  const metadata: string[] = ['电影']
+  if (e.ProductionYear) {
+    metadata.push(e.ProductionYear.toString())
+  }
+  if (e.CommunityRating) {
+    metadata.push(`${e.CommunityRating.toFixed(1)} 分`)
+  }
+  let image = ''
+  if (e.BackdropImageTags && e.BackdropImageTags.length > 0) {
+    image = ApiClient.Instance().basePath + imageApi.getItemImageUrlById(
+      e.Id, ImageType.Backdrop, { tag: e.BackdropImageTags[0] })
+  } else {
+    image = getItemBackDropImageUrl(e) || resolveImageUrl(e, imageApi)
+  }
+  return {
+    id: e.Id,
+    name: e.Name || '',
+    image: image,
+    mediaName: '电影',
+    type: e.Type,
+    subtitle: metadata.join(' · '),
+    description: e.Overview || '',
+    score: e.CommunityRating || undefined
+  }
 }

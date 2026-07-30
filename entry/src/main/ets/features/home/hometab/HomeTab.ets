@@ -16,10 +16,14 @@ import {
   VERTICAL_CARD_LIST_HEIGHT
 } from "../../../common/OneMoreConst"
 import { VerticalVideoCard } from "../../../component/VerticalVideoCard"
-import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { FeiniuPointLightModifier } from "../../../theme/FeiniuPointLightModifier"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
+
+const HERO_AUTOPLAY_INTERVAL: number = 6500
+const HERO_TRANSITION_DURATION: number = 450
+const HERO_PROGRESS_START_DELAY: number = 16
 
 @ComponentV2
 export struct HomeTab {
@@ -27,6 +31,42 @@ export struct HomeTab {
   @Param contentScroller: Scroller = new Scroller()
   @Local ui: HomeUIState = new HomeUIState(this.getUIContext())
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
+  @Local heroIndex: number = 0
+  @Local heroProgress: number = 0
+  private heroProgressTimer: number = -1
+
+  private cancelHeroProgressStart(): void {
+    if (this.heroProgressTimer >= 0) {
+      clearTimeout(this.heroProgressTimer)
+      this.heroProgressTimer = -1
+    }
+  }
+
+  private restartHeroProgress(index: number): void {
+    this.cancelHeroProgressStart()
+    const itemCount = this.ui.recommendationList.length
+    this.heroIndex = itemCount > 0 ? Math.max(0, Math.min(index, itemCount - 1)) : 0
+    this.heroProgress = 0
+    if (itemCount <= 1) {
+      return
+    }
+    this.heroProgressTimer = setTimeout(() => {
+      this.heroProgressTimer = -1
+      this.getUIContext().animateTo({
+        duration: HERO_AUTOPLAY_INTERVAL,
+        curve: Curve.Linear
+      }, () => {
+        this.heroProgress = 100
+      })
+    }, HERO_PROGRESS_START_DELAY)
+  }
+
+  private heroSegmentProgress(index: number): number {
+    if (index < this.heroIndex) {
+      return 100
+    }
+    return index === this.heroIndex ? this.heroProgress : 0
+  }
 
   private scrollTail(): number {
     return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.vm.appUIState.safeBottom)
@@ -37,8 +77,30 @@ export struct HomeTab {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
-  private feiniuPhoneContentTopInset(): number {
+  private phoneContentTopInset(): number {
     return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private showNativeHero(): boolean {
+    return this.useNativeSurface() &&
+      this.vm.appUIState.currentBreakpoint.includes('s') &&
+      this.ui.recommendationList.length > 0
+  }
+
+  private openHeroDetails(item: VideoItem): void {
+    const seriesId = item.seriesId || ''
+    const openSeries = item.type === BaseItemKind.Series ||
+      (item.type === BaseItemKind.Episode && seriesId.length > 0)
+    const targetId = item.type === BaseItemKind.Episode && seriesId.length > 0 ? seriesId : item.id
+    const mediaName = item.mediaName ||
+      (openSeries ? '电视节目' : item.type === BaseItemKind.Movie ? '电影' : '')
+    HMRouterMgr.to(RouterConsts.VideoDetailPage)
+      .withParam({
+        id: targetId,
+        mediaName: mediaName,
+        isTvShows: openSeries
+      })
+      .push()
   }
 
   private syncRootNavigationLiveTvAvailability(): void {
@@ -115,14 +177,20 @@ export struct HomeTab {
   private homeRefreshContent() {
     Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
       List({ scroller: this.contentScroller }) {
-        if (this.vm.appUIState.currentBreakpoint.includes('s') && !this.useNativeSurface()) {
-          ListItem().height(this.feiniuPhoneContentTopInset())
+        if (this.vm.appUIState.currentBreakpoint.includes('s') &&
+          (!this.useNativeSurface() || !this.showNativeHero())) {
+          ListItem().height(this.phoneContentTopInset())
         }
         // if (this.ui.mediaList.length > 0) {
         //   ListItem() {
         //     this.buildMediaList()
         //   }
         // }
+        if (this.showNativeHero()) {
+          ListItem() {
+            this.nativeHomeHeroCarousel()
+          }
+        }
         if (this.ui.resumeList.length > 0) {
           ListItem() {
             this.buildResumeList()
@@ -240,6 +308,198 @@ export struct HomeTab {
   }
 
   @Builder
+  private nativeHomeHeroCarousel() {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      Swiper() {
+        ForEach(this.ui.recommendationList, (item: VideoItem) => {
+          this.nativeHomeHero(item)
+        }, (item: VideoItem) => item.id)
+      }
+      .width('100%')
+      .height('100%')
+      .autoPlay(this.ui.recommendationList.length > 1)
+      .interval(HERO_AUTOPLAY_INTERVAL)
+      .duration(HERO_TRANSITION_DURATION)
+      .loop(this.ui.recommendationList.length > 1)
+      .indicator(false)
+      .onChange((index: number) => {
+        this.restartHeroProgress(index)
+      })
+
+      if (this.ui.recommendationList.length > 1) {
+        this.nativeHomeHeroProgressIndicator()
+      }
+    }
+    .width('100%')
+    .height(430)
+    .onAppear(() => {
+      this.restartHeroProgress(this.heroIndex)
+    })
+    .onDisAppear(() => {
+      this.cancelHeroProgressStart()
+    })
+  }
+
+  @Builder
+  private nativeHomeHeroProgressIndicator() {
+    Row({ space: 4 }) {
+      ForEach(this.ui.recommendationList, (item: VideoItem, index: number) => {
+        Progress({
+          value: this.heroSegmentProgress(index),
+          total: 100,
+          type: ProgressType.Linear
+        })
+          .layoutWeight(1)
+          .height(3)
+          .color($r('sys.color.icon_primary'))
+          .backgroundColor($r('sys.color.icon_secondary'))
+          .style({
+            strokeWidth: 3,
+            strokeRadius: 1.5,
+            enableSmoothEffect: false,
+            enableScanEffect: false
+          })
+      }, (item: VideoItem) => `hero-progress:${item.id}`)
+    }
+    .width('100%')
+    .height(3)
+    .padding({ left: 16, right: 16 })
+    .margin({ bottom: 14 })
+  }
+
+  @Builder
+  private nativeHeroDetailsButton(item: VideoItem) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 4 }) {
+        Text('详情')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(15)
+          .fontColor([Color.White])
+      }
+      .justifyContent(FlexAlign.Center)
+    }
+    .width(92)
+    .height(44)
+    .borderRadius(22)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .onClick(() => {
+      this.openHeroDetails(item)
+    })
+  }
+
+  @Builder
+  private nativeHomeHeroReadabilityScrim() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .linearGradient({
+        angle: 180,
+        colors: [
+          ['rgba(0,0,0,0.08)', 0.0],
+          ['rgba(0,0,0,0.16)', 0.42],
+          ['rgba(0,0,0,0.88)', 1.0]
+        ]
+      })
+  }
+
+  @Builder
+  private nativeHomeHeroCanvasTransition() {
+    Column()
+      .width('100%')
+      .height(96)
+      .linearGradient({
+        angle: 180,
+        colors: [
+          [Color.Transparent, 0.0],
+          [$r('app.color.native_canvas_background'), 1.0]
+        ]
+      })
+  }
+
+  @Builder
+  private nativeHomeHero(item: VideoItem) {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: item.image,
+          objectFit: ImageFit.Cover,
+          placeholderSrc: $r('app.media.placeholder_video'),
+          placeholderObjectFit: ImageFit.CENTER
+        }
+      })
+        .width('100%')
+        .height('100%')
+
+      this.nativeHomeHeroReadabilityScrim()
+      this.nativeHomeHeroCanvasTransition()
+
+      Column({ space: 8 }) {
+        Text(item.name)
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (item.subtitle && item.subtitle.length > 0) {
+          Text(item.subtitle)
+            .fontSize(14)
+            .fontColor('rgba(255,255,255,0.82)')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+
+        if (item.description && item.description.length > 0) {
+          Text(item.description)
+            .fontSize(13)
+            .fontColor('rgba(255,255,255,0.74)')
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+
+        Row({ space: 10 }) {
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 7 }) {
+              SymbolGlyph($r('sys.symbol.play_fill'))
+                .fontSize(18)
+                .fontColor([Color.Black])
+              Text('播放')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.Black)
+            }
+            .justifyContent(FlexAlign.Center)
+          }
+          .width(148)
+          .height(44)
+          .borderRadius(22)
+          .backgroundColor(Color.White)
+          .onClick(() => {
+            playItems([item.id], this.getUIContext().getHostContext()!)
+          })
+
+          this.nativeHeroDetailsButton(item)
+        }
+        .width('100%')
+      }
+      .width('100%')
+      .padding({
+        left: 16,
+        right: 16,
+        bottom: 64
+      })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .height(430)
+    .backgroundColor(Color.Black)
+  }
+
+  @Builder
   buildResumeList() {
     Column() {
       Text('继续观看')
@@ -261,7 +521,7 @@ export struct HomeTab {
           }.onClick(() => {
             playItems([item.id], this.getUIContext().getHostContext()!)
           })
-        })
+        }, (item: VideoItem) => item.id)
         ListItem().width(8)
       }
       .width('100%')

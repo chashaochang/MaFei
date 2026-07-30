@@ -28,6 +28,8 @@ function validDestination() {
     'beforeBack: () => boolean = () => false',
     '@Prop titleBarVisible: boolean = true',
     '@Prop backButtonVisible: boolean = true',
+    '@Prop contentExtendsUnderTitleBar: boolean = false',
+    '@Prop heroTitleChrome: boolean = false',
     '@Prop menus: Array<NavigationMenuItem> = []',
     '@Prop scrollControllers: Array<Scroller> = []',
     'private usesNativeChrome(): boolean {',
@@ -41,6 +43,12 @@ function validDestination() {
     '}',
     'private nativeSafeAreaEdges(): Array<LayoutSafeAreaEdge> {',
     '  return this.usesNativeChrome() ? [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : []',
+    '}',
+    'private nativeContentTopInset(): number {',
+    '  if (this.contentExtendsUnderTitleBar || !this.titleBarVisible || !this.usesNativeChrome()) {',
+      '    return 0',
+    '  }',
+    '  return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT',
     '}',
     'private nativeMenus(): Array<HdsNavigationMenuItemOptions> {',
     '  return this.menus.map((item: NavigationMenuItem): HdsNavigationMenuItemOptions => {',
@@ -59,38 +67,38 @@ function validDestination() {
     '      scrollEffectOpts: {',
     '        enableScrollEffect: true,',
     '        scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,',
-    '        blurEffectiveStartOffset: LengthMetrics.vp(8),',
-    '        blurEffectiveEndOffset: LengthMetrics.vp(56)',
+    '        blurEffectiveStartOffset: LengthMetrics.vp(1),',
+    '        blurEffectiveEndOffset: LengthMetrics.vp(24)',
     '      },',
     '      systemMaterialEffect: {',
     '        materialType: hdsMaterial.MaterialType.IMMERSIVE,',
-    '        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE',
+    '        materialLevel: hdsMaterial.MaterialLevel.GENTLE',
     '      },',
     '      originalStyle: {',
     '        backgroundStyle: {',
-    "          backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg_transparent'),",
-    '          maskExtraHeight: 16,',
-    '          blurRadius: 48',
+    '          backgroundColor: Color.Transparent,',
+    '          maskExtraHeight: 0,',
+    '          blurRadius: 0',
     '        },',
     '        contentStyle: {',
     '          titleStyle: {',
-    "            mainTitleColor: $r('app.color.text_primary'),",
-    "            subTitleColor: $r('app.color.text_2')",
+    "            mainTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),",
+    "            subTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_2')",
     '          },',
     '          menuStyle: {',
-    "            iconColor: $r('app.color.text_primary'),",
-    "            textColor: $r('app.color.color_main')",
+    "            iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),",
+    "            textColor: this.heroTitleChrome ? Color.White : $r('app.color.color_main')",
     '          },',
     '          backIconStyle: {',
-    "            iconColor: $r('app.color.text_primary')",
+    "            iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary')",
     '          }',
     '        }',
     '      },',
     '      scrollEffectStyle: {',
     '        backgroundStyle: {',
-    "          backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),",
-    '          maskExtraHeight: 16,',
-    '          blurRadius: 48',
+    '          backgroundColor: Color.Transparent,',
+    '          maskExtraHeight: 0,',
+    '          blurRadius: 8',
     '        },',
     '        contentStyle: {',
     '          titleStyle: {',
@@ -113,11 +121,20 @@ function validDestination() {
     '  return this.beforeBack() || this.helper.onBackPressed()',
     '}',
     'private hdsContent() {',
-    '  if (this.usesNativeChrome()) {',
-    '    this.contentBuilder()',
-    '  } else {',
-    '    this.legacyContentBuilder()',
+    '  Column() {',
+    '    Blank().height(this.nativeContentTopInset())',
+    '    Stack() {',
+    '      if (this.usesNativeChrome()) {',
+    '        this.contentBuilder()',
+    '      } else {',
+    '        this.legacyContentBuilder()',
+      '      }',
+    '    }',
+    "    .width('100%')",
+    '    .layoutWeight(1)',
     '  }',
+    "  .width('100%')",
+    "  .height('100%')",
     '}',
     'private hdsDestination() {',
     '  HdsNavDestination() {',
@@ -472,6 +489,19 @@ test('keeps the HDS destination stable when the active theme changes', () => {
   )
 })
 
+test('rejects switching the HDS content host when title underlap changes', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace(
+      '  Column() {\n',
+      '  if (this.contentExtendsUnderTitleBar) { Stack() {} }\n  Column() {\n'
+    ))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /one stable host/
+  )
+})
+
 test('requires Native chrome to be gated by both theme and API capability', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
@@ -565,7 +595,7 @@ test('requires immersive gradient blur for the Native HDS title', () => {
     .replace('HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR', 'HdsScrollEffectType.COMMON_BLUR'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep immersive gradient blur from 8vp to 56vp/
+    /reveal immersive gradient blur from 1vp to 24vp/
   )
 })
 
@@ -579,47 +609,47 @@ test('requires the HDS title component to leave component safe-area avoidance di
   )
 })
 
-test('requires the 8vp Native title blur start threshold', () => {
+test('requires the 1vp Native title blur start threshold', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('blurEffectiveStartOffset: LengthMetrics.vp(8)',
-      'blurEffectiveStartOffset: LengthMetrics.vp(0)'))
+    .replace('blurEffectiveStartOffset: LengthMetrics.vp(1)',
+      'blurEffectiveStartOffset: LengthMetrics.vp(8)'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep immersive gradient blur from 8vp to 56vp/
+    /reveal immersive gradient blur from 1vp to 24vp/
   )
 })
 
-test('requires the 56vp Native title blur end threshold', () => {
+test('requires the 24vp Native title blur end threshold', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('blurEffectiveEndOffset: LengthMetrics.vp(56)',
-      'blurEffectiveEndOffset: LengthMetrics.vp(8)'))
+    .replace('blurEffectiveEndOffset: LengthMetrics.vp(24)',
+      'blurEffectiveEndOffset: LengthMetrics.vp(56)'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep immersive gradient blur from 8vp to 56vp/
+    /reveal immersive gradient blur from 1vp to 24vp/
   )
 })
 
-test('requires the system scrolled Native HDS title background', () => {
+test('requires the scrolled Native HDS title background to stay transparent', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace("backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),",
-      "backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg_transparent'),"))
+    .replace('backgroundColor: Color.Transparent,\n          maskExtraHeight: 0,\n          blurRadius: 8',
+      "backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),\n          maskExtraHeight: 0,\n          blurRadius: 8"))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /must use transparent original and system scrolled backgrounds/
+    /must keep both title backgrounds transparent/
   )
 })
 
 test('rejects a non-transparent original Native HDS title background', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('sys.color.ohos_id_color_titlebar_bg_transparent',
-      'sys.color.ohos_id_color_titlebar_bg'))
+    .replace('backgroundColor: Color.Transparent,',
+      "backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),"))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /must use transparent original and system scrolled backgrounds/
+    /must keep both title backgrounds transparent/
   )
 })
 
@@ -631,6 +661,29 @@ test('requires legible Native HDS title chrome colors', () => {
   assert.throws(
     () => validateNativeRouteDestinations(sources),
     /title chrome must remain legible in light and dark modes/
+  )
+})
+
+test('requires Hero white chrome to be limited to the original title style', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace(
+      "mainTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary')",
+      'mainTitleColor: Color.White'
+    ))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /Hero title chrome must be opt-in only in the original style/
+  )
+})
+
+test('requires the Hero chrome opt-in to default to false', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace('@Prop heroTitleChrome: boolean = false', '@Prop heroTitleChrome: boolean = true'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /title, back, content-inset, Hero chrome, menu, and scroll controls/
   )
 })
 
@@ -656,17 +709,17 @@ test('requires the immersive material type for the Native HDS title', () => {
     .replace('hdsMaterial.MaterialType.IMMERSIVE', 'hdsMaterial.MaterialType.NONE'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep the adaptive immersive material/
+    /keep the gentle immersive material/
   )
 })
 
-test('requires the adaptive material level for the Native HDS title', () => {
+test('requires the gentle material level for the Native HDS title', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('hdsMaterial.MaterialLevel.ADAPTIVE', 'hdsMaterial.MaterialLevel.THIN'))
+    .replace('hdsMaterial.MaterialLevel.GENTLE', 'hdsMaterial.MaterialLevel.ADAPTIVE'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep the adaptive immersive material/
+    /keep the gentle immersive material/
   )
 })
 
@@ -714,13 +767,13 @@ test('rejects manual safeTop padding outside the system title', () => {
   )
 })
 
-test('rejects a manual Native title spacer', () => {
+test('rejects a second Native title spacer', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
     .replace('    this.contentBuilder()', '    Blank().height(24)\n    this.contentBuilder()'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /must not add a second title or safe-area inset/
+    /must own exactly one guarded title-bar spacer/
   )
 })
 

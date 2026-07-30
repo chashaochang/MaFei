@@ -85,9 +85,9 @@ export function validateNativeMineHeader(sources) {
   }
 
   const spacer = methodBlock(mineTab, 'topSpacerHeight')
-  if (!/if\s*\(\s*this\.destinationOwnsTitleBar\s*\)\s*\{\s*return\s+0\s*\}/.test(spacer) ||
-    !/return\s+this\.vm\.appUIState\.safeTop\s*\+\s*\(\s*this\.compactTopInset\s*\?\s*0\s*:\s*UIConstants\.ACTION_BAR_HEIGHT\s*\)/.test(spacer)) {
-    throw new Error('compact MineTab header must remove only the ActionBar placeholder')
+  if (!/if\s*\(\s*this\.destinationOwnsTitleBar\s*\|\|\s*this\.compactTopInset\s*\)\s*\{\s*return\s+0\s*\}/.test(spacer) ||
+    !/return\s+this\.vm\.appUIState\.safeTop\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(spacer)) {
+    throw new Error('system-owned MineTab headers must suppress all manual top inset')
   }
   if (count(mineTab, /Blank\s*\(\s*\)\.height\s*\(\s*this\.topSpacerHeight\s*\(\s*\)\s*\)/g) !== 1) {
     throw new Error('MineTab content must use the guarded top spacer exactly once')

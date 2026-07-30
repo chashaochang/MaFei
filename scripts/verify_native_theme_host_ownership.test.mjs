@@ -17,6 +17,7 @@ const standardPath = 'entry/src/main/ets/features/home/phone/HomePhoneStandardTa
 const nativePath = 'entry/src/main/ets/features/home/phone/HomePhoneNativeTabs.ets'
 const pointLightPath = 'entry/src/main/ets/theme/FeiniuPointLightModifier.ets'
 const homeTabPath = 'entry/src/main/ets/features/home/hometab/HomeTab.ets'
+const homeViewModelPath = 'entry/src/main/ets/features/home/hometab/HomeViewModel.ets'
 const chasingTabPath = 'entry/src/main/ets/features/home/chasing/ChasingTab.ets'
 const favoriteTabPath = 'entry/src/main/ets/features/favorite/FavoriteListPage.ets'
 const mediaTabPath = 'entry/src/main/ets/features/home/mediatab/MediaTab.ets'
@@ -39,7 +40,7 @@ function validHomeScreen() {
     "  if (this.ui.selectedDestination === HomeDestination.Favorite) { return '收藏' }",
     "  if (this.ui.selectedDestination === HomeDestination.Media) { return '媒体库' }",
     "  if (this.ui.selectedDestination === HomeDestination.Mine) { return '我的' }",
-    "  return '马飞'",
+    "  return '首页'",
     '}',
     'private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean): void {',
     '  this.appUIState.rootNavigationTitleBarVisible = visible',
@@ -55,7 +56,7 @@ function validHomeScreen() {
     '  )',
     '}',
     'aboutToDisappear() {',
-    "  this.publishRootNavigationChrome(false, '马飞', false)",
+    "  this.publishRootNavigationChrome(false, '首页', false)",
     '}',
     'private get nativeFromHomeTopInset(): number {',
     '  return 0',
@@ -195,12 +196,18 @@ function validRootPage() {
     '  HMRouterMgr.to(RouterConsts.SearchPage).push()',
     '  return []',
     '}',
+    'private rootNavigationHeroChromeVisible(): boolean {',
+    '  return this.appUIState.rootNavigationHomeActionsVisible &&',
+    '    this.appUIState.rootNavigationHomeHeroVisible',
+    '}',
     'private pageContent() {}',
     'build() {',
     '  AppRouteDestination({',
     '    title: this.appUIState.rootNavigationTitle,',
     '    titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,',
     '    backButtonVisible: false,',
+    '    contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,',
+    '    heroTitleChrome: this.rootNavigationHeroChromeVisible(),',
     '    menus: this.rootNavigationMenus(),',
     '    contentBuilder: () => { this.pageContent() },',
     '    legacyContentBuilder: () => { this.pageContent() }',
@@ -221,6 +228,21 @@ function validHomeTab() {
     '  this.syncRootNavigationLiveTvAvailability()',
     '}',
     'HomeInsetsPolicy.scrollTail(this.contentBottomInset, safeBottom)'
+  ].join('\n')
+}
+
+function validHomeViewModel() {
+  return [
+    'private getRecommendationList(): Promise<void> {',
+    '  return Promise.resolve().then(() => {',
+    '    const recommendations: VideoItem[] = []',
+    '    this.ui.recommendationList = recommendations',
+    '    const heroVisible = recommendations.length > 0',
+    '    if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {',
+    '      this.appUIState.rootNavigationHomeHeroVisible = heroVisible',
+    '    }',
+    '  })',
+    '}'
   ].join('\n')
 }
 
@@ -275,9 +297,10 @@ function validSources() {
   return new Map([
     [appStatePath, [
       '@Trace feiniuPointLightEnabled: boolean = false',
-      "@Trace rootNavigationTitle: string = '马飞'",
+      "@Trace rootNavigationTitle: string = '首页'",
       '@Trace rootNavigationTitleBarVisible: boolean = false',
       '@Trace rootNavigationHomeActionsVisible: boolean = false',
+      '@Trace rootNavigationHomeHeroVisible: boolean = false',
       '@Trace rootNavigationLiveTvAvailable: boolean = false'
     ].join('\n')],
     [indexPath, validIndex()],
@@ -299,6 +322,7 @@ function validSources() {
       'new hdsEffect.HdsEffectBuilder()'
     ].join('\n')],
     [homeTabPath, validHomeTab()],
+    [homeViewModelPath, validHomeViewModel()],
     [chasingTabPath, validFromHomeTopInsetOwner()],
     [favoriteTabPath, validFromHomeTopInsetOwner()],
     [mediaTabPath, [
@@ -321,6 +345,83 @@ function validSources() {
 
 test('accepts a full-page native HDS content host and isolated non-native shell', () => {
   assert.doesNotThrow(() => validateNativeThemeHostOwnership(validSources()))
+})
+
+test('requires a default-hidden root Home Hero presence state', () => {
+  const sources = validSources()
+  sources.set(appStatePath, sources.get(appStatePath)
+    .replace('@Trace rootNavigationHomeHeroVisible: boolean = false\n', ''))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /root Home Hero presence/
+  )
+})
+
+test('requires root content extension to remain stable while Hero data changes', () => {
+  const sources = validSources()
+  sources.set(rootPagePath, sources.get(rootPagePath)
+    .replace(
+      'contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible',
+      'contentExtendsUnderTitleBar: this.rootNavigationHeroChromeVisible()'
+    ))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /keep Home content extension stable/
+  )
+})
+
+test('requires Hero title chrome to share the content-extension gate', () => {
+  const sources = validSources()
+  sources.set(rootPagePath, sources.get(rootPagePath)
+    .replace(
+      'heroTitleChrome: this.rootNavigationHeroChromeVisible()',
+      'heroTitleChrome: true'
+    ))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /Hero title chrome must use the populated Home Hero gate/
+  )
+})
+
+test('requires Home Hero presence to come from the committed recommendation result', () => {
+  const sources = validSources()
+  sources.set(homeViewModelPath, sources.get(homeViewModelPath)
+    .replace(
+      'recommendations.length > 0',
+      'this.appUIState.nativeThemeAvailable'
+    ))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /committed recommendation result/
+  )
+})
+
+test('rejects a HomeTab recommendation monitor that feeds back into the route host', () => {
+  const sources = validSources()
+  sources.set(homeTabPath, sources.get(homeTabPath) + [
+    '',
+    "@Monitor('ui.recommendationList')",
+    'onRecommendationListChange(): void {',
+    '  this.syncRootNavigationHomeHeroVisibility()',
+    '}'
+  ].join('\n'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /must not feed recommendation state back/
+  )
+})
+
+test('requires redundant Home Hero visibility writes to be suppressed', () => {
+  const sources = validSources()
+  sources.set(homeViewModelPath, sources.get(homeViewModelPath)
+    .replace(
+      'if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {',
+      'if (true) {'
+    ))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /suppress redundant Hero visibility writes/
+  )
 })
 
 test('derives the default workspace root from the verifier script location', () => {
@@ -435,7 +536,7 @@ test('synchronizes root destination chrome and clears it when HomeScreen leaves'
 
   const leakedSources = validSources()
   leakedSources.set(homeScreenPath, validHomeScreen().replace(
-    "  this.publishRootNavigationChrome(false, '马飞', false)",
+    "  this.publishRootNavigationChrome(false, '首页', false)",
     '  this.updateRootNavigationTitleBar()'
   ))
   assert.throws(

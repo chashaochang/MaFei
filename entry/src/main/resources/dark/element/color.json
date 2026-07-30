@@ -5,6 +5,10 @@
       "value": "#101010"
     },
     {
+      "name": "native_canvas_background",
+      "value": "#161618"
+    },
+    {
       "name": "on_primary",
       "value": "#FFFFFF"
     },

@@ -22,7 +22,6 @@ import {
   OverlayMaterialDecision,
   OverlaySurfaceRole
 } from '../../theme/AppThemeOverlayPolicy';
-import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
   pageUrl: RouterConsts.SeasonDetailPage,
@@ -40,7 +39,8 @@ export struct SeasonDetailPage {
   }
 
   private secondarySurfaceBackground(): ResourceColor {
-    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2')
+    return this.useNativeSurface() ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_2')
   }
 
   private sheetMaterialDecision(): OverlayMaterialDecision {
@@ -75,17 +75,6 @@ export struct SeasonDetailPage {
       .width('100%')
       .height(this.ui.imageHeight - 100)
       .blur(this.ui.blur)
-  }
-
-  @Builder
-  private nativeDetailContentGroupSurface() {
-    Column()
-      .width('100%')
-      .height('100%')
-      .constraintSize({ maxWidth: 720 })
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
   }
 
   @Builder
@@ -239,9 +228,6 @@ export struct SeasonDetailPage {
             .alignContent(Alignment.Top)
 
             Stack() {
-              if (this.useNativeSurface()) {
-                this.nativeDetailContentGroupSurface()
-              }
               Column() {
                 Row({ space: 8 }) {
                 Button() {

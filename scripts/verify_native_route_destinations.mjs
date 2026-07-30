@@ -163,12 +163,20 @@ function validateSharedDestination(source) {
   for (const configurable of [
     /@Prop\s+titleBarVisible\s*:\s*boolean\s*=\s*true/,
     /@Prop\s+backButtonVisible\s*:\s*boolean\s*=\s*true/,
+    /@Prop\s+contentExtendsUnderTitleBar\s*:\s*boolean\s*=\s*false/,
+    /@Prop\s+heroTitleChrome\s*:\s*boolean\s*=\s*false/,
     /@Prop\s+menus\s*:\s*Array<NavigationMenuItem>\s*=\s*\[\s*\]/,
     /@Prop\s+scrollControllers\s*:\s*Array<Scroller>\s*=\s*\[\s*\]/
   ]) {
     if (!configurable.test(source)) {
-      throw new Error('shared destination must expose title, back, menu, and scroll controls')
+      throw new Error('shared destination must expose title, back, content-inset, Hero chrome, menu, and scroll controls')
     }
+  }
+
+  const contentTopInset = methodBlock(source, 'nativeContentTopInset')
+  if (!/if\s*\(\s*this\.contentExtendsUnderTitleBar\s*\|\|\s*!\s*this\.titleBarVisible\s*\|\|\s*!\s*this\.usesNativeChrome\s*\(\s*\)\s*\)\s*\{\s*return\s+0/.test(contentTopInset) ||
+    !/return\s+Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(contentTopInset)) {
+    throw new Error('shared destination must derive one stable guarded system-title content inset')
   }
 
   const titleOptions = methodBlock(source, 'nativeTitleBarOptions')
@@ -190,14 +198,14 @@ function validateSharedDestination(source) {
   const scrollEffect = propertyBlock(titleStyle, 'scrollEffectOpts')
   if (!/enableScrollEffect\s*:\s*true/.test(scrollEffect) ||
     !/scrollEffectType\s*:\s*HdsScrollEffectType\.IMMERSIVE_GRADIENT_BLUR/.test(scrollEffect) ||
-    !/blurEffectiveStartOffset\s*:\s*LengthMetrics\.vp\s*\(\s*8\s*\)/.test(scrollEffect) ||
-    !/blurEffectiveEndOffset\s*:\s*LengthMetrics\.vp\s*\(\s*56\s*\)/.test(scrollEffect)) {
-    throw new Error('Native HDS title must keep immersive gradient blur from 8vp to 56vp')
+    !/blurEffectiveStartOffset\s*:\s*LengthMetrics\.vp\s*\(\s*1\s*\)/.test(scrollEffect) ||
+    !/blurEffectiveEndOffset\s*:\s*LengthMetrics\.vp\s*\(\s*24\s*\)/.test(scrollEffect)) {
+    throw new Error('Native HDS title must reveal immersive gradient blur from 1vp to 24vp')
   }
   const systemMaterial = propertyBlock(titleStyle, 'systemMaterialEffect')
   if (!/materialType\s*:\s*hdsMaterial\.MaterialType\.IMMERSIVE/.test(systemMaterial) ||
-    !/materialLevel\s*:\s*hdsMaterial\.MaterialLevel\.ADAPTIVE/.test(systemMaterial)) {
-    throw new Error('Native HDS title must keep the adaptive immersive material')
+    !/materialLevel\s*:\s*hdsMaterial\.MaterialLevel\.GENTLE/.test(systemMaterial)) {
+    throw new Error('Native HDS title must keep the gentle immersive material')
   }
   const originalStyle = propertyBlock(titleStyle, 'originalStyle')
   const scrolledStyle = propertyBlock(titleStyle, 'scrollEffectStyle')
@@ -205,28 +213,44 @@ function validateSharedDestination(source) {
   const scrolledBackground = propertyBlock(scrolledStyle, 'backgroundStyle')
   if (count(titleOptions, /\bbackgroundColor\s*:/g) !== 2 ||
     count(originalBackground, /\bbackgroundColor\s*:/g) !== 1 ||
-    !/backgroundColor\s*:\s*\$r\s*\(\s*['"]sys\.color\.ohos_id_color_titlebar_bg_transparent['"]\s*\)/.test(originalBackground) ||
+    !/backgroundColor\s*:\s*Color\.Transparent/.test(originalBackground) ||
     count(scrolledBackground, /\bbackgroundColor\s*:/g) !== 1 ||
-    !/backgroundColor\s*:\s*\$r\s*\(\s*['"]sys\.color\.ohos_id_color_titlebar_bg['"]\s*\)/.test(scrolledBackground)) {
-    throw new Error('Native HDS title must use transparent original and system scrolled backgrounds')
+    !/backgroundColor\s*:\s*Color\.Transparent/.test(scrolledBackground)) {
+    throw new Error('Native HDS title must keep both title backgrounds transparent')
   }
-  for (const background of [originalBackground, scrolledBackground]) {
-    if (!/maskExtraHeight\s*:\s*16/.test(background) || !/blurRadius\s*:\s*48/.test(background)) {
-      throw new Error('Native HDS title must preserve its gradient blur mask geometry')
-    }
+  if (!/maskExtraHeight\s*:\s*0/.test(originalBackground) ||
+    !/blurRadius\s*:\s*0/.test(originalBackground) ||
+    !/maskExtraHeight\s*:\s*0/.test(scrolledBackground) ||
+    !/blurRadius\s*:\s*8/.test(scrolledBackground)) {
+    throw new Error('Native HDS title must keep zero initial blur and 8vp scrolled blur')
   }
-  for (const style of [originalStyle, scrolledStyle]) {
-    const contentStyle = propertyBlock(style, 'contentStyle')
-    const titleContentStyle = propertyBlock(contentStyle, 'titleStyle')
-    const menuContentStyle = propertyBlock(contentStyle, 'menuStyle')
-    const backIconStyle = propertyBlock(contentStyle, 'backIconStyle')
-    if (!/mainTitleColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(titleContentStyle) ||
-      !/subTitleColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_2['"]\s*\)/.test(titleContentStyle) ||
-      !/iconColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(menuContentStyle) ||
-      !/textColor\s*:\s*\$r\s*\(\s*['"]app\.color\.color_main['"]\s*\)/.test(menuContentStyle) ||
-      !/iconColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(backIconStyle)) {
-      throw new Error('Native HDS title chrome must remain legible in light and dark modes')
-    }
+  const originalContentStyle = propertyBlock(originalStyle, 'contentStyle')
+  const originalTitleStyle = propertyBlock(originalContentStyle, 'titleStyle')
+  const originalMenuStyle = propertyBlock(originalContentStyle, 'menuStyle')
+  const originalBackIconStyle = propertyBlock(originalContentStyle, 'backIconStyle')
+  if (!/mainTitleColor\s*:\s*this\.heroTitleChrome\s*\?\s*Color\.White\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(
+    originalTitleStyle) ||
+    !/subTitleColor\s*:\s*this\.heroTitleChrome\s*\?\s*Color\.White\s*:\s*\$r\s*\(\s*['"]app\.color\.text_2['"]\s*\)/.test(
+      originalTitleStyle) ||
+    !/iconColor\s*:\s*this\.heroTitleChrome\s*\?\s*Color\.White\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(
+      originalMenuStyle) ||
+    !/textColor\s*:\s*this\.heroTitleChrome\s*\?\s*Color\.White\s*:\s*\$r\s*\(\s*['"]app\.color\.color_main['"]\s*\)/.test(
+      originalMenuStyle) ||
+    !/iconColor\s*:\s*this\.heroTitleChrome\s*\?\s*Color\.White\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(
+      originalBackIconStyle)) {
+    throw new Error('Native HDS Hero title chrome must be opt-in only in the original style')
+  }
+
+  const scrolledContentStyle = propertyBlock(scrolledStyle, 'contentStyle')
+  const scrolledTitleStyle = propertyBlock(scrolledContentStyle, 'titleStyle')
+  const scrolledMenuStyle = propertyBlock(scrolledContentStyle, 'menuStyle')
+  const scrolledBackIconStyle = propertyBlock(scrolledContentStyle, 'backIconStyle')
+  if (!/mainTitleColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(scrolledTitleStyle) ||
+    !/subTitleColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_2['"]\s*\)/.test(scrolledTitleStyle) ||
+    !/iconColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(scrolledMenuStyle) ||
+    !/textColor\s*:\s*\$r\s*\(\s*['"]app\.color\.color_main['"]\s*\)/.test(scrolledMenuStyle) ||
+    !/iconColor\s*:\s*\$r\s*\(\s*['"]app\.color\.text_primary['"]\s*\)/.test(scrolledBackIconStyle)) {
+    throw new Error('Native HDS title chrome must remain legible in light and dark modes')
   }
   if (!/\bbeforeBack\s*:\s*\(\s*\)\s*=>\s*boolean\s*=\s*\(\s*\)\s*=>\s*false\b/.test(source)) {
     throw new Error('shared destination must keep its custom back hook optional')
@@ -237,6 +261,12 @@ function validateSharedDestination(source) {
   }
 
   const hdsContent = methodBlock(source, 'hdsContent')
+  if (/\bcontentExtendsUnderTitleBar\b/.test(hdsContent) ||
+    count(hdsContent, /\bBlank\s*\(/g) !== 1 ||
+    count(hdsContent, /Blank\s*\(\s*\)\s*\.height\s*\(\s*this\.nativeContentTopInset\s*\(\s*\)\s*\)/g) !== 1 ||
+    count(hdsContent, /\.layoutWeight\s*\(\s*1\s*\)/g) !== 1) {
+    throw new Error('shared HDS content must own exactly one guarded title-bar spacer inside one stable host')
+  }
   const branches = contentBranches(hdsContent)
   if (count(branches.native, /\bthis\.contentBuilder\s*\(\s*\)/g) !== 1 ||
     /\bthis\.legacyContentBuilder\s*\(|\b(?:NavDestination|HdsNavDestination|Navigation|HdsNavigation)\s*\(/.test(branches.native)) {
@@ -377,7 +407,7 @@ function validateSharedDestination(source) {
   }
 
   if (count(source, /\.safeAreaPadding\s*\(/g) !== 0 ||
-    /\bnativeDestinationTopInset\b|\.layoutWeight\s*\(|\bBlank\s*\(|\.padding\s*\(\s*\{[^}]*\btop\s*:/.test(source)) {
+    /\bnativeDestinationTopInset\b|\.padding\s*\(\s*\{[^}]*\btop\s*:/.test(source)) {
     throw new Error('shared route must not pad content away from the HDS title material')
   }
   const build = methodBlock(source, 'build')

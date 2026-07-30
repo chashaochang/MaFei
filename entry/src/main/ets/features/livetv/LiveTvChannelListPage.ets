@@ -139,8 +139,8 @@ export struct LiveTvChannelListPage {
     .layoutWeight(1)
     .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
     .borderRadius({
-      topLeft: 20,
-      topRight: 20
+      topLeft: nativeSurface ? 0 : 20,
+      topRight: nativeSurface ? 0 : 20
     })
     .padding({
       left: 16,

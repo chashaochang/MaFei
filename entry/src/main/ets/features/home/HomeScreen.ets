@@ -189,7 +189,7 @@ export struct HomeScreen {
     if (this.ui.selectedDestination === HomeDestination.Mine) {
       return '我的'
     }
-    return '马飞'
+    return '首页'
   }
 
   private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean): void {
@@ -231,7 +231,7 @@ export struct HomeScreen {
   }
 
   aboutToDisappear() {
-    this.publishRootNavigationChrome(false, '马飞', false)
+    this.publishRootNavigationChrome(false, '首页', false)
     if (this.themePromptTimer >= 0) {
       clearTimeout(this.themePromptTimer)
       this.themePromptTimer = -1

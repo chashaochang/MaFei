@@ -12,6 +12,7 @@ const STANDARD_HOST = 'entry/src/main/ets/features/home/phone/HomePhoneStandardT
 const NATIVE_HOST = 'entry/src/main/ets/features/home/phone/HomePhoneNativeTabs.ets'
 const POINT_LIGHT_OWNER = 'entry/src/main/ets/theme/FeiniuPointLightModifier.ets'
 const HOME_TAB = 'entry/src/main/ets/features/home/hometab/HomeTab.ets'
+const HOME_VIEW_MODEL = 'entry/src/main/ets/features/home/hometab/HomeViewModel.ets'
 const CHASING_TAB = 'entry/src/main/ets/features/home/chasing/ChasingTab.ets'
 const FAVORITE_TAB = 'entry/src/main/ets/features/favorite/FavoriteListPage.ets'
 const MEDIA_TAB = 'entry/src/main/ets/features/home/mediatab/MediaTab.ets'
@@ -48,9 +49,11 @@ const BREAKPOINT_MONITOR =
 const ROOT_TITLE_BAR_STATE =
   /@Trace\s+rootNavigationTitleBarVisible\s*:\s*boolean\s*=\s*false/
 const ROOT_TITLE_STATE =
-  /@Trace\s+rootNavigationTitle\s*:\s*string\s*=\s*['"]马飞['"]/
+  /@Trace\s+rootNavigationTitle\s*:\s*string\s*=\s*['"]首页['"]/
 const ROOT_HOME_ACTIONS_STATE =
   /@Trace\s+rootNavigationHomeActionsVisible\s*:\s*boolean\s*=\s*false/
+const ROOT_HOME_HERO_STATE =
+  /@Trace\s+rootNavigationHomeHeroVisible\s*:\s*boolean\s*=\s*false/
 const ROOT_LIVE_TV_STATE =
   /@Trace\s+rootNavigationLiveTvAvailable\s*:\s*boolean\s*=\s*false/
 const ROOT_TITLE_BAR_INITIALIZER =
@@ -61,6 +64,8 @@ const ROOT_TITLE_STATE_UPDATE =
   /this\.appUIState\.rootNavigationTitle\s*=\s*title/
 const ROOT_HOME_ACTIONS_STATE_UPDATE =
   /this\.appUIState\.rootNavigationHomeActionsVisible\s*=\s*homeActionsVisible/
+const RECOMMENDATION_LIST_MONITOR =
+  /@Monitor\s*\(\s*['"]ui\.recommendationList['"]\s*\)/g
 const THEME_STYLE_MONITOR =
   /@Monitor\s*\(\s*['"]appUIState\.themeStyle['"]\s*\)/g
 const NATIVE_NAV_SAFE_AREA_GATE_BODY =
@@ -249,6 +254,7 @@ export function validateNativeThemeHostOwnership(sources) {
   const chasingTab = requiredSource(sources, CHASING_TAB)
   const favoriteTab = requiredSource(sources, FAVORITE_TAB)
   const homeTab = requiredSource(sources, HOME_TAB)
+  const homeViewModel = requiredSource(sources, HOME_VIEW_MODEL)
   const mediaTab = requiredSource(sources, MEDIA_TAB)
 
   for (const [path, source] of sources.entries()) {
@@ -323,6 +329,9 @@ export function validateNativeThemeHostOwnership(sources) {
   }
   if (!ROOT_HOME_ACTIONS_STATE.test(appState)) {
     throw new Error('AppUIState must keep root Home actions hidden by default')
+  }
+  if (!ROOT_HOME_HERO_STATE.test(appState)) {
+    throw new Error('AppUIState must persist a default-hidden root Home Hero presence state')
   }
   if (!ROOT_LIVE_TV_STATE.test(appState)) {
     throw new Error('AppUIState must persist root Live TV menu availability')
@@ -406,6 +415,16 @@ export function validateNativeThemeHostOwnership(sources) {
       throw new Error('IndexPage must bind the current root destination title, menus, and content')
     }
   }
+  const rootHeroChrome = methodBlock(rootPage, 'rootNavigationHeroChromeVisible')
+  if (!/contentExtendsUnderTitleBar\s*:\s*this\.appUIState\.rootNavigationHomeActionsVisible/.test(rootBuild)) {
+    throw new Error('IndexPage must keep Home content extension stable while Hero data changes')
+  }
+  if (!/^\s*return\s+this\.appUIState\.rootNavigationHomeActionsVisible\s*&&\s*this\.appUIState\.rootNavigationHomeHeroVisible\s*;?\s*$/.test(
+    rootHeroChrome) ||
+    !/heroTitleChrome\s*:\s*this\.rootNavigationHeroChromeVisible\s*\(\s*\)/.test(rootBuild) ||
+    count(rootBuild, /this\.rootNavigationHeroChromeVisible\s*\(\s*\)/g) !== 1) {
+    throw new Error('IndexPage Hero title chrome must use the populated Home Hero gate')
+  }
   const rootMenus = methodBlock(rootPage, 'rootNavigationMenus')
   if (!/if\s*\(\s*!\s*this\.appUIState\.rootNavigationHomeActionsVisible\s*\)\s*\{[\s\S]*?return\s+menus/.test(rootMenus) ||
     !/this\.appUIState\.rootNavigationLiveTvAvailable/.test(rootMenus) ||
@@ -428,8 +447,8 @@ export function validateNativeThemeHostOwnership(sources) {
       throw new Error('HomeScreen must map every HomeDestination to its Native title')
     }
   }
-  if (!/return\s+['"]马飞['"]/.test(rootTitle)) {
-    throw new Error('HomeScreen must map Home to the MaFei Native title')
+  if (!/return\s+['"]首页['"]/.test(rootTitle)) {
+    throw new Error('HomeScreen must map Home to the Home Native title')
   }
 
   const publishRootChrome = methodBlock(homeScreen, 'publishRootNavigationChrome')
@@ -447,7 +466,7 @@ export function validateNativeThemeHostOwnership(sources) {
     throw new Error('HomeScreen must keep the Native title bar visible across tabs and limit actions to Home')
   }
   const disappear = methodBlock(homeScreen, 'aboutToDisappear')
-  if (!/this\.publishRootNavigationChrome\s*\(\s*false\s*,\s*['"]马飞['"]\s*,\s*false\s*\)/.test(disappear)) {
+  if (!/this\.publishRootNavigationChrome\s*\(\s*false\s*,\s*['"]首页['"]\s*,\s*false\s*\)/.test(disappear)) {
     throw new Error('HomeScreen must clear root destination chrome when leaving the page')
   }
   if (!NATIVE_FROM_HOME_TOP_INSET.test(homeScreen)) {
@@ -459,10 +478,26 @@ export function validateNativeThemeHostOwnership(sources) {
     /navInstance\?\.menus|nativeNavigationMenus/.test(homeTab)) {
     throw new Error('HomeTab must publish menu availability without mutating the outer Navigation')
   }
+  const homeAboutToAppear = methodBlock(homeTab, 'aboutToAppear')
   if (!/this\.syncRootNavigationLiveTvAvailability\s*\(\s*\)/.test(
     methodBlock(homeTab, 'onLiveTvAvailabilityChange')) ||
-    !/this\.syncRootNavigationLiveTvAvailability\s*\(\s*\)/.test(methodBlock(homeTab, 'aboutToAppear'))) {
+    !/this\.syncRootNavigationLiveTvAvailability\s*\(\s*\)/.test(homeAboutToAppear)) {
     throw new Error('HomeTab must keep root menu availability synchronized')
+  }
+
+  if (count(homeTab, RECOMMENDATION_LIST_MONITOR) !== 0 ||
+    /syncRootNavigationHomeHeroVisibility/.test(homeTab)) {
+    throw new Error('HomeTab must not feed recommendation state back into its own route host')
+  }
+
+  const recommendationLoad = methodBlock(homeViewModel, 'getRecommendationList')
+  if (!/this\.ui\.recommendationList\s*=\s*recommendations[\s\S]{0,200}const\s+heroVisible\s*=\s*recommendations\.length\s*>\s*0/.test(
+    recommendationLoad)) {
+    throw new Error('HomeViewModel must derive Hero visibility from the committed recommendation result')
+  }
+  if (!/if\s*\(\s*this\.appUIState\.rootNavigationHomeHeroVisible\s*!==\s*heroVisible\s*\)\s*\{\s*this\.appUIState\.rootNavigationHomeHeroVisible\s*=\s*heroVisible/.test(
+    recommendationLoad)) {
+    throw new Error('HomeViewModel must suppress redundant Hero visibility writes')
   }
 
   const breakpointHandler = breakpointMonitorBlock(homeScreen)

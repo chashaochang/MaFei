@@ -25,6 +25,7 @@ export struct AppRouteDestination {
   @Prop titleBarVisible: boolean = true
   @Prop backButtonVisible: boolean = true
   @Prop contentExtendsUnderTitleBar: boolean = false
+  @Prop heroTitleChrome: boolean = false
   @Prop menus: Array<NavigationMenuItem> = []
   @Prop scrollControllers: Array<Scroller> = []
   @BuilderParam contentBuilder: () => void = EmptyRouteContent
@@ -50,7 +51,7 @@ export struct AppRouteDestination {
   }
 
   private nativeContentTopInset(): number {
-    if (!this.titleBarVisible || !this.usesNativeChrome()) {
+    if (this.contentExtendsUnderTitleBar || !this.titleBarVisible || !this.usesNativeChrome()) {
       return 0
     }
     return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
@@ -87,38 +88,38 @@ export struct AppRouteDestination {
         scrollEffectOpts: {
           enableScrollEffect: true,
           scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
-          blurEffectiveStartOffset: LengthMetrics.vp(8),
-          blurEffectiveEndOffset: LengthMetrics.vp(56)
+          blurEffectiveStartOffset: LengthMetrics.vp(1),
+          blurEffectiveEndOffset: LengthMetrics.vp(24)
         },
         systemMaterialEffect: {
           materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+          materialLevel: hdsMaterial.MaterialLevel.GENTLE
         },
         originalStyle: {
           backgroundStyle: {
             backgroundColor: Color.Transparent,
-            maskExtraHeight: 16,
-            blurRadius: 48
+            maskExtraHeight: 0,
+            blurRadius: 0
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: $r('app.color.text_primary'),
-              subTitleColor: $r('app.color.text_2')
+              mainTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),
+              subTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_2')
             },
             menuStyle: {
-              iconColor: $r('app.color.text_primary'),
-              textColor: $r('app.color.color_main')
+              iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),
+              textColor: this.heroTitleChrome ? Color.White : $r('app.color.color_main')
             },
             backIconStyle: {
-              iconColor: $r('app.color.text_primary')
+              iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary')
             }
           }
         },
         scrollEffectStyle: {
           backgroundStyle: {
             backgroundColor: Color.Transparent,
-            maskExtraHeight: 16,
-            blurRadius: 48
+            maskExtraHeight: 0,
+            blurRadius: 8
           },
           contentStyle: {
             titleStyle: {
@@ -144,28 +145,20 @@ export struct AppRouteDestination {
 
   @Builder
   private hdsContent() {
-    if (this.contentExtendsUnderTitleBar && this.usesNativeChrome()) {
+    Column() {
+      Blank().height(this.nativeContentTopInset())
       Stack() {
-        this.contentBuilder()
-      }
-      .width('100%')
-      .height('100%')
-    } else {
-      Column() {
-        Blank().height(this.nativeContentTopInset())
-        Stack() {
-          if (this.usesNativeChrome()) {
-            this.contentBuilder()
-          } else {
-            this.legacyContentBuilder()
-          }
+        if (this.usesNativeChrome()) {
+          this.contentBuilder()
+        } else {
+          this.legacyContentBuilder()
         }
-        .width('100%')
-        .layoutWeight(1)
       }
       .width('100%')
-      .height('100%')
+      .layoutWeight(1)
     }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder

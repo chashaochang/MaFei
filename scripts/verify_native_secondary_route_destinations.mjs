@@ -176,7 +176,7 @@ function validateMine(routeSource, tabSource) {
     throw new Error('MineTab destination title ownership must remain opt-in')
   }
   const spacer = methodBlock(tabSource, 'topSpacerHeight')
-  if (!/if\s*\(\s*this\.destinationOwnsTitleBar\s*\)\s*\{\s*return\s+0\s*\}/.test(spacer)) {
+  if (!/if\s*\(\s*this\.destinationOwnsTitleBar\s*\|\|\s*this\.compactTopInset\s*\)\s*\{\s*return\s+0\s*\}/.test(spacer)) {
     throw new Error('Mine Native destination must not add a second top inset')
   }
   const tabBuild = methodBlock(tabSource, 'build')

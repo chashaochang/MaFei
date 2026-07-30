@@ -48,7 +48,8 @@ export struct VideoDetailPage {
   }
 
   private secondarySurfaceBackground(): ResourceColor {
-    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2')
+    return this.useNativeSurface() ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_2')
   }
 
   private sheetMaterialDecision(): OverlayMaterialDecision {
@@ -766,6 +767,9 @@ export struct VideoDetailPage {
   build() {
     AppRouteDestination({
       title: this.ui.showActionBar ? this.ui.title : '',
+      contentExtendsUnderTitleBar: true,
+      heroTitleChrome: true,
+      scrollControllers: [this.ui.scroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

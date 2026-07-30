@@ -24,11 +24,10 @@ function validSources() {
       '@Param compactTopInset: boolean = false',
       '@Param destinationOwnsTitleBar: boolean = false',
       'private topSpacerHeight(): number {',
-      '  if (this.destinationOwnsTitleBar) {',
+      '  if (this.destinationOwnsTitleBar || this.compactTopInset) {',
       '    return 0',
       '  }',
-      '  return this.vm.appUIState.safeTop +',
-      '    (this.compactTopInset ? 0 : UIConstants.ACTION_BAR_HEIGHT)',
+      '  return this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT',
       '}',
       'Blank().height(this.topSpacerHeight())',
       'if (!this.compactTopInset && !this.destinationOwnsTitleBar) {',
@@ -92,13 +91,13 @@ test('rejects compact spacing outside the native phone shell', () => {
   )
 })
 
-test('preserves safeTop while removing only the ActionBar placeholder', () => {
+test('suppresses all manual top inset when the root title bar owns it', () => {
   const sources = validSources()
   sources.set(mineTabPath, validSources().get(mineTabPath)
-    .replace('this.vm.appUIState.safeTop +', '0 +'))
+    .replace('this.destinationOwnsTitleBar || this.compactTopInset', 'this.destinationOwnsTitleBar'))
   assert.throws(
     () => validateNativeMineHeader(sources),
-    /remove only the ActionBar placeholder/
+    /suppress all manual top inset/
   )
 })
 

@@ -91,6 +91,11 @@ export struct IndexPage {
     emitter.off(TokenExpiredEvent)
   }
 
+  private rootNavigationHeroChromeVisible(): boolean {
+    return this.appUIState.rootNavigationHomeActionsVisible &&
+      this.appUIState.rootNavigationHomeHeroVisible
+  }
+
   private rootNavigationMenus(): Array<NavigationMenuItem> {
     let menus: Array<NavigationMenuItem> = []
     if (!this.appUIState.rootNavigationHomeActionsVisible) {
@@ -151,6 +156,8 @@ export struct IndexPage {
       title: this.appUIState.rootNavigationTitle,
       titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,
       backButtonVisible: false,
+      contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,
+      heroTitleChrome: this.rootNavigationHeroChromeVisible(),
       menus: this.rootNavigationMenus(),
       scrollControllers: [this.homeScroller],
       contentBuilder: () => {

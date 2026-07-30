@@ -9,7 +9,7 @@ import { getUIAbilityContext } from "../../../common/CommonFunc"
 import { wantConstant } from "@kit.AbilityKit"
 import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 import { ActionBar } from "../../../component/ActionBar"
-import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 
@@ -76,7 +76,8 @@ export struct MineTab {
               top: 2,
               bottom: 2
             })
-            .backgroundColor($r('app.color.primary_light_hover'))
+            .backgroundColor(this.useNativeSurface() ?
+              $r('sys.color.comp_background_tertiary') : $r('app.color.primary_light_hover'))
             .borderRadius(4)
         }
 
@@ -109,7 +110,7 @@ export struct MineTab {
     }
     .width('100%')
     .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
   }
 
   @Builder

@@ -184,8 +184,8 @@ export struct VideoListPage {
     .layoutWeight(1)
     .backgroundColor(nativeSurface ? Color.Transparent : this.pageBackground())
     .borderRadius({
-      topLeft: 20,
-      topRight: 20
+      topLeft: nativeSurface ? 0 : 20,
+      topRight: nativeSurface ? 0 : 20
     })
     .padding({
       left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,

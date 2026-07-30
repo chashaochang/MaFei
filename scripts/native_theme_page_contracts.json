@@ -21,6 +21,21 @@
       "method": "nativeLeftMenuBuilder"
     },
     {
+      "path": "entry/src/main/ets/features/home/hometab/HomeTab.ets",
+      "component": "HomeTab",
+      "method": "nativeHeroDetailsButton"
+    },
+    {
+      "path": "entry/src/main/ets/features/home/chasing/ChasingTab.ets",
+      "component": "ChasingTab",
+      "method": "nativeUnselectedFilterChip"
+    },
+    {
+      "path": "entry/src/main/ets/features/home/minetab/MineTab.ets",
+      "component": "MineTab",
+      "method": "nativeProfileHeader"
+    },
+    {
       "path": "entry/src/main/ets/features/management/ManagementUserDetailPage.ets",
       "component": "ManagementUserDetailPage",
       "method": "saveBar"
@@ -137,12 +152,6 @@
       "path": "entry/src/main/ets/features/home/hometab/HomeTab.ets",
       "component": "HomeTab",
       "method": "nativeAllMediaCount",
-      "kind": "content-group"
-    },
-    {
-      "path": "entry/src/main/ets/features/home/minetab/MineTab.ets",
-      "component": "MineTab",
-      "method": "nativeProfileHeader",
       "kind": "content-group"
     },
     {
@@ -344,12 +353,6 @@
       "kind": "content-group"
     },
     {
-      "path": "entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets",
-      "component": "SeasonDetailPage",
-      "method": "nativeDetailContentGroupSurface",
-      "kind": "content-group"
-    },
-    {
       "path": "entry/src/main/ets/features/serverdiscovery/ServerDiscoveryPage.ets",
       "component": "ServerDiscoveryPage",
       "method": "nativeDiscoveryArea",
@@ -407,12 +410,6 @@
       "path": "entry/src/main/ets/features/setting/account/AccountPage.ets",
       "component": "AccountPage",
       "method": "nativeAccountGroup",
-      "kind": "content-group"
-    },
-    {
-      "path": "entry/src/main/ets/features/videodetail/VideoDetailPage.ets",
-      "component": "VideoDetailPage",
-      "method": "nativeDetailContentGroupSurface",
       "kind": "content-group"
     },
     {
