@@ -14,7 +14,7 @@ import { AppPreference } from "../../../data/AppPreference";
 import { ApiClient } from "../../../network/ApiClient";
 import { VideoItem } from "../hometab/HomeUIState";
 import { ChasingUIState } from "./ChasingUIState";
-import { ChasePlanner } from "./ChasePlanner";
+import { ChaseFollowedSeriesItem, ChasePlanner } from "./ChasePlanner";
 
 export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
   private imageApi: ImageUrlsApi = new ImageUrlsApi()
@@ -25,15 +25,16 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
       const chasingSeriesIds = AppPreference.getInstance().getChasingSeriesIds()
       this.ui.followedCount = chasingSeriesIds.length
       if (chasingSeriesIds.length === 0) {
-        this.applyPlan([], [])
+        this.applyPlan([], [], [])
         this.ui.pageState = PageState.Content
         return
       }
-      const list = await Promise.all([
+      const lists = await Promise.all([
         this.getResumeList(chasingSeriesIds),
-        this.getNextUpList(chasingSeriesIds)
+        this.getNextUpList(chasingSeriesIds),
+        this.getFollowedSeriesList(chasingSeriesIds)
       ])
-      this.applyPlan(list[0], list[1])
+      this.applyPlan(lists[0], lists[1], lists[2])
       this.ui.pageState = PageState.Content
     } catch (e) {
       console.error(`[ChasingVM] refresh failed: ${JSON.stringify(e)}`)
@@ -93,10 +94,31 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     return items
   }
 
-  private applyPlan(continueItems: VideoItem[], nextUpItems: VideoItem[]): void {
-    this.ui.continueCount = continueItems.length
-    this.ui.nextUpCount = nextUpItems.length
-    const result = new ChasePlanner().plan(continueItems, nextUpItems)
+  private async getFollowedSeriesList(chasingSeriesIds: string[]): Promise<ChaseFollowedSeriesItem[]> {
+    const res: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+      userId: ApiClient.Instance().userId,
+      ids: chasingSeriesIds,
+      includeItemTypes: [BaseItemKind.Series],
+      fields: [ItemFields.PrimaryImageAspectRatio],
+      enableUserData: true,
+      enableImages: true,
+      imageTypeLimit: 1,
+      enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
+      enableTotalRecordCount: false
+    })
+    return (res.data?.Items || [])
+      .map((item: BaseItemDto): ChaseFollowedSeriesItem => this.mapFollowedSeriesItem(item))
+  }
+
+  private applyPlan(
+    continueItems: VideoItem[],
+    nextUpItems: VideoItem[],
+    followedSeriesItems: ChaseFollowedSeriesItem[]
+  ): void {
+    const result = new ChasePlanner().plan(continueItems, nextUpItems, followedSeriesItems)
+    this.ui.continueCount = result.sections[0].items.length
+    this.ui.nextUpCount = result.sections[1].items.length
+    this.ui.completedCount = result.sections[2].items.length
     this.ui.summary = result.summary
     this.ui.totalCount = result.totalCount
     this.ui.sections = result.sections
@@ -139,6 +161,20 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
       subtitle: `S${item.ParentIndexNumber || 0}:E${item.IndexNumber || 0} - ${item.Name || ''}`,
       type: item.Type,
       percent: 0
+    }
+  }
+
+  private mapFollowedSeriesItem(item: BaseItemDto): ChaseFollowedSeriesItem {
+    return {
+      id: item.Id || '',
+      name: item.Name || '',
+      image: this.resolveDisplayImage(item),
+      seriesId: item.Id || '',
+      subtitle: '已看完',
+      type: BaseItemKind.Series,
+      percent: 100,
+      unplayedItemCount: item.UserData?.UnplayedItemCount,
+      played: item.UserData?.Played
     }
   }
 

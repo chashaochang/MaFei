@@ -70,7 +70,13 @@ export struct ChasingTab {
     const merged: VideoItem[] = []
     this.appendUniqueItems(merged, this.getSectionItems('nextUp'))
     this.appendUniqueItems(merged, this.getSectionItems('continue'))
+    this.appendUniqueItems(merged, this.getSectionItems('completed'))
     return merged
+  }
+
+  private getRemainingNextUpItems(): VideoItem[] {
+    const items = this.getSectionItems('nextUp')
+    return items.length > 1 ? items.slice(1) : []
   }
 
   private getFilteredItems(): VideoItem[] {
@@ -81,7 +87,7 @@ export struct ChasingTab {
       return this.getSectionItems('continue')
     }
     if (this.selectedFilterIndex === 2) {
-      return []
+      return this.getSectionItems('completed')
     }
     return this.getAllItems()
   }
@@ -100,6 +106,10 @@ export struct ChasingTab {
       playItems([item.id], this.getUIContext().getHostContext()!)
       return
     }
+    this.openSeriesDetail(item)
+  }
+
+  private openSeriesDetail(item: VideoItem): void {
     HMRouterMgr.to(RouterConsts.VideoDetailPage)
       .withParam({
         id: item.seriesId || item.id,
@@ -138,18 +148,31 @@ export struct ChasingTab {
                 this.filterRow()
               }
             }
-            if (this.getSectionItems('nextUp').length > 0) {
+            if (this.ui.followedCount > 0 && this.getFilteredItems().length === 0) {
+              ListItem() {
+                this.filterEmptyState()
+              }
+            } else if (this.selectedFilterIndex === 0 && this.getSectionItems('nextUp').length > 0) {
               ListItem() {
                 this.featuredUpdate(this.getSectionItems('nextUp')[0])
               }
-            }
-            if (this.getSectionItems('continue').length > 0) {
+              if (this.getRemainingNextUpItems().length > 0) {
+                ListItem() {
+                  this.sectionList('接下来', `${this.getRemainingNextUpItems().length} 集等待播放`,
+                    this.getRemainingNextUpItems(), 'nextUp')
+                }
+              }
+            } else if (this.selectedFilterIndex === 1) {
               ListItem() {
                 this.sectionList('继续观看', `${this.getSectionItems('continue').length} 个内容可继续播放`,
                   this.getSectionItems('continue'), 'continue')
               }
-            }
-            if (this.getFilteredItems().length > 0) {
+            } else if (this.selectedFilterIndex === 2) {
+              ListItem() {
+                this.sectionList('已看完', `${this.getSectionItems('completed').length} 部剧集已看完`,
+                  this.getSectionItems('completed'), 'completed')
+              }
+            } else if (this.selectedFilterIndex === 3) {
               ListItem() {
                 this.sectionList('全部追剧', this.getFilterSubtitle(), this.getFilteredItems(), 'all')
               }
@@ -192,8 +215,8 @@ export struct ChasingTab {
             this.vm.refresh()
           })
       }
-      if (this.ui.pageState === PageState.Content && this.ui.totalCount === 0) {
-        EmptyView({ title: this.ui.followedCount > 0 ? '已关注剧集暂无待看内容' : '暂无追剧，去剧集详情页添加' })
+      if (this.ui.pageState === PageState.Content && this.ui.followedCount === 0) {
+        EmptyView({ title: '暂无追剧，去剧集详情页添加' })
       }
     }
     .width('100%')
@@ -209,9 +232,41 @@ export struct ChasingTab {
       return '只看已有播放进度'
     }
     if (this.selectedFilterIndex === 2) {
-      return '暂无新内容但仍保持关注'
+      return '只看已完整看完的剧集'
     }
     return '全部已关注剧集'
+  }
+
+  private getFilterEmptyTitle(): string {
+    if (this.selectedFilterIndex === 0) {
+      return '暂无待看的下一集'
+    }
+    if (this.selectedFilterIndex === 1) {
+      return '暂无可继续观看的内容'
+    }
+    if (this.selectedFilterIndex === 2) {
+      return '暂无已看完的剧集'
+    }
+    return '暂无可展示的追剧内容'
+  }
+
+  @Builder
+  private filterEmptyState() {
+    Column({ space: 8 }) {
+      Text(this.getFilterEmptyTitle())
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor())
+        .textAlign(TextAlign.Center)
+      Text(this.getFilterSubtitle())
+        .fontSize(13)
+        .fontColor(this.secondaryTextColor())
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .height(180)
+    .padding({ left: 32, right: 32 })
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
@@ -420,16 +475,15 @@ export struct ChasingTab {
               index: index
             })
           }.onClick(() => {
-            if (kind === 'continue' || item.type === 'Episode') {
+            if (kind === 'completed') {
+              this.openSeriesDetail(item)
+              return
+            }
+            if (kind === 'continue') {
               playItems([item.id], this.getUIContext().getHostContext()!)
               return
             }
-            HMRouterMgr.to(RouterConsts.VideoDetailPage)
-              .withParam({
-                id: item.id,
-                isTvShows: item.type === 'Series'
-              })
-              .push()
+            this.openItem(item)
           })
         })
         ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))

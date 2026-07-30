@@ -12,6 +12,11 @@ export interface ChasePlannerItem {
   time?: string
 }
 
+export interface ChaseFollowedSeriesItem extends ChasePlannerItem {
+  unplayedItemCount?: number | null
+  played?: boolean
+}
+
 export interface ChasePlannerSection {
   kind: string
   title: string
@@ -27,7 +32,11 @@ export interface ChasePlannerResult {
 }
 
 export class ChasePlanner {
-  plan(continueItems: ChasePlannerItem[], nextUpItems: ChasePlannerItem[]): ChasePlannerResult {
+  plan(
+    continueItems: ChasePlannerItem[],
+    nextUpItems: ChasePlannerItem[],
+    followedSeriesItems: ChaseFollowedSeriesItem[]
+  ): ChasePlannerResult {
     const normalizedContinue = continueItems
       .filter((item: ChasePlannerItem): boolean => item.id.trim().length > 0)
       .map((item: ChasePlannerItem): ChasePlannerItem => this.normalizeItem(item))
@@ -38,6 +47,27 @@ export class ChasePlanner {
     const normalizedNextUp = nextUpItems
       .filter((item: ChasePlannerItem): boolean => item.id.trim().length > 0 && !continueIds.has(item.id))
       .map((item: ChasePlannerItem): ChasePlannerItem => this.normalizeItem(item))
+    const activeSeriesKeys: Set<string> = new Set<string>()
+    normalizedContinue.forEach((item: ChasePlannerItem) => {
+      activeSeriesKeys.add(this.seriesKey(item))
+    })
+    normalizedNextUp.forEach((item: ChasePlannerItem) => {
+      activeSeriesKeys.add(this.seriesKey(item))
+    })
+    const completedSeriesKeys: Set<string> = new Set<string>()
+    const normalizedCompleted = followedSeriesItems
+      .filter((item: ChaseFollowedSeriesItem): boolean => {
+        const key = this.seriesKey(item)
+        if (key.length === 0 || activeSeriesKeys.has(key) || !this.isCompletedSeries(item)) {
+          return false
+        }
+        if (completedSeriesKeys.has(key)) {
+          return false
+        }
+        completedSeriesKeys.add(key)
+        return true
+      })
+      .map((item: ChaseFollowedSeriesItem): ChasePlannerItem => this.normalizeItem(item))
 
     const sections: ChasePlannerSection[] = [
       {
@@ -53,15 +83,37 @@ export class ChasePlanner {
         subtitle: normalizedNextUp.length === 0 ? '暂无接下来可播放的剧集' :
           `${normalizedNextUp.length} 集等待播放`,
         items: normalizedNextUp
+      },
+      {
+        kind: 'completed',
+        title: '已看完',
+        subtitle: normalizedCompleted.length === 0 ? '暂无已看完的剧集' :
+          `${normalizedCompleted.length} 部剧集已看完`,
+        items: normalizedCompleted
       }
     ]
 
     return {
       ok: true,
-      summary: this.buildSummary(normalizedContinue.length, normalizedNextUp.length),
-      totalCount: normalizedContinue.length + normalizedNextUp.length,
+      summary: this.buildSummary(
+        normalizedContinue.length,
+        normalizedNextUp.length,
+        normalizedCompleted.length
+      ),
+      totalCount: normalizedContinue.length + normalizedNextUp.length + normalizedCompleted.length,
       sections
     }
+  }
+
+  private seriesKey(item: ChasePlannerItem): string {
+    return (item.seriesId || item.id).trim()
+  }
+
+  private isCompletedSeries(item: ChaseFollowedSeriesItem): boolean {
+    if (item.unplayedItemCount === 0) {
+      return true
+    }
+    return (item.unplayedItemCount === undefined || item.unplayedItemCount === null) && item.played === true
   }
 
   private normalizeItem(item: ChasePlannerItem): ChasePlannerItem {
@@ -81,16 +133,17 @@ export class ChasePlanner {
     }
   }
 
-  private buildSummary(continueCount: number, nextUpCount: number): string {
-    if (continueCount > 0 && nextUpCount > 0) {
-      return `继续观看 ${continueCount} · 接下来 ${nextUpCount}`
-    }
+  private buildSummary(continueCount: number, nextUpCount: number, completedCount: number): string {
+    const parts: string[] = []
     if (continueCount > 0) {
-      return `继续观看 ${continueCount}`
+      parts.push(`继续观看 ${continueCount}`)
     }
     if (nextUpCount > 0) {
-      return `接下来 ${nextUpCount}`
+      parts.push(`接下来 ${nextUpCount}`)
     }
-    return '暂无追剧内容'
+    if (completedCount > 0) {
+      parts.push(`已看完 ${completedCount}`)
+    }
+    return parts.length > 0 ? parts.join(' · ') : '暂无追剧内容'
   }
 }

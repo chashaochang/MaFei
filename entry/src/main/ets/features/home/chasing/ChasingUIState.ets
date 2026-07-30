@@ -8,6 +8,7 @@ export class ChasingUIState extends BaseUIState {
   @Trace followedCount: number = 0
   @Trace continueCount: number = 0
   @Trace nextUpCount: number = 0
+  @Trace completedCount: number = 0
   @Trace sections: ChaseSection[] = []
   @Trace isRefreshing: boolean = false
   @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
