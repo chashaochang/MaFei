@@ -112,7 +112,7 @@ export struct IndexPage {
     }
     menus.push({
       value: '搜索',
-      icon: $r('app.media.ic_search'),
+      icon: $r('sys.symbol.magnifyingglass'),
       action: () => {
         HMRouterMgr.to(RouterConsts.SearchPage).push()
       }
@@ -158,6 +158,7 @@ export struct IndexPage {
       backButtonVisible: false,
       contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,
       heroTitleChrome: this.rootNavigationHeroChromeVisible(),
+      titleMaterialFollowsSystem: true,
       menus: this.rootNavigationMenus(),
       scrollControllers: [this.homeScroller],
       contentBuilder: () => {

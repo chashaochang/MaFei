@@ -14,7 +14,10 @@ const favoriteListPath = 'entry/src/main/ets/features/favorite/FavoriteListPage.
 const liveTvChannelListPath = 'entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets'
 const managementDashboardPath = 'entry/src/main/ets/features/management/ManagementDashboardPage.ets'
 const managementUsersPath = 'entry/src/main/ets/features/management/ManagementUsersPage.ets'
-const managementSessionDetailPath = 'entry/src/main/ets/features/management/ManagementSessionDetailPage.ets'
+const managementSessionDetailPath = 'entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets'
+const managementDevicesPath = 'entry/src/main/ets/features/management/devices/ManagementDevicesPage.ets'
+const managementDeviceDetailPath = 'entry/src/main/ets/features/management/devices/ManagementDeviceDetailPage.ets'
+const managementActivityPath = 'entry/src/main/ets/features/management/activity/ManagementActivityPage.ets'
 const managementTaskDetailPath = 'entry/src/main/ets/features/management/ManagementTaskDetailPage.ets'
 const managementUserCreatePath = 'entry/src/main/ets/features/management/ManagementUserCreatePage.ets'
 const managementUserDetailPath = 'entry/src/main/ets/features/management/ManagementUserDetailPage.ets'
@@ -30,6 +33,7 @@ function validDestination() {
     '@Prop backButtonVisible: boolean = true',
     '@Prop contentExtendsUnderTitleBar: boolean = false',
     '@Prop heroTitleChrome: boolean = false',
+    '@Prop titleMaterialFollowsSystem: boolean = true',
     '@Prop menus: Array<NavigationMenuItem> = []',
     '@Prop scrollControllers: Array<Scroller> = []',
     'private usesNativeChrome(): boolean {',
@@ -71,8 +75,10 @@ function validDestination() {
     '        blurEffectiveEndOffset: LengthMetrics.vp(24)',
     '      },',
     '      systemMaterialEffect: {',
-    '        materialType: hdsMaterial.MaterialType.IMMERSIVE,',
-    '        materialLevel: hdsMaterial.MaterialLevel.GENTLE',
+    '        materialType: this.titleMaterialFollowsSystem ?',
+    '          hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE,',
+    '        materialLevel: this.titleMaterialFollowsSystem ?',
+    '          hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE',
     '      },',
     '      originalStyle: {',
     '        backgroundStyle: {',
@@ -465,6 +471,9 @@ function validSources() {
     [managementUsersPath, validManagementRoute('ManagementUsersPage')],
     [managementSessionDetailPath, validManagementRoute('ManagementSessionDetailPage')],
     [managementTaskDetailPath, validManagementRoute('ManagementTaskDetailPage')],
+    [managementDevicesPath, validManagementRoute('ManagementDevicesPage')],
+    [managementDeviceDetailPath, validManagementRoute('ManagementDeviceDetailPage')],
+    [managementActivityPath, validManagementRoute('ManagementActivityPage')],
     [managementUserCreatePath, validManagementRoute('ManagementUserCreatePage')],
     [managementUserDetailPath, validManagementUserDetailRoute()],
     [minePath, [
@@ -683,7 +692,18 @@ test('requires the Hero chrome opt-in to default to false', () => {
     .replace('@Prop heroTitleChrome: boolean = false', '@Prop heroTitleChrome: boolean = true'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /title, back, content-inset, Hero chrome, menu, and scroll controls/
+    /title, back, content-inset, Hero chrome, material, menu, and scroll controls/
+  )
+})
+
+test('requires system-following title material to be the route default', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace('@Prop titleMaterialFollowsSystem: boolean = true',
+      '@Prop titleMaterialFollowsSystem: boolean = false'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /title, back, content-inset, Hero chrome, material, menu, and scroll controls/
   )
 })
 
@@ -703,23 +723,47 @@ test('requires a theme-resolved destination background', () => {
   )
 })
 
-test('requires the immersive material type for the Native HDS title', () => {
+test('requires secondary Native titles to follow the system material type', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('hdsMaterial.MaterialType.IMMERSIVE', 'hdsMaterial.MaterialType.NONE'))
+    .replace('hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE',
+      'hdsMaterial.MaterialType.IMMERSIVE : hdsMaterial.MaterialType.IMMERSIVE'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep the gentle immersive material/
+    /follow the system except for the explicit Home material/
   )
 })
 
-test('requires the gentle material level for the Native HDS title', () => {
+test('requires secondary Native titles to follow the system material level', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('hdsMaterial.MaterialLevel.GENTLE', 'hdsMaterial.MaterialLevel.ADAPTIVE'))
+    .replace('hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE',
+      'hdsMaterial.MaterialLevel.GENTLE : hdsMaterial.MaterialLevel.GENTLE'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep the gentle immersive material/
+    /follow the system except for the explicit Home material/
+  )
+})
+
+test('requires the explicit Home fallback to keep the current immersive material', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace('hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE',
+      'hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.ADAPTIVE'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /follow the system except for the explicit Home material/
+  )
+})
+
+test('requires the explicit Home fallback to keep the current gentle level', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace('hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE',
+      'hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.ADAPTIVE'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /follow the system except for the explicit Home material/
   )
 })
 

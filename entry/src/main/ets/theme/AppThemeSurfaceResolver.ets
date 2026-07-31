@@ -4,13 +4,19 @@ import { ThemeStyle } from '../entity/ThemeStyle'
 export enum AppThemeMaterialRole {
   ContentGroup = 'content_group',
   Floating = 'floating',
-  InteractiveFloating = 'interactive_floating'
+  InteractiveFloating = 'interactive_floating',
+  AdaptiveInteractive = 'adaptive_interactive',
+  HomeLibraryChip = 'home_library_chip',
+  HomeLibraryChipSelected = 'home_library_chip_selected'
 }
 
 export class AppThemeSurfaceResolver {
   private static contentGroup?: uiMaterial.Material
   private static floating?: uiMaterial.Material
   private static interactiveFloating?: uiMaterial.Material
+  private static adaptiveInteractive?: uiMaterial.Material
+  private static homeLibraryChip?: uiMaterial.Material
+  private static homeLibraryChipSelected?: uiMaterial.Material
   private static interactiveLightEffect: uiMaterial.LightEffectOptions = {
     color: Color.White
   }
@@ -83,6 +89,14 @@ export class AppThemeSurfaceResolver {
       }
       return AppThemeSurfaceResolver.contentGroup
     }
+    if (role === AppThemeMaterialRole.AdaptiveInteractive) {
+      if (!AppThemeSurfaceResolver.adaptiveInteractive) {
+        AppThemeSurfaceResolver.adaptiveInteractive = new uiMaterial.ImmersiveMaterial({
+          interactive: true
+        })
+      }
+      return AppThemeSurfaceResolver.adaptiveInteractive
+    }
     if (role === AppThemeMaterialRole.InteractiveFloating) {
       if (!AppThemeSurfaceResolver.interactiveFloating) {
         AppThemeSurfaceResolver.interactiveFloating = new uiMaterial.ImmersiveMaterial({
@@ -95,6 +109,22 @@ export class AppThemeSurfaceResolver {
         })
       }
       return AppThemeSurfaceResolver.interactiveFloating
+    }
+    if (role === AppThemeMaterialRole.HomeLibraryChip) {
+      if (!AppThemeSurfaceResolver.homeLibraryChip) {
+        AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({
+          interactive: true
+        })
+      }
+      return AppThemeSurfaceResolver.homeLibraryChip
+    }
+    if (role === AppThemeMaterialRole.HomeLibraryChipSelected) {
+      if (!AppThemeSurfaceResolver.homeLibraryChipSelected) {
+        AppThemeSurfaceResolver.homeLibraryChipSelected = new uiMaterial.ImmersiveMaterial({
+          interactive: true
+        })
+      }
+      return AppThemeSurfaceResolver.homeLibraryChipSelected
     }
     if (!AppThemeSurfaceResolver.floating) {
       AppThemeSurfaceResolver.floating = new uiMaterial.ImmersiveMaterial({

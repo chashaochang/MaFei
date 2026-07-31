@@ -7,6 +7,9 @@ import breakpointPolicyTest from './BreakpointPolicy.test';
 import homeShellPolicyTest from './HomeShellPolicy.test';
 import homeInsetsPolicyTest from './HomeInsetsPolicy.test';
 import homeDestinationTest from './HomeDestination.test';
+import managementSessionsTest from './ManagementSessions.test';
+import managementDevicesTest from './ManagementDevices.test';
+import managementActivityTest from './ManagementActivity.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -18,4 +21,7 @@ export default function testsuite() {
   homeShellPolicyTest();
   homeInsetsPolicyTest();
   homeDestinationTest();
+  managementSessionsTest();
+  managementDevicesTest();
+  managementActivityTest();
 }

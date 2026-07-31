@@ -1,5 +1,7 @@
-import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
+import { BaseItemKind, CollectionType } from "sdk/src/main/ets/generated-client/models"
 import { BaseUIState } from "../../../common/base/BaseUIState"
+
+export const HOME_RECENT_MEDIA_ID: string = '__home_recent__'
 
 @ObservedV2
 export class HomeUIState extends BaseUIState{
@@ -14,6 +16,11 @@ export class HomeUIState extends BaseUIState{
   //媒体库列表
   @Trace latestMediaList: MediaItem[] = []
   @Trace latestMap: Map<string, VideoItem[]> = new Map
+  @Trace selectedLatestMediaId: string = HOME_RECENT_MEDIA_ID
+  @Trace latestMediaLoading: boolean = true
+  @Trace latestMediaLoadingMore: boolean = false
+  @Trace latestMediaHasMore: boolean = true
+  @Trace latestMediaLoadFailed: boolean = false
 
   @Trace isRefreshing: boolean = false;
   @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
@@ -24,7 +31,6 @@ export class HomeUIState extends BaseUIState{
   @Trace tvCount: string = '--'
 
   @Trace hasLiveTv = false
-  @Trace allMediaBgColor = '#0000FF'
 }
 
 export interface MediaItem {
@@ -33,6 +39,7 @@ export interface MediaItem {
   id: string,
   childCount: number,
   type?: BaseItemKind,
+  collectionType?: CollectionType,
 }
 
 export interface VideoItem {

@@ -1,196 +1,217 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { validateNativeHomeVisualContracts } from './verify_native_home_visual_contracts.mjs'
 
-const SURFACE_RESOLVER = 'entry/src/main/ets/theme/AppThemeSurfaceResolver.ets'
-const HOME_TAB = 'entry/src/main/ets/features/home/hometab/HomeTab.ets'
-
-const validResolver = `
-export class AppThemeSurfaceResolver {
-  static appCanvasBackground(ready: boolean, effectiveTheme: ThemeStyle): ResourceColor {
-    if (!ready) {
-      return $r('app.color.start_window_background')
-    }
-    return effectiveTheme === ThemeStyle.Native ?
-      $r('app.color.native_canvas_background') : $r('app.color.bg_main')
-  }
-
-  static material(role: AppThemeMaterialRole): uiMaterial.Material {
-    if (role === AppThemeMaterialRole.ContentGroup) {
-      return new uiMaterial.ImmersiveMaterial({
-        materialColor: $r('sys.color.comp_background_primary')
-      })
-    }
-    return uiMaterial.Material.empty
-  }
-}
-`
-
-const validHomeTab = `
-export struct HomeTab {
-  private useNativeSurface(): boolean {
-    return true
-  }
-
-  private phoneContentTopInset(): number {
-    return 80
-  }
-
-  private homeRefreshContent() {
-    List() {
-      if (this.vm.appUIState.currentBreakpoint.includes('s') &&
-        (!this.useNativeSurface() || !this.showNativeHero())) {
-        ListItem().height(this.phoneContentTopInset())
-      }
-    }
-  }
-
-  private nativeHomeHeroProgressIndicator() {
-    Progress()
-      .color($r('sys.color.icon_primary'))
-      .backgroundColor($r('sys.color.icon_secondary'))
-  }
-
-  private nativeHomeHeroReadabilityScrim() {
-    Column()
-      .linearGradient({
-        angle: 180,
-        colors: [
-          ['rgba(0,0,0,0.08)', 0.0],
-          ['rgba(0,0,0,0.16)', 0.42],
-          ['rgba(0,0,0,0.88)', 1.0]
-        ]
-      })
-  }
-
-  private nativeHomeHeroCanvasTransition() {
-    Column()
-      .width('100%')
-      .height(96)
-      .linearGradient({
-        angle: 180,
-        colors: [
-          [Color.Transparent, 0.0],
-          [$r('app.color.native_canvas_background'), 1.0]
-        ]
-      })
-  }
-
-  private nativeHomeHero(item: VideoItem) {
-    Stack() {
-      this.nativeHomeHeroReadabilityScrim()
-      this.nativeHomeHeroCanvasTransition()
-      Column({ space: 8 }) {}
-    }
-    .height(430)
-  }
-
-  private nativeMediaCount(type: BaseItemKind): string {
-    if (type === BaseItemKind.Movie) {
-      return this.ui.movieCount
-    }
-    if (type === BaseItemKind.TvProgram) {
-      return this.ui.tvCount
-    }
-    return this.ui.totalCount
-  }
-
-  @Builder
-  private nativeMediaNavigationItem(type: BaseItemKind) {
-    Stack() {
-      Text(this.nativeMediaCount(type))
-    }
-    .width(90)
-    .height(60)
-  }
-
-  @Builder
-  private nativeAllMediaCount() {
-    Row() {
-      this.nativeMediaNavigationItem(BaseItemKind.Video)
-      this.nativeMediaNavigationItem(BaseItemKind.Movie)
-      this.nativeMediaNavigationItem(BaseItemKind.TvProgram)
-    }
-    .width(286)
-    .height(60)
-  }
-}
-`
-
-function sources(resolver = validResolver, homeTab = validHomeTab) {
-  return new Map([
-    [SURFACE_RESOLVER, resolver],
-    [HOME_TAB, homeTab]
-  ])
+const paths = {
+  resolver: 'entry/src/main/ets/theme/AppThemeSurfaceResolver.ets',
+  homeTab: 'entry/src/main/ets/features/home/hometab/HomeTab.ets',
+  latestSection: 'entry/src/main/ets/features/home/hometab/HomeLatestMediaSection.ets',
+  chipSelector: 'entry/src/main/ets/features/home/hometab/HomeLibraryChipSelector.ets',
+  homeViewModel: 'entry/src/main/ets/features/home/hometab/HomeViewModel.ets',
+  routeDestination: 'entry/src/main/ets/component/AppRouteDestination.ets',
+  appUIState: 'entry/src/main/ets/entity/AppUIState.ets',
+  events: 'entry/src/main/ets/events/Events.ets',
+  indexPage: 'entry/src/main/ets/features/splash/IndexPage.ets'
 }
 
-test('accepts the Native adaptive canvas, white card, and reactive media entry contract', () => {
+const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const current = Object.fromEntries(Object.entries(paths).map(([key, path]) => [
+  key,
+  readFileSync(resolve(workspaceRoot, path), 'utf8')
+]))
+
+function sources(overrides = {}) {
+  const values = { ...current, ...overrides }
+  return new Map(Object.entries(paths).map(([key, path]) => [path, values[key]]))
+}
+
+test('accepts the single-instance sticky home library header', () => {
   assert.doesNotThrow(() => validateNativeHomeVisualContracts(sources()))
 })
 
-test('rejects sharing the Feiniu canvas with the Native theme', () => {
-  const resolver = validResolver.replace('native_canvas_background', 'bg_main')
-  assert.throws(() => validateNativeHomeVisualContracts(sources(resolver)), /dedicated adaptive background/)
+test('rejects a second selector in AppRouteDestination', () => {
+  const routeDestination = current.routeDestination + '\nHomeLibraryChipSelector({})'
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
+    /second home library Chip selector/)
 })
 
-test('rejects a transparent Native ContentGroup tint', () => {
-  const resolver = validResolver.replace(
-    "$r('sys.color.comp_background_primary')", 'Color.Transparent')
-  assert.throws(() => validateNativeHomeVisualContracts(sources(resolver)), /primary card color/)
+test('rejects the former selection event bridge', () => {
+  const events = current.events + '\nexport const HomeLatestMediaSelectionEvent = "x"'
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ events })),
+    /duplicate-instance bridge/)
 })
 
-test('rejects passing reactive counts through the media Builder signature', () => {
-  const homeTab = validHomeTab.replace(
-    'nativeMediaNavigationItem(type: BaseItemKind)',
-    'nativeMediaNavigationItem(count: string, type: BaseItemKind)')
-  assert.throws(() => validateNativeHomeVisualContracts(sources(validResolver, homeTab)),
-    /one stable discriminator/)
+test('rejects duplicated selector state in AppUIState', () => {
+  const appUIState = current.appUIState + '\nrootNavigationHomeLibrarySelectedId: string = ""'
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ appUIState })),
+    /duplicate-instance bridge/)
 })
 
-test('rejects media navigation that stops reading one count state', () => {
-  const homeTab = validHomeTab.replace('return this.ui.movieCount', "return '--'")
-  assert.throws(() => validateNativeHomeVisualContracts(sources(validResolver, homeTab)), /movieCount/)
+test('rejects more than one selector instance in HomeTab', () => {
+  const homeTab = current.homeTab + '\nHomeLibraryChipSelector({})'
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /exactly one/)
 })
 
-test('rejects an unstable media group size', () => {
-  const homeTab = validHomeTab.replace('.width(286)', ".width('100%')")
-  assert.throws(() => validateNativeHomeVisualContracts(sources(validResolver, homeTab)), /286x60/)
+test('rejects moving the selector back into the media grid component', () => {
+  const latestSection = current.latestSection + '\nHomeLibraryChipSelector({})'
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ latestSection })),
+    /render only the selected media grid/)
 })
 
-test('rejects a Hero canvas transition that does not end in the adaptive canvas', () => {
-  const homeTab = validHomeTab.replace(
-    "$r('app.color.native_canvas_background')", "'#F1F2F4'")
-  assert.throws(
-    () => validateNativeHomeVisualContracts(sources(validResolver, homeTab)),
-    /adaptive canvas color/
-  )
+test('rejects removing the real ListItemGroup sticky header', () => {
+  const homeTab = current.homeTab.replace('ListItemGroup({ header: this.latestMediaStickyHeader })',
+    'ListItemGroup()')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /real ListItemGroup sticky header/)
 })
 
-test('rejects a Hero that omits the separate canvas transition layer', () => {
-  const homeTab = validHomeTab.replace('      this.nativeHomeHeroCanvasTransition()\n', '')
-  assert.throws(
-    () => validateNativeHomeVisualContracts(sources(validResolver, homeTab)),
-    /separate readability and canvas transition layers/
-  )
+test('rejects material or blur on the whole sticky row', () => {
+  const homeTab = current.homeTab.replace('.backgroundColor(Color.Transparent)',
+    '.backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /transparent lane|whole Chip header row/)
 })
 
-test('rejects fixed white Hero progress colors', () => {
-  const homeTab = validHomeTab
-    .replace("$r('sys.color.icon_primary')", 'Color.White')
-    .replace("$r('sys.color.icon_secondary')", "'rgba(255,255,255,0.30)'")
-  assert.throws(
-    () => validateNativeHomeVisualContracts(sources(validResolver, homeTab)),
-    /adaptive system colors/
-  )
+test('rejects removing the extra gap beside search and live menus', () => {
+  const homeTab = current.homeTab.replace('HOME_LIBRARY_HEADER_EXTRA_MENU_GAP : 0', '0 : 0')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /transparent lane/)
 })
 
-test('rejects removing the Native no-Hero list spacer from the stable content branch', () => {
-  const homeTab = validHomeTab.replace(
-    "(!this.useNativeSurface() || !this.showNativeHero())",
-    '!this.useNativeSurface()'
-  )
-  assert.throws(
-    () => validateNativeHomeVisualContracts(sources(validResolver, homeTab)),
-    /HomeTab must own the Native empty-Hero top inset/
-  )
+test('rejects reserving search width before the header sticks', () => {
+  const homeTab = current.homeTab.replace(
+    "if (!this.latestChipStripMenuReserved) {\n      return 0\n    }", '')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /reserve only the menu width/)
+})
+
+test('rejects reserving menu width later than one title-bar height', () => {
+  const homeTab = current.homeTab.replace(
+    'globalY <= UIConstants.ACTION_BAR_HEIGHT', 'globalY <= 12')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /real sticky state/)
+})
+
+test('rejects removing the sticky vertical alignment offset', () => {
+  const homeTab = current.homeTab.replace('HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0', '0 : 0')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /vertical alignment offset/)
+})
+
+test('rejects opaque white selected Chip styling', () => {
+  const chipSelector = current.chipSelector.replace('ColorMetrics.rgba(255, 255, 255, 0.82)',
+    'ColorMetrics.rgba(255, 255, 255, 1)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /translucent-white/)
+})
+
+test('rejects removing immersive material from unselected Chips', () => {
+  const chipSelector = current.chipSelector.replace('AppThemeMaterialRole.HomeLibraryChip)',
+    'AppThemeMaterialRole.HomeLibraryChipSelected)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /Every Chip/)
+})
+
+test('rejects custom tint parameters on system Chip material', () => {
+  const resolver = current.resolver.replace(
+    'AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          interactive: true',
+    "AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          interactive: true,\n          materialColor: '#FFFFFF'")
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ resolver })),
+    /default system immersive material/)
+})
+
+test('rejects close icons on home library Chips', () => {
+  const chipSelector = current.chipSelector.replace('allowClose: false', 'allowClose: true')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /Every Chip/)
+})
+
+test('rejects title-bar blur over the pinned header', () => {
+  const routeDestination = current.routeDestination.replace(
+    'enableScrollEffect: !this.appUIState.rootNavigationHomeLibraryPinned',
+    'enableScrollEffect: true')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
+    /stop blur/)
+})
+
+test('rejects disabling menu material while the header is pinned', () => {
+  const routeDestination = current.routeDestination.replace(
+    'materialType: this.titleMaterialFollowsSystem ?',
+    'materialType: this.appUIState.rootNavigationHomeLibraryPinned ? hdsMaterial.MaterialType.NONE : this.titleMaterialFollowsSystem ?')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
+    /without disabling menu material/)
+})
+
+test('rejects the bitmap search menu icon', () => {
+  const indexPage = current.indexPage.replace(
+    "icon: $r('sys.symbol.magnifyingglass')",
+    "icon: $r('app.media.ic_search')")
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ indexPage })),
+    /sharp system vector symbol/)
+})
+
+test('rejects a hard-clipped right edge beside search', () => {
+  const chipSelector = current.chipSelector.replace(
+    '.fadingEdge(this.fadeRightEdge, {',
+    '.fadingEdge(false, {')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /horizontal ChipV2 group/)
+})
+
+test('rejects a pinned header trapped below the HDS touch layer', () => {
+  const homeTab = current.homeTab
+    .replace('.zIndex(this.latestChipStripPinned ? 10 : 0)', '.zIndex(0)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /transparent lane/)
+})
+
+test('rejects keeping the HDS title-bar touch layer while pinned', () => {
+  const routeDestination = current.routeDestination.replace(
+    ' ||\n      this.appUIState.rootNavigationHomeLibraryPinned', '')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
+    /touch interception layer/)
+})
+
+test('rejects removing selected-Chip visibility scrolling', () => {
+  const chipSelector = current.chipSelector.replace('ScrollAlign.CENTER', 'ScrollAlign.START')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /visible horizontal area/)
+})
+
+test('rejects scrolling the main page when switching libraries', () => {
+  const homeTab = current.homeTab.replace('this.vm.selectLatestMedia(id)',
+    'this.vm.selectLatestMedia(id)\n    this.contentScroller.scrollToIndex(0)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /update only the grid/)
+})
+
+test('rejects removing stable grid height while switching', () => {
+  const latestSection = current.latestSection.replace(
+    '.constraintSize({ minHeight: this.contentMinHeight })', '')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ latestSection })),
+    /reserve stable height/)
+})
+
+test('rejects a horizontal poster list', () => {
+  const latestSection = current.latestSection
+    .replace('    Grid() {', '    List() {')
+    .replace('.columnsTemplate(this.gridColumns())', '.listDirection(Axis.Horizontal)')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ latestSection })),
+    /vertically expanding poster grid/)
+})
+
+test('rejects ungrouped recently-added requests', () => {
+  const homeViewModel = current.homeViewModel.replace('groupItems: true', 'groupItems: false')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeViewModel })),
+    /grouped latest-media semantics/)
+})
+
+test('rejects sharing the Feiniu canvas with Native', () => {
+  const resolver = current.resolver.replace('native_canvas_background', 'bg_main')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ resolver })),
+    /dedicated adaptive background/)
 })

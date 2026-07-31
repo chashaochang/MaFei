@@ -1,8 +1,5 @@
 import {
-  ActivityLogEntry,
   ItemCounts,
-  LogLevel,
-  SessionInfoDto,
   SystemInfo,
   TaskInfo,
   TaskState,
@@ -12,16 +9,12 @@ import { ManagementApiService } from './ManagementApiService';
 import {
   ManagementActionResult,
   ManagementActionCode,
-  ManagementActivityItem,
-  ManagementActivitySeverity,
-  ManagementDashboardSnapshot,
   ManagementErrorCode,
   ManagementMediaCounts,
   ManagementSectionKind,
   ManagementSectionResult,
   ManagementSectionStatus,
   ManagementServerOverview,
-  ManagementSessionItem,
   ManagementTaskItem,
   ManagementUserSummary
 } from './ManagementModels';
@@ -68,39 +61,6 @@ export class ManagementRepository {
     } catch (error) {
       return this.classifyError(error as Object)
     }
-  }
-
-  async loadDashboard(): Promise<ManagementDashboardSnapshot> {
-    const results: ManagementSectionResult[] = await Promise.all([
-      this.loadServerSection(),
-      this.loadCountsSection(),
-      this.loadUsersSection(),
-      this.loadSessionsSection(),
-      this.loadTasksSection(),
-      this.loadActivitiesSection()
-    ])
-    const snapshot = new ManagementDashboardSnapshot()
-    snapshot.serverResult = results[0]
-    snapshot.countsResult = results[1]
-    snapshot.usersResult = results[2]
-    snapshot.sessionsResult = results[3]
-    snapshot.tasksResult = results[4]
-    snapshot.activitiesResult = results[5]
-    return snapshot
-  }
-
-  async loadSessionsSection(): Promise<ManagementSectionResult> {
-    const result = this.createResult(ManagementSectionKind.Sessions)
-    try {
-      const sessions = await this.service.getSessions()
-      result.sessions = sessions
-        .filter((item: SessionInfoDto) => item.IsActive !== false && item.NowPlayingItem !== undefined)
-        .map((item: SessionInfoDto) => this.mapSession(item))
-      result.status = result.sessions.length > 0 ? ManagementSectionStatus.Content : ManagementSectionStatus.Empty
-    } catch (error) {
-      this.applyError(result, error)
-    }
-    return result
   }
 
   async loadTasksSection(): Promise<ManagementSectionResult> {
@@ -181,19 +141,6 @@ export class ManagementRepository {
       result.status = ManagementSectionStatus.Content
     } catch (error) {
       this.applyError(result, error)
-    }
-    return result
-  }
-
-  async loadActivitiesSection(): Promise<ManagementSectionResult> {
-    const result = this.createResult(ManagementSectionKind.Activities)
-    try {
-      const response = await this.service.getActivityLog()
-      result.activities = (response.Items || []).slice(0, 6)
-        .map((item: ActivityLogEntry) => this.mapActivity(item))
-      result.status = result.activities.length > 0 ? ManagementSectionStatus.Content : ManagementSectionStatus.Empty
-    } catch (error) {
-      this.applyError(result, error, true)
     }
     return result
   }
@@ -290,31 +237,6 @@ export class ManagementRepository {
     return summary
   }
 
-  private mapSession(session: SessionInfoDto): ManagementSessionItem {
-    const result = new ManagementSessionItem()
-    result.id = session.Id || ''
-    result.userName = session.UserName || ''
-    result.client = session.Client || ''
-    result.deviceName = session.DeviceName || session.DeviceType || ''
-    result.deviceType = session.DeviceType || ''
-    result.applicationVersion = session.ApplicationVersion || ''
-    result.remoteEndPoint = session.RemoteEndPoint || ''
-    result.itemName = session.NowPlayingItem?.Name || ''
-    result.paused = session.PlayState?.IsPaused === true
-    result.muted = session.PlayState?.IsMuted === true
-    result.canSeek = session.PlayState?.CanSeek === true
-    result.volumeLevel = session.PlayState?.VolumeLevel ?? -1
-    result.audioStreamIndex = session.PlayState?.AudioStreamIndex ?? -1
-    result.subtitleStreamIndex = session.PlayState?.SubtitleStreamIndex ?? -1
-    result.playMethod = session.PlayState?.PlayMethod || ''
-    result.mediaSourceId = session.PlayState?.MediaSourceId || ''
-    result.supportsMediaControl = session.SupportsMediaControl === true
-    result.supportsRemoteControl = session.SupportsRemoteControl === true
-    result.positionTicks = session.PlayState?.PositionTicks || 0
-    result.lastActivityDate = session.LastActivityDate || ''
-    return result
-  }
-
   private mapTask(task: TaskInfo): ManagementTaskItem {
     const result = new ManagementTaskItem()
     result.id = task.Id || ''
@@ -338,17 +260,4 @@ export class ManagementRepository {
     return task.State === TaskState.Running || task.State === TaskState.Cancelling
   }
 
-  private mapActivity(activity: ActivityLogEntry): ManagementActivityItem {
-    const result = new ManagementActivityItem()
-    result.id = (activity.Id || 0).toString()
-    result.title = activity.Name || ''
-    result.overview = activity.ShortOverview || activity.Overview || ''
-    result.date = activity.Date || ''
-    if (activity.Severity === LogLevel.Error || activity.Severity === LogLevel.Critical) {
-      result.severity = ManagementActivitySeverity.Error
-    } else if (activity.Severity === LogLevel.Warning) {
-      result.severity = ManagementActivitySeverity.Warning
-    }
-    return result
-  }
 }

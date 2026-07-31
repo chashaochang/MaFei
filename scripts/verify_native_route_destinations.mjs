@@ -11,7 +11,10 @@ const FAVORITE_LIST = 'entry/src/main/ets/features/favorite/FavoriteListPage.ets
 const LIVE_TV_CHANNEL_LIST = 'entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets'
 const MANAGEMENT_DASHBOARD = 'entry/src/main/ets/features/management/ManagementDashboardPage.ets'
 const MANAGEMENT_USERS = 'entry/src/main/ets/features/management/ManagementUsersPage.ets'
-const MANAGEMENT_SESSION_DETAIL = 'entry/src/main/ets/features/management/ManagementSessionDetailPage.ets'
+const MANAGEMENT_SESSION_DETAIL = 'entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets'
+const MANAGEMENT_DEVICES = 'entry/src/main/ets/features/management/devices/ManagementDevicesPage.ets'
+const MANAGEMENT_DEVICE_DETAIL = 'entry/src/main/ets/features/management/devices/ManagementDeviceDetailPage.ets'
+const MANAGEMENT_ACTIVITY = 'entry/src/main/ets/features/management/activity/ManagementActivityPage.ets'
 const MANAGEMENT_TASK_DETAIL = 'entry/src/main/ets/features/management/ManagementTaskDetailPage.ets'
 const MANAGEMENT_USER_CREATE = 'entry/src/main/ets/features/management/ManagementUserCreatePage.ets'
 const MANAGEMENT_USER_DETAIL = 'entry/src/main/ets/features/management/ManagementUserDetailPage.ets'
@@ -27,6 +30,9 @@ const ROUTE_PAGES = [
   MANAGEMENT_USERS,
   MANAGEMENT_SESSION_DETAIL,
   MANAGEMENT_TASK_DETAIL,
+  MANAGEMENT_DEVICES,
+  MANAGEMENT_DEVICE_DETAIL,
+  MANAGEMENT_ACTIVITY,
   MANAGEMENT_USER_CREATE,
   MANAGEMENT_USER_DETAIL
 ]
@@ -37,7 +43,10 @@ const RESOLVER_BACKGROUND_PAGES = new Set([
   MANAGEMENT_SESSION_DETAIL,
   MANAGEMENT_TASK_DETAIL,
   MANAGEMENT_USER_CREATE,
-  MANAGEMENT_USER_DETAIL
+  MANAGEMENT_USER_DETAIL,
+  MANAGEMENT_DEVICES,
+  MANAGEMENT_DEVICE_DETAIL,
+  MANAGEMENT_ACTIVITY
 ])
 const LEGACY_ROUTE_BACKGROUNDS = new Map([
   [PLAYER_ENGINE, 'start_window_background'],
@@ -165,11 +174,12 @@ function validateSharedDestination(source) {
     /@Prop\s+backButtonVisible\s*:\s*boolean\s*=\s*true/,
     /@Prop\s+contentExtendsUnderTitleBar\s*:\s*boolean\s*=\s*false/,
     /@Prop\s+heroTitleChrome\s*:\s*boolean\s*=\s*false/,
+    /@Prop\s+titleMaterialFollowsSystem\s*:\s*boolean\s*=\s*true/,
     /@Prop\s+menus\s*:\s*Array<NavigationMenuItem>\s*=\s*\[\s*\]/,
     /@Prop\s+scrollControllers\s*:\s*Array<Scroller>\s*=\s*\[\s*\]/
   ]) {
     if (!configurable.test(source)) {
-      throw new Error('shared destination must expose title, back, content-inset, Hero chrome, menu, and scroll controls')
+      throw new Error('shared destination must expose title, back, content-inset, Hero chrome, material, menu, and scroll controls')
     }
   }
 
@@ -203,9 +213,11 @@ function validateSharedDestination(source) {
     throw new Error('Native HDS title must reveal immersive gradient blur from 1vp to 24vp')
   }
   const systemMaterial = propertyBlock(titleStyle, 'systemMaterialEffect')
-  if (!/materialType\s*:\s*hdsMaterial\.MaterialType\.IMMERSIVE/.test(systemMaterial) ||
-    !/materialLevel\s*:\s*hdsMaterial\.MaterialLevel\.GENTLE/.test(systemMaterial)) {
-    throw new Error('Native HDS title must keep the gentle immersive material')
+  if (!/materialType\s*:\s*this\.titleMaterialFollowsSystem\s*\?\s*hdsMaterial\.MaterialType\.ADAPTIVE\s*:\s*hdsMaterial\.MaterialType\.IMMERSIVE/.test(
+    systemMaterial) ||
+    !/materialLevel\s*:\s*this\.titleMaterialFollowsSystem\s*\?\s*hdsMaterial\.MaterialLevel\.ADAPTIVE\s*:\s*hdsMaterial\.MaterialLevel\.GENTLE/.test(
+      systemMaterial)) {
+    throw new Error('Native HDS title must follow the system except for the explicit Home material')
   }
   const originalStyle = propertyBlock(titleStyle, 'originalStyle')
   const scrolledStyle = propertyBlock(titleStyle, 'scrollEffectStyle')

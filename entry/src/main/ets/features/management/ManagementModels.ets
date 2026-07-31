@@ -17,15 +17,7 @@ export enum ManagementSectionKind {
   Server,
   Counts,
   Users,
-  Sessions,
-  Tasks,
-  Activities
-}
-
-export enum ManagementActivitySeverity {
-  Information,
-  Warning,
-  Error
+  Tasks
 }
 
 export enum ManagementErrorCode {
@@ -70,29 +62,6 @@ export class ManagementUserSummary {
   disabled: number = 0
 }
 
-export class ManagementSessionItem {
-  id: string = ''
-  userName: string = ''
-  client: string = ''
-  deviceName: string = ''
-  deviceType: string = ''
-  applicationVersion: string = ''
-  remoteEndPoint: string = ''
-  itemName: string = ''
-  paused: boolean = false
-  muted: boolean = false
-  canSeek: boolean = false
-  volumeLevel: number = -1
-  audioStreamIndex: number = -1
-  subtitleStreamIndex: number = -1
-  playMethod: string = ''
-  mediaSourceId: string = ''
-  supportsMediaControl: boolean = false
-  supportsRemoteControl: boolean = false
-  positionTicks: number = 0
-  lastActivityDate: string = ''
-}
-
 export class ManagementTaskItem {
   id: string = ''
   key: string = ''
@@ -109,14 +78,6 @@ export class ManagementTaskItem {
   lastExecutionError: string = ''
 }
 
-export class ManagementActivityItem {
-  id: string = ''
-  title: string = ''
-  overview: string = ''
-  date: string = ''
-  severity: ManagementActivitySeverity = ManagementActivitySeverity.Information
-}
-
 export class ManagementSectionResult {
   kind: ManagementSectionKind = ManagementSectionKind.Server
   status: ManagementSectionStatus = ManagementSectionStatus.Loading
@@ -125,18 +86,7 @@ export class ManagementSectionResult {
   server: ManagementServerOverview | null = null
   counts: ManagementMediaCounts | null = null
   users: ManagementUserSummary | null = null
-  sessions: ManagementSessionItem[] = []
   tasks: ManagementTaskItem[] = []
-  activities: ManagementActivityItem[] = []
-}
-
-export class ManagementDashboardSnapshot {
-  serverResult: ManagementSectionResult = new ManagementSectionResult()
-  countsResult: ManagementSectionResult = new ManagementSectionResult()
-  usersResult: ManagementSectionResult = new ManagementSectionResult()
-  sessionsResult: ManagementSectionResult = new ManagementSectionResult()
-  tasksResult: ManagementSectionResult = new ManagementSectionResult()
-  activitiesResult: ManagementSectionResult = new ManagementSectionResult()
 }
 
 export class ManagementActionResult {

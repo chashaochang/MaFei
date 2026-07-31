@@ -1275,6 +1275,366 @@
     {
       "name": "management_user_day_saturday",
       "value": "星期六"
+    },
+    {
+      "name": "management_activity_all",
+      "value": "全部"
+    },
+    {
+      "name": "management_activity_days",
+      "value": "天"
+    },
+    {
+      "name": "management_activity_info",
+      "value": "详情"
+    },
+    {
+      "name": "management_activity_item",
+      "value": "查看项目"
+    },
+    {
+      "name": "management_activity_item_unavailable",
+      "value": "项目已不存在或暂不支持"
+    },
+    {
+      "name": "management_activity_item_failed",
+      "value": "无法打开项目，请稍后重试"
+    },
+    {
+      "name": "management_activity_next",
+      "value": "下一页"
+    },
+    {
+      "name": "management_activity_previous",
+      "value": "上一页"
+    },
+    {
+      "name": "management_activity_search",
+      "value": "搜索名称、详情或类型"
+    },
+    {
+      "name": "management_activity_sort_date",
+      "value": "按时间"
+    },
+    {
+      "name": "management_activity_sort_name",
+      "value": "按名称"
+    },
+    {
+      "name": "management_activity_sort_severity",
+      "value": "按级别"
+    },
+    {
+      "name": "management_activity_sort_user",
+      "value": "按用户"
+    },
+    {
+      "name": "management_activity_system",
+      "value": "系统"
+    },
+    {
+      "name": "management_activity_time_all",
+      "value": "全部时间"
+    },
+    {
+      "name": "management_activity_title",
+      "value": "活动"
+    },
+    {
+      "name": "management_activity_user",
+      "value": "用户"
+    },
+    {
+      "name": "management_activity_view_all",
+      "value": "查看全部"
+    },
+    {
+      "name": "management_device_action_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "management_device_action_in_progress",
+      "value": "设备操作进行中"
+    },
+    {
+      "name": "management_device_all_time",
+      "value": "全部时间"
+    },
+    {
+      "name": "management_device_app",
+      "value": "应用"
+    },
+    {
+      "name": "management_device_authorized",
+      "value": "已授权"
+    },
+    {
+      "name": "management_device_batch_failed",
+      "value": "失败"
+    },
+    {
+      "name": "management_device_batch_success",
+      "value": "成功"
+    },
+    {
+      "name": "management_device_current",
+      "value": "当前设备"
+    },
+    {
+      "name": "management_device_current_protected",
+      "value": "当前设备不能撤销授权"
+    },
+    {
+      "name": "management_device_current_will_remain",
+      "value": "当前设备将保留授权"
+    },
+    {
+      "name": "management_device_custom_name",
+      "value": "自定义名称"
+    },
+    {
+      "name": "management_device_days",
+      "value": "天"
+    },
+    {
+      "name": "management_device_detail_title",
+      "value": "设备详情"
+    },
+    {
+      "name": "management_device_empty",
+      "value": "暂无已授权设备"
+    },
+    {
+      "name": "management_device_last_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_device_last_user",
+      "value": "最近用户"
+    },
+    {
+      "name": "management_device_load_failed",
+      "value": "设备加载失败"
+    },
+    {
+      "name": "management_device_next",
+      "value": "下一页"
+    },
+    {
+      "name": "management_device_previous",
+      "value": "上一页"
+    },
+    {
+      "name": "management_device_rename_failed",
+      "value": "设备改名失败"
+    },
+    {
+      "name": "management_device_rename_success",
+      "value": "设备名称已更新"
+    },
+    {
+      "name": "management_device_revoke",
+      "value": "撤销授权"
+    },
+    {
+      "name": "management_device_revoke_failed",
+      "value": "撤销授权失败"
+    },
+    {
+      "name": "management_device_revoke_others",
+      "value": "撤销其他设备"
+    },
+    {
+      "name": "management_device_revoke_others_count",
+      "value": "将撤销设备数量："
+    },
+    {
+      "name": "management_device_revoke_success",
+      "value": "已撤销设备授权"
+    },
+    {
+      "name": "management_device_revoke_title",
+      "value": "撤销设备授权？"
+    },
+    {
+      "name": "management_device_save_name",
+      "value": "保存名称"
+    },
+    {
+      "name": "management_device_search",
+      "value": "搜索设备、应用或用户"
+    },
+    {
+      "name": "management_device_sort_app",
+      "value": "按应用"
+    },
+    {
+      "name": "management_device_sort_name",
+      "value": "按名称"
+    },
+    {
+      "name": "management_device_sort_recent",
+      "value": "按最近活动"
+    },
+    {
+      "name": "management_device_sort_user",
+      "value": "按用户"
+    },
+    {
+      "name": "management_device_unsupported",
+      "value": "当前服务器不支持设备管理"
+    },
+    {
+      "name": "management_devices_title",
+      "value": "设备"
+    },
+    {
+      "name": "management_session_action_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "management_session_action_in_progress",
+      "value": "会话操作进行中"
+    },
+    {
+      "name": "management_session_action_sent",
+      "value": "命令已发送"
+    },
+    {
+      "name": "management_session_audio_codec",
+      "value": "音频编码"
+    },
+    {
+      "name": "management_session_bitrate",
+      "value": "码率"
+    },
+    {
+      "name": "management_session_container",
+      "value": "容器"
+    },
+    {
+      "name": "management_session_control_unavailable",
+      "value": "当前会话不支持此操作"
+    },
+    {
+      "name": "management_session_ended",
+      "value": "会话已结束"
+    },
+    {
+      "name": "management_session_framerate",
+      "value": "帧率"
+    },
+    {
+      "name": "management_session_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "management_session_message_empty",
+      "value": "消息不能为空"
+    },
+    {
+      "name": "management_session_message_placeholder",
+      "value": "输入要发送到此设备的消息"
+    },
+    {
+      "name": "management_session_message_sent",
+      "value": "消息已发送"
+    },
+    {
+      "name": "management_session_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "management_session_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "management_session_playback_direct_play",
+      "value": "直接播放"
+    },
+    {
+      "name": "management_session_playback_direct_stream",
+      "value": "直接串流"
+    },
+    {
+      "name": "management_session_playback_method",
+      "value": "播放方式"
+    },
+    {
+      "name": "management_session_playback_remux",
+      "value": "封装转换"
+    },
+    {
+      "name": "management_session_playback_transcode",
+      "value": "转码"
+    },
+    {
+      "name": "management_session_playing",
+      "value": "播放中"
+    },
+    {
+      "name": "management_session_resolution",
+      "value": "分辨率"
+    },
+    {
+      "name": "management_session_resume",
+      "value": "继续"
+    },
+    {
+      "name": "management_session_send",
+      "value": "发送"
+    },
+    {
+      "name": "management_session_stop",
+      "value": "停止"
+    },
+    {
+      "name": "management_session_stop_title",
+      "value": "停止此会话？"
+    },
+    {
+      "name": "management_session_transcode_reasons",
+      "value": "转码原因"
+    },
+    {
+      "name": "management_session_transcoding",
+      "value": "转码中"
+    },
+    {
+      "name": "management_session_video_codec",
+      "value": "视频编码"
+    },
+    {
+      "name": "management_session_return_dashboard",
+      "value": "返回管理控制台"
+    },
+    {
+      "name": "management_session_transcode_reason_container",
+      "value": "容器格式或码率不受支持"
+    },
+    {
+      "name": "management_session_transcode_reason_video",
+      "value": "视频格式超出设备播放能力"
+    },
+    {
+      "name": "management_session_transcode_reason_audio",
+      "value": "音频格式超出设备播放能力"
+    },
+    {
+      "name": "management_session_transcode_reason_subtitle",
+      "value": "字幕格式不受支持"
+    },
+    {
+      "name": "management_session_transcode_reason_stream_info",
+      "value": "媒体流信息不完整"
+    },
+    {
+      "name": "management_session_transcode_reason_direct_play",
+      "value": "直接播放失败"
+    },
+    {
+      "name": "management_session_transcode_reason_other",
+      "value": "服务器需要转换此媒体"
     }
   ]
 }

@@ -419,6 +419,9 @@ export function validateNativeThemeHostOwnership(sources) {
   if (!/contentExtendsUnderTitleBar\s*:\s*this\.appUIState\.rootNavigationHomeActionsVisible/.test(rootBuild)) {
     throw new Error('IndexPage must keep Home content extension stable while Hero data changes')
   }
+  if (!/titleMaterialFollowsSystem\s*:\s*!\s*this\.appUIState\.rootNavigationHomeActionsVisible/.test(rootBuild)) {
+    throw new Error('IndexPage must preserve only the approved Home-tab title material')
+  }
   if (!/^\s*return\s+this\.appUIState\.rootNavigationHomeActionsVisible\s*&&\s*this\.appUIState\.rootNavigationHomeHeroVisible\s*;?\s*$/.test(
     rootHeroChrome) ||
     !/heroTitleChrome\s*:\s*this\.rootNavigationHeroChromeVisible\s*\(\s*\)/.test(rootBuild) ||

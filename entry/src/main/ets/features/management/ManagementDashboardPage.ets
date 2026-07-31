@@ -14,15 +14,19 @@ import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { ManagementActivityDashboardSection } from './activity/ManagementActivityDashboardSection';
+import { ManagementActivityDashboardUIState } from './activity/ManagementActivityUIState';
+import { ManagementActivityDashboardViewModel } from './activity/ManagementActivityViewModel';
+import { ManagementSessionsDashboardSection } from './sessions/ManagementSessionsDashboardSection';
+import { ManagementSessionItem } from './sessions/ManagementSessionModels';
+import { ManagementSessionsUIState } from './sessions/ManagementSessionsUIState';
+import { ManagementSessionsViewModel } from './sessions/ManagementSessionsViewModel';
 import { ManagementDashboardSkeleton } from './ManagementDashboardSkeleton';
 import { ManagementDashboardUIState } from './ManagementDashboardUIState';
 import { ManagementDashboardViewModel } from './ManagementDashboardViewModel';
 import {
-  ManagementActivityItem,
-  ManagementActivitySeverity,
   ManagementPermissionState,
   ManagementSectionStatus,
-  ManagementSessionItem,
   ManagementTaskItem
 } from './ManagementModels';
 
@@ -34,6 +38,10 @@ import {
 export struct ManagementDashboardPage {
   @Local ui: ManagementDashboardUIState = new ManagementDashboardUIState(this.getUIContext())
   @Local vm: ManagementDashboardViewModel = new ManagementDashboardViewModel(this.ui)
+  @Local sessionsUI: ManagementSessionsUIState = new ManagementSessionsUIState(this.getUIContext())
+  @Local sessionsVM: ManagementSessionsViewModel = new ManagementSessionsViewModel(this.sessionsUI)
+  @Local activityUI: ManagementActivityDashboardUIState = new ManagementActivityDashboardUIState(this.getUIContext())
+  @Local activityVM: ManagementActivityDashboardViewModel = new ManagementActivityDashboardViewModel(this.activityUI)
   private permissionPopTimer: number = -1
   private lifecycleOwner: IHMLifecycleOwner | null = null
 
@@ -42,9 +50,14 @@ export struct ManagementDashboardPage {
   }
   private pageShownCallback = (_context: HMLifecycleContext): void => {
     this.vm.init()
+    this.sessionsVM.initList()
+    this.activityVM.init()
   }
+
   private pageHiddenCallback = (_context: HMLifecycleContext): void => {
     this.vm.stopPolling()
+    this.sessionsVM.stop()
+    this.activityVM.stop()
   }
 
   aboutToAppear(): void {
@@ -54,6 +67,8 @@ export struct ManagementDashboardPage {
       this.lifecycleOwner.addObserver(HMLifecycleState.onHidden, this.pageHiddenCallback)
     } else {
       this.vm.init()
+      this.sessionsVM.initList()
+      this.activityVM.init()
     }
   }
 
@@ -63,6 +78,8 @@ export struct ManagementDashboardPage {
     this.lifecycleOwner = null
     this.clearPermissionPopTimer()
     this.vm.stopPolling()
+    this.sessionsVM.stop()
+    this.activityVM.stop()
   }
 
   @Monitor('ui.permissionState')
@@ -71,6 +88,8 @@ export struct ManagementDashboardPage {
     if (this.ui.permissionState !== ManagementPermissionState.Denied) {
       return
     }
+    this.sessionsVM.stop()
+    this.activityVM.stop()
     this.getUIContext().getPromptAction().showToast({ message: this.ui.permissionMessage })
     this.permissionPopTimer = setTimeout(() => {
       this.permissionPopTimer = -1
@@ -119,7 +138,7 @@ export struct ManagementDashboardPage {
 
   private openSessionDetail(session: ManagementSessionItem): void {
     HMRouterMgr.to(RouterConsts.ManagementSessionDetailPage)
-      .withParam({ session: session })
+      .withParam({ sessionId: session.id })
       .push()
   }
 
@@ -133,19 +152,20 @@ export struct ManagementDashboardPage {
     HMRouterMgr.to(RouterConsts.ManagementUsersPage).push()
   }
 
-  private formatDate(value: string): string {
-    if (!value) {
-      return ''
-    }
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) {
-      return value
-    }
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const day = date.getDate().toString().padStart(2, '0')
-    const hour = date.getHours().toString().padStart(2, '0')
-    const minute = date.getMinutes().toString().padStart(2, '0')
-    return `${month}-${day} ${hour}:${minute}`
+  private openDevices(): void {
+    HMRouterMgr.to(RouterConsts.ManagementDevicesPage).push()
+  }
+
+  private openActivity(): void {
+    HMRouterMgr.to(RouterConsts.ManagementActivityPage).push()
+  }
+
+  private async refreshAll(): Promise<void> {
+    await Promise.all([
+      this.vm.refresh(),
+      this.sessionsVM.refresh(),
+      this.activityVM.refresh()
+    ])
   }
 
   @Builder
@@ -523,59 +543,14 @@ export struct ManagementDashboardPage {
 
   @Builder
   sessionsCardBody() {
-    Column({ space: 8 }) {
-      this.sectionHeader($r('app.string.management_active_sessions'),
-        $r('app.string.management_refresh'), () => this.vm.refreshSessions())
-      if ((this.ui.sessionsStatus === ManagementSectionStatus.Content ||
-        this.ui.sessionsStatus === ManagementSectionStatus.Error) && this.ui.sessions.length > 0) {
-        ForEach(this.ui.sessions.slice(0, 3), (session: ManagementSessionItem) => {
-          Row({ space: 10 }) {
-            SymbolGlyph(session.paused ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
-              .fontSize(18)
-              .fontColor([$r('app.color.color_main')])
-              .width(36)
-              .height(36)
-              .backgroundColor(AppThemeSurfaceResolver.iconWellBackground(this.vm.appUIState.themeStyle))
-              .borderRadius(12)
-            Column({ space: 3 }) {
-              Text(session.itemName)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.primaryTextColor())
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(`${session.userName} · ${session.deviceName || session.client}`)
-                .fontSize(12)
-                .fontColor(this.secondaryTextColor())
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-            SymbolGlyph($r('sys.symbol.chevron_right'))
-              .fontSize(12)
-              .fontColor([this.secondaryTextColor()])
-          }
-          .width('100%')
-          .padding({ top: 7, bottom: 7 })
-          .borderRadius(10)
-          .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
-          .onClick(() => this.openSessionDetail(session))
-        }, (session: ManagementSessionItem) => session.id)
-        if (this.ui.sessionsStatus === ManagementSectionStatus.Error) {
-          this.inlineState($r('app.string.management_stale_result'), true, () => this.vm.refreshSessions())
-        }
-      } else if (this.ui.sessionsStatus === ManagementSectionStatus.Empty) {
-        this.inlineState($r('app.string.management_sessions_empty'))
-      } else if (this.ui.sessionsStatus === ManagementSectionStatus.Loading) {
-        this.inlineLoadingState()
-      } else if (this.ui.sessionsStatus === ManagementSectionStatus.Error) {
-        this.inlineState($r('app.string.management_sessions_failed'), true, () => this.vm.refreshSessions())
-      } else if (this.ui.sessionsStatus === ManagementSectionStatus.Unsupported) {
-        this.inlineState($r('app.string.management_section_unsupported'))
-      }
-    }
-    .width('100%')
+    ManagementSessionsDashboardSection({
+      ui: this.sessionsUI,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onRefresh: () => this.sessionsVM.refresh(),
+      onOpenDevices: () => this.openDevices(),
+      onOpenSession: (session: ManagementSessionItem) => this.openSessionDetail(session)
+    })
   }
 
   @Builder
@@ -612,58 +587,14 @@ export struct ManagementDashboardPage {
 
   @Builder
   activityCardBody() {
-    Column({ space: 8 }) {
-      this.sectionHeader($r('app.string.management_recent_activity'))
-      if ((this.ui.activitiesStatus === ManagementSectionStatus.Content ||
-        this.ui.activitiesStatus === ManagementSectionStatus.Error) && this.ui.activities.length > 0) {
-        ForEach(this.ui.activities, (activity: ManagementActivityItem) => {
-          Row({ space: 10 }) {
-            Row()
-              .width(8)
-              .height(8)
-              .borderRadius(4)
-              .backgroundColor(activity.severity === ManagementActivitySeverity.Error ?
-                $r('app.color.main_red_color') :
-                (activity.severity === ManagementActivitySeverity.Warning ? $r('app.color.status_warning') :
-                  $r('app.color.color_main')))
-            Column({ space: 3 }) {
-              Text(activity.title)
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.primaryTextColor())
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              if (activity.overview) {
-                Text(activity.overview)
-                  .fontSize(12)
-                  .fontColor(this.secondaryTextColor())
-                  .maxLines(2)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-            Text(this.formatDate(activity.date))
-              .fontSize(11)
-              .fontColor(this.secondaryTextColor())
-          }
-          .width('100%')
-          .padding({ top: 7, bottom: 7 })
-        }, (activity: ManagementActivityItem) => activity.id)
-        if (this.ui.activitiesStatus === ManagementSectionStatus.Error) {
-          this.inlineState($r('app.string.management_stale_result'), true, () => this.vm.refreshActivities())
-        }
-      } else if (this.ui.activitiesStatus === ManagementSectionStatus.Empty) {
-        this.inlineState($r('app.string.management_activity_empty'))
-      } else if (this.ui.activitiesStatus === ManagementSectionStatus.Loading) {
-        this.inlineLoadingState()
-      } else if (this.ui.activitiesStatus === ManagementSectionStatus.Error) {
-        this.inlineState($r('app.string.management_activity_failed'), true, () => this.vm.refreshActivities())
-      } else if (this.ui.activitiesStatus === ManagementSectionStatus.Unsupported) {
-        this.inlineState($r('app.string.management_section_unsupported'))
-      }
-    }
-    .width('100%')
+    ManagementActivityDashboardSection({
+      ui: this.activityUI,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onRefresh: () => this.activityVM.refresh(),
+      onRetry: () => this.activityVM.init(),
+      onOpenAll: () => this.openActivity()
+    })
   }
 
   @Builder
@@ -844,7 +775,7 @@ export struct ManagementDashboardPage {
         .onOffsetChange((offset: number) => {
           this.ui.refreshOffset = offset
         })
-        .onRefreshing(() => this.vm.refresh())
+        .onRefreshing(() => this.refreshAll())
         .padding({
           left: 16,
           right: 16,

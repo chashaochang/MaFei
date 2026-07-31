@@ -208,6 +208,7 @@ function validRootPage() {
     '    backButtonVisible: false,',
     '    contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,',
     '    heroTitleChrome: this.rootNavigationHeroChromeVisible(),',
+    '    titleMaterialFollowsSystem: !this.appUIState.rootNavigationHomeActionsVisible,',
     '    menus: this.rootNavigationMenus(),',
     '    contentBuilder: () => { this.pageContent() },',
     '    legacyContentBuilder: () => { this.pageContent() }',
@@ -367,6 +368,17 @@ test('requires root content extension to remain stable while Hero data changes',
   assert.throws(
     () => validateNativeThemeHostOwnership(sources),
     /keep Home content extension stable/
+  )
+})
+
+test('keeps only the approved Home-tab title material while every other destination follows the system', () => {
+  const sources = validSources()
+  sources.set(rootPagePath, sources.get(rootPagePath)
+    .replace('titleMaterialFollowsSystem: !this.appUIState.rootNavigationHomeActionsVisible',
+      'titleMaterialFollowsSystem: false'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(sources),
+    /preserve only the approved Home-tab title material/
   )
 })
 

@@ -1,7 +1,6 @@
 import { AxiosInstance, AxiosResponse } from '@ohos/axios';
-import { ActivityLogEntryQueryResult, ItemCounts, SessionInfoDto, SystemInfo, TaskInfo, UserDto } from 'sdk/src/main/ets/generated-client/models';
+import { ItemCounts, SystemInfo, TaskInfo, UserDto } from 'sdk/src/main/ets/generated-client/models';
 import { getLibraryApi } from 'sdk/src/main/ets/utils/api/library-api';
-import { getSessionApi } from 'sdk/src/main/ets/utils/api/session-api';
 import { getSystemApi } from 'sdk/src/main/ets/utils/api/system-api';
 import { getUserApi } from 'sdk/src/main/ets/utils/api/user-api';
 import { ApiClient } from '../../network/ApiClient';
@@ -31,12 +30,6 @@ export class ManagementApiService {
     return response.data || []
   }
 
-  async getSessions(): Promise<SessionInfoDto[]> {
-    const response: AxiosResponse<SessionInfoDto[]> = await getSessionApi(ApiClient.Instance())
-      .getSessions({ activeWithinSeconds: 900 })
-    return response.data || []
-  }
-
   async getScheduledTasks(): Promise<TaskInfo[]> {
     const api = ApiClient.Instance()
     const axiosInstance = api.axiosInstance as AxiosInstance
@@ -45,17 +38,6 @@ export class ManagementApiService {
       { headers: { Authorization: api.authorizationHeader } }
     )
     return response.data || []
-  }
-
-  async getActivityLog(): Promise<ActivityLogEntryQueryResult> {
-    const api = ApiClient.Instance()
-    const axiosInstance = api.axiosInstance as AxiosInstance
-    const response: AxiosResponse<ActivityLogEntryQueryResult> =
-      await axiosInstance.get<ActivityLogEntryQueryResult>(
-        `${api.basePath}/System/ActivityLog/Entries?StartIndex=0&Limit=12`,
-        { headers: { Authorization: api.authorizationHeader } }
-      )
-    return response.data
   }
 
   async startScheduledTask(taskId: string): Promise<void> {

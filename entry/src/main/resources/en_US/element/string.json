@@ -1275,6 +1275,366 @@
     {
       "name": "management_user_day_saturday",
       "value": "Saturday"
+    },
+    {
+      "name": "management_activity_all",
+      "value": "All"
+    },
+    {
+      "name": "management_activity_days",
+      "value": "days"
+    },
+    {
+      "name": "management_activity_info",
+      "value": "Details"
+    },
+    {
+      "name": "management_activity_item",
+      "value": "View item"
+    },
+    {
+      "name": "management_activity_item_unavailable",
+      "value": "This item is unavailable"
+    },
+    {
+      "name": "management_activity_item_failed",
+      "value": "Could not open this item. Try again later"
+    },
+    {
+      "name": "management_activity_next",
+      "value": "Next"
+    },
+    {
+      "name": "management_activity_previous",
+      "value": "Previous"
+    },
+    {
+      "name": "management_activity_search",
+      "value": "Search name, details, or type"
+    },
+    {
+      "name": "management_activity_sort_date",
+      "value": "By date"
+    },
+    {
+      "name": "management_activity_sort_name",
+      "value": "By name"
+    },
+    {
+      "name": "management_activity_sort_severity",
+      "value": "By severity"
+    },
+    {
+      "name": "management_activity_sort_user",
+      "value": "By user"
+    },
+    {
+      "name": "management_activity_system",
+      "value": "System"
+    },
+    {
+      "name": "management_activity_time_all",
+      "value": "All time"
+    },
+    {
+      "name": "management_activity_title",
+      "value": "Activity"
+    },
+    {
+      "name": "management_activity_user",
+      "value": "User"
+    },
+    {
+      "name": "management_activity_view_all",
+      "value": "View all"
+    },
+    {
+      "name": "management_device_action_failed",
+      "value": "Action failed"
+    },
+    {
+      "name": "management_device_action_in_progress",
+      "value": "A device action is in progress"
+    },
+    {
+      "name": "management_device_all_time",
+      "value": "All time"
+    },
+    {
+      "name": "management_device_app",
+      "value": "Application"
+    },
+    {
+      "name": "management_device_authorized",
+      "value": "Authorized"
+    },
+    {
+      "name": "management_device_batch_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "management_device_batch_success",
+      "value": "Succeeded"
+    },
+    {
+      "name": "management_device_current",
+      "value": "Current device"
+    },
+    {
+      "name": "management_device_current_protected",
+      "value": "The current device cannot be revoked"
+    },
+    {
+      "name": "management_device_current_will_remain",
+      "value": "The current device will remain authorized"
+    },
+    {
+      "name": "management_device_custom_name",
+      "value": "Custom name"
+    },
+    {
+      "name": "management_device_days",
+      "value": "days"
+    },
+    {
+      "name": "management_device_detail_title",
+      "value": "Device details"
+    },
+    {
+      "name": "management_device_empty",
+      "value": "No authorized devices"
+    },
+    {
+      "name": "management_device_last_activity",
+      "value": "Last activity"
+    },
+    {
+      "name": "management_device_last_user",
+      "value": "Last user"
+    },
+    {
+      "name": "management_device_load_failed",
+      "value": "Failed to load devices"
+    },
+    {
+      "name": "management_device_next",
+      "value": "Next"
+    },
+    {
+      "name": "management_device_previous",
+      "value": "Previous"
+    },
+    {
+      "name": "management_device_rename_failed",
+      "value": "Failed to rename device"
+    },
+    {
+      "name": "management_device_rename_success",
+      "value": "Device name updated"
+    },
+    {
+      "name": "management_device_revoke",
+      "value": "Revoke"
+    },
+    {
+      "name": "management_device_revoke_failed",
+      "value": "Failed to revoke device"
+    },
+    {
+      "name": "management_device_revoke_others",
+      "value": "Revoke other devices"
+    },
+    {
+      "name": "management_device_revoke_others_count",
+      "value": "Devices to revoke:"
+    },
+    {
+      "name": "management_device_revoke_success",
+      "value": "Device authorization revoked"
+    },
+    {
+      "name": "management_device_revoke_title",
+      "value": "Revoke this device?"
+    },
+    {
+      "name": "management_device_save_name",
+      "value": "Save name"
+    },
+    {
+      "name": "management_device_search",
+      "value": "Search devices, apps, or users"
+    },
+    {
+      "name": "management_device_sort_app",
+      "value": "By app"
+    },
+    {
+      "name": "management_device_sort_name",
+      "value": "By name"
+    },
+    {
+      "name": "management_device_sort_recent",
+      "value": "By recent activity"
+    },
+    {
+      "name": "management_device_sort_user",
+      "value": "By user"
+    },
+    {
+      "name": "management_device_unsupported",
+      "value": "Device management is not supported"
+    },
+    {
+      "name": "management_devices_title",
+      "value": "Devices"
+    },
+    {
+      "name": "management_session_action_failed",
+      "value": "Action failed"
+    },
+    {
+      "name": "management_session_action_in_progress",
+      "value": "A session action is in progress"
+    },
+    {
+      "name": "management_session_action_sent",
+      "value": "Command sent"
+    },
+    {
+      "name": "management_session_audio_codec",
+      "value": "Audio codec"
+    },
+    {
+      "name": "management_session_bitrate",
+      "value": "Bitrate"
+    },
+    {
+      "name": "management_session_container",
+      "value": "Container"
+    },
+    {
+      "name": "management_session_control_unavailable",
+      "value": "This session cannot be controlled"
+    },
+    {
+      "name": "management_session_ended",
+      "value": "Session ended"
+    },
+    {
+      "name": "management_session_framerate",
+      "value": "Frame rate"
+    },
+    {
+      "name": "management_session_idle",
+      "value": "Idle"
+    },
+    {
+      "name": "management_session_message_empty",
+      "value": "Message cannot be empty"
+    },
+    {
+      "name": "management_session_message_placeholder",
+      "value": "Message this device"
+    },
+    {
+      "name": "management_session_message_sent",
+      "value": "Message sent"
+    },
+    {
+      "name": "management_session_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "management_session_paused",
+      "value": "Paused"
+    },
+    {
+      "name": "management_session_playback_direct_play",
+      "value": "Direct play"
+    },
+    {
+      "name": "management_session_playback_direct_stream",
+      "value": "Direct stream"
+    },
+    {
+      "name": "management_session_playback_method",
+      "value": "Playback method"
+    },
+    {
+      "name": "management_session_playback_remux",
+      "value": "Remux"
+    },
+    {
+      "name": "management_session_playback_transcode",
+      "value": "Transcode"
+    },
+    {
+      "name": "management_session_playing",
+      "value": "Playing"
+    },
+    {
+      "name": "management_session_resolution",
+      "value": "Resolution"
+    },
+    {
+      "name": "management_session_resume",
+      "value": "Resume"
+    },
+    {
+      "name": "management_session_send",
+      "value": "Send"
+    },
+    {
+      "name": "management_session_stop",
+      "value": "Stop"
+    },
+    {
+      "name": "management_session_stop_title",
+      "value": "Stop this session?"
+    },
+    {
+      "name": "management_session_transcode_reasons",
+      "value": "Transcode reasons"
+    },
+    {
+      "name": "management_session_transcoding",
+      "value": "Transcoding"
+    },
+    {
+      "name": "management_session_video_codec",
+      "value": "Video codec"
+    },
+    {
+      "name": "management_session_return_dashboard",
+      "value": "Return to management dashboard"
+    },
+    {
+      "name": "management_session_transcode_reason_container",
+      "value": "The container format or bitrate is not supported"
+    },
+    {
+      "name": "management_session_transcode_reason_video",
+      "value": "The video format is not supported by this device"
+    },
+    {
+      "name": "management_session_transcode_reason_audio",
+      "value": "The audio format is not supported by this device"
+    },
+    {
+      "name": "management_session_transcode_reason_subtitle",
+      "value": "The subtitle format is not supported"
+    },
+    {
+      "name": "management_session_transcode_reason_stream_info",
+      "value": "Media stream information is incomplete"
+    },
+    {
+      "name": "management_session_transcode_reason_direct_play",
+      "value": "Direct play failed"
+    },
+    {
+      "name": "management_session_transcode_reason_other",
+      "value": "The server must convert this media"
     }
   ]
 }

@@ -11,25 +11,40 @@ import {
 } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
 import {
-  generateBeautifulDeepBlueColor,
   getItemBackDropImageUrl,
-  getTypeByCollectionType,
-  resolveLatestImageUrl
+  getItemImageUrl,
+  getTypeByCollectionType
 } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
-import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState";
+import {
+  HOME_RECENT_MEDIA_ID,
+  HomeUIState,
+  MediaItem,
+  VideoItem
+} from "./HomeUIState";
+
+const HOME_FEED_PAGE_SIZE: number = 30
+
+interface HomeFeedPage {
+  items: BaseItemDto[]
+  nextStartIndex: number
+  hasMore: boolean
+}
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
+  private latestStartIndexes: Map<string, number> = new Map<string, number>()
+  private latestHasMoreById: Map<string, boolean> = new Map<string, boolean>()
+  private latestLoadedIds: Set<string> = new Set<string>()
+  private latestLoadingIds: Set<string> = new Set<string>()
+  private latestRequestVersion: number = 0
 
   init(): void {
-    this.ui.allMediaBgColor = generateBeautifulDeepBlueColor()
     // 使用 Promise 链，init 立即返回不阻塞
     this.getMediaList().then(() => {
       return Promise.all([
         this.getRecommendationList(),
         this.getResumeList(),
-        this.getCounts(),
         this.getNextUpList(),
         this.getLatestList()
       ])
@@ -70,33 +85,6 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     })
   }
 
-  private getCounts(): Promise<void> {
-    return getItemsApi(ApiClient.Instance()).getItems({
-      userId: ApiClient.Instance().userId,
-      includeItemTypes: ['Movie', 'Series'],
-      recursive: true,
-      limit: 1
-    }).then((totalRes: AxiosResponse<BaseItemDtoQueryResult>): Promise<AxiosResponse<BaseItemDtoQueryResult>> => {
-      this.ui.totalCount = totalRes.data.TotalRecordCount + '' || '--'
-      return getItemsApi(ApiClient.Instance()).getItems({
-        userId: ApiClient.Instance().userId,
-        includeItemTypes: ['Movie'],
-        recursive: true,
-        limit: 1
-      })
-    }).then((movieRes: AxiosResponse<BaseItemDtoQueryResult>): Promise<AxiosResponse<BaseItemDtoQueryResult>> => {
-      this.ui.movieCount = movieRes.data.TotalRecordCount + '' || '--'
-      return getItemsApi(ApiClient.Instance()).getItems({
-        userId: ApiClient.Instance().userId,
-        includeItemTypes: ['Series'],
-        recursive: true,
-        limit: 1
-      })
-    }).then((tvRes: AxiosResponse<BaseItemDtoQueryResult>): void => {
-      this.ui.tvCount = tvRes.data.TotalRecordCount + '' || '--'
-    })
-  }
-
   private getMediaList(): Promise<void> {
     this.ui.hasLiveTv = false
     return new Promise((resolve, reject) => {
@@ -116,7 +104,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
                 }),
                 id: e.Id || '',
                 childCount: e.ChildCount || 0,
-                type: getTypeByCollectionType(e.CollectionType)
+                type: getTypeByCollectionType(e.CollectionType),
+                collectionType: e.CollectionType
               }
             }) || []
             resolve()
@@ -209,63 +198,230 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
   }
 
   private getLatestList(): Promise<void> {
-    const mediaList = this.ui.mediaList
-    const itemsToFetch =
-      mediaList.filter(item => (item.type != BaseItemKind.LiveTvChannel && item.type != BaseItemKind.Audio))
-    if (itemsToFetch.length === 0) {
+    this.latestRequestVersion += 1
+    const requestVersion = this.latestRequestVersion
+    this.latestStartIndexes = new Map<string, number>()
+    this.latestHasMoreById = new Map<string, boolean>()
+    this.latestLoadedIds = new Set<string>()
+    this.latestLoadingIds = new Set<string>()
+    this.ui.latestMap = new Map<string, VideoItem[]>()
+    this.ui.latestMediaList = this.ui.mediaList.filter((item: MediaItem): boolean => {
+      return isSupportedHomeVideoLibrary(item)
+    })
+    this.ui.selectedLatestMediaId = resolveLatestMediaSelection(
+      this.ui.selectedLatestMediaId, this.ui.latestMediaList)
+    this.ui.latestMediaLoading = true
+    this.ui.latestMediaLoadingMore = false
+    this.ui.latestMediaHasMore = true
+    this.ui.latestMediaLoadFailed = false
+    return this.loadLatestMediaPage(this.ui.selectedLatestMediaId, true, requestVersion)
+  }
+
+  selectLatestMedia(id: string): void {
+    if (id !== HOME_RECENT_MEDIA_ID &&
+      !this.ui.latestMediaList.some((item: MediaItem): boolean => item.id === id)) {
+      return
+    }
+    this.ui.selectedLatestMediaId = id
+    this.ui.latestMediaLoadFailed = false
+    this.ui.latestMediaHasMore = this.latestHasMoreById.get(id) ?? true
+    if (this.latestLoadedIds.has(id)) {
+      this.ui.latestMediaLoading = false
+      this.ui.latestMediaLoadingMore = false
+      return
+    }
+    this.ui.latestMediaLoading = true
+    this.ui.latestMediaLoadingMore = false
+    this.loadLatestMediaPage(id, true, this.latestRequestVersion)
+  }
+
+  loadMoreLatestMedia(): void {
+    const id = this.ui.selectedLatestMediaId
+    if (this.ui.latestMediaLoading || this.ui.latestMediaLoadingMore ||
+      !(this.latestHasMoreById.get(id) ?? true)) {
+      return
+    }
+    this.loadLatestMediaPage(id, false, this.latestRequestVersion)
+  }
+
+  retryLatestMedia(): void {
+    const id = this.ui.selectedLatestMediaId
+    const currentItems = this.ui.latestMap.get(id) || []
+    this.ui.latestMediaLoadFailed = false
+    this.loadLatestMediaPage(id, currentItems.length === 0, this.latestRequestVersion)
+  }
+
+  private loadLatestMediaPage(id: string, replace: boolean, requestVersion: number): Promise<void> {
+    if (this.latestLoadingIds.has(id)) {
       return Promise.resolve()
     }
-
-    const promises = itemsToFetch.map((item): Promise<[MediaItem, VideoItem[]]> => {
-      return getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-        limit: 16,
-        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+    this.latestLoadingIds.add(id)
+    const startIndex = replace ? 0 : (this.latestStartIndexes.get(id) || 0)
+    if (this.ui.selectedLatestMediaId === id) {
+      this.ui.latestMediaLoading = replace
+      this.ui.latestMediaLoadingMore = !replace
+      this.ui.latestMediaLoadFailed = false
+    }
+    const media = id === HOME_RECENT_MEDIA_ID ? undefined :
+      this.ui.latestMediaList.find((item: MediaItem): boolean => item.id === id)
+    let request: Promise<HomeFeedPage>
+    if (id === HOME_RECENT_MEDIA_ID) {
+      request = getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
+        userId: ApiClient.Instance().userId,
+        limit: HOME_FEED_PAGE_SIZE,
+        groupItems: true,
+        includeItemTypes: homeFeedItemTypes(),
+        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
+          ItemFields.MediaSourceCount],
         imageTypeLimit: 1,
-        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
-        parentId: item.id,
-        userId: ApiClient.Instance().userId
-      }).then((res: AxiosResponse<BaseItemDto[]>) => {
-        if (res.data && res.data.length > 0) {
-          const list = res.data.map<VideoItem>((e) => {
-            let subtitle = ''
-            if (e.Type === BaseItemKind.Series) {
-              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-            } else if (e.Type === BaseItemKind.Episode) {
-              subtitle = `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`
-            } else {
-              subtitle = e.ProductionYear ? e.ProductionYear.toString() : ''
-            }
-            return {
-              id: e.Id || '',
-              name: e.SeriesName || e.Name || '',
-              image: ApiClient.Instance().basePath + resolveLatestImageUrl(e, this.imageApi),
-              subtitle: subtitle,
-              mediaName: item.name,
-              type: e.Type
-            }
-          })
-          return [item, list] as [MediaItem, VideoItem[]]
+        enableImages: true,
+        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
+      }).then((res: AxiosResponse<BaseItemDto[]>): HomeFeedPage => {
+        const items = res.data || []
+        return {
+          items: items,
+          nextStartIndex: items.length,
+          hasMore: false
         }
-        return [item, []] as [MediaItem, VideoItem[]]
-      }).catch(() => {
-        return [item, []] as [MediaItem, VideoItem[]]
       })
-    })
-
-    return Promise.all(promises).then((results) => {
-      const latestMap = new Map<string, VideoItem[]>()
-      const latestMediaList: MediaItem[] = []
-      for (let i = 0; i < results.length; i++) {
-        const item = results[i][0]
-        const list = results[i][1]
-        if (list.length > 0) {
-          latestMap.set(item.id, list)
-          latestMediaList.push(item)
+    } else {
+      request = getItemsApi(ApiClient.Instance()).getItems({
+        userId: ApiClient.Instance().userId,
+        parentId: media?.id,
+        recursive: true,
+        startIndex: startIndex,
+        limit: HOME_FEED_PAGE_SIZE,
+        includeItemTypes: homeFeedItemTypes(media),
+        sortBy: ['DateCreated'],
+        sortOrder: ['Descending'],
+        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
+          ItemFields.MediaSourceCount],
+        imageTypeLimit: 1,
+        enableImages: true,
+        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
+      }).then((res: AxiosResponse<BaseItemDtoQueryResult>): HomeFeedPage => {
+        const items: BaseItemDto[] = res.data?.Items || []
+        const nextStartIndex = startIndex + items.length
+        const totalCount = res.data?.TotalRecordCount || 0
+        return {
+          items: items,
+          nextStartIndex: nextStartIndex,
+          hasMore: items.length === HOME_FEED_PAGE_SIZE &&
+            (totalCount === 0 || nextStartIndex < totalCount)
         }
+      })
+    }
+    return request.then((page: HomeFeedPage) => {
+      if (requestVersion !== this.latestRequestVersion) {
+        return
       }
-      this.ui.latestMap = latestMap
-      this.ui.latestMediaList = latestMediaList
+      const rawItems: BaseItemDto[] = page.items
+      const mappedItems: VideoItem[] = rawItems.map((item: BaseItemDto): VideoItem => {
+        return mapHomeFeedItem(item, media?.name || '最近添加', this.imageApi)
+      })
+      const previousItems: VideoItem[] = replace ? [] : (this.ui.latestMap.get(id) || [])
+      const mergedItems: VideoItem[] = appendUniqueVideoItems(previousItems, mappedItems)
+      const nextMap = new Map<string, VideoItem[]>(this.ui.latestMap)
+      nextMap.set(id, mergedItems)
+      this.ui.latestMap = nextMap
+      this.latestStartIndexes.set(id, page.nextStartIndex)
+      this.latestHasMoreById.set(id, page.hasMore)
+      this.latestLoadedIds.add(id)
+      if (this.ui.selectedLatestMediaId === id) {
+        this.ui.latestMediaLoading = false
+        this.ui.latestMediaLoadingMore = false
+        this.ui.latestMediaHasMore = page.hasMore
+        this.ui.latestMediaLoadFailed = false
+      }
+    }).catch(() => {
+      if (requestVersion === this.latestRequestVersion && this.ui.selectedLatestMediaId === id) {
+        this.ui.latestMediaLoading = false
+        this.ui.latestMediaLoadingMore = false
+        this.ui.latestMediaLoadFailed = true
+      }
+    }).finally(() => {
+      this.latestLoadingIds.delete(id)
     })
+  }
+}
+
+export function resolveLatestMediaSelection(currentId: string, mediaList: MediaItem[]): string {
+  if (currentId === HOME_RECENT_MEDIA_ID) {
+    return HOME_RECENT_MEDIA_ID
+  }
+  if (mediaList.some((item: MediaItem) => item.id === currentId)) {
+    return currentId
+  }
+  return HOME_RECENT_MEDIA_ID
+}
+
+export function appendUniqueVideoItems(current: VideoItem[], incoming: VideoItem[]): VideoItem[] {
+  const result: VideoItem[] = current.slice()
+  const ids: Set<string> = new Set<string>()
+  result.forEach((item: VideoItem): void => {
+    ids.add(item.id)
+  })
+  incoming.forEach((item: VideoItem): void => {
+    if (!ids.has(item.id)) {
+      ids.add(item.id)
+      result.push(item)
+    }
+  })
+  return result
+}
+
+export function isSupportedHomeVideoLibrary(item: MediaItem): boolean {
+  return item.collectionType === undefined ||
+    item.collectionType === CollectionType.Unknown ||
+    item.collectionType === CollectionType.Movies ||
+    item.collectionType === CollectionType.Tvshows ||
+    item.collectionType === CollectionType.Homevideos ||
+    item.collectionType === CollectionType.Folders
+}
+
+export function homeFeedItemTypes(media?: MediaItem): BaseItemKind[] {
+  if (!media) {
+    return [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode, BaseItemKind.Video]
+  }
+  if (media.type === BaseItemKind.Movie) {
+    return [BaseItemKind.Movie]
+  }
+  if (media.type === BaseItemKind.Series) {
+    return [BaseItemKind.Series]
+  }
+  return [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Video]
+}
+
+function mapHomeFeedItem(item: BaseItemDto, mediaName: string, imageApi: ImageUrlsApi): VideoItem {
+  let subtitle = item.ProductionYear ? item.ProductionYear.toString() : ''
+  if (item.Type === BaseItemKind.Episode) {
+    subtitle = `S${item.ParentIndexNumber || 0}:E${item.IndexNumber || 0} - ${item.Name || ''}`
+  }
+  const seriesId = item.SeriesId || ''
+  if (item.Type === BaseItemKind.Episode && seriesId.length > 0) {
+    const tag = item.SeriesPrimaryImageTag
+    return {
+      id: seriesId,
+      name: item.SeriesName || item.Name || '',
+      image: ApiClient.Instance().basePath + imageApi.getItemImageUrlById(
+        seriesId,
+        ImageType.Primary,
+        tag ? { tag: tag } : {}
+      ),
+      seriesId: seriesId,
+      subtitle: subtitle,
+      mediaName: '电视节目',
+      type: BaseItemKind.Series
+    }
+  }
+  return {
+    id: item.Id || '',
+    name: item.Name || '',
+    image: getItemImageUrl(item),
+    seriesId: item.SeriesId || undefined,
+    subtitle: subtitle,
+    mediaName: item.Type === BaseItemKind.Movie ? '电影' : mediaName,
+    type: item.Type
   }
 }
 

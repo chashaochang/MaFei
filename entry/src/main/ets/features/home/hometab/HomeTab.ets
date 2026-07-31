@@ -1,29 +1,41 @@
 import { HMRouterMgr } from "@hadss/hmrouter"
 import { ImageKnifeComponent } from "@ohos/imageknifepro"
-import { HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
+import { HOME_RECENT_MEDIA_ID, HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
 import { HomeViewModel } from "./HomeViewModel"
 import { UIConstants } from "../../../common/UIConstants"
 import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
-import { generateBeautifulDeepBlueColor, playItems } from "../../../common/CommonFunc"
+import { playItems } from "../../../common/CommonFunc"
 import { HomeRefreshEvent } from "../../../events/Events"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { ToastUtil } from "../../../utils/ToastUtil"
 import { RouterConsts } from "../../../common/RouterConsts"
 import { HorizontalVideoCard } from "../../../component/HorizontalVideoCard"
 import {
-  HORIZONTAL_CARD_LIST_HEIGHT,
-  HORIZONTAL_CARD_SPACE,
-  VERTICAL_CARD_LIST_HEIGHT
+  HORIZONTAL_CARD_LIST_HEIGHT, HORIZONTAL_CARD_SPACE
 } from "../../../common/OneMoreConst"
-import { VerticalVideoCard } from "../../../component/VerticalVideoCard"
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
-import { FeiniuPointLightModifier } from "../../../theme/FeiniuPointLightModifier"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
+import { HomeLatestMediaSection } from "./HomeLatestMediaSection"
+import { HomeFeedTabItem, HomeLibraryChipSelector } from "./HomeLibraryChipSelector"
+import {
+  ChipV2,
+  ChipV2Label,
+  ChipV2Options,
+  ChipV2PrefixImageIcon,
+  ChipV2Size,
+  ColorMetrics
+} from "@kit.ArkUI"
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
 const HERO_PROGRESS_START_DELAY: number = 16
+const HOME_LIBRARY_HEADER_EXTRA_MENU_GAP: number = 12
+const HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET: number = 3
+const HOME_LIBRARY_SEARCH_MENU_WIDTH: number = 56
+const HOME_LIBRARY_LIVE_MENU_WIDTH: number = 104
+const HOME_LIBRARY_SEARCH_BUTTON_SIZE: number = 40
+const HOME_LIBRARY_SEARCH_ICON_SIZE: number = 24
 
 @ComponentV2
 export struct HomeTab {
@@ -33,6 +45,8 @@ export struct HomeTab {
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
   @Local heroIndex: number = 0
   @Local heroProgress: number = 0
+  @Local latestChipStripPinned: boolean = false
+  @Local latestChipStripMenuReserved: boolean = false
   private heroProgressTimer: number = -1
 
   private cancelHeroProgressStart(): void {
@@ -87,6 +101,59 @@ export struct HomeTab {
       this.ui.recommendationList.length > 0
   }
 
+  private latestFeedContentMinHeight(): number {
+    const availableHeight = this.vm.appUIState.deviceHeight -
+      this.phoneContentTopInset() - this.scrollTail()
+    return Math.max(360, availableHeight)
+  }
+
+  private latestMediaTabs(): HomeFeedTabItem[] {
+    const tabs: HomeFeedTabItem[] = [{ id: HOME_RECENT_MEDIA_ID, label: '最近添加' }]
+    this.ui.latestMediaList.forEach((media: MediaItem): void => {
+      tabs.push({ id: media.id, label: media.name })
+    })
+    return tabs
+  }
+
+  private latestMediaHeaderSidePadding(): number {
+    return HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
+  }
+
+  private latestMediaHeaderTopInset(): number {
+    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+      return 0
+    }
+    return Math.max(0, this.vm.appUIState.safeTop)
+  }
+
+  private latestMediaHeaderMenuInset(): number {
+    if (!this.latestChipStripMenuReserved) {
+      return 0
+    }
+    const menuWidth = this.ui.hasLiveTv ?
+      HOME_LIBRARY_LIVE_MENU_WIDTH : HOME_LIBRARY_SEARCH_MENU_WIDTH
+    return this.latestChipStripPinned ? this.latestMediaHeaderSidePadding() : menuWidth
+  }
+
+  private latestMediaHeaderTopPadding(): number {
+    return this.latestMediaHeaderTopInset()
+  }
+
+  private latestMediaChipAlignmentOffset(): number {
+    return this.latestChipStripPinned ? HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0
+  }
+
+  private updateLatestChipStripPinned(pinned: boolean): void {
+    if (this.latestChipStripPinned !== pinned) {
+      this.latestChipStripPinned = pinned
+    }
+    this.vm.appUIState.rootNavigationHomeLibraryPinned = pinned
+  }
+
+  private selectLatestMedia(id: string): void {
+    this.vm.selectLatestMedia(id)
+  }
+
   private openHeroDetails(item: VideoItem): void {
     const seriesId = item.seriesId || ''
     const openSeries = item.type === BaseItemKind.Series ||
@@ -121,6 +188,94 @@ export struct HomeTab {
     })
     this.syncRootNavigationLiveTvAvailability()
     this.vm.init()
+  }
+
+  aboutToDisappear(): void {
+    this.cancelHeroProgressStart()
+    this.latestChipStripPinned = false
+    this.latestChipStripMenuReserved = false
+    this.vm.appUIState.rootNavigationHomeLibraryPinned = false
+  }
+
+  private updateLatestMediaHeaderPinned(area: Area): void {
+    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+      this.latestChipStripMenuReserved = false
+      this.updateLatestChipStripPinned(false)
+      return
+    }
+    const globalY = area.globalPosition.y as number
+    this.latestChipStripMenuReserved = globalY <= UIConstants.ACTION_BAR_HEIGHT
+    this.updateLatestChipStripPinned(globalY <= 0)
+  }
+
+  private stickyLiveTvOptions(): ChipV2Options {
+    return new ChipV2Options({
+      label: new ChipV2Label({ text: '' }),
+      prefixIcon: new ChipV2PrefixImageIcon({
+        src: $r('app.media.iptv'),
+        fillColor: ColorMetrics.resourceColor($r('sys.color.icon_primary'))
+      }),
+      size: ChipV2Size.NORMAL,
+      allowClose: false,
+      backgroundSystemMaterial: AppThemeSurfaceResolver.material(
+        AppThemeMaterialRole.HomeLibraryChip),
+      onClicked: (): void => {
+        HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+      }
+    })
+  }
+
+  @Builder
+  private latestMediaStickyHeader() {
+    Row({ space: 8 }) {
+      HomeLibraryChipSelector({
+        tabs: this.latestMediaTabs(),
+        selectedId: this.ui.selectedLatestMediaId,
+        fadeRightEdge: this.latestChipStripMenuReserved,
+        rightContentPadding: this.latestChipStripMenuReserved ?
+          HOME_LIBRARY_HEADER_EXTRA_MENU_GAP : 0,
+        onSelectedIdChange: (id: string) => {
+          this.selectLatestMedia(id)
+        }
+      })
+        .layoutWeight(1)
+        .translate({ y: this.latestMediaChipAlignmentOffset() })
+
+      if (this.latestChipStripPinned) {
+        if (this.ui.hasLiveTv) {
+          ChipV2({ chipV2Options: this.stickyLiveTvOptions() })
+        }
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(HOME_LIBRARY_SEARCH_ICON_SIZE)
+            .fontWeight(FontWeight.Regular)
+            .fontColor([$r('sys.color.icon_primary')])
+        }
+        .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+        .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
+        .accessibilityText('搜索')
+        .onClick(() => {
+          HMRouterMgr.to(RouterConsts.SearchPage).push()
+        })
+      }
+    }
+    .width('100%')
+    .height(UIConstants.ACTION_BAR_HEIGHT + this.latestMediaHeaderTopInset())
+    .padding({
+      left: this.latestMediaHeaderSidePadding(),
+      right: this.latestMediaHeaderMenuInset(),
+      top: this.latestMediaHeaderTopPadding()
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .zIndex(this.latestChipStripPinned ? 10 : 0)
+    .hitTestBehavior(HitTestMode.Transparent)
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      this.updateLatestMediaHeaderPinned(newValue)
+    })
   }
 
   @Builder
@@ -202,21 +357,36 @@ export struct HomeTab {
           }
         }
 
-        ListItem() {
-          this.buildAllMediaCount()
-        }.visibility(this.vm.appUIState.isBigScreen ? Visibility.None : Visibility.Visible)
-
-        ForEach(this.ui.latestMediaList, (item: MediaItem) => {
+        ListItemGroup({ header: this.latestMediaStickyHeader }) {
           ListItem() {
-            this.buildLastAddedList(item)
+            HomeLatestMediaSection({
+              latestMap: this.ui.latestMap,
+              selectedMediaId: this.ui.selectedLatestMediaId,
+              nativeSurface: this.useNativeSurface(),
+              currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+              loading: this.ui.latestMediaLoading,
+              loadingMore: this.ui.latestMediaLoadingMore,
+              hasMore: this.ui.latestMediaHasMore,
+              loadFailed: this.ui.latestMediaLoadFailed,
+              contentMinHeight: this.latestFeedContentMinHeight(),
+              onRetry: () => {
+                this.vm.retryLatestMedia()
+              }
+            })
           }
-        })
+        }
+
         ListItem().height(this.scrollTail())
       }
       .width('100%')
       .height('100%')
       .listDirection(Axis.Vertical)
+      .sticky(this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s') ?
+        StickyStyle.Header : StickyStyle.None)
       .scrollBar(BarState.Off)
+      .onReachEnd(() => {
+        this.vm.loadMoreLatestMedia()
+      })
     }
     .pullDownRatio(0.3)
     .refreshOffset(64)
@@ -503,9 +673,10 @@ export struct HomeTab {
   buildResumeList() {
     Column() {
       Text('继续观看')
-        .fontSize(14)
+        .fontSize(20)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(this.useNativeSurface() ?
+          $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
       List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
         ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
@@ -541,9 +712,10 @@ export struct HomeTab {
   buildNextUpList() {
     Column() {
       Text('接下来')
-        .fontSize(14)
+        .fontSize(20)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(this.useNativeSurface() ?
+          $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
       List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
         ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
@@ -574,321 +746,6 @@ export struct HomeTab {
       top: 20
     })
     .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  buildLastAddedList(item: MediaItem) {
-    Column() {
-      Text('最近添加的 ' + item.name).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
-      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
-        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-
-        ForEach(this.ui.latestMap.get(item.id), (item: VideoItem, index: number) => {
-          ListItem() {
-            VerticalVideoCard({
-              image: item.image,
-              name: item.name,
-              subtitle: item.subtitle,
-              index: index
-            })
-          }.onClick(() => {
-            HMRouterMgr.to(RouterConsts.VideoDetailPage)
-              .withParam({
-                id: item.id,
-                mediaName: item.mediaName,
-                isTvShows: item.type === BaseItemKind.Series,
-              })
-              .push()
-          })
-        })
-        if (this.vm.appUIState.currentBreakpoint.includes('s')) {
-          ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-        }
-      }
-      .width('100%')
-      .height(VERTICAL_CARD_LIST_HEIGHT.getValue(this.vm.appUIState.currentBreakpoint))
-      .margin({ top: 12 })
-      .listDirection(Axis.Horizontal)
-      .scrollBar(BarState.Off)
-    }
-    .width('100%')
-    .margin({
-      top: 24
-    })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  private nativeMediaIcon(type: BaseItemKind): Resource {
-    if (type === BaseItemKind.Movie) {
-      return $r('app.media.bg_trans_movie')
-    }
-    if (type === BaseItemKind.TvProgram) {
-      return $r('app.media.bg_trans_tv')
-    }
-    return $r('app.media.bg_trans_all')
-  }
-
-  private nativeMediaTitle(type: BaseItemKind): string {
-    if (type === BaseItemKind.Movie) {
-      return '电影'
-    }
-    if (type === BaseItemKind.TvProgram) {
-      return '电视节目'
-    }
-    return '全部影视'
-  }
-
-  private nativeMediaCount(type: BaseItemKind): string {
-    if (type === BaseItemKind.Movie) {
-      return this.ui.movieCount
-    }
-    if (type === BaseItemKind.TvProgram) {
-      return this.ui.tvCount
-    }
-    return this.ui.totalCount
-  }
-
-  private nativeMediaRouteId(type: BaseItemKind): string {
-    if (type === BaseItemKind.Movie) {
-      return 'movies'
-    }
-    if (type === BaseItemKind.TvProgram) {
-      return 'tvs'
-    }
-    return 'all'
-  }
-
-  @Builder
-  private nativeMediaNavigationItem(type: BaseItemKind) {
-    Stack() {
-      Image(this.nativeMediaIcon(type))
-        .fillColor($r('sys.color.icon_secondary'))
-        .width(35)
-        .height(35)
-        .opacity(0.2)
-        .rotate({
-          x: 0,
-          y: 0,
-          z: 1,
-          centerX: '50%',
-          centerY: '50%',
-          angle: 22.5
-        })
-        .translate({
-          x: 5
-        })
-      Column({ space: 4 }) {
-        Text(this.nativeMediaTitle(type))
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
-        Text(this.nativeMediaCount(type))
-          .fontSize(14)
-          .fontWeight(FontWeight.Normal)
-          .fontColor($r('sys.color.font_secondary'))
-      }
-      .width(90)
-      .height(60)
-      .justifyContent(FlexAlign.Center)
-    }
-    .width(90)
-    .height(60)
-    .align(Alignment.BottomEnd)
-    .onClick(() => {
-      let mediaItem: MediaItem = {
-        name: this.nativeMediaTitle(type),
-        id: this.nativeMediaRouteId(type),
-        image: '',
-        childCount: 0,
-        type: type
-      }
-      HMRouterMgr.to(RouterConsts.VideoListPage)
-        .withParam(mediaItem)
-        .push()
-    })
-  }
-
-  @Builder
-  private nativeAllMediaCount() {
-    Row({ space: 8 }) {
-      this.nativeMediaNavigationItem(BaseItemKind.Video)
-      this.nativeMediaNavigationItem(BaseItemKind.Movie)
-      this.nativeMediaNavigationItem(BaseItemKind.TvProgram)
-    }
-    .width(286)
-    .height(60)
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-    .margin({
-      top: 24, left: 16
-    })
-  }
-
-  @Builder
-  private feiniuAllMediaCount() {
-    Row({ space: 8 }) {
-      Stack() {
-        Image($r('app.media.bg_trans_all'))
-          .fillColor(Color.White)
-          .width(35)
-          .height(35)
-          .opacity(0.2)
-          .rotate({
-            x: 0,
-            y: 0,
-            z: 1,
-            centerX: '50%',
-            centerY: '50%',
-            angle: 22.5
-          })
-          .translate({
-            x: 5
-          })
-        Column({ space: 4 }) {
-          Text('全部影视')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-          Text(this.ui.totalCount)
-            .fontSize(14)
-            .fontWeight(FontWeight.Normal)
-            .fontColor(Color.White)
-        }
-        .width(90)
-        .height(60)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          let mediaItem: MediaItem = {
-            name: '全部影视',
-            id: 'all',
-            image: '',
-            childCount: 0,
-            type: BaseItemKind.Video
-          }
-          HMRouterMgr.to(RouterConsts.VideoListPage)
-            .withParam(mediaItem)
-            .push()
-        })
-      }
-      .backgroundColor(this.ui.allMediaBgColor)
-      .visualEffect(FeiniuPointLightModifier.build({
-        enabled: this.vm.appUIState.feiniuPointLightEnabled,
-        color: this.ui.allMediaBgColor,
-        intensity: 20,
-        height: 60
-      }))
-      .align(Alignment.BottomEnd)
-      .borderRadius(8)
-      .clip(true)
-
-      Stack() {
-        Image($r('app.media.bg_trans_movie'))
-          .fillColor(Color.White)
-          .width(35)
-          .height(35)
-          .opacity(0.2)
-          .rotate({
-            x: 0,
-            y: 0,
-            z: 1,
-            centerX: '50%',
-            centerY: '50%',
-            angle: 22.5
-          })
-          .translate({
-            x: 5
-          })
-        Column({ space: 4 }) {
-          Text('电影')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-          Text(this.ui.movieCount)
-            .fontSize(14)
-            .fontWeight(FontWeight.Normal)
-            .fontColor(Color.White)
-        }
-        .width(90)
-        .height(60)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          let mediaItem: MediaItem = {
-            name: '电影',
-            id: 'movies',
-            image: '',
-            childCount: 0,
-            type: BaseItemKind.Movie
-          }
-          HMRouterMgr.to(RouterConsts.VideoListPage)
-            .withParam(mediaItem)
-            .push()
-        })
-      }.backgroundColor(generateBeautifulDeepBlueColor())
-      .align(Alignment.BottomEnd)
-      .borderRadius(8)
-      .clip(true)
-
-      Stack() {
-        Image($r('app.media.bg_trans_tv'))
-          .fillColor(Color.White)
-          .width(35)
-          .height(35)
-          .opacity(0.2)
-          .rotate({
-            x: 0,
-            y: 0,
-            z: 1,
-            centerX: '50%',
-            centerY: '50%',
-            angle: 22.5
-          })
-          .translate({
-            x: 5
-          })
-        Column({ space: 4 }) {
-          Text('电视节目')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-          Text(this.ui.tvCount)
-            .fontSize(14)
-            .fontWeight(FontWeight.Normal)
-            .fontColor(Color.White)
-        }
-        .width(90)
-        .height(60)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          let mediaItem: MediaItem = {
-            name: '电视节目',
-            id: 'tvs',
-            image: '',
-            childCount: 0,
-            type: BaseItemKind.TvProgram
-          }
-          HMRouterMgr.to(RouterConsts.VideoListPage)
-            .withParam(mediaItem)
-            .push()
-        })
-      }.backgroundColor(generateBeautifulDeepBlueColor())
-      .align(Alignment.BottomEnd)
-      .borderRadius(8)
-      .clip(true)
-    }
-    .margin({
-      top: 24, left: 16
-    })
-  }
-
-  @Builder
-  buildAllMediaCount() {
-    if (this.useNativeSurface()) {
-      this.nativeAllMediaCount()
-    } else {
-      this.feiniuAllMediaCount()
-    }
   }
 
   @Builder

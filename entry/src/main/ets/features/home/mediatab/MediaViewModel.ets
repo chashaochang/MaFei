@@ -87,7 +87,8 @@ export class MediaViewModel {
           }),
         id: item.Id || '',
         childCount: childResponse.data?.TotalRecordCount || 0,
-        type: getTypeByCollectionType(item.CollectionType)
+        type: getTypeByCollectionType(item.CollectionType),
+        collectionType: item.CollectionType
       } as MediaItem
     }))
   }

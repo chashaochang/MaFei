@@ -26,6 +26,7 @@ export struct AppRouteDestination {
   @Prop backButtonVisible: boolean = true
   @Prop contentExtendsUnderTitleBar: boolean = false
   @Prop heroTitleChrome: boolean = false
+  @Prop titleMaterialFollowsSystem: boolean = true
   @Prop menus: Array<NavigationMenuItem> = []
   @Prop scrollControllers: Array<Scroller> = []
   @BuilderParam contentBuilder: () => void = EmptyRouteContent
@@ -63,11 +64,16 @@ export struct AppRouteDestination {
         content: {
           icon: item.icon,
           label: item.value,
-          isEnabled: item.isEnabled,
+          isEnabled: item.isEnabled ?? true,
           action: item.action
         }
       }
     })
+  }
+
+  private nativeMainTitle(): ResourceStr {
+    return this.appUIState.rootNavigationHomeActionsVisible &&
+      this.appUIState.rootNavigationHomeLibraryPinned ? '' : this.title
   }
 
   private nativeTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -76,7 +82,7 @@ export struct AppRouteDestination {
       enableComponentSafeArea: false,
       content: {
         title: {
-          mainTitle: this.title,
+          mainTitle: this.nativeMainTitle(),
           mainTitleSize: TitleSize.TITLE_S
         },
         menu: {
@@ -86,14 +92,16 @@ export struct AppRouteDestination {
       },
       style: {
         scrollEffectOpts: {
-          enableScrollEffect: true,
+          enableScrollEffect: !this.appUIState.rootNavigationHomeLibraryPinned,
           scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
           blurEffectiveStartOffset: LengthMetrics.vp(1),
           blurEffectiveEndOffset: LengthMetrics.vp(24)
         },
         systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.GENTLE
+          materialType: this.titleMaterialFollowsSystem ?
+            hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: this.titleMaterialFollowsSystem ?
+            hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE
         },
         originalStyle: {
           backgroundStyle: {
@@ -172,7 +180,8 @@ export struct AppRouteDestination {
     ))
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(this.nativeTitleBarOptions())
-    .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome())
+    .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome() ||
+      this.appUIState.rootNavigationHomeLibraryPinned)
     .hideBackButton(!this.backButtonVisible)
     .hideToolBar(true)
     .bindToScrollable(this.titleBarVisible && this.usesNativeChrome() ? this.scrollControllers : [])

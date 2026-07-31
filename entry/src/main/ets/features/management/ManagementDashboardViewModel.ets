@@ -14,7 +14,6 @@ import { ManagementRepository } from './ManagementRepository';
 export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashboardUIState> {
   private repository: ManagementRepository = new ManagementRepository()
   private taskTimer: number = -1
-  private sessionTimer: number = -1
   private initialized: boolean = false
   private visible: boolean = false
   private loading: boolean = false
@@ -22,8 +21,6 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
   private countsLoading: boolean = false
   private usersLoading: boolean = false
   private tasksLoading: boolean = false
-  private sessionsLoading: boolean = false
-  private activitiesLoading: boolean = false
   private scanPollUntil: number = 0
   private generation: number = 0
 
@@ -55,7 +52,6 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
     this.ui.permissionState = ManagementPermissionState.Allowed
     this.ui.pageState = PageState.Content
     this.refresh(false)
-    this.startSessionPolling()
     this.syncTaskPolling()
   }
 
@@ -73,9 +69,7 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
         this.refreshServer(),
         this.refreshCounts(),
         this.refreshUsers(),
-        this.refreshSessions(),
-        this.refreshTasks(),
-        this.refreshActivities()
+        this.refreshTasks()
       ])
     } finally {
       if (generation === this.generation) {
@@ -181,53 +175,6 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
     }
   }
 
-  async refreshSessions(): Promise<void> {
-    if (!this.visible || this.sessionsLoading ||
-      this.ui.permissionState !== ManagementPermissionState.Allowed) {
-      return
-    }
-    this.sessionsLoading = true
-    const generation = this.generation
-    try {
-      const result = await this.repository.loadSessionsSection()
-      if (!this.isActive(generation)) {
-        return
-      }
-      if (this.handleSectionAccessError(result)) {
-        return
-      }
-      this.applySessions(result)
-    } finally {
-      if (generation === this.generation) {
-        this.sessionsLoading = false
-      }
-    }
-  }
-
-  async refreshActivities(): Promise<void> {
-    if (!this.visible || this.activitiesLoading ||
-      this.ui.permissionState !== ManagementPermissionState.Allowed) {
-      return
-    }
-    this.activitiesLoading = true
-    const generation = this.generation
-    try {
-      const result = await this.repository.loadActivitiesSection()
-      if (!this.isActive(generation) || this.handleSectionAccessError(result)) {
-        return
-      }
-      this.ui.activitiesStatus = result.status
-      this.ui.activitiesMessage = result.message
-      if (result.status !== ManagementSectionStatus.Error) {
-        this.ui.activities = result.activities
-      }
-    } finally {
-      if (generation === this.generation) {
-        this.activitiesLoading = false
-      }
-    }
-  }
-
   async startLibraryScan(): Promise<void> {
     if (this.ui.isStartingScan || this.ui.isScanSubmissionLocked || this.ui.isLibraryScanRunning) {
       this.showToast(this.getString('management_scan_running'))
@@ -285,30 +232,12 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
     this.countsLoading = false
     this.usersLoading = false
     this.tasksLoading = false
-    this.sessionsLoading = false
-    this.activitiesLoading = false
     this.ui.isRefreshing = false
     this.ui.isStartingScan = false
     if (this.taskTimer >= 0) {
       clearInterval(this.taskTimer)
       this.taskTimer = -1
     }
-    if (this.sessionTimer >= 0) {
-      clearInterval(this.sessionTimer)
-      this.sessionTimer = -1
-    }
-  }
-
-  private startSessionPolling(): void {
-    if (!this.visible || this.ui.permissionState !== ManagementPermissionState.Allowed) {
-      return
-    }
-    if (this.sessionTimer >= 0) {
-      clearInterval(this.sessionTimer)
-    }
-    this.sessionTimer = setInterval(() => {
-      this.refreshSessions()
-    }, 15000)
   }
 
   private syncTaskPolling(): void {
@@ -329,14 +258,6 @@ export class ManagementDashboardViewModel extends BaseViewModel<ManagementDashbo
     this.taskTimer = setInterval(() => {
       this.refreshTasks()
     }, 3000)
-  }
-
-  private applySessions(result: ManagementSectionResult): void {
-    this.ui.sessionsStatus = result.status
-    this.ui.sessionsMessage = result.message
-    if (result.status !== ManagementSectionStatus.Error) {
-      this.ui.sessions = result.sessions
-    }
   }
 
   private applyTasks(result: ManagementSectionResult): void {
