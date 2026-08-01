@@ -27,6 +27,7 @@ import {
   ColorMetrics
 } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
+import { HomeInitialSkeleton } from './HomeInitialSkeleton'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
@@ -102,6 +103,10 @@ export struct HomeTab {
     return this.useNativeSurface() &&
       this.vm.appUIState.currentBreakpoint.includes('s') &&
       this.ui.recommendationList.length > 0
+  }
+
+  private showNativeHeroSkeleton(): boolean {
+    return this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')
   }
 
   private latestFeedContentMinHeight(): number {
@@ -336,46 +341,50 @@ export struct HomeTab {
     Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
       List({ scroller: this.contentScroller }) {
         if (this.vm.appUIState.currentBreakpoint.includes('s') &&
-          (!this.useNativeSurface() || !this.showNativeHero())) {
+          (!this.useNativeSurface() || (!this.ui.initialLoading && !this.showNativeHero()))) {
           ListItem().height(this.phoneContentTopInset())
         }
-        // if (this.ui.mediaList.length > 0) {
-        //   ListItem() {
-        //     this.buildMediaList()
-        //   }
-        // }
-        if (this.showNativeHero()) {
+        if (this.ui.initialLoading) {
           ListItem() {
-            this.nativeHomeHeroCarousel()
-          }
-        }
-        if (this.ui.resumeList.length > 0) {
-          ListItem() {
-            this.buildResumeList()
-          }
-        }
-        if (this.ui.nextUpList.length > 0) {
-          ListItem() {
-            this.buildNextUpList()
-          }
-        }
-
-        ListItemGroup({ header: this.latestMediaStickyHeader }) {
-          ListItem() {
-            HomeLatestMediaSection({
-              latestMap: this.ui.latestMap,
-              selectedMediaId: this.ui.selectedLatestMediaId,
-              nativeSurface: this.useNativeSurface(),
-              currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-              loading: this.ui.latestMediaLoading,
-              loadingMore: this.ui.latestMediaLoadingMore,
-              hasMore: this.ui.latestMediaHasMore,
-              loadFailed: this.ui.latestMediaLoadFailed,
-              contentMinHeight: this.latestFeedContentMinHeight(),
-              onRetry: () => {
-                this.vm.retryLatestMedia()
-              }
+            HomeInitialSkeleton({
+              showHero: this.showNativeHeroSkeleton(),
+              currentBreakpoint: this.vm.appUIState.currentBreakpoint
             })
+          }
+        } else {
+          if (this.showNativeHero()) {
+            ListItem() {
+              this.nativeHomeHeroCarousel()
+            }
+          }
+          if (this.ui.resumeList.length > 0) {
+            ListItem() {
+              this.buildResumeList()
+            }
+          }
+          if (this.ui.nextUpList.length > 0) {
+            ListItem() {
+              this.buildNextUpList()
+            }
+          }
+
+          ListItemGroup({ header: this.latestMediaStickyHeader }) {
+            ListItem() {
+              HomeLatestMediaSection({
+                latestMap: this.ui.latestMap,
+                selectedMediaId: this.ui.selectedLatestMediaId,
+                nativeSurface: this.useNativeSurface(),
+                currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                loading: this.ui.latestMediaLoading,
+                loadingMore: this.ui.latestMediaLoadingMore,
+                hasMore: this.ui.latestMediaHasMore,
+                loadFailed: this.ui.latestMediaLoadFailed,
+                contentMinHeight: this.latestFeedContentMinHeight(),
+                onRetry: () => {
+                  this.vm.retryLatestMedia()
+                }
+              })
+            }
           }
         }
 

@@ -5,6 +5,7 @@ export const HOME_RECENT_MEDIA_ID: string = '__home_recent__'
 
 @ObservedV2
 export class HomeUIState extends BaseUIState{
+  @Trace initialLoading: boolean = true
   //媒体库列表
   @Trace mediaList: MediaItem[] = []
   //继续观看列表

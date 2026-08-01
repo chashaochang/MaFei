@@ -44,6 +44,8 @@ interface HomeRecentLibraryPage {
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
   imageApi: ImageUrlsApi = new ImageUrlsApi()
+  private initialLoadCompleted: boolean = false
+  private initVersion: number = 0
   private latestStartIndexes: Map<string, number> = new Map<string, number>()
   private latestHasMoreById: Map<string, boolean> = new Map<string, boolean>()
   private latestLoadedIds: Set<string> = new Set<string>()
@@ -51,6 +53,11 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
   private latestRequestVersion: number = 0
 
   init(): void {
+    this.initVersion += 1
+    const requestVersion = this.initVersion
+    if (!this.initialLoadCompleted) {
+      this.ui.initialLoading = true
+    }
     // 使用 Promise 链，init 立即返回不阻塞
     this.getMediaList().then(() => {
       return Promise.all([
@@ -60,10 +67,19 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         this.getLatestList()
       ])
     }).then(() => {
-      this.ui.isRefreshing = false
+      this.finishInit(requestVersion)
     }).catch(() => {
-      this.ui.isRefreshing = false
+      this.finishInit(requestVersion)
     })
+  }
+
+  private finishInit(requestVersion: number): void {
+    if (requestVersion !== this.initVersion) {
+      return
+    }
+    this.initialLoadCompleted = true
+    this.ui.initialLoading = false
+    this.ui.isRefreshing = false
   }
 
   private getRecommendationList(): Promise<void> {
