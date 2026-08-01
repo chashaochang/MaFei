@@ -174,7 +174,7 @@ export struct AppRouteDestination {
     HdsNavDestination() {
       this.hdsContent()
     }
-    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+    .backgroundColor(AppThemeSurfaceResolver.destinationCanvasBackground(
       this.appUIState.themeStyle,
       HdsUiCapability.supportsNativeTheme()
     ))

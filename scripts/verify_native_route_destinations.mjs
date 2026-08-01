@@ -317,8 +317,8 @@ function validateSharedDestination(source) {
   }
   const nativeTail = nativeDestination.slice(nativeRoot.end + 1)
   if (count(nativeTail, /\.backgroundColor\s*\(/g) !== 1 ||
-    !/\.backgroundColor\s*\(\s*AppThemeSurfaceResolver\.routeBackground\s*\(\s*this\.appUIState\.themeStyle\s*,\s*HdsUiCapability\.supportsNativeTheme\s*\(\s*\)\s*\)\s*\)/.test(nativeTail)) {
-    throw new Error('shared destination must keep the Native route transparent and preserve the legacy background')
+    !/\.backgroundColor\s*\(\s*AppThemeSurfaceResolver\.destinationCanvasBackground\s*\(\s*this\.appUIState\.themeStyle\s*,\s*HdsUiCapability\.supportsNativeTheme\s*\(\s*\)\s*\)\s*\)/.test(nativeTail)) {
+    throw new Error('shared destination must own an opaque transition canvas behind transparent Native content')
   }
   for (const required of [
     /\.titleMode\s*\(\s*HdsNavDestinationTitleMode\.MINI\s*\)/,

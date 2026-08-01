@@ -38,6 +38,11 @@ export class AppThemeSurfaceResolver {
       Color.Transparent : $r('app.color.bg_main')
   }
 
+  static destinationCanvasBackground(style: ThemeStyle, available: boolean): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(style, available) ?
+      $r('app.color.native_canvas_background') : $r('app.color.bg_main')
+  }
+
   static iconWellBackground(style: ThemeStyle): ResourceColor {
     return style === ThemeStyle.Native ?
       $r('sys.color.comp_background_tertiary') : $r('app.color.component_bg')

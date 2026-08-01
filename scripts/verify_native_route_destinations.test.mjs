@@ -146,7 +146,7 @@ function validDestination() {
     '  HdsNavDestination() {',
     '    this.hdsContent()',
     '  }',
-    '    .backgroundColor(AppThemeSurfaceResolver.routeBackground(',
+    '    .backgroundColor(AppThemeSurfaceResolver.destinationCanvasBackground(',
     '      this.appUIState.themeStyle,',
     '      HdsUiCapability.supportsNativeTheme()',
     '    ))',
@@ -711,7 +711,7 @@ test('requires a theme-resolved destination background', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
     .replace(
-      '    .backgroundColor(AppThemeSurfaceResolver.routeBackground(\n' +
+      '    .backgroundColor(AppThemeSurfaceResolver.destinationCanvasBackground(\n' +
       '      this.appUIState.themeStyle,\n' +
       '      HdsUiCapability.supportsNativeTheme()\n' +
       '    ))',
@@ -719,7 +719,7 @@ test('requires a theme-resolved destination background', () => {
     ))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep the Native route transparent and preserve the legacy background/
+    /own an opaque transition canvas behind transparent Native content/
   )
 })
 
