@@ -24,11 +24,22 @@ import {
 } from "./HomeUIState";
 
 const HOME_FEED_PAGE_SIZE: number = 30
+const HOME_RECENT_LIBRARY_LIMIT: number = 16
+
+interface HomeFeedSourceItem {
+  item: BaseItemDto
+  mediaName: string
+}
 
 interface HomeFeedPage {
-  items: BaseItemDto[]
+  items: HomeFeedSourceItem[]
   nextStartIndex: number
   hasMore: boolean
+}
+
+interface HomeRecentLibraryPage {
+  media: MediaItem
+  items: BaseItemDto[]
 }
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
@@ -266,18 +277,31 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       this.ui.latestMediaList.find((item: MediaItem): boolean => item.id === id)
     let request: Promise<HomeFeedPage>
     if (id === HOME_RECENT_MEDIA_ID) {
-      request = getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-        userId: ApiClient.Instance().userId,
-        limit: HOME_FEED_PAGE_SIZE,
-        groupItems: true,
-        includeItemTypes: homeFeedItemTypes(),
-        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
-          ItemFields.MediaSourceCount],
-        imageTypeLimit: 1,
-        enableImages: true,
-        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
-      }).then((res: AxiosResponse<BaseItemDto[]>): HomeFeedPage => {
-        const items = res.data || []
+      const latestRequests: Promise<HomeRecentLibraryPage>[] = this.ui.mediaList
+        .filter((library: MediaItem): boolean => isLegacyHomeLatestLibrary(library))
+        .map(
+          (library: MediaItem): Promise<HomeRecentLibraryPage> => {
+            return getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
+              userId: ApiClient.Instance().userId,
+              parentId: library.id,
+              limit: HOME_RECENT_LIBRARY_LIMIT,
+              fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+              imageTypeLimit: 1,
+              enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
+            }).then((res: AxiosResponse<BaseItemDto[]>): HomeRecentLibraryPage => {
+              return {
+                media: library,
+                items: res.data || []
+              }
+            }).catch((): HomeRecentLibraryPage => {
+              return {
+                media: library,
+                items: []
+              }
+            })
+          })
+      request = Promise.all(latestRequests).then((pages: HomeRecentLibraryPage[]): HomeFeedPage => {
+        const items = interleaveRecentLibraryItems(pages, HOME_FEED_PAGE_SIZE)
         return {
           items: items,
           nextStartIndex: items.length,
@@ -304,7 +328,12 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
         const nextStartIndex = startIndex + items.length
         const totalCount = res.data?.TotalRecordCount || 0
         return {
-          items: items,
+          items: items.map((item: BaseItemDto): HomeFeedSourceItem => {
+            return {
+              item: item,
+              mediaName: media?.name || ''
+            }
+          }),
           nextStartIndex: nextStartIndex,
           hasMore: items.length === HOME_FEED_PAGE_SIZE &&
             (totalCount === 0 || nextStartIndex < totalCount)
@@ -315,9 +344,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       if (requestVersion !== this.latestRequestVersion) {
         return
       }
-      const rawItems: BaseItemDto[] = page.items
-      const mappedItems: VideoItem[] = rawItems.map((item: BaseItemDto): VideoItem => {
-        return mapHomeFeedItem(item, media?.name || '最近添加', this.imageApi)
+      const mappedItems: VideoItem[] = page.items.map((source: HomeFeedSourceItem): VideoItem => {
+        return mapHomeFeedItem(source.item, source.mediaName || '最近添加', this.imageApi)
       })
       const previousItems: VideoItem[] = replace ? [] : (this.ui.latestMap.get(id) || [])
       const mergedItems: VideoItem[] = appendUniqueVideoItems(previousItems, mappedItems)
@@ -368,6 +396,32 @@ export function appendUniqueVideoItems(current: VideoItem[], incoming: VideoItem
     }
   })
   return result
+}
+
+function interleaveRecentLibraryItems(pages: HomeRecentLibraryPage[], limit: number): HomeFeedSourceItem[] {
+  const result: HomeFeedSourceItem[] = []
+  let itemIndex = 0
+  let appended = true
+  while (result.length < limit && appended) {
+    appended = false
+    for (let pageIndex = 0; pageIndex < pages.length && result.length < limit; pageIndex++) {
+      const page = pages[pageIndex]
+      const item = page.items[itemIndex]
+      if (item) {
+        result.push({
+          item: item,
+          mediaName: page.media.name
+        })
+        appended = true
+      }
+    }
+    itemIndex += 1
+  }
+  return result
+}
+
+function isLegacyHomeLatestLibrary(item: MediaItem): boolean {
+  return item.type !== BaseItemKind.LiveTvChannel && item.type !== BaseItemKind.Audio
 }
 
 export function isSupportedHomeVideoLibrary(item: MediaItem): boolean {
