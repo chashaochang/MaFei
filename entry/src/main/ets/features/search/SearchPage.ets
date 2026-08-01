@@ -11,8 +11,9 @@ import { GridView } from "@abner/refresh_v2";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { AlertDialogV2, AdvancedDialogV2Button } from '@kit.ArkUI';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
+import { UIConstants } from "../../common/UIConstants";
 
 @HMRouter({
   pageUrl: RouterConsts.SearchPage,
@@ -44,6 +45,10 @@ export struct SearchPage {
 
   private secondaryTextColor(nativeSurface: boolean): ResourceColor {
     return nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private nativeHeaderHeight(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT + 16
   }
 
   @Builder
@@ -91,14 +96,83 @@ export struct SearchPage {
 
   @Builder
   private nativeSearchForm() {
-    Row() {
-      this.searchBarContent(true, false)
+    Search({
+      value: this.ui.searchText,
+      placeholder: '搜索影片、剧集和视频'
+    })
+      .layoutWeight(1)
+      .height(48)
+      .fontColor($r('sys.color.font_primary'))
+      .placeholderColor($r('sys.color.font_secondary'))
+      .textFont({ size: 16 })
+      .searchIcon({
+        size: 20,
+        color: $r('sys.color.icon_secondary')
+      })
+      .cancelButton({
+        style: CancelButtonStyle.INPUT,
+        icon: {
+          size: 18,
+          color: $r('sys.color.icon_secondary')
+        }
+      })
+      .searchButton('搜索', {
+        fontSize: 16,
+        fontColor: $r('app.color.color_main')
+      })
+      .backgroundColor(Color.Transparent)
+      .borderRadius(24)
+      .clip(true)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .onFocus(() => {
+        this.ui.focus = true
+      })
+      .onBlur(() => {
+        this.ui.focus = false
+      })
+      .onChange((value: string) => {
+        this.ui.searchText = value
+        this.vm.search(value)
+      })
+      .onSubmit((value: string) => {
+        this.ui.searchText = value
+        this.vm.search(value, true)
+      })
+  }
+
+  @Builder
+  private nativeSearchHeader() {
+    Row({ space: 12 }) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.chevron_backward'))
+          .fontSize(24)
+          .fontColor([$r('sys.color.icon_primary')])
+      }
+      .width(48)
+      .height(48)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .accessibilityText('返回')
+      .onClick(() => {
+        HMRouterMgr.pop()
+      })
+
+      this.nativeSearchForm()
     }
     .width('100%')
-    .height(48)
-    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    .height(this.nativeHeaderHeight())
+    .padding({
+      top: Math.max(0, this.vm.appUIState.safeTop) + 8,
+      left: AppThemeTokens.pageHorizontalPadding(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen),
+      right: AppThemeTokens.pageHorizontalPadding(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen),
+      bottom: 8
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .zIndex(10)
   }
 
   @Builder
@@ -127,21 +201,32 @@ export struct SearchPage {
         })
     } else {
       Row() {
-        Text(this.ui.totalCount + '个搜索结果')
-          .fontSize(12)
-          .fontColor(this.secondaryTextColor(nativeSurface))
-          .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
-          .padding({
-            left: 6,
-            right: 6,
-            top: 4,
-            bottom: 4
-          })
-          .borderRadius(4)
+        if (nativeSurface) {
+          Text('搜索结果')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryTextColor(true))
+          Text(this.ui.totalCount + ' 个')
+            .fontSize(13)
+            .fontColor(this.secondaryTextColor(true))
+            .margin({ left: 8 })
+        } else {
+          Text(this.ui.totalCount + '个搜索结果')
+            .fontSize(12)
+            .fontColor(this.secondaryTextColor(false))
+            .backgroundColor($r('app.color.bg_main'))
+            .padding({
+              left: 6,
+              right: 6,
+              top: 4,
+              bottom: 4
+            })
+            .borderRadius(4)
+        }
         Blank().layoutWeight(1)
       }
       .width('100%')
-      .height(46)
+      .height(nativeSurface ? 56 : 46)
 
       GridView({
         lazyDataSource: this.vm.dataSource,
@@ -193,7 +278,8 @@ export struct SearchPage {
   private searchHistoryContent(nativeSurface: boolean) {
     Row() {
       Text('搜索历史')
-        .fontSize(14)
+        .fontSize(nativeSurface ? 20 : 14)
+        .fontWeight(nativeSurface ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.primaryTextColor(nativeSurface))
       Blank().layoutWeight(1)
       Text('清除')
@@ -209,29 +295,51 @@ export struct SearchPage {
 
           });
         })
-    }.padding({ top: 12 })
+    }
+    .height(nativeSurface ? 56 : 46)
+    .alignItems(VerticalAlign.Center)
 
     Flex({ wrap: FlexWrap.Wrap }) {
       ForEach(this.ui.histories, (item: string) => {
-        Text(item)
-          .fontSize(12)
-          .padding({
-            left: 12,
-            right: 12,
-            top: 6,
-            bottom: 6
-          })
-          .margin({
-            top: 10,
-            right: 10
-          })
-          .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
-          .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_1'))
-          .borderRadius(8)
+        if (nativeSurface) {
+          Button({ type: ButtonType.Capsule, stateEffect: false }) {
+            Text(item)
+              .fontSize(14)
+              .fontColor($r('sys.color.font_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .height(36)
+          .padding({ left: 14, right: 14 })
+          .margin({ right: 10, bottom: 10 })
+          .buttonStyle(ButtonStyleMode.TEXTUAL)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
           .onClick(() => {
             this.ui.searchText = item
             this.vm.search(item)
           })
+        } else {
+          Text(item)
+            .fontSize(12)
+            .padding({
+              left: 12,
+              right: 12,
+              top: 6,
+              bottom: 6
+            })
+            .margin({
+              top: 10,
+              right: 10
+            })
+            .fontColor($r('app.color.text_2'))
+            .backgroundColor($r('app.color.bg_1'))
+            .borderRadius(8)
+            .onClick(() => {
+              this.ui.searchText = item
+              this.vm.search(item)
+            })
+        }
       })
     }
   }
@@ -243,10 +351,7 @@ export struct SearchPage {
     }
     .width('100%')
     .layoutWeight(1)
-    .padding({ left: 16, right: 16 })
-    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -266,40 +371,56 @@ export struct SearchPage {
 
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
-    Column({ space: 10 }) {
-      if (showLegacyActionBar) {
+    if (showLegacyActionBar) {
+      Column({ space: 10 }) {
         this.feiniuSearchBar()
-      } else {
-        this.nativeSearchForm()
-      }
 
-      if (this.ui.searchText.trim() != '') {
-        if (showLegacyActionBar) {
+        if (this.ui.searchText.trim() != '') {
           this.feiniuSearchResults()
-        } else {
-          this.nativeSearchResults()
-        }
-      } else if (this.ui.histories.length > 0) {
-        if (showLegacyActionBar) {
+        } else if (this.ui.histories.length > 0) {
           this.feiniuSearchHistory()
-        } else {
-          this.nativeSearchHistory()
         }
       }
-    }.width('100%')
-    .height('100%')
-    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
-    .padding({
-      left: showLegacyActionBar ? 0 : 16,
-      right: showLegacyActionBar ? 0 : 16,
-      top: showLegacyActionBar ? this.vm.appUIState.safeTop : 0,
-      bottom: this.vm.appUIState.safeBottom
-    })
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.bg_main'))
+      .padding({
+        top: this.vm.appUIState.safeTop,
+        bottom: this.vm.appUIState.safeBottom
+      })
+    } else {
+      Stack({ alignContent: Alignment.Top }) {
+        Column() {
+          if (this.ui.searchText.trim() != '') {
+            this.nativeSearchResults()
+          } else if (this.ui.histories.length > 0) {
+            this.nativeSearchHistory()
+          }
+        }
+        .width('100%')
+        .height('100%')
+        .padding({
+          left: AppThemeTokens.pageHorizontalPadding(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen),
+          right: AppThemeTokens.pageHorizontalPadding(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen),
+          top: this.nativeHeaderHeight(),
+          bottom: this.vm.appUIState.safeBottom
+        })
+
+        this.nativeSearchHeader()
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+    }
   }
 
   build() {
     AppRouteDestination({
       title: '搜索',
+      titleBarVisible: false,
+      contentExtendsUnderTitleBar: true,
       contentBuilder: () => {
         this.pageContent(false)
       },
