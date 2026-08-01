@@ -74,6 +74,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
 
     this.ui.videoGroups = groups
     this.ui.videos = videos
+    this.ui.selectGroupIndex = 0
   }
 
   getSeasonDetail() {
@@ -89,7 +90,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
         new ImageUrlsApi().getItemImageUrlById(itemData.SeriesId, ImageType.Backdrop)
         this.ui.seriesName = itemData.SeriesName || ''
         this.ui.seasonName = itemData.Name || ''
-        this.ui.info = `${itemData.ProductionYear}  /  ${this.ui.preInfo}`
+        this.ui.info = this.ui.preInfo || (itemData.ProductionYear ? itemData.ProductionYear.toString() : '')
         this.ui.overview = itemData.Overview || ''
         this.ui.people = itemData.People || []
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
@@ -181,7 +182,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   }
 
   protected changeImageHeight(): void {
-    this.ui.imageHeight = SeasonDetailUIState.imageInitHeight;
+    this.ui.imageHeight = this.ui.imageBaseHeight;
     this.originImageHeight = this.ui.imageHeight;
   }
 

@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnifeComponent } from '@ohos/imageknifepro';
+import { ImageKnife, ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
@@ -22,6 +22,82 @@ import {
   OverlayMaterialDecision,
   OverlaySurfaceRole
 } from '../../theme/AppThemeOverlayPolicy';
+import { image } from '@kit.ImageKit';
+import {
+  HomeFeedTabItem,
+  HomeLibraryChipSelector
+} from '../home/hometab/HomeLibraryChipSelector';
+
+@ComponentV2
+struct NativeSeasonPlayAction {
+  @Require @Param label: string
+  @Require @Param onAction: () => void
+
+  build() {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_primary')])
+        Text(this.label)
+          .fontSize(16)
+          .fontColor($r('sys.color.font_primary'))
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .padding({ left: 20, right: 20 })
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+    }
+    .height(50)
+    .borderRadius(25)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    .accessibilityText(this.label)
+    .onClick(() => {
+      this.onAction()
+    })
+  }
+}
+
+@ComponentV2
+struct NativeSeasonIconAction {
+  @Require @Param label: string
+  @Require @Param accessibilityLabel: string
+  @Require @Param selected: boolean
+  @Require @Param onAction: () => void
+
+  build() {
+    Column({ space: 6 }) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Image($r('app.media.ic_check'))
+          .width(22)
+          .height(22)
+          .renderMode(ImageRenderMode.Template)
+          .interpolation(ImageInterpolation.High)
+          .fillColor(this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
+      }
+      .width(50)
+      .height(50)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .accessibilityText(this.accessibilityLabel)
+      .onClick(() => {
+        this.onAction()
+      })
+
+      Text(this.label)
+        .fontSize(12)
+        .fontColor($r('sys.color.font_secondary'))
+        .maxLines(1)
+        .textAlign(TextAlign.Center)
+    }
+    .width(88)
+    .alignItems(HorizontalAlign.Center)
+  }
+}
 
 @HMRouter({
   pageUrl: RouterConsts.SeasonDetailPage,
@@ -32,15 +108,114 @@ export struct SeasonDetailPage {
   @Local ui: SeasonDetailUIState = new SeasonDetailUIState(this.getUIContext())
   vm: SeasonDetailViewModel = new SeasonDetailViewModel(this.ui)
   @Local isShowSheet: boolean = false;
+  @Local heroPixelMap?: image.PixelMap
+  private heroPixelMapSource: string = ''
+  private heroPixelMapLoadingSource: string = ''
+
+  private async prepareHeroPixelMap(sourceUrl: string): Promise<void> {
+    if (!sourceUrl || this.heroPixelMapSource === sourceUrl || this.heroPixelMapLoadingSource === sourceUrl) {
+      return
+    }
+    this.heroPixelMapLoadingSource = sourceUrl
+    try {
+      const imageData = await ImageKnife.getInstance().getCacheImage(sourceUrl)
+      const sourcePixelMap = imageData?.pixelmapList?.[0]
+      if (!sourcePixelMap) {
+        return
+      }
+      const imageInfo = await sourcePixelMap.getImageInfo()
+      const pixelFormat = imageInfo.pixelFormat
+      const sourceAlphaType = imageInfo.alphaType
+      if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
+        pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
+        pixelFormat !== image.PixelMapFormat.ARGB_8888) {
+        return
+      }
+
+      const width = imageInfo.size.width
+      const height = imageInfo.size.height
+      const rowBytes = sourcePixelMap.getBytesNumberPerRow()
+      const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
+      await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
+      const sourcePixels = new Uint8Array(sourceBuffer)
+      const compactBuffer = new ArrayBuffer(width * height * 4)
+      const compactPixels = new Uint8Array(compactBuffer)
+
+      for (let y = 0; y < height; y++) {
+        const sourceRowStart = y * rowBytes
+        const targetRowStart = y * width * 4
+        compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
+      }
+
+      const fadeStart = Math.floor(height * 0.64)
+      const fadeHeight = Math.max(1, height - fadeStart)
+      const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
+      for (let y = fadeStart; y < height; y++) {
+        const progress = (y - fadeStart) / fadeHeight
+        const smoothProgress = progress * progress * (3 - 2 * progress)
+        const alphaScale = 1 - smoothProgress
+        for (let x = 0; x < width; x++) {
+          const pixelIndex = (y * width + x) * 4
+          const alphaIndex = pixelIndex + alphaOffset
+          const sourceAlpha = compactPixels[alphaIndex]
+          const targetAlpha = Math.round(sourceAlpha * alphaScale)
+          const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
+          for (let channel = 0; channel < 4; channel++) {
+            if (channel !== alphaOffset) {
+              compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
+            }
+          }
+          compactPixels[alphaIndex] = targetAlpha
+        }
+      }
+
+      const nextPixelMap = await image.createPixelMap(compactBuffer, {
+        size: { width: width, height: height },
+        srcPixelFormat: pixelFormat,
+        pixelFormat: pixelFormat,
+        alphaType: image.AlphaType.PREMUL,
+        editable: false
+      })
+      if (this.ui.backgroundImage !== sourceUrl) {
+        nextPixelMap.release()
+        return
+      }
+      const previousPixelMap = this.heroPixelMap
+      this.heroPixelMapSource = sourceUrl
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.FastOutSlowIn }, () => {
+        this.heroPixelMap = nextPixelMap
+      })
+      if (previousPixelMap && previousPixelMap !== nextPixelMap) {
+        previousPixelMap.release()
+      }
+    } finally {
+      if (this.heroPixelMapLoadingSource === sourceUrl) {
+        this.heroPixelMapLoadingSource = ''
+      }
+    }
+  }
 
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
-  private secondarySurfaceBackground(): ResourceColor {
-    return this.useNativeSurface() ?
-      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_2')
+  private configureHeroHeight(): void {
+    this.ui.imageBaseHeight = this.useNativeSurface() ?
+      SeasonDetailUIState.nativeImageInitHeight : SeasonDetailUIState.imageInitHeight
+    this.ui.imageHeight = this.ui.imageBaseHeight
+  }
+
+  private seasonTabs(): HomeFeedTabItem[] {
+    return this.ui.seasons.map<HomeFeedTabItem>((season: VideoItem) => {
+      return { id: season.id, label: season.name }
+    })
+  }
+
+  private episodeGroupTabs(): HomeFeedTabItem[] {
+    return this.ui.videoGroups.map<HomeFeedTabItem>((group: string, index: number) => {
+      return { id: index.toString(), label: group }
+    })
   }
 
   private sheetMaterialDecision(): OverlayMaterialDecision {
@@ -53,15 +228,172 @@ export struct SeasonDetailPage {
   }
 
   @Builder
-  private nativeBackdrop() {
-    ImageKnifeComponent({
-      imageKnifeOption: {
-        loadSrc: this.ui.backgroundImage,
-        objectFit: ImageFit.Cover,
+  private nativeHeroBackdrop() {
+    Stack() {
+      if (this.heroPixelMap && this.heroPixelMapSource === this.ui.backgroundImage) {
+        Image(this.heroPixelMap)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .transition(TransitionEffect.OPACITY)
+      } else {
+        ImageKnifeComponent({
+          imageKnifeOption: {
+            loadSrc: this.ui.backgroundImage,
+            objectFit: ImageFit.Cover,
+            onComplete: () => {
+              this.prepareHeroPixelMap(this.ui.backgroundImage)
+            }
+          }
+        })
+          .width('100%')
+          .height('100%')
       }
-    })
+
+      Stack()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 0,
+          colors: [
+            ['rgba(0, 0, 0, 0)', 0],
+            ['rgba(0, 0, 0, 0.08)', 0.24],
+            ['rgba(0, 0, 0, 0.28)', 0.66],
+            ['rgba(0, 0, 0, 0)', 1]
+          ]
+        })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private nativePageBackdrop() {
+    Stack() {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.ui.backgroundImage,
+          objectFit: ImageFit.Cover
+        }
+      })
+        .width('100%')
+        .height('100%')
+        .scale({ x: 1.18, y: 1.18 })
+        .blur(128)
+        .opacity(0.95)
+
+      Stack()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 0,
+          colors: [
+            [$r('app.color.native_detail_page_overlay_soft'), 0],
+            [$r('app.color.native_detail_page_overlay_soft'), 0.56],
+            [$r('app.color.native_detail_page_overlay_strong'), 1]
+          ]
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
+  private nativeHeroMetadata() {
+    Column({ space: 10 }) {
+      Text(this.ui.seasonName)
+        .fontSize(14)
+        .fontColor(Color.White)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(this.ui.seriesName)
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(this.ui.info)
+        .fontSize(13)
+        .fontColor(Color.White)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .lineSpacing({ value: 10, unit: LengthUnit.VP })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 12 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private nativeDetailActions() {
+    Column({ space: 14 }) {
+      NativeSeasonPlayAction({
+        label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+        onAction: () => {
+          this.vm.playFirst()
+        }
+      })
+        .width('100%')
+
+      Row() {
+        NativeSeasonIconAction({
+          label: this.ui.played ? '已观看' : '标记已看',
+          accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+          selected: this.ui.played,
+          onAction: () => {
+            this.vm.changePlayedState()
+          }
+        })
+      }
       .width('100%')
-      .height(this.ui.imageHeight)
+      .justifyContent(FlexAlign.Center)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private legacyDetailActions() {
+    Row({ space: 8 }) {
+      Button() {
+        Row() {
+          Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+          Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
+            .fontSize(16)
+            .fontColor(Color.White)
+            .fontWeight(FontWeight.Medium)
+        }
+      }
+      .layoutWeight(1)
+      .margin({ right: 12 })
+      .borderRadius(25)
+      .height(50)
+      .backgroundColor($r('app.color.color_main'))
+      .onClick(() => {
+        this.vm.playFirst()
+      })
+
+      Button() {
+        Image($r('app.media.ic_check'))
+          .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+          .width(22)
+          .height(22)
+      }
+      .width(50)
+      .height(50)
+      .borderWidth(1)
+      .borderColor($r('app.color.border'))
+      .borderRadius(25)
+      .backgroundColor($r('app.color.bg_2'))
+      .onClick(() => {
+        this.vm.changePlayedState()
+      })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
   }
 
   @Builder
@@ -139,6 +471,7 @@ export struct SeasonDetailPage {
   }
 
   aboutToAppear(): void {
+    this.configureHeroHeight()
     let param = HMRouterMgr.getCurrentParam() as object
     if (param) {
       this.ui.id = param['id'] as string
@@ -151,210 +484,211 @@ export struct SeasonDetailPage {
     }
   }
 
+  aboutToDisappear(): void {
+    if (this.heroPixelMap) {
+      this.heroPixelMap.release()
+      this.heroPixelMap = undefined
+      this.heroPixelMapSource = ''
+    }
+  }
+
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
     Stack() {
+      if (this.useNativeSurface() && !this.ui.firstLoading) {
+        this.nativePageBackdrop()
+      }
+
       if (this.ui.firstLoading) {
         SkeletonDetailView()
       } else {
         Scroll(this.ui.scroller) {
           Column() {
             Stack() {
-              //背景图
               if (this.useNativeSurface()) {
-                this.nativeBackdrop()
+                this.nativeHeroBackdrop()
+                this.nativeHeroMetadata()
               } else {
                 this.feiniuBackdrop()
-              }
-              //渐变遮罩
-              Stack().width('100%')
-                .height(this.useNativeSurface() ? this.ui.imageHeight : this.ui.imageHeight - 100)
-                .linearGradient({
-                  angle: 0, // 0度在CSS中是从下到上，ArkTS中180度对应
-                  colors: [
-                    [0x121618, 0.0], // 起始位置：完全不透明
-                    ['rgba(26, 30, 35, 0.6)', 0.3], // 30%位置：60%不透明
-                    ['rgba(26, 30, 35, 0.2)', 0.4], // 40%位置：20%不透明
-                    ['rgba(26, 30, 35, 0.1)', 1]// 100%位置：10%不透明
-                  ]
-                })
 
-              if (this.useNativeSurface()) {
-                Stack()
-                  .width('100%')
-                  .height(72)
-                  .align(Alignment.Bottom)
+                Stack().width('100%')
+                  .height(this.ui.imageHeight - 100)
                   .linearGradient({
                     angle: 0,
                     colors: [
-                      [$r('app.color.native_canvas_background'), 0],
-                      [Color.Transparent, 1]
+                      [0x121618, 0.0],
+                      ['rgba(26, 30, 35, 0.6)', 0.3],
+                      ['rgba(26, 30, 35, 0.2)', 0.4],
+                      ['rgba(26, 30, 35, 0.1)', 1]
                     ]
                   })
+
+                Column() {
+                  Blank()
+                  Row({ space: 16 }) {
+                    ImageKnifeComponent({
+                      imageKnifeOption: {
+                        loadSrc: this.ui.image,
+                        objectFit: ImageFit.Fill,
+                        border: {
+                          width: 0.5,
+                          radius: 12,
+                          color: $r('app.color.border_1')
+                        }
+                      }
+                    })
+                      .height('100%')
+                      .aspectRatio(291 / 436)
+                    Column() {
+                      Blank().height(60)
+                      Text(this.ui.seriesName).fontColor(Color.White).fontWeight(FontWeight.Medium).fontSize(28)
+                      Blank()
+                      Text(this.ui.seasonName).fontColor($r('app.color.text_primary')).fontSize(14)
+                      Blank().height(10)
+                      Text() {
+                        Span(this.ui.info)
+                      }
+                      .fontSize(12)
+                      .fontColor($r('app.color.text_1'))
+                      .lineSpacing({ value: 6, unit: LengthUnit.VP })
+                      .width('100%')
+                      .textAlign(TextAlign.Start)
+                    }
+                    .alignItems(HorizontalAlign.Start)
+                    .height('100%')
+                    .layoutWeight(1)
+                  }
+                  .height(200)
+                  .padding({ left: 16, right: 16 })
+                }
+                .width('100%')
+                .height('100%')
               }
 
-              Column() {
-                Blank()
-                Row({ space: 16 }) {
-                  ImageKnifeComponent({
-                    imageKnifeOption: {
-                      loadSrc: this.ui.image,
-                      objectFit: ImageFit.Fill,
-                      border: {
-                        width: AppThemeSurfaceResolver.outlineWidth(
-                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
-                        radius: 12,
-                        color: AppThemeSurfaceResolver.mediaOutline(
-                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
-                      }
-                    }
-                  })
-                    .height('100%')
-                    .aspectRatio(291 / 436)
-                  Column() {
-                    Blank().height(60)
-                    Text(this.ui.seriesName).fontColor(Color.White).fontWeight(FontWeight.Medium).fontSize(28)
-                    Blank()
-                    Text(this.ui.seasonName).fontColor($r('app.color.text_primary')).fontSize(14)
-                    Blank().height(10)
-                    Text() {
-                      //Span(this.ui.score + '分  / ').fontColor($r('app.color.text_score'))
-                      Span(this.ui.info)
-                    }
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_1'))
-                    .lineSpacing({ value: 6, unit: LengthUnit.VP })
-                    .width('100%')
-                    .textAlign(TextAlign.Start)
-                  }.alignItems(HorizontalAlign.Start)
-                  .height('100%')
-                  .layoutWeight(1)
-                }.height(200)
-                .padding({
-                  left: 16,
-                  right: 16
-                })
-                .margin({ bottom: this.useNativeSurface() ? 36 : 0 })
-              }.width('100%')
-              .height('100%')
-
-            }.width('100%')
+            }
+            .width('100%')
             .height(this.ui.imageHeight)
-            .alignContent(Alignment.Top)
+            .alignContent(this.useNativeSurface() ? Alignment.BottomStart : Alignment.Top)
 
             Stack() {
               Column() {
-                Row({ space: 8 }) {
-                Button() {
-                  Row() {
-                    Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                    Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
-                      .fontSize(16)
-                      .fontColor(Color.White)
-                      .fontWeight(FontWeight.Medium)
-                  }
+                if (this.useNativeSurface()) {
+                  this.nativeDetailActions()
+                } else {
+                  this.legacyDetailActions()
                 }
-                .layoutWeight(1)
-                .margin({
-                  right: 12
-                })
-                .borderRadius(25)
-                .height(50)
-                .backgroundColor($r('app.color.color_main'))
-                .systemMaterial(this.useNativeSurface() ?
-                  AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-                  AppThemeSurfaceResolver.disabledSystemMaterial())
-                .onClick(() => {
-                  this.vm.playFirst()
-                })
-
-                Button() {
-                  Image($r('app.media.ic_check'))
-                    .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
-                    .width(22)
-                    .height(22)
-                }
-                .width(50)
-                .height(50)
-                .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                .borderColor(AppThemeSurfaceResolver.contentOutline(
-                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                .borderRadius(25)
-                .backgroundColor(this.secondarySurfaceBackground())
-                .onClick(() => {
-                  this.vm.changePlayedState()
-                })
-              }.width('100%')
-              .padding({ left: 16, right: 16 })
 
               if (this.ui.overview.length > 0) {
                 Blank().height(20)
                 this.overviewSheetTrigger()
               }
-              //Text(this.ui.overview).width('100%').fontSize(14).fontColor($r('app.color.text_1')).textAlign(TextAlign.Start)
 
-              Blank().height(20)
-              if (this.ui.seasons.length > 1) {
-                List() {
-                  ForEach(this.ui.seasons, (season: VideoItem, index) => {
-                    ListItem() {
-                      Row() {
-                        Text(season.name)
-                          .fontColor(season.id === this.ui.id ? $r('app.color.color_main') : $r('app.color.text_1'))
-                          .fontSize(14)
-                          .onClick(() => {
-                            this.ui.videoScroller.scrollEdge(Edge.Start)
-                            this.ui.id = season.id
-                            this.vm.getSeasonDetail()
-                            this.vm.getEpisodes(season.id)
-                          })
-                        if (index !== this.ui.seasons.length - 1) {
-                          Text('  /  ').fontSize(12).fontColor('#7f8c94')
+              if (this.useNativeSurface()) {
+                Blank().height(24)
+                if (this.ui.seasons.length > 1) {
+                  Text('选择季')
+                    .fontSize(18)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor($r('sys.color.font_primary'))
+                    .padding({ left: 16, right: 16 })
+
+                  Blank().height(12)
+                  HomeLibraryChipSelector({
+                    tabs: this.seasonTabs(),
+                    selectedId: this.ui.id,
+                    onSelectedIdChange: (id: string) => {
+                      if (id === this.ui.id) {
+                        return
+                      }
+                      this.ui.videoScroller.scrollEdge(Edge.Start)
+                      this.ui.id = id
+                      this.ui.episodeName = ''
+                      this.vm.getSeasonDetail()
+                    }
+                  })
+                    .padding({ left: 16, right: 16 })
+                }
+
+                Blank().height(this.ui.seasons.length > 1 ? 24 : 0)
+                Text('剧集')
+                  .fontSize(18)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('sys.color.font_primary'))
+                  .padding({ left: 16, right: 16 })
+
+                if (this.ui.videoGroups.length > 1) {
+                  Blank().height(12)
+                  HomeLibraryChipSelector({
+                    tabs: this.episodeGroupTabs(),
+                    selectedId: this.ui.selectGroupIndex.toString(),
+                    onSelectedIdChange: (id: string) => {
+                      this.ui.videoScroller.scrollEdge(Edge.Start)
+                      this.ui.selectGroupIndex = Number(id)
+                    }
+                  })
+                    .padding({ left: 16, right: 16 })
+                }
+              } else {
+                Blank().height(20)
+                if (this.ui.seasons.length > 1) {
+                  List() {
+                    ForEach(this.ui.seasons, (season: VideoItem, index) => {
+                      ListItem() {
+                        Row() {
+                          Text(season.name)
+                            .fontColor(season.id === this.ui.id ? $r('app.color.color_main') :
+                              $r('app.color.text_1'))
+                            .fontSize(14)
+                            .onClick(() => {
+                              this.ui.videoScroller.scrollEdge(Edge.Start)
+                              this.ui.id = season.id
+                              this.vm.getSeasonDetail()
+                              this.vm.getEpisodes(season.id)
+                            })
+                          if (index !== this.ui.seasons.length - 1) {
+                            Text('  /  ').fontSize(12).fontColor('#7f8c94')
+                          }
                         }
                       }
-                    }
-                  })
-                }.width('100%').height(20).listDirection(Axis.Horizontal).scrollBar(BarState.Off)
-                .padding({ left: 16, right: 16 })
-              }
-
-              if (this.ui.videoGroups.length > 1) {
-                List() {
-                  ForEach(this.ui.videoGroups, (group: string, index) => {
-                    ListItem() {
-                      Text(group)
-                        .fontColor(index === this.ui.selectGroupIndex ? $r('app.color.color_main') :
-                          $r('app.color.text_1'))
-                        .fontSize(14)
-                        .padding({
-                          left: 8,
-                          right: 8,
-                          top: 6,
-                          bottom: 6
-                        })
-                        .borderRadius(6)
-                        .backgroundColor(index === this.ui.selectGroupIndex ? 'rgba(29, 155, 240, 0.1)' :
-                          Color.Transparent)
-                        .onClick(() => {
-                          this.ui.videoScroller.scrollEdge(Edge.Start)
-                          this.ui.selectGroupIndex = index
-                        })
-                    }
-                  })
+                    })
+                  }
+                  .width('100%')
+                  .height(20)
+                  .listDirection(Axis.Horizontal)
+                  .scrollBar(BarState.Off)
+                  .padding({ left: 16, right: 16 })
                 }
-                .width('100%')
-                .height(30)
-                .listDirection(Axis.Horizontal)
-                .scrollBar(BarState.Off)
-                .margin({
-                  top: 12
-                })
-                .padding({ left: 16, right: 16 })
+
+                if (this.ui.videoGroups.length > 1) {
+                  List() {
+                    ForEach(this.ui.videoGroups, (group: string, index) => {
+                      ListItem() {
+                        Text(group)
+                          .fontColor(index === this.ui.selectGroupIndex ? $r('app.color.color_main') :
+                            $r('app.color.text_1'))
+                          .fontSize(14)
+                          .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+                          .borderRadius(6)
+                          .backgroundColor(index === this.ui.selectGroupIndex ? 'rgba(29, 155, 240, 0.1)' :
+                            Color.Transparent)
+                          .onClick(() => {
+                            this.ui.videoScroller.scrollEdge(Edge.Start)
+                            this.ui.selectGroupIndex = index
+                          })
+                      }
+                    })
+                  }
+                  .width('100%')
+                  .height(30)
+                  .listDirection(Axis.Horizontal)
+                  .scrollBar(BarState.Off)
+                  .margin({ top: 12 })
+                  .padding({ left: 16, right: 16 })
+                }
               }
 
               Blank(16)
-              if (this.ui.videos.length > 0) {
+              if (this.ui.videos.length > this.ui.selectGroupIndex) {
                 List({ space: 12, scroller: this.ui.videoScroller }) {
                   ForEach(this.ui.videos[this.ui.selectGroupIndex], (item: VideoItem) => {
                     ListItem() {
@@ -414,7 +748,8 @@ export struct SeasonDetailPage {
                         }.width('100%').aspectRatio(16 / 9)
 
                         Text(item.name)
-                          .fontColor($r('app.color.text_primary'))
+                          .fontColor(this.useNativeSurface() ? $r('sys.color.font_primary') :
+                            $r('app.color.text_primary'))
                           .fontSize(14)
                           .fontWeight(FontWeight.Medium)
                           .width('100%')
@@ -428,7 +763,7 @@ export struct SeasonDetailPage {
                           })
                           .textAlign(TextAlign.Start)
                         Text(item.subtitle)
-                          .fontColor(Color.Gray)
+                          .fontColor(this.useNativeSurface() ? $r('sys.color.font_secondary') : Color.Gray)
                           .fontSize(12)
                           .width('100%')
                           .maxLines(2)
@@ -441,7 +776,8 @@ export struct SeasonDetailPage {
                             top: 4
                           })
                         Text(item.time)
-                          .fontColor($r('app.color.text_1'))
+                          .fontColor(this.useNativeSurface() ? $r('sys.color.font_secondary') :
+                            $r('app.color.text_1'))
                           .fontSize(12)
                           .width('100%')
                           .maxLines(1)
@@ -453,8 +789,9 @@ export struct SeasonDetailPage {
                           .margin({
                             top: 4
                           })
-                      }.width(160)
-                      .height(140)
+                      }
+                      .width(this.useNativeSurface() ? 180 : 160)
+                      .height(this.useNativeSurface() ? 158 : 140)
                       .alignItems(HorizontalAlign.Start)
                       .margin({
                         bottom: 8
@@ -470,7 +807,7 @@ export struct SeasonDetailPage {
                   })
                 }
                 .width('100%')
-                .height(165)
+                .height(this.useNativeSurface() ? 184 : 165)
                 .listDirection(Axis.Horizontal)
                 .scrollBar(BarState.Off)
                 .padding({ left: 16, right: 16 })
@@ -515,9 +852,10 @@ export struct SeasonDetailPage {
             this.vm.bannerSpringBack();
           }
           this.ui.blur = y / 5
-          if (y > 128) {
+          const titleRevealOffset = this.useNativeSurface() ? 200 : 128
+          if (y > titleRevealOffset) {
             this.ui.showActionBar = true
-            this.ui.actionBarOpacity = Math.min((y - 128) / 72, 0.6)
+            this.ui.actionBarOpacity = Math.min((y - titleRevealOffset) / 72, 0.6)
           } else {
             this.ui.actionBarOpacity = 0
             this.ui.showActionBar = false

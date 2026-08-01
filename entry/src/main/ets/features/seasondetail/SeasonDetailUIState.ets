@@ -37,6 +37,8 @@ export class SeasonDetailUIState extends BaseUIState {
   @Trace actionBarOpacity: number = 0
 
   static readonly imageInitHeight: number = 320;
+  static readonly nativeImageInitHeight: number = 430;
+  @Trace imageBaseHeight: number = SeasonDetailUIState.imageInitHeight;
   @Trace hasEdgeEffect: boolean = false;
   @Trace currentScrollState: ScrollState = ScrollState.Idle;
   @Trace imageHeight: number = SeasonDetailUIState.imageInitHeight;
