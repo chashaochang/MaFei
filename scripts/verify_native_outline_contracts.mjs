@@ -48,7 +48,7 @@ const OUTLINE_TARGETS = [
   },
   {
     path: VIDEO_DETAIL,
-    widths: [1, 1, 1, 1, 1, 1],
+    widths: [1, 1, 1, 1],
     whiteFrames: 0
   }
 ]

@@ -26,6 +26,7 @@ import {
   ChipV2Size,
   ColorMetrics
 } from "@kit.ArkUI"
+import { ConfigurationConstant } from '@kit.AbilityKit'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
@@ -76,10 +77,12 @@ export struct HomeTab {
   }
 
   private heroSegmentProgress(index: number): number {
-    if (index < this.heroIndex) {
-      return 100
-    }
     return index === this.heroIndex ? this.heroProgress : 0
+  }
+
+  private heroProgressTrackColor(): ResourceColor {
+    return this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ?
+      'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.12)'
   }
 
   private scrollTail(): number {
@@ -522,7 +525,7 @@ export struct HomeTab {
           .layoutWeight(1)
           .height(3)
           .color($r('sys.color.icon_primary'))
-          .backgroundColor($r('sys.color.icon_secondary'))
+          .backgroundColor(this.heroProgressTrackColor())
           .style({
             strokeWidth: 3,
             strokeRadius: 1.5,

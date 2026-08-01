@@ -162,12 +162,6 @@
       "kind": "content-group"
     },
     {
-      "path": "entry/src/main/ets/features/cast/CastDetailPage.ets",
-      "component": "CastDetailPage",
-      "method": "nativeProfileGroupSurface",
-      "kind": "content-group"
-    },
-    {
       "path": "entry/src/main/ets/features/connect/ConnectScreen.ets",
       "component": "ConnectScreen",
       "method": "nativeConnectionForm",

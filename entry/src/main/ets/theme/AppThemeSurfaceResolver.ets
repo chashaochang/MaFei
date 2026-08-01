@@ -5,6 +5,7 @@ export enum AppThemeMaterialRole {
   ContentGroup = 'content_group',
   Floating = 'floating',
   InteractiveFloating = 'interactive_floating',
+  PrimaryInteractive = 'primary_interactive',
   AdaptiveInteractive = 'adaptive_interactive',
   HomeLibraryChip = 'home_library_chip',
   HomeLibraryChipSelected = 'home_library_chip_selected'
@@ -14,6 +15,7 @@ export class AppThemeSurfaceResolver {
   private static contentGroup?: uiMaterial.Material
   private static floating?: uiMaterial.Material
   private static interactiveFloating?: uiMaterial.Material
+  private static primaryInteractive?: uiMaterial.Material
   private static adaptiveInteractive?: uiMaterial.Material
   private static homeLibraryChip?: uiMaterial.Material
   private static homeLibraryChipSelected?: uiMaterial.Material
@@ -114,6 +116,19 @@ export class AppThemeSurfaceResolver {
         })
       }
       return AppThemeSurfaceResolver.interactiveFloating
+    }
+    if (role === AppThemeMaterialRole.PrimaryInteractive) {
+      if (!AppThemeSurfaceResolver.primaryInteractive) {
+        AppThemeSurfaceResolver.primaryInteractive = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: $r('app.color.color_main'),
+          colorInvert: false,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+        })
+      }
+      return AppThemeSurfaceResolver.primaryInteractive
     }
     if (role === AppThemeMaterialRole.HomeLibraryChip) {
       if (!AppThemeSurfaceResolver.homeLibraryChip) {

@@ -9,6 +9,26 @@
       "value": "#F1F2F4"
     },
     {
+      "name": "native_detail_atmosphere_overlay_top",
+      "value": "#00F1F2F4"
+    },
+    {
+      "name": "native_detail_atmosphere_overlay_bottom",
+      "value": "#B8F1F2F4"
+    },
+    {
+      "name": "native_detail_page_overlay_strong",
+      "value": "#70F1F2F4"
+    },
+    {
+      "name": "native_detail_page_overlay_soft",
+      "value": "#38F1F2F4"
+    },
+    {
+      "name": "native_detail_information_background",
+      "value": "#66FFFFFF"
+    },
+    {
       "name": "color_main",
       "value": "#2173df"
     },

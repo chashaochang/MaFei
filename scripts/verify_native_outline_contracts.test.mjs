@@ -18,7 +18,7 @@ const TARGETS = [
   ['entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets', [0.5], true],
   ['entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets', [0.5, 0.5, 1], true],
   ['entry/src/main/ets/features/cast/CastDetailPage.ets', [0.5, 1], false],
-  [VIDEO_DETAIL, [1, 1, 1, 1, 1, 1], false]
+  [VIDEO_DETAIL, [1, 1, 1, 1], false]
 ]
 
 const resolver = `
@@ -42,7 +42,7 @@ function sourceFor(path, widths, whiteFrame) {
       `.borderWidth(${outlineCall(1)})`,
       ".borderColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :",
       '  AppThemeSurfaceResolver.contentOutline(this.themeStyle, this.nativeThemeAvailable))',
-      ...Array.from({ length: 4 }, () => [
+      ...Array.from({ length: 2 }, () => [
         `.borderWidth(${outlineCall(1)})`,
         '.borderColor(AppThemeSurfaceResolver.contentOutline(this.themeStyle, this.nativeThemeAvailable))'
       ]).flat()

@@ -16,6 +16,7 @@ import {
 @ComponentV2
 export struct AudioSubtitleSelector {
   @Param @Require source: MediaSourceInfo
+  @Param triggerTextColor: ResourceColor = $r('app.color.text_primary')
   @Local subtitle: string = '无字幕'
   @Local audio: string = '未知音频'
   @Consumer() selectedSubtitleIndex: number = 0
@@ -103,11 +104,11 @@ export struct AudioSubtitleSelector {
 
   @Builder
   private subtitleTriggerContent() {
-    Text(this.getShowName(0)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
+    Text(this.getShowName(0)).fontSize(12).fontWeight(FontWeight.Bold).fontColor(this.triggerTextColor)
     SymbolGlyph(this.isShowingSubtitleOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
-      .fontColor([$r('app.color.text_primary')])
+      .fontColor([this.triggerTextColor])
       .visibility(this.subtitles.length > 1 ? Visibility.Visible : Visibility.Hidden)
   }
 
@@ -151,11 +152,11 @@ export struct AudioSubtitleSelector {
 
   @Builder
   private audioTriggerContent() {
-    Text(this.getShowName(1)).fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
+    Text(this.getShowName(1)).fontSize(12).fontWeight(FontWeight.Bold).fontColor(this.triggerTextColor)
     SymbolGlyph(this.isShowingAudioOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
-      .fontColor([$r('app.color.text_primary')])
+      .fontColor([this.triggerTextColor])
       .visibility(this.audios.length > 1 ? Visibility.Visible : Visibility.Hidden)
   }
 

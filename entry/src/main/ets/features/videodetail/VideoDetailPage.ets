@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnifeComponent } from '@ohos/imageknifepro';
+import { ImageKnife, ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { VideoDetailUIState } from './VideoDetailUIState';
@@ -30,6 +30,88 @@ import {
   OverlaySurfaceRole
 } from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { image } from '@kit.ImageKit';
+
+@ComponentV2
+struct NativeDetailPlayAction {
+  @Require @Param label: string
+  @Require @Param onAction: () => void
+
+  build() {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.play_fill'))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_primary')])
+        Text(this.label)
+          .fontSize(16)
+          .fontColor($r('sys.color.font_primary'))
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .padding({ left: 20, right: 20 })
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+    }
+    .height(50)
+    .borderRadius(25)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    .accessibilityText(this.label)
+    .onClick(() => {
+      this.onAction()
+    })
+  }
+}
+
+@ComponentV2
+struct NativeDetailIconAction {
+  @Param icon: ResourceStr | undefined = undefined
+  @Param symbol: Resource | undefined = undefined
+  @Require @Param label: string
+  @Require @Param accessibilityLabel: string
+  @Require @Param selected: boolean
+  @Require @Param onAction: () => void
+
+  build() {
+    Column({ space: 6 }) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        if (this.symbol) {
+          SymbolGlyph(this.symbol)
+            .fontSize(23)
+            .fontColor([
+              this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary')
+            ])
+        } else if (this.icon) {
+          Image(this.icon)
+            .width(22)
+            .height(22)
+            .renderMode(ImageRenderMode.Template)
+            .interpolation(ImageInterpolation.High)
+            .fillColor(this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
+        }
+      }
+      .width(50)
+      .height(50)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .accessibilityText(this.accessibilityLabel)
+      .onClick(() => {
+        this.onAction()
+      })
+
+      Text(this.label)
+        .fontSize(12)
+        .fontColor($r('sys.color.font_secondary'))
+        .maxLines(1)
+        .textAlign(TextAlign.Center)
+    }
+    .width(72)
+    .alignItems(HorizontalAlign.Center)
+  }
+}
 
 @HMRouter({
   pageUrl: RouterConsts.VideoDetailPage,
@@ -39,8 +121,95 @@ import { AppThemeTokens } from '../../theme/AppThemeTokens';
 export struct VideoDetailPage {
   @Local ui: VideoDetailUIState = new VideoDetailUIState(this.getUIContext())
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
+  @Local heroPixelMap?: image.PixelMap
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
+  private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
+  private heroPixelMapSource: string = ''
+  private heroPixelMapLoadingSource: string = ''
+
+  private async prepareHeroPixelMap(sourceUrl: string): Promise<void> {
+    if (!sourceUrl || this.heroPixelMapSource === sourceUrl || this.heroPixelMapLoadingSource === sourceUrl) {
+      return
+    }
+    this.heroPixelMapLoadingSource = sourceUrl
+    try {
+      const imageData = await ImageKnife.getInstance().getCacheImage(sourceUrl)
+      const sourcePixelMap = imageData?.pixelmapList?.[0]
+      if (!sourcePixelMap) {
+        return
+      }
+      const imageInfo = await sourcePixelMap.getImageInfo()
+      const pixelFormat = imageInfo.pixelFormat
+      const sourceAlphaType = imageInfo.alphaType
+      if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
+        pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
+        pixelFormat !== image.PixelMapFormat.ARGB_8888) {
+        return
+      }
+
+      const width = imageInfo.size.width
+      const height = imageInfo.size.height
+      const rowBytes = sourcePixelMap.getBytesNumberPerRow()
+      const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
+      await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
+      const sourcePixels = new Uint8Array(sourceBuffer)
+      const compactBuffer = new ArrayBuffer(width * height * 4)
+      const compactPixels = new Uint8Array(compactBuffer)
+
+      for (let y = 0; y < height; y++) {
+        const sourceRowStart = y * rowBytes
+        const targetRowStart = y * width * 4
+        compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
+      }
+
+      const fadeStart = Math.floor(height * 0.64)
+      const fadeHeight = Math.max(1, height - fadeStart)
+      const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
+      for (let y = fadeStart; y < height; y++) {
+        const progress = (y - fadeStart) / fadeHeight
+        const smoothProgress = progress * progress * (3 - 2 * progress)
+        const alphaScale = 1 - smoothProgress
+        for (let x = 0; x < width; x++) {
+          const pixelIndex = (y * width + x) * 4
+          const alphaIndex = pixelIndex + alphaOffset
+          const sourceAlpha = compactPixels[alphaIndex]
+          const targetAlpha = Math.round(sourceAlpha * alphaScale)
+          const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
+          for (let channel = 0; channel < 4; channel++) {
+            if (channel !== alphaOffset) {
+              compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
+            }
+          }
+          compactPixels[alphaIndex] = targetAlpha
+        }
+      }
+
+      const nextPixelMap = await image.createPixelMap(compactBuffer, {
+        size: { width: width, height: height },
+        srcPixelFormat: pixelFormat,
+        pixelFormat: pixelFormat,
+        alphaType: image.AlphaType.PREMUL,
+        editable: false
+      })
+      if (this.ui.image !== sourceUrl) {
+        nextPixelMap.release()
+        return
+      }
+      const previousPixelMap = this.heroPixelMap
+      this.heroPixelMapSource = sourceUrl
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.FastOutSlowIn }, () => {
+        this.heroPixelMap = nextPixelMap
+      })
+      if (previousPixelMap && previousPixelMap !== nextPixelMap) {
+        previousPixelMap.release()
+      }
+    } finally {
+      if (this.heroPixelMapLoadingSource === sourceUrl) {
+        this.heroPixelMapLoadingSource = ''
+      }
+    }
+  }
 
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
@@ -50,6 +219,17 @@ export struct VideoDetailPage {
   private secondarySurfaceBackground(): ResourceColor {
     return this.useNativeSurface() ?
       AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_2')
+  }
+
+  private detailInformationBackground(): ResourceColor {
+    return this.useNativeSurface() ?
+      $r('app.color.native_detail_information_background') : this.secondarySurfaceBackground()
+  }
+
+  private configureHeroHeight(): void {
+    this.ui.imageBaseHeight = this.useNativeSurface() ?
+      VideoDetailUIState.nativeImageInitHeight : VideoDetailUIState.imageInitHeight
+    this.ui.imageHeight = this.ui.imageBaseHeight
   }
 
   private sheetMaterialDecision(): OverlayMaterialDecision {
@@ -63,17 +243,280 @@ export struct VideoDetailPage {
 
   @Builder
   private nativeHeroBackdrop() {
-    Column() {
+    Stack() {
+      if (this.heroPixelMap && this.heroPixelMapSource === this.ui.image) {
+        Image(this.heroPixelMap)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .transition(TransitionEffect.OPACITY)
+      } else {
+        ImageKnifeComponent({
+          imageKnifeOption: {
+            loadSrc: this.ui.image,
+            objectFit: ImageFit.Cover,
+            onComplete: () => {
+              this.prepareHeroPixelMap(this.ui.image)
+            }
+          }
+        })
+          .width('100%')
+          .height('100%')
+          .opacity(0)
+          .hitTestBehavior(HitTestMode.None)
+      }
+
+      Stack()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 0,
+          colors: [
+            ['rgba(0, 0, 0, 0)', 0],
+            ['rgba(0, 0, 0, 0.08)', 0.24],
+            ['rgba(0, 0, 0, 0.26)', 0.64],
+            ['rgba(0, 0, 0, 0)', 1]
+          ]
+        })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private nativePageBackdrop() {
+    Stack() {
       ImageKnifeComponent({
         imageKnifeOption: {
           loadSrc: this.ui.image,
           objectFit: ImageFit.Cover
         }
-      }).width('100%')
+      })
+        .width('100%')
         .height('100%')
+        .scale({ x: 1.18, y: 1.18 })
+        .blur(128)
+        .opacity(0.95)
+
+      Stack()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 0,
+          colors: [
+            [$r('app.color.native_detail_page_overlay_soft'), 0],
+            [$r('app.color.native_detail_page_overlay_soft'), 0.56],
+            [$r('app.color.native_detail_page_overlay_strong'), 1]
+          ]
+        })
     }
     .width('100%')
     .height('100%')
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
+  private nativeHeroMetadata() {
+    Column({ space: 10 }) {
+      if (this.ui.isMovie && this.ui.logo.length > 0) {
+        ImageKnifeComponent({
+          imageKnifeOption: {
+            loadSrc: this.ui.logo,
+            objectFit: ImageFit.Contain,
+          }
+        })
+          .height(76)
+          .aspectRatio(80 / 31)
+      } else {
+        if (this.ui.subtitle.length > 0) {
+          Text(this.ui.subtitle)
+            .fontSize(14)
+            .fontColor(Color.White)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        Text(this.ui.title)
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+
+      Text() {
+        if (this.ui.score > 0) {
+          Span(this.ui.score.toFixed(1) + '分  ')
+            .fontColor($r('app.color.text_score'))
+        }
+        Span(this.ui.info)
+      }
+      .fontSize(13)
+      .fontColor(Color.White)
+      .maxLines(2)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .lineSpacing({ value: 10, unit: LengthUnit.VP })
+
+      if (!this.ui.isTvShows && this.ui.mediaSources.length > 0) {
+        Row({ space: 14 }) {
+          ForEach(this.vm.getTags(), (item: string) => {
+            Image(item)
+              .height(21)
+              .colorFilter(this.heroTagColorFilter)
+          })
+        }
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 8 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private nativeDetailActions() {
+    Column({ space: 14 }) {
+      NativeDetailPlayAction({
+        label: this.ui.playButtonText,
+        onAction: () => {
+          if (this.ui.isTvShows) {
+            this.vm.playFirst()
+          } else {
+            let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
+            playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
+              this.ui.selectedSubtitle?.Index)
+          }
+        }
+      })
+        .width('100%')
+
+      Row({ space: 16 }) {
+        NativeDetailIconAction({
+          icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
+          label: this.ui.isFavorite ? '已收藏' : '收藏',
+          accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
+          selected: this.ui.isFavorite,
+          onAction: () => {
+            this.vm.changeFavorite()
+          }
+        })
+        if (this.ui.isTvShows) {
+          NativeDetailIconAction({
+            symbol: this.ui.isChasing ? $r('sys.symbol.list_bullet_square_fill') :
+              $r('sys.symbol.list_bullet_square'),
+            label: this.ui.isChasing ? '已追剧' : '追剧',
+            accessibilityLabel: this.ui.isChasing ? '取消追剧' : '追剧',
+            selected: this.ui.isChasing,
+            onAction: () => {
+              this.vm.changeChasingState()
+            }
+          })
+        }
+        NativeDetailIconAction({
+          icon: $r('app.media.ic_check'),
+          label: this.ui.played ? '已观看' : '标记已看',
+          accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+          selected: this.ui.played,
+          onAction: () => {
+            this.vm.changePlayedState()
+          }
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private legacyDetailActions() {
+    Row({ space: 8 }) {
+      Button() {
+        Row() {
+          Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+          Text(this.ui.playButtonText)
+            .fontSize(16)
+            .fontColor(Color.White)
+            .fontWeight(FontWeight.Medium)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .padding({ left: 18, right: 18 })
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+      }
+      .height(50)
+      .layoutWeight(1)
+      .margin({ right: 12 })
+      .borderRadius(25)
+      .onClick(() => {
+        if (this.ui.isTvShows) {
+          this.vm.playFirst()
+        } else {
+          let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
+          playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
+            this.ui.selectedSubtitle?.Index)
+        }
+      })
+
+      Button() {
+        Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+          .fillColor($r('app.color.text_1'))
+          .width(this.ui.isTvShows ? 20 : 22)
+          .height(this.ui.isTvShows ? 20 : 22)
+      }
+      .width(this.ui.isTvShows ? 44 : 50)
+      .height(this.ui.isTvShows ? 44 : 50)
+      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+      .borderColor(AppThemeSurfaceResolver.contentOutline(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+      .borderRadius(this.ui.isTvShows ? 22 : 25)
+      .backgroundColor(this.secondarySurfaceBackground())
+      .onClick(() => {
+        this.vm.changeFavorite()
+      })
+
+      if (this.ui.isTvShows) {
+        Button() {
+          Image(this.ui.isChasing ? $r('app.media.history') : $r('app.media.add'))
+            .fillColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.text_1'))
+            .width(20)
+            .height(20)
+        }
+        .width(44)
+        .height(44)
+        .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+        .borderColor(this.ui.isChasing ? $r('app.color.color_main') :
+          AppThemeSurfaceResolver.contentOutline(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+        .borderRadius(22)
+        .backgroundColor(this.secondarySurfaceBackground())
+        .onClick(() => {
+          this.vm.changeChasingState()
+        })
+      }
+
+      Button() {
+        Image($r('app.media.ic_check'))
+          .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+          .width(this.ui.isTvShows ? 20 : 22)
+          .height(this.ui.isTvShows ? 20 : 22)
+      }
+      .width(this.ui.isTvShows ? 44 : 50)
+      .height(this.ui.isTvShows ? 44 : 50)
+      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+      .borderColor(AppThemeSurfaceResolver.contentOutline(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+      .borderRadius(this.ui.isTvShows ? 22 : 25)
+      .backgroundColor(this.secondarySurfaceBackground())
+      .onClick(() => {
+        this.vm.changePlayedState()
+      })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
   }
 
   @Builder
@@ -121,6 +564,7 @@ export struct VideoDetailPage {
   }
 
   aboutToAppear(): void {
+    this.configureHeroHeight()
     let param = HMRouterMgr.getCurrentParam() as object
     if (param) {
       this.ui.id = param['id'] as string
@@ -138,6 +582,11 @@ export struct VideoDetailPage {
 
   aboutToDisappear(): void {
     this.getUIContext().getHostContext()?.eventHub.off(VideoDetailRefreshEvent)
+    if (this.heroPixelMap) {
+      this.heroPixelMap.release()
+      this.heroPixelMap = undefined
+      this.heroPixelMapSource = ''
+    }
   }
 
   @Builder
@@ -217,7 +666,7 @@ export struct VideoDetailPage {
         this.ui.isShowVideoInfoSheet = true
       })
       .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
-        height: '100%',
+        height: '70%',
         preferType: SheetType.BOTTOM,
         title: { title: '文件媒体信息' },
       })
@@ -231,7 +680,7 @@ export struct VideoDetailPage {
         this.ui.isShowVideoInfoSheet = true
       })
       .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
-        height: '100%',
+        height: '70%',
         preferType: SheetType.BOTTOM,
         title: { title: '文件媒体信息' },
         backgroundColor: Color.Transparent,
@@ -247,7 +696,7 @@ export struct VideoDetailPage {
         this.ui.isShowVideoInfoSheet = true
       })
       .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
-        height: '100%',
+        height: '70%',
         preferType: SheetType.BOTTOM,
         title: { title: '文件媒体信息' },
         systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
@@ -258,6 +707,10 @@ export struct VideoDetailPage {
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
     Stack() {
+      if (this.useNativeSurface() && !this.ui.firstLoading) {
+        this.nativePageBackdrop()
+      }
+
       if (this.ui.firstLoading) {
         SkeletonDetailView()
       } else {
@@ -270,19 +723,23 @@ export struct VideoDetailPage {
                 this.feiniuHeroBackdrop()
               }
 
-              Stack().width('100%')
-                .height('100%')
-                .linearGradient({
-                  angle: 0, // 0度在CSS中是从下到上，ArkTS中180度对应
-                  colors: [
-                    ['rgba(26, 30, 35, 0.8)', 0], // 起始位置：完全不透明
-                    ['rgba(26, 30, 35, 0.6)', 0.3], // 30%位置：60%不透明
-                    ['rgba(26, 30, 35, 0.2)', 0.4], // 40%位置：20%不透明
-                    ['rgba(26, 30, 35, 0.1)', 1]// 100%位置：10%不透明
-                  ]
-                })
+              if (!this.useNativeSurface()) {
+                Stack().width('100%')
+                  .height('100%')
+                  .linearGradient({
+                    angle: 0,
+                    colors: [
+                      ['rgba(26, 30, 35, 0.8)', 0],
+                      ['rgba(26, 30, 35, 0.6)', 0.3],
+                      ['rgba(26, 30, 35, 0.2)', 0.4],
+                      ['rgba(26, 30, 35, 0.1)', 1]
+                    ]
+                  })
+              }
 
-              if (this.ui.isMovie) {
+              if (this.useNativeSurface()) {
+                this.nativeHeroMetadata()
+              } else if (this.ui.isMovie) {
                 ImageKnifeComponent({
                   imageKnifeOption: {
                     loadSrc: this.ui.logo,
@@ -313,7 +770,9 @@ export struct VideoDetailPage {
                       overflow: TextOverflow.Ellipsis
                     })
                     .textAlign(TextAlign.Center)
-                }.padding(16).alignItems(HorizontalAlign.Start)
+                }
+                .padding(16)
+                .alignItems(HorizontalAlign.Start)
               }
             }.width('100%')
             .height(this.ui.imageHeight)
@@ -321,35 +780,39 @@ export struct VideoDetailPage {
 
             Stack() {
               Column() {
-                //信息
-              Text() {
-                if (!this.ui.isTvShows && this.ui.score > 0) {
-                  Span(this.ui.score + '分  ').fontColor($r('app.color.text_score'))
+              if (!this.useNativeSurface()) {
+                Text() {
+                  if (!this.ui.isTvShows && this.ui.score > 0) {
+                    Span(this.ui.score + '分  ').fontColor($r('app.color.text_score'))
+                  }
+                  Span(this.ui.info)
                 }
-                Span(this.ui.info)
+                .fontSize(12)
+                .fontColor($r('app.color.text_1'))
+                .lineSpacing({ value: 6, unit: LengthUnit.VP })
+                .width('100%')
+                .textAlign(TextAlign.Start)
+                .padding({ left: 16, right: 16 })
               }
-              .fontSize(12)
-              .fontColor($r('app.color.text_1'))
-              .lineSpacing({ value: 6, unit: LengthUnit.VP })
-              .width('100%')
-              .textAlign(TextAlign.Start)
-              .padding({ left: 16, right: 16 })
 
               if (!this.ui.isTvShows) {
-                Blank().height(10)
-                Row({ space: 16 }) {
-                  ForEach(this.vm.getTags(), (item: string) => {
-                    Image(item)
-                      .height(22)
-                      .colorFilter(this.ui.colorFilter)
-                  })
-                }.padding({ left: 16, right: 16 })
+                if (!this.useNativeSurface()) {
+                  Blank().height(10)
+                  Row({ space: 16 }) {
+                    ForEach(this.vm.getTags(), (item: string) => {
+                      Image(item)
+                        .height(22)
+                        .colorFilter(this.ui.colorFilter)
+                    })
+                  }.padding({ left: 16, right: 16 })
+                }
 
                 Blank().height(10)
                 //todo 字幕音频切换
                 Row({ space: 16 }) {
                   AudioSubtitleSelector({
                     source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
+                    triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
                     onSelectSubtitle: (subtitle) => {
                       this.ui.selectedSubtitle = subtitle
                     },
@@ -375,153 +838,10 @@ export struct VideoDetailPage {
                 }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 16, right: 16 })
               }
               Blank().height(16)
-              if (this.ui.isTvShows) {
-                Column({ space: 10 }) {
-                  Button() {
-                    Row() {
-                      Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                      Text(this.ui.playButtonText)
-                        .fontSize(16)
-                        .fontColor(Color.White)
-                        .fontWeight(FontWeight.Medium)
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    .padding({ left: 20, right: 20 })
-                    .width('100%')
-                    .justifyContent(FlexAlign.Center)
-                  }
-                  .height(50)
-                  .borderRadius(25)
-                  .onClick(() => {
-                    this.vm.playFirst()
-                  })
-
-                  Row({ space: 10 }) {
-                    Button() {
-                      Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                        .fillColor($r('app.color.text_1'))
-                        .width(20)
-                        .height(20)
-                    }
-                    .width(44)
-                    .height(44)
-                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                    .borderColor(AppThemeSurfaceResolver.contentOutline(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                    .borderRadius(22)
-                    .backgroundColor(this.secondarySurfaceBackground())
-                    .onClick(() => {
-                      this.vm.changeFavorite()
-                    })
-
-                    Button() {
-                      Image(this.ui.isChasing ? $r('app.media.history') : $r('app.media.add'))
-                        .fillColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.text_1'))
-                        .width(20)
-                        .height(20)
-                    }
-                    .width(44)
-                    .height(44)
-                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                    .borderColor(this.ui.isChasing ? $r('app.color.color_main') :
-                      AppThemeSurfaceResolver.contentOutline(
-                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                    .borderRadius(22)
-                    .backgroundColor(this.secondarySurfaceBackground())
-                    .onClick(() => {
-                      this.vm.changeChasingState()
-                    })
-
-                    Button() {
-                      Image($r('app.media.ic_check'))
-                        .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
-                        .width(20)
-                        .height(20)
-                    }
-                    .width(44)
-                    .height(44)
-                    .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                    .borderColor(AppThemeSurfaceResolver.contentOutline(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                    .borderRadius(22)
-                    .backgroundColor(this.secondarySurfaceBackground())
-                    .onClick(() => {
-                      this.vm.changePlayedState()
-                    })
-                  }
-                  .width('100%')
-                  .justifyContent(FlexAlign.End)
-                }
-                .width('100%')
-                .padding({ left: 16, right: 16 })
+              if (this.useNativeSurface()) {
+                this.nativeDetailActions()
               } else {
-                Row({ space: 8 }) {
-                  Button() {
-                    Row() {
-                      Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                      Text(this.ui.playButtonText)
-                        .fontSize(16)
-                        .fontColor(Color.White)
-                        .fontWeight(FontWeight.Medium)
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    .padding({ left: 18, right: 18 })
-                  }
-                  .height(50)
-                  .layoutWeight(1)
-                  .margin({
-                    right: 12
-                  })
-                  .borderRadius(25)
-                  .onClick(() => {
-                    let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
-                    playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
-                      this.ui.selectedSubtitle?.Index)
-                  })
-
-                  Button() {
-                    Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                      .fillColor($r('app.color.text_1'))
-                      .width(22)
-                      .height(22)
-                  }
-                  .width(50)
-                  .height(50)
-                  .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                  .borderColor(AppThemeSurfaceResolver.contentOutline(
-                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                  .borderRadius(25)
-                  .backgroundColor(this.secondarySurfaceBackground())
-                  .onClick(() => {
-                    this.vm.changeFavorite()
-                  })
-
-                  Button() {
-                    Image($r('app.media.ic_check'))
-                      .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
-                      .width(22)
-                      .height(22)
-                  }
-                  .width(50)
-                  .height(50)
-                  .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                  .borderColor(AppThemeSurfaceResolver.contentOutline(
-                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                  .borderRadius(25)
-                  .backgroundColor(this.secondarySurfaceBackground())
-                  .onClick(() => {
-                    this.vm.changePlayedState()
-                  })
-                }
-                .width('100%')
-                .padding({ left: 16, right: 16 })
+                this.legacyDetailActions()
               }
 
 
@@ -630,7 +950,7 @@ export struct VideoDetailPage {
                     // Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
                   }
                   .width('100%')
-                  .backgroundColor(this.secondarySurfaceBackground())
+                  .backgroundColor(this.detailInformationBackground())
                   .borderRadius(12)
                   .padding(12)
                   .alignItems(HorizontalAlign.Start)
@@ -678,7 +998,7 @@ export struct VideoDetailPage {
                     this.videoInfoSheetTrigger()
                   }
                   .width('100%')
-                  .backgroundColor(this.secondarySurfaceBackground())
+                  .backgroundColor(this.detailInformationBackground())
                   .borderRadius(12)
                   .padding(12)
                   .margin({ top: 12 })
@@ -698,7 +1018,7 @@ export struct VideoDetailPage {
                     Text(item.Name)
                       .fontSize(12)
                       .fontColor($r('app.color.text_1'))
-                      .backgroundColor(this.secondarySurfaceBackground())
+                      .backgroundColor(this.detailInformationBackground())
                       .borderRadius(4)
                       .padding({
                         left: 12,
@@ -715,7 +1035,7 @@ export struct VideoDetailPage {
               Blank().height(30 + this.vm.appUIState.safeBottom)
 
               }.alignItems(HorizontalAlign.Start).padding({
-                top: 12
+                top: this.useNativeSurface() ? 0 : 12
               })
               .width('100%')
               .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
@@ -759,7 +1079,7 @@ export struct VideoDetailPage {
         this.feiniuActionBar()
       }
     }
-    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+    .backgroundColor(this.useNativeSurface() ? Color.Transparent : AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
     .alignContent(Alignment.Top)
   }
@@ -816,6 +1136,7 @@ export struct VideoDetailPage {
     }
     .scrollBar(BarState.Off)
     .scrollable(ScrollDirection.Vertical)
+    .edgeEffect(EdgeEffect.None)
     .padding({
       left: 16,
       right: 16,
@@ -824,10 +1145,9 @@ export struct VideoDetailPage {
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
-
-    // .nestedScroll({
-    //   scrollForward: NestedScrollMode.PARENT_FIRST,
-    //   scrollBackward: NestedScrollMode.SELF_FIRST,
-    // })
+    .nestedScroll({
+      scrollForward: NestedScrollMode.PARENT_FIRST,
+      scrollBackward: NestedScrollMode.SELF_FIRST,
+    })
   }
 }

@@ -9,6 +9,26 @@
       "value": "#161618"
     },
     {
+      "name": "native_detail_atmosphere_overlay_top",
+      "value": "#00161618"
+    },
+    {
+      "name": "native_detail_atmosphere_overlay_bottom",
+      "value": "#B8161618"
+    },
+    {
+      "name": "native_detail_page_overlay_strong",
+      "value": "#68161618"
+    },
+    {
+      "name": "native_detail_page_overlay_soft",
+      "value": "#30161618"
+    },
+    {
+      "name": "native_detail_information_background",
+      "value": "#24FFFFFF"
+    },
+    {
       "name": "on_primary",
       "value": "#FFFFFF"
     },

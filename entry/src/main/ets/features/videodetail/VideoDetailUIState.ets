@@ -47,6 +47,8 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace playButtonText: string = '播放'
 
   static readonly imageInitHeight: number = 350;
+  static readonly nativeImageInitHeight: number = 430;
+  @Trace imageBaseHeight: number = VideoDetailUIState.imageInitHeight;
   @Trace hasEdgeEffect: boolean = false;
   @Trace currentScrollState: ScrollState = ScrollState.Idle;
   @Trace imageHeight: number = VideoDetailUIState.imageInitHeight;

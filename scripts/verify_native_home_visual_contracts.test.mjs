@@ -96,6 +96,22 @@ test('rejects reserving menu width later than one title-bar height', () => {
     /real sticky state/)
 })
 
+test('rejects cumulative Hero progress across previous segments', () => {
+  const homeTab = current.homeTab.replace(
+    'return index === this.heroIndex ? this.heroProgress : 0',
+    'if (index < this.heroIndex) { return 100 }\n    return index === this.heroIndex ? this.heroProgress : 0')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /only the current segment/)
+})
+
+test('rejects low-contrast system secondary color for the Hero progress track', () => {
+  const homeTab = current.homeTab.replace(
+    '.backgroundColor(this.heroProgressTrackColor())',
+    ".backgroundColor($r('sys.color.icon_secondary'))")
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /active-to-track contrast/)
+})
+
 test('rejects removing the sticky vertical alignment offset', () => {
   const homeTab = current.homeTab.replace('HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0', '0 : 0')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),

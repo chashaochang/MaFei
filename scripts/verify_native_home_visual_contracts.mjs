@@ -288,10 +288,18 @@ export function validateNativeHomeVisualContracts(sources) {
     throw new Error('Recent episodes must collapse into one series card')
   }
 
+  const segmentProgress = methodBlock(homeTab, 'heroSegmentProgress')
+  if (!/return\s+index\s*===\s*this\.heroIndex\s*\?\s*this\.heroProgress\s*:\s*0/.test(segmentProgress) ||
+    /index\s*<\s*this\.heroIndex/.test(segmentProgress)) {
+    throw new Error('Native Hero progress must animate only the current segment')
+  }
+  const progressTrackColor = methodBlock(homeTab, 'heroProgressTrackColor')
   const progress = methodBlock(homeTab, 'nativeHomeHeroProgressIndicator')
-  if (!/\.color\s*\(\s*\$r\s*\(\s*['"]sys\.color\.icon_primary['"]\s*\)\s*\)/.test(progress) ||
-    !/\.backgroundColor\s*\(\s*\$r\s*\(\s*['"]sys\.color\.icon_secondary['"]\s*\)\s*\)/.test(progress)) {
-    throw new Error('Native Hero progress must use adaptive system colors over the canvas transition')
+  if (!/rgba\(255,255,255,0\.20\)/.test(progressTrackColor) ||
+    !/rgba\(0,0,0,0\.12\)/.test(progressTrackColor) ||
+    !/\.color\s*\(\s*\$r\s*\(\s*['"]sys\.color\.icon_primary['"]\s*\)\s*\)/.test(progress) ||
+    !/\.backgroundColor\s*\(\s*this\.heroProgressTrackColor\s*\(\s*\)\s*\)/.test(progress)) {
+    throw new Error('Native Hero progress must keep strong active-to-track contrast in both color modes')
   }
   const readabilityScrim = methodBlock(homeTab, 'nativeHomeHeroReadabilityScrim')
   if (!/rgba\(0,0,0,0\.08\)/.test(readabilityScrim) ||

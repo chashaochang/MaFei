@@ -156,7 +156,11 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         this.ui.title = itemData.Name || ''
         this.ui.image = getItemImageUrl(itemData, ImageType.Backdrop)
         this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
-        this.ui.info = `${itemData.Genres?.join('  ')}  /  ${this.ui.mediaName}`
+        this.ui.score = itemData.CommunityRating || 0
+        this.ui.info =
+          `${itemData.ProductionYear ? itemData.ProductionYear + '  /  ' : ''}` +
+            `${itemData.Genres?.join('  ') || ''}` +
+            `${this.ui.mediaName ? '  /  ' + this.ui.mediaName : ''}`
         this.ui.overview = itemData.Overview || ''
         //this.ui.people = itemData.People || []
         this.ui.isFavorite = itemData.UserData?.IsFavorite || false
@@ -299,7 +303,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   }
 
   protected changeImageHeight(): void {
-    this.ui.imageHeight = VideoDetailUIState.imageInitHeight
+    this.ui.imageHeight = this.ui.imageBaseHeight
     this.originImageHeight = this.ui.imageHeight;
   }
 

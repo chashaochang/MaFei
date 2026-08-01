@@ -61,7 +61,7 @@ export struct SeasonDetailPage {
       }
     })
       .width('100%')
-      .height(this.ui.imageHeight - 100)
+      .height(this.ui.imageHeight)
   }
 
   @Builder
@@ -168,7 +168,7 @@ export struct SeasonDetailPage {
               }
               //渐变遮罩
               Stack().width('100%')
-                .height(this.ui.imageHeight - 100)
+                .height(this.useNativeSurface() ? this.ui.imageHeight : this.ui.imageHeight - 100)
                 .linearGradient({
                   angle: 0, // 0度在CSS中是从下到上，ArkTS中180度对应
                   colors: [
@@ -178,6 +178,20 @@ export struct SeasonDetailPage {
                     ['rgba(26, 30, 35, 0.1)', 1]// 100%位置：10%不透明
                   ]
                 })
+
+              if (this.useNativeSurface()) {
+                Stack()
+                  .width('100%')
+                  .height(72)
+                  .align(Alignment.Bottom)
+                  .linearGradient({
+                    angle: 0,
+                    colors: [
+                      [$r('app.color.native_canvas_background'), 0],
+                      [Color.Transparent, 1]
+                    ]
+                  })
+              }
 
               Column() {
                 Blank()
@@ -220,6 +234,7 @@ export struct SeasonDetailPage {
                   left: 16,
                   right: 16
                 })
+                .margin({ bottom: this.useNativeSurface() ? 36 : 0 })
               }.width('100%')
               .height('100%')
 
@@ -245,6 +260,10 @@ export struct SeasonDetailPage {
                 })
                 .borderRadius(25)
                 .height(50)
+                .backgroundColor($r('app.color.color_main'))
+                .systemMaterial(this.useNativeSurface() ?
+                  AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+                  AppThemeSurfaceResolver.disabledSystemMaterial())
                 .onClick(() => {
                   this.vm.playFirst()
                 })
@@ -466,7 +485,7 @@ export struct SeasonDetailPage {
               Blank().height(30 + this.vm.appUIState.safeBottom)
 
               }.alignItems(HorizontalAlign.Start).padding({
-                top: 20
+                top: this.useNativeSurface() ? 0 : 20
               })
               .width('100%')
               .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
@@ -517,6 +536,9 @@ export struct SeasonDetailPage {
   build() {
     AppRouteDestination({
       title: this.ui.showActionBar ? this.ui.title : '',
+      contentExtendsUnderTitleBar: true,
+      heroTitleChrome: true,
+      scrollControllers: [this.ui.scroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

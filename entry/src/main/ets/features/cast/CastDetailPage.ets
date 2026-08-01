@@ -20,7 +20,6 @@ import {
   OverlayMaterialDecision,
   OverlaySurfaceRole
 } from '../../theme/AppThemeOverlayPolicy';
-import { AppThemeTokens } from '../../theme/AppThemeTokens';
 
 @HMRouter({
   pageUrl: RouterConsts.CastDetailPage,
@@ -51,15 +50,8 @@ export struct CastDetailPage {
     )
   }
 
-  @Builder
-  private nativeProfileGroupSurface() {
-    Column()
-      .width('100%')
-      .height('100%')
-      .constraintSize({ maxWidth: 720 })
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  private primaryTextColor(): ResourceColor {
+    return this.useNativeSurface() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
 
   @Builder
@@ -134,9 +126,6 @@ export struct CastDetailPage {
         }
         ListItem(){
           Stack() {
-            if (this.useNativeSurface()) {
-              this.nativeProfileGroupSurface()
-            }
             Row({ space: 16 }) {
             ImageKnifeComponent({
               imageKnifeOption: {
@@ -155,31 +144,50 @@ export struct CastDetailPage {
               .aspectRatio(291 / 436)
             Column() {
               Blank().layoutWeight(1)
-              Text(this.ui.name).fontColor($r('app.color.text_primary')).fontWeight(FontWeight.Medium).fontSize(28)
+              Text(this.ui.name).fontColor(this.primaryTextColor()).fontWeight(FontWeight.Medium).fontSize(28)
               Blank()
-              Text(this.ui.sortName).fontColor($r('app.color.text_primary')).fontSize(14)
+              Text(this.ui.sortName).fontColor(this.primaryTextColor()).fontSize(14)
               if (this.ui.overview.length > 0) {
                 Blank().height(10)
                 this.overviewSheetTrigger()
               }
               Blank().height(10)
-              Button() {
-                Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-                  .fillColor($r('app.color.text_1'))
-                  .width(22)
-                  .height(22)
+              if (this.useNativeSurface()) {
+                Button({ type: ButtonType.Circle, stateEffect: false }) {
+                  Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                    .width(22)
+                    .height(22)
+                    .renderMode(ImageRenderMode.Template)
+                    .interpolation(ImageInterpolation.High)
+                    .fillColor(this.ui.isFavorite ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
+                }
+                .width(50)
+                .height(50)
+                .buttonStyle(ButtonStyleMode.TEXTUAL)
+                .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+                .accessibilityText(this.ui.isFavorite ? '取消收藏' : '收藏')
+                .onClick(() => {
+                  this.vm.changeFavorite()
+                })
+              } else {
+                Button() {
+                  Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                    .fillColor($r('app.color.text_1'))
+                    .width(22)
+                    .height(22)
+                }
+                .width(50)
+                .height(50)
+                .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                .borderColor(AppThemeSurfaceResolver.contentOutline(
+                  this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                .borderRadius(25)
+                .backgroundColor(this.secondarySurfaceBackground())
+                .onClick(() => {
+                  this.vm.changeFavorite()
+                })
               }
-              .width(50)
-              .height(50)
-              .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-              .borderColor(AppThemeSurfaceResolver.contentOutline(
-                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-              .borderRadius(25)
-              .backgroundColor(this.secondarySurfaceBackground())
-              .onClick(() => {
-                this.vm.changeFavorite()
-              })
             }.alignItems(HorizontalAlign.Start)
             .height('100%')
             .layoutWeight(1)
@@ -187,9 +195,10 @@ export struct CastDetailPage {
             .width('100%')
             .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
             .padding({
-              top: 10,
+              top: this.useNativeSurface() ? 20 : 10,
               left: 16,
-              right: 16
+              right: 16,
+              bottom: this.useNativeSurface() ? 16 : 0
             })
           }
           .width('100%')
@@ -316,6 +325,7 @@ export struct CastDetailPage {
   build() {
     AppRouteDestination({
       title: this.showActionBar ? this.ui.name : '',
+      scrollControllers: [this.scroller],
       contentBuilder: () => {
         this.pageContent(false)
       },
