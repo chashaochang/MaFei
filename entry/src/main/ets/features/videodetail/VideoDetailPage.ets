@@ -58,7 +58,7 @@ struct NativeDetailPlayAction {
     .borderRadius(25)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
     .accessibilityText(this.label)
     .onClick(() => {
       this.onAction()

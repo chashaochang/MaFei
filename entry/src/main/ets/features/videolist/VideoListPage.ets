@@ -367,7 +367,9 @@ export struct VideoCard {
         })
         .textAlign(this.textAlign)
       Text(this.item.subtitle)
-        .fontColor(Color.Gray)
+        .fontColor(AppThemeSurfaceResolver.useNativeSurface(
+          this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+          $r('sys.color.font_primary') : Color.Gray)
         .fontSize(12)
         .width('100%')
         .maxLines(1)

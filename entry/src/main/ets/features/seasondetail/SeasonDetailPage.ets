@@ -54,7 +54,7 @@ struct NativeSeasonPlayAction {
     .borderRadius(25)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
     .accessibilityText(this.label)
     .onClick(() => {
       this.onAction()
@@ -301,30 +301,48 @@ export struct SeasonDetailPage {
 
   @Builder
   private nativeHeroMetadata() {
-    Column({ space: 10 }) {
-      Text(this.ui.seasonName)
-        .fontSize(14)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    Row({ space: 16 }) {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.ui.image,
+          objectFit: ImageFit.Cover,
+          border: {
+            width: 0,
+            radius: 12,
+            color: Color.Transparent
+          }
+        }
+      })
+        .width(96)
+        .height(144)
 
-      Text(this.ui.seriesName)
-        .fontSize(28)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Column({ space: 10 }) {
+        Text(this.ui.seasonName)
+          .fontSize(14)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(this.ui.info)
-        .fontSize(13)
-        .fontColor(Color.White)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .lineSpacing({ value: 10, unit: LengthUnit.VP })
+        Text(this.ui.seriesName)
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.ui.info)
+          .fontSize(13)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .lineSpacing({ value: 10, unit: LengthUnit.VP })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 12 })
-    .alignItems(HorizontalAlign.Start)
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .alignItems(VerticalAlign.Bottom)
   }
 
   @Builder
