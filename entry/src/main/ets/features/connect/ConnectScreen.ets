@@ -10,8 +10,7 @@ import { CheckUrlStateType, Unchecked, Error } from "../../ui/state/CheckUrlStat
 import { inputMethod } from "@kit.IMEKit"
 import { HMRouterMgr } from "@hadss/hmrouter"
 import { RouterConsts } from "../../common/RouterConsts"
-import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver"
-import { AppThemeTokens } from "../../theme/AppThemeTokens"
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
 export struct ConnectScreen {
@@ -76,7 +75,10 @@ export struct ConnectScreen {
         this.ui.password = v
       }
     })
-    AnimatedErrorText({ errorText: this.ui.errorText }).padding({ top: 4 })
+    AnimatedErrorText({
+      errorText: this.ui.errorText,
+      nativeSurface: nativeSurface
+    }).padding({ top: 4 })
     Row({ space: 4 }) {
       Toggle({ type: ToggleType.Checkbox, isOn: this.ui.rememberPwd })
         .width(16)
@@ -97,6 +99,7 @@ export struct ConnectScreen {
       StyledTextButton({
         text: '登录',
         enable: this.ui.username.length > 0 && this.ui.password.length > 0,
+        nativeSurface: nativeSurface,
         onclick: (): void => {
           this.vm.onLogin(this.isFromAddAccount)
         }
@@ -133,11 +136,8 @@ export struct ConnectScreen {
     .width('100%')
     .constraintSize({ maxWidth: 375 })
     .alignItems(HorizontalAlign.Start)
-    .padding({ top: 16, bottom: 16 })
-    .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-    .margin({ top: 30 })
+    .padding({ top: 16, bottom: 16, left: 12, right: 12 })
+    .margin({ top: 20 })
   }
 
   @Builder
@@ -171,6 +171,8 @@ export struct ConnectScreen {
       .height('100%')
       .justifyContent(FlexAlign.Start)
       .padding({ left: 16, right: 16 })
+      .backgroundColor(this.showRouteActionBar && this.useNativeSurface() ?
+        $r('app.color.native_canvas_background') : Color.Transparent)
     }
     .height('100%')
     .width('100%')
@@ -223,13 +225,20 @@ struct AuthTextField {
         .maxLines(1)
         .borderWidth(this.nativeSurface ? 0 : 1)
         .borderColor($r('app.color.border_input'))
-        .borderRadius(8)
-        .height(56)
-        .placeholderColor(Color.Gray)
+        .borderRadius(this.nativeSurface ? 14 : 8)
+        .height(this.nativeSurface ? 52 : 56)
+        .placeholderColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .backgroundColor(this.nativeSurface ? Color.Transparent : $r('app.color.component_bg'))
       // Image(this.icon).height(24).margin({ left: 16 })
-    }.height(56).alignContent(Alignment.Start)
+    }
+    .height(this.nativeSurface ? 52 : 56)
+    .borderRadius(this.nativeSurface ? 14 : 8)
+    .clip(true)
+    .alignContent(Alignment.Start)
+    .systemMaterial(this.nativeSurface ?
+      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+      AppThemeSurfaceResolver.disabledSystemMaterial())
   }
 }
 
@@ -237,10 +246,13 @@ struct AuthTextField {
 @Component
 export struct AnimatedErrorText {
   @Prop errorText: string
+  @Prop nativeSurface: boolean = false
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
-      Text(this.errorText).width('100%').fontColor(Color.Red)
+      Text(this.errorText)
+        .width('100%')
+        .fontColor(this.nativeSurface ? $r('app.color.status_warning') : Color.Red)
     } else {
       Blank()
     }
@@ -251,19 +263,24 @@ export struct AnimatedErrorText {
 export struct StyledTextButton {
   @Prop text: string
   @Prop enable: boolean
+  @Prop nativeSurface: boolean = false
   onclick: () => void = () => {
   }
 
   build() {
     Button(this.text, { type: ButtonType.Normal, stateEffect: true })
-      .borderRadius(8)
-      .backgroundColor(0x317aff)
+      .borderRadius(this.nativeSurface ? 24 : 8)
+      .backgroundColor(this.nativeSurface ? Color.Transparent : 0x317aff)
+      .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : Color.White)
       .width('100%')
       .height(48)
       .onClick(() => this.onclick())
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })
+      .systemMaterial(this.nativeSurface ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+        AppThemeSurfaceResolver.disabledSystemMaterial())
   }
 }
 
@@ -289,7 +306,8 @@ struct AddressSelection {
         onSubmit: this.onSubmit
       })
       AnimatedErrorText({
-        errorText: this.errorText
+        errorText: this.errorText,
+        nativeSurface: this.nativeSurface
       })
       // if (!this.loading) {
       //   Blank().height(12)
@@ -318,6 +336,12 @@ struct ServerUrlField {
   onSubmit: () => void = () => {
   }
 
+  private openAccountHistory(): void {
+    HMRouterMgr.to(RouterConsts.AccountPage).withParam({
+      fromLogin: true
+    }).push()
+  }
+
   build() {
     Stack() {
       TextInput({
@@ -341,20 +365,31 @@ struct ServerUrlField {
         .maxLines(1)
         .borderWidth(this.nativeSurface ? 0 : 1)
         .borderColor($r('app.color.border_input'))
-        .borderRadius(8)
-        .height(56)
-        .placeholderColor(Color.Gray)
+        .borderRadius(this.nativeSurface ? 14 : 8)
+        .height(this.nativeSurface ? 52 : 56)
+        .placeholderColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .backgroundColor(this.nativeSurface ? Color.Transparent : $r('app.color.component_bg'))
-      Image($r('app.media.history'))
-        .height(20)
-        .fillColor(this.nativeSurface ? $r('sys.color.icon_primary') : $r('app.color.text_primary'))
-        .margin({ right: 12 })
-        .onClick(() => {
-          HMRouterMgr.to(RouterConsts.AccountPage).withParam({
-            fromLogin: true
-          }).push()
-        })
-    }.height(56).alignContent(Alignment.End)
+      if (this.nativeSurface) {
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_primary')])
+          .margin({ right: 14 })
+          .onClick(() => this.openAccountHistory())
+      } else {
+        Image($r('app.media.history'))
+          .height(20)
+          .fillColor($r('app.color.text_primary'))
+          .margin({ right: 12 })
+          .onClick(() => this.openAccountHistory())
+      }
+    }
+    .height(this.nativeSurface ? 52 : 56)
+    .borderRadius(this.nativeSurface ? 14 : 8)
+    .clip(true)
+    .alignContent(Alignment.End)
+    .systemMaterial(this.nativeSurface ?
+      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+      AppThemeSurfaceResolver.disabledSystemMaterial())
   }
 }

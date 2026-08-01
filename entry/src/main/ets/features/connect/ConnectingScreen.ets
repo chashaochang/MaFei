@@ -1,7 +1,7 @@
 import { AppUIState } from "../../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
 import lottie, { AnimationItem } from "@ohos/lottie";
-import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 
 @ComponentV2
 export struct ConnectingScreen {
@@ -30,6 +30,12 @@ export struct ConnectingScreen {
 
   private secondaryTextColor(): ResourceColor {
     return this.useNativeSurface() ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private pageBackground(): ResourceColor {
+    return this.useNativeSurface() ? $r('app.color.native_canvas_background') :
+      AppThemeSurfaceResolver.routeBackground(
+        this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
   @Builder
@@ -67,8 +73,42 @@ export struct ConnectingScreen {
 
   @Builder
   private nativeConnectingContent() {
-    Column() {
-      this.connectingContent()
+    Column({ space: 12 }) {
+      Blank().layoutWeight(1)
+      Stack() {
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(42)
+          .fontColor([$r('sys.color.icon_primary')])
+      }
+      .width(88)
+      .height(88)
+      .borderRadius(44)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      LoadingProgress()
+        .width(28)
+        .height(28)
+        .margin({ top: 8 })
+      Text('正在连接服务器')
+        .fontColor(this.primaryTextColor())
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+      Text('正在验证服务器状态和账号信息')
+        .fontColor(this.secondaryTextColor())
+        .fontSize(14)
+      Blank().layoutWeight(1)
+      Button({ type: ButtonType.Capsule, stateEffect: true }) {
+        Text('退出登录')
+          .fontColor(this.primaryTextColor())
+          .fontSize(14)
+      }
+      .height(44)
+      .padding({ left: 24, right: 24 })
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .onClick(() => {
+        this.onLogoutClick()
+      })
+      .margin({ bottom: 32 })
     }
     .width('100%')
     .height('100%')
@@ -94,8 +134,7 @@ export struct ConnectingScreen {
       }
     }.width('100%')
     .height('100%')
-    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
-      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+    .backgroundColor(this.pageBackground())
   }
 
   loadAnimation() {
