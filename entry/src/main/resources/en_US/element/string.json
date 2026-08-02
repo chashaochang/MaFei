@@ -493,6 +493,14 @@
       "value": "Ascending"
     },
     {
+      "name": "management_user_access_scope",
+      "value": "Access scope"
+    },
+    {
+      "name": "management_user_advanced_access",
+      "value": "Advanced access"
+    },
+    {
       "name": "management_user_role_administrator",
       "value": "Administrator"
     },

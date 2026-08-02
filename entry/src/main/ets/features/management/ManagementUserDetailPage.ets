@@ -2,6 +2,7 @@ import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { PageState } from '../../common/base/BaseUIState';
 import { RouterConsts } from '../../common/RouterConsts';
+import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import {
@@ -9,6 +10,7 @@ import {
   AppThemeSurfaceResolver
 } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementPermissionState } from './ManagementModels';
 import { ManagementUserAccessSection } from './ManagementUserAccessSection';
 import { ManagementUserDetailUIState } from './ManagementUserDetailUIState';
@@ -33,6 +35,8 @@ export struct ManagementUserDetailPage {
   @Param embeddedInitialTab: ManagementUserTab = ManagementUserTab.Profile
   @Local ui: ManagementUserDetailUIState = new ManagementUserDetailUIState(this.getUIContext())
   @Local vm: ManagementUserDetailViewModel = new ManagementUserDetailViewModel(this.ui)
+  private readonly contentScroller: Scroller = new Scroller()
+  private readonly tabsController: TabsController = new TabsController()
   @Event onDeleted: (userId: string) => void = (_userId: string) => {
   }
 
@@ -113,6 +117,22 @@ export struct ManagementUserDetailPage {
       return $r('app.string.management_user_tab_password')
     }
     return $r('app.string.management_user_tab_profile')
+  }
+
+  private managementTabIndex(tab: ManagementUserTab): number {
+    return tab === ManagementUserTab.Access ? 1 :
+      (tab === ManagementUserTab.Parental ? 2 :
+        (tab === ManagementUserTab.Password ? 3 : 0))
+  }
+
+  private tabFromIndex(index: number): ManagementUserTab {
+    return index === 1 ? ManagementUserTab.Access :
+      (index === 2 ? ManagementUserTab.Parental :
+        (index === 3 ? ManagementUserTab.Password : ManagementUserTab.Profile))
+  }
+
+  private nativeTopSpacer(): number {
+    return this.embedded ? 0 : Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
   private currentStatus(): ManagementUserOperationStatus {
@@ -388,9 +408,22 @@ export struct ManagementUserDetailPage {
     }
     if (!this.ui.currentTabDirty) {
       this.vm.selectTab(tab)
+      this.tabsController.changeIndex(this.managementTabIndex(tab))
       return
     }
-    this.showUnsavedDialog(() => this.vm.selectTab(tab))
+    this.showUnsavedDialog(() => {
+      this.vm.selectTab(tab)
+      this.tabsController.changeIndex(this.managementTabIndex(tab))
+    })
+  }
+
+  private selectSystemTab(index: number): void {
+    const currentIndex = this.managementTabIndex(this.ui.selectedTab)
+    if (index === currentIndex) {
+      return
+    }
+    this.tabsController.changeIndex(currentIndex)
+    this.selectTab(this.tabFromIndex(index))
   }
 
   private attemptLeave(onLeave: () => void): void {
@@ -582,7 +615,11 @@ export struct ManagementUserDetailPage {
         .borderRadius(10)
         .backgroundColor(this.useNativeMaterial() ?
           $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
-        .border({ width: 1, color: $r('app.color.main_red_color') })
+        .border({
+          width: AppThemeSurfaceResolver.outlineWidth(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+          color: $r('app.color.main_red_color')
+        })
         .enabled(!this.vm.isSaving())
         .accessibilityText($r('app.string.management_user_remove_avatar'))
         .onClick(() => this.confirmRemoveAvatar())
@@ -621,37 +658,80 @@ export struct ManagementUserDetailPage {
   @Builder
   currentSection() {
     if (this.ui.selectedTab === ManagementUserTab.Access) {
-      ManagementUserAccessSection({
-        ui: this.ui,
-        themeStyle: this.vm.appUIState.themeStyle,
-        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-        onChanged: () => this.vm.markCurrentTabDirty()
-      })
+      this.accessSection()
     } else if (this.ui.selectedTab === ManagementUserTab.Parental) {
-      ManagementUserParentalSection({
-        ui: this.ui,
-        themeStyle: this.vm.appUIState.themeStyle,
-        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-        onChanged: () => this.vm.markCurrentTabDirty()
-      })
+      this.parentalSection()
     } else if (this.ui.selectedTab === ManagementUserTab.Password) {
-      ManagementUserPasswordSection({
-        ui: this.ui,
-        themeStyle: this.vm.appUIState.themeStyle,
-        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-        onChanged: () => this.vm.markCurrentTabDirty(),
-        onSetPassword: () => this.setPassword(),
-        onResetPassword: () => this.confirmResetPassword(),
-        onClearPassword: () => this.confirmClearPassword()
-      })
+      this.passwordSection()
     } else {
-      ManagementUserProfileSection({
-        ui: this.ui,
-        themeStyle: this.vm.appUIState.themeStyle,
-        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-        onChanged: () => this.vm.markCurrentTabDirty()
-      })
+      this.profileSection()
     }
+  }
+
+  @Builder
+  private profileSection() {
+    ManagementUserProfileSection({
+      ui: this.ui,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onChanged: () => this.vm.markCurrentTabDirty()
+    })
+  }
+
+  @Builder
+  private accessSection() {
+    ManagementUserAccessSection({
+      ui: this.ui,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onChanged: () => this.vm.markCurrentTabDirty()
+    })
+  }
+
+  @Builder
+  private parentalSection() {
+    ManagementUserParentalSection({
+      ui: this.ui,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onChanged: () => this.vm.markCurrentTabDirty()
+    })
+  }
+
+  @Builder
+  private passwordSection() {
+    ManagementUserPasswordSection({
+      ui: this.ui,
+      themeStyle: this.vm.appUIState.themeStyle,
+      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+      onChanged: () => this.vm.markCurrentTabDirty(),
+      onSetPassword: () => this.setPassword(),
+      onResetPassword: () => this.confirmResetPassword(),
+      onClearPassword: () => this.confirmClearPassword()
+    })
+  }
+
+  @Builder
+  private nativeTabs() {
+    Tabs({
+      index: this.managementTabIndex(this.ui.selectedTab),
+      controller: this.tabsController
+    }) {
+      TabContent() { this.profileSection() }
+        .tabBar($r('app.string.management_user_tab_profile'))
+      TabContent() { this.accessSection() }
+        .tabBar($r('app.string.management_user_tab_access'))
+      TabContent() { this.parentalSection() }
+        .tabBar($r('app.string.management_user_tab_parental'))
+      TabContent() { this.passwordSection() }
+        .tabBar($r('app.string.management_user_tab_password'))
+    }
+    .width('100%')
+    .height('auto')
+    .barMode(BarMode.Fixed)
+    .scrollable(false)
+    .animationDuration(0)
+    .onChange((index: number) => this.selectSystemTab(index))
   }
 
   @Builder
@@ -683,7 +763,11 @@ export struct ManagementUserDetailPage {
         .height(42)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
-        .border({ width: 1, color: $r('app.color.main_red_color') })
+        .border({
+          width: AppThemeSurfaceResolver.outlineWidth(
+            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+          color: $r('app.color.main_red_color')
+        })
         .borderRadius(8)
         .enabled(!this.vm.isSaving() && !this.deleteProtected())
         .onClick(() => this.requestDelete())
@@ -693,33 +777,70 @@ export struct ManagementUserDetailPage {
     .alignItems(HorizontalAlign.Start)
     .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
     .backgroundColor(this.useNativeMaterial() ?
-      $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
-    .border({ width: 1, color: $r('app.color.main_red_color') })
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+    .border({
+      width: AppThemeSurfaceResolver.outlineWidth(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+      color: $r('app.color.main_red_color')
+    })
   }
 
   @Builder
-  editorContent() {
-    Scroll() {
-      Column({ space: 12 }) {
-        this.profileHeaderSurface()
+  private editorBody(useSystemTabs: boolean) {
+    Column({ space: 12 }) {
+      this.profileHeaderSurface()
+      if (useSystemTabs) {
+        this.nativeTabs()
+      } else {
         this.tabBar()
         this.currentSection()
-        this.dangerousActions()
-        if (this.ui.message) {
-          Text(this.localizedMessage(this.ui.message))
-            .fontSize(12)
-            .fontColor($r('app.color.main_red_color'))
-            .width('100%')
-        }
+      }
+      this.dangerousActions()
+      if (this.ui.message) {
+        Text(this.localizedMessage(this.ui.message))
+          .fontSize(12)
+          .fontColor($r('app.color.main_red_color'))
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .constraintSize({ maxWidth: 900 })
+  }
+
+  @Builder
+  nativeEditorContent() {
+    Scroll(this.contentScroller) {
+      Column({ space: 12 }) {
+        Blank().height(this.nativeTopSpacer())
+        this.editorBody(true)
       }
       .width('100%')
       .constraintSize({ maxWidth: 900 })
       .padding({
         left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
         right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-        top: 12,
-        bottom: this.showSaveBar() ? 104 : 24
+        bottom: ManagementNativePagePolicy.contentBottomPadding(
+          this.vm.appUIState.safeBottom + 24, this.showSaveBar())
       })
+    }
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Auto)
+  }
+
+  @Builder
+  legacyEditorContent() {
+    Scroll() {
+      Column() {
+        this.editorBody(false)
+      }
+        .width('100%')
+        .padding({
+          left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+          right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+          top: 12,
+          bottom: this.showSaveBar() ? 104 : 24
+        })
     }
     .width('100%')
     .height('100%')
@@ -745,8 +866,11 @@ export struct ManagementUserDetailPage {
         .height(40)
         .padding({ left: 20, right: 20 })
         .fontColor($r('app.color.on_primary'))
-        .backgroundColor($r('app.color.color_main'))
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(10)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(this.currentStatus() !== ManagementUserOperationStatus.Saving)
         .onClick(() => this.vm.saveCurrentTab())
     }
@@ -831,7 +955,11 @@ export struct ManagementUserDetailPage {
         } else if (this.ui.pageState === PageState.Error) {
           this.stateView(this.localizedMessage(this.ui.permissionMessage || this.ui.message), true)
         } else {
-          this.editorContent()
+          if (showLegacyActionBar) {
+            this.legacyEditorContent()
+          } else {
+            this.nativeEditorContent()
+          }
           if (this.showSaveBar()) {
             this.saveBarSurface()
           }
@@ -852,6 +980,8 @@ export struct ManagementUserDetailPage {
     } else {
       AppRouteDestination({
         title: this.ui.userName || $r('app.string.management_user_title'),
+        contentExtendsUnderTitleBar: true,
+        scrollControllers: [this.contentScroller],
         contentBuilder: () => {
           this.pageContent(false)
         },

@@ -1,5 +1,5 @@
 import { ThemeStyle } from '../../entity/ThemeStyle';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ManagementUserDetailUIState } from './ManagementUserDetailUIState';
 import { ManagementPasswordDraft, ManagementUserOperationStatus } from './ManagementUserModels';
@@ -145,8 +145,11 @@ export struct ManagementUserPasswordSection {
         .height(42)
         .padding({ left: 18, right: 18 })
         .fontColor($r('app.color.on_primary'))
-        .backgroundColor($r('app.color.color_main'))
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(9)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(!this.actionLocked())
         .onClick(() => this.onSetPassword())
     }
@@ -191,7 +194,10 @@ export struct ManagementUserPasswordSection {
         .height(42)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
-        .border({ width: 1, color: $r('app.color.main_red_color') })
+        .border({
+          width: AppThemeSurfaceResolver.outlineWidth(this.themeStyle, this.nativeThemeAvailable, 1),
+          color: $r('app.color.main_red_color')
+        })
         .borderRadius(8)
         .enabled(!this.actionLocked())
         .onClick(() => this.onResetPassword())
@@ -200,7 +206,10 @@ export struct ManagementUserPasswordSection {
         .height(42)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
-        .border({ width: 1, color: $r('app.color.main_red_color') })
+        .border({
+          width: AppThemeSurfaceResolver.outlineWidth(this.themeStyle, this.nativeThemeAvailable, 1),
+          color: $r('app.color.main_red_color')
+        })
         .borderRadius(8)
         .enabled(!this.actionLocked() && this.ui.user.hasPassword)
         .onClick(() => this.onClearPassword())
@@ -210,8 +219,11 @@ export struct ManagementUserPasswordSection {
     .alignItems(HorizontalAlign.Start)
     .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
     .backgroundColor(this.useNativeMaterial() ?
-      $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
-    .border({ width: 1, color: $r('app.color.main_red_color') })
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+    .border({
+      width: AppThemeSurfaceResolver.outlineWidth(this.themeStyle, this.nativeThemeAvailable, 1),
+      color: $r('app.color.main_red_color')
+    })
   }
 
   build() {

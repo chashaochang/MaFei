@@ -681,8 +681,12 @@ export struct ManagementUserProfileSection {
     .alignItems(HorizontalAlign.Start)
     .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
     .backgroundColor(this.useNativeMaterial() ?
-      $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
-    .border({ width: 1, color: $r('app.color.main_red_color') })
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+    .border({
+      width: AppThemeSurfaceResolver.outlineWidth(
+        this.themeStyle, this.nativeThemeAvailable, 1),
+      color: $r('app.color.main_red_color')
+    })
   }
 
   build() {

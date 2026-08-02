@@ -1,10 +1,12 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { PageState } from '../../common/base/BaseUIState';
 import { RouterConsts } from '../../common/RouterConsts';
+import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementPermissionState } from './ManagementModels';
 import { ManagementUserCreateUIState } from './ManagementUserCreateUIState';
 import { ManagementUserCreateViewModel } from './ManagementUserCreateViewModel';
@@ -24,6 +26,8 @@ import {
 export struct ManagementUserCreatePage {
   @Local ui: ManagementUserCreateUIState = new ManagementUserCreateUIState(this.getUIContext())
   @Local vm: ManagementUserCreateViewModel = new ManagementUserCreateViewModel(this.ui)
+  @Local advancedExpanded: boolean = false
+  private readonly contentScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
     this.vm.init()
@@ -57,6 +61,15 @@ export struct ManagementUserCreatePage {
   private secondaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
       $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private createEnabled(): boolean {
+    return !this.ui.saving && this.ui.name.trim().length > 0 &&
+      this.ui.password === this.ui.confirmPassword
   }
 
   private getString(name: string): string {
@@ -417,6 +430,123 @@ export struct ManagementUserCreatePage {
   }
 
   @Builder
+  private nativeAccessScopeContent() {
+    Column() {
+      this.groupHeader($r('app.string.management_user_access_scope'),
+        $r('app.string.management_user_advanced_access'))
+      this.allowAllRow($r('app.string.management_user_access_all_folders'),
+        $r('app.string.management_user_access_all_folders_desc'),
+        this.ui.access.enableAllFolders, (value: boolean) => {
+          const next = this.copyAccess()
+          next.enableAllFolders = value
+          this.ui.access = next
+          if (!value) {
+            this.advancedExpanded = true
+          }
+        })
+      Divider().margin({ left: 16 }).color($r('sys.color.comp_divider'))
+      this.allowAllRow($r('app.string.management_user_access_all_channels'),
+        $r('app.string.management_user_access_all_channels_desc'),
+        this.ui.access.enableAllChannels, (value: boolean) => {
+          const next = this.copyAccess()
+          next.enableAllChannels = value
+          this.ui.access = next
+          if (!value) {
+            this.advancedExpanded = true
+          }
+        })
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private nativeAccessScope() {
+    Column() { this.nativeAccessScopeContent() }
+      .width('100%')
+      .borderRadius(8)
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private nativeFolderSelection() {
+    Column() {
+      this.groupHeader($r('app.string.management_user_access_folders'),
+        $r('app.string.management_user_access_folders_desc'))
+      this.optionState(this.ui.foldersStatus, this.ui.folders)
+      ForEach(this.ui.folders, (option: ManagementUserOption) => {
+        this.optionRow(option, this.ui.access.enabledFolderIds.includes(option.id),
+          (checked: boolean) => {
+            const next = this.copyAccess()
+            next.enabledFolderIds = this.updateSelection(next.enabledFolderIds, option.id, checked)
+            this.ui.access = next
+          })
+      }, (option: ManagementUserOption) => option.id)
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .borderRadius(8)
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private nativeChannelSelection() {
+    Column() {
+      this.groupHeader($r('app.string.management_user_access_channels'),
+        $r('app.string.management_user_access_channels_desc'))
+      this.optionState(this.ui.channelsStatus, this.ui.channels)
+      ForEach(this.ui.channels, (option: ManagementUserOption) => {
+        this.optionRow(option, this.ui.access.enabledChannelIds.includes(option.id),
+          (checked: boolean) => {
+            const next = this.copyAccess()
+            next.enabledChannelIds = this.updateSelection(next.enabledChannelIds, option.id, checked)
+            this.ui.access = next
+          })
+      }, (option: ManagementUserOption) => option.id)
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .borderRadius(8)
+    .clip(true)
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+  }
+
+  @Builder
+  private nativeAdvancedAccess() {
+    Column({ space: AppThemeTokens.groupSpacing(this.vm.appUIState.themeStyle) }) {
+      Row({ space: 12 }) {
+        Text($r('app.string.management_user_advanced_access'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor())
+          .layoutWeight(1)
+        SymbolGlyph(this.advancedExpanded ?
+          $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+          .fontSize(16)
+          .fontColor([this.secondaryTextColor()])
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+      .borderRadius(8)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+      .onClick(() => this.advancedExpanded = !this.advancedExpanded)
+      if (this.advancedExpanded && !this.ui.access.enableAllFolders) {
+        this.nativeFolderSelection()
+      }
+      if (this.advancedExpanded && !this.ui.access.enableAllChannels) {
+        this.nativeChannelSelection()
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
   private partialSuccess() {
     if (this.ui.partialSuccess) {
       Column({ space: 10 }) {
@@ -442,8 +572,11 @@ export struct ManagementUserCreatePage {
             .height(40)
             .padding({ left: 16, right: 16 })
             .fontColor($r('app.color.on_primary'))
-            .backgroundColor($r('app.color.color_main'))
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
             .borderRadius(9)
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
             .enabled(!this.ui.saving)
             .onClick(() => this.retryAccess())
           Button($r('app.string.management_user_open_details'),
@@ -468,13 +601,17 @@ export struct ManagementUserCreatePage {
       .alignItems(HorizontalAlign.Start)
       .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
       .backgroundColor(this.useNativeMaterial() ?
-        $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
-      .border({ width: 1, color: $r('app.color.status_warning') })
+        AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+      .border({
+        width: AppThemeSurfaceResolver.outlineWidth(
+          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+        color: $r('app.color.status_warning')
+      })
     }
   }
 
   @Builder
-  private formContent() {
+  private legacyFormContent() {
     Scroll() {
       Column({ space: AppThemeTokens.groupSpacing(this.vm.appUIState.themeStyle) }) {
         this.credentialsSurface()
@@ -512,6 +649,69 @@ export struct ManagementUserCreatePage {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Auto)
+  }
+
+  @Builder
+  private createBarContent() {
+    Row() {
+      Button(this.ui.saving ?
+        $r('app.string.management_user_saving') :
+        $r('app.string.management_user_create'), { type: ButtonType.Normal })
+        .width('100%')
+        .height(46)
+        .fontColor($r('app.color.on_primary'))
+        .backgroundColor(Color.Transparent)
+        .borderRadius(10)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+        .enabled(this.createEnabled())
+        .onClick(() => this.submit())
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
+  }
+
+  @Builder
+  private nativeCreateBar() {
+    Column() { this.createBarContent() }
+      .width('100%')
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+  }
+
+  @Builder
+  private nativeFormContent() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Scroll(this.contentScroller) {
+        Column({ space: AppThemeTokens.groupSpacing(this.vm.appUIState.themeStyle) }) {
+          Blank().height(this.nativeTopSpacer())
+          this.credentialsSurface()
+          this.nativeAccessScope()
+          this.nativeAdvancedAccess()
+          this.partialSuccess()
+          if (!this.ui.partialSuccess && this.ui.message) {
+            Text(this.localizedMessage(this.ui.message))
+              .fontSize(12)
+              .fontColor($r('app.color.main_red_color'))
+              .width('100%')
+          }
+        }
+        .width('100%')
+        .constraintSize({ maxWidth: 760 })
+        .padding({
+          left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+          right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+          bottom: ManagementNativePagePolicy.contentBottomPadding(
+            this.vm.appUIState.safeBottom + 24, !this.ui.partialSuccess)
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .scrollBar(BarState.Auto)
+      if (!this.ui.partialSuccess) {
+        this.nativeCreateBar()
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -564,7 +764,11 @@ export struct ManagementUserCreatePage {
         this.stateView(this.localizedMessage(
           this.ui.permissionMessage || 'management_permission_check_failed'), true)
       } else {
-        this.formContent()
+        if (showLegacyActionBar) {
+          this.legacyFormContent()
+        } else {
+          this.nativeFormContent()
+        }
       }
     }
     .width('100%')
@@ -576,6 +780,8 @@ export struct ManagementUserCreatePage {
   build() {
     AppRouteDestination({
       title: $r('app.string.management_user_create'),
+      contentExtendsUnderTitleBar: true,
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

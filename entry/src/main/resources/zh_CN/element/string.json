@@ -493,6 +493,14 @@
       "value": "升序"
     },
     {
+      "name": "management_user_access_scope",
+      "value": "访问范围"
+    },
+    {
+      "name": "management_user_advanced_access",
+      "value": "高级访问权限"
+    },
+    {
       "name": "management_user_role_administrator",
       "value": "管理员"
     },
