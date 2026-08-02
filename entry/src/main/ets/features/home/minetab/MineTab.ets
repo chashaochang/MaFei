@@ -5,13 +5,15 @@ import { MineUIState } from "./MineUIState"
 import { MineViewModel } from "./MineViewModel"
 import { BaseGroupItem, ListGroup } from "../../../component/ListGroup"
 import { RouterConsts } from "../../../common/RouterConsts"
-import { getUIAbilityContext } from "../../../common/CommonFunc"
+import { getUIAbilityContext, playItems } from "../../../common/CommonFunc"
 import { wantConstant } from "@kit.AbilityKit"
 import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 import { ActionBar } from "../../../component/ActionBar"
-import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
+import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
+import { MineHistorySection } from "./MineHistorySection"
+import { MineHistoryItem } from "./MineHistoryPlanner"
 
 @ComponentV2
 export struct MineTab {
@@ -19,12 +21,16 @@ export struct MineTab {
   @Param contentBottomInset?: number = undefined
   @Param compactTopInset: boolean = false
   @Param destinationOwnsTitleBar: boolean = false
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: MineUIState = new MineUIState(this.getUIContext())
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
   private topSpacerHeight(): number {
-    if (this.destinationOwnsTitleBar || this.compactTopInset) {
+    if (this.destinationOwnsTitleBar) {
       return 0
+    }
+    if (this.compactTopInset) {
+      return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
     }
     return this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT
   }
@@ -40,12 +46,10 @@ export struct MineTab {
 
   aboutToAppear(): void {
     HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown, () => {
-      this.vm.getAppearanceName()
-      this.vm.getPlayerEngineName()
+      this.vm.refreshHistory()
     })
     this.vm.init()
-    this.vm.getAppearanceName()
-    this.vm.getPlayerEngineName()
+    this.vm.refreshHistory()
   }
 
   @Builder
@@ -54,12 +58,10 @@ export struct MineTab {
       ImageKnifeComponent({
         imageKnifeOption: {
           loadSrc: this.ui.userAvatar,
-          border: {
-            radius: 32
-          },
+          border: { radius: this.useNativeSurface() ? 24 : 32 },
           placeholderSrc: $r('app.media.default_avatar')
         }
-      }).width(64).height(64)
+      }).width(this.useNativeSurface() ? 48 : 64).height(this.useNativeSurface() ? 48 : 64)
       Column({ space: 4 }) {
         Row({ space: 12 }) {
           Text(this.ui.userName)
@@ -86,20 +88,21 @@ export struct MineTab {
             $r('sys.color.font_secondary') : $r('app.color.text_1'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-        Text(this.ui.serverVersion)
-          .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-            $r('sys.color.font_tertiary') : $r('app.color.text_2'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
+        if (!this.useNativeSurface()) {
+          Text(this.ui.serverVersion)
+            .fontColor($r('app.color.text_2'))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+        }
       }
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .padding({
-      left: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 14 : 8,
-      right: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 14 : 8,
-      top: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 14 : 0,
-      bottom: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 14 : 8
+      left: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 0 : 8,
+      right: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 0 : 8,
+      top: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 8 : 0,
+      bottom: 8
     })
   }
 
@@ -109,8 +112,6 @@ export struct MineTab {
       this.profileHeaderContent()
     }
     .width('100%')
-    .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
   }
 
   @Builder
@@ -150,16 +151,28 @@ export struct MineTab {
         .visibility(this.vm.appUIState.currentBreakpoint.includes('sm') &&
           AppThemeTokens.showMineBackground(this.vm.appUIState.themeStyle) ?
           Visibility.Visible : Visibility.None)
-      Scroll() {
+      Scroll(this.contentScroller) {
         Column({ space: AppThemeTokens.groupSpacing(this.vm.appUIState.themeStyle) }) {
           Blank().height(this.topSpacerHeight())
           this.profileHeader()
 
+          MineHistorySection({
+            state: this.ui.historyState,
+            items: this.ui.historyItems,
+            currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+            nativeSurface: this.useNativeSurface(),
+            themeStyle: this.vm.appUIState.themeStyle,
+            onItemClick: (item: MineHistoryItem) => {
+              playItems([item.id], this.getUIContext().getHostContext()!)
+            },
+            onRetry: () => {
+              this.vm.refreshHistory()
+            }
+          })
+
           ListGroup({
-            items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch'), '', true,
-              $r('app.string.account_switch_desc')),
-              new BaseGroupItem('网(Web)易通', $r('app.media.web'), '', true,
-                $r('app.string.web_itong_desc'))],
+            items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch')),
+              new BaseGroupItem('网(Web)易通', $r('app.media.web'))],
             onItemClick: (index) => {
               switch (index) {
                 case 0: {
@@ -175,25 +188,18 @@ export struct MineTab {
           })
           if (this.ui.isAdministrator) {
             ListGroup({
-              items: [new BaseGroupItem($r('app.string.management_title'), $r('app.media.ic_setting'), '', true,
-                $r('app.string.management_entry_desc'))],
+              items: [new BaseGroupItem($r('app.string.management_title'), $r('app.media.ic_setting'))],
               onItemClick: () => {
                 HMRouterMgr.to(RouterConsts.ManagementDashboardPage).push()
               }
             })
           }
           ListGroup({
-            items: [new BaseGroupItem($r('app.string.appearance_title'), $r('app.media.theme'),
-              this.ui.appearanceName, true, $r('app.string.theme_native_desc'))],
+            items: [new BaseGroupItem(
+              $r('app.string.settings_title'), $r('app.media.ic_setting'), '', true, '',
+              $r('sys.symbol.gearshape'))],
             onItemClick: () => {
-              HMRouterMgr.to(RouterConsts.ColorModePage).push()
-            }
-          })
-          ListGroup({
-            items: [new BaseGroupItem('播放器引擎', $r('app.media.movie'), this.ui.playerEngineName, true,
-              $r('app.string.player_engine_desc'))],
-            onItemClick: () => {
-              HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()
+              HMRouterMgr.to(RouterConsts.SettingPage).push()
             }
           })
           ListGroup({

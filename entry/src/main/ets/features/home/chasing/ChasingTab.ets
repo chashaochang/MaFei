@@ -20,6 +20,7 @@ export struct ChasingTab {
   @Param fromHome: boolean = false
   @Param contentTopInset: number = 0
   @Param contentBottomInset?: number = undefined
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: ChasingUIState = new ChasingUIState(this.getUIContext())
   @Local vm: ChasingViewModel = new ChasingViewModel(this.ui)
   @Local selectedFilterIndex: number = 0
@@ -142,7 +143,10 @@ export struct ChasingTab {
         this.topBar()
 
         Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
-          List() {
+          List({ scroller: this.contentScroller }) {
+            if (this.ownedContentTopInset() > 0) {
+              ListItem().height(this.ownedContentTopInset())
+            }
             if (this.ui.followedCount > 0 || this.ui.totalCount > 0) {
               ListItem() {
                 this.filterRow()
@@ -200,7 +204,6 @@ export struct ChasingTab {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: this.ownedContentTopInset() })
       .backgroundColor(this.pageBackground())
 
       if (this.ui.pageState === PageState.Loading) {

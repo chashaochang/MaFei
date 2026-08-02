@@ -17,6 +17,26 @@
       "value": "Appearance & Theme"
     },
     {
+      "name": "settings_title",
+      "value": "Settings"
+    },
+    {
+      "name": "appearance_settings_title",
+      "value": "Appearance & Display"
+    },
+    {
+      "name": "mine_recent_watching",
+      "value": "Recently Watching"
+    },
+    {
+      "name": "mine_history_retry",
+      "value": "Viewing history failed to load. Tap to retry."
+    },
+    {
+      "name": "playback_settings_title",
+      "value": "Playback"
+    },
+    {
       "name": "theme_style_title",
       "value": "Theme style"
     },

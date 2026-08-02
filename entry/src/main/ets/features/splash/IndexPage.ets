@@ -27,6 +27,10 @@ export struct IndexPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   apiClientController: ApiClientController = new ApiClientController()
   private readonly homeScroller: Scroller = new Scroller()
+  private readonly chasingScroller: Scroller = new Scroller()
+  private readonly favoriteScroller: Scroller = new Scroller()
+  private readonly mediaScroller: Scroller = new Scroller()
+  private readonly mineScroller: Scroller = new Scroller()
   //是否点了取消登录
   @Local isCancel: boolean = false
 
@@ -120,11 +124,27 @@ export struct IndexPage {
     return menus
   }
 
+  private rootNavigationScrollControllers(): Array<Scroller> {
+    return [
+      this.homeScroller,
+      this.chasingScroller,
+      this.favoriteScroller,
+      this.mediaScroller,
+      this.mineScroller
+    ]
+  }
+
   @Builder
   private pageContent() {
     Stack() {
       if (this.appUIState.isLogin) {
-        HomeScreen({ homeScroller: this.homeScroller })
+        HomeScreen({
+          homeScroller: this.homeScroller,
+          chasingScroller: this.chasingScroller,
+          favoriteScroller: this.favoriteScroller,
+          mediaScroller: this.mediaScroller,
+          mineScroller: this.mineScroller
+        })
       } else {
         ConnectScreen()
         ConnectingScreen({
@@ -156,11 +176,11 @@ export struct IndexPage {
       title: this.appUIState.rootNavigationTitle,
       titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,
       backButtonVisible: false,
-      contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,
+      contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible,
       heroTitleChrome: this.rootNavigationHeroChromeVisible(),
       titleMaterialFollowsSystem: true,
       menus: this.rootNavigationMenus(),
-      scrollControllers: [this.homeScroller],
+      scrollControllers: this.rootNavigationScrollControllers(),
       contentBuilder: () => {
         this.pageContent()
       },

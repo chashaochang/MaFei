@@ -18,6 +18,7 @@ import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
 export struct MediaTab {
   @Param contentBottomInset?: number = undefined
   @Param rootTitleBarOwned: boolean = false
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: MediaUIState = new MediaUIState(this.getUIContext())
   @Local vm: MediaViewModel = new MediaViewModel(this.ui)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
@@ -33,7 +34,7 @@ export struct MediaTab {
 
   private contentTopSpacer(): number {
     const safeTop = Math.max(0, this.appUIState.safeTop)
-    return this.rootTitleBarOwned ? 0 : safeTop + UIConstants.ACTION_BAR_HEIGHT
+    return safeTop + UIConstants.ACTION_BAR_HEIGHT
   }
 
   aboutToAppear(): void {
@@ -62,7 +63,7 @@ export struct MediaTab {
     Stack() {
       if (this.ui.pageState === PageState.Content) {
         Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
-          Scroll() {
+          Scroll(this.contentScroller) {
             Column() {
               Blank().height(this.contentTopSpacer())
               // ListGroup({

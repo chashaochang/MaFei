@@ -14,15 +14,15 @@ export class AppThemeTokens {
   }
 
   static listRowHeight(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 64 : 52
+    return AppThemeTokens.isNative(style) ? 56 : 52
   }
 
   static iconWellSize(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 36 : 18
+    return AppThemeTokens.isNative(style) ? 20 : 18
   }
 
   static iconWellRadius(style: ThemeStyle): number {
-    return AppThemeTokens.isNative(style) ? 10 : 0
+    return AppThemeTokens.isNative(style) ? 0 : 0
   }
 
   static profileRadius(style: ThemeStyle): number {

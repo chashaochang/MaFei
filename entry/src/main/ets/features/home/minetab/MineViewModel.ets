@@ -7,14 +7,17 @@ import { ApiClient } from "../../../network/ApiClient";
 import { MineUIState } from "./MineUIState";
 import { bundleManager, common } from "@kit.AbilityKit";
 import { ApiClientController } from "../../../data/ApiClientController";
-import { CustomColorMode } from "../../../entity/CustomColorMode";
-import { PlayerEngineType } from "../../../entity/PlayerEngineType";
 import { AppPreference } from "../../../data/AppPreference";
 import { DBManager } from "../../../data/DBManager";
-import { ThemeStyle } from "../../../entity/ThemeStyle";
+import { MineHistoryPlanner } from "./MineHistoryPlanner";
+import { MineHistoryLoadResult, MineHistoryRepository } from "./MineHistoryRepository";
+import { MineHistoryState } from "./MineUIState";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
   apiClientController: ApiClientController = new ApiClientController()
+  private readonly historyRepository: MineHistoryRepository = new MineHistoryRepository()
+  private readonly historyPlanner: MineHistoryPlanner = new MineHistoryPlanner()
+  private historyRefreshing: boolean = false
 
   init() {
     this.ui.isAdministrator = false
@@ -60,8 +63,7 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
 
   private getAppVersion() {
     try {
-      let context = getContext(this) as common.UIAbilityContext;
-      let bundleName = context.applicationInfo.name;
+      const context = this.ui.context.getHostContext() as common.UIAbilityContext;
 
       bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
         .then((bundleInfo) => {
@@ -75,32 +77,29 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
     }
   }
 
-  getAppearanceName() {
-    const resourceManager = this.ui.context.getHostContext()?.resourceManager
-    if (!resourceManager) {
-      this.ui.appearanceName = ''
+  async refreshHistory(): Promise<void> {
+    if (this.historyRefreshing) {
       return
     }
-    const themeName = this.appUIState.themeStyle === ThemeStyle.Native ?
-      resourceManager.getStringByNameSync('theme_native_name') :
-      resourceManager.getStringByNameSync('theme_feiniu_name')
-    let colorModeName = resourceManager.getStringByNameSync('color_mode_auto')
-    if (this.appUIState.customColorMode === CustomColorMode.Light) {
-      colorModeName = resourceManager.getStringByNameSync('color_mode_light')
-    } else if (this.appUIState.customColorMode === CustomColorMode.Dark) {
-      colorModeName = resourceManager.getStringByNameSync('color_mode_dark')
-    }
-    this.ui.appearanceName = `${themeName} · ${colorModeName}`
-  }
-
-  getPlayerEngineName() {
-    const engineType = AppPreference.getInstance().getPlayerEngineType()
-    if (engineType === PlayerEngineType.AUTO) {
-      this.ui.playerEngineName = $r('app.string.player_engine_auto')
-    } else if (engineType === PlayerEngineType.AV) {
-      this.ui.playerEngineName = $r('app.string.player_engine_av')
-    } else {
-      this.ui.playerEngineName = $r('app.string.player_engine_mpv')
+    this.historyRefreshing = true
+    this.ui.historyState = MineHistoryState.Loading
+    try {
+      const result: MineHistoryLoadResult = await this.historyRepository.load()
+      const items = this.historyPlanner.merge(result.resume.items, result.completed.items, 8)
+      this.ui.historyItems = items
+      if (result.resume.failed && result.completed.failed) {
+        this.ui.historyState = MineHistoryState.Error
+      } else if (items.length === 0) {
+        this.ui.historyState = MineHistoryState.Empty
+      } else {
+        this.ui.historyState = MineHistoryState.Content
+      }
+    } catch (error) {
+      console.error(`[MineHistory] refresh failed: ${JSON.stringify(error)}`)
+      this.ui.historyItems = []
+      this.ui.historyState = MineHistoryState.Error
+    } finally {
+      this.historyRefreshing = false
     }
   }
 

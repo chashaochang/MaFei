@@ -1,192 +1,157 @@
-import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
-import { AppStorageV2 } from '@kit.ArkUI';
-import { AppUIState } from '../../entity/AppUIState';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
-import { AppThemeTokens } from '../../theme/AppThemeTokens';
-import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { HMLifecycleState, HMRouter, HMRouterMgr } from '@hadss/hmrouter'
+import { AppStorageV2 } from '@kit.ArkUI'
+import { UIConstants } from '../../common/UIConstants'
+import { RouterConsts } from '../../common/RouterConsts'
+import { ActionBar } from '../../component/ActionBar'
+import { AppRouteDestination } from '../../component/AppRouteDestination'
+import { AppPreference } from '../../data/AppPreference'
+import { AppUIState } from '../../entity/AppUIState'
+import { CustomColorMode } from '../../entity/CustomColorMode'
+import { PlayerEngineType } from '../../entity/PlayerEngineType'
+import { ThemeStyle } from '../../entity/ThemeStyle'
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
+import { AppThemeTokens } from '../../theme/AppThemeTokens'
 
 @HMRouter({
-  pageUrl:'/Setting',
+  pageUrl: '/Setting',
   useNavDst: true
 })
 @ComponentV2
-export struct SettingPage{
+export struct SettingPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  private readonly contentScroller: Scroller = new Scroller()
+  @Local appearanceName: string = ''
+  @Local playerEngineName: ResourceStr = $r('app.string.player_engine_auto')
 
-  private useNativeMaterial(): boolean {
-    return AppThemeSurfaceResolver.useNativeSurface(
-      this.appUIState.themeStyle,
-      this.appUIState.nativeThemeAvailable
-    )
-  }
-
-  private primaryTextColor(): ResourceColor {
-    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-      $r('sys.color.font_primary') : Color.White
-  }
-
-  private secondaryTextColor(): ResourceColor {
-    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-      $r('sys.color.font_secondary') : '#999999'
-  }
-
-  private iconColor(): ResourceColor {
-    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-      $r('sys.color.icon_secondary') : '#666666'
-  }
-  
-  @Builder
-  private SettingItemContent(title: string, subtitle?: string, showArrow: boolean = true, onClick?: () => void) {
-    Row() {
-      Column() {
-        Text(title)
-          .fontSize(16)
-          .fontColor(this.primaryTextColor())
-          .textAlign(TextAlign.Start)
-        if (subtitle) {
-          Text(subtitle)
-            .fontSize(12)
-            .fontColor(this.secondaryTextColor())
-            .textAlign(TextAlign.Start)
-            .margin({ top: 4 })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      
-      if (showArrow) {
-        Image($r('app.media.ic_right'))
-          .width(20)
-          .height(20)
-          .fillColor(this.iconColor())
-      }
-    }
-    .width('100%')
-    .height(subtitle ? 72 : 56)
-    .padding({ left: 16, right: 16 })
-    .justifyContent(FlexAlign.SpaceBetween)
-    .onClick(() => {
-      if (onClick) {
-        onClick()
-      }
+  aboutToAppear(): void {
+    this.refreshSummaries()
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(HMLifecycleState.onShown, () => {
+      this.refreshSummaries()
     })
   }
 
+  private refreshSummaries(): void {
+    const resourceManager = this.getUIContext().getHostContext()?.resourceManager
+    if (resourceManager) {
+      try {
+        const themeName = this.appUIState.themeStyle === ThemeStyle.Native ?
+          resourceManager.getStringByNameSync('theme_native_name') :
+          resourceManager.getStringByNameSync('theme_feiniu_name')
+        let colorModeName = resourceManager.getStringByNameSync('color_mode_auto')
+        if (this.appUIState.customColorMode === CustomColorMode.Light) {
+          colorModeName = resourceManager.getStringByNameSync('color_mode_light')
+        } else if (this.appUIState.customColorMode === CustomColorMode.Dark) {
+          colorModeName = resourceManager.getStringByNameSync('color_mode_dark')
+        }
+        this.appearanceName = `${themeName} · ${colorModeName}`
+      } catch (_) {
+        this.appearanceName = ''
+      }
+    }
+    const engineType = AppPreference.getInstance().getPlayerEngineType()
+    if (engineType === PlayerEngineType.AV) {
+      this.playerEngineName = $r('app.string.player_engine_av')
+    } else if (engineType === PlayerEngineType.MPV) {
+      this.playerEngineName = $r('app.string.player_engine_mpv')
+    } else {
+      this.playerEngineName = $r('app.string.player_engine_auto')
+    }
+  }
+
+  private primaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(native: boolean): ResourceColor {
+    return native ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
   @Builder
-  private SettingGroup(title: string, subtitle?: string, showArrow: boolean = true, onClick?: () => void) {
+  private settingRow(title: ResourceStr, trailing: ResourceStr, native: boolean, onClick: () => void) {
+    Row({ space: 12 }) {
+      Text(title)
+        .fontSize(native ? 16 : 14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor(native))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(trailing)
+        .fontSize(native ? 14 : 13)
+        .fontColor(this.secondaryTextColor(native))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(native ? 18 : 14)
+        .fontColor([native ? $r('sys.color.icon_tertiary') : $r('app.color.text_primary')])
+    }
+    .width('100%')
+    .height(native ? 56 : 52)
+    .padding({ left: 16, right: 16 })
+    .onClick(onClick)
+  }
+
+  @Builder
+  private settingGroup(title: ResourceStr, trailing: ResourceStr, native: boolean, onClick: () => void) {
     Column() {
-      this.SettingItemContent(title, subtitle, showArrow, onClick)
+      this.settingRow(title, trailing, native, onClick)
     }
     .width('100%')
     .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
     .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuSettingGroup(title: string, subtitle?: string, showArrow: boolean = true, onClick?: () => void) {
-    Column() {
-      this.SettingItemContent(title, subtitle, showArrow, onClick)
-    }
-    .width('100%')
-    .backgroundColor('#1a1a1a')
-    .borderRadius(8)
-  }
-
-  @Builder
-  private settingGroupSurface(title: string, subtitle?: string, showArrow: boolean = true, onClick?: () => void) {
-    if (this.useNativeMaterial()) {
-      this.SettingGroup(title, subtitle, showArrow, onClick)
-    } else {
-      this.feiniuSettingGroup(title, subtitle, showArrow, onClick)
-    }
+    .backgroundColor(native ? AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
   }
 
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
-    Column(){
+    Column() {
       if (showLegacyActionBar) {
-        Row() {
-          Image($r('app.media.ic_back'))
-            .width(44)
-            .height(44)
-            .padding(12)
-            .onClick(() => {
-              HMRouterMgr.pop()
-            })
-          Text('设置').fontColor(this.primaryTextColor()).fontSize(16).margin({left:16})
-          Blank().layoutWeight(1)
-        }
-        .height(56)
-        .width('100%')
-        .justifyContent(FlexAlign.Start)
-        .backgroundColor('#202020')
+        ActionBar({ title: $r('app.string.settings_title') })
       }
-      
-      // 设置项列表
-      Scroll() {
+      Scroll(this.contentScroller) {
         Column({ space: 12 }) {
-          // 应用信息分组
-          Column({ space: 8 }) {
-            Text('应用信息')
-              .fontSize(14)
-              .fontColor(this.secondaryTextColor())
-              .width('100%')
-              .textAlign(TextAlign.Start)
-              .margin({ left: 16, bottom: 4 })
-            
-            this.settingGroupSurface('关于应用', '客户端信息', true, () => {
-              HMRouterMgr.push({
-                pageUrl: '/About'
-              })
-            })
+          if (!showLegacyActionBar) {
+            Blank().height(this.nativeTopSpacer())
           }
-          
-          // 用户协议分组
-          Column({ space: 8 }) {
-            Text('隐私协议')
-              .fontSize(14)
-              .fontColor(this.secondaryTextColor())
-              .width('100%')
-              .textAlign(TextAlign.Start)
-              .margin({ left: 16, bottom: 4 })
-            
-            this.settingGroupSurface('隐私协议', '查看隐私保护政策', true, () => {
-              HMRouterMgr.push({
-                pageUrl: '/Privacy'
-              })
-            })
-          }
-          // 联系我们
-          Column({ space: 8 }) {
-            Text('联系我们')
-              .fontSize(14)
-              .fontColor(this.secondaryTextColor())
-              .width('100%')
-              .textAlign(TextAlign.Start)
-              .margin({ left: 16, bottom: 4 })
-            
-            this.settingGroupSurface('反馈建议', '需求/反馈QQ群: 991893385', false)
-          }
+          this.settingGroup(
+            $r('app.string.appearance_settings_title'),
+            this.appearanceName,
+            !showLegacyActionBar,
+            () => HMRouterMgr.to(RouterConsts.ColorModePage).push()
+          )
+          this.settingGroup(
+            $r('app.string.playback_settings_title'),
+            this.playerEngineName,
+            !showLegacyActionBar,
+            () => HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()
+          )
+          Blank().height(Math.max(24, this.appUIState.safeBottom))
         }
         .width('100%')
-        .constraintSize({ maxWidth: this.useNativeMaterial() ? 560 : '100%' })
-        .padding({ left: 16, right: 16, top: 16, bottom: 32 })
+        .constraintSize({ maxWidth: 680 })
+        .padding({ left: 16, right: 16 })
       }
-      .align(Alignment.Top)
+      .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
-      
+      .align(Alignment.Top)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(showLegacyActionBar ? '#101010' : Color.Transparent)
-    .expandSafeArea([SafeAreaType.SYSTEM],[SafeAreaEdge.BOTTOM])
+    .justifyContent(FlexAlign.Start)
+    .backgroundColor(showLegacyActionBar ? $r('app.color.start_window_background') : Color.Transparent)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   build() {
     AppRouteDestination({
-      title: '设置',
+      title: $r('app.string.settings_title'),
+      contentExtendsUnderTitleBar: true,
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

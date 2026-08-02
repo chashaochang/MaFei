@@ -27,6 +27,7 @@ export struct FavoriteListPage {
   @Param fromHome: boolean = false
   @Param contentTopInset: number = 0
   @Param contentBottomInset?: number = undefined
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: FavoriteListUIState = new FavoriteListUIState(this.getUIContext())
   vm: FavoriteListViewModel = new FavoriteListViewModel(this.ui)
 
@@ -52,6 +53,15 @@ export struct FavoriteListPage {
 
   private primaryTextColor(nativeSurface: boolean): ResourceColor {
     return nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  @Builder
+  private nativeGridHeader() {
+    Column() {
+      Blank().height(this.ownedContentTopInset())
+      this.sortRow(true)
+    }
+    .width('100%')
   }
 
   aboutToAppear(): void {
@@ -94,35 +104,42 @@ export struct FavoriteListPage {
   }
 
   @Builder
+  private sortRow(nativeSurface: boolean) {
+    Row() {
+      Text(sortOptions[this.ui.selectedSortIndex].label)
+        .fontSize(14)
+        .fontColor(this.primaryTextColor(nativeSurface))
+        .onClick(() => {
+          this.vm.sortDialog.show()
+        })
+      Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+        .width(16)
+        .height(16)
+        .fillColor(this.primaryTextColor(nativeSurface))
+        .margin({ left: 6 })
+        .onClick(() => {
+          if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+            this.ui.isDesc = !this.ui.isDesc
+            this.vm.refresh()
+          }
+        })
+      if (nativeSurface) {
+        this.nativeCountLabel()
+      } else {
+        this.feiniuCountLabel()
+      }
+      Blank().layoutWeight(1)
+    }
+    .width('100%')
+    .height(46)
+  }
+
+  @Builder
   private listContent(nativeSurface: boolean) {
     Column() {
-      Row() {
-        Text(sortOptions[this.ui.selectedSortIndex].label)
-          .fontSize(14)
-          .fontColor(this.primaryTextColor(nativeSurface))
-          .onClick(() => {
-            this.vm.sortDialog.show()
-          })
-        Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
-          .width(16)
-          .height(16)
-          .fillColor(this.primaryTextColor(nativeSurface))
-          .margin({ left: 6 })
-          .onClick(() => {
-            if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
-              this.ui.isDesc = !this.ui.isDesc
-              this.vm.refresh()
-            }
-          })
-        if (nativeSurface) {
-          this.nativeCountLabel()
-        } else {
-          this.feiniuCountLabel()
-        }
-        Blank().layoutWeight(1)
+      if (!nativeSurface) {
+        this.sortRow(false)
       }
-      .width('100%')
-      .height(46)
 
       GridView({
         lazyDataSource: this.vm.dataSource,
@@ -132,7 +149,9 @@ export struct FavoriteListPage {
         showEmptyLayout: this.ui.totalCount === '0',
         emptyLayout: () => this.emptyLayout(),
         itemLayout: (item, index) => this.itemLayout(item, index),
+        itemHeaderLayout: nativeSurface ? () => this.nativeGridHeader() : undefined,
         controller: this.vm.controller,
+        scroller: this.contentScroller,
         onRefresh: () => {
           this.vm.refresh()
         },
@@ -184,7 +203,6 @@ export struct FavoriteListPage {
     .padding({
       left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
       right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      top: this.ownedContentTopInset(),
       bottom: this.scrollTail()
     })
   }

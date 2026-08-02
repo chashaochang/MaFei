@@ -32,10 +32,15 @@ import { HomeInsetsPolicy } from "./HomeInsetsPolicy";
 import { HomeDestination, HomeDestinationMapper } from "./HomeDestination";
 import { HomePhoneNativeTabs } from "./phone/HomePhoneNativeTabs";
 import { HomePhoneStandardTabs } from "./phone/HomePhoneStandardTabs";
+import { UIConstants } from "../../common/UIConstants";
 
 @ComponentV2
 export struct HomeScreen {
   @Param homeScroller: Scroller = new Scroller()
+  @Param chasingScroller: Scroller = new Scroller()
+  @Param favoriteScroller: Scroller = new Scroller()
+  @Param mediaScroller: Scroller = new Scroller()
+  @Param mineScroller: Scroller = new Scroller()
   @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private contentTabsController: TabsController = new TabsController()
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
@@ -105,7 +110,10 @@ export struct HomeScreen {
   }
 
   private get nativeFromHomeTopInset(): number {
-    return 0
+    if (this.shell !== HomeShellKind.PhoneNativeHds) {
+      return 0
+    }
+    return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
   private usesPadMediaContent(): boolean {
@@ -570,7 +578,8 @@ export struct HomeScreen {
     ChasingTab({
       fromHome: true,
       contentTopInset: this.nativeFromHomeTopInset,
-      contentBottomInset: this.contentBottomInset
+      contentBottomInset: this.contentBottomInset,
+      contentScroller: this.chasingScroller
     })
   }
 
@@ -579,7 +588,8 @@ export struct HomeScreen {
     FavoriteListPage({
       fromHome: true,
       contentTopInset: this.nativeFromHomeTopInset,
-      contentBottomInset: this.contentBottomInset
+      contentBottomInset: this.contentBottomInset,
+      contentScroller: this.favoriteScroller
     })
   }
 
@@ -587,7 +597,8 @@ export struct HomeScreen {
   private mediaTabContent() {
     MediaTab({
       contentBottomInset: this.contentBottomInset,
-      rootTitleBarOwned: this.shell === HomeShellKind.PhoneNativeHds
+      rootTitleBarOwned: this.shell === HomeShellKind.PhoneNativeHds,
+      contentScroller: this.mediaScroller
     })
   }
 
@@ -595,7 +606,8 @@ export struct HomeScreen {
   private mineTabContent() {
     MineTab({
       contentBottomInset: this.contentBottomInset,
-      compactTopInset: this.shell === HomeShellKind.PhoneNativeHds
+      compactTopInset: this.shell === HomeShellKind.PhoneNativeHds,
+      contentScroller: this.mineScroller
     })
   }
 

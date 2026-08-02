@@ -29,37 +29,37 @@ export struct ListGroup {
   @Builder
   private groupContent() {
     ForEach(this.items, (item: BaseGroupItem, index) => {
-      Row({ space: 10 }) {
+      Row({ space: item.hasLeadingIcon() ? 10 : 0 }) {
         Stack() {
-          Image(item.icon)
-            .width(18)
-            .height(18)
-            .fillColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
-              $r('sys.color.icon_primary') : $r('app.color.text_primary'))
+          if (this.useNativeSurface() && item.symbol) {
+            SymbolGlyph(item.symbol)
+              .fontSize(this.useNativeSurface() ? 20 : 18)
+              .fontColor([AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
+                $r('sys.color.icon_secondary') : $r('app.color.text_primary')])
+          } else {
+            Image(item.icon)
+              .width(this.useNativeSurface() ? 20 : 18)
+              .height(this.useNativeSurface() ? 20 : 18)
+              .renderMode(this.useNativeSurface() ? ImageRenderMode.Template : ImageRenderMode.Original)
+              .interpolation(ImageInterpolation.High)
+              .fillColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
+                $r('sys.color.icon_secondary') : $r('app.color.text_primary'))
+          }
         }
-        .width(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
-        .height(item.icon != '' ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
+        .width(item.hasLeadingIcon() ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
+        .height(item.hasLeadingIcon() ? AppThemeTokens.iconWellSize(this.appUIState.themeStyle) : 0)
         .borderRadius(AppThemeTokens.iconWellRadius(this.appUIState.themeStyle))
-        .backgroundColor(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ?
-          $r('sys.color.comp_background_tertiary') : Color.Transparent)
-        .visibility(item.icon != '' ? Visibility.Visible : Visibility.None)
-        Column({ space: 3 }) {
+        .backgroundColor(Color.Transparent)
+        .visibility(item.hasLeadingIcon() ? Visibility.Visible : Visibility.None)
+        Column() {
           Text(item.name)
             .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
               $r('sys.color.font_primary') : $r('app.color.text_primary'))
-            .fontSize(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ? 14 : 13)
+            .fontSize(AppThemeTokens.showIconWell(this.appUIState.themeStyle) ? 16 : 13)
             .fontWeight(FontWeight.Medium)
             .width('100%')
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (item.description !== '' && AppThemeTokens.showIconWell(this.appUIState.themeStyle)) {
-            Text(item.description)
-              .fontColor($r('sys.color.font_secondary'))
-              .fontSize(12)
-              .width('100%')
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -67,22 +67,24 @@ export struct ListGroup {
         Text(item.rightText)
           .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
             $r('sys.color.font_secondary') : $r('app.color.text_1'))
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
+          .fontSize(AppThemeTokens.isNative(this.appUIState.themeStyle) ? 14 : 13)
+          .fontWeight(AppThemeTokens.isNative(this.appUIState.themeStyle) ? FontWeight.Normal : FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(13)
+          .fontSize(AppThemeTokens.isNative(this.appUIState.themeStyle) ? 22 : 13)
           .fontColor([AppThemeTokens.isNative(this.appUIState.themeStyle) ?
-            $r('sys.color.icon_secondary') : $r('app.color.text_primary')])
-          .fontWeight(FontWeight.Bold)
+            $r('sys.color.icon_tertiary') : $r('app.color.text_primary')])
+          .fontWeight(AppThemeTokens.isNative(this.appUIState.themeStyle) ? FontWeight.Normal : FontWeight.Bold)
           .visibility(item.showArrow ? Visibility.Visible : Visibility.None)
       }
       .width('100%')
       .height(AppThemeTokens.listRowHeight(this.appUIState.themeStyle))
       .padding({
-        top: 12,
-        bottom: 12,
-        left: 16,
-        right: 16
+        top: this.useNativeSurface() ? 0 : 12,
+        bottom: this.useNativeSurface() ? 0 : 12,
+        left: this.useNativeSurface() ? 12 : 16,
+        right: this.useNativeSurface() ? 12 : 16
       })
       .stateStyles({ pressed: this.pressedStyles, normal: this.normalStyles })
       .onClick(() => {
@@ -95,8 +97,8 @@ export struct ListGroup {
           .backgroundColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
             $r('sys.color.comp_divider') : $r('app.color.border'))
           .margin({
-            left: 16,
-            right: 16
+            left: this.useNativeSurface() && item.hasLeadingIcon() ? 42 : 16,
+            right: this.useNativeSurface() ? 12 : 16
           })
       }
     })
@@ -136,17 +138,23 @@ export struct ListGroup {
 
 export class BaseGroupItem {
   icon: ResourceStr = ''
+  symbol: Resource | undefined = undefined
   name: ResourceStr = ''
   rightText: ResourceStr = ''
   showArrow: boolean = true
   description: ResourceStr = ''
 
   constructor(name: ResourceStr, icon: ResourceStr = '', rightText: ResourceStr = '', showArrow: boolean = true,
-    description: ResourceStr = '') {
+    description: ResourceStr = '', symbol: Resource | undefined = undefined) {
     this.name = name
     this.icon = icon
     this.rightText = rightText
     this.showArrow = showArrow
     this.description = description
+    this.symbol = symbol
+  }
+
+  hasLeadingIcon(): boolean {
+    return this.icon !== '' || this.symbol !== undefined
   }
 }

@@ -17,6 +17,26 @@
       "value": "外观与主题"
     },
     {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "appearance_settings_title",
+      "value": "外观与显示"
+    },
+    {
+      "name": "mine_recent_watching",
+      "value": "最近在看"
+    },
+    {
+      "name": "mine_history_retry",
+      "value": "播放历史加载失败，点击重试"
+    },
+    {
+      "name": "playback_settings_title",
+      "value": "播放"
+    },
+    {
       "name": "theme_style_title",
       "value": "主题风格"
     },

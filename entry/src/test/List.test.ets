@@ -10,6 +10,7 @@ import homeDestinationTest from './HomeDestination.test';
 import managementSessionsTest from './ManagementSessions.test';
 import managementDevicesTest from './ManagementDevices.test';
 import managementActivityTest from './ManagementActivity.test';
+import mineHistoryPlannerTest from './MineHistoryPlanner.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -24,4 +25,5 @@ export default function testsuite() {
   managementSessionsTest();
   managementDevicesTest();
   managementActivityTest();
+  mineHistoryPlannerTest();
 }

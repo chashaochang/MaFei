@@ -1,4 +1,12 @@
 import { BaseUIState } from "../../../common/base/BaseUIState"
+import { MineHistoryItem } from "./MineHistoryPlanner"
+
+export enum MineHistoryState {
+  Loading,
+  Content,
+  Empty,
+  Error
+}
 
 @ObservedV2
 export class MineUIState extends BaseUIState {
@@ -14,6 +22,6 @@ export class MineUIState extends BaseUIState {
   userPolicy: string = ''
   @Trace isAdministrator: boolean = false
   @Trace versionName: string = ''
-  @Trace appearanceName: string = ''
-  @Trace playerEngineName: ResourceStr = $r('app.string.player_engine_auto')
+  @Trace historyState: MineHistoryState = MineHistoryState.Loading
+  @Trace historyItems: MineHistoryItem[] = []
 }
