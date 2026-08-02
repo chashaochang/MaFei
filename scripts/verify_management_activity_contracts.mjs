@@ -85,7 +85,7 @@ export function validateManagementActivity(sources) {
     /onRetry\s*:\s*\(\)\s*=>\s*this\.activityVM\.init\s*\(\s*\)/,
     'dashboard activity retry must recheck access and reinitialize loading')
   requirePattern(sources, managementActivityPaths.page,
-    /if\s*\(\s*this\.ui\.stale\s*\)[\s\S]*management_stale_result[\s\S]*management_retry[\s\S]*loadPage\s*\(\s*this\.ui\.retryPageIndex\s*\)/,
+    /staleNotice[\s\S]*management_stale_result[\s\S]*management_retry[\s\S]*loadPage\s*\(\s*this\.ui\.retryPageIndex\s*\)[\s\S]*if\s*\(\s*this\.ui\.stale\s*\)\s*this\.staleNotice\s*\(\s*\)/,
     'stale full-page activity must show its retry target')
   requirePattern(sources, managementActivityPaths.repository,
     /loadMediaTarget[\s\S]*ManagementErrorCode\.Unsupported[\s\S]*return\s+result/,

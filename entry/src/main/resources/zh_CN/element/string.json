@@ -1763,6 +1763,14 @@
     {
       "name": "management_task_action_failed",
       "value": "操作失败"
+    },
+    {
+      "name": "management_activity_filter_title",
+      "value": "筛选活动"
+    },
+    {
+      "name": "management_activity_detail_title",
+      "value": "活动详情"
     }
   ]
 }

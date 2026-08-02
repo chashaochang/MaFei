@@ -7,11 +7,14 @@ import {
 } from '@hadss/hmrouter';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
+import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../../theme/AppThemeTokens';
+import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
+import { ManagementActivityFilterSheet } from './ManagementActivityFilterSheet';
 import {
   ManagementActivityItem,
   ManagementActivityMediaTarget,
@@ -21,6 +24,11 @@ import {
 import { ManagementActivityUIState } from './ManagementActivityUIState';
 import { ManagementActivityViewModel } from './ManagementActivityViewModel';
 
+enum ManagementActivitySheetKind {
+  Filter,
+  Detail
+}
+
 @HMRouter({
   pageUrl: RouterConsts.ManagementActivityPage,
   useNavDst: true
@@ -29,7 +37,13 @@ import { ManagementActivityViewModel } from './ManagementActivityViewModel';
 export struct ManagementActivityPage {
   @Local ui: ManagementActivityUIState = new ManagementActivityUIState(this.getUIContext())
   @Local vm: ManagementActivityViewModel = new ManagementActivityViewModel(this.ui)
+  @Local sheetVisible: boolean = false
+  @Local sheetKind: ManagementActivitySheetKind = ManagementActivitySheetKind.Filter
+  @Local selectedItem: ManagementActivityItem | null = null
   private lifecycleOwner: IHMLifecycleOwner | null = null
+  private readonly listScroller: Scroller = new Scroller()
+  private readonly detailScroller: Scroller = new Scroller()
+  private readonly sheetScroller: Scroller = new Scroller()
   private pageShownCallback = (_context: HMLifecycleContext): void => {
     this.vm.init()
   }
@@ -65,7 +79,7 @@ export struct ManagementActivityPage {
   }
 
   private isLarge(): boolean {
-    return this.vm.appUIState.deviceWidth >= 840
+    return ManagementNativePagePolicy.isExpanded(this.vm.appUIState.deviceWidth)
   }
 
   private useNativeMaterial(): boolean {
@@ -81,6 +95,10 @@ export struct ManagementActivityPage {
   private secondaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
       $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
   private getString(name: string): string {
@@ -110,6 +128,20 @@ export struct ManagementActivityPage {
     return `${year}-${month}-${day} ${hour}:${minute}`
   }
 
+  private recentDays(): number {
+    if (this.ui.fromMs <= 0) return 0
+    const days = Math.round((Date.now() - this.ui.fromMs) / (24 * 60 * 60 * 1000))
+    if (days === 1 || days === 7 || days === 30) return days
+    return 0
+  }
+
+  private activeFilterCount(): number {
+    return (this.recentDays() > 0 ? 1 : 0) +
+      (this.ui.selectedSeverities.length > 0 ? 1 : 0) +
+      (this.ui.selectedUsers.length > 0 ? 1 : 0) +
+      (this.ui.sortField === ManagementActivitySortField.Date && !this.ui.ascending ? 0 : 1)
+  }
+
   private setRecentDays(days: number): void {
     this.ui.fromMs = days <= 0 ? 0 : Date.now() - days * 24 * 60 * 60 * 1000
     this.ui.toMs = 0
@@ -137,11 +169,42 @@ export struct ManagementActivityPage {
   private userNames(): string[] {
     const result: string[] = []
     this.ui.sourceItems.forEach((item: ManagementActivityItem) => {
-      if (item.userName.length > 0 && !result.includes(item.userName)) {
-        result.push(item.userName)
-      }
+      if (item.userName.length > 0 && !result.includes(item.userName)) result.push(item.userName)
     })
     return result
+  }
+
+  private applyNativeFilters(recentDays: number, severities: string[], users: string[],
+    sortField: ManagementActivitySortField, ascending: boolean): void {
+    this.ui.fromMs = recentDays <= 0 ? 0 : Date.now() - recentDays * 24 * 60 * 60 * 1000
+    this.ui.toMs = 0
+    this.ui.selectedSeverities = severities
+    this.ui.selectedUsers = users
+    this.ui.sortField = sortField
+    this.ui.ascending = ascending
+    this.sheetVisible = false
+    this.vm.loadPage(0)
+  }
+
+  private showFilterSheet(): void {
+    this.sheetKind = ManagementActivitySheetKind.Filter
+    this.sheetVisible = true
+  }
+
+  private selectActivity(item: ManagementActivityItem): void {
+    this.selectedItem = item
+    if (!this.isLarge()) {
+      this.sheetKind = ManagementActivitySheetKind.Detail
+      this.sheetVisible = true
+    }
+  }
+
+  private selectedActivity(): ManagementActivityItem | null {
+    if (this.selectedItem && this.ui.items.some((item: ManagementActivityItem) =>
+      item.id === this.selectedItem!.id)) {
+      return this.selectedItem
+    }
+    return this.ui.items.length > 0 ? this.ui.items[0] : null
   }
 
   private showOverview(item: ManagementActivityItem): void {
@@ -176,12 +239,13 @@ export struct ManagementActivityPage {
         })
         return
       }
+      this.sheetVisible = false
       HMRouterMgr.to(RouterConsts.VideoDetailPage).withParam({
         id: target.id,
         mediaName: target.mediaName,
         isTvShows: target.isTvShows
       }).push()
-    } catch (error) {
+    } catch (_error) {
       this.getUIContext().getPromptAction().showToast({
         message: $r('app.string.management_activity_item_failed')
       })
@@ -189,7 +253,70 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private filters() {
+  private nativeFilters() {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Search({ value: this.ui.query, placeholder: $r('app.string.management_activity_search') })
+          .layoutWeight(1)
+          .height(40)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .onChange((value: string) => {
+            this.ui.query = value
+            this.vm.applyFilters()
+          })
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Button() {
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(18)
+              .fontColor([this.primaryTextColor()])
+          }
+          .width(40)
+          .height(40)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .accessibilityText($r('app.string.management_activity_filter_title'))
+          .onClick(() => this.showFilterSheet())
+          if (this.activeFilterCount() > 0) {
+            Text(this.activeFilterCount().toString())
+              .fontSize(10)
+              .fontColor($r('app.color.on_primary'))
+              .textAlign(TextAlign.Center)
+              .width(18)
+              .height(18)
+              .borderRadius(9)
+              .backgroundColor($r('app.color.color_main'))
+          }
+        }
+        .width(40)
+        .height(40)
+      }
+      .width('100%')
+      Row() {
+        ForEach([ManagementActivityView.All, ManagementActivityView.User, ManagementActivityView.System],
+          (view: ManagementActivityView) => {
+            Button(this.viewLabel(view), { type: ButtonType.Normal })
+              .layoutWeight(1)
+              .height(36)
+              .fontSize(13)
+              .fontColor(this.ui.view === view ? this.primaryTextColor() : this.secondaryTextColor())
+              .backgroundColor(this.ui.view === view ?
+                AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
+              .borderRadius(8)
+              .onClick(() => this.vm.selectView(view))
+          }, (view: ManagementActivityView) => view.toString())
+      }
+      .width('100%')
+      .padding(2)
+      .borderRadius(10)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 10 })
+  }
+
+  @Builder
+  private legacyFilters() {
     Column({ space: 8 }) {
       Row({ space: 6 }) {
         ForEach([ManagementActivityView.All, ManagementActivityView.User, ManagementActivityView.System],
@@ -251,7 +378,42 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private compactRow(item: ManagementActivityItem) {
+  private nativeRow(item: ManagementActivityItem) {
+    Row({ space: 12 }) {
+      Row()
+        .width(8)
+        .height(8)
+        .borderRadius(4)
+        .backgroundColor(this.severityColor(item.severity))
+      Column({ space: 4 }) {
+        Text(item.name)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor())
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(`${this.formatDate(item.date)} · ${item.userName || item.type}`)
+          .fontSize(12)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(12)
+        .fontColor([this.secondaryTextColor()])
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 60 })
+    .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+    .backgroundColor(this.isLarge() && this.selectedActivity()?.id === item.id ?
+      AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
+    .onClick(() => this.selectActivity(item))
+  }
+
+  @Builder
+  private legacyCompactRow(item: ManagementActivityItem) {
     Row({ space: 10 }) {
       Row().width(8).height(8).borderRadius(4).backgroundColor(this.severityColor(item.severity))
       Column({ space: 3 }) {
@@ -279,7 +441,7 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private wideRow(item: ManagementActivityItem) {
+  private legacyWideRow(item: ManagementActivityItem) {
     Row({ space: 10 }) {
       Text(this.formatDate(item.date)).width(138).fontSize(11).fontColor(this.secondaryTextColor())
       Text(item.severity).width(78).fontSize(11).fontColor(this.severityColor(item.severity))
@@ -299,75 +461,336 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private activityList() {
+  private pagingControls() {
+    Row({ space: 10 }) {
+      Button($r('app.string.management_activity_previous'))
+        .enabled(this.ui.displayedPageIndex > 0)
+        .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex - 1))
+      Text(`${this.ui.displayedPageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor())
+      Button($r('app.string.management_activity_next'))
+        .enabled(this.ui.displayedPageIndex + 1 < this.ui.pageCount)
+        .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex + 1))
+    }
+    .height(50)
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private staleNotice() {
+    Row({ space: 10 }) {
+      Text($r('app.string.management_stale_result'))
+        .layoutWeight(1)
+        .fontSize(12)
+        .fontColor($r('app.color.status_warning'))
+      Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+        .height(32)
+        .enabled(!this.ui.refreshing)
+        .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 6 })
+  }
+
+  @Builder
+  private stateContent() {
+    if (this.ui.status === ManagementSectionStatus.Loading) {
+      LoadingProgress().layoutWeight(1).width(28).height(28).color($r('app.color.color_main'))
+    } else {
+      Column({ space: 10 }) {
+        Text(this.ui.status === ManagementSectionStatus.Unsupported ?
+          $r('app.string.management_section_unsupported') : $r('app.string.management_activity_empty'))
+          .fontSize(14)
+          .fontColor(this.secondaryTextColor())
+        if (this.ui.status === ManagementSectionStatus.Error) {
+          Button($r('app.string.management_retry'))
+            .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
+        }
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  @Builder
+  private nativeActivityList() {
+    if ((this.ui.status === ManagementSectionStatus.Content ||
+      this.ui.status === ManagementSectionStatus.Error) && this.ui.items.length > 0) {
+      List({ scroller: this.listScroller }) {
+        ForEach(this.ui.items, (item: ManagementActivityItem, index: number) => {
+          ListItem() {
+            Column() {
+              this.nativeRow(item)
+              if (index + 1 < this.ui.items.length) {
+                Divider().margin({ left: 34 }).color($r('sys.color.comp_divider'))
+              }
+            }
+          }
+        }, (item: ManagementActivityItem) => item.id.toString())
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Auto)
+      .borderRadius(8)
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+      if (this.ui.stale) this.staleNotice()
+      this.pagingControls()
+    } else {
+      this.stateContent()
+    }
+  }
+
+  @Builder
+  private legacyActivityList() {
     if ((this.ui.status === ManagementSectionStatus.Content ||
       this.ui.status === ManagementSectionStatus.Error) && this.ui.items.length > 0) {
       List() {
         ForEach(this.ui.items, (item: ManagementActivityItem) => {
           ListItem() {
             if (this.isLarge()) {
-              this.wideRow(item)
+              this.legacyWideRow(item)
             } else {
-              this.compactRow(item)
+              this.legacyCompactRow(item)
             }
           }
         }, (item: ManagementActivityItem) => item.id.toString())
       }
       .layoutWeight(1).width('100%').scrollBar(BarState.Auto)
-      if (this.ui.stale) {
-        Row({ space: 10 }) {
-          Text($r('app.string.management_stale_result'))
-            .layoutWeight(1)
-            .fontSize(12)
-            .fontColor($r('app.color.status_warning'))
-          Button($r('app.string.management_retry'), { type: ButtonType.Normal })
-            .height(32)
-            .enabled(!this.ui.refreshing)
-            .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
-        }
-        .width('100%').padding({ left: 12, right: 12, top: 6 })
-      }
-      Row({ space: 10 }) {
-        Button($r('app.string.management_activity_previous')).enabled(this.ui.displayedPageIndex > 0)
-          .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex - 1))
-        Text(`${this.ui.displayedPageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
-          .fontSize(12).fontColor(this.secondaryTextColor())
-        Button($r('app.string.management_activity_next'))
-          .enabled(this.ui.displayedPageIndex + 1 < this.ui.pageCount)
-          .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex + 1))
-      }
-      .height(50).width('100%').justifyContent(FlexAlign.Center)
-    } else if (this.ui.status === ManagementSectionStatus.Loading) {
-      LoadingProgress().layoutWeight(1).width(28).height(28).color($r('app.color.color_main'))
+      if (this.ui.stale) this.staleNotice()
+      this.pagingControls()
     } else {
-      Column({ space: 10 }) {
-        Text(this.ui.status === ManagementSectionStatus.Unsupported ?
-          $r('app.string.management_section_unsupported') : $r('app.string.management_activity_empty'))
-          .fontSize(14).fontColor(this.secondaryTextColor())
-        if (this.ui.status === ManagementSectionStatus.Error) {
-          Button($r('app.string.management_retry')).onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
+      this.stateContent()
+    }
+  }
+
+  @Builder
+  private detailRow(label: ResourceStr, value: ResourceStr, showDivider: boolean = true) {
+    Column() {
+      Row({ space: 16 }) {
+        Text(label)
+          .fontSize(13)
+          .fontColor(this.secondaryTextColor())
+          .constraintSize({ minWidth: 92 })
+        Text(value || $r('app.string.management_detail_unknown'))
+          .fontSize(13)
+          .fontColor(this.primaryTextColor())
+          .layoutWeight(1)
+          .textAlign(TextAlign.End)
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 48 })
+      if (showDivider) Divider().margin({ left: 16 }).color($r('sys.color.comp_divider'))
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private activityDetailBody(item: ManagementActivityItem) {
+    Column({ space: 12 }) {
+      Column({ space: 8 }) {
+        Row({ space: 10 }) {
+          Row().width(10).height(10).borderRadius(5).backgroundColor(this.severityColor(item.severity))
+          Text(item.name)
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryTextColor())
+            .layoutWeight(1)
+            .maxLines(3)
+        }
+        if (item.overview || item.shortOverview) {
+          Text(item.overview || item.shortOverview)
+            .fontSize(14)
+            .fontColor(this.primaryTextColor())
+            .lineHeight(22)
         }
       }
-      .layoutWeight(1).justifyContent(FlexAlign.Center)
+      .width('100%')
+      .padding(18)
+      .alignItems(HorizontalAlign.Start)
+      .borderRadius(8)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+      Column() {
+        this.detailRow($r('app.string.management_detail_status'), item.severity)
+        this.detailRow($r('app.string.management_detail_last_activity'), this.formatDate(item.date))
+        this.detailRow($r('app.string.management_detail_user'), item.userName)
+        this.detailRow($r('app.string.management_detail_category'), item.type, false)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .borderRadius(8)
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
     }
+    .width('100%')
+  }
+
+  @Builder
+  private openMediaButton(item: ManagementActivityItem) {
+    if (item.itemId) {
+      Button($r('app.string.management_activity_item'), { type: ButtonType.Normal })
+        .width('100%')
+        .height(44)
+        .fontColor($r('app.color.on_primary'))
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+        .enabled(this.ui.pendingItemId.length === 0)
+        .onClick(() => this.openMedia(item))
+    }
+  }
+
+  @Builder
+  private activityDetailSheet() {
+    Column() {
+      Row() {
+        Text($r('app.string.management_activity_detail_title'))
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .padding({ left: 20, right: 64, top: 16, bottom: 8 })
+      if (this.selectedItem) {
+        Scroll(this.sheetScroller) {
+          this.activityDetailBody(this.selectedItem!)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 12 })
+        .scrollBar(BarState.Auto)
+        Column() {
+          this.openMediaButton(this.selectedItem!)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 10, bottom: Math.max(12, this.vm.appUIState.safeBottom) })
+        .backgroundColor(Color.Transparent)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private expandedDetailPane() {
+    if (this.selectedActivity()) {
+      Scroll(this.detailScroller) {
+        Column({ space: 12 }) {
+          this.activityDetailBody(this.selectedActivity()!)
+          this.openMediaButton(this.selectedActivity()!)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: this.vm.appUIState.safeBottom + 24 })
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .scrollBar(BarState.Auto)
+    } else {
+      Blank().layoutWeight(1)
+    }
+  }
+
+  @Builder
+  private filterSheet() {
+    ManagementActivityFilterSheet({
+      initialRecentDays: this.recentDays(),
+      initialSeverities: this.ui.selectedSeverities,
+      initialUsers: this.ui.selectedUsers,
+      availableUsers: this.userNames(),
+      initialSortField: this.ui.sortField,
+      initialAscending: this.ui.ascending,
+      onApply: (recentDays: number, severities: string[], users: string[],
+        sortField: ManagementActivitySortField, ascending: boolean) => {
+        this.applyNativeFilters(recentDays, severities, users, sortField, ascending)
+      }
+    })
+  }
+
+  @Builder
+  private pageSheet() {
+    if (this.sheetKind === ManagementActivitySheetKind.Filter) {
+      this.filterSheet()
+    } else {
+      this.activityDetailSheet()
+    }
+  }
+
+  @Builder
+  private nativePage() {
+    Column() {
+      Blank().height(this.nativeTopSpacer())
+      if (this.isLarge()) {
+        Row({ space: 12 }) {
+          Column() {
+            this.nativeFilters()
+            this.nativeActivityList()
+          }
+          .width(340)
+          .height('100%')
+          this.expandedDetailPane()
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .padding({ left: 12, right: 12 })
+      } else {
+        Column() {
+          this.nativeFilters()
+          this.nativeActivityList()
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .padding({ left: 12, right: 12, bottom: this.vm.appUIState.safeBottom })
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private legacyPage() {
+    Column() {
+      ActionBar({ title: $r('app.string.management_activity_title') })
+      this.legacyFilters()
+      this.legacyActivityList()
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ bottom: this.vm.appUIState.safeBottom })
+    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
   }
 
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
     Column() {
-      if (showLegacyActionBar) ActionBar({ title: $r('app.string.management_activity_title') })
-      this.filters()
-      this.activityList()
+      if (showLegacyActionBar) {
+        this.legacyPage()
+      } else {
+        this.nativePage()
+      }
     }
-    .width('100%').height('100%')
-    .padding({ bottom: this.vm.appUIState.safeBottom })
-    .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Transparent)
+    .bindSheet($$this.sheetVisible, this.pageSheet(), {
+      height: '70%',
+      preferType: SheetType.BOTTOM,
+      showClose: true,
+      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+    })
   }
 
   build() {
     AppRouteDestination({
       title: $r('app.string.management_activity_title'),
+      contentExtendsUnderTitleBar: true,
+      scrollControllers: [this.listScroller, this.detailScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },
