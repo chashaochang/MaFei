@@ -139,6 +139,7 @@ export class ManagementSessionMapper {
     const relativeUrl = tag ?
       imageApi.getItemImageUrlById(imageItemId, imageType, { tag: tag }) :
       imageApi.getItemImageUrlById(imageItemId, imageType)
-    return ApiClient.Instance().basePath + relativeUrl
+    const basePath: string = ApiClient.isInitialized() ? ApiClient.Instance().basePath : ''
+    return basePath + relativeUrl
   }
 }
