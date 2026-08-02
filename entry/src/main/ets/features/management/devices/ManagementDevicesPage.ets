@@ -7,12 +7,15 @@ import {
 } from '@hadss/hmrouter';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
+import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../../theme/AppThemeTokens';
+import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
 import { ManagementDeviceDetailPanel } from './ManagementDeviceDetailPanel';
+import { ManagementDeviceFilterSheet } from './ManagementDeviceFilterSheet';
 import {
   ManagementDeviceActionResult,
   ManagementDeviceBatchResult,
@@ -30,6 +33,7 @@ import { ManagementDevicesViewModel } from './ManagementDevicesViewModel';
 export struct ManagementDevicesPage {
   @Local ui: ManagementDevicesUIState = new ManagementDevicesUIState(this.getUIContext())
   @Local vm: ManagementDevicesViewModel = new ManagementDevicesViewModel(this.ui)
+  private readonly contentScroller: Scroller = new Scroller()
   private lifecycleOwner: IHMLifecycleOwner | null = null
   private pageShownCallback = (_context: HMLifecycleContext): void => {
     this.vm.init()
@@ -66,7 +70,7 @@ export struct ManagementDevicesPage {
   }
 
   private isLarge(): boolean {
-    return this.vm.appUIState.deviceWidth >= 840
+    return ManagementNativePagePolicy.isExpanded(this.vm.appUIState.deviceWidth)
   }
 
   private useNativeMaterial(): boolean {
@@ -86,6 +90,32 @@ export struct ManagementDevicesPage {
 
   private getString(name: string): string {
     return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private activeFilterCount(): number {
+    return (this.ui.recentDays > 0 ? 1 : 0) +
+      (this.ui.selectedUsers.length > 0 ? 1 : 0) +
+      (this.ui.sortField === ManagementDeviceSortField.LastActivity && !this.ui.ascending ? 0 : 1)
+  }
+
+  private canRevokeOthers(): boolean {
+    return !this.ui.batchPending && this.ui.pendingDeviceId.length === 0 &&
+      this.ui.sourceDevices.some((item: ManagementDeviceItem) => !item.current)
+  }
+
+  private formatDate(value: string): string {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const day = date.getDate().toString().padStart(2, '0')
+    const hour = date.getHours().toString().padStart(2, '0')
+    const minute = date.getMinutes().toString().padStart(2, '0')
+    return `${month}-${day} ${hour}:${minute}`
   }
 
   private showActionResult(result: ManagementDeviceActionResult, success: ResourceStr): void {
@@ -210,6 +240,7 @@ export struct ManagementDevicesPage {
   }
 
   private setRecentDays(days: number): void {
+    this.ui.recentDays = days
     this.ui.fromMs = days <= 0 ? 0 : Date.now() - days * 24 * 60 * 60 * 1000
     this.ui.toMs = 0
     this.vm.applyQuery(true)
@@ -236,8 +267,30 @@ export struct ManagementDevicesPage {
     return result
   }
 
+  private applyNativeFilters(recentDays: number, users: string[],
+    sortField: ManagementDeviceSortField, ascending: boolean): void {
+    this.ui.recentDays = recentDays
+    this.ui.fromMs = recentDays <= 0 ? 0 : Date.now() - recentDays * 24 * 60 * 60 * 1000
+    this.ui.toMs = 0
+    this.ui.selectedUsers = users
+    this.ui.sortField = sortField
+    this.ui.ascending = ascending
+    this.ui.filterSheetVisible = false
+    this.vm.applyQuery(true)
+  }
+
+  @Styles
+  private pressedRowStyle(): void {
+    .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
+  }
+
+  @Styles
+  private normalRowStyle(): void {
+    .backgroundColor(Color.Transparent)
+  }
+
   @Builder
-  private filters() {
+  private legacyFilters() {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
         Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
@@ -286,7 +339,58 @@ export struct ManagementDevicesPage {
   }
 
   @Builder
-  private deviceRow(device: ManagementDeviceItem) {
+  private nativeFilters() {
+    Row({ space: 8 }) {
+      Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
+        .layoutWeight(1)
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .onChange((value: string) => {
+          this.ui.query = value
+          this.vm.applyQuery(true)
+        })
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.more'))
+            .fontSize(18)
+            .fontColor([this.primaryTextColor()])
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .accessibilityText($r('app.string.management_device_filter_title'))
+        .onClick(() => this.ui.filterSheetVisible = true)
+        if (this.activeFilterCount() > 0) {
+          Text(this.activeFilterCount().toString())
+            .fontSize(10)
+            .fontColor($r('app.color.on_primary'))
+            .textAlign(TextAlign.Center)
+            .width(18)
+            .height(18)
+            .borderRadius(9)
+            .backgroundColor($r('app.color.color_main'))
+        }
+      }
+      .width(40)
+      .height(40)
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 10 })
+  }
+
+  @Builder
+  private filters() {
+    if (this.useNativeMaterial()) {
+      this.nativeFilters()
+    } else {
+      this.legacyFilters()
+    }
+  }
+
+  @Builder
+  private legacyDeviceRow(device: ManagementDeviceItem) {
     Row({ space: 10 }) {
       SymbolGlyph($r('sys.symbol.externaldrive'))
         .fontSize(19).fontColor([$r('app.color.color_main')])
@@ -313,12 +417,70 @@ export struct ManagementDevicesPage {
   }
 
   @Builder
+  private nativeDeviceRow(device: ManagementDeviceItem) {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.externaldrive'))
+        .fontSize(20)
+        .fontColor([$r('app.color.color_main')])
+        .width(36)
+        .height(36)
+      Column({ space: 4 }) {
+        Row({ space: 8 }) {
+          Text(device.displayName)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.primaryTextColor())
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (device.current) {
+            Text($r('app.string.management_device_current'))
+              .fontSize(11)
+              .fontColor($r('app.color.status_success'))
+          }
+        }
+        Text(`${device.appName} ${device.appVersion} · ${device.lastUserName}`)
+          .fontSize(13)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 4 }) {
+        Text(this.formatDate(device.lastActivityDate))
+          .fontSize(11)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(1)
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([this.secondaryTextColor()])
+      }
+      .alignItems(HorizontalAlign.End)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 68 })
+    .padding({ left: 12, right: 10, top: 8, bottom: 8 })
+    .borderRadius(8)
+    .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
+    .onClick(() => this.openDevice(device))
+  }
+
+  @Builder
+  private deviceRow(device: ManagementDeviceItem) {
+    if (this.useNativeMaterial()) {
+      this.nativeDeviceRow(device)
+    } else {
+      this.legacyDeviceRow(device)
+    }
+  }
+
+  @Builder
   private listContent() {
     Column() {
       this.filters()
       if ((this.ui.status === ManagementSectionStatus.Content ||
         this.ui.status === ManagementSectionStatus.Error) && this.ui.devices.length > 0) {
-        List() {
+        List({ scroller: this.contentScroller }) {
           ForEach(this.ui.devices, (item: ManagementDeviceItem) => {
             ListItem() { this.deviceRow(item) }
           }, (item: ManagementDeviceItem) => item.id)
@@ -342,13 +504,38 @@ export struct ManagementDevicesPage {
           .layoutWeight(1).fontSize(14).fontColor(this.secondaryTextColor())
       }
     }
-    .width('100%').height('100%')
+    .width('100%')
+    .height('100%')
+    .borderRadius(this.useNativeMaterial() ? 8 : 0)
+    .clip(this.useNativeMaterial())
+    .backgroundColor(this.useNativeMaterial() ?
+      AppThemeSurfaceResolver.contentGroupBackground() : Color.Transparent)
+  }
+
+  @Builder
+  private deviceFilterSheet() {
+    ManagementDeviceFilterSheet({
+      initialRecentDays: this.ui.recentDays,
+      initialUsers: this.ui.selectedUsers,
+      availableUsers: this.userNames(),
+      initialSortField: this.ui.sortField,
+      initialAscending: this.ui.ascending,
+      onApply: (recentDays: number, users: string[],
+        sortField: ManagementDeviceSortField, ascending: boolean) => {
+        this.applyNativeFilters(recentDays, users, sortField, ascending)
+      },
+      onDismiss: () => this.ui.filterSheetVisible = false
+    })
   }
 
   @Builder
   private pageContent(showLegacyActionBar: boolean) {
     Column() {
-      if (showLegacyActionBar) ActionBar({ title: $r('app.string.management_devices_title') })
+      if (showLegacyActionBar) {
+        ActionBar({ title: $r('app.string.management_devices_title') })
+      } else {
+        Blank().height(this.nativeTopSpacer())
+      }
       if (this.isLarge()) {
         Row({ space: 12 }) {
           Column() { this.listContent() }.width(320).height('100%')
@@ -358,6 +545,7 @@ export struct ManagementDevicesPage {
                 ui: this.ui,
                 device: this.selectedDevice()!,
                 themeStyle: this.vm.appUIState.themeStyle,
+                nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
                 onRename: () => this.renameSelected(),
                 onRevoke: () => this.confirmRevoke(this.selectedDevice()!)
               })
@@ -375,11 +563,23 @@ export struct ManagementDevicesPage {
     .width('100%').height('100%')
     .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+    .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
+      height: '70%',
+      preferType: SheetType.BOTTOM
+    })
   }
 
   build() {
     AppRouteDestination({
       title: $r('app.string.management_devices_title'),
+      contentExtendsUnderTitleBar: true,
+      menus: [{
+        value: $r('app.string.management_device_revoke_others'),
+        icon: $r('sys.symbol.trash'),
+        isEnabled: this.canRevokeOthers(),
+        action: () => this.confirmRevokeOthers()
+      }],
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

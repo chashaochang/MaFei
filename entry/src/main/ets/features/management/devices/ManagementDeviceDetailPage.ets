@@ -1,9 +1,11 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
+import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
 import { ManagementDeviceDetailPanel } from './ManagementDeviceDetailPanel';
 import { ManagementDeviceActionResult, ManagementDeviceItem } from './ManagementDeviceModels';
@@ -18,6 +20,7 @@ import { ManagementDevicesViewModel } from './ManagementDevicesViewModel';
 export struct ManagementDeviceDetailPage {
   @Local ui: ManagementDevicesUIState = new ManagementDevicesUIState(this.getUIContext())
   @Local vm: ManagementDevicesViewModel = new ManagementDevicesViewModel(this.ui)
+  private readonly contentScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
     const param = HMRouterMgr.getCurrentParam() as object
@@ -56,6 +59,10 @@ export struct ManagementDeviceDetailPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
   private async rename(): Promise<void> {
@@ -142,21 +149,60 @@ export struct ManagementDeviceDetailPage {
   }
 
   @Builder
+  private nativeDetailContent() {
+    Scroll(this.contentScroller) {
+      Column({ space: 12 }) {
+        Blank().height(this.nativeTopSpacer())
+        ManagementDeviceDetailPanel({
+          ui: this.ui,
+          device: this.selected()!,
+          themeStyle: this.vm.appUIState.themeStyle,
+          nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+          onRename: () => this.rename(),
+          onRevoke: () => this.confirmRevoke()
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 760 })
+      .padding({
+        left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+        right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+        bottom: ManagementNativePagePolicy.contentBottomPadding(this.vm.appUIState.safeBottom + 24, false)
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .layoutWeight(1)
+    .scrollBar(BarState.Auto)
+  }
+
+  @Builder
+  private legacyDetailContent() {
+    Scroll() {
+      ManagementDeviceDetailPanel({
+        ui: this.ui,
+        device: this.selected()!,
+        themeStyle: this.vm.appUIState.themeStyle,
+        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+        onRename: () => this.rename(),
+        onRevoke: () => this.confirmRevoke()
+      })
+    }
+    .layoutWeight(1)
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 12, bottom: this.vm.appUIState.safeBottom + 24 })
+  }
+
+  @Builder
   private pageContent(showLegacyActionBar: boolean) {
     Column() {
       if (showLegacyActionBar) ActionBar({ title: $r('app.string.management_device_detail_title') })
       if (this.selected()) {
-        Scroll() {
-          ManagementDeviceDetailPanel({
-            ui: this.ui,
-            device: this.selected()!,
-            themeStyle: this.vm.appUIState.themeStyle,
-            onRename: () => this.rename(),
-            onRevoke: () => this.confirmRevoke()
-          })
+        if (showLegacyActionBar) {
+          this.legacyDetailContent()
+        } else {
+          this.nativeDetailContent()
         }
-        .layoutWeight(1).width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: this.vm.appUIState.safeBottom + 24 })
       } else if (this.ui.status === ManagementSectionStatus.Loading) {
         LoadingProgress().layoutWeight(1).width(28).height(28).color($r('app.color.color_main'))
       } else {
@@ -171,6 +217,8 @@ export struct ManagementDeviceDetailPage {
   build() {
     AppRouteDestination({
       title: $r('app.string.management_device_detail_title'),
+      contentExtendsUnderTitleBar: true,
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

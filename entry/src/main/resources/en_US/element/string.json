@@ -1481,6 +1481,22 @@
       "value": "Device details"
     },
     {
+      "name": "management_device_filter_sort",
+      "value": "Sort"
+    },
+    {
+      "name": "management_device_filter_time",
+      "value": "Activity time"
+    },
+    {
+      "name": "management_device_filter_title",
+      "value": "Filter devices"
+    },
+    {
+      "name": "management_device_filter_user",
+      "value": "Last user"
+    },
+    {
       "name": "management_device_empty",
       "value": "No authorized devices"
     },
@@ -1547,6 +1563,10 @@
     {
       "name": "management_device_sort_app",
       "value": "By app"
+    },
+    {
+      "name": "management_device_sort_ascending",
+      "value": "Ascending"
     },
     {
       "name": "management_device_sort_name",

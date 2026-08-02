@@ -1481,6 +1481,22 @@
       "value": "设备详情"
     },
     {
+      "name": "management_device_filter_sort",
+      "value": "排序"
+    },
+    {
+      "name": "management_device_filter_time",
+      "value": "活动时间"
+    },
+    {
+      "name": "management_device_filter_title",
+      "value": "筛选设备"
+    },
+    {
+      "name": "management_device_filter_user",
+      "value": "最近用户"
+    },
+    {
       "name": "management_device_empty",
       "value": "暂无已授权设备"
     },
@@ -1547,6 +1563,10 @@
     {
       "name": "management_device_sort_app",
       "value": "按应用"
+    },
+    {
+      "name": "management_device_sort_ascending",
+      "value": "升序"
     },
     {
       "name": "management_device_sort_name",

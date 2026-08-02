@@ -20,6 +20,7 @@ export class ManagementDevicesUIState extends BaseUIState {
   @Trace devices: ManagementDeviceItem[] = []
   @Trace selectedDeviceId: string = ''
   @Trace query: string = ''
+  @Trace recentDays: number = 0
   @Trace fromMs: number = 0
   @Trace toMs: number = 0
   @Trace selectedUsers: string[] = []
@@ -35,4 +36,5 @@ export class ManagementDevicesUIState extends BaseUIState {
   @Trace pendingDeviceId: string = ''
   @Trace batchPending: boolean = false
   @Trace batchResult: ManagementDeviceBatchResult = new ManagementDeviceBatchResult()
+  @Trace filterSheetVisible: boolean = false
 }
