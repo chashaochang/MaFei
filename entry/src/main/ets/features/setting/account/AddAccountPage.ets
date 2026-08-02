@@ -9,20 +9,22 @@ import { AppRouteDestination } from '../../../component/AppRouteDestination';
 })
 @ComponentV2
 export struct AddAccountPage {
+  @Builder
+  private pageContent(showRouteActionBar: boolean) {
+    ConnectScreen({
+      isFromAddAccount: true,
+      showRouteActionBar
+    })
+  }
+
   build() {
     AppRouteDestination({
       title: '新增账号',
       contentBuilder: () => {
-        ConnectScreen({
-          isFromAddAccount: true,
-          showRouteActionBar: false
-        })
+        this.pageContent(false)
       },
       legacyContentBuilder: () => {
-        ConnectScreen({
-          isFromAddAccount: true,
-          showRouteActionBar: true
-        })
+        this.pageContent(true)
       }
     })
   }

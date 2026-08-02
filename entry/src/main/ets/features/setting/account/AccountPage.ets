@@ -54,6 +54,19 @@ export struct AccountPage {
     HMRouterMgr.to(RouterConsts.AddAccountPage).push()
   }
 
+  private navigationMenus(): Array<NavigationMenuItem> {
+    if (this.fromLogin) {
+      return []
+    }
+    return [{
+      value: '新增账号',
+      icon: $r('sys.symbol.plus'),
+      action: () => {
+        this.openAddAccount()
+      }
+    }]
+  }
+
   private primaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
       $r('sys.color.font_primary') : $r('app.color.text_primary')
@@ -290,36 +303,6 @@ export struct AccountPage {
   }
 
   @Builder
-  private nativeAddAccountEntry() {
-    Row() {
-      Button() {
-        Row({ space: 8 }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(18)
-            .fontColor([$r('app.color.color_main')])
-          Text('新增账号')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.color_main'))
-        }
-      }
-      .height(44)
-      .constraintSize({ minWidth: 120 })
-      .padding({ left: 16, right: 16 })
-      .borderRadius(12)
-      .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.appUIState.themeStyle))
-      .accessibilityText('新增账号')
-      .onClick(() => {
-        this.openAddAccount()
-      })
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 560 })
-    .padding({ left: 16, right: 16, top: 12 })
-    .justifyContent(FlexAlign.End)
-  }
-
-  @Builder
   private feiniuAccountList() {
     ListView({
       isLazyData: false,
@@ -350,9 +333,6 @@ export struct AccountPage {
           }
         })
       }
-      if (!showLegacyActionBar && !this.fromLogin) {
-        this.nativeAddAccountEntry()
-      }
       if (showLegacyActionBar) {
         this.feiniuAccountList()
       } else {
@@ -367,6 +347,7 @@ export struct AccountPage {
   build() {
     AppRouteDestination({
       title: this.fromLogin ? '历史登录' : '切换账号',
+      menus: this.navigationMenus(),
       contentBuilder: () => {
         this.pageContent(false)
       },
