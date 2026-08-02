@@ -517,7 +517,7 @@ export struct ManagementUserDetailPage {
             .backgroundColor(this.ui.selectedTab === tab ?
               AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
               Color.Transparent)
-            .borderRadius(9)
+            .borderRadius(this.useNativeMaterial() ? 20 : 9)
             .onClick(() => this.selectTab(tab))
         }
       }, (tab: ManagementUserTab) => tab.toString())
@@ -598,9 +598,12 @@ export struct ManagementUserDetailPage {
       }
       .width(44)
       .height(44)
-      .borderRadius(10)
-      .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(
-        this.vm.appUIState.themeStyle))
+      .borderRadius(this.useNativeMaterial() ? 22 : 10)
+      .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
+        AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
+      .systemMaterial(this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+        AppThemeSurfaceResolver.disabledSystemMaterial())
       .enabled(!this.vm.isSaving())
       .accessibilityText($r('app.string.management_user_change_avatar'))
       .onClick(() => this.updateAvatar())
@@ -612,9 +615,11 @@ export struct ManagementUserDetailPage {
         }
         .width(44)
         .height(44)
-        .borderRadius(10)
-        .backgroundColor(this.useNativeMaterial() ?
-          $r('sys.color.comp_background_tertiary') : $r('app.color.bg_1'))
+        .borderRadius(this.useNativeMaterial() ? 22 : 10)
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
@@ -763,12 +768,15 @@ export struct ManagementUserDetailPage {
         .height(42)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
           color: $r('app.color.main_red_color')
         })
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 21 : 8)
         .enabled(!this.vm.isSaving() && !this.deleteProtected())
         .onClick(() => this.requestDelete())
     }
@@ -857,8 +865,12 @@ export struct ManagementUserDetailPage {
       Button($r('app.string.management_user_discard'), { type: ButtonType.Normal })
         .height(40)
         .padding({ left: 16, right: 16 })
+        .borderRadius(this.useNativeMaterial() ? 20 : 8)
         .fontColor(this.secondaryTextColor())
         .backgroundColor(Color.Transparent)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => this.vm.discardCurrentTab())
       Button(this.currentStatus() === ManagementUserOperationStatus.Saving ?
         $r('app.string.management_user_saving') : $r('app.string.management_user_save'),
@@ -867,7 +879,7 @@ export struct ManagementUserDetailPage {
         .padding({ left: 20, right: 20 })
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .borderRadius(10)
+        .borderRadius(this.useNativeMaterial() ? 20 : 10)
         .systemMaterial(this.useNativeMaterial() ?
           AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
           AppThemeSurfaceResolver.disabledSystemMaterial())
@@ -920,8 +932,11 @@ export struct ManagementUserDetailPage {
           .height(40)
           .padding({ left: 20, right: 20 })
           .fontColor($r('app.color.on_primary'))
-          .backgroundColor($r('app.color.color_main'))
-          .borderRadius(10)
+          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+          .borderRadius(this.useNativeMaterial() ? 20 : 10)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(() => this.vm.reload())
       }
     }

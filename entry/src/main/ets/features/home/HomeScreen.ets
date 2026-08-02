@@ -568,6 +568,7 @@ export struct HomeScreen {
   @Builder
   private homeTabContent() {
     HomeTab({
+      active: this.ui.selectedDestination === HomeDestination.Home,
       contentBottomInset: this.contentBottomInset,
       contentScroller: this.homeScroller
     })

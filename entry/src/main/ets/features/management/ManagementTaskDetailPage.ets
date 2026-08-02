@@ -229,7 +229,7 @@ export struct ManagementTaskDetailPage {
           .width(48)
           .height(48)
           .backgroundColor(AppThemeSurfaceResolver.iconWellBackground(this.appUIState.themeStyle))
-          .borderRadius(16)
+          .borderRadius(8)
         Column({ space: 4 }) {
           Text(this.displayValue(this.task?.name || ''))
             .fontSize(18)
@@ -472,9 +472,10 @@ export struct ManagementTaskDetailPage {
       .fontColor(this.task?.busy ? $r('app.color.main_red_color') : $r('app.color.on_primary'))
       .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
         (this.task?.busy ? Color.Transparent : $r('app.color.color_main')))
-      .borderRadius(10)
-      .systemMaterial(this.useNativeMaterial() && !this.task?.busy ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+      .borderRadius(this.useNativeMaterial() ? 23 : 10)
+      .systemMaterial(this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(this.task?.busy ?
+          AppThemeMaterialRole.AdaptiveInteractive : AppThemeMaterialRole.PrimaryInteractive) :
         AppThemeSurfaceResolver.disabledSystemMaterial())
       .enabled(!this.actionPending)
       .onClick(() => this.runTaskAction())
@@ -516,8 +517,11 @@ export struct ManagementTaskDetailPage {
             .padding({ left: 22, right: 22 })
             .fontSize(14)
             .fontColor($r('app.color.on_primary'))
-            .backgroundColor($r('app.color.color_main'))
-            .borderRadius(12)
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+            .borderRadius(this.useNativeMaterial() ? 19 : 12)
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
             .onClick(() => this.checkAdministratorAccess())
         }
       }

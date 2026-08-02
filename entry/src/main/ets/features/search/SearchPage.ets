@@ -14,6 +14,7 @@ import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
 import { UIConstants } from "../../common/UIConstants";
+import { deviceInfo } from '@kit.BasicServicesKit';
 
 @HMRouter({
   pageUrl: RouterConsts.SearchPage,
@@ -287,13 +288,22 @@ export struct SearchPage {
         .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
         .onClick(() => {
           let uiContext: UIContext = this.getUIContext();
-          uiContext.getPromptAction().openCustomDialog({
-            builder: () => {
-              this.dialogBuilder();
-            },
-          }).catch(() => {
-
-          });
+          if (deviceInfo.sdkApiVersion >= 26) {
+            uiContext.getPromptAction().openCustomDialog({
+              builder: () => {
+                this.dialogBuilder();
+              },
+              systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+            }).catch(() => {
+            });
+          } else {
+            uiContext.getPromptAction().openCustomDialog({
+              builder: () => {
+                this.dialogBuilder();
+              }
+            }).catch(() => {
+            });
+          }
         })
     }
     .height(nativeSurface ? 56 : 46)

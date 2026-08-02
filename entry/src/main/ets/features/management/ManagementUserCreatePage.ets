@@ -168,8 +168,8 @@ export struct ManagementUserCreatePage {
         .maxLength(128)
         .fontSize(14)
         .fontColor(this.primaryTextColor())
-        .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(
-          this.vm.appUIState.themeStyle))
+        .backgroundColor(this.useNativeMaterial() ? $r('sys.color.comp_background_tertiary') :
+          AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
         .borderRadius(8)
         .enabled(!this.ui.saving && !this.ui.partialSuccess)
         .onChange(onChange)
@@ -196,8 +196,8 @@ export struct ManagementUserCreatePage {
           .maxLength(128)
           .fontSize(14)
           .fontColor(this.primaryTextColor())
-          .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(
-            this.vm.appUIState.themeStyle))
+          .backgroundColor(this.useNativeMaterial() ? $r('sys.color.comp_background_tertiary') :
+            AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
           .borderRadius(8)
           .enabled(!this.ui.saving && !this.ui.partialSuccess)
           .onChange((value: string) => {
@@ -573,7 +573,7 @@ export struct ManagementUserCreatePage {
             .padding({ left: 16, right: 16 })
             .fontColor($r('app.color.on_primary'))
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-            .borderRadius(9)
+            .borderRadius(this.useNativeMaterial() ? 20 : 9)
             .systemMaterial(this.useNativeMaterial() ?
               AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
               AppThemeSurfaceResolver.disabledSystemMaterial())
@@ -585,12 +585,15 @@ export struct ManagementUserCreatePage {
             .padding({ left: 16, right: 16 })
             .fontColor(this.primaryTextColor())
             .backgroundColor(Color.Transparent)
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
             .border({
               width: 1,
               color: AppThemeSurfaceResolver.contentOutline(
                 this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
             })
-            .borderRadius(9)
+            .borderRadius(this.useNativeMaterial() ? 20 : 9)
             .enabled(!this.ui.saving)
             .onClick(() => this.openDetails(this.ui.createdUserId))
         }
@@ -661,7 +664,7 @@ export struct ManagementUserCreatePage {
         .height(46)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
-        .borderRadius(10)
+        .borderRadius(23)
         .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
         .enabled(this.createEnabled())
         .onClick(() => this.submit())
@@ -729,8 +732,11 @@ export struct ManagementUserCreatePage {
           .height(40)
           .padding({ left: 20, right: 20 })
           .fontColor($r('app.color.on_primary'))
-          .backgroundColor($r('app.color.color_main'))
-          .borderRadius(10)
+          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+          .borderRadius(this.useNativeMaterial() ? 20 : 10)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(() => this.vm.init())
       }
     }

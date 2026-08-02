@@ -5,6 +5,7 @@ import {
 } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ObjectUtil } from '../../utils/ObjectUtil';
+import { ManagementNativeSelect } from './ManagementNativeSelect';
 import { ManagementUserDetailUIState } from './ManagementUserDetailUIState';
 import {
   ManagementAccessScheduleItem,
@@ -70,19 +71,6 @@ export struct ManagementUserParentalSection {
     this.onChanged()
   }
 
-  private ratingLabel(value: number | null): string {
-    if (value === null) {
-      return this.getString('management_user_parental_rating_unrestricted')
-    }
-    const selected = this.ui.parentalRatings.find((option: ManagementParentalRatingOption) =>
-      option.value === value)
-    return selected?.name || value.toString()
-  }
-
-  private getString(name: string): string {
-    return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
-  }
-
   private unratedLabel(value: string): ResourceStr {
     if (value === 'Movie') return $r('app.string.management_user_unrated_movie')
     if (value === 'Trailer') return $r('app.string.management_user_unrated_trailer')
@@ -106,6 +94,25 @@ export struct ManagementUserParentalSection {
     if (value === 'Friday') return $r('app.string.management_user_day_friday')
     if (value === 'Saturday') return $r('app.string.management_user_day_saturday')
     return $r('app.string.management_user_day_everyday')
+  }
+
+  private ratingOptions(): ResourceStr[] {
+    const options: ResourceStr[] = [$r('app.string.management_user_parental_rating_unrestricted')]
+    this.ui.parentalRatings.forEach((option: ManagementParentalRatingOption) => options.push(option.name))
+    return options
+  }
+
+  private ratingIndex(): number {
+    if (this.ui.parental.maxParentalRating === null) {
+      return 0
+    }
+    const index = this.ui.parentalRatings.findIndex((option: ManagementParentalRatingOption) =>
+      option.value === this.ui.parental.maxParentalRating)
+    return index >= 0 ? index + 1 : 0
+  }
+
+  private dayOptions(): ResourceStr[] {
+    return SCHEDULE_DAYS.map((day: string) => this.dayLabel(day))
   }
 
   private hasTagConflict(): boolean {
@@ -182,30 +189,6 @@ export struct ManagementUserParentalSection {
   }
 
   @Builder
-  private ratingMenu() {
-    Menu() {
-      MenuItem({ content: $r('app.string.management_user_parental_rating_unrestricted') })
-        .selectIcon(true)
-        .selected(this.ui.parental.maxParentalRating === null)
-        .onClick(() => {
-          const next = this.copyParental()
-          next.maxParentalRating = null
-          this.commitParental(next)
-        })
-      ForEach(this.ui.parentalRatings, (option: ManagementParentalRatingOption) => {
-        MenuItem({ content: option.name })
-          .selectIcon(true)
-          .selected(this.ui.parental.maxParentalRating === option.value)
-          .onClick(() => {
-            const next = this.copyParental()
-            next.maxParentalRating = option.value
-            this.commitParental(next)
-          })
-      }, (option: ManagementParentalRatingOption) => `${option.name}-${option.value}`)
-    }
-  }
-
-  @Builder
   private ratingContent() {
     Column({ space: 12 }) {
       this.groupHeader($r('app.string.management_user_parental_rating'),
@@ -215,28 +198,16 @@ export struct ManagementUserParentalSection {
           .fontSize(14)
           .fontColor(this.primaryTextColor())
           .layoutWeight(1)
-        Button() {
-          Row({ space: 6 }) {
-            Text(this.ratingLabel(this.ui.parental.maxParentalRating))
-              .fontSize(13)
-              .fontColor(this.primaryTextColor())
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(12)
-              .fontColor([this.secondaryTextColor()])
+        ManagementNativeSelect({
+          options: this.ratingOptions(),
+          selectedIndex: this.ratingIndex(),
+          themeStyle: this.themeStyle,
+          nativeThemeAvailable: this.nativeThemeAvailable,
+          onSelect: (index: number) => {
+            const next = this.copyParental()
+            next.maxParentalRating = index === 0 ? null : this.ui.parentalRatings[index - 1].value
+            this.commitParental(next)
           }
-        }
-        .height(40)
-        .constraintSize({ minWidth: 140, maxWidth: 260 })
-        .padding({ left: 12, right: 12 })
-        .borderRadius(8)
-        .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.ratingMenu(), {
-          placement: Placement.BottomRight,
-          systemMaterial: this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-            undefined
         })
       }
       .width('100%')
@@ -351,7 +322,7 @@ export struct ManagementUserParentalSection {
     .height(34)
     .padding({ left: 10, right: 10 })
     .margin({ right: 8, bottom: 8 })
-    .borderRadius(8)
+    .borderRadius(this.useNativeMaterial() ? 17 : 8)
     .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
     .onClick(() => {
       const next = this.copyParental()
@@ -385,7 +356,7 @@ export struct ManagementUserParentalSection {
         }
         .height(36)
         .padding({ left: 10, right: 10 })
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 18 : 8)
         .backgroundColor(Color.Transparent)
         .onClick(() => this.openTagDialog(blocked))
       }
@@ -454,22 +425,6 @@ export struct ManagementUserParentalSection {
   }
 
   @Builder
-  private dayMenu(scheduleIndex: number) {
-    Menu() {
-      ForEach(SCHEDULE_DAYS, (day: string) => {
-        MenuItem({ content: this.dayLabel(day) })
-          .selectIcon(true)
-          .selected(this.ui.parental.schedules[scheduleIndex].dayOfWeek === day)
-          .onClick(() => {
-            const next = this.copyParental()
-            next.schedules[scheduleIndex].dayOfWeek = day
-            this.commitParental(next)
-          })
-      }, (day: string) => day)
-    }
-  }
-
-  @Builder
   private hourInput(label: ResourceStr, value: number, onChange: (value: number) => void) {
     Column({ space: 4 }) {
       Text(label)
@@ -494,25 +449,21 @@ export struct ManagementUserParentalSection {
   private scheduleRow(schedule: ManagementAccessScheduleItem, index: number) {
     Column({ space: 10 }) {
       Row({ space: 10 }) {
-        Button() {
-          Row({ space: 6 }) {
-            Text(this.dayLabel(schedule.dayOfWeek))
-              .fontSize(13)
-              .fontColor(this.primaryTextColor())
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(12)
-              .fontColor([this.secondaryTextColor()])
+        ManagementNativeSelect({
+          options: this.dayOptions(),
+          selectedIndex: Math.max(0, SCHEDULE_DAYS.indexOf(schedule.dayOfWeek)),
+          themeStyle: this.themeStyle,
+          nativeThemeAvailable: this.nativeThemeAvailable,
+          selectorWidth: 148,
+          valueTextAlign: TextAlign.Start,
+          menuPlacement: Placement.BottomLeft,
+          onSelect: (selectedIndex: number) => {
+            if (selectedIndex >= 0 && selectedIndex < SCHEDULE_DAYS.length) {
+              const next = this.copyParental()
+              next.schedules[index].dayOfWeek = SCHEDULE_DAYS[selectedIndex]
+              this.commitParental(next)
+            }
           }
-        }
-        .height(40)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(8)
-        .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.dayMenu(index), {
-          placement: Placement.BottomLeft,
-          systemMaterial: this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-            undefined
         })
         Blank()
         Button() {
@@ -522,7 +473,7 @@ export struct ManagementUserParentalSection {
         }
         .width(40)
         .height(40)
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 20 : 8)
         .backgroundColor(Color.Transparent)
         .accessibilityText($r('app.string.management_user_parental_remove_schedule'))
         .onClick(() => {
@@ -590,7 +541,7 @@ export struct ManagementUserParentalSection {
         }
         .height(40)
         .padding({ left: 12, right: 12 })
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 20 : 8)
         .backgroundColor(Color.Transparent)
         .onClick(() => {
           const next = this.copyParental()
@@ -655,6 +606,7 @@ export struct ManagementUserParentalSection {
       Row({ space: 10 }) {
         Button($r('app.string.management_user_cancel'), { type: ButtonType.Normal })
           .height(40)
+          .borderRadius(this.useNativeMaterial() ? 20 : 8)
           .layoutWeight(1)
           .fontColor(this.secondaryTextColor())
           .backgroundColor(Color.Transparent)
@@ -664,7 +616,7 @@ export struct ManagementUserParentalSection {
           .layoutWeight(1)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor($r('app.color.color_main'))
-          .borderRadius(8)
+          .borderRadius(this.useNativeMaterial() ? 20 : 8)
           .enabled(this.tagDraft.trim().length > 0)
           .onClick(() => this.addTag())
       }

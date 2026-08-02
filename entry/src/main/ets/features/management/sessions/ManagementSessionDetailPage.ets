@@ -242,9 +242,13 @@ export struct ManagementSessionDetailPage {
       Button($r('app.string.management_retry'), { type: ButtonType.Normal })
         .height(32)
         .padding({ left: 12, right: 12 })
+        .borderRadius(this.useNativeMaterial() ? 16 : 8)
         .fontSize(12)
         .fontColor($r('app.color.color_main'))
         .backgroundColor(Color.Transparent)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => this.vm.refresh())
     }
     .width('100%')
@@ -514,6 +518,7 @@ export struct ManagementSessionDetailPage {
           $r('app.string.management_session_pause'), { type: ButtonType.Normal })
           .height(42)
           .padding({ left: 14, right: 14 })
+          .borderRadius(21)
           .fontColor(this.primaryTextColor())
           .backgroundColor(Color.Transparent)
           .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
@@ -526,12 +531,13 @@ export struct ManagementSessionDetailPage {
       })
         .layoutWeight(1)
         .height(42)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .borderRadius(8)
+        .backgroundColor($r('sys.color.comp_background_tertiary'))
         .onChange((value: string) => this.ui.messageDraft = value)
       Button($r('app.string.management_session_send'), { type: ButtonType.Normal })
         .height(42)
         .padding({ left: 14, right: 14 })
+        .borderRadius(21)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
         .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
@@ -542,8 +548,10 @@ export struct ManagementSessionDetailPage {
         Button($r('app.string.management_session_stop'), { type: ButtonType.Normal })
           .height(42)
           .padding({ left: 12, right: 12 })
+          .borderRadius(21)
           .fontColor($r('app.color.main_red_color'))
           .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
           .enabled(this.ui.pendingAction === ManagementSessionAction.None)
           .onClick(() => this.confirmStop(item))
       }
@@ -600,10 +608,24 @@ export struct ManagementSessionDetailPage {
       if (this.ui.ended) {
         Button($r('app.string.management_session_return_dashboard'), { type: ButtonType.Normal })
           .height(42)
+          .padding({ left: 22, right: 22 })
+          .borderRadius(this.useNativeMaterial() ? 21 : 10)
+          .fontColor($r('app.color.on_primary'))
+          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(() => HMRouterMgr.pop())
       } else {
         Button($r('app.string.management_retry'), { type: ButtonType.Normal })
           .height(42)
+          .padding({ left: 22, right: 22 })
+          .borderRadius(this.useNativeMaterial() ? 21 : 10)
+          .fontColor($r('app.color.on_primary'))
+          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(() => this.vm.refresh())
       }
     }

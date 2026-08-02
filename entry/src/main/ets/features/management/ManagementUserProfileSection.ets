@@ -1,10 +1,8 @@
 import { ThemeStyle } from '../../entity/ThemeStyle';
-import {
-  AppThemeMaterialRole,
-  AppThemeSurfaceResolver
-} from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ObjectUtil } from '../../utils/ObjectUtil';
+import { ManagementNativeSelect } from './ManagementNativeSelect';
 import { ManagementUserDetailUIState } from './ManagementUserDetailUIState';
 import {
   ManagementProfileDraft,
@@ -51,19 +49,31 @@ export struct ManagementUserProfileSection {
     this.onChanged()
   }
 
-  private optionLabel(options: ManagementUserOption[], selectedId: string): string {
-    const selected = options.find((option: ManagementUserOption) => option.id === selectedId)
-    return selected?.name || selectedId || '-'
+  private optionLabels(options: ManagementUserOption[]): ResourceStr[] {
+    return options.map((option: ManagementUserOption) => option.name)
   }
 
-  private syncPlayLabel(value: string): ResourceStr {
-    if (value === SYNC_PLAY_NONE) {
-      return $r('app.string.management_user_sync_play_none')
+  private optionIndex(options: ManagementUserOption[], selectedId: string): number {
+    const index = options.findIndex((option: ManagementUserOption) => option.id === selectedId)
+    return index >= 0 ? index : 0
+  }
+
+  private syncPlayOptions(): ResourceStr[] {
+    return [
+      $r('app.string.management_user_sync_play_none'),
+      $r('app.string.management_user_sync_play_join'),
+      $r('app.string.management_user_sync_play_create')
+    ]
+  }
+
+  private syncPlayIndex(): number {
+    if (this.ui.profile.syncPlayAccess === SYNC_PLAY_NONE) {
+      return 0
     }
-    if (value === SYNC_PLAY_JOIN) {
-      return $r('app.string.management_user_sync_play_join')
+    if (this.ui.profile.syncPlayAccess === SYNC_PLAY_JOIN) {
+      return 1
     }
-    return $r('app.string.management_user_sync_play_create')
+    return 2
   }
 
   private administratorLocked(): boolean {
@@ -124,19 +134,6 @@ export struct ManagementUserProfileSection {
   }
 
   @Builder
-  private providerMenu(options: ManagementUserOption[], selectedId: string,
-    onSelect: (id: string) => void) {
-    Menu() {
-      ForEach(options, (option: ManagementUserOption) => {
-        MenuItem({ content: option.name })
-          .selectIcon(true)
-          .selected(option.id === selectedId)
-          .onClick(() => onSelect(option.id))
-      }, (option: ManagementUserOption) => option.id)
-    }
-  }
-
-  @Builder
   private providerRow(title: ResourceStr, options: ManagementUserOption[], selectedId: string,
     onSelect: (id: string) => void) {
     Row({ space: 12 }) {
@@ -144,29 +141,17 @@ export struct ManagementUserProfileSection {
         .fontSize(14)
         .fontColor(this.primaryTextColor())
         .layoutWeight(1)
-      Button() {
-        Row({ space: 6 }) {
-          Text(this.optionLabel(options, selectedId))
-            .fontSize(13)
-            .fontColor(this.primaryTextColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(12)
-            .fontColor([this.secondaryTextColor()])
+      ManagementNativeSelect({
+        options: this.optionLabels(options),
+        selectedIndex: this.optionIndex(options, selectedId),
+        themeStyle: this.themeStyle,
+        nativeThemeAvailable: this.nativeThemeAvailable,
+        isEnabled: options.length > 0,
+        onSelect: (index: number) => {
+          if (index >= 0 && index < options.length) {
+            onSelect(options[index].id)
+          }
         }
-      }
-      .height(40)
-      .constraintSize({ minWidth: 140, maxWidth: 260 })
-      .padding({ left: 12, right: 12 })
-      .borderRadius(8)
-      .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-      .enabled(options.length > 0)
-      .bindMenu(this.providerMenu(options, selectedId, onSelect), {
-        placement: Placement.BottomRight,
-        systemMaterial: this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-          undefined
       })
     }
     .width('100%')
@@ -548,37 +533,6 @@ export struct ManagementUserProfileSection {
   }
 
   @Builder
-  private syncPlayMenu() {
-    Menu() {
-      MenuItem({ content: $r('app.string.management_user_sync_play_none') })
-        .selectIcon(true)
-        .selected(this.ui.profile.syncPlayAccess === SYNC_PLAY_NONE)
-        .onClick(() => {
-          const next = this.copyProfile()
-          next.syncPlayAccess = SYNC_PLAY_NONE
-          this.commitProfile(next)
-        })
-      MenuItem({ content: $r('app.string.management_user_sync_play_join') })
-        .selectIcon(true)
-        .selected(this.ui.profile.syncPlayAccess === SYNC_PLAY_JOIN)
-        .onClick(() => {
-          const next = this.copyProfile()
-          next.syncPlayAccess = SYNC_PLAY_JOIN
-          this.commitProfile(next)
-        })
-      MenuItem({ content: $r('app.string.management_user_sync_play_create') })
-        .selectIcon(true)
-        .selected(this.ui.profile.syncPlayAccess === SYNC_PLAY_CREATE ||
-          this.ui.profile.syncPlayAccess.length === 0)
-        .onClick(() => {
-          const next = this.copyProfile()
-          next.syncPlayAccess = SYNC_PLAY_CREATE
-          this.commitProfile(next)
-        })
-    }
-  }
-
-  @Builder
   private limitsContent() {
     Column() {
       this.groupHeader($r('app.string.management_user_group_limits'),
@@ -609,28 +563,17 @@ export struct ManagementUserProfileSection {
           .fontSize(14)
           .fontColor(this.primaryTextColor())
           .layoutWeight(1)
-        Button() {
-          Row({ space: 6 }) {
-            Text(this.syncPlayLabel(this.ui.profile.syncPlayAccess))
-              .fontSize(13)
-              .fontColor(this.primaryTextColor())
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(12)
-              .fontColor([this.secondaryTextColor()])
+        ManagementNativeSelect({
+          options: this.syncPlayOptions(),
+          selectedIndex: this.syncPlayIndex(),
+          themeStyle: this.themeStyle,
+          nativeThemeAvailable: this.nativeThemeAvailable,
+          onSelect: (index: number) => {
+            const next = this.copyProfile()
+            next.syncPlayAccess = index === 0 ? SYNC_PLAY_NONE :
+              (index === 1 ? SYNC_PLAY_JOIN : SYNC_PLAY_CREATE)
+            this.commitProfile(next)
           }
-        }
-        .height(40)
-        .constraintSize({ minWidth: 140, maxWidth: 260 })
-        .padding({ left: 12, right: 12 })
-        .borderRadius(8)
-        .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.syncPlayMenu(), {
-          placement: Placement.BottomRight,
-          systemMaterial: this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-            undefined
         })
       }
       .width('100%')

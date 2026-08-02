@@ -202,39 +202,45 @@ export struct MineTab {
               HMRouterMgr.to(RouterConsts.SettingPage).push()
             }
           })
-          ListGroup({
-            items: [
-              new BaseGroupItem('隐私协议', $r('app.media.ic_yinsi')),
-              new BaseGroupItem('加入群聊', $r('app.media.add_group')),
-              new BaseGroupItem('关于我们', $r('app.media.about'), this.ui.versionName, false)
-            ],
-            onItemClick: (index) => {
-              switch (index) {
-                case 0:
-                  HMRouterMgr.push({
-                    pageUrl: RouterConsts.PrivacyPage
-                  })
-                  break
-                case 1:
-                  try {
-                    getUIAbilityContext().startAbility({
-                      uri: 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=991893385&card_type=group&source=qrcode',
-                      flags: wantConstant.Flags.FLAG_START_WITHOUT_TIPS
-                    }).catch(() => {
-                      HMRouterMgr.to(RouterConsts.AddGroupPage).push()
+          Column({ space: 8 }) {
+            ListGroup({
+              items: [
+                new BaseGroupItem('隐私协议', $r('app.media.ic_yinsi')),
+                new BaseGroupItem('加入群聊', $r('app.media.add_group'))
+              ],
+              onItemClick: (index) => {
+                switch (index) {
+                  case 0:
+                    HMRouterMgr.push({
+                      pageUrl: RouterConsts.PrivacyPage
                     })
-                  } catch (e) {
-                    HMRouterMgr.to(RouterConsts.AddGroupPage).push()
-                  }
-                  break
-                case 2:
-                  HMRouterMgr.push({
-                    pageUrl: RouterConsts.AboutPage
-                  })
-                  break
+                    break
+                  case 1:
+                    try {
+                      getUIAbilityContext().startAbility({
+                        uri: 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=991893385&card_type=group&source=qrcode',
+                        flags: wantConstant.Flags.FLAG_START_WITHOUT_TIPS
+                      }).catch(() => {
+                        HMRouterMgr.to(RouterConsts.AddGroupPage).push()
+                      })
+                    } catch (e) {
+                      HMRouterMgr.to(RouterConsts.AddGroupPage).push()
+                    }
+                    break
+                }
               }
+            })
+
+            if (this.ui.versionName.length > 0) {
+              Text(this.ui.versionName)
+                .width('100%')
+                .fontSize(12)
+                .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                  $r('sys.color.font_tertiary') : $r('app.color.text_2'))
+                .textAlign(TextAlign.Center)
             }
-          })
+          }
+          .width('100%')
 
           ListGroup({
             items: [new BaseGroupItem('退出登录')],

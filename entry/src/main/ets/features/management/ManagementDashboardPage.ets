@@ -12,7 +12,7 @@ import { RouterConsts } from '../../common/RouterConsts';
 import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ManagementActivityDashboardSection } from './activity/ManagementActivityDashboardSection';
 import { ManagementActivityDashboardUIState } from './activity/ManagementActivityUIState';
@@ -169,7 +169,7 @@ export struct ManagementDashboardPage {
   }
 
   @Builder
-  sectionHeader(title: ResourceStr, action?: ResourceStr, onAction?: () => void) {
+  sectionHeader(title: ResourceStr) {
     Row() {
       Text(title)
         .fontSize(18)
@@ -177,15 +177,6 @@ export struct ManagementDashboardPage {
         .fontColor(this.primaryTextColor())
         .layoutWeight(1)
         .maxLines(2)
-      if (action && onAction) {
-        Button(action, { type: ButtonType.Normal })
-          .height(32)
-          .padding({ left: 12, right: 12 })
-          .fontSize(13)
-          .fontColor($r('app.color.color_main'))
-          .backgroundColor(Color.Transparent)
-          .onClick(onAction)
-      }
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
@@ -300,8 +291,11 @@ export struct ManagementDashboardPage {
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.on_primary'))
-        .backgroundColor($r('app.color.color_main'))
-        .borderRadius(12)
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+        .borderRadius(this.useNativeMaterial() ? 22 : 12)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(!this.ui.isLibraryScanRunning && !this.ui.isStartingScan && !this.ui.isScanSubmissionLocked)
         .opacity(this.ui.isLibraryScanRunning || this.ui.isStartingScan ||
           this.ui.isScanSubmissionLocked ? 0.55 : 1)
@@ -435,9 +429,14 @@ export struct ManagementDashboardPage {
       if (retry && onRetry) {
         Button($r('app.string.management_retry'), { type: ButtonType.Normal })
           .height(30)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(this.useNativeMaterial() ? 15 : 8)
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(onRetry)
       }
     }
@@ -461,8 +460,7 @@ export struct ManagementDashboardPage {
   @Builder
   tasksCardBody() {
     Column({ space: 10 }) {
-      this.sectionHeader($r('app.string.management_running_tasks'),
-        $r('app.string.management_refresh'), () => this.vm.refreshTasks())
+      this.sectionHeader($r('app.string.management_running_tasks'))
       if ((this.ui.tasksStatus === ManagementSectionStatus.Content ||
         this.ui.tasksStatus === ManagementSectionStatus.Error) && this.ui.tasks.length > 0) {
         ForEach(this.ui.tasks, (task: ManagementTaskItem) => {
@@ -547,7 +545,6 @@ export struct ManagementDashboardPage {
       ui: this.sessionsUI,
       themeStyle: this.vm.appUIState.themeStyle,
       nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onRefresh: () => this.sessionsVM.refresh(),
       onOpenDevices: () => this.openDevices(),
       onOpenSession: (session: ManagementSessionItem) => this.openSessionDetail(session)
     })
@@ -591,7 +588,6 @@ export struct ManagementDashboardPage {
       ui: this.activityUI,
       themeStyle: this.vm.appUIState.themeStyle,
       nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onRefresh: () => this.activityVM.refresh(),
       onRetry: () => this.activityVM.init(),
       onOpenAll: () => this.openActivity()
     })
@@ -676,8 +672,11 @@ export struct ManagementDashboardPage {
         .padding({ left: 24, right: 24 })
         .fontSize(14)
         .fontColor($r('app.color.on_primary'))
-        .backgroundColor($r('app.color.color_main'))
-        .borderRadius(12)
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+        .borderRadius(this.useNativeMaterial() ? 20 : 12)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => this.vm.init())
     }
     .layoutWeight(1)

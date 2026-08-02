@@ -4,7 +4,7 @@ import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
 import { ManagementDeviceDetailPanel } from './ManagementDeviceDetailPanel';
@@ -141,6 +141,14 @@ export struct ManagementDeviceDetailPage {
         .fontColor($r('app.color.text_1'))
         .textAlign(TextAlign.Center)
       Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+        .height(40)
+        .padding({ left: 20, right: 20 })
+        .borderRadius(this.useNativeMaterial() ? 20 : 10)
+        .fontColor($r('app.color.on_primary'))
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => this.vm.init())
     }
     .layoutWeight(1)

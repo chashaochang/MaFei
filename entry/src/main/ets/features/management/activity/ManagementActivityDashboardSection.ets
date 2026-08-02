@@ -1,5 +1,5 @@
 import { ThemeStyle } from '../../../entity/ThemeStyle';
-import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import { ManagementSectionStatus } from '../ManagementModels';
 import { ManagementActivityItem } from './ManagementActivityModels';
 import { ManagementActivityDashboardUIState } from './ManagementActivityUIState';
@@ -12,12 +12,14 @@ export struct ManagementActivityDashboardSection {
   @Param themeStyle: ThemeStyle
   @Param nativeThemeAvailable: boolean = false
 
-  @Event onRefresh: () => void = () => {
-  }
   @Event onRetry: () => void = () => {
   }
 
   @Event onOpenAll: () => void = () => {
+  }
+
+  private useNativeMaterial(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
   }
 
   private primaryTextColor(): ResourceColor {
@@ -53,15 +55,13 @@ export struct ManagementActivityDashboardSection {
           .fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.primaryTextColor())
           .layoutWeight(1)
         Button($r('app.string.management_activity_view_all'), { type: ButtonType.Normal })
-          .height(32).fontSize(13).fontColor($r('app.color.color_main'))
-          .backgroundColor(Color.Transparent).onClick(() => this.onOpenAll())
-        Button() {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(16).fontColor([$r('app.color.color_main')])
-        }
-        .width(32).height(32).backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.management_refresh'))
-        .onClick(() => this.onRefresh())
+          .height(32).borderRadius(this.useNativeMaterial() ? 16 : 8)
+          .fontSize(13).fontColor($r('app.color.color_main'))
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .onClick(() => this.onOpenAll())
       }
       .width('100%')
       if ((this.ui.status === ManagementSectionStatus.Content ||
@@ -92,7 +92,11 @@ export struct ManagementActivityDashboardSection {
           Text($r('app.string.management_activity_failed'))
             .fontSize(13).fontColor(this.secondaryTextColor())
           Button($r('app.string.management_retry'), { type: ButtonType.Normal })
-            .height(34).enabled(!this.ui.refreshing)
+            .height(34).borderRadius(this.useNativeMaterial() ? 17 : 8)
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .enabled(!this.ui.refreshing)
             .onClick(() => this.onRetry())
         }
         .width('100%').alignItems(HorizontalAlign.Start)

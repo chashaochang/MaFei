@@ -117,6 +117,11 @@ export struct ManagementActivityPage {
     return $r('app.color.color_main')
   }
 
+  private detailGroupBackground(inSheet: boolean): ResourceColor {
+    return inSheet && this.useNativeMaterial() ?
+      Color.Transparent : AppThemeSurfaceResolver.contentGroupBackground()
+  }
+
   private formatDate(value: string): string {
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return value
@@ -273,6 +278,7 @@ export struct ManagementActivityPage {
           }
           .width(40)
           .height(40)
+          .borderRadius(20)
           .backgroundColor(Color.Transparent)
           .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
           .accessibilityText($r('app.string.management_activity_filter_title'))
@@ -302,13 +308,13 @@ export struct ManagementActivityPage {
               .fontColor(this.ui.view === view ? this.primaryTextColor() : this.secondaryTextColor())
               .backgroundColor(this.ui.view === view ?
                 AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
-              .borderRadius(8)
+              .borderRadius(18)
               .onClick(() => this.vm.selectView(view))
           }, (view: ManagementActivityView) => view.toString())
       }
       .width('100%')
       .padding(2)
-      .borderRadius(10)
+      .borderRadius(20)
       .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
     }
     .width('100%')
@@ -401,7 +407,7 @@ export struct ManagementActivityPage {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
       SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(12)
+        .fontSize(20)
         .fontColor([this.secondaryTextColor()])
     }
     .width('100%')
@@ -464,12 +470,26 @@ export struct ManagementActivityPage {
   private pagingControls() {
     Row({ space: 10 }) {
       Button($r('app.string.management_activity_previous'))
+        .height(36)
+        .padding({ left: 16, right: 16 })
+        .borderRadius(this.useNativeMaterial() ? 18 : 8)
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(this.ui.displayedPageIndex > 0)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex - 1))
       Text(`${this.ui.displayedPageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
         .fontSize(12)
         .fontColor(this.secondaryTextColor())
       Button($r('app.string.management_activity_next'))
+        .height(36)
+        .padding({ left: 16, right: 16 })
+        .borderRadius(this.useNativeMaterial() ? 18 : 8)
+        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(this.ui.displayedPageIndex + 1 < this.ui.pageCount)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex + 1))
     }
@@ -487,6 +507,12 @@ export struct ManagementActivityPage {
         .fontColor($r('app.color.status_warning'))
       Button($r('app.string.management_retry'), { type: ButtonType.Normal })
         .height(32)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(this.useNativeMaterial() ? 16 : 8)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(!this.ui.refreshing)
         .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
     }
@@ -506,6 +532,14 @@ export struct ManagementActivityPage {
           .fontColor(this.secondaryTextColor())
         if (this.ui.status === ManagementSectionStatus.Error) {
           Button($r('app.string.management_retry'))
+            .height(40)
+            .padding({ left: 22, right: 22 })
+            .borderRadius(this.useNativeMaterial() ? 20 : 10)
+            .fontColor($r('app.color.on_primary'))
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
             .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
         }
       }
@@ -590,7 +624,7 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private activityDetailBody(item: ManagementActivityItem) {
+  private activityDetailBody(item: ManagementActivityItem, inSheet: boolean = false) {
     Column({ space: 12 }) {
       Column({ space: 8 }) {
         Row({ space: 10 }) {
@@ -613,7 +647,7 @@ export struct ManagementActivityPage {
       .padding(18)
       .alignItems(HorizontalAlign.Start)
       .borderRadius(8)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+      .backgroundColor(this.detailGroupBackground(inSheet))
       Column() {
         this.detailRow($r('app.string.management_detail_status'), item.severity)
         this.detailRow($r('app.string.management_detail_last_activity'), this.formatDate(item.date))
@@ -624,7 +658,7 @@ export struct ManagementActivityPage {
       .padding({ left: 16, right: 16 })
       .borderRadius(8)
       .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+      .backgroundColor(this.detailGroupBackground(inSheet))
     }
     .width('100%')
   }
@@ -635,6 +669,7 @@ export struct ManagementActivityPage {
       Button($r('app.string.management_activity_item'), { type: ButtonType.Normal })
         .width('100%')
         .height(44)
+        .borderRadius(22)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
         .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
@@ -657,7 +692,7 @@ export struct ManagementActivityPage {
       .padding({ left: 20, right: 64, top: 16, bottom: 8 })
       if (this.selectedItem) {
         Scroll(this.sheetScroller) {
-          this.activityDetailBody(this.selectedItem!)
+          this.activityDetailBody(this.selectedItem!, true)
         }
         .layoutWeight(1)
         .width('100%')
@@ -782,7 +817,10 @@ export struct ManagementActivityPage {
       height: '70%',
       preferType: SheetType.BOTTOM,
       showClose: true,
-      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
+      systemMaterial: this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+        AppThemeSurfaceResolver.disabledSystemMaterial()
     })
   }
 

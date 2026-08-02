@@ -358,6 +358,7 @@ export struct ManagementDevicesPage {
         }
         .width(40)
         .height(40)
+        .borderRadius(20)
         .backgroundColor(Color.Transparent)
         .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
         .accessibilityText($r('app.string.management_device_filter_title'))
@@ -452,7 +453,7 @@ export struct ManagementDevicesPage {
           .fontColor(this.secondaryTextColor())
           .maxLines(1)
         SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(14)
+          .fontSize(20)
           .fontColor([this.secondaryTextColor()])
       }
       .alignItems(HorizontalAlign.End)
@@ -487,11 +488,26 @@ export struct ManagementDevicesPage {
         }
         .layoutWeight(1).width('100%').scrollBar(BarState.Auto)
         Row({ space: 10 }) {
-          Button($r('app.string.management_device_previous')).enabled(this.ui.pageIndex > 0)
+          Button($r('app.string.management_device_previous'), { type: ButtonType.Normal })
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .borderRadius(18)
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .enabled(this.ui.pageIndex > 0)
             .onClick(() => this.vm.setPage(this.ui.pageIndex - 1))
           Text(`${this.ui.pageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
             .fontSize(12).fontColor(this.secondaryTextColor())
-          Button($r('app.string.management_device_next'))
+          Button($r('app.string.management_device_next'), { type: ButtonType.Normal })
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .borderRadius(18)
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+            .systemMaterial(this.useNativeMaterial() ?
+              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+              AppThemeSurfaceResolver.disabledSystemMaterial())
             .enabled(this.ui.pageIndex + 1 < this.ui.pageCount)
             .onClick(() => this.vm.setPage(this.ui.pageIndex + 1))
         }
@@ -566,7 +582,10 @@ export struct ManagementDevicesPage {
       height: '70%',
       preferType: SheetType.BOTTOM,
       showClose: true,
-      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
+      systemMaterial: this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+        AppThemeSurfaceResolver.disabledSystemMaterial()
     })
   }
 

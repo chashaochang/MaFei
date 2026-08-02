@@ -337,6 +337,7 @@ export struct ManagementUsersPage {
           }
           .width(40)
           .height(40)
+          .borderRadius(20)
           .backgroundColor(Color.Transparent)
           .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
           .accessibilityText($r('app.string.management_user_filter_title'))
@@ -369,13 +370,13 @@ export struct ManagementUsersPage {
             .fontColor(this.ui.roleFilter === filter ? this.primaryTextColor() : this.secondaryTextColor())
             .backgroundColor(this.ui.roleFilter === filter ?
               AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
-            .borderRadius(8)
+            .borderRadius(18)
             .onClick(() => this.ui.roleFilter = filter)
         }, (filter: ManagementUserRoleFilter) => filter.toString())
       }
       .width('100%')
       .padding(2)
-      .borderRadius(10)
+      .borderRadius(20)
       .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
     }
     .width('100%')
@@ -612,8 +613,11 @@ export struct ManagementUsersPage {
           .height(40)
           .padding({ left: 20, right: 20 })
           .fontColor($r('app.color.on_primary'))
-          .backgroundColor($r('app.color.color_main'))
-          .borderRadius(10)
+          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+          .borderRadius(20)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(onAction)
       }
     }
@@ -695,9 +699,13 @@ export struct ManagementUsersPage {
           .layoutWeight(1)
         Button($r('app.string.management_user_retry'), { type: ButtonType.Normal })
           .height(32)
+          .borderRadius(16)
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .onClick(() => this.vm.refresh())
       }
       .width('100%')
@@ -852,7 +860,10 @@ export struct ManagementUsersPage {
       height: '70%',
       preferType: SheetType.BOTTOM,
       showClose: true,
-      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
+      systemMaterial: this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+        AppThemeSurfaceResolver.disabledSystemMaterial()
     })
   }
 

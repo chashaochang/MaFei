@@ -340,7 +340,7 @@ export struct CastDetailPage {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
-        .fontColor($r('app.color.text_1'))
+        .fontColor(this.primaryTextColor())
         .fontSize(14)
         .textAlign(TextAlign.Start)
         .lineSpacing({

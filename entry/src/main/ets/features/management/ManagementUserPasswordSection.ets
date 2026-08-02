@@ -146,7 +146,7 @@ export struct ManagementUserPasswordSection {
         .padding({ left: 18, right: 18 })
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .borderRadius(9)
+        .borderRadius(this.useNativeMaterial() ? 21 : 9)
         .systemMaterial(this.useNativeMaterial() ?
           AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
           AppThemeSurfaceResolver.disabledSystemMaterial())
@@ -198,7 +198,10 @@ export struct ManagementUserPasswordSection {
           width: AppThemeSurfaceResolver.outlineWidth(this.themeStyle, this.nativeThemeAvailable, 1),
           color: $r('app.color.main_red_color')
         })
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 21 : 8)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(!this.actionLocked())
         .onClick(() => this.onResetPassword())
       Button($r('app.string.management_user_clear_password'), { type: ButtonType.Normal })
@@ -210,7 +213,10 @@ export struct ManagementUserPasswordSection {
           width: AppThemeSurfaceResolver.outlineWidth(this.themeStyle, this.nativeThemeAvailable, 1),
           color: $r('app.color.main_red_color')
         })
-        .borderRadius(8)
+        .borderRadius(this.useNativeMaterial() ? 21 : 8)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .enabled(!this.actionLocked() && this.ui.user.hasPassword)
         .onClick(() => this.onClearPassword())
     }

@@ -24,7 +24,8 @@ import {
   ChipV2Options,
   ChipV2PrefixImageIcon,
   ChipV2Size,
-  ColorMetrics
+  ColorMetrics,
+  curves
 } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
 import { HomeInitialSkeleton } from './HomeInitialSkeleton'
@@ -32,6 +33,10 @@ import { HomeInitialSkeleton } from './HomeInitialSkeleton'
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
 const HERO_PROGRESS_START_DELAY: number = 16
+const HOME_HERO_BASE_HEIGHT: number = 430
+const HOME_HERO_STRETCH_FACTOR: number = 3
+const HOME_HERO_SPRING_DURATION: number = 250
+const HOME_HERO_REFRESH_THRESHOLD: number = 64
 const HOME_LIBRARY_HEADER_EXTRA_MENU_GAP: number = 12
 const HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET: number = 3
 const HOME_LIBRARY_SEARCH_MENU_WIDTH: number = 56
@@ -41,15 +46,20 @@ const HOME_LIBRARY_SEARCH_ICON_SIZE: number = 24
 
 @ComponentV2
 export struct HomeTab {
+  @Param active: boolean = true
   @Param contentBottomInset?: number = undefined
   @Param contentScroller: Scroller = new Scroller()
   @Local ui: HomeUIState = new HomeUIState(this.getUIContext())
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
   @Local heroIndex: number = 0
   @Local heroProgress: number = 0
+  @Local nativeHeroHeight: number = HOME_HERO_BASE_HEIGHT
+  @Local nativeHeroScrollState: ScrollState = ScrollState.Idle
+  @Local nativeHeroRefreshProgress: number = 0
   @Local latestChipStripPinned: boolean = false
   @Local latestChipStripMenuReserved: boolean = false
   private heroProgressTimer: number = -1
+  private nativeHeroSpringCurve: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30)
 
   private cancelHeroProgressStart(): void {
     if (this.heroProgressTimer >= 0) {
@@ -109,6 +119,57 @@ export struct HomeTab {
     return this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')
   }
 
+  private springBackNativeHero(): void {
+    if (this.nativeHeroHeight === HOME_HERO_BASE_HEIGHT) {
+      this.nativeHeroScrollState = ScrollState.Idle
+      return
+    }
+    const shouldRefresh = this.nativeHeroHeight >=
+      HOME_HERO_BASE_HEIGHT + HOME_HERO_REFRESH_THRESHOLD && !this.ui.isRefreshing
+    this.nativeHeroScrollState = ScrollState.Fling
+    this.getUIContext().animateTo({
+      curve: this.nativeHeroSpringCurve,
+      duration: HOME_HERO_SPRING_DURATION
+    }, () => {
+      this.nativeHeroHeight = HOME_HERO_BASE_HEIGHT
+      this.nativeHeroScrollState = ScrollState.Idle
+      if (!this.ui.isRefreshing) {
+        this.nativeHeroRefreshProgress = 0
+      }
+    })
+    if (shouldRefresh) {
+      this.nativeHeroRefreshProgress = 100
+      this.ui.isRefreshing = true
+      this.vm.init()
+    } else {
+      this.nativeHeroRefreshProgress = 0
+    }
+  }
+
+  private stretchNativeHero(offset: number, state: ScrollState): boolean {
+    if (!this.showNativeHero() || this.contentScroller.currentOffset().yOffset > 0) {
+      return false
+    }
+    if (state === ScrollState.Scroll && offset !== 0) {
+      this.nativeHeroScrollState = ScrollState.Scroll
+      const nextHeight = this.nativeHeroHeight - offset
+      if (nextHeight < HOME_HERO_BASE_HEIGHT) {
+        this.nativeHeroHeight = HOME_HERO_BASE_HEIGHT
+        this.nativeHeroScrollState = ScrollState.Fling
+        return false
+      }
+      this.nativeHeroHeight += -(offset / HOME_HERO_STRETCH_FACTOR)
+      this.nativeHeroRefreshProgress = Math.min(100, Math.max(0,
+        (this.nativeHeroHeight - HOME_HERO_BASE_HEIGHT) / HOME_HERO_REFRESH_THRESHOLD * 100))
+      return true
+    }
+    if (this.nativeHeroScrollState === ScrollState.Scroll && state === ScrollState.Fling) {
+      this.springBackNativeHero()
+      return true
+    }
+    return false
+  }
+
   private latestFeedContentMinHeight(): number {
     const availableHeight = this.vm.appUIState.deviceHeight -
       this.phoneContentTopInset() - this.scrollTail()
@@ -155,7 +216,12 @@ export struct HomeTab {
     if (this.latestChipStripPinned !== pinned) {
       this.latestChipStripPinned = pinned
     }
-    this.vm.appUIState.rootNavigationHomeLibraryPinned = pinned
+    this.syncRootNavigationPinnedState()
+  }
+
+  private syncRootNavigationPinnedState(): void {
+    this.vm.appUIState.rootNavigationHomeLibraryPinned =
+      this.active ? this.latestChipStripPinned : false
   }
 
   private selectLatestMedia(id: string): void {
@@ -187,6 +253,18 @@ export struct HomeTab {
     this.syncRootNavigationLiveTvAvailability()
   }
 
+  @Monitor('active')
+  onActiveChange(): void {
+    this.syncRootNavigationPinnedState()
+  }
+
+  @Monitor('ui.isRefreshing')
+  onNativeHeroRefreshingChange(): void {
+    if (!this.ui.isRefreshing) {
+      this.nativeHeroRefreshProgress = 0
+    }
+  }
+
   aboutToAppear(): void {
     //监听刷新事件
     this.getUIContext().getHostContext()?.eventHub.on(HomeRefreshEvent, () => {
@@ -200,6 +278,9 @@ export struct HomeTab {
 
   aboutToDisappear(): void {
     this.cancelHeroProgressStart()
+    this.nativeHeroHeight = HOME_HERO_BASE_HEIGHT
+    this.nativeHeroScrollState = ScrollState.Idle
+    this.nativeHeroRefreshProgress = 0
     this.latestChipStripPinned = false
     this.latestChipStripMenuReserved = false
     this.vm.appUIState.rootNavigationHomeLibraryPinned = false
@@ -337,9 +418,8 @@ export struct HomeTab {
   }
 
   @Builder
-  private homeRefreshContent() {
-    Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
-      List({ scroller: this.contentScroller }) {
+  private homeContentList(nativeHeroStretch: boolean) {
+    List({ scroller: this.contentScroller }) {
         if (this.vm.appUIState.currentBreakpoint.includes('s') &&
           (!this.useNativeSurface() || (!this.ui.initialLoading && !this.showNativeHero()))) {
           ListItem().height(this.phoneContentTopInset())
@@ -356,6 +436,7 @@ export struct HomeTab {
             ListItem() {
               this.nativeHomeHeroCarousel()
             }
+            .height(this.nativeHeroHeight)
           }
           if (this.ui.resumeList.length > 0) {
             ListItem() {
@@ -389,30 +470,54 @@ export struct HomeTab {
         }
 
         ListItem().height(this.scrollTail())
+    }
+    .width('100%')
+    .height('100%')
+    .clip(false)
+    .edgeEffect(EdgeEffect.None)
+    .listDirection(Axis.Vertical)
+    .sticky(this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s') ?
+      StickyStyle.Header : StickyStyle.None)
+    .scrollBar(BarState.Off)
+    .onScrollFrameBegin((offset: number, state: ScrollState) => {
+      if (nativeHeroStretch && this.stretchNativeHero(offset, state)) {
+        return { offsetRemain: 0 }
       }
-      .width('100%')
+      return { offsetRemain: offset }
+    })
+    .onDidScroll(() => {
+      if (nativeHeroStretch && this.contentScroller.currentOffset().yOffset === 0 &&
+        this.nativeHeroScrollState === ScrollState.Scroll) {
+        this.springBackNativeHero()
+      }
+    })
+    .onReachEnd(() => {
+      this.vm.loadMoreLatestMedia()
+    })
+  }
+
+  @Builder
+  private homeRefreshContent() {
+    if (this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')) {
+      this.homeContentList(true)
+    } else {
+      Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
+        this.homeContentList(false)
+      }
+      .pullDownRatio(0.3)
+      .refreshOffset(64)
+      .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
       .height('100%')
-      .listDirection(Axis.Vertical)
-      .sticky(this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s') ?
-        StickyStyle.Header : StickyStyle.None)
-      .scrollBar(BarState.Off)
-      .onReachEnd(() => {
-        this.vm.loadMoreLatestMedia()
+      .onStateChange((status) => {
+        this.ui.refreshStatus = status
+      })
+      .onOffsetChange((offset) => {
+        this.ui.refreshOffset = offset
+      })
+      .onRefreshing(() => {
+        this.vm.init()
       })
     }
-    .pullDownRatio(0.3)
-    .refreshOffset(64)
-    .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
-    .height('100%')
-    .onStateChange((status) => {
-      this.ui.refreshStatus = status
-    })
-    .onOffsetChange((offset) => {
-      this.ui.refreshOffset = offset
-    })
-    .onRefreshing(() => {
-      this.vm.init()
-    })
   }
 
   @Builder
@@ -511,14 +616,46 @@ export struct HomeTab {
       if (this.ui.recommendationList.length > 1) {
         this.nativeHomeHeroProgressIndicator()
       }
+
+      if (this.nativeHeroRefreshProgress > 0 || this.ui.isRefreshing) {
+        this.nativeHomeHeroRefreshIndicator()
+      }
     }
     .width('100%')
-    .height(430)
+    .height('100%')
     .onAppear(() => {
       this.restartHeroProgress(this.heroIndex)
     })
     .onDisAppear(() => {
       this.cancelHeroProgressStart()
+    })
+  }
+
+  @Builder
+  private nativeHomeHeroRefreshIndicator() {
+    Row() {
+      Progress({
+        value: this.nativeHeroRefreshProgress,
+        total: 100,
+        type: ProgressType.Ring
+      })
+        .width(22)
+        .height(22)
+        .color(Color.White)
+        .style({
+          strokeWidth: 3,
+          status: this.ui.isRefreshing ? ProgressStatus.LOADING : ProgressStatus.PROGRESSING
+        })
+    }
+    .width(36)
+    .height(36)
+    .justifyContent(FlexAlign.Center)
+    .borderRadius(18)
+    .backgroundColor('rgba(0,0,0,0.30)')
+    .opacity(this.ui.isRefreshing ? 1 : Math.min(1, this.nativeHeroRefreshProgress / 35))
+    .position({
+      x: (this.vm.appUIState.deviceWidth - 36) / 2,
+      y: this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT + 8
     })
   }
 
@@ -677,7 +814,7 @@ export struct HomeTab {
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .height(430)
+    .height('100%')
     .backgroundColor(Color.Black)
   }
 
@@ -767,4 +904,5 @@ export struct HomeTab {
       refreshStatus: this.ui.refreshStatus
     })
   }
+
 }

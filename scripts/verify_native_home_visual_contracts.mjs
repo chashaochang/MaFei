@@ -137,19 +137,25 @@ export function validateNativeHomeVisualContracts(sources) {
   }
 
   const homeRefresh = methodBlock(homeTab, 'homeRefreshContent')
+  const homeList = methodBlock(homeTab, 'homeContentList')
+  if (!/useNativeSurface\s*\(\s*\)[\s\S]*homeContentList\s*\(\s*true\s*\)/.test(homeRefresh) ||
+    !/else\s*\{[\s\S]*Refresh\s*\([\s\S]*builder\s*:\s*this\.customRefreshComponent\s*\(\s*\)[\s\S]*homeContentList\s*\(\s*false\s*\)/.test(
+      homeRefresh)) {
+    throw new Error('Native Home must bypass Refresh while Feiniu keeps its existing refresh path')
+  }
   if (!/ListItemGroup\s*\(\s*\{\s*header\s*:\s*this\.latestMediaStickyHeader\s*\}/.test(
-    homeRefresh) || !/\.sticky\s*\([\s\S]*StickyStyle\.Header/.test(homeRefresh)) {
+    homeList) || !/\.sticky\s*\([\s\S]*StickyStyle\.Header/.test(homeList)) {
     throw new Error('Home library Chips must use one real ListItemGroup sticky header')
   }
   if (!/HomeLatestMediaSection\s*\(\s*\{[\s\S]*latestMap\s*:\s*this\.ui\.latestMap[\s\S]*selectedMediaId\s*:\s*this\.ui\.selectedLatestMediaId[\s\S]*loadingMore\s*:\s*this\.ui\.latestMediaLoadingMore/.test(
-    homeRefresh)) {
+    homeList)) {
     throw new Error('HomeTab must compose one state-backed latest-media grid')
   }
-  if (!/\.onReachEnd\s*\([\s\S]*this\.vm\.loadMoreLatestMedia\s*\(\s*\)/.test(homeRefresh)) {
+  if (!/\.onReachEnd\s*\([\s\S]*this\.vm\.loadMoreLatestMedia\s*\(\s*\)/.test(homeList)) {
     throw new Error('Home list must page the selected media feed at the bottom')
   }
   if (!/if\s*\(\s*this\.vm\.appUIState\.currentBreakpoint\.includes\s*\(\s*['"]s['"]\s*\)\s*&&\s*\(\s*!\s*this\.useNativeSurface\s*\(\s*\)\s*\|\|\s*!\s*this\.showNativeHero\s*\(\s*\)\s*\)\s*\)\s*\{\s*ListItem\s*\(\s*\)\.height\s*\(\s*this\.phoneContentTopInset\s*\(\s*\)\s*\)/.test(
-    homeRefresh)) {
+    homeList)) {
     throw new Error('HomeTab must own the Native empty-Hero top inset inside the stable root content branch')
   }
 
@@ -311,10 +317,35 @@ export function validateNativeHomeVisualContracts(sources) {
     !/app\.color\.native_canvas_background/.test(canvasTransition)) {
     throw new Error('Native Hero canvas transition must end in the adaptive canvas color')
   }
+  const heroStretch = methodBlock(homeTab, 'stretchNativeHero')
+  const heroSpringBack = methodBlock(homeTab, 'springBackNativeHero')
+  if (!/contentScroller\.currentOffset\s*\(\s*\)\.yOffset\s*>\s*0/.test(heroStretch) ||
+    !/state\s*===\s*ScrollState\.Scroll[\s\S]*nativeHeroHeight\s*\+=\s*-\(offset\s*\/\s*HOME_HERO_STRETCH_FACTOR\)/.test(
+      heroStretch) ||
+    !/ScrollState\.Fling[\s\S]*springBackNativeHero\s*\(\s*\)/.test(heroStretch) ||
+    !/interpolatingSpring|nativeHeroSpringCurve/.test(heroSpringBack) ||
+    !/nativeHeroHeight\s*=\s*HOME_HERO_BASE_HEIGHT/.test(heroSpringBack) ||
+    !/HOME_HERO_BASE_HEIGHT\s*\+\s*HOME_HERO_REFRESH_THRESHOLD/.test(heroSpringBack) ||
+    !/ui\.isRefreshing\s*=\s*true[\s\S]*vm\.init\s*\(\s*\)/.test(heroSpringBack)) {
+    throw new Error('Native Hero must stretch, trigger refresh at threshold, and spring back')
+  }
+  const heroCarousel = methodBlock(homeTab, 'nativeHomeHeroCarousel')
+  const heroRefreshIndicator = methodBlock(homeTab, 'nativeHomeHeroRefreshIndicator')
+  if (!/\.height\s*\(\s*['"]100%['"]\s*\)/.test(heroCarousel) ||
+    !/nativeHeroRefreshProgress[\s\S]*nativeHomeHeroRefreshIndicator/.test(heroCarousel) ||
+    !/ProgressType\.Ring/.test(heroRefreshIndicator) ||
+    !/ProgressStatus\.LOADING/.test(heroRefreshIndicator) ||
+    !/ListItem\s*\(\s*\)\s*\{[\s\S]*this\.nativeHomeHeroCarousel\s*\(\s*\)[\s\S]*\.height\s*\(\s*this\.nativeHeroHeight\s*\)/.test(
+      homeList) ||
+    !/\.clip\s*\(\s*false\s*\)/.test(homeList) ||
+    !/\.edgeEffect\s*\(\s*EdgeEffect\.None\s*\)/.test(homeList) ||
+    !/\.onScrollFrameBegin\s*\([\s\S]*stretchNativeHero[\s\S]*offsetRemain\s*:\s*0/.test(homeList)) {
+    throw new Error('Native Hero height must be driven directly by the unclipped List scroll frame')
+  }
   const hero = methodBlock(homeTab, 'nativeHomeHero')
   if (hero.indexOf('this.nativeHomeHeroReadabilityScrim()') < 0 ||
     hero.indexOf('this.nativeHomeHeroCanvasTransition()') < 0 ||
-    !/\.height\s*\(\s*430\s*\)/.test(hero)) {
+    !/\.height\s*\(\s*['"]100%['"]\s*\)/.test(hero)) {
     throw new Error('Native Hero must keep separate readability and canvas transition layers')
   }
 }

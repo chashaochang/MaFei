@@ -133,6 +133,7 @@ export class AppThemeSurfaceResolver {
     if (role === AppThemeMaterialRole.HomeLibraryChip) {
       if (!AppThemeSurfaceResolver.homeLibraryChip) {
         AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({
+          applyShadow: false,
           interactive: true
         })
       }
@@ -141,6 +142,7 @@ export class AppThemeSurfaceResolver {
     if (role === AppThemeMaterialRole.HomeLibraryChipSelected) {
       if (!AppThemeSurfaceResolver.homeLibraryChipSelected) {
         AppThemeSurfaceResolver.homeLibraryChipSelected = new uiMaterial.ImmersiveMaterial({
+          applyShadow: false,
           interactive: true
         })
       }

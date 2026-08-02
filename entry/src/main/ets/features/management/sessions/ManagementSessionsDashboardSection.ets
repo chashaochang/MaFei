@@ -1,6 +1,6 @@
 import { ImageKnifeComponent } from '@ohos/imageknifepro';
 import { ThemeStyle } from '../../../entity/ThemeStyle';
-import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import { ManagementSectionStatus } from '../ManagementModels';
 import {
   ManagementPlaybackKind,
@@ -16,11 +16,13 @@ export struct ManagementSessionsDashboardSection {
   @Require
   @Param themeStyle: ThemeStyle
   @Param nativeThemeAvailable: boolean = false
-  @Event onRefresh: () => void = () => {
-  }
   @Event onOpenDevices: () => void = () => {
   }
   @Event onOpenSession: (session: ManagementSessionItem) => void = (_session: ManagementSessionItem) => {
+  }
+
+  private useNativeMaterial(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
   }
 
   private primaryTextColor(): ResourceColor {
@@ -83,20 +85,14 @@ export struct ManagementSessionsDashboardSection {
       Button($r('app.string.management_devices_title'), { type: ButtonType.Normal })
         .height(32)
         .padding({ left: 12, right: 12 })
+        .borderRadius(this.useNativeMaterial() ? 16 : 8)
         .fontSize(13)
         .fontColor($r('app.color.color_main'))
         .backgroundColor(Color.Transparent)
+        .systemMaterial(this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => this.onOpenDevices())
-      Button() {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(16)
-          .fontColor([$r('app.color.color_main')])
-      }
-      .width(32)
-      .height(32)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText($r('app.string.management_refresh'))
-      .onClick(() => this.onRefresh())
     }
     .width('100%')
   }
