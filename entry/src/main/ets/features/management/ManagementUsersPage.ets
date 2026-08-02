@@ -9,18 +9,25 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { PageState } from '../../common/base/BaseUIState';
 import { CustomRefreshComponent } from '../../common/CustomRefreshComponent';
 import { RouterConsts } from '../../common/RouterConsts';
+import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
+import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from './ManagementModels';
 import { ManagementUserDetailPage } from './ManagementUserDetailPage';
+import { ManagementUserFilterSheet } from './ManagementUserFilterSheet';
 import {
   ManagementUserActionResult,
-  ManagementUserFilter,
   ManagementUserItem,
-  ManagementUserTab
+  ManagementUserRoleFilter,
+  ManagementUserSortField,
+  ManagementUserStatusFilter,
+  ManagementUserTab,
+  ManagementUserVisibilityFilter
 } from './ManagementUserModels';
+import { ManagementUserQueryOptions } from './ManagementUserQuery';
 import { ManagementUsersUIState } from './ManagementUsersUIState';
 import { ManagementUsersViewModel } from './ManagementUsersViewModel';
 
@@ -32,6 +39,7 @@ import { ManagementUsersViewModel } from './ManagementUsersViewModel';
 export struct ManagementUsersPage {
   @Local ui: ManagementUsersUIState = new ManagementUsersUIState(this.getUIContext())
   @Local vm: ManagementUsersViewModel = new ManagementUsersViewModel(this.ui)
+  private readonly contentScroller: Scroller = new Scroller()
   private permissionPopTimer: number = -1
   private lifecycleOwner: IHMLifecycleOwner | null = null
   private pageShownCallback = (_context: HMLifecycleContext): void => {
@@ -81,7 +89,7 @@ export struct ManagementUsersPage {
   }
 
   private isLarge(): boolean {
-    return this.vm.appUIState.deviceWidth >= 840
+    return ManagementNativePagePolicy.isExpanded(this.vm.appUIState.deviceWidth)
   }
 
   private useNativeMaterial(): boolean {
@@ -118,20 +126,57 @@ export struct ManagementUsersPage {
     }
   }
 
-  private filterLabel(filter: ManagementUserFilter): ResourceStr {
-    if (filter === ManagementUserFilter.Administrators) {
+  private roleLabel(filter: ManagementUserRoleFilter): ResourceStr {
+    if (filter === ManagementUserRoleFilter.Administrators) {
       return $r('app.string.management_user_filter_administrators')
     }
-    if (filter === ManagementUserFilter.Standard) {
+    if (filter === ManagementUserRoleFilter.Standard) {
       return $r('app.string.management_user_filter_standard')
     }
-    if (filter === ManagementUserFilter.Disabled) {
-      return $r('app.string.management_user_filter_disabled')
-    }
-    if (filter === ManagementUserFilter.Hidden) {
-      return $r('app.string.management_user_filter_hidden')
-    }
     return $r('app.string.management_user_filter_all')
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private clearFilters(): void {
+    this.ui.query = ''
+    this.ui.roleFilter = ManagementUserRoleFilter.All
+    this.ui.statusFilter = ManagementUserStatusFilter.All
+    this.ui.visibilityFilter = ManagementUserVisibilityFilter.All
+    this.ui.sortField = ManagementUserSortField.Name
+    this.ui.ascending = true
+  }
+
+  private legacyFilterSelected(filter: number): boolean {
+    if (filter === 1) {
+      return this.ui.roleFilter === ManagementUserRoleFilter.Administrators &&
+        this.ui.statusFilter === ManagementUserStatusFilter.All
+    }
+    if (filter === 2) {
+      return this.ui.roleFilter === ManagementUserRoleFilter.Standard &&
+        this.ui.statusFilter === ManagementUserStatusFilter.All
+    }
+    if (filter === 3) {
+      return this.ui.roleFilter === ManagementUserRoleFilter.All &&
+        this.ui.statusFilter === ManagementUserStatusFilter.Disabled
+    }
+    if (filter === 4) {
+      return this.ui.visibilityFilter === ManagementUserVisibilityFilter.Hidden
+    }
+    return this.ui.roleFilter === ManagementUserRoleFilter.All &&
+      this.ui.statusFilter === ManagementUserStatusFilter.All &&
+      this.ui.visibilityFilter === ManagementUserVisibilityFilter.All
+  }
+
+  private applyLegacyFilter(filter: number): void {
+    this.ui.roleFilter = filter === 1 ? ManagementUserRoleFilter.Administrators :
+      (filter === 2 ? ManagementUserRoleFilter.Standard : ManagementUserRoleFilter.All)
+    this.ui.statusFilter = filter === 3 ? ManagementUserStatusFilter.Disabled :
+      ManagementUserStatusFilter.All
+    this.ui.visibilityFilter = filter === 4 ? ManagementUserVisibilityFilter.Hidden :
+      ManagementUserVisibilityFilter.All
   }
 
   private statusText(user: ManagementUserItem): string {
@@ -275,62 +320,96 @@ export struct ManagementUsersPage {
   }
 
   @Builder
-  searchAndFilters() {
+  nativeSearchAndFilters() {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
-        Search({
-          value: this.ui.query,
-          placeholder: $r('app.string.management_user_search_placeholder')
-        })
+        Search({ value: this.ui.query, placeholder: $r('app.string.management_user_search_placeholder') })
           .layoutWeight(1)
           .height(40)
-          .backgroundColor(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
-            $r('app.color.bg_main'))
-          .borderRadius(10)
-          .onChange((value: string) => {
-            this.ui.query = value
-          })
-        if (this.useNativeMaterial()) {
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .onChange((value: string) => this.ui.query = value)
+        Stack({ alignContent: Alignment.TopEnd }) {
           Button() {
-            SymbolGlyph($r('sys.symbol.plus'))
-              .fontSize(20)
-              .fontColor([$r('app.color.color_main')])
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(18)
+              .fontColor([this.primaryTextColor()])
           }
           .width(40)
           .height(40)
-          .borderRadius(10)
-          .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
-          .accessibilityText($r('app.string.management_user_create'))
-          .onClick(() => this.openCreate())
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .accessibilityText($r('app.string.management_user_filter_title'))
+          .onClick(() => this.ui.filterSheetVisible = true)
+          if (this.ui.activeAdvancedFilterCount > 0) {
+            Text(this.ui.activeAdvancedFilterCount.toString())
+              .fontSize(10)
+              .fontColor($r('app.color.on_primary'))
+              .textAlign(TextAlign.Center)
+              .width(18)
+              .height(18)
+              .borderRadius(9)
+              .backgroundColor($r('app.color.color_main'))
+          }
         }
+        .width(40)
+        .height(40)
       }
       .width('100%')
-      .height(40)
-      List({ space: 8 }) {
+      Row() {
         ForEach([
-          ManagementUserFilter.All,
-          ManagementUserFilter.Administrators,
-          ManagementUserFilter.Standard,
-          ManagementUserFilter.Disabled,
-          ManagementUserFilter.Hidden
-        ], (filter: ManagementUserFilter) => {
+          ManagementUserRoleFilter.All,
+          ManagementUserRoleFilter.Administrators,
+          ManagementUserRoleFilter.Standard
+        ], (filter: ManagementUserRoleFilter) => {
+          Button(this.roleLabel(filter), { type: ButtonType.Normal })
+            .layoutWeight(1)
+            .height(36)
+            .fontSize(13)
+            .fontColor(this.ui.roleFilter === filter ? this.primaryTextColor() : this.secondaryTextColor())
+            .backgroundColor(this.ui.roleFilter === filter ?
+              AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
+            .borderRadius(8)
+            .onClick(() => this.ui.roleFilter = filter)
+        }, (filter: ManagementUserRoleFilter) => filter.toString())
+      }
+      .width('100%')
+      .padding(2)
+      .borderRadius(10)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 10 })
+  }
+
+  @Builder
+  legacySearchAndFilters() {
+    Column({ space: 10 }) {
+      Search({ value: this.ui.query, placeholder: $r('app.string.management_user_search_placeholder') })
+        .width('100%')
+        .height(40)
+        .backgroundColor($r('app.color.bg_main'))
+        .borderRadius(10)
+        .onChange((value: string) => this.ui.query = value)
+      List({ space: 8 }) {
+        ForEach([0, 1, 2, 3, 4], (filter: number) => {
           ListItem() {
-            Button(this.filterLabel(filter), { type: ButtonType.Normal })
+            Button(filter === 1 ? $r('app.string.management_user_filter_administrators') :
+              (filter === 2 ? $r('app.string.management_user_filter_standard') :
+                (filter === 3 ? $r('app.string.management_user_filter_disabled') :
+                  (filter === 4 ? $r('app.string.management_user_filter_hidden') :
+                    $r('app.string.management_user_filter_all')))), { type: ButtonType.Normal })
               .height(34)
               .padding({ left: 13, right: 13 })
               .fontSize(13)
-              .fontColor(this.ui.filter === filter ? $r('app.color.color_main') :
+              .fontColor(this.legacyFilterSelected(filter) ? $r('app.color.color_main') :
                 this.secondaryTextColor())
-              .backgroundColor(this.ui.filter === filter ?
-                AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
-                Color.Transparent)
+              .backgroundColor(this.legacyFilterSelected(filter) ?
+                AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : Color.Transparent)
               .borderRadius(8)
-              .onClick(() => {
-                this.ui.filter = filter
-              })
+              .onClick(() => this.applyLegacyFilter(filter))
           }
-        }, (filter: ManagementUserFilter) => filter.toString())
+        })
       }
       .width('100%')
       .height(36)
@@ -339,6 +418,15 @@ export struct ManagementUsersPage {
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 10 })
+  }
+
+  @Builder
+  searchAndFilters() {
+    if (this.useNativeMaterial()) {
+      this.nativeSearchAndFilters()
+    } else {
+      this.legacySearchAndFilters()
+    }
   }
 
   @Builder
@@ -378,7 +466,43 @@ export struct ManagementUsersPage {
   }
 
   @Builder
-  userRow(user: ManagementUserItem) {
+  nativeUserRow(user: ManagementUserItem) {
+    Row({ space: 12 }) {
+      this.avatar(user)
+      Column({ space: 3 }) {
+        Text(user.name)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.statusText(user))
+          .fontSize(13)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      SymbolGlyph(user.hasPassword ? $r('sys.symbol.lock_fill') : $r('sys.symbol.lock_open'))
+        .fontSize(16)
+        .fontColor([user.hasPassword ? $r('sys.color.icon_tertiary') : $r('app.color.status_warning')])
+        .accessibilityText(user.hasPassword ?
+          $r('app.string.management_user_password_set') :
+          $r('app.string.management_user_password_not_set'))
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(20)
+        .fontColor([$r('sys.color.icon_tertiary')])
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
+    .onClick(() => this.openUser(user))
+  }
+
+  @Builder
+  feiniuUserRow(user: ManagementUserItem) {
     Row({ space: 10 }) {
       this.avatar(user)
       Column({ space: 2 }) {
@@ -428,6 +552,15 @@ export struct ManagementUsersPage {
     .borderRadius(8)
     .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
     .onClick(() => this.openUser(user))
+  }
+
+  @Builder
+  userRow(user: ManagementUserItem) {
+    if (this.useNativeMaterial()) {
+      this.nativeUserRow(user)
+    } else {
+      this.feiniuUserRow(user)
+    }
   }
 
   @Builder
@@ -514,11 +647,10 @@ export struct ManagementUsersPage {
       this.stateView($r('sys.symbol.magnifyingglass'),
         $r('app.string.management_user_no_results'),
         $r('app.string.management_user_clear_filters'), () => {
-          this.ui.query = ''
-          this.ui.filter = ManagementUserFilter.All
+          this.clearFilters()
         })
     } else {
-      List() {
+      List({ scroller: this.contentScroller }) {
         ForEach(this.ui.filteredUsers, (user: ManagementUserItem) => {
           ListItem() {
             this.userRow(user)
@@ -578,6 +710,24 @@ export struct ManagementUsersPage {
     this.searchAndFilters()
     this.staleBanner()
     this.refreshableList()
+  }
+
+  @Builder
+  userFilterSheet() {
+    ManagementUserFilterSheet({
+      initialStatus: this.ui.statusFilter,
+      initialVisibility: this.ui.visibilityFilter,
+      initialSortField: this.ui.sortField,
+      initialAscending: this.ui.ascending,
+      onApply: (options: ManagementUserQueryOptions) => {
+        this.ui.statusFilter = options.status
+        this.ui.visibilityFilter = options.visibility
+        this.ui.sortField = options.sortField
+        this.ui.ascending = options.ascending
+        this.ui.filterSheetVisible = false
+      },
+      onDismiss: () => this.ui.filterSheetVisible = false
+    })
   }
 
   @Builder
@@ -671,6 +821,8 @@ export struct ManagementUsersPage {
           rightBtnAccessibilityText: $r('app.string.management_user_create'),
           onRightBtnClick: () => this.openCreate()
         })
+      } else {
+        Blank().height(this.nativeTopSpacer())
       }
       if (this.ui.pageState === PageState.Loading) {
         this.loadingRows()
@@ -697,11 +849,22 @@ export struct ManagementUsersPage {
     .height('100%')
     .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+    .bindSheet($$this.ui.filterSheetVisible, this.userFilterSheet(), {
+      height: '70%',
+      preferType: SheetType.BOTTOM
+    })
   }
 
   build() {
     AppRouteDestination({
       title: $r('app.string.management_user_title'),
+      contentExtendsUnderTitleBar: true,
+      menus: [{
+        value: $r('app.string.management_user_create'),
+        icon: $r('sys.symbol.plus'),
+        action: () => this.openCreate()
+      }],
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

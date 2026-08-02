@@ -441,6 +441,58 @@
       "value": "Hidden"
     },
     {
+      "name": "management_filter_reset",
+      "value": "Reset"
+    },
+    {
+      "name": "management_filter_apply",
+      "value": "Apply"
+    },
+    {
+      "name": "management_user_filter_title",
+      "value": "Filter users"
+    },
+    {
+      "name": "management_user_filter_status",
+      "value": "Status"
+    },
+    {
+      "name": "management_user_filter_visibility",
+      "value": "Visibility"
+    },
+    {
+      "name": "management_user_filter_sort",
+      "value": "Sort"
+    },
+    {
+      "name": "management_user_status_all",
+      "value": "All statuses"
+    },
+    {
+      "name": "management_user_visibility_all",
+      "value": "All users"
+    },
+    {
+      "name": "management_user_visibility_visible",
+      "value": "Visible users"
+    },
+    {
+      "name": "management_user_visibility_hidden",
+      "value": "Hidden users"
+    },
+    {
+      "name": "management_user_sort_name",
+      "value": "Name"
+    },
+    {
+      "name": "management_user_sort_activity",
+      "value": "Recent activity"
+    },
+    {
+      "name": "management_user_sort_ascending",
+      "value": "Ascending"
+    },
+    {
       "name": "management_user_role_administrator",
       "value": "Administrator"
     },

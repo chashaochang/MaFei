@@ -1,6 +1,13 @@
 import { BaseUIState } from '../../common/base/BaseUIState';
 import { ManagementPermissionState, ManagementSectionStatus } from './ManagementModels';
-import { ManagementUserFilter, ManagementUserItem } from './ManagementUserModels';
+import { ManagementUserQuery, ManagementUserQueryOptions } from './ManagementUserQuery';
+import {
+  ManagementUserItem,
+  ManagementUserRoleFilter,
+  ManagementUserSortField,
+  ManagementUserStatusFilter,
+  ManagementUserVisibilityFilter
+} from './ManagementUserModels';
 
 @ObservedV2
 export class ManagementUsersUIState extends BaseUIState {
@@ -9,7 +16,12 @@ export class ManagementUsersUIState extends BaseUIState {
   @Trace status: ManagementSectionStatus = ManagementSectionStatus.Loading
   @Trace users: ManagementUserItem[] = []
   @Trace query: string = ''
-  @Trace filter: ManagementUserFilter = ManagementUserFilter.All
+  @Trace roleFilter: ManagementUserRoleFilter = ManagementUserRoleFilter.All
+  @Trace statusFilter: ManagementUserStatusFilter = ManagementUserStatusFilter.All
+  @Trace visibilityFilter: ManagementUserVisibilityFilter = ManagementUserVisibilityFilter.All
+  @Trace sortField: ManagementUserSortField = ManagementUserSortField.Name
+  @Trace ascending: boolean = true
+  @Trace filterSheetVisible: boolean = false
   @Trace isRefreshing: boolean = false
   @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
   @Trace refreshOffset: number = 0
@@ -21,25 +33,19 @@ export class ManagementUsersUIState extends BaseUIState {
   @Trace message: string = ''
 
   get filteredUsers(): ManagementUserItem[] {
-    const query = this.query.trim().toLocaleLowerCase()
-    return this.users.filter((user: ManagementUserItem) =>
-      (query.length === 0 || user.name.toLocaleLowerCase().includes(query)) &&
-        this.matchesFilter(user))
+    const options = new ManagementUserQueryOptions()
+    options.query = this.query
+    options.role = this.roleFilter
+    options.status = this.statusFilter
+    options.visibility = this.visibilityFilter
+    options.sortField = this.sortField
+    options.ascending = this.ascending
+    return ManagementUserQuery.apply(this.users, options)
   }
 
-  private matchesFilter(user: ManagementUserItem): boolean {
-    if (this.filter === ManagementUserFilter.Administrators) {
-      return user.administrator
-    }
-    if (this.filter === ManagementUserFilter.Standard) {
-      return !user.administrator
-    }
-    if (this.filter === ManagementUserFilter.Disabled) {
-      return user.disabled
-    }
-    if (this.filter === ManagementUserFilter.Hidden) {
-      return user.hidden
-    }
-    return true
+  get activeAdvancedFilterCount(): number {
+    return (this.statusFilter === ManagementUserStatusFilter.All ? 0 : 1) +
+      (this.visibilityFilter === ManagementUserVisibilityFilter.All ? 0 : 1) +
+      (this.sortField === ManagementUserSortField.Name && this.ascending ? 0 : 1)
   }
 }

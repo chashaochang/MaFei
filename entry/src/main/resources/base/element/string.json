@@ -629,6 +629,58 @@
       "value": "已隐藏"
     },
     {
+      "name": "management_filter_reset",
+      "value": "重置"
+    },
+    {
+      "name": "management_filter_apply",
+      "value": "应用"
+    },
+    {
+      "name": "management_user_filter_title",
+      "value": "筛选用户"
+    },
+    {
+      "name": "management_user_filter_status",
+      "value": "状态"
+    },
+    {
+      "name": "management_user_filter_visibility",
+      "value": "可见性"
+    },
+    {
+      "name": "management_user_filter_sort",
+      "value": "排序"
+    },
+    {
+      "name": "management_user_status_all",
+      "value": "全部状态"
+    },
+    {
+      "name": "management_user_visibility_all",
+      "value": "全部用户"
+    },
+    {
+      "name": "management_user_visibility_visible",
+      "value": "可见用户"
+    },
+    {
+      "name": "management_user_visibility_hidden",
+      "value": "隐藏用户"
+    },
+    {
+      "name": "management_user_sort_name",
+      "value": "名称"
+    },
+    {
+      "name": "management_user_sort_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_user_sort_ascending",
+      "value": "升序"
+    },
+    {
       "name": "management_user_role_administrator",
       "value": "管理员"
     },

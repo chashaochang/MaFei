@@ -1,9 +1,24 @@
-export enum ManagementUserFilter {
+export enum ManagementUserRoleFilter {
   All,
   Administrators,
-  Standard,
-  Disabled,
+  Standard
+}
+
+export enum ManagementUserStatusFilter {
+  All,
+  Enabled,
+  Disabled
+}
+
+export enum ManagementUserVisibilityFilter {
+  All,
+  Visible,
   Hidden
+}
+
+export enum ManagementUserSortField {
+  Name,
+  LastActivity
 }
 
 export enum ManagementUserTab {

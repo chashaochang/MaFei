@@ -11,6 +11,7 @@ import {
   ManagementUserItem
 } from './ManagementUserModels';
 import { ManagementUserRepository } from './ManagementUserRepository';
+import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementUsersUIState } from './ManagementUsersUIState';
 
 export class ManagementUsersViewModel extends BaseViewModel<ManagementUsersUIState> {
@@ -139,7 +140,7 @@ export class ManagementUsersViewModel extends BaseViewModel<ManagementUsersUISta
     }
     const selectedExists = users.some((user: ManagementUserItem) =>
       user.id === this.ui.selectedUserId)
-    if (!selectedExists && this.appUIState.deviceWidth >= 840) {
+    if (!selectedExists && ManagementNativePagePolicy.isExpanded(this.appUIState.deviceWidth)) {
       this.ui.selectedUserId = users[0].id
     }
   }
