@@ -6,7 +6,7 @@ import { WebITongViewModel } from './WebITongViewModel';
 import { ApiClient } from '../../network/ApiClient';
 import { ActivityEventHandler } from '../../events/ActivityEventHandler';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 
 @HMRouter({
   pageUrl: RouterConsts.WebITongPage,
@@ -21,6 +21,11 @@ export struct WebITongPage {
 
   private routeTitle(): string {
     return this.ui.pageTitle.length > 0 ? this.ui.pageTitle : '网(Web)易通'
+  }
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
   private handleRouteBack(): boolean {
@@ -135,7 +140,10 @@ export struct WebITongPage {
         .width(40)
         .height(40)
         .borderRadius(26)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
+        .systemMaterial(this.useNativeSurface() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => {
           if (this.vm.controller?.accessBackward()) {
             this.vm.controller?.backward()
@@ -155,7 +163,10 @@ export struct WebITongPage {
         .width(40)
         .height(40)
         .borderRadius(26)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
+        .systemMaterial(this.useNativeSurface() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => {
           HMRouterMgr.pop()
         })
@@ -174,7 +185,10 @@ export struct WebITongPage {
           .borderWidth(AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
           .borderColor($r('app.color.border'))
-          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
+          .systemMaterial(this.useNativeSurface() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+            AppThemeSurfaceResolver.disabledSystemMaterial())
           .borderRadius(6)
           .padding({
             left: 12, right: 12
@@ -191,7 +205,10 @@ export struct WebITongPage {
         .width(40)
         .height(40)
         .borderRadius(26)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
+        .systemMaterial(this.useNativeSurface() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => {
           try {
             this.vm.controller?.refresh()
@@ -212,7 +229,10 @@ export struct WebITongPage {
         .width(40)
         .height(40)
         .borderRadius(26)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
+        .systemMaterial(this.useNativeSurface() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
+          AppThemeSurfaceResolver.disabledSystemMaterial())
         .onClick(() => {
           this.ui.expandControl = !this.ui.expandControl
         })
@@ -236,9 +256,10 @@ export struct WebITongPage {
   build() {
     AppRouteDestination({
       title: this.routeTitle(),
+      titleBarVisible: false,
       beforeBack: () => this.handleRouteBack(),
       contentBuilder: () => {
-        this.pageContent(false)
+        this.pageContent(true)
       },
       legacyContentBuilder: () => {
         this.pageContent(true)
