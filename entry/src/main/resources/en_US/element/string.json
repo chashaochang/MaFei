@@ -1735,6 +1735,34 @@
     {
       "name": "management_session_transcode_reason_other",
       "value": "The server must convert this media"
+    },
+    {
+      "name": "management_task_start",
+      "value": "Start task"
+    },
+    {
+      "name": "management_task_starting",
+      "value": "Starting"
+    },
+    {
+      "name": "management_task_cancel",
+      "value": "Cancel task"
+    },
+    {
+      "name": "management_task_cancelling",
+      "value": "Cancelling"
+    },
+    {
+      "name": "management_task_started",
+      "value": "Task started"
+    },
+    {
+      "name": "management_task_cancelled",
+      "value": "Task cancellation requested"
+    },
+    {
+      "name": "management_task_action_failed",
+      "value": "Operation failed"
     }
   ]
 }

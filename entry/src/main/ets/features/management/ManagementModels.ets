@@ -39,6 +39,16 @@ export enum ManagementActionCode {
   ScanStartFailed
 }
 
+export enum ManagementTaskActionCode {
+  None,
+  Started,
+  Cancelled,
+  Busy,
+  AuthenticationExpired,
+  PermissionDenied,
+  Failed
+}
+
 export class ManagementServerOverview {
   name: string = ''
   version: string = ''
@@ -92,5 +102,11 @@ export class ManagementSectionResult {
 export class ManagementActionResult {
   ok: boolean = false
   code: ManagementActionCode = ManagementActionCode.None
+  message: string = ''
+}
+
+export class ManagementTaskActionResult {
+  ok: boolean = false
+  code: ManagementTaskActionCode = ManagementTaskActionCode.None
   message: string = ''
 }

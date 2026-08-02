@@ -1923,6 +1923,34 @@
     {
       "name": "management_session_transcode_reason_other",
       "value": "服务器需要转换此媒体"
+    },
+    {
+      "name": "management_task_start",
+      "value": "启动任务"
+    },
+    {
+      "name": "management_task_starting",
+      "value": "正在启动"
+    },
+    {
+      "name": "management_task_cancel",
+      "value": "取消任务"
+    },
+    {
+      "name": "management_task_cancelling",
+      "value": "正在取消"
+    },
+    {
+      "name": "management_task_started",
+      "value": "任务已启动"
+    },
+    {
+      "name": "management_task_cancelled",
+      "value": "已请求取消任务"
+    },
+    {
+      "name": "management_task_action_failed",
+      "value": "操作失败"
     }
   ]
 }

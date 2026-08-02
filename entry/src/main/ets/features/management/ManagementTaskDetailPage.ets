@@ -1,17 +1,22 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { AppStorageV2 } from '@kit.ArkUI';
 import { RouterConsts } from '../../common/RouterConsts';
+import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppUIState } from '../../entity/AppUIState';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import {
   ManagementErrorCode,
   ManagementPermissionState,
+  ManagementTaskActionCode,
+  ManagementTaskActionResult,
   ManagementTaskItem
 } from './ManagementModels';
+import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementRepository } from './ManagementRepository';
+import { ManagementTaskActionPolicy } from './ManagementTaskActionPolicy';
 
 @HMRouter({
   pageUrl: RouterConsts.ManagementTaskDetailPage,
@@ -22,10 +27,13 @@ export struct ManagementTaskDetailPage {
   @Local task: ManagementTaskItem | null = null
   @Local permissionState: ManagementPermissionState = ManagementPermissionState.Checking
   @Local accessErrorCode: ManagementErrorCode = ManagementErrorCode.None
+  @Local actionPending: boolean = false
+  @Local actionMessage: string = ''
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
   private repository: ManagementRepository = new ManagementRepository()
   private pendingTask: ManagementTaskItem | null = null
   private accessGeneration: number = 0
+  private readonly contentScroller: Scroller = new Scroller()
 
   aboutToAppear(): void {
     this.accessGeneration += 1
@@ -33,6 +41,8 @@ export struct ManagementTaskDetailPage {
     this.pendingTask = null
     this.permissionState = ManagementPermissionState.Checking
     this.accessErrorCode = ManagementErrorCode.None
+    this.actionPending = false
+    this.actionMessage = ''
     const param = HMRouterMgr.getCurrentParam() as object
     if (!param) {
       this.permissionState = ManagementPermissionState.Error
@@ -99,6 +109,57 @@ export struct ManagementTaskDetailPage {
   private secondaryTextColor(): ResourceColor {
     return this.useNativeMaterial() ?
       $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private nativeTopSpacer(): number {
+    return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private taskActionLabel(): ResourceStr {
+    if (this.actionPending) {
+      return this.task?.busy ? $r('app.string.management_task_cancelling') :
+        $r('app.string.management_task_starting')
+    }
+    return this.task?.busy ? $r('app.string.management_task_cancel') :
+      $r('app.string.management_task_start')
+  }
+
+  private taskActionMessage(result: ManagementTaskActionResult): ResourceStr {
+    if (result.code === ManagementTaskActionCode.Started) {
+      return $r('app.string.management_task_started')
+    }
+    if (result.code === ManagementTaskActionCode.Cancelled) {
+      return $r('app.string.management_task_cancelled')
+    }
+    if (result.code === ManagementTaskActionCode.PermissionDenied) {
+      return $r('app.string.management_permission_denied')
+    }
+    return $r('app.string.management_task_action_failed')
+  }
+
+  private async refreshTask(): Promise<void> {
+    const taskId = this.task?.id || this.pendingTask?.id || ''
+    if (!taskId) return
+    try {
+      const refreshed = await this.repository.loadTask(taskId)
+      if (refreshed) {
+        this.task = refreshed
+        this.pendingTask = refreshed
+      }
+    } catch (_error) {
+    }
+  }
+
+  private async runTaskAction(): Promise<void> {
+    const task = this.task
+    if (!task || this.actionPending) return
+    this.actionPending = true
+    const result = task.busy ? await this.repository.cancelTask(task) :
+      await this.repository.startTask(task)
+    this.actionMessage = result.message
+    this.getUIContext().getPromptAction().showToast({ message: this.taskActionMessage(result) })
+    await this.refreshTask()
+    this.actionPending = false
   }
 
   private displayValue(value: string): ResourceStr {
@@ -387,8 +448,49 @@ export struct ManagementTaskDetailPage {
       if (this.task?.lastExecutionError) {
         this.taskErrorSurface()
       }
+      if (this.actionMessage) {
+        Text(this.actionMessage)
+          .fontSize(12)
+          .fontColor($r('app.color.main_red_color'))
+          .width('100%')
+          .padding({ left: 4, right: 4 })
+      }
     }
     .width('100%')
+  }
+
+  private showTaskAction(): boolean {
+    if (!this.task) return false
+    return ManagementTaskActionPolicy.canStart(this.task) || ManagementTaskActionPolicy.canCancel(this.task)
+  }
+
+  @Builder
+  private taskActionButton() {
+    Button(this.taskActionLabel(), { type: ButtonType.Normal })
+      .width('100%')
+      .height(46)
+      .fontColor(this.task?.busy ? $r('app.color.main_red_color') : $r('app.color.on_primary'))
+      .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
+        (this.task?.busy ? Color.Transparent : $r('app.color.color_main')))
+      .borderRadius(10)
+      .systemMaterial(this.useNativeMaterial() && !this.task?.busy ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
+        AppThemeSurfaceResolver.disabledSystemMaterial())
+      .enabled(!this.actionPending)
+      .onClick(() => this.runTaskAction())
+  }
+
+  @Builder
+  private taskActionBar() {
+    Column() {
+      this.taskActionButton()
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 10, bottom: this.appUIState.safeBottom + 10 })
+    .systemMaterial(this.useNativeMaterial() ?
+      AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
   }
 
   @Builder
@@ -433,19 +535,33 @@ export struct ManagementTaskDetailPage {
         ActionBar({ title: $r('app.string.management_task_detail_title') })
       }
       if (this.task) {
-        Scroll() {
-          this.content()
+        Stack({ alignContent: Alignment.Bottom }) {
+          Scroll(this.contentScroller) {
+            Column({ space: 12 }) {
+              if (!showLegacyActionBar) {
+                Blank().height(this.nativeTopSpacer())
+              }
+              this.content()
+            }
+            .width('100%')
+            .constraintSize({ maxWidth: 720 })
+            .padding({
+              left: this.appUIState.deviceWidth >= 600 ? 24 : 16,
+              right: this.appUIState.deviceWidth >= 600 ? 24 : 16,
+              top: showLegacyActionBar ? 12 : 0,
+              bottom: ManagementNativePagePolicy.contentBottomPadding(
+                this.appUIState.safeBottom + 24, this.showTaskAction())
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .scrollBar(BarState.Auto)
+          if (this.showTaskAction()) {
+            this.taskActionBar()
+          }
         }
         .layoutWeight(1)
         .width('100%')
-        .scrollBar(BarState.Off)
-        .padding({
-          left: 16,
-          right: 16,
-          top: 12,
-          bottom: this.appUIState.safeBottom + 24
-        })
-        .constraintSize({ maxWidth: 720 })
       } else {
         this.accessStateView()
       }
@@ -459,6 +575,8 @@ export struct ManagementTaskDetailPage {
   build() {
     AppRouteDestination({
       title: $r('app.string.management_task_detail_title'),
+      contentExtendsUnderTitleBar: true,
+      scrollControllers: [this.contentScroller],
       contentBuilder: () => {
         this.pageContent(false)
       },

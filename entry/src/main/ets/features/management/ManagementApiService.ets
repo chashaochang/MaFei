@@ -52,4 +52,16 @@ export class ManagementApiService {
       throw Error(`Unexpected scheduled task response: ${response.status}`)
     }
   }
+
+  async cancelScheduledTask(taskId: string): Promise<void> {
+    const api = ApiClient.Instance()
+    const axiosInstance = api.axiosInstance as AxiosInstance
+    const response: AxiosResponse<void> = await axiosInstance.delete<void>(
+      `${api.basePath}/ScheduledTasks/Running/${encodeURIComponent(taskId)}`,
+      { headers: { Authorization: api.authorizationHeader } }
+    )
+    if (response.status < 200 || response.status >= 300) {
+      throw Error(`Unexpected scheduled task response: ${response.status}`)
+    }
+  }
 }

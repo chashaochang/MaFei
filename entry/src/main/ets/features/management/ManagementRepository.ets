@@ -15,9 +15,12 @@ import {
   ManagementSectionResult,
   ManagementSectionStatus,
   ManagementServerOverview,
+  ManagementTaskActionCode,
+  ManagementTaskActionResult,
   ManagementTaskItem,
   ManagementUserSummary
 } from './ManagementModels';
+import { ManagementTaskActionPolicy } from './ManagementTaskActionPolicy';
 
 const REFRESH_LIBRARY_TASK_KEY: string = 'RefreshLibrary'
 
@@ -107,6 +110,65 @@ export class ManagementRepository {
       } else {
         result.code = ManagementActionCode.ScanStartFailed
       }
+      result.message = this.getServerErrorMessage(error)
+      return result
+    }
+  }
+
+  async loadTask(taskId: string): Promise<ManagementTaskItem | null> {
+    if (!taskId) return null
+    const tasks = await this.service.getScheduledTasks()
+    const task = tasks.find((item: TaskInfo) => item.Id === taskId)
+    return task ? this.mapTask(task) : null
+  }
+
+  async startTask(task: ManagementTaskItem): Promise<ManagementTaskActionResult> {
+    const result = new ManagementTaskActionResult()
+    if (!ManagementTaskActionPolicy.canStart(task)) {
+      result.code = ManagementTaskActionCode.Busy
+      return result
+    }
+    const accessCode = await this.checkCurrentUserAccess()
+    if (accessCode !== ManagementErrorCode.None) {
+      result.code = accessCode === ManagementErrorCode.AuthenticationExpired ?
+        ManagementTaskActionCode.AuthenticationExpired :
+        (accessCode === ManagementErrorCode.PermissionDenied ?
+          ManagementTaskActionCode.PermissionDenied : ManagementTaskActionCode.Failed)
+      return result
+    }
+    try {
+      await this.service.startScheduledTask(task.id)
+      result.ok = true
+      result.code = ManagementTaskActionCode.Started
+      return result
+    } catch (error) {
+      result.code = ManagementTaskActionPolicy.codeForHttpStatus(this.getHttpStatus(error) || 0)
+      result.message = this.getServerErrorMessage(error)
+      return result
+    }
+  }
+
+  async cancelTask(task: ManagementTaskItem): Promise<ManagementTaskActionResult> {
+    const result = new ManagementTaskActionResult()
+    if (!ManagementTaskActionPolicy.canCancel(task)) {
+      result.code = ManagementTaskActionCode.Failed
+      return result
+    }
+    const accessCode = await this.checkCurrentUserAccess()
+    if (accessCode !== ManagementErrorCode.None) {
+      result.code = accessCode === ManagementErrorCode.AuthenticationExpired ?
+        ManagementTaskActionCode.AuthenticationExpired :
+        (accessCode === ManagementErrorCode.PermissionDenied ?
+          ManagementTaskActionCode.PermissionDenied : ManagementTaskActionCode.Failed)
+      return result
+    }
+    try {
+      await this.service.cancelScheduledTask(task.id)
+      result.ok = true
+      result.code = ManagementTaskActionCode.Cancelled
+      return result
+    } catch (error) {
+      result.code = ManagementTaskActionPolicy.codeForHttpStatus(this.getHttpStatus(error) || 0)
       result.message = this.getServerErrorMessage(error)
       return result
     }

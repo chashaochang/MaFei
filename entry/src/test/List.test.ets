@@ -12,6 +12,7 @@ import managementDevicesTest from './ManagementDevices.test';
 import managementActivityTest from './ManagementActivity.test';
 import managementNativePagePolicyTest from './ManagementNativePagePolicy.test';
 import managementUsersTest from './ManagementUsers.test';
+import managementTasksTest from './ManagementTasks.test';
 import mineHistoryPlannerTest from './MineHistoryPlanner.test';
 
 export default function testsuite() {
@@ -25,6 +26,7 @@ export default function testsuite() {
   homeInsetsPolicyTest();
   homeDestinationTest();
   managementSessionsTest();
+  managementTasksTest();
   managementDevicesTest();
   managementActivityTest();
   managementNativePagePolicyTest();
