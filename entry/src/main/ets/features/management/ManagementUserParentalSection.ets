@@ -232,7 +232,12 @@ export struct ManagementUserParentalSection {
         .padding({ left: 12, right: 12 })
         .borderRadius(8)
         .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.ratingMenu())
+        .bindMenu(this.ratingMenu(), {
+          placement: Placement.BottomRight,
+          systemMaterial: this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+            undefined
+        })
       }
       .width('100%')
       .constraintSize({ minHeight: 54 })
@@ -503,7 +508,12 @@ export struct ManagementUserParentalSection {
         .padding({ left: 12, right: 12 })
         .borderRadius(8)
         .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.dayMenu(index))
+        .bindMenu(this.dayMenu(index), {
+          placement: Placement.BottomLeft,
+          systemMaterial: this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+            undefined
+        })
         Blank()
         Button() {
           SymbolGlyph($r('sys.symbol.xmark'))

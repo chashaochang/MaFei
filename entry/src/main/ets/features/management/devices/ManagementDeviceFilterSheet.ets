@@ -12,7 +12,6 @@ export struct ManagementDeviceFilterSheet {
   @Require @Param initialAscending: boolean
   @Require @Param onApply: (recentDays: number, users: string[],
     sortField: ManagementDeviceSortField, ascending: boolean) => void
-  @Require @Param onDismiss: () => void
   @Local draftRecentDays: number = 0
   @Local draftUsers: string[] = []
   @Local draftSortField: ManagementDeviceSortField = ManagementDeviceSortField.LastActivity
@@ -64,19 +63,9 @@ export struct ManagementDeviceFilterSheet {
           .fontWeight(FontWeight.Bold)
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('sys.color.icon_secondary')])
-        }
-        .width(40)
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.management_cancel'))
-        .onClick(() => this.onDismiss())
       }
       .width('100%')
-      .padding({ left: 20, right: 12, top: 12, bottom: 8 })
+      .padding({ left: 20, right: 64, top: 16, bottom: 8 })
 
       Scroll() {
         Column({ space: 12 }) {
@@ -92,6 +81,9 @@ export struct ManagementDeviceFilterSheet {
                 { value: `30 ${this.getString('management_device_days')}` }
               ])
                 .selected(this.recentIndex())
+                .menuAlign(MenuAlignType.END)
+                .optionWidth(OptionWidthMode.FIT_TRIGGER)
+                .menuSystemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
                 .onSelect((index: number) => {
                   this.draftRecentDays = index === 1 ? 7 : (index === 2 ? 30 : 0)
                 })
@@ -112,6 +104,9 @@ export struct ManagementDeviceFilterSheet {
                 { value: this.getString('management_device_sort_user') }
               ])
                 .selected(this.sortIndex())
+                .menuAlign(MenuAlignType.END)
+                .optionWidth(OptionWidthMode.FIT_TRIGGER)
+                .menuSystemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
                 .onSelect((index: number) => {
                   this.draftSortField = index === 1 ? ManagementDeviceSortField.Name :
                     (index === 2 ? ManagementDeviceSortField.App :
@@ -200,10 +195,11 @@ export struct ManagementDeviceFilterSheet {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 10, bottom: Math.max(12, this.appUIState.safeBottom) })
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .backgroundColor(Color.Transparent)
     }
     .width('100%')
     .height('100%')
+    .alignItems(HorizontalAlign.Start)
     .backgroundColor(Color.Transparent)
   }
 }

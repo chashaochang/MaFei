@@ -725,8 +725,7 @@ export struct ManagementUsersPage {
         this.ui.sortField = options.sortField
         this.ui.ascending = options.ascending
         this.ui.filterSheetVisible = false
-      },
-      onDismiss: () => this.ui.filterSheetVisible = false
+      }
     })
   }
 
@@ -851,7 +850,9 @@ export struct ManagementUsersPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
     .bindSheet($$this.ui.filterSheetVisible, this.userFilterSheet(), {
       height: '70%',
-      preferType: SheetType.BOTTOM
+      preferType: SheetType.BOTTOM,
+      showClose: true,
+      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
     })
   }
 

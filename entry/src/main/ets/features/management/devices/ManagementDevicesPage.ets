@@ -523,8 +523,7 @@ export struct ManagementDevicesPage {
       onApply: (recentDays: number, users: string[],
         sortField: ManagementDeviceSortField, ascending: boolean) => {
         this.applyNativeFilters(recentDays, users, sortField, ascending)
-      },
-      onDismiss: () => this.ui.filterSheetVisible = false
+      }
     })
   }
 
@@ -565,7 +564,9 @@ export struct ManagementDevicesPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
     .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
       height: '70%',
-      preferType: SheetType.BOTTOM
+      preferType: SheetType.BOTTOM,
+      showClose: true,
+      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
     })
   }
 

@@ -1,5 +1,8 @@
 import { ThemeStyle } from '../../entity/ThemeStyle';
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../theme/AppThemeSurfaceResolver';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ObjectUtil } from '../../utils/ObjectUtil';
 import { ManagementUserDetailUIState } from './ManagementUserDetailUIState';
@@ -159,7 +162,12 @@ export struct ManagementUserProfileSection {
       .borderRadius(8)
       .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
       .enabled(options.length > 0)
-      .bindMenu(this.providerMenu(options, selectedId, onSelect))
+      .bindMenu(this.providerMenu(options, selectedId, onSelect), {
+        placement: Placement.BottomRight,
+        systemMaterial: this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+          undefined
+      })
     }
     .width('100%')
     .constraintSize({ minHeight: 54 })
@@ -618,7 +626,12 @@ export struct ManagementUserProfileSection {
         .padding({ left: 12, right: 12 })
         .borderRadius(8)
         .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-        .bindMenu(this.syncPlayMenu())
+        .bindMenu(this.syncPlayMenu(), {
+          placement: Placement.BottomRight,
+          systemMaterial: this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
+            undefined
+        })
       }
       .width('100%')
       .constraintSize({ minHeight: 54 })

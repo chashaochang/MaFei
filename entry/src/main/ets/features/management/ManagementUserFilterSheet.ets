@@ -15,7 +15,6 @@ export struct ManagementUserFilterSheet {
   @Require @Param initialSortField: ManagementUserSortField
   @Require @Param initialAscending: boolean
   @Require @Param onApply: (options: ManagementUserQueryOptions) => void
-  @Require @Param onDismiss: () => void
   @Local draftStatus: ManagementUserStatusFilter = ManagementUserStatusFilter.All
   @Local draftVisibility: ManagementUserVisibilityFilter = ManagementUserVisibilityFilter.All
   @Local draftSortField: ManagementUserSortField = ManagementUserSortField.Name
@@ -71,19 +70,9 @@ export struct ManagementUserFilterSheet {
           .fontWeight(FontWeight.Bold)
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('sys.color.icon_secondary')])
-        }
-        .width(40)
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.management_user_cancel'))
-        .onClick(() => this.onDismiss())
       }
       .width('100%')
-      .padding({ left: 20, right: 12, top: 12, bottom: 8 })
+      .padding({ left: 20, right: 64, top: 16, bottom: 8 })
 
       Column() {
         Row({ space: 16 }) {
@@ -97,6 +86,9 @@ export struct ManagementUserFilterSheet {
             { value: this.getString('management_user_status_disabled') }
           ])
             .selected(this.statusIndex())
+            .menuAlign(MenuAlignType.END)
+            .optionWidth(OptionWidthMode.FIT_TRIGGER)
+            .menuSystemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
             .onSelect((index: number) => {
               this.draftStatus = index === 1 ? ManagementUserStatusFilter.Enabled :
                 (index === 2 ? ManagementUserStatusFilter.Disabled : ManagementUserStatusFilter.All)
@@ -117,6 +109,9 @@ export struct ManagementUserFilterSheet {
             { value: this.getString('management_user_visibility_hidden') }
           ])
             .selected(this.visibilityIndex())
+            .menuAlign(MenuAlignType.END)
+            .optionWidth(OptionWidthMode.FIT_TRIGGER)
+            .menuSystemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
             .onSelect((index: number) => {
               this.draftVisibility = index === 1 ? ManagementUserVisibilityFilter.Visible :
                 (index === 2 ? ManagementUserVisibilityFilter.Hidden : ManagementUserVisibilityFilter.All)
@@ -136,6 +131,9 @@ export struct ManagementUserFilterSheet {
             { value: this.getString('management_user_sort_activity') }
           ])
             .selected(this.sortIndex())
+            .menuAlign(MenuAlignType.END)
+            .optionWidth(OptionWidthMode.FIT_TRIGGER)
+            .menuSystemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
             .onSelect((index: number) => {
               this.draftSortField = index === 1 ? ManagementUserSortField.LastActivity :
                 ManagementUserSortField.Name
@@ -182,10 +180,11 @@ export struct ManagementUserFilterSheet {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 10, bottom: Math.max(12, this.appUIState.safeBottom) })
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .backgroundColor(Color.Transparent)
     }
     .width('100%')
     .height('100%')
+    .alignItems(HorizontalAlign.Start)
     .backgroundColor(Color.Transparent)
   }
 }
