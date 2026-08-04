@@ -14,6 +14,7 @@ import managementNativePagePolicyTest from './ManagementNativePagePolicy.test';
 import managementUsersTest from './ManagementUsers.test';
 import managementTasksTest from './ManagementTasks.test';
 import mineHistoryPlannerTest from './MineHistoryPlanner.test';
+import managementLibrariesTest from './ManagementLibraries.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -32,4 +33,5 @@ export default function testsuite() {
   managementNativePagePolicyTest();
   managementUsersTest();
   mineHistoryPlannerTest();
+  managementLibrariesTest();
 }
