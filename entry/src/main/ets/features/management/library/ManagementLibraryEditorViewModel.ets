@@ -115,6 +115,10 @@ export class ManagementLibraryEditorViewModel extends BaseViewModel<ManagementLi
     this.ui.saving = false
   }
 
+  resume(): void {
+    this.visible = true
+  }
+
   setName(value: string): void {
     const draft = ManagementLibraryMapper.cloneDraft(this.ui.draft)
     draft.name = value
@@ -335,7 +339,13 @@ export class ManagementLibraryEditorViewModel extends BaseViewModel<ManagementLi
 
   private typeDisplayName(type: CollectionTypeOptions): string {
     const resourceName = type === CollectionTypeOptions.Movies ? 'management_movies' :
-      (type === CollectionTypeOptions.Tvshows ? 'management_series' : '')
+      (type === CollectionTypeOptions.Tvshows ? 'management_series' :
+        (type === CollectionTypeOptions.Music ? 'management_library_type_music' :
+          (type === CollectionTypeOptions.Musicvideos ? 'management_library_type_musicvideos' :
+            (type === CollectionTypeOptions.Homevideos ? 'management_library_type_homevideos' :
+              (type === CollectionTypeOptions.Boxsets ? 'management_library_type_boxsets' :
+                (type === CollectionTypeOptions.Books ? 'management_library_type_books' :
+                  'management_library_type_mixed'))))))
     if (resourceName.length > 0) {
       try {
         return this.ui.context.getHostContext()?.resourceManager.getStringByNameSync(resourceName) || type

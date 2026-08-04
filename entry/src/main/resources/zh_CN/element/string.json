@@ -1927,6 +1927,390 @@
     {
       "name": "management_library_path_load_failed",
       "value": "无法读取服务器目录"
+    },
+    {
+      "name": "management_library_add_path",
+      "value": "添加路径"
+    },
+    {
+      "name": "management_library_advanced",
+      "value": "高级设置"
+    },
+    {
+      "name": "management_library_advanced_hint",
+      "value": "不常用的扫描、元数据、字幕和图片选项"
+    },
+    {
+      "name": "management_library_archive_media",
+      "value": "启用压缩包媒体"
+    },
+    {
+      "name": "management_library_array_placeholder",
+      "value": "每行输入一项"
+    },
+    {
+      "name": "management_library_authentication_expired",
+      "value": "登录状态已失效，请重新登录"
+    },
+    {
+      "name": "management_library_auto_add_collection",
+      "value": "自动加入合集"
+    },
+    {
+      "name": "management_library_auto_series_grouping",
+      "value": "自动合并来自不同文件夹的剧集"
+    },
+    {
+      "name": "management_library_automatic",
+      "value": "自动"
+    },
+    {
+      "name": "management_library_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "management_library_chapter_images",
+      "value": "提取章节图片"
+    },
+    {
+      "name": "management_library_chapter_images_during_scan",
+      "value": "媒体库扫描时提取章节图片"
+    },
+    {
+      "name": "management_library_country",
+      "value": "元数据国家或地区"
+    },
+    {
+      "name": "management_library_custom_delimiters",
+      "value": "自定义标签分隔符"
+    },
+    {
+      "name": "management_library_delimiter_whitelist",
+      "value": "保留的分隔符"
+    },
+    {
+      "name": "management_library_discard",
+      "value": "放弃更改"
+    },
+    {
+      "name": "management_library_editor_loading",
+      "value": "正在加载媒体库设置"
+    },
+    {
+      "name": "management_library_embedded_episode_info",
+      "value": "优先使用内嵌剧集信息"
+    },
+    {
+      "name": "management_library_embedded_extra_titles",
+      "value": "优先使用内嵌附加内容标题"
+    },
+    {
+      "name": "management_library_embedded_subtitles",
+      "value": "允许的内嵌字幕"
+    },
+    {
+      "name": "management_library_embedded_subtitles_all",
+      "value": "全部允许"
+    },
+    {
+      "name": "management_library_embedded_subtitles_image",
+      "value": "仅图形字幕"
+    },
+    {
+      "name": "management_library_embedded_subtitles_none",
+      "value": "全部禁用"
+    },
+    {
+      "name": "management_library_embedded_subtitles_text",
+      "value": "仅文本字幕"
+    },
+    {
+      "name": "management_library_embedded_titles",
+      "value": "优先使用内嵌标题"
+    },
+    {
+      "name": "management_library_enabled",
+      "value": "启用此媒体库"
+    },
+    {
+      "name": "management_library_image_fetchers",
+      "value": "图片获取器"
+    },
+    {
+      "name": "management_library_image_limit",
+      "value": "数量上限"
+    },
+    {
+      "name": "management_library_image_min_width",
+      "value": "最小宽度"
+    },
+    {
+      "name": "management_library_image_options",
+      "value": "图片选项"
+    },
+    {
+      "name": "management_library_internet_providers",
+      "value": "启用互联网元数据提供程序"
+    },
+    {
+      "name": "management_library_keep_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "management_library_lufs_scan",
+      "value": "扫描音频响度（LUFS）"
+    },
+    {
+      "name": "management_library_lyric_fetchers",
+      "value": "歌词获取器"
+    },
+    {
+      "name": "management_library_media_segment_providers",
+      "value": "媒体片段提供程序"
+    },
+    {
+      "name": "management_library_metadata_fetchers",
+      "value": "元数据获取器"
+    },
+    {
+      "name": "management_library_metadata_language",
+      "value": "首选元数据语言"
+    },
+    {
+      "name": "management_library_metadata_readers",
+      "value": "本地元数据读取器"
+    },
+    {
+      "name": "management_library_metadata_savers",
+      "value": "元数据保存器"
+    },
+    {
+      "name": "management_library_name",
+      "value": "名称"
+    },
+    {
+      "name": "management_library_name_placeholder",
+      "value": "输入媒体库名称"
+    },
+    {
+      "name": "management_library_name_required",
+      "value": "请输入媒体库名称"
+    },
+    {
+      "name": "management_library_not_found",
+      "value": "媒体库不存在或已被移除"
+    },
+    {
+      "name": "management_library_options_load_failed",
+      "value": "无法加载服务器支持的媒体库选项"
+    },
+    {
+      "name": "management_library_path_duplicate",
+      "value": "媒体库路径不能重复"
+    },
+    {
+      "name": "management_library_path_remove",
+      "value": "移除此路径"
+    },
+    {
+      "name": "management_library_path_required",
+      "value": "请至少添加一个媒体库路径"
+    },
+    {
+      "name": "management_library_paths",
+      "value": "媒体库路径"
+    },
+    {
+      "name": "management_library_paths_empty",
+      "value": "尚未添加路径"
+    },
+    {
+      "name": "management_library_paths_hint",
+      "value": "路径位于 Jellyfin 服务器上，保存前会验证写入权限"
+    },
+    {
+      "name": "management_library_perfect_subtitle_match",
+      "value": "仅下载完全匹配的字幕"
+    },
+    {
+      "name": "management_library_photos",
+      "value": "启用照片识别"
+    },
+    {
+      "name": "management_library_prefer_nonstandard_artist_tag",
+      "value": "优先使用非标准艺术家标签"
+    },
+    {
+      "name": "management_library_provider_item_type",
+      "value": "媒体类型"
+    },
+    {
+      "name": "management_library_provider_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "management_library_provider_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "management_library_providers",
+      "value": "元数据提供程序"
+    },
+    {
+      "name": "management_library_providers_hint",
+      "value": "勾选启用项，并按服务器调用顺序排列"
+    },
+    {
+      "name": "management_library_realtime_monitor",
+      "value": "实时监控文件变化"
+    },
+    {
+      "name": "management_library_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_library_save",
+      "value": "保存"
+    },
+    {
+      "name": "management_library_save_failed",
+      "value": "保存失败，请检查服务器返回的信息"
+    },
+    {
+      "name": "management_library_save_local_metadata",
+      "value": "将元数据保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_lyrics",
+      "value": "将歌词保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_partial",
+      "value": "服务器已完成部分更改，请核对当前媒体库状态后重试"
+    },
+    {
+      "name": "management_library_save_subtitles",
+      "value": "将字幕保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_success",
+      "value": "媒体库已保存"
+    },
+    {
+      "name": "management_library_save_trickplay",
+      "value": "将 Trickplay 图片保存到媒体目录"
+    },
+    {
+      "name": "management_library_saved_state",
+      "value": "没有未保存的更改"
+    },
+    {
+      "name": "management_library_saving",
+      "value": "正在保存"
+    },
+    {
+      "name": "management_library_scan_interval",
+      "value": "自动刷新间隔（天）"
+    },
+    {
+      "name": "management_library_season_zero_name",
+      "value": "第 0 季显示名称"
+    },
+    {
+      "name": "management_library_season_zero_placeholder",
+      "value": "特别篇"
+    },
+    {
+      "name": "management_library_similar_item_providers",
+      "value": "相似项目提供程序"
+    },
+    {
+      "name": "management_library_skip_subtitles_audio_match",
+      "value": "音轨语言匹配时跳过字幕下载"
+    },
+    {
+      "name": "management_library_skip_subtitles_embedded",
+      "value": "已有内嵌字幕时跳过字幕下载"
+    },
+    {
+      "name": "management_library_subtitle_fetchers",
+      "value": "字幕获取器"
+    },
+    {
+      "name": "management_library_subtitle_languages",
+      "value": "字幕下载语言"
+    },
+    {
+      "name": "management_library_trickplay",
+      "value": "生成 Trickplay 图片"
+    },
+    {
+      "name": "management_library_trickplay_during_scan",
+      "value": "媒体库扫描时生成 Trickplay 图片"
+    },
+    {
+      "name": "management_library_type",
+      "value": "内容类型"
+    },
+    {
+      "name": "management_library_type_books",
+      "value": "图书"
+    },
+    {
+      "name": "management_library_type_boxsets",
+      "value": "合集"
+    },
+    {
+      "name": "management_library_type_create_hint",
+      "value": "创建后内容类型不可更改"
+    },
+    {
+      "name": "management_library_type_homevideos",
+      "value": "家庭视频与照片"
+    },
+    {
+      "name": "management_library_type_locked_hint",
+      "value": "现有媒体库不能更改内容类型"
+    },
+    {
+      "name": "management_library_type_mixed",
+      "value": "混合内容"
+    },
+    {
+      "name": "management_library_type_movies",
+      "value": "电影"
+    },
+    {
+      "name": "management_library_type_music",
+      "value": "音乐"
+    },
+    {
+      "name": "management_library_type_musicvideos",
+      "value": "音乐视频"
+    },
+    {
+      "name": "management_library_type_tvshows",
+      "value": "电视节目"
+    },
+    {
+      "name": "management_library_unsaved_message",
+      "value": "当前更改尚未保存。确定要放弃并返回吗？"
+    },
+    {
+      "name": "management_library_unsaved_state",
+      "value": "有未保存的更改"
+    },
+    {
+      "name": "management_library_unsaved_title",
+      "value": "放弃未保存的更改？"
+    },
+    {
+      "name": "management_library_unsupported_option",
+      "value": "服务器返回但当前界面未识别的字段会原样保留，不会在保存时丢失"
+    },
+    {
+      "name": "management_library_use_custom_delimiters",
+      "value": "使用自定义标签分隔符"
     }
   ]
 }

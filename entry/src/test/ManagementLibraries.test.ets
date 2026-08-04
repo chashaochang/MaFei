@@ -564,6 +564,22 @@ export default function managementLibrariesTest() {
       vm.stop()
     })
 
+    it('resumesEditorWithoutReloadingDraftAfterPathBrowserReturn', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      const ui = new ManagementLibraryEditorUIState({} as UIContext)
+      const vm = new ManagementLibraryEditorViewModel(ui, new ManagementLibraryRepository(fake))
+      await vm.loadNew(CollectionTypeOptions.Mixed)
+      vm.setName('Preserved name')
+      vm.setPaths(['/media'])
+      vm.stop()
+      vm.resume()
+      await vm.setCollectionType(CollectionTypeOptions.Movies)
+      expect(ui.draft.collectionType).assertEqual(CollectionTypeOptions.Movies)
+      expect(ui.draft.name).assertEqual('Preserved name')
+      expect(ui.draft.paths[0]).assertEqual('/media')
+      vm.stop()
+    })
+
     it('validatesEveryPathThroughRepositoryAndKeepsDirtyOnFailure', 0, async () => {
       const fake = new FakeManagementLibraryService()
       const ui = new ManagementLibraryEditorUIState({} as UIContext)

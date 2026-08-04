@@ -1927,6 +1927,390 @@
     {
       "name": "management_library_path_load_failed",
       "value": "Unable to load server folders"
+    },
+    {
+      "name": "management_library_add_path",
+      "value": "Add path"
+    },
+    {
+      "name": "management_library_advanced",
+      "value": "Advanced"
+    },
+    {
+      "name": "management_library_advanced_hint",
+      "value": "Less common scanning, metadata, subtitle, and image options"
+    },
+    {
+      "name": "management_library_archive_media",
+      "value": "Enable archive media files"
+    },
+    {
+      "name": "management_library_array_placeholder",
+      "value": "Enter one value per line"
+    },
+    {
+      "name": "management_library_authentication_expired",
+      "value": "Your session has expired. Sign in again."
+    },
+    {
+      "name": "management_library_auto_add_collection",
+      "value": "Automatically add to collections"
+    },
+    {
+      "name": "management_library_auto_series_grouping",
+      "value": "Automatically merge series from different folders"
+    },
+    {
+      "name": "management_library_automatic",
+      "value": "Automatic"
+    },
+    {
+      "name": "management_library_basic",
+      "value": "Basic information"
+    },
+    {
+      "name": "management_library_chapter_images",
+      "value": "Extract chapter images"
+    },
+    {
+      "name": "management_library_chapter_images_during_scan",
+      "value": "Extract chapter images during library scans"
+    },
+    {
+      "name": "management_library_country",
+      "value": "Metadata country or region"
+    },
+    {
+      "name": "management_library_custom_delimiters",
+      "value": "Custom tag delimiters"
+    },
+    {
+      "name": "management_library_delimiter_whitelist",
+      "value": "Preserved delimiters"
+    },
+    {
+      "name": "management_library_discard",
+      "value": "Discard changes"
+    },
+    {
+      "name": "management_library_editor_loading",
+      "value": "Loading library settings"
+    },
+    {
+      "name": "management_library_embedded_episode_info",
+      "value": "Prefer embedded episode information"
+    },
+    {
+      "name": "management_library_embedded_extra_titles",
+      "value": "Prefer embedded extra titles"
+    },
+    {
+      "name": "management_library_embedded_subtitles",
+      "value": "Allowed embedded subtitles"
+    },
+    {
+      "name": "management_library_embedded_subtitles_all",
+      "value": "Allow all"
+    },
+    {
+      "name": "management_library_embedded_subtitles_image",
+      "value": "Image subtitles only"
+    },
+    {
+      "name": "management_library_embedded_subtitles_none",
+      "value": "Allow none"
+    },
+    {
+      "name": "management_library_embedded_subtitles_text",
+      "value": "Text subtitles only"
+    },
+    {
+      "name": "management_library_embedded_titles",
+      "value": "Prefer embedded titles"
+    },
+    {
+      "name": "management_library_enabled",
+      "value": "Enable this library"
+    },
+    {
+      "name": "management_library_image_fetchers",
+      "value": "Image fetchers"
+    },
+    {
+      "name": "management_library_image_limit",
+      "value": "Image limit"
+    },
+    {
+      "name": "management_library_image_min_width",
+      "value": "Minimum width"
+    },
+    {
+      "name": "management_library_image_options",
+      "value": "Image options"
+    },
+    {
+      "name": "management_library_internet_providers",
+      "value": "Enable internet metadata providers"
+    },
+    {
+      "name": "management_library_keep_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "management_library_lufs_scan",
+      "value": "Scan audio loudness (LUFS)"
+    },
+    {
+      "name": "management_library_lyric_fetchers",
+      "value": "Lyric fetchers"
+    },
+    {
+      "name": "management_library_media_segment_providers",
+      "value": "Media segment providers"
+    },
+    {
+      "name": "management_library_metadata_fetchers",
+      "value": "Metadata fetchers"
+    },
+    {
+      "name": "management_library_metadata_language",
+      "value": "Preferred metadata language"
+    },
+    {
+      "name": "management_library_metadata_readers",
+      "value": "Local metadata readers"
+    },
+    {
+      "name": "management_library_metadata_savers",
+      "value": "Metadata savers"
+    },
+    {
+      "name": "management_library_name",
+      "value": "Name"
+    },
+    {
+      "name": "management_library_name_placeholder",
+      "value": "Enter a library name"
+    },
+    {
+      "name": "management_library_name_required",
+      "value": "Enter a library name"
+    },
+    {
+      "name": "management_library_not_found",
+      "value": "The library no longer exists"
+    },
+    {
+      "name": "management_library_options_load_failed",
+      "value": "Unable to load the library options supported by the server"
+    },
+    {
+      "name": "management_library_path_duplicate",
+      "value": "Library paths must be unique"
+    },
+    {
+      "name": "management_library_path_remove",
+      "value": "Remove this path"
+    },
+    {
+      "name": "management_library_path_required",
+      "value": "Add at least one library path"
+    },
+    {
+      "name": "management_library_paths",
+      "value": "Library paths"
+    },
+    {
+      "name": "management_library_paths_empty",
+      "value": "No paths have been added"
+    },
+    {
+      "name": "management_library_paths_hint",
+      "value": "Paths are on the Jellyfin server and write access is validated before saving"
+    },
+    {
+      "name": "management_library_perfect_subtitle_match",
+      "value": "Require a perfect subtitle match"
+    },
+    {
+      "name": "management_library_photos",
+      "value": "Enable photo detection"
+    },
+    {
+      "name": "management_library_prefer_nonstandard_artist_tag",
+      "value": "Prefer nonstandard artist tags"
+    },
+    {
+      "name": "management_library_provider_item_type",
+      "value": "Media type"
+    },
+    {
+      "name": "management_library_provider_move_down",
+      "value": "Move down"
+    },
+    {
+      "name": "management_library_provider_move_up",
+      "value": "Move up"
+    },
+    {
+      "name": "management_library_providers",
+      "value": "Metadata providers"
+    },
+    {
+      "name": "management_library_providers_hint",
+      "value": "Enable providers and arrange them in server execution order"
+    },
+    {
+      "name": "management_library_realtime_monitor",
+      "value": "Monitor file changes in real time"
+    },
+    {
+      "name": "management_library_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "management_library_save",
+      "value": "Save"
+    },
+    {
+      "name": "management_library_save_failed",
+      "value": "Save failed. Check the server response."
+    },
+    {
+      "name": "management_library_save_local_metadata",
+      "value": "Save metadata into media folders"
+    },
+    {
+      "name": "management_library_save_lyrics",
+      "value": "Save lyrics into media folders"
+    },
+    {
+      "name": "management_library_save_partial",
+      "value": "The server applied only part of the change. Review the current library and try again."
+    },
+    {
+      "name": "management_library_save_subtitles",
+      "value": "Save subtitles into media folders"
+    },
+    {
+      "name": "management_library_save_success",
+      "value": "Library saved"
+    },
+    {
+      "name": "management_library_save_trickplay",
+      "value": "Save Trickplay images into media folders"
+    },
+    {
+      "name": "management_library_saved_state",
+      "value": "No unsaved changes"
+    },
+    {
+      "name": "management_library_saving",
+      "value": "Saving"
+    },
+    {
+      "name": "management_library_scan_interval",
+      "value": "Automatic refresh interval (days)"
+    },
+    {
+      "name": "management_library_season_zero_name",
+      "value": "Season zero display name"
+    },
+    {
+      "name": "management_library_season_zero_placeholder",
+      "value": "Specials"
+    },
+    {
+      "name": "management_library_similar_item_providers",
+      "value": "Similar item providers"
+    },
+    {
+      "name": "management_library_skip_subtitles_audio_match",
+      "value": "Skip subtitle downloads when the audio language matches"
+    },
+    {
+      "name": "management_library_skip_subtitles_embedded",
+      "value": "Skip subtitle downloads when embedded subtitles exist"
+    },
+    {
+      "name": "management_library_subtitle_fetchers",
+      "value": "Subtitle fetchers"
+    },
+    {
+      "name": "management_library_subtitle_languages",
+      "value": "Subtitle download languages"
+    },
+    {
+      "name": "management_library_trickplay",
+      "value": "Generate Trickplay images"
+    },
+    {
+      "name": "management_library_trickplay_during_scan",
+      "value": "Generate Trickplay images during library scans"
+    },
+    {
+      "name": "management_library_type",
+      "value": "Content type"
+    },
+    {
+      "name": "management_library_type_books",
+      "value": "Books"
+    },
+    {
+      "name": "management_library_type_boxsets",
+      "value": "Box sets"
+    },
+    {
+      "name": "management_library_type_create_hint",
+      "value": "The content type cannot be changed after creation"
+    },
+    {
+      "name": "management_library_type_homevideos",
+      "value": "Home videos and photos"
+    },
+    {
+      "name": "management_library_type_locked_hint",
+      "value": "The content type of an existing library cannot be changed"
+    },
+    {
+      "name": "management_library_type_mixed",
+      "value": "Mixed content"
+    },
+    {
+      "name": "management_library_type_movies",
+      "value": "Movies"
+    },
+    {
+      "name": "management_library_type_music",
+      "value": "Music"
+    },
+    {
+      "name": "management_library_type_musicvideos",
+      "value": "Music videos"
+    },
+    {
+      "name": "management_library_type_tvshows",
+      "value": "TV shows"
+    },
+    {
+      "name": "management_library_unsaved_message",
+      "value": "Your changes have not been saved. Discard them and go back?"
+    },
+    {
+      "name": "management_library_unsaved_state",
+      "value": "Unsaved changes"
+    },
+    {
+      "name": "management_library_unsaved_title",
+      "value": "Discard unsaved changes?"
+    },
+    {
+      "name": "management_library_unsupported_option",
+      "value": "Fields returned by the server that this screen does not recognize are preserved unchanged when saving."
+    },
+    {
+      "name": "management_library_use_custom_delimiters",
+      "value": "Use custom tag delimiters"
     }
   ]
 }
