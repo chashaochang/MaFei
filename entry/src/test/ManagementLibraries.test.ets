@@ -1,6 +1,8 @@
 import { describe, expect, it } from '@ohos/hypium'
 import {
   CollectionTypeOptions,
+  FileSystemEntryInfo,
+  FileSystemEntryType,
   MediaPathInfo,
   TaskInfo,
   TaskState,
@@ -29,6 +31,12 @@ import {
   ManagementLibraryLoadStatus,
   ManagementLibraryRepository
 } from '../main/ets/features/management/library/ManagementLibraryRepository'
+import { ManagementLibraryPathBrowserUIState } from
+  '../main/ets/features/management/library/ManagementLibraryPathBrowserUIState'
+import {
+  ManagementLibraryPathBrowserPolicy,
+  ManagementLibraryPathBrowserViewModel
+} from '../main/ets/features/management/library/ManagementLibraryPathBrowserViewModel'
 
 class FakeLibraryHttpResponse {
   status: number = 0
@@ -50,6 +58,11 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   administrator: boolean = true
   failOn: string = ''
   failStatus: number = 0
+  drives: FileSystemEntryInfo[] = []
+  directoryEntries: FileSystemEntryInfo[] = []
+  parentPath: string = ''
+  validatedPath: string = ''
+  validatedWritable: boolean = false
 
   private record(name: string): void {
     this.calls.push(name)
@@ -111,8 +124,25 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
     this.virtualFolders = this.virtualFolders.filter((item: VirtualFolderInfo) => item.Name !== name)
   }
 
-  async validatePath(_path: string, _writable: boolean): Promise<void> {
+  async validatePath(path: string, writable: boolean): Promise<void> {
     this.record('validatePath')
+    this.validatedPath = path
+    this.validatedWritable = writable
+  }
+
+  async getDrives(): Promise<FileSystemEntryInfo[]> {
+    this.record('getDrives')
+    return this.drives
+  }
+
+  async getDirectoryContents(_path: string): Promise<FileSystemEntryInfo[]> {
+    this.record('getDirectoryContents')
+    return this.directoryEntries
+  }
+
+  async getParentPath(_path: string): Promise<string> {
+    this.record('getParentPath')
+    return this.parentPath
   }
 
   async refreshItem(_itemId: string): Promise<void> {
@@ -339,6 +369,47 @@ export default function managementLibrariesTest() {
       expect(result.status).assertEqual(ManagementLibraryLoadStatus.Error)
       expect(result.errorCode).assertEqual(ManagementLibraryOperationCode.PermissionDenied)
       expect(result.message).assertEqual('server failure 403')
+    })
+
+    it('filtersFilesAndSortsBrowsableDirectories', 0, () => {
+      const entries = ManagementLibraryPathBrowserPolicy.directories([
+        { Name: 'zeta', Path: '/zeta', Type: FileSystemEntryType.Directory },
+        { Name: 'movie.mkv', Path: '/movie.mkv', Type: FileSystemEntryType.File },
+        { Name: 'Alpha', Path: '/alpha', Type: FileSystemEntryType.Directory },
+        { Name: 'share', Path: '/share', Type: FileSystemEntryType.NetworkShare }
+      ])
+      expect(entries.length).assertEqual(3)
+      expect(entries[0].path).assertEqual('/alpha')
+      expect(entries[1].path).assertEqual('/share')
+      expect(entries[2].path).assertEqual('/zeta')
+    })
+
+    it('doesNotReturnAnUnverifiedManualPath', 0, () => {
+      expect(ManagementLibraryPathBrowserPolicy.isManualPathVerified('/media', '')).assertFalse()
+      expect(ManagementLibraryPathBrowserPolicy.isManualPathVerified('/media', '/other')).assertFalse()
+      expect(ManagementLibraryPathBrowserPolicy.isManualPathVerified(' /media ', '/media')).assertTrue()
+    })
+
+    it('usesServerParentPathAndWritableValidation', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.parentPath = '/media'
+      fake.directoryEntries = [
+        { Name: 'Movies', Path: '/media/Movies', Type: FileSystemEntryType.Directory }
+      ]
+      const ui = new ManagementLibraryPathBrowserUIState({} as UIContext)
+      const vm = new ManagementLibraryPathBrowserViewModel(ui, fake)
+      await vm.init()
+      fake.calls = []
+      ui.currentPath = '/media/Movies'
+      await vm.goParent()
+      expect(fake.calls.join(',')).assertEqual('getParentPath,getDirectoryContents')
+      expect(ui.currentPath).assertEqual('/media')
+      vm.setManualPath('/media/Movies')
+      expect(await vm.validateManualPath()).assertTrue()
+      expect(fake.validatedPath).assertEqual('/media/Movies')
+      expect(fake.validatedWritable).assertTrue()
+      expect(vm.canReturnManualPath()).assertTrue()
+      vm.stop()
     })
   })
 }

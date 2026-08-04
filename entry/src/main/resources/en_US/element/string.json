@@ -1871,6 +1871,62 @@
     {
       "name": "management_library_select_hint",
       "value": "Select a library to view details"
+    },
+    {
+      "name": "management_library_path_title",
+      "value": "Select server folder"
+    },
+    {
+      "name": "management_library_path_root",
+      "value": "Server root"
+    },
+    {
+      "name": "management_library_path_choose",
+      "value": "Select"
+    },
+    {
+      "name": "management_library_path_manual_title",
+      "value": "Enter a server path manually"
+    },
+    {
+      "name": "management_library_path_placeholder",
+      "value": "/media/videos"
+    },
+    {
+      "name": "management_library_path_validating",
+      "value": "Validating"
+    },
+    {
+      "name": "management_library_path_validate",
+      "value": "Validate path"
+    },
+    {
+      "name": "management_library_path_use",
+      "value": "Use this path"
+    },
+    {
+      "name": "management_library_path_validation_success",
+      "value": "Path validated"
+    },
+    {
+      "name": "management_library_path_validation_failed",
+      "value": "The path is unavailable or the server cannot write to it"
+    },
+    {
+      "name": "management_library_path_loading",
+      "value": "Loading server folders"
+    },
+    {
+      "name": "management_library_path_empty",
+      "value": "No browsable folders are available here"
+    },
+    {
+      "name": "management_library_path_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "management_library_path_load_failed",
+      "value": "Unable to load server folders"
     }
   ]
 }

@@ -2059,6 +2059,62 @@
     {
       "name": "management_library_select_hint",
       "value": "选择一个媒体库查看详情"
+    },
+    {
+      "name": "management_library_path_title",
+      "value": "选择服务器目录"
+    },
+    {
+      "name": "management_library_path_root",
+      "value": "服务器根目录"
+    },
+    {
+      "name": "management_library_path_choose",
+      "value": "选择"
+    },
+    {
+      "name": "management_library_path_manual_title",
+      "value": "手动输入服务器路径"
+    },
+    {
+      "name": "management_library_path_placeholder",
+      "value": "/media/videos"
+    },
+    {
+      "name": "management_library_path_validating",
+      "value": "验证中"
+    },
+    {
+      "name": "management_library_path_validate",
+      "value": "验证路径"
+    },
+    {
+      "name": "management_library_path_use",
+      "value": "使用此路径"
+    },
+    {
+      "name": "management_library_path_validation_success",
+      "value": "路径验证通过"
+    },
+    {
+      "name": "management_library_path_validation_failed",
+      "value": "路径不可用或服务器没有写入权限"
+    },
+    {
+      "name": "management_library_path_loading",
+      "value": "正在读取服务器目录"
+    },
+    {
+      "name": "management_library_path_empty",
+      "value": "此位置没有可进入的目录"
+    },
+    {
+      "name": "management_library_path_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_library_path_load_failed",
+      "value": "无法读取服务器目录"
     }
   ]
 }
