@@ -1,7 +1,19 @@
 import { describe, expect, it } from '@ohos/hypium'
-import { CollectionTypeOptions } from 'sdk/src/main/ets/generated-client/models'
+import {
+  CollectionTypeOptions,
+  MediaPathInfo,
+  TaskInfo,
+  TaskState,
+  UserDto,
+  VirtualFolderInfo
+} from 'sdk/src/main/ets/generated-client/models'
+import {
+  ManagementLibraryApiService
+} from '../main/ets/features/management/library/ManagementLibraryApiService'
 import {
   ManagementLibraryDraft,
+  ManagementLibraryOperationCode,
+  ManagementLibraryOptions,
   ManagementLibraryValidationCode,
   ManagementMediaDeleteTarget
 } from '../main/ets/features/management/library/ManagementLibraryModels'
@@ -13,6 +25,109 @@ import { ManagementLibraryPolicy } from
   '../main/ets/features/management/library/ManagementLibraryPolicy'
 import { ManagementMediaDeletePolicy } from
   '../main/ets/features/management/library/ManagementMediaDeletePolicy'
+import {
+  ManagementLibraryLoadStatus,
+  ManagementLibraryRepository
+} from '../main/ets/features/management/library/ManagementLibraryRepository'
+
+class FakeLibraryHttpResponse {
+  status: number = 0
+  data: string = ''
+}
+
+class FakeLibraryHttpError extends Error {
+  response?: FakeLibraryHttpResponse
+
+  constructor() {
+    super('fake library HTTP error')
+  }
+}
+
+class FakeManagementLibraryService extends ManagementLibraryApiService {
+  calls: string[] = []
+  virtualFolders: VirtualFolderInfo[] = []
+  tasks: TaskInfo[] = []
+  administrator: boolean = true
+  failOn: string = ''
+  failStatus: number = 0
+
+  private record(name: string): void {
+    this.calls.push(name)
+    if (this.failOn !== name) return
+    if (this.failStatus > 0) {
+      const response = new FakeLibraryHttpResponse()
+      response.status = this.failStatus
+      response.data = 'server failure ' + this.failStatus
+      const error = new FakeLibraryHttpError()
+      error.response = response
+      throw error
+    }
+    throw Error(`forced ${name}`)
+  }
+
+  async getCurrentUser(): Promise<UserDto> {
+    this.record('getCurrentUser')
+    return {
+      Policy: {
+        IsAdministrator: this.administrator,
+        AuthenticationProviderId: '',
+        PasswordResetProviderId: ''
+      }
+    }
+  }
+
+  async getVirtualFolders(): Promise<VirtualFolderInfo[]> {
+    this.record('getVirtualFolders')
+    return this.virtualFolders
+  }
+
+  async renameVirtualFolder(_name: string, _newName: string): Promise<void> {
+    this.record('renameVirtualFolder')
+  }
+
+  async removeMediaPath(_name: string, _path: string): Promise<void> {
+    this.record('removeMediaPath')
+  }
+
+  async addMediaPath(_name: string, _path: string): Promise<void> {
+    this.record('addMediaPath')
+  }
+
+  async updateMediaPath(_name: string, _pathInfo: MediaPathInfo): Promise<void> {
+    this.record('updateMediaPath')
+  }
+
+  async updateLibraryOptions(_id: string, _options: ManagementLibraryOptions): Promise<void> {
+    this.record('updateLibraryOptions')
+  }
+
+  async addVirtualFolder(_name: string, _type: string | undefined, _paths: string[],
+    _options: ManagementLibraryOptions): Promise<void> {
+    this.record('addVirtualFolder')
+  }
+
+  async removeVirtualFolder(name: string): Promise<void> {
+    this.record('removeVirtualFolder')
+    this.virtualFolders = this.virtualFolders.filter((item: VirtualFolderInfo) => item.Name !== name)
+  }
+
+  async validatePath(_path: string, _writable: boolean): Promise<void> {
+    this.record('validatePath')
+  }
+
+  async refreshItem(_itemId: string): Promise<void> {
+    this.record('refreshItem')
+  }
+
+  async getScheduledTasks(): Promise<TaskInfo[]> {
+    this.record('getScheduledTasks')
+    return this.tasks
+  }
+
+  async startScheduledTask(_taskId: string): Promise<void> {
+    this.record('startScheduledTask')
+  }
+}
 
 function libraryDraft(name: string, paths: string[]): ManagementLibraryDraft {
   const draft = new ManagementLibraryDraft()
@@ -31,6 +146,29 @@ function deleteTarget(id: string, canDelete: boolean, path: string): ManagementM
   target.canDelete = canDelete
   target.path = path
   return target
+}
+
+function folder(id: string, name: string, paths: string[]): VirtualFolderInfo {
+  return { ItemId: id, Name: name, Locations: paths, LibraryOptions: { Enabled: true } }
+}
+
+function originalDraft(): ManagementLibraryDraft {
+  const draft = libraryDraft('Movies', ['/old', '/keep'])
+  draft.id = 'library-id'
+  draft.originalName = 'Movies'
+  return draft
+}
+
+function editedDraft(): ManagementLibraryDraft {
+  const draft = libraryDraft('Films', ['/keep', '/new'])
+  draft.id = 'library-id'
+  draft.originalName = 'Movies'
+  draft.options.Enabled = false
+  return draft
+}
+
+function refreshTask(state: TaskState): TaskInfo {
+  return { Id: 'refresh-task', Key: 'RefreshLibrary', State: state }
 }
 
 export default function managementLibrariesTest() {
@@ -121,6 +259,86 @@ export default function managementLibrariesTest() {
       expect(clone.options.TypeOptions?.[0].SimilarItemProviderOrder?.[0]).assertEqual('MovieDb')
       clone.options.MediaSegmentProviderOrder?.push('Other')
       expect(draft.options.MediaSegmentProviderOrder?.length).assertEqual(1)
+    })
+
+    it('createsAfterSequentialValidationAndReload', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.virtualFolders = [folder('new-id', 'Movies', ['/one', '/two'])]
+      const result = await new ManagementLibraryRepository(fake)
+        .createLibrary(libraryDraft('Movies', ['/one', '/two']))
+      expect(result.ok).assertTrue()
+      expect(fake.calls.join(','))
+        .assertEqual('getCurrentUser,validatePath,validatePath,addVirtualFolder,getVirtualFolders')
+    })
+
+    it('editsInRenamePathOptionReloadOrder', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.virtualFolders = [folder('library-id', 'Films', ['/keep', '/new'])]
+      const result = await new ManagementLibraryRepository(fake).saveEdit(originalDraft(), editedDraft())
+      expect(result.ok).assertTrue()
+      expect(fake.calls.join(','))
+        .assertEqual('getCurrentUser,getVirtualFolders,renameVirtualFolder,removeMediaPath,validatePath,' +
+          'addMediaPath,updateLibraryOptions,getVirtualFolders')
+    })
+
+    it('reloadsFinalStateAfterPartialWriteFailure', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.virtualFolders = [folder('library-id', 'Movies', ['/old', '/keep'])]
+      fake.failOn = 'addMediaPath'
+      const result = await new ManagementLibraryRepository(fake).saveEdit(originalDraft(), editedDraft())
+      expect(result.code).assertEqual(ManagementLibraryOperationCode.PartialSuccess)
+      expect(fake.calls.join(','))
+        .assertEqual('getCurrentUser,getVirtualFolders,renameVirtualFolder,removeMediaPath,validatePath,' +
+          'addMediaPath,getVirtualFolders')
+    })
+
+    it('rejectsAdministratorWritesBeforeMutation', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.administrator = false
+      const result = await new ManagementLibraryRepository(fake)
+        .createLibrary(libraryDraft('Movies', ['/media']))
+      expect(result.code).assertEqual(ManagementLibraryOperationCode.PermissionDenied)
+      expect(fake.calls.join(',')).assertEqual('getCurrentUser')
+    })
+
+    it('rejectsGlobalScanUnlessRefreshTaskIsIdle', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.tasks = [refreshTask(TaskState.Running)]
+      const result = await new ManagementLibraryRepository(fake).startAllScan()
+      expect(result.ok).assertFalse()
+      expect(fake.calls.includes('startScheduledTask')).assertFalse()
+    })
+
+    it('startsGlobalAndSingleScansAfterFreshAdministratorChecks', 0, async () => {
+      const globalFake = new FakeManagementLibraryService()
+      globalFake.tasks = [refreshTask(TaskState.Idle)]
+      expect((await new ManagementLibraryRepository(globalFake).startAllScan()).ok).assertTrue()
+      expect(globalFake.calls.join(','))
+        .assertEqual('getCurrentUser,getScheduledTasks,startScheduledTask')
+
+      const itemFake = new FakeManagementLibraryService()
+      expect((await new ManagementLibraryRepository(itemFake).startLibraryScan('library-id')).ok)
+        .assertTrue()
+      expect(itemFake.calls.join(',')).assertEqual('getCurrentUser,refreshItem')
+    })
+
+    it('removesOnlyVirtualLibraryConfigurationAndReloads', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.virtualFolders = [folder('library-id', 'Movies', ['/media'])]
+      const result = await new ManagementLibraryRepository(fake).removeLibrary('Movies')
+      expect(result.ok).assertTrue()
+      expect(fake.calls.join(','))
+        .assertEqual('getCurrentUser,removeVirtualFolder,getVirtualFolders')
+    })
+
+    it('mapsLoadPermissionErrorsAndPreservesServerMessage', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.failOn = 'getVirtualFolders'
+      fake.failStatus = 403
+      const result = await new ManagementLibraryRepository(fake).loadLibraries()
+      expect(result.status).assertEqual(ManagementLibraryLoadStatus.Error)
+      expect(result.errorCode).assertEqual(ManagementLibraryOperationCode.PermissionDenied)
+      expect(result.message).assertEqual('server failure 403')
     })
   })
 }

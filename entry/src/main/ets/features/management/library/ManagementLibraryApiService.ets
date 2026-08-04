@@ -35,6 +35,21 @@ const ITEM_REFRESH_PATH: string = '/Items/{itemId}/Refresh'
 const SCHEDULED_TASKS_PATH: string = '/ScheduledTasks'
 const SCHEDULED_TASK_RUNNING_PATH: string = '/ScheduledTasks/Running/{taskId}'
 
+interface ManagementLibraryRequestParams {
+  name?: string
+  newName?: string
+  collectionType?: string
+  paths?: string[]
+  path?: string
+  refreshLibrary?: boolean
+  libraryContentType?: string
+  isNewLibrary?: boolean
+  includeFiles?: boolean
+  includeDirectories?: boolean
+  metadataRefreshMode?: string
+  imageRefreshMode?: string
+}
+
 export interface ManagementLibraryService {
   getCurrentUser(): Promise<UserDto>
   getVirtualFolders(): Promise<VirtualFolderInfo[]>
@@ -73,10 +88,14 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
   }
 
   async getAvailableOptions(type: string, isNew: boolean): Promise<ManagementLibraryAvailableOptions> {
+    const params: ManagementLibraryRequestParams = {
+      libraryContentType: type,
+      isNewLibrary: isNew
+    }
     const response: AxiosResponse<ManagementLibraryAvailableOptions> =
       await this.axios().get<ManagementLibraryAvailableOptions>(
         this.url(AVAILABLE_OPTIONS_PATH),
-        this.config({ libraryContentType: type, isNewLibrary: isNew }))
+        this.config(params))
     this.ensureSuccess(response.status, 'available library options')
     return response.data
   }
@@ -98,16 +117,27 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
   async addVirtualFolder(name: string, type: string | undefined, paths: string[],
     options: ManagementLibraryOptions): Promise<void> {
     const body: AddVirtualFolderDto = { LibraryOptions: options }
+    const params: ManagementLibraryRequestParams = {
+      name: name,
+      collectionType: type,
+      paths: paths,
+      refreshLibrary: false
+    }
     const response: AxiosResponse<void> = await this.axios().post<void>(
       this.url(VIRTUAL_FOLDERS_PATH), body,
-      this.config({ name: name, collectionType: type, paths: paths, refreshLibrary: false }))
+      this.config(params))
     this.ensureSuccess(response.status, 'add virtual folder')
   }
 
   async renameVirtualFolder(name: string, newName: string): Promise<void> {
+    const params: ManagementLibraryRequestParams = {
+      name: name,
+      newName: newName,
+      refreshLibrary: false
+    }
     const response: AxiosResponse<void> = await this.axios().post<void>(
       this.url(LIBRARY_NAME_PATH), undefined,
-      this.config({ name: name, newName: newName, refreshLibrary: false }))
+      this.config(params))
     this.ensureSuccess(response.status, 'rename virtual folder')
   }
 
@@ -119,30 +149,40 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
   }
 
   async removeVirtualFolder(name: string): Promise<void> {
+    const params: ManagementLibraryRequestParams = { name: name, refreshLibrary: false }
     const response: AxiosResponse<void> = await this.axios().delete<void>(
-      this.url(VIRTUAL_FOLDERS_PATH),
-      this.config({ name: name, refreshLibrary: false }))
+      this.url(VIRTUAL_FOLDERS_PATH), this.config(params))
     this.ensureSuccess(response.status, 'remove virtual folder')
   }
 
   async addMediaPath(name: string, path: string): Promise<void> {
+    const params: ManagementLibraryRequestParams = {
+      name: name,
+      path: path,
+      refreshLibrary: false
+    }
     const response: AxiosResponse<void> = await this.axios().post<void>(
       this.url(LIBRARY_PATHS_PATH), undefined,
-      this.config({ name: name, path: path, refreshLibrary: false }))
+      this.config(params))
     this.ensureSuccess(response.status, 'add media path')
   }
 
   async removeMediaPath(name: string, path: string): Promise<void> {
+    const params: ManagementLibraryRequestParams = {
+      name: name,
+      path: path,
+      refreshLibrary: false
+    }
     const response: AxiosResponse<void> = await this.axios().delete<void>(
-      this.url(LIBRARY_PATHS_PATH),
-      this.config({ name: name, path: path, refreshLibrary: false }))
+      this.url(LIBRARY_PATHS_PATH), this.config(params))
     this.ensureSuccess(response.status, 'remove media path')
   }
 
   async updateMediaPath(name: string, pathInfo: MediaPathInfo): Promise<void> {
+    const params: ManagementLibraryRequestParams = { name: name, refreshLibrary: false }
     const response: AxiosResponse<void> = await this.axios().post<void>(
       this.url(LIBRARY_PATH_UPDATE_PATH), pathInfo,
-      this.config({ name: name, refreshLibrary: false }))
+      this.config(params))
     this.ensureSuccess(response.status, 'update media path')
   }
 
@@ -154,16 +194,21 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
   }
 
   async getDirectoryContents(path: string): Promise<FileSystemEntryInfo[]> {
+    const params: ManagementLibraryRequestParams = {
+      path: path,
+      includeFiles: false,
+      includeDirectories: true
+    }
     const response: AxiosResponse<FileSystemEntryInfo[]> = await this.axios().get<FileSystemEntryInfo[]>(
-      this.url(DIRECTORY_CONTENTS_PATH),
-      this.config({ path: path, includeFiles: false, includeDirectories: true }))
+      this.url(DIRECTORY_CONTENTS_PATH), this.config(params))
     this.ensureSuccess(response.status, 'directory contents')
     return response.data || []
   }
 
   async getParentPath(path: string): Promise<string> {
+    const params: ManagementLibraryRequestParams = { path: path }
     const response: AxiosResponse<string> = await this.axios().get<string>(
-      this.url(PARENT_PATH), this.config({ path: path }))
+      this.url(PARENT_PATH), this.config(params))
     this.ensureSuccess(response.status, 'parent path')
     return response.data || ''
   }
@@ -181,9 +226,12 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
 
   async refreshItem(itemId: string): Promise<void> {
     const endpoint = ITEM_REFRESH_PATH.replace('{itemId}', encodeURIComponent(itemId))
+    const params: ManagementLibraryRequestParams = {
+      metadataRefreshMode: 'None',
+      imageRefreshMode: 'None'
+    }
     const response: AxiosResponse<void> = await this.axios().post<void>(
-      this.url(endpoint), undefined,
-      this.config({ metadataRefreshMode: 'None', imageRefreshMode: 'None' }))
+      this.url(endpoint), undefined, this.config(params))
     this.ensureSuccess(response.status, 'refresh library item')
   }
 
@@ -215,7 +263,7 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
     return `${ApiClient.Instance().basePath}${path}`
   }
 
-  private config(params?: Object): RawAxiosRequestConfig {
+  private config(params?: ManagementLibraryRequestParams): RawAxiosRequestConfig {
     return {
       headers: { Authorization: ApiClient.Instance().authorizationHeader },
       params: params
