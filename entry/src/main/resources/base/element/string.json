@@ -2499,6 +2499,46 @@
     {
       "name": "management_library_use_custom_delimiters",
       "value": "使用自定义标签分隔符"
+    },
+    {
+      "name": "management_media_delete_title",
+      "value": "删除媒体文件"
+    },
+    {
+      "name": "management_media_delete_message",
+      "value": "将从媒体服务器和文件系统中永久删除此媒体："
+    },
+    {
+      "name": "management_media_delete_path",
+      "value": "文件路径"
+    },
+    {
+      "name": "management_media_delete_notice",
+      "value": "此操作不可撤销，删除后文件可能无法恢复。"
+    },
+    {
+      "name": "management_media_delete_blocked",
+      "value": "以下项目未获得服务器删除许可，不会被删除："
+    },
+    {
+      "name": "management_media_delete",
+      "value": "删除"
+    },
+    {
+      "name": "management_media_delete_success",
+      "value": "媒体文件已删除"
+    },
+    {
+      "name": "management_media_delete_no_eligible",
+      "value": "服务器未允许删除此媒体文件"
+    },
+    {
+      "name": "management_media_delete_conflict",
+      "value": "删除操作冲突，请稍后重试"
+    },
+    {
+      "name": "management_media_delete_failed",
+      "value": "删除媒体文件失败"
     }
   ]
 }

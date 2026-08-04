@@ -17,9 +17,19 @@ import { curves } from '@kit.ArkUI';
 import { ToastUtil } from "../../utils/ToastUtil";
 import { ReportService } from "../../network/ReportService";
 import { AppPreference } from "../../data/AppPreference";
+import { MediaLibraryRefreshEvent } from '../../events/Events'
+import {
+  ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult,
+  ManagementMediaDeleteSummary,
+  ManagementMediaDeleteTarget
+} from '../management/library/ManagementLibraryModels'
+import { ManagementMediaDeletePolicy } from '../management/library/ManagementMediaDeletePolicy'
+import { ManagementMediaDeleteRepository } from '../management/library/ManagementMediaDeleteRepository'
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
+  private deleteRepository: ManagementMediaDeleteRepository = new ManagementMediaDeleteRepository()
   private originImageHeight: number = 0;
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   episodeList: string[] = []
@@ -85,6 +95,53 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return this.episodeList.length > 0
   }
 
+  async loadDeleteAccess(): Promise<void> {
+    this.ui.isAdministrator = false
+    const result = await this.deleteRepository.requireAdministrator()
+    this.ui.isAdministrator = result.ok
+  }
+
+  private applyDeleteCapability(itemData: BaseItemDto): void {
+    this.ui.deletePath = itemData.Path || itemData.MediaSources?.[0]?.Path || ''
+    this.ui.canDelete = itemData.CanDelete === true && this.ui.deletePath.trim().length > 0
+  }
+
+  private currentDeleteTarget(): ManagementMediaDeleteTarget {
+    const target = new ManagementMediaDeleteTarget()
+    target.id = this.ui.id
+    target.name = this.ui.title
+    target.path = this.ui.deletePath
+    target.canDelete = this.ui.canDelete
+    return target
+  }
+
+  deleteSummary(): ManagementMediaDeleteSummary {
+    return ManagementMediaDeletePolicy.summarize([this.currentDeleteTarget()], this.ui.isAdministrator)
+  }
+
+  async deleteCurrentMedia(): Promise<ManagementLibraryOperationResult> {
+    if (this.ui.deleting) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.Conflict, 'management_media_delete_conflict')
+    }
+    const target = this.currentDeleteTarget()
+    if (!ManagementMediaDeletePolicy.canDeleteTarget(true, target)) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.PermissionDenied, 'management_media_delete_no_eligible')
+    }
+    this.ui.deleting = true
+    try {
+      const result = await this.deleteRepository.deleteTargets([target])
+      if (result.ok) {
+        this.ui.canDelete = false
+        this.ui.context.getHostContext()?.eventHub.emit(MediaLibraryRefreshEvent)
+      }
+      return result
+    } finally {
+      this.ui.deleting = false
+    }
+  }
+
   getVideoDetail(id: string) {
     getUserLibraryApi(ApiClient.Instance()).getItem({
       userId: ApiClient.Instance().userId,
@@ -92,6 +149,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }).then((res: AxiosResponse<BaseItemDto>) => {
       if (res.data) {
         let itemData = res.data
+        this.applyDeleteCapability(itemData)
         this.ui.title = itemData.Name || ''
         if (itemData.Type === BaseItemKind.Movie) {
           this.ui.isMovie = true
@@ -153,6 +211,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }).then((res: AxiosResponse<BaseItemDto>) => {
       if (res.data) {
         let itemData = res.data
+        this.applyDeleteCapability(itemData)
         this.ui.title = itemData.Name || ''
         this.ui.image = getItemImageUrl(itemData, ImageType.Backdrop)
         this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)

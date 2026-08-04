@@ -31,6 +31,11 @@ import {
 } from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { image } from '@kit.ImageKit';
+import { ManagementMediaDeleteDialog } from '../management/library/ManagementMediaDeleteDialog'
+import {
+  ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult
+} from '../management/library/ManagementLibraryModels'
 
 @ComponentV2
 struct NativeDetailPlayAction {
@@ -224,6 +229,70 @@ export struct VideoDetailPage {
   private detailInformationBackground(): ResourceColor {
     return this.useNativeSurface() ?
       $r('app.color.native_detail_information_background') : this.secondarySurfaceBackground()
+  }
+
+  private getString(name: string): string {
+    return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
+  }
+
+  private localizedDeleteMessage(result: ManagementLibraryOperationResult): string {
+    if (result.message.length > 0 && result.message.startsWith('management_')) {
+      return this.getString(result.message)
+    }
+    if (result.message.length > 0) {
+      return result.message
+    }
+    if (result.code === ManagementLibraryOperationCode.AuthenticationExpired) {
+      return this.getString('management_library_authentication_expired')
+    }
+    if (result.code === ManagementLibraryOperationCode.PermissionDenied) {
+      return this.getString('management_permission_denied')
+    }
+    if (result.code === ManagementLibraryOperationCode.NotFound) {
+      return this.getString('management_library_not_found')
+    }
+    if (result.code === ManagementLibraryOperationCode.Conflict) {
+      return this.getString('management_media_delete_conflict')
+    }
+    return this.getString('management_media_delete_failed')
+  }
+
+  private openDeleteDialog(): void {
+    if (!this.ui.isAdministrator || !this.ui.canDelete || this.ui.deleting) {
+      return
+    }
+    ManagementMediaDeleteDialog.show(this.getUIContext(), this.vm.deleteSummary(), () => {
+      this.vm.deleteCurrentMedia().then((result: ManagementLibraryOperationResult) => {
+        if (result.ok) {
+          this.getUIContext().getPromptAction().showToast({
+            message: $r('app.string.management_media_delete_success')
+          })
+          HMRouterMgr.pop()
+        } else {
+          this.getUIContext().getPromptAction().showToast({
+            message: this.localizedDeleteMessage(result)
+          })
+        }
+      }).catch(() => {
+        this.getUIContext().getPromptAction().showToast({
+          message: $r('app.string.management_media_delete_failed')
+        })
+      })
+    })
+  }
+
+  private navigationMenus(): Array<NavigationMenuItem> {
+    if (!this.useNativeSurface() || !this.ui.isAdministrator || !this.ui.canDelete) {
+      return []
+    }
+    return [{
+      value: $r('app.string.management_media_delete'),
+      icon: $r('sys.symbol.trash'),
+      isEnabled: !this.ui.deleting,
+      action: () => {
+        this.openDeleteDialog()
+      }
+    }]
   }
 
   private configureHeroHeight(): void {
@@ -554,6 +623,9 @@ export struct VideoDetailPage {
   private refreshDetail(): void {
     if (!this.ui.id) {
       return
+    }
+    if (this.useNativeSurface()) {
+      this.vm.loadDeleteAccess()
     }
     if (this.ui.isTvShows) {
       this.vm.getTvShowDetail(this.ui.id)
@@ -1089,6 +1161,7 @@ export struct VideoDetailPage {
       title: this.ui.showActionBar ? this.ui.title : '',
       contentExtendsUnderTitleBar: true,
       heroTitleChrome: true,
+      menus: this.navigationMenus(),
       scrollControllers: [this.ui.scroller],
       contentBuilder: () => {
         this.pageContent(false)

@@ -33,6 +33,11 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace subtitleInfo: string = ''
   @Trace externalUrls: ExternalUrl[] = []
 
+  @Trace isAdministrator: boolean = false
+  @Trace canDelete: boolean = false
+  @Trace deletePath: string = ''
+  @Trace deleting: boolean = false
+
   @Trace seasons: VideoItem[] = []
 
   scroller: Scroller = new Scroller()

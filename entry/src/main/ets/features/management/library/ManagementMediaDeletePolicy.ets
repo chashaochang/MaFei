@@ -8,14 +8,20 @@ export class ManagementMediaDeletePolicy {
     return administrator && itemCanDelete && itemId.trim().length > 0
   }
 
+  static canDeleteTarget(administrator: boolean, target: ManagementMediaDeleteTarget): boolean {
+    return ManagementMediaDeletePolicy.canDelete(administrator, target.canDelete, target.id) &&
+      target.path.trim().length > 0
+  }
+
   static summarize(targets: ManagementMediaDeleteTarget[], administrator: boolean): ManagementMediaDeleteSummary {
     const summary = new ManagementMediaDeleteSummary()
     targets.forEach((target: ManagementMediaDeleteTarget) => {
-      if (ManagementMediaDeletePolicy.canDelete(administrator, target.canDelete, target.id)) {
+      if (summary.mediaName.length === 0 && target.name.trim().length > 0) {
+        summary.mediaName = target.name
+      }
+      if (ManagementMediaDeletePolicy.canDeleteTarget(administrator, target)) {
         summary.allowedIds.push(target.id)
-        if (target.path.trim().length > 0) {
-          summary.allowedPaths.push(target.path)
-        }
+        summary.allowedPaths.push(target.path.trim())
       } else {
         summary.blockedNames.push(target.name)
       }

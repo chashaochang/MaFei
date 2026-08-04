@@ -109,6 +109,7 @@ export class ManagementMediaDeleteTarget {
 }
 
 export class ManagementMediaDeleteSummary {
+  mediaName: string = ''
   allowedIds: string[] = []
   allowedPaths: string[] = []
   blockedNames: string[] = []

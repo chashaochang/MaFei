@@ -2311,6 +2311,46 @@
     {
       "name": "management_library_use_custom_delimiters",
       "value": "Use custom tag delimiters"
+    },
+    {
+      "name": "management_media_delete_title",
+      "value": "Delete media file"
+    },
+    {
+      "name": "management_media_delete_message",
+      "value": "This media will be permanently deleted from the server and filesystem:"
+    },
+    {
+      "name": "management_media_delete_path",
+      "value": "File path"
+    },
+    {
+      "name": "management_media_delete_notice",
+      "value": "This action cannot be undone, and the file may not be recoverable."
+    },
+    {
+      "name": "management_media_delete_blocked",
+      "value": "The following items are not server-deletable and will be skipped:"
+    },
+    {
+      "name": "management_media_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "management_media_delete_success",
+      "value": "Media file deleted"
+    },
+    {
+      "name": "management_media_delete_no_eligible",
+      "value": "The server did not allow deleting this media file"
+    },
+    {
+      "name": "management_media_delete_conflict",
+      "value": "Delete operation conflict; try again later"
+    },
+    {
+      "name": "management_media_delete_failed",
+      "value": "Failed to delete media file"
     }
   ]
 }

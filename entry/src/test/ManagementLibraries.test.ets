@@ -37,6 +37,8 @@ import {
   ManagementLibraryLoadStatus,
   ManagementLibraryRepository
 } from '../main/ets/features/management/library/ManagementLibraryRepository'
+import { ManagementMediaDeleteRepository } from
+  '../main/ets/features/management/library/ManagementMediaDeleteRepository'
 import { ManagementLibraryPathBrowserUIState } from
   '../main/ets/features/management/library/ManagementLibraryPathBrowserUIState'
 import {
@@ -78,6 +80,7 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   cultures: CultureDto[] = []
   requestedType: string = ''
   requestedIsNew: boolean = false
+  deletedIds: string[] = []
 
   private record(name: string): void {
     this.calls.push(name)
@@ -188,6 +191,11 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
 
   async startScheduledTask(_taskId: string): Promise<void> {
     this.record('startScheduledTask')
+  }
+
+  async deleteItems(ids: string[]): Promise<void> {
+    this.record('deleteItems')
+    this.deletedIds = ids.slice()
   }
 }
 
@@ -364,6 +372,48 @@ export default function managementLibrariesTest() {
       expect(summary.allowedPaths[0]).assertEqual('/media/a.mkv')
       expect(summary.blockedNames.length).assertEqual(1)
       expect(summary.blockedNames[0]).assertEqual('blocked')
+    })
+
+    it('rechecksAdministratorBeforeDeletingMedia', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.administrator = false
+      const result = await new ManagementMediaDeleteRepository(fake).deleteTargets([
+        deleteTarget('movie', true, '/media/movie.mkv')
+      ])
+      expect(result.code).assertEqual(ManagementLibraryOperationCode.PermissionDenied)
+      expect(fake.calls.includes('deleteItems')).assertFalse()
+    })
+
+    it('sendsOnlyEligibleIdsOnce', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      const result = await new ManagementMediaDeleteRepository(fake).deleteTargets([
+        deleteTarget('allowed', true, '/media/a.mkv'),
+        deleteTarget('blocked', false, '/media/b.mkv')
+      ])
+      expect(result.ok).assertTrue()
+      expect(fake.calls.join(',')).assertEqual('getCurrentUser,deleteItems')
+      expect(fake.deletedIds.join(',')).assertEqual('allowed')
+    })
+
+    it('blocksMediaDeletionWhenPathIsUnknown', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      const result = await new ManagementMediaDeleteRepository(fake).deleteTargets([
+        deleteTarget('unknown-path', true, '')
+      ])
+      expect(result.code).assertEqual(ManagementLibraryOperationCode.PermissionDenied)
+      expect(fake.calls.includes('deleteItems')).assertFalse()
+    })
+
+    it('mapsMediaDeleteServerFailureWithoutChangingLocalSelection', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.failOn = 'deleteItems'
+      fake.failStatus = 409
+      const result = await new ManagementMediaDeleteRepository(fake).deleteTargets([
+        deleteTarget('conflict', true, '/media/conflict.mkv')
+      ])
+      expect(result.code).assertEqual(ManagementLibraryOperationCode.Conflict)
+      expect(result.ok).assertFalse()
+      expect(fake.deletedIds.length).assertEqual(0)
     })
 
     it('preservesCompatibilityFieldsWhenCloningOptions', 0, () => {
