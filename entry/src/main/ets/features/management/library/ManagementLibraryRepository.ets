@@ -1,4 +1,6 @@
 import {
+  CountryInfo,
+  CultureDto,
   MediaPathInfo,
   TaskInfo,
   TaskState,
@@ -12,6 +14,7 @@ import { ManagementLibraryChangePlanner } from './ManagementLibraryChangePlanner
 import { ManagementLibraryMapper } from './ManagementLibraryMapper'
 import {
   ManagementLibraryDraft,
+  ManagementLibraryAvailableOptions,
   ManagementLibraryItem,
   ManagementLibraryOperationCode,
   ManagementLibraryOperationResult,
@@ -93,6 +96,41 @@ export class ManagementLibraryRepository {
         result.errorCode = this.codeForStatus(status)
       }
       return result
+    }
+  }
+
+  async loadAvailableOptions(type: string, isNew: boolean): Promise<ManagementLibraryAvailableOptions> {
+    return await this.service.getAvailableOptions(type, isNew)
+  }
+
+  async loadCountries(): Promise<CountryInfo[]> {
+    return await this.service.getCountries()
+  }
+
+  async loadCultures(): Promise<CultureDto[]> {
+    return await this.service.getCultures()
+  }
+
+  async loadLibraryById(itemId: string): Promise<ManagementLibraryItem | undefined> {
+    const id = itemId.trim()
+    if (id.length === 0) return undefined
+    const folders = await this.service.getVirtualFolders()
+    const folder = folders.find((item: VirtualFolderInfo) => item.ItemId === id)
+    return folder ? ManagementLibraryMapper.toItem(folder) : undefined
+  }
+
+  async validateWritablePath(path: string): Promise<ManagementLibraryOperationResult> {
+    const access = await this.requireAdministrator()
+    if (!access.ok) return access
+    const normalized = path.trim()
+    if (normalized.length === 0) {
+      return ManagementLibraryOperationResult.failure(ManagementLibraryOperationCode.NotFound)
+    }
+    try {
+      await this.service.validatePath(normalized, true)
+      return ManagementLibraryOperationResult.success()
+    } catch (error) {
+      return this.failureFor(error as Object)
     }
   }
 

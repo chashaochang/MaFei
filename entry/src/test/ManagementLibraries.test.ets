@@ -1,8 +1,13 @@
 import { describe, expect, it } from '@ohos/hypium'
 import {
   CollectionTypeOptions,
+  CountryInfo,
+  CultureDto,
+  EmbeddedSubtitleOptions,
   FileSystemEntryInfo,
   FileSystemEntryType,
+  ImageType,
+  LibraryOptionInfoDto,
   MediaPathInfo,
   TaskInfo,
   TaskState,
@@ -13,6 +18,7 @@ import {
   ManagementLibraryApiService
 } from '../main/ets/features/management/library/ManagementLibraryApiService'
 import {
+  ManagementLibraryAvailableOptions,
   ManagementLibraryDraft,
   ManagementLibraryOperationCode,
   ManagementLibraryOptions,
@@ -37,6 +43,10 @@ import {
   ManagementLibraryPathBrowserPolicy,
   ManagementLibraryPathBrowserViewModel
 } from '../main/ets/features/management/library/ManagementLibraryPathBrowserViewModel'
+import { ManagementLibraryEditorUIState } from
+  '../main/ets/features/management/library/ManagementLibraryEditorUIState'
+import { ManagementLibraryEditorViewModel } from
+  '../main/ets/features/management/library/ManagementLibraryEditorViewModel'
 
 class FakeLibraryHttpResponse {
   status: number = 0
@@ -63,6 +73,11 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   parentPath: string = ''
   validatedPath: string = ''
   validatedWritable: boolean = false
+  availableOptions: ManagementLibraryAvailableOptions = {}
+  countries: CountryInfo[] = []
+  cultures: CultureDto[] = []
+  requestedType: string = ''
+  requestedIsNew: boolean = false
 
   private record(name: string): void {
     this.calls.push(name)
@@ -92,6 +107,23 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   async getVirtualFolders(): Promise<VirtualFolderInfo[]> {
     this.record('getVirtualFolders')
     return this.virtualFolders
+  }
+
+  async getAvailableOptions(type: string, isNew: boolean): Promise<ManagementLibraryAvailableOptions> {
+    this.record('getAvailableOptions')
+    this.requestedType = type
+    this.requestedIsNew = isNew
+    return this.availableOptions
+  }
+
+  async getCountries(): Promise<CountryInfo[]> {
+    this.record('getCountries')
+    return this.countries
+  }
+
+  async getCultures(): Promise<CultureDto[]> {
+    this.record('getCultures')
+    return this.cultures
   }
 
   async renameVirtualFolder(_name: string, _newName: string): Promise<void> {
@@ -167,6 +199,68 @@ function libraryDraft(name: string, paths: string[]): ManagementLibraryDraft {
   draft.options = { Enabled: true }
   draft.originalOptionsJson = ManagementLibraryMapper.serializeOptions(draft.options)
   return draft
+}
+
+function fullLibraryOptionsFixture(): ManagementLibraryOptions {
+  return {
+    Enabled: true,
+    EnableArchiveMediaFiles: false,
+    EnablePhotos: true,
+    EnableRealtimeMonitor: true,
+    EnableLUFSScan: true,
+    EnableChapterImageExtraction: true,
+    ExtractChapterImagesDuringLibraryScan: false,
+    EnableTrickplayImageExtraction: true,
+    ExtractTrickplayImagesDuringLibraryScan: false,
+    PathInfos: [{ Path: '/media' }],
+    SaveLocalMetadata: true,
+    EnableInternetProviders: true,
+    EnableAutomaticSeriesGrouping: true,
+    EnableEmbeddedTitles: true,
+    EnableEmbeddedExtrasTitles: true,
+    EnableEmbeddedEpisodeInfos: true,
+    AutomaticRefreshIntervalDays: 30,
+    PreferredMetadataLanguage: 'zh',
+    MetadataCountryCode: 'CN',
+    SeasonZeroDisplayName: 'Specials',
+    MetadataSavers: ['Nfo'],
+    DisabledLocalMetadataReaders: ['DisabledReader'],
+    LocalMetadataReaderOrder: ['Nfo'],
+    DisabledSubtitleFetchers: ['DisabledSub'],
+    SubtitleFetcherOrder: ['SubA'],
+    DisabledMediaSegmentProviders: ['DisabledSegment'],
+    MediaSegmentProvideOrder: ['LegacySegmentProvider'],
+    MediaSegmentProviderOrder: ['SegmentProvider'],
+    SkipSubtitlesIfEmbeddedSubtitlesPresent: true,
+    SkipSubtitlesIfAudioTrackMatches: true,
+    SubtitleDownloadLanguages: ['zho'],
+    RequirePerfectSubtitleMatch: true,
+    SaveSubtitlesWithMedia: true,
+    SaveLyricsWithMedia: true,
+    SaveTrickplayWithMedia: true,
+    DisabledLyricFetchers: ['DisabledLyric'],
+    LyricFetcherOrder: ['LyricProvider'],
+    PreferNonstandardArtistsTag: true,
+    UseCustomTagDelimiters: true,
+    CustomTagDelimiters: ['/', '|'],
+    DelimiterWhitelist: ['AC/DC'],
+    AutomaticallyAddToCollection: true,
+    AllowEmbeddedSubtitles: EmbeddedSubtitleOptions.AllowText,
+    TypeOptions: [{
+      Type: 'Movie',
+      MetadataFetchers: ['ProviderA'],
+      MetadataFetcherOrder: ['ProviderB', 'ProviderA'],
+      ImageFetchers: ['ImageA'],
+      ImageFetcherOrder: ['ImageA'],
+      SimilarItemProviders: ['SimilarProvider'],
+      SimilarItemProviderOrder: ['SimilarProvider'],
+      ImageOptions: [{ Type: ImageType.Primary, Limit: 1, MinWidth: 600 }]
+    }]
+  }
+}
+
+function providerOption(name: string, enabled: boolean): LibraryOptionInfoDto {
+  return { Name: name, DefaultEnabled: enabled }
 }
 
 function deleteTarget(id: string, canDelete: boolean, path: string): ManagementMediaDeleteTarget {
@@ -291,6 +385,40 @@ export default function managementLibrariesTest() {
       expect(draft.options.MediaSegmentProviderOrder?.length).assertEqual(1)
     })
 
+    it('clonesAllLibraryOptionFamiliesWithoutDroppingCompatibilityFields', 0, () => {
+      const source = fullLibraryOptionsFixture()
+      const result = ManagementLibraryMapper.cloneOptions(source)
+      expect(ManagementLibraryMapper.serializeOptions(result))
+        .assertEqual(ManagementLibraryMapper.serializeOptions(source))
+    })
+
+    it('preservesServerProviderOrderAndDisabledEntries', 0, () => {
+      const options = ManagementLibraryMapper.cloneOptions(fullLibraryOptionsFixture())
+      expect(options.TypeOptions?.[0].MetadataFetcherOrder?.join(','))
+        .assertEqual('ProviderB,ProviderA')
+      expect(options.DisabledSubtitleFetchers?.[0]).assertEqual('DisabledSub')
+      expect(options.MediaSegmentProviderOrder?.[0]).assertEqual('SegmentProvider')
+      expect(options.TypeOptions?.[0].SimilarItemProviderOrder?.[0]).assertEqual('SimilarProvider')
+    })
+
+    it('mapsDynamicProviderDefaultsWithoutDroppingDisabledOrderEntries', 0, () => {
+      const available: ManagementLibraryAvailableOptions = {
+        TypeOptions: [{
+          Type: 'Movie',
+          MetadataFetchers: [providerOption('Disabled', false), providerOption('Enabled', true)],
+          ImageFetchers: [providerOption('ImageB', false), providerOption('ImageA', true)],
+          SimilarItemProviders: [providerOption('SimilarB', false), providerOption('SimilarA', true)],
+          DefaultImageOptions: [{ Type: ImageType.Primary, Limit: 1, MinWidth: 600 }]
+        }]
+      }
+      const options = ManagementLibraryMapper.defaultTypeOptions(available)
+      expect(options[0].MetadataFetchers?.join(',')).assertEqual('Enabled')
+      expect(options[0].MetadataFetcherOrder?.join(',')).assertEqual('Disabled,Enabled')
+      expect(options[0].ImageFetcherOrder?.join(',')).assertEqual('ImageB,ImageA')
+      expect(options[0].SimilarItemProviderOrder?.join(',')).assertEqual('SimilarB,SimilarA')
+      expect(options[0].ImageOptions?.[0].MinWidth).assertEqual(600)
+    })
+
     it('createsAfterSequentialValidationAndReload', 0, async () => {
       const fake = new FakeManagementLibraryService()
       fake.virtualFolders = [folder('new-id', 'Movies', ['/one', '/two'])]
@@ -409,6 +537,49 @@ export default function managementLibrariesTest() {
       expect(fake.validatedPath).assertEqual('/media/Movies')
       expect(fake.validatedWritable).assertTrue()
       expect(vm.canReturnManualPath()).assertTrue()
+      vm.stop()
+    })
+
+    it('loadsMixedEditorBootstrapWithoutOverwritingCustomName', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.availableOptions = {
+        MetadataSavers: [providerOption('Nfo', true), providerOption('DisabledSaver', false)],
+        MetadataReaders: [providerOption('ReaderA', true), providerOption('ReaderB', false)],
+        SubtitleFetchers: [providerOption('SubA', true), providerOption('SubB', false)],
+        LyricFetchers: [providerOption('LyricsA', true), providerOption('LyricsB', false)],
+        MediaSegmentProviders: [providerOption('SegmentA', true), providerOption('SegmentB', false)]
+      }
+      const ui = new ManagementLibraryEditorUIState({} as UIContext)
+      const vm = new ManagementLibraryEditorViewModel(ui, new ManagementLibraryRepository(fake))
+      await vm.loadNew(CollectionTypeOptions.Mixed)
+      expect(fake.requestedType).assertEqual('mixed')
+      expect(fake.requestedIsNew).assertTrue()
+      expect(ui.draft.name).assertEqual('')
+      expect(ui.draft.options.MetadataSavers?.join(',')).assertEqual('Nfo')
+      expect(ui.draft.options.DisabledSubtitleFetchers?.join(',')).assertEqual('SubB')
+      vm.setName('Custom Library')
+      await vm.setCollectionType(CollectionTypeOptions.Movies)
+      expect(ui.draft.name).assertEqual('Custom Library')
+      expect(ui.dirty).assertTrue()
+      vm.stop()
+    })
+
+    it('validatesEveryPathThroughRepositoryAndKeepsDirtyOnFailure', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      const ui = new ManagementLibraryEditorUIState({} as UIContext)
+      const vm = new ManagementLibraryEditorViewModel(ui, new ManagementLibraryRepository(fake))
+      await vm.loadNew(CollectionTypeOptions.Mixed)
+      vm.setName('Movies')
+      vm.setPaths(['/one', '/two'])
+      fake.failOn = 'validatePath'
+      const result = await vm.save()
+      expect(result.ok).assertFalse()
+      expect(ui.pathErrors.has('/one')).assertTrue()
+      expect(ui.dirty).assertTrue()
+      expect(ui.saving).assertFalse()
+      expect(vm.beforeBack()).assertTrue()
+      expect(ui.discardConfirmVisible).assertTrue()
+      expect(vm.beforeBack()).assertTrue()
       vm.stop()
     })
   })

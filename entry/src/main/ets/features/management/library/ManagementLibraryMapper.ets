@@ -1,8 +1,14 @@
-import { VirtualFolderInfo } from 'sdk/src/main/ets/generated-client/models'
 import {
+  ImageOption,
+  LibraryOptionInfoDto,
+  VirtualFolderInfo
+} from 'sdk/src/main/ets/generated-client/models'
+import {
+  ManagementLibraryAvailableOptions,
   ManagementLibraryDraft,
   ManagementLibraryItem,
-  ManagementLibraryOptions
+  ManagementLibraryOptions,
+  ManagementLibraryTypeOptions
 } from './ManagementLibraryModels'
 import { ManagementLibraryPolicy } from './ManagementLibraryPolicy'
 
@@ -15,6 +21,32 @@ export class ManagementLibraryMapper {
 
   static serializeOptions(options: ManagementLibraryOptions): string {
     return JSON.stringify(options)
+  }
+
+  static defaultTypeOptions(available: ManagementLibraryAvailableOptions): ManagementLibraryTypeOptions[] {
+    return (available.TypeOptions || []).map((source): ManagementLibraryTypeOptions => {
+      const result: ManagementLibraryTypeOptions = {}
+      result.Type = source.Type || ''
+      result.MetadataFetchers = ManagementLibraryMapper.enabledProviderNames(source.MetadataFetchers)
+      result.MetadataFetcherOrder = ManagementLibraryMapper.providerNames(source.MetadataFetchers)
+      result.ImageFetchers = ManagementLibraryMapper.enabledProviderNames(source.ImageFetchers)
+      result.ImageFetcherOrder = ManagementLibraryMapper.providerNames(source.ImageFetchers)
+      result.SimilarItemProviders = ManagementLibraryMapper.enabledProviderNames(source.SimilarItemProviders)
+      result.SimilarItemProviderOrder = ManagementLibraryMapper.providerNames(source.SimilarItemProviders)
+      result.ImageOptions = ManagementLibraryMapper.cloneImageOptions(source.DefaultImageOptions || [])
+      return result
+    })
+  }
+
+  static providerNames(options: LibraryOptionInfoDto[] | undefined): string[] {
+    return (options || []).map((item: LibraryOptionInfoDto) => item.Name || '')
+      .filter((name: string) => name.length > 0)
+  }
+
+  static enabledProviderNames(options: LibraryOptionInfoDto[] | undefined): string[] {
+    return (options || []).filter((item: LibraryOptionInfoDto) => item.DefaultEnabled === true)
+      .map((item: LibraryOptionInfoDto) => item.Name || '')
+      .filter((name: string) => name.length > 0)
   }
 
   static toItem(folder: VirtualFolderInfo): ManagementLibraryItem {
@@ -54,5 +86,15 @@ export class ManagementLibraryMapper {
     draft.options = ManagementLibraryMapper.cloneOptions(source.options)
     draft.originalOptionsJson = source.originalOptionsJson
     return draft
+  }
+
+  private static cloneImageOptions(options: ImageOption[]): ImageOption[] {
+    return options.map((source: ImageOption): ImageOption => {
+      return {
+        Type: source.Type,
+        Limit: source.Limit,
+        MinWidth: source.MinWidth
+      }
+    })
   }
 }
