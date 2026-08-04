@@ -14,8 +14,10 @@ import { AxiosResponse } from "@ohos/axios";
 import { getSystemApi } from "sdk/src/main/ets/utils/api/system-api";
 import { ApiClient } from "../../network/ApiClient";
 import { emitter } from "@kit.BasicServicesKit";
-import { TokenExpiredEvent } from "../../events/Events";
+import { MediaLibraryRefreshEvent, TokenExpiredEvent } from "../../events/Events";
 import { AppRouteDestination } from "../../component/AppRouteDestination";
+import { ManagementLibraryRepository } from "../management/library/ManagementLibraryRepository";
+import { ManagementLibraryOperationResult } from "../management/library/ManagementLibraryModels";
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
@@ -31,6 +33,7 @@ export struct IndexPage {
   private readonly favoriteScroller: Scroller = new Scroller()
   private readonly mediaScroller: Scroller = new Scroller()
   private readonly mineScroller: Scroller = new Scroller()
+  private readonly libraryRepository: ManagementLibraryRepository = new ManagementLibraryRepository()
   //是否点了取消登录
   @Local isCancel: boolean = false
 
@@ -100,8 +103,61 @@ export struct IndexPage {
       this.appUIState.rootNavigationHomeHeroVisible
   }
 
+  private showLibraryOperationResult(result: ManagementLibraryOperationResult): void {
+    this.getUIContext().getPromptAction().showToast({
+      message: result.ok ? $r('app.string.management_library_scan_started') :
+        $r('app.string.management_library_operation_failed')
+    })
+  }
+
+  private async startAllLibraryScan(): Promise<void> {
+    if (this.appUIState.rootNavigationMediaScanBusy) {
+      return
+    }
+    this.appUIState.rootNavigationMediaScanBusy = true
+    try {
+      this.showLibraryOperationResult(await this.libraryRepository.startAllScan())
+    } finally {
+      this.appUIState.rootNavigationMediaScanBusy = false
+    }
+  }
+
+  private mediaAdministratorMenus(): Array<NavigationMenuItem> {
+    return [{
+      value: $r('app.string.management_library_add'),
+      icon: $r('sys.symbol.plus'),
+      action: () => {
+        HMRouterMgr.to(RouterConsts.ManagementLibraryEditorPage)
+          .withParam({ libraryId: '' })
+          .push()
+      }
+    }, {
+      value: $r('app.string.management_library_scan_all'),
+      icon: $r('sys.symbol.play_fill'),
+      isEnabled: !this.appUIState.rootNavigationMediaScanBusy,
+      action: () => {
+        this.startAllLibraryScan()
+      }
+    }, {
+      value: $r('app.string.management_library_title'),
+      icon: $r('sys.symbol.list_bullet_square'),
+      action: () => {
+        HMRouterMgr.to(RouterConsts.ManagementLibrariesPage).push()
+      }
+    }, {
+      value: $r('app.string.management_refresh'),
+      icon: $r('sys.symbol.arrow_clockwise'),
+      action: () => {
+        this.getUIContext().getHostContext()?.eventHub.emit(MediaLibraryRefreshEvent)
+      }
+    }]
+  }
+
   private rootNavigationMenus(): Array<NavigationMenuItem> {
     let menus: Array<NavigationMenuItem> = []
+    if (this.appUIState.rootNavigationMediaAdminActionsVisible) {
+      return this.mediaAdministratorMenus()
+    }
     if (!this.appUIState.rootNavigationHomeActionsVisible) {
       return menus
     }

@@ -27,6 +27,8 @@ export class AppUIState {
   @Trace rootNavigationTitle: string = '首页'
   @Trace rootNavigationTitleBarVisible: boolean = false
   @Trace rootNavigationHomeActionsVisible: boolean = false
+  @Trace rootNavigationMediaAdminActionsVisible: boolean = false
+  @Trace rootNavigationMediaScanBusy: boolean = false
   @Trace rootNavigationHomeHeroVisible: boolean = false
   @Trace rootNavigationLiveTvAvailable: boolean = false
   @Trace rootNavigationHomeLibraryPinned: boolean = false

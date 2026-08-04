@@ -7,6 +7,8 @@ export class MediaUIState extends BaseUIState {
   @Trace favoriteCount: number = 0;
   //媒体库列表
   @Trace mediaList: MediaItem[] = []
+  @Trace isAdministrator: boolean = false
+  @Trace isScanBusy: boolean = false
   @Trace isRefreshing: boolean = false;
   @Trace refreshStatus: RefreshStatus = RefreshStatus.Inactive
   @Trace refreshOffset: number = 0

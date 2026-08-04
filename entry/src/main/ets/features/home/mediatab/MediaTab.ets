@@ -8,8 +8,9 @@ import { ActionBar } from "../../../component/ActionBar";
 import { FailedView } from "../../../component/FailedView";
 import { BaseGroupItem, ListGroup } from "../../../component/ListGroup";
 import { AppUIState } from "../../../entity/AppUIState";
-import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver";
-import { ToastUtil } from "../../../utils/ToastUtil";
+import { MediaLibraryRefreshEvent } from "../../../events/Events";
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver";
+import { ManagementLibraryOperationResult } from "../../management/library/ManagementLibraryModels";
 import { MediaUIState } from "./MediaUIState";
 import { MediaViewModel } from "./MediaViewModel";
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
@@ -19,9 +20,13 @@ export struct MediaTab {
   @Param contentBottomInset?: number = undefined
   @Param rootTitleBarOwned: boolean = false
   @Param contentScroller: Scroller = new Scroller()
+  @Param onAdministratorStateChange: (isAdministrator: boolean) => void = (_isAdministrator: boolean) => {}
   @Local ui: MediaUIState = new MediaUIState(this.getUIContext())
   @Local vm: MediaViewModel = new MediaViewModel(this.ui)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  private refreshEventHandler = (): void => {
+    this.vm.init()
+  }
 
   private scrollTail(): number {
     return HomeInsetsPolicy.scrollTail(this.contentBottomInset, this.appUIState.safeBottom)
@@ -37,8 +42,95 @@ export struct MediaTab {
     return safeTop + UIConstants.ACTION_BAR_HEIGHT
   }
 
+  @Monitor('ui.isAdministrator')
+  onAdministratorChange(): void {
+    this.onAdministratorStateChange(this.ui.isAdministrator)
+  }
+
   aboutToAppear(): void {
+    this.getUIContext().getHostContext()?.eventHub.on(MediaLibraryRefreshEvent, this.refreshEventHandler)
     this.vm.init()
+  }
+
+  aboutToDisappear(): void {
+    this.getUIContext().getHostContext()?.eventHub.off(MediaLibraryRefreshEvent, this.refreshEventHandler)
+    this.onAdministratorStateChange(false)
+  }
+
+  private emitLibraryRefresh(): void {
+    this.getUIContext().getHostContext()?.eventHub.emit(MediaLibraryRefreshEvent)
+  }
+
+  private showScanResult(result: ManagementLibraryOperationResult): void {
+    this.getUIContext().getPromptAction().showToast({
+      message: result.ok ? $r('app.string.management_library_scan_started') :
+        $r('app.string.management_library_operation_failed')
+    })
+  }
+
+  private actionTextColor(primary: boolean): ResourceColor {
+    if (primary) {
+      return $r('app.color.on_primary')
+    }
+    return this.useNativeSurface() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  @Builder
+  private administratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
+    primary: boolean, action: () => void) {
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: 6 }) {
+        SymbolGlyph(icon)
+          .fontSize(17)
+          .fontColor([this.actionTextColor(primary)])
+        Text(title)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.actionTextColor(primary))
+          .maxLines(1)
+      }
+    }
+    .height(40)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(20)
+    .backgroundColor(this.useNativeSurface() ? Color.Transparent :
+      (primary ? $r('app.color.color_main') : $r('app.color.bg_1')))
+    .systemMaterial(this.useNativeSurface() ? AppThemeSurfaceResolver.material(
+      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive) :
+      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .enabled(enabled)
+    .opacity(enabled ? 1 : 0.55)
+    .onClick(action)
+  }
+
+  @Builder
+  private administratorActions() {
+    if (!this.rootTitleBarOwned && this.ui.isAdministrator) {
+      Scroll() {
+        Row({ space: 8 }) {
+          this.administratorAction($r('app.string.management_library_add'), $r('sys.symbol.plus'), true,
+            false, () => {
+              HMRouterMgr.to(RouterConsts.ManagementLibraryEditorPage)
+                .withParam({ libraryId: '' })
+                .push()
+            })
+          this.administratorAction($r('app.string.management_library_scan_all'), $r('sys.symbol.play_fill'),
+            !this.ui.isScanBusy, true, () => {
+              this.vm.scanAll().then((result: ManagementLibraryOperationResult) => this.showScanResult(result))
+            })
+          this.administratorAction($r('app.string.management_library_title'),
+            $r('sys.symbol.list_bullet_square'), true, false, () => {
+              HMRouterMgr.to(RouterConsts.ManagementLibrariesPage).push()
+            })
+          this.administratorAction($r('app.string.management_refresh'), $r('sys.symbol.arrow_clockwise'), true,
+            false, () => this.emitLibraryRefresh())
+        }
+      }
+      .width('100%')
+      .height(48)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+    }
   }
 
   @Builder
@@ -66,6 +158,7 @@ export struct MediaTab {
           Scroll(this.contentScroller) {
             Column() {
               Blank().height(this.contentTopSpacer())
+              this.administratorActions()
               // ListGroup({
               //   items: [new BaseGroupItem('收藏', $r('app.media.ic_unlike'), this.ui.favoriteCount + '')],
               //   onItemClick: (_index) => {
@@ -87,7 +180,7 @@ export struct MediaTab {
                     .withParam(this.ui.mediaList[index])
                     .push()
                 }
-              }).margin({ top: 12 })
+              }).margin({ top: this.ui.isAdministrator && !this.rootTitleBarOwned ? 4 : 12 })
               Blank().height(this.scrollTail())
             }.alignItems(HorizontalAlign.Start)
             .padding({

@@ -12,10 +12,16 @@ import { PageState } from "../../../common/base/BaseUIState";
 import { getTypeByCollectionType } from "../../../common/CommonFunc";
 import { ApiClient } from "../../../network/ApiClient";
 import { MediaItem } from "../hometab/HomeUIState";
+import {
+  ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult
+} from "../../management/library/ManagementLibraryModels";
+import { ManagementLibraryRepository } from "../../management/library/ManagementLibraryRepository";
 import { MediaUIState } from "./MediaUIState";
 
 export class MediaViewModel {
   ui: MediaUIState
+  private libraryRepository: ManagementLibraryRepository = new ManagementLibraryRepository()
 
   constructor(ui: MediaUIState) {
     this.ui = ui
@@ -27,14 +33,30 @@ export class MediaViewModel {
       //获取收藏数量
       // await this.getFavoriteCount()
       //获取媒体库列表
+      const administratorResult = this.libraryRepository.requireAdministrator()
       this.ui.mediaList = await this.getMediaList()
+      this.ui.isAdministrator = (await administratorResult).ok
       this.ui.pageState = PageState.Content
     } catch (_error) {
       console.error('[MediaVM] init failed')
       this.ui.mediaList = []
+      this.ui.isAdministrator = false
       this.ui.pageState = PageState.Error
     } finally {
       this.ui.isRefreshing = false
+    }
+  }
+
+  async scanAll(): Promise<ManagementLibraryOperationResult> {
+    if (this.ui.isScanBusy) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.Conflict, 'management_library_operation_in_progress')
+    }
+    this.ui.isScanBusy = true
+    try {
+      return await this.libraryRepository.startAllScan()
+    } finally {
+      this.ui.isScanBusy = false
     }
   }
 

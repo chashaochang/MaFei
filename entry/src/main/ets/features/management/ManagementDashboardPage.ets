@@ -136,6 +136,18 @@ export struct ManagementDashboardPage {
     .backgroundColor(Color.Transparent)
   }
 
+  @Styles
+  pressedLibraryRowStyle(): void {
+    .backgroundColor(this.useNativeMaterial() ?
+      AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) : $r('app.color.bg_hover'))
+  }
+
+  @Styles
+  normalLibraryRowStyle(): void {
+    .backgroundColor(this.useNativeMaterial() ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+  }
+
   private openSessionDetail(session: ManagementSessionItem): void {
     HMRouterMgr.to(RouterConsts.ManagementSessionDetailPage)
       .withParam({ sessionId: session.id })
@@ -158,6 +170,10 @@ export struct ManagementDashboardPage {
 
   private openActivity(): void {
     HMRouterMgr.to(RouterConsts.ManagementActivityPage).push()
+  }
+
+  private openLibraries(): void {
+    HMRouterMgr.to(RouterConsts.ManagementLibrariesPage).push()
   }
 
   private async refreshAll(): Promise<void> {
@@ -417,6 +433,30 @@ export struct ManagementDashboardPage {
   }
 
   @Builder
+  librariesCardBody() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.list_bullet_square'))
+        .fontSize(20)
+        .fontColor([$r('app.color.color_main')])
+      Text($r('app.string.management_library_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor())
+        .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([this.secondaryTextColor()])
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 16, right: 14 })
+    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+    .clip(true)
+    .stateStyles({ pressed: this.pressedLibraryRowStyle, normal: this.normalLibraryRowStyle })
+    .onClick(() => this.openLibraries())
+  }
+
+  @Builder
   inlineState(message: ResourceStr, retry: boolean = false, onRetry?: () => void) {
     Row({ space: 8 }) {
       SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
@@ -631,6 +671,7 @@ export struct ManagementDashboardPage {
       Row({ space: 12 }) {
         Column({ space: 12 }) {
           this.overviewCardSurface()
+          this.librariesCardBody()
           this.usersCardSurface()
           this.tasksCardSurface()
         }
@@ -646,6 +687,7 @@ export struct ManagementDashboardPage {
     } else {
       Column({ space: 12 }) {
         this.overviewCardSurface()
+        this.librariesCardBody()
         this.usersCardSurface()
         this.tasksCardSurface()
         this.sessionsCardSurface()

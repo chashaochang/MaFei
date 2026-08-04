@@ -5,6 +5,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const managementLibraryServicePath =
   'entry/src/main/ets/features/management/library/ManagementLibraryApiService.ets'
 
+const entryPointPaths = Object.freeze({
+  appState: 'entry/src/main/ets/entity/AppUIState.ets',
+  index: 'entry/src/main/ets/features/splash/IndexPage.ets',
+  home: 'entry/src/main/ets/features/home/HomeScreen.ets',
+  mediaTab: 'entry/src/main/ets/features/home/mediatab/MediaTab.ets',
+  dashboard: 'entry/src/main/ets/features/management/ManagementDashboardPage.ets',
+  libraries: 'entry/src/main/ets/features/management/library/ManagementLibrariesPage.ets',
+  events: 'entry/src/main/ets/events/Events.ets'
+})
+
 const requiredEndpoints = Object.freeze([
   '/Library/VirtualFolders',
   '/Library/VirtualFolders/LibraryOptions',
@@ -62,6 +72,41 @@ export function verifyServiceOwnershipText(source) {
   }
 }
 
+function requireMarker(source, marker, message) {
+  if (!source.includes(marker)) {
+    throw new Error(message + ': ' + marker)
+  }
+}
+
+export function verifyMediaEntryScopeText(source) {
+  requireMarker(source, 'rootNavigationMediaAdminActionsVisible', 'missing explicit Media menu state')
+  requireMarker(source, 'selectedDestination === HomeDestination.Media', 'Media menu is not destination scoped')
+  requireMarker(source, '&& this.mediaAdministrator', 'Media menu is not administrator scoped')
+  requireMarker(source, "publishRootNavigationChrome(false, '首页', false, false)",
+    'Media menu state is not cleared when HomeScreen disappears')
+}
+
+export function verifyMediaEntryPointsText(sources) {
+  requireMarker(sources.appState, 'rootNavigationMediaAdminActionsVisible', 'missing Media menu state')
+  requireMarker(sources.appState, 'rootNavigationMediaScanBusy', 'missing Media scan busy state')
+  verifyMediaEntryScopeText(sources.home)
+  for (const marker of [
+    'ManagementLibraryEditorPage',
+    'ManagementLibrariesPage',
+    'startAllScan()',
+    'MediaLibraryRefreshEvent'
+  ]) {
+    requireMarker(sources.index, marker, 'root Navigation is missing a Media administrator action')
+  }
+  requireMarker(sources.mediaTab, '!this.rootTitleBarOwned && this.ui.isAdministrator',
+    'legacy Media actions are not administrator scoped')
+  requireMarker(sources.dashboard, 'RouterConsts.ManagementLibrariesPage',
+    'server dashboard is missing the media-library entry')
+  requireMarker(sources.libraries, 'MediaLibraryRefreshEvent',
+    'management library list does not consume shared refresh')
+  requireMarker(sources.events, 'MediaLibraryRefreshEvent', 'shared media-library refresh event is missing')
+}
+
 function collectUiFiles(directory) {
   const files = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -90,6 +135,8 @@ export function runManagementLibraryValidation(workspaceRoot = defaultWorkspaceR
   for (const uiPath of collectUiFiles(libraryRoot)) {
     verifyUiText(readFileSync(uiPath, 'utf8'), relative(workspaceRoot, uiPath))
   }
+  verifyMediaEntryPointsText(Object.fromEntries(Object.entries(entryPointPaths).map(([key, path]) =>
+    [key, readFileSync(resolve(workspaceRoot, path), 'utf8')])))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

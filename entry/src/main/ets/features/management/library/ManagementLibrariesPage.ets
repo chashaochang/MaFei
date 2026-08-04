@@ -8,6 +8,7 @@ import {
 import { PageState } from '../../../common/base/BaseUIState'
 import { CustomRefreshComponent } from '../../../common/CustomRefreshComponent'
 import { RouterConsts } from '../../../common/RouterConsts'
+import { MediaLibraryRefreshEvent } from '../../../events/Events'
 import { ActionBar } from '../../../component/ActionBar'
 import { AppRouteDestination } from '../../../component/AppRouteDestination'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
@@ -35,8 +36,12 @@ export struct ManagementLibrariesPage {
   private pageHiddenCallback = (_context: HMLifecycleContext): void => {
     this.vm.stop()
   }
+  private refreshEventHandler = (): void => {
+    this.vm.load(true)
+  }
 
   aboutToAppear(): void {
+    this.getUIContext().getHostContext()?.eventHub.on(MediaLibraryRefreshEvent, this.refreshEventHandler)
     this.lifecycleOwner = HMRouterMgr.getCurrentLifecycleOwner()
     if (this.lifecycleOwner) {
       this.lifecycleOwner.addObserver(HMLifecycleState.onShown, this.pageShownCallback)
@@ -47,6 +52,7 @@ export struct ManagementLibrariesPage {
   }
 
   aboutToDisappear(): void {
+    this.getUIContext().getHostContext()?.eventHub.off(MediaLibraryRefreshEvent, this.refreshEventHandler)
     this.lifecycleOwner?.removeObserver(HMLifecycleState.onShown, this.pageShownCallback)
     this.lifecycleOwner?.removeObserver(HMLifecycleState.onHidden, this.pageHiddenCallback)
     this.lifecycleOwner = null

@@ -1,4 +1,5 @@
 export const HomeRefreshEvent = "HomeRefreshEvent"
+export const MediaLibraryRefreshEvent = "MediaLibraryRefreshEvent"
 export const VideoDetailRefreshEvent = "VideoDetailRefreshEvent"
 export const TokenExpiredEvent = "TokenExpiredEvent"
 export const HomeBackPressedEvent = "HomeBackPressedEvent"

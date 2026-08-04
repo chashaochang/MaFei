@@ -45,6 +45,7 @@ export struct HomeScreen {
   private contentTabsController: TabsController = new TabsController()
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
+  @Local mediaAdministrator: boolean = false
   private lastTime: number = 0;
   private themePromptChecked: boolean = false
   private themePromptCompleted: boolean = false
@@ -200,10 +201,12 @@ export struct HomeScreen {
     return '首页'
   }
 
-  private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean): void {
+  private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean,
+    mediaAdminActionsVisible: boolean): void {
     this.appUIState.rootNavigationTitleBarVisible = visible
     this.appUIState.rootNavigationTitle = title
     this.appUIState.rootNavigationHomeActionsVisible = homeActionsVisible
+    this.appUIState.rootNavigationMediaAdminActionsVisible = mediaAdminActionsVisible
   }
 
   private updateRootNavigationTitleBar(): void {
@@ -211,7 +214,8 @@ export struct HomeScreen {
     this.publishRootNavigationChrome(
       visible,
       this.rootNavigationTitle(),
-      visible && this.ui.selectedDestination === HomeDestination.Home
+      visible && this.ui.selectedDestination === HomeDestination.Home,
+      visible && this.ui.selectedDestination === HomeDestination.Media && this.mediaAdministrator
     )
   }
 
@@ -239,7 +243,7 @@ export struct HomeScreen {
   }
 
   aboutToDisappear() {
-    this.publishRootNavigationChrome(false, '首页', false)
+    this.publishRootNavigationChrome(false, '首页', false, false)
     if (this.themePromptTimer >= 0) {
       clearTimeout(this.themePromptTimer)
       this.themePromptTimer = -1
@@ -599,7 +603,11 @@ export struct HomeScreen {
     MediaTab({
       contentBottomInset: this.contentBottomInset,
       rootTitleBarOwned: this.shell === HomeShellKind.PhoneNativeHds,
-      contentScroller: this.mediaScroller
+      contentScroller: this.mediaScroller,
+      onAdministratorStateChange: (isAdministrator: boolean) => {
+        this.mediaAdministrator = isAdministrator
+        this.updateRootNavigationTitleBar()
+      }
     })
   }
 

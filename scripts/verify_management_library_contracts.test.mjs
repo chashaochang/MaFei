@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   loadManagementLibraryServiceText,
   runManagementLibraryValidation,
+  verifyMediaEntryScopeText,
   verifyServiceOwnershipText,
   verifyServiceText,
   verifyUiText
@@ -62,4 +63,12 @@ test('rejects query-string concatenation in the API service', () => {
 
 test('accepts the current media library API ownership', () => {
   assert.doesNotThrow(() => runManagementLibraryValidation())
+})
+
+test('rejects Media root actions without administrator and destination scoping', () => {
+  assert.throws(() => verifyMediaEntryScopeText(`
+    rootNavigationMediaAdminActionsVisible
+    selectedDestination === HomeDestination.Media
+    publishRootNavigationChrome(false, '首页', false, false)
+  `), /administrator scoped/)
 })
