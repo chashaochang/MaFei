@@ -236,7 +236,7 @@ export function validateNativeHomeVisualContracts(sources) {
   }
 
   const titleBarOptions = methodBlock(routeDestination, 'nativeTitleBarOptions')
-  if (!/enableScrollEffect\s*:\s*!this\.appUIState\.rootNavigationHomeLibraryPinned/.test(
+  if (!/enableScrollEffect\s*:\s*!this\.rootHomeLibraryPinned\s*\(\s*\)/.test(
     titleBarOptions) ||
     /hdsMaterial\.MaterialType\.NONE/.test(titleBarOptions) ||
     !/titleMaterialFollowsSystem\s*\?[\s\S]*hdsMaterial\.MaterialType\.ADAPTIVE/.test(
@@ -244,7 +244,11 @@ export function validateNativeHomeVisualContracts(sources) {
     throw new Error('The HDS title bar must stop blur without disabling menu material')
   }
   const hdsDestination = methodBlock(routeDestination, 'hdsDestination')
-  if (!/hideTitleBar\s*\([\s\S]*rootNavigationHomeLibraryPinned/.test(hdsDestination)) {
+  const rootPinnedState = methodBlock(routeDestination, 'rootHomeLibraryPinned')
+  if (!/ownsRootNavigationChrome\s*&&\s*this\.appUIState\.rootNavigationHomeLibraryPinned/.test(
+    rootPinnedState) ||
+    !/hideTitleBar\s*\([\s\S]*rootHomeLibraryPinned\s*\(\s*\)/.test(hdsDestination) ||
+    !/ownsRootNavigationChrome\s*:\s*true/.test(indexPage)) {
     throw new Error('The pinned header must remove the HDS title-bar touch interception layer')
   }
   if (!/if\s*\(\s*this\.latestChipStripPinned\s*\)[\s\S]*Button\s*\(\s*\{\s*type\s*:\s*ButtonType\.Circle/.test(

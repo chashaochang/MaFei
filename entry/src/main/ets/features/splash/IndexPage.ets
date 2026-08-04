@@ -235,6 +235,7 @@ export struct IndexPage {
       contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible,
       heroTitleChrome: this.rootNavigationHeroChromeVisible(),
       titleMaterialFollowsSystem: true,
+      ownsRootNavigationChrome: true,
       menus: this.rootNavigationMenus(),
       scrollControllers: this.rootNavigationScrollControllers(),
       contentBuilder: () => {

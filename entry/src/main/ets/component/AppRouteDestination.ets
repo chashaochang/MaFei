@@ -27,6 +27,7 @@ export struct AppRouteDestination {
   @Prop contentExtendsUnderTitleBar: boolean = false
   @Prop heroTitleChrome: boolean = false
   @Prop titleMaterialFollowsSystem: boolean = true
+  @Prop ownsRootNavigationChrome: boolean = false
   @Prop menus: Array<NavigationMenuItem> = []
   @Prop scrollControllers: Array<Scroller> = []
   @BuilderParam contentBuilder: () => void = EmptyRouteContent
@@ -71,9 +72,12 @@ export struct AppRouteDestination {
     })
   }
 
+  private rootHomeLibraryPinned(): boolean {
+    return this.ownsRootNavigationChrome && this.appUIState.rootNavigationHomeLibraryPinned
+  }
+
   private nativeMainTitle(): ResourceStr {
-    return this.appUIState.rootNavigationHomeActionsVisible &&
-      this.appUIState.rootNavigationHomeLibraryPinned ? '' : this.title
+    return this.rootHomeLibraryPinned() ? '' : this.title
   }
 
   private nativeTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -92,7 +96,7 @@ export struct AppRouteDestination {
       },
       style: {
         scrollEffectOpts: {
-          enableScrollEffect: !this.appUIState.rootNavigationHomeLibraryPinned,
+          enableScrollEffect: !this.rootHomeLibraryPinned(),
           scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
           blurEffectiveStartOffset: LengthMetrics.vp(1),
           blurEffectiveEndOffset: LengthMetrics.vp(24)
@@ -181,7 +185,7 @@ export struct AppRouteDestination {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(this.nativeTitleBarOptions())
     .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome() ||
-      this.appUIState.rootNavigationHomeLibraryPinned)
+      this.rootHomeLibraryPinned())
     .hideBackButton(!this.backButtonVisible)
     .hideToolBar(true)
     .bindToScrollable(this.titleBarVisible && this.usesNativeChrome() ? this.scrollControllers : [])
