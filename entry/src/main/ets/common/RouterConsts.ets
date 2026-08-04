@@ -30,5 +30,8 @@ export class RouterConsts {
   static readonly ManagementUsersPage = 'ManagementUsersPage'
   static readonly ManagementUserDetailPage = 'ManagementUserDetailPage'
   static readonly ManagementUserCreatePage = 'ManagementUserCreatePage'
+  static readonly ManagementLibrariesPage = 'ManagementLibrariesPage'
+  static readonly ManagementLibraryEditorPage = 'ManagementLibraryEditorPage'
+  static readonly ManagementLibraryPathBrowserPage = 'ManagementLibraryPathBrowserPage'
 
 }

@@ -1959,6 +1959,106 @@
     {
       "name": "management_activity_detail_title",
       "value": "活动详情"
+    },
+    {
+      "name": "management_library_title",
+      "value": "媒体库管理"
+    },
+    {
+      "name": "management_library_add",
+      "value": "添加媒体库"
+    },
+    {
+      "name": "management_library_scan_all",
+      "value": "扫描全部媒体库"
+    },
+    {
+      "name": "management_library_scan_all_message",
+      "value": "启动 Jellyfin 全部媒体库扫描？"
+    },
+    {
+      "name": "management_library_start_scan",
+      "value": "开始扫描"
+    },
+    {
+      "name": "management_library_scan_one",
+      "value": "扫描此媒体库"
+    },
+    {
+      "name": "management_library_scan_started",
+      "value": "已请求服务器开始扫描"
+    },
+    {
+      "name": "management_library_scanning",
+      "value": "扫描中"
+    },
+    {
+      "name": "management_library_ready",
+      "value": "就绪"
+    },
+    {
+      "name": "management_library_edit",
+      "value": "编辑媒体库"
+    },
+    {
+      "name": "management_library_remove",
+      "value": "移除媒体库"
+    },
+    {
+      "name": "management_library_remove_title",
+      "value": "确认移除媒体库"
+    },
+    {
+      "name": "management_library_remove_message",
+      "value": "将移除媒体库："
+    },
+    {
+      "name": "management_library_remove_notice",
+      "value": "此操作只移除 Jellyfin 虚拟媒体库配置，不删除服务器上的源文件。"
+    },
+    {
+      "name": "management_library_remove_success",
+      "value": "媒体库已移除"
+    },
+    {
+      "name": "management_library_more_actions",
+      "value": "更多媒体库操作"
+    },
+    {
+      "name": "management_library_empty",
+      "value": "服务器还没有媒体库"
+    },
+    {
+      "name": "management_library_load_failed",
+      "value": "无法加载媒体库"
+    },
+    {
+      "name": "management_library_unsupported",
+      "value": "当前服务器不支持媒体库管理"
+    },
+    {
+      "name": "management_library_stale",
+      "value": "刷新失败，正在显示上次加载的数据"
+    },
+    {
+      "name": "management_library_operation_in_progress",
+      "value": "已有媒体库操作正在进行"
+    },
+    {
+      "name": "management_library_operation_failed",
+      "value": "媒体库操作失败"
+    },
+    {
+      "name": "management_library_no_paths",
+      "value": "未配置媒体路径"
+    },
+    {
+      "name": "management_library_paths_unit",
+      "value": "个路径"
+    },
+    {
+      "name": "management_library_select_hint",
+      "value": "选择一个媒体库查看详情"
     }
   ]
 }

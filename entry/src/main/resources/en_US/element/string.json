@@ -1771,6 +1771,106 @@
     {
       "name": "management_activity_detail_title",
       "value": "Activity details"
+    },
+    {
+      "name": "management_library_title",
+      "value": "Media libraries"
+    },
+    {
+      "name": "management_library_add",
+      "value": "Add library"
+    },
+    {
+      "name": "management_library_scan_all",
+      "value": "Scan all libraries"
+    },
+    {
+      "name": "management_library_scan_all_message",
+      "value": "Start a scan of all Jellyfin libraries?"
+    },
+    {
+      "name": "management_library_start_scan",
+      "value": "Start scan"
+    },
+    {
+      "name": "management_library_scan_one",
+      "value": "Scan this library"
+    },
+    {
+      "name": "management_library_scan_started",
+      "value": "The server was asked to start scanning"
+    },
+    {
+      "name": "management_library_scanning",
+      "value": "Scanning"
+    },
+    {
+      "name": "management_library_ready",
+      "value": "Ready"
+    },
+    {
+      "name": "management_library_edit",
+      "value": "Edit library"
+    },
+    {
+      "name": "management_library_remove",
+      "value": "Remove library"
+    },
+    {
+      "name": "management_library_remove_title",
+      "value": "Remove media library"
+    },
+    {
+      "name": "management_library_remove_message",
+      "value": "The following library will be removed:"
+    },
+    {
+      "name": "management_library_remove_notice",
+      "value": "This removes only the Jellyfin virtual-library configuration. Source files on the server are not deleted."
+    },
+    {
+      "name": "management_library_remove_success",
+      "value": "Library removed"
+    },
+    {
+      "name": "management_library_more_actions",
+      "value": "More library actions"
+    },
+    {
+      "name": "management_library_empty",
+      "value": "This server has no media libraries"
+    },
+    {
+      "name": "management_library_load_failed",
+      "value": "Unable to load media libraries"
+    },
+    {
+      "name": "management_library_unsupported",
+      "value": "This server does not support media-library management"
+    },
+    {
+      "name": "management_library_stale",
+      "value": "Refresh failed. Showing the last loaded data"
+    },
+    {
+      "name": "management_library_operation_in_progress",
+      "value": "Another media-library operation is in progress"
+    },
+    {
+      "name": "management_library_operation_failed",
+      "value": "Media-library operation failed"
+    },
+    {
+      "name": "management_library_no_paths",
+      "value": "No media paths configured"
+    },
+    {
+      "name": "management_library_paths_unit",
+      "value": "paths"
+    },
+    {
+      "name": "management_library_select_hint",
+      "value": "Select a library to view details"
     }
   ]
 }
