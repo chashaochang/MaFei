@@ -1,3 +1,6 @@
+import { ThemeStyle } from '../entity/ThemeStyle';
+import { ThemeStylePreview } from './ThemeStylePreview';
+
 @ComponentV2
 export struct ThemeUpgradeDialog {
   @Require @Param onSelectFeiniu: () => void
@@ -5,51 +8,28 @@ export struct ThemeUpgradeDialog {
   @Require @Param onDismiss: () => void
 
   @Builder
-  previewCard(highlight: boolean) {
-    Column({ space: 5 }) {
-      Row()
-        .width('100%')
-        .aspectRatio(2 / 3)
-        .backgroundColor(highlight ? $r('app.color.primary_light_hover') :
-          $r('sys.color.comp_background_tertiary'))
-        .borderRadius(10)
-      Row()
-        .height(5)
-        .width('78%')
-        .backgroundColor($r('sys.color.font_secondary'))
-        .borderRadius(3)
-    }
-    .layoutWeight(1)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
   nativeThemePreview() {
-    Column() {
-      Row() {
-        Column({ space: 5 }) {
-          Row().height(8).width(86).borderRadius(4).backgroundColor($r('sys.color.font_primary'))
-          Row().height(6).width(132).borderRadius(3).backgroundColor($r('sys.color.font_secondary'))
-        }
-        .alignItems(HorizontalAlign.Start)
-        Blank()
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_primary')])
+    Row({ space: 12 }) {
+      Column({ space: 6 }) {
+        ThemeStylePreview({ style: ThemeStyle.Native, compact: true })
+        Text($r('app.string.theme_native_name'))
+          .fontSize(11)
+          .fontColor($r('sys.color.font_secondary'))
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-      Row({ space: 8 }) {
-        this.previewCard(true)
-        this.previewCard(false)
-        this.previewCard(false)
+      .alignItems(HorizontalAlign.Start)
+
+      Column({ space: 6 }) {
+        ThemeStylePreview({ style: ThemeStyle.Feiniu, compact: true })
+        Text($r('app.string.theme_feiniu_name'))
+          .fontSize(11)
+          .fontColor($r('sys.color.font_secondary'))
       }
-      .width('100%')
-      .margin({ top: 14 })
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .height(150)
     .padding(16)
+    .justifyContent(FlexAlign.Center)
     .borderRadius(20)
     .backgroundColor($r('sys.color.comp_background_secondary'))
   }

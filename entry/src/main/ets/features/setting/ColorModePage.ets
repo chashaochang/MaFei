@@ -2,6 +2,7 @@ import { HMRouter } from '@hadss/hmrouter';
 import { RouterConsts } from '../../common/RouterConsts';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { ThemeStylePreview } from '../../component/ThemeStylePreview';
 import { AppPreference } from '../../data/AppPreference';
 import { AppUIState } from '../../entity/AppUIState';
 import { CustomColorMode } from '../../entity/CustomColorMode';
@@ -92,34 +93,9 @@ export struct ColorModePage {
   }
 
   @Builder
-  themePreview(style: ThemeStyle) {
-    Column({ space: 5 }) {
-      Row().height(8).width('100%')
-        .backgroundColor(style === ThemeStyle.Native ?
-          $r('sys.color.font_secondary') : $r('app.color.text_2'))
-        .borderRadius(4)
-      Row().height(8).width('82%')
-        .backgroundColor(style === ThemeStyle.Native ?
-          $r('sys.color.font_secondary') : $r('app.color.text_2'))
-        .borderRadius(4)
-      Row().height(8).width('58%')
-        .backgroundColor(style === ThemeStyle.Native ?
-          $r('sys.color.font_secondary') : $r('app.color.text_2'))
-        .borderRadius(4)
-    }
-    .width(72)
-    .height(54)
-    .padding(8)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(style === ThemeStyle.Native ?
-      $r('sys.color.comp_background_tertiary') : $r('app.color.primary_light_hover'))
-    .borderRadius(AppThemeTokens.groupRadius(style))
-  }
-
-  @Builder
   private feiniuThemeChoice(style: ThemeStyle, title: ResourceStr, description: ResourceStr) {
     Row({ space: 12 }) {
-      this.themePreview(style)
+      ThemeStylePreview({ style: style })
       Column({ space: 4 }) {
         Text(title)
           .fontSize(16)
@@ -157,7 +133,7 @@ export struct ColorModePage {
   @Builder
   private nativeThemeChoice(style: ThemeStyle, title: ResourceStr, description: ResourceStr) {
     Row({ space: 12 }) {
-      this.themePreview(style)
+      ThemeStylePreview({ style: style })
       Column({ space: 4 }) {
         Text(title)
           .fontSize(16)
