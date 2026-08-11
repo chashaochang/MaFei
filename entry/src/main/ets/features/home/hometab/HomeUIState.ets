@@ -47,6 +47,8 @@ export interface VideoItem {
   id: string,
   name: string,
   image: string,
+  canDelete?: boolean,
+  path?: string,
   seriesId?: string,
   mediaName?: string,
   type?: string,

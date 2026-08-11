@@ -21,6 +21,7 @@ import {
   ManagementLibraryAvailableOptions,
   ManagementLibraryDraft,
   ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult,
   ManagementLibraryOptions,
   ManagementLibraryValidationCode,
   ManagementMediaDeleteTarget
@@ -49,6 +50,9 @@ import { ManagementLibraryEditorUIState } from
   '../main/ets/features/management/library/ManagementLibraryEditorUIState'
 import { ManagementLibraryEditorViewModel } from
   '../main/ets/features/management/library/ManagementLibraryEditorViewModel'
+import { VideoItem } from '../main/ets/features/home/hometab/HomeUIState'
+import { VideoListUIState } from '../main/ets/features/videolist/VideoListUIState'
+import { VideoListViewModel } from '../main/ets/features/videolist/VideoListViewModel'
 
 class FakeLibraryHttpResponse {
   status: number = 0
@@ -196,6 +200,13 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   async deleteItems(ids: string[]): Promise<void> {
     this.record('deleteItems')
     this.deletedIds = ids.slice()
+  }
+}
+
+class FailingMediaDeleteRepository extends ManagementMediaDeleteRepository {
+  async deleteTargets(_targets: ManagementMediaDeleteTarget[]): Promise<ManagementLibraryOperationResult> {
+    return ManagementLibraryOperationResult.failure(
+      ManagementLibraryOperationCode.Conflict, 'management_media_delete_conflict')
   }
 }
 
@@ -372,6 +383,49 @@ export default function managementLibrariesTest() {
       expect(summary.allowedPaths[0]).assertEqual('/media/a.mkv')
       expect(summary.blockedNames.length).assertEqual(1)
       expect(summary.blockedNames[0]).assertEqual('blocked')
+    })
+
+    it('keepsVideoListSelectionUniqueAndExitsAfterLastToggle', 0, () => {
+      const ui = new VideoListUIState({} as UIContext)
+      ui.enterSelection('movie')
+      ui.enterSelection('movie')
+      expect(ui.selectionMode).assertTrue()
+      expect(ui.selectedIds.length).assertEqual(1)
+      ui.toggleSelection('movie')
+      expect(ui.selectionMode).assertFalse()
+      expect(ui.selectedIds.length).assertEqual(0)
+    })
+
+    it('clearsEveryVideoListSelectionFlag', 0, () => {
+      const ui = new VideoListUIState({} as UIContext)
+      ui.enterSelection('movie')
+      ui.deletingSelection = true
+      ui.deleteDialogVisible = true
+      ui.clearSelection()
+      expect(ui.selectionMode).assertFalse()
+      expect(ui.selectedIds.length).assertEqual(0)
+      expect(ui.deletingSelection).assertFalse()
+      expect(ui.deleteDialogVisible).assertFalse()
+    })
+
+    it('keepsVideoListItemsAndSelectionWhenBatchDeleteFails', 0, async () => {
+      const ui = new VideoListUIState({} as UIContext)
+      ui.isAdministrator = true
+      const vm = new VideoListViewModel(ui, new FailingMediaDeleteRepository())
+      const item: VideoItem = {
+        id: 'movie',
+        name: 'Movie',
+        image: '',
+        canDelete: true,
+        path: '/media/movie.mkv'
+      }
+      vm.dataSource.initData([item])
+      ui.enterSelection(item.id)
+      const result = await vm.deleteSelection()
+      expect(result.ok).assertFalse()
+      expect(vm.dataSource.totalCount()).assertEqual(1)
+      expect(ui.selectionMode).assertTrue()
+      expect(ui.selectedIds[0]).assertEqual(item.id)
     })
 
     it('rechecksAdministratorBeforeDeletingMedia', 0, async () => {

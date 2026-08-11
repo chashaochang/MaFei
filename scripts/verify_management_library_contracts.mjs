@@ -15,6 +15,13 @@ const entryPointPaths = Object.freeze({
   events: 'entry/src/main/ets/events/Events.ets'
 })
 
+export const batchDeletePaths = Object.freeze({
+  homeState: 'entry/src/main/ets/features/home/hometab/HomeUIState.ets',
+  listState: 'entry/src/main/ets/features/videolist/VideoListUIState.ets',
+  listViewModel: 'entry/src/main/ets/features/videolist/VideoListViewModel.ets',
+  listPage: 'entry/src/main/ets/features/videolist/VideoListPage.ets'
+})
+
 const requiredEndpoints = Object.freeze([
   '/Library/VirtualFolders',
   '/Library/VirtualFolders/LibraryOptions',
@@ -107,6 +114,56 @@ export function verifyMediaEntryPointsText(sources) {
   requireMarker(sources.events, 'MediaLibraryRefreshEvent', 'shared media-library refresh event is missing')
 }
 
+export function verifyBatchDeleteText(sources) {
+  requireMarker(sources.homeState, 'canDelete?: boolean', 'video items must retain CanDelete')
+  requireMarker(sources.homeState, 'path?: string', 'video items must retain Path')
+  for (const marker of [
+    '@Trace selectionMode: boolean = false',
+    '@Trace selectedIds: string[] = []',
+    '@Trace deletingSelection: boolean = false',
+    '@Trace deleteDialogVisible: boolean = false',
+    'enterSelection(id: string)',
+    'toggleSelection(id: string)',
+    'clearSelection()'
+  ]) {
+    requireMarker(sources.listState, marker, 'video list selection state is incomplete')
+  }
+
+  const queryBlocks = sources.listViewModel.split(/getItems\s*\(\s*\{/).slice(1)
+    .map((segment) => segment.slice(0, segment.indexOf('}).then')))
+  if (queryBlocks.length < 2 || queryBlocks.some((block) =>
+    !block.includes("'CanDelete'") || !block.includes("'Path'"))) {
+    throw new Error('every video list query must request CanDelete and Path')
+  }
+  for (const marker of [
+    'item.CanDelete === true',
+    "item.Path || ''",
+    'this.dataSource.getDataAll()',
+    'this.deleteRepository.deleteTargets(targets)',
+    'this.ui.clearSelection()'
+  ]) {
+    requireMarker(sources.listViewModel, marker, 'video list batch-delete ownership is incomplete')
+  }
+
+  verifyUiText(sources.listPage, batchDeletePaths.listPage)
+  if (/\.deleteItems\s*\(/.test(sources.listPage)) {
+    throw new Error('VideoListPage must not submit deleteItems directly')
+  }
+  for (const marker of [
+    'ManagementMediaDeleteDialog.show',
+    'LongPressGesture()',
+    '.priorityGesture(',
+    'selectionMenus()',
+    'selectable:',
+    'selected:',
+    'onLongPress:',
+    'onSelect:',
+    '.backgroundColor(0x38007DFF)'
+  ]) {
+    requireMarker(sources.listPage, marker, 'video list selection UI is incomplete')
+  }
+}
+
 function collectUiFiles(directory) {
   const files = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -128,6 +185,11 @@ export function loadManagementLibraryServiceText(workspaceRoot = defaultWorkspac
   return readFileSync(resolve(workspaceRoot, managementLibraryServicePath), 'utf8')
 }
 
+export function loadBatchDeleteSources(workspaceRoot = defaultWorkspaceRoot()) {
+  return Object.fromEntries(Object.entries(batchDeletePaths).map(([key, path]) =>
+    [key, readFileSync(resolve(workspaceRoot, path), 'utf8')]))
+}
+
 export function runManagementLibraryValidation(workspaceRoot = defaultWorkspaceRoot()) {
   verifyServiceOwnershipText(loadManagementLibraryServiceText(workspaceRoot))
   const libraryRoot = resolve(workspaceRoot,
@@ -137,6 +199,7 @@ export function runManagementLibraryValidation(workspaceRoot = defaultWorkspaceR
   }
   verifyMediaEntryPointsText(Object.fromEntries(Object.entries(entryPointPaths).map(([key, path]) =>
     [key, readFileSync(resolve(workspaceRoot, path), 'utf8')])))
+  verifyBatchDeleteText(loadBatchDeleteSources(workspaceRoot))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

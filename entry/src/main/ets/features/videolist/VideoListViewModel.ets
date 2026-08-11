@@ -1,7 +1,7 @@
 import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
 import { AxiosResponse } from "@ohos/axios";
 import { getItemsApi } from "sdk";
-import { BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
+import { BaseItemDto, BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
@@ -10,9 +10,18 @@ import { sortOptions } from "../../entity/SortOption";
 import { ApiClient } from "../../network/ApiClient";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
+import {
+  ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult,
+  ManagementMediaDeleteSummary,
+  ManagementMediaDeleteTarget
+} from "../management/library/ManagementLibraryModels";
+import { ManagementMediaDeletePolicy } from "../management/library/ManagementMediaDeletePolicy";
+import { ManagementMediaDeleteRepository } from "../management/library/ManagementMediaDeleteRepository";
 import { VideoListUIState } from "./VideoListUIState";
 
 export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
+  private deleteRepository: ManagementMediaDeleteRepository
   controller: RefreshController = new RefreshController() //刷新控制器，声明全局变量
   dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
   mediaItem?: MediaItem
@@ -23,15 +32,120 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     this.ui.selectedSortIndex = index
     this.sortBy = [sortOptions[this.ui.selectedSortIndex].value]
     this.startIndex = 0
+    this.clearSelectionAndReload()
     this.getVideoList()
     this.sortDialog.dismiss()
   }, () => AppThemeSurfaceResolver.useNativeSurface(
     this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
+  constructor(ui: VideoListUIState,
+    deleteRepository: ManagementMediaDeleteRepository = new ManagementMediaDeleteRepository()) {
+    super(ui)
+    this.deleteRepository = deleteRepository
+  }
+
   init(mediaItem: MediaItem) {
     this.ui.title = mediaItem.name
     this.mediaItem = mediaItem
+    this.loadDeleteAccess()
     this.refresh()
+  }
+
+  private async loadDeleteAccess(): Promise<void> {
+    const result = await this.deleteRepository.requireAdministrator()
+    this.ui.isAdministrator = result.ok
+    if (!result.ok) {
+      this.ui.clearSelection()
+    }
+    this.dataSource.reloadData()
+  }
+
+  private clearSelectionAndReload(): void {
+    this.ui.clearSelection()
+    this.dataSource.reloadData()
+  }
+
+  private toVideoItem(item: BaseItemDto): VideoItem {
+    return {
+      id: item.Id || '',
+      name: item.Name || '',
+      image: getItemImageUrl(item),
+      subtitle: item.ProductionYear ? item.ProductionYear.toString() : '',
+      score: item.CommunityRating ? item.CommunityRating : 0,
+      tags: getResolutions(item.MediaStreams),
+      mediaName: this.ui.title,
+      type: item.Type,
+      canDelete: item.CanDelete === true,
+      path: item.Path || ''
+    }
+  }
+
+  private deleteTarget(item: VideoItem): ManagementMediaDeleteTarget {
+    const target = new ManagementMediaDeleteTarget()
+    target.id = item.id
+    target.name = item.name
+    target.path = item.path || ''
+    target.canDelete = item.canDelete === true
+    return target
+  }
+
+  canSelect(item: VideoItem): boolean {
+    return ManagementMediaDeletePolicy.canDeleteTarget(
+      this.ui.isAdministrator, this.deleteTarget(item))
+  }
+
+  enterSelection(item: VideoItem): void {
+    if (this.canSelect(item)) {
+      this.ui.enterSelection(item.id)
+      this.dataSource.reloadData()
+    }
+  }
+
+  toggleSelection(item: VideoItem): void {
+    if (this.ui.isSelected(item.id) || this.canSelect(item)) {
+      this.ui.toggleSelection(item.id)
+      this.dataSource.reloadData()
+    }
+  }
+
+  cancelSelection(): void {
+    this.clearSelectionAndReload()
+  }
+
+  private selectedTargets(): ManagementMediaDeleteTarget[] {
+    return this.dataSource.getDataAll()
+      .map((value: Object): VideoItem => value as VideoItem)
+      .filter((item: VideoItem) => this.ui.isSelected(item.id))
+      .map((item: VideoItem): ManagementMediaDeleteTarget => this.deleteTarget(item))
+  }
+
+  deleteSummary(): ManagementMediaDeleteSummary {
+    return ManagementMediaDeletePolicy.summarize(
+      this.selectedTargets(), this.ui.isAdministrator)
+  }
+
+  async deleteSelection(): Promise<ManagementLibraryOperationResult> {
+    if (this.ui.deletingSelection) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.Conflict, 'management_media_delete_conflict')
+    }
+    const targets = this.selectedTargets()
+    if (targets.length === 0) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.PermissionDenied, 'management_media_delete_no_eligible')
+    }
+    this.ui.deletingSelection = true
+    try {
+      const result = await this.deleteRepository.deleteTargets(targets)
+      if (result.ok) {
+        this.clearSelectionAndReload()
+        this.startIndex = 0
+        this.getVideoList()
+      }
+      return result
+    } finally {
+      this.ui.deletingSelection = false
+    }
   }
 
   getVideoList() {
@@ -39,8 +153,8 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
       getItemsApi(ApiClient.Instance()).getItems({
         startIndex: this.startIndex,
         limit: this.limit,
-        fields: ['PrimaryImageAspectRatio', 'SortName', 'Path', 'ChildCount', 'MediaSourceCount',
-          'PrimaryImageAspectRatio'],
+        fields: ['PrimaryImageAspectRatio', 'SortName', 'CanDelete', 'Path', 'ChildCount',
+          'MediaSourceCount'],
         imageTypeLimit: 1,
         parentId: this.mediaItem!.id,
         sortBy: this.sortBy,
@@ -51,18 +165,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           noMore = true
         }
         if (res.data && res.data.Items && res.data.Items.length > 0) {
-          let videoList = res.data.Items.map<VideoItem>(e => {
-            return {
-              id: e.Id || '',
-              name: e.Name || '',
-              image: getItemImageUrl(e),
-              subtitle: e.ProductionYear ? e.ProductionYear.toString() : '',
-              score: e.CommunityRating ? e.CommunityRating : 0,
-              tags: getResolutions(e.MediaStreams),
-              mediaName: this.ui.title,
-              type: e.Type,
-            }
-          })
+          let videoList = res.data.Items.map<VideoItem>((item: BaseItemDto) => this.toVideoItem(item))
           if (res.data.StartIndex == 0) {
             this.ui.pageState = PageState.Content
             this.dataSource.initData(videoList)
@@ -107,7 +210,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
       getItemsApi(ApiClient.Instance()).getItems({
         parentId: parentId,
         recursive: true,
-        fields: ['PrimaryImageAspectRatio', 'MediaSourceCount', 'MediaStreams'],
+        fields: ['PrimaryImageAspectRatio', 'CanDelete', 'Path', 'MediaSourceCount', 'MediaStreams'],
         imageTypeLimit: 1,
         enableImageTypes: ['Primary', 'Backdrop', 'Banner', 'Thumb'],
         sortBy: this.sortBy,
@@ -121,18 +224,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           noMore = true
         }
         if (res.data && res.data.Items && res.data.Items.length > 0) {
-          let videoList = res.data.Items.map<VideoItem>(e => {
-            return {
-              id: e.Id || '',
-              name: e.Name || '',
-              image: getItemImageUrl(e),
-              subtitle: e.ProductionYear ? e.ProductionYear.toString() : '',
-              score: e.CommunityRating ? e.CommunityRating : 0,
-              tags: getResolutions(e.MediaStreams),
-              mediaName: this.ui.title,
-              type: e.Type,
-            }
-          })
+          let videoList = res.data.Items.map<VideoItem>((item: BaseItemDto) => this.toVideoItem(item))
           if (res.data.StartIndex == 0) {
             this.ui.pageState = PageState.Content
             this.dataSource.initData(videoList)
@@ -165,6 +257,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
   }
 
   refresh() {
+    this.clearSelectionAndReload()
     this.startIndex = 0
     this.getVideoList()
   }

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  loadBatchDeleteSources,
   loadManagementLibraryServiceText,
   runManagementLibraryValidation,
+  verifyBatchDeleteText,
   verifyMediaEntryScopeText,
   verifyServiceOwnershipText,
   verifyServiceText,
@@ -71,4 +73,28 @@ test('rejects Media root actions without administrator and destination scoping',
     selectedDestination === HomeDestination.Media
     publishRootNavigationChrome(false, '首页', false, false)
   `), /administrator scoped/)
+})
+
+test('requires CanDelete and Path in every video list query', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listViewModel = sources.listViewModel.replace("'CanDelete', 'Path'", "'Path'")
+  assert.throws(() => verifyBatchDeleteText(sources), /every video list query/)
+})
+
+test('rejects direct batch-delete submission from VideoListPage', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listPage += '\ngetLibraryApi().deleteItems({ ids: [] })'
+  assert.throws(() => verifyBatchDeleteText(sources), /must not submit deleteItems directly/)
+})
+
+test('requires stable long-press selection overlay contracts', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listPage = sources.listPage.replace('.backgroundColor(0x38007DFF)', '')
+  assert.throws(() => verifyBatchDeleteText(sources), /selection UI is incomplete/)
+})
+
+test('requires long-press selection to outrank grid and image gestures', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listPage = sources.listPage.replace('.priorityGesture(', '.gesture(')
+  assert.throws(() => verifyBatchDeleteText(sources), /selection UI is incomplete/)
 })

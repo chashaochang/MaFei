@@ -18,6 +18,11 @@ import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../../entity/AppUIState";
+import {
+  ManagementLibraryOperationCode,
+  ManagementLibraryOperationResult
+} from "../management/library/ManagementLibraryModels";
+import { ManagementMediaDeleteDialog } from "../management/library/ManagementMediaDeleteDialog";
 
 @HMRouter({
   pageUrl: RouterConsts.VideoListPage,
@@ -45,6 +50,85 @@ export struct VideoListPage {
 
   private primaryTextColor(nativeSurface: boolean): ResourceColor {
     return nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private getString(name: string): string {
+    return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
+  }
+
+  private routeTitle(): ResourceStr {
+    if (!this.ui.selectionMode) {
+      return this.ui.title
+    }
+    return `${this.ui.selectedIds.length} · ${this.getString('management_media_delete')}`
+  }
+
+  private localizedDeleteMessage(result: ManagementLibraryOperationResult): string {
+    if (result.message.startsWith('management_')) {
+      return this.getString(result.message)
+    }
+    if (result.message.length > 0) {
+      return result.message
+    }
+    if (result.code === ManagementLibraryOperationCode.AuthenticationExpired) {
+      return this.getString('management_library_authentication_expired')
+    }
+    if (result.code === ManagementLibraryOperationCode.PermissionDenied) {
+      return this.getString('management_permission_denied')
+    }
+    if (result.code === ManagementLibraryOperationCode.NotFound) {
+      return this.getString('management_library_not_found')
+    }
+    if (result.code === ManagementLibraryOperationCode.Conflict) {
+      return this.getString('management_media_delete_conflict')
+    }
+    return this.getString('management_media_delete_failed')
+  }
+
+  private openDeleteDialog(): void {
+    if (!this.ui.selectionMode || this.ui.deletingSelection || this.ui.deleteDialogVisible) {
+      return
+    }
+    const summary = this.vm.deleteSummary()
+    if (summary.allowedIds.length === 0) {
+      this.getUIContext().getPromptAction().showToast({
+        message: $r('app.string.management_media_delete_no_eligible')
+      })
+      return
+    }
+    this.ui.deleteDialogVisible = true
+    ManagementMediaDeleteDialog.show(this.getUIContext(), summary, () => {
+      this.ui.deleteDialogVisible = false
+      this.vm.deleteSelection().then((result: ManagementLibraryOperationResult) => {
+        this.getUIContext().getPromptAction().showToast({
+          message: result.ok ? $r('app.string.management_media_delete_success') :
+            this.localizedDeleteMessage(result)
+        })
+      }).catch(() => {
+        this.getUIContext().getPromptAction().showToast({
+          message: $r('app.string.management_media_delete_failed')
+        })
+      })
+    }, () => {
+      this.ui.deleteDialogVisible = false
+    })
+  }
+
+  private selectionMenus(): Array<NavigationMenuItem> {
+    if (!this.ui.selectionMode) {
+      return []
+    }
+    return [{
+      value: $r('app.string.management_media_delete'),
+      icon: $r('sys.symbol.trash'),
+      isEnabled: !this.ui.deletingSelection && this.ui.selectedIds.length > 0,
+      action: () => this.openDeleteDialog()
+    }, {
+      value: $r('app.string.management_cancel'),
+      icon: $r('sys.symbol.xmark'),
+      isEnabled: !this.ui.deletingSelection,
+      action: () => this.vm.cancelSelection()
+    }]
   }
 
   aboutToAppear(): void {
@@ -94,8 +178,48 @@ export struct VideoListPage {
   }
 
   @Builder
+  private selectionToolbar() {
+    Row({ space: 8 }) {
+      Text(this.routeTitle())
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor(this.useNativeSurface()))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      Button({ type: ButtonType.Circle, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.trash'))
+          .fontSize(20)
+          .fontColor([$r('app.color.main_red_color')])
+      }
+      .width(40)
+      .height(40)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
+      .accessibilityText($r('app.string.management_media_delete'))
+      .onClick(() => this.openDeleteDialog())
+      Button({ type: ButtonType.Circle, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontSize(20)
+          .fontColor([this.primaryTextColor(this.useNativeSurface())])
+      }
+      .width(40)
+      .height(40)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .enabled(!this.ui.deletingSelection)
+      .accessibilityText($r('app.string.management_cancel'))
+      .onClick(() => this.vm.cancelSelection())
+    }
+    .width('100%')
+    .height(48)
+  }
+
+  @Builder
   private listContent(nativeSurface: boolean) {
     Column() {
+      if (this.ui.selectionMode && (this.fromHome || !nativeSurface)) {
+        this.selectionToolbar()
+      }
       Row() {
         Text(sortOptions[this.ui.selectedSortIndex].label)
           .fontSize(14)
@@ -199,7 +323,7 @@ export struct VideoListPage {
     Column() {
       if (showLegacyActionBar) {
         ActionBar({
-          title: this.ui.title
+          title: this.routeTitle()
         })
       }
       this.listContent(!showLegacyActionBar)
@@ -224,7 +348,15 @@ export struct VideoListPage {
       this.embeddedContent()
     } else {
       AppRouteDestination({
-        title: this.ui.title,
+        title: this.routeTitle(),
+        menus: this.selectionMenus(),
+        beforeBack: () => {
+          if (this.ui.selectionMode) {
+            this.vm.cancelSelection()
+            return true
+          }
+          return false
+        },
         contentBuilder: () => {
           this.pageContent(false)
         },
@@ -238,8 +370,14 @@ export struct VideoListPage {
   @Builder
   itemLayout(item: Object, _index: number): void {
     // 自定义item
-    VideoCard({ item: item as VideoItem })
-      .onClick(() => {
+    VideoCard({
+      item: item as VideoItem,
+      selectable: this.vm.canSelect(item as VideoItem),
+      selected: this.ui.isSelected((item as VideoItem).id),
+      selectionMode: this.ui.selectionMode,
+      onLongPress: () => this.vm.enterSelection(item as VideoItem),
+      onSelect: () => this.vm.toggleSelection(item as VideoItem),
+      onOpen: () => {
         HMRouterMgr.to(RouterConsts.VideoDetailPage)
           .withParam({
             id: (item as VideoItem).id,
@@ -247,7 +385,8 @@ export struct VideoListPage {
             isTvShows: (item as VideoItem).type === 'Series',
           })
           .push()
-      })
+      }
+    })
   }
 
   @Builder
@@ -260,6 +399,12 @@ export struct VideoListPage {
 export struct VideoCard {
   @Param @Require item: VideoItem
   @Param textAlign: TextAlign = TextAlign.Start
+  @Param selectable: boolean = false
+  @Param selected: boolean = false
+  @Param selectionMode: boolean = false
+  @Event onLongPress: () => void = () => {}
+  @Event onSelect: () => void = () => {}
+  @Event onOpen: () => void = () => {}
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
   build() {
@@ -350,6 +495,35 @@ export struct VideoCard {
           })
           .margin(4)
         }
+        if (this.selected) {
+          Column() {
+          }
+          .width('100%')
+          .height('100%')
+          .backgroundColor(0x38007DFF)
+          .hitTestBehavior(HitTestMode.None)
+          Stack() {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(18)
+              .fontColor([Color.White])
+          }
+          .width(28)
+          .height(28)
+          .borderRadius(14)
+          .backgroundColor($r('app.color.color_main'))
+          .alignRules({
+            top: {
+              anchor: '__container__',
+              align: VerticalAlign.Top
+            },
+            right: {
+              anchor: '__container__',
+              align: HorizontalAlign.End
+            }
+          })
+          .margin(8)
+          .hitTestBehavior(HitTestMode.None)
+        }
       }.width('100%').aspectRatio(2 / 3)
 
       Text(this.item.name)
@@ -384,5 +558,17 @@ export struct VideoCard {
     }.alignItems(HorizontalAlign.Start).margin({
       bottom: 8
     })
+    .onClick(() => {
+      if (this.selectionMode) {
+        this.onSelect()
+      } else {
+        this.onOpen()
+      }
+    })
+    .priorityGesture(LongPressGesture().onAction(() => {
+      if (this.selectable && !this.selectionMode) {
+        this.onLongPress()
+      }
+    }))
   }
 }
