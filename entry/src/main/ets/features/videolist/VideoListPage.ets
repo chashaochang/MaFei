@@ -85,18 +85,27 @@ export struct VideoListPage {
     return this.getString('management_media_delete_failed')
   }
 
-  private openDeleteDialog(): void {
+  private async openDeleteDialog(): Promise<void> {
     if (!this.ui.selectionMode || this.ui.deletingSelection || this.ui.deleteDialogVisible) {
+      return
+    }
+    this.ui.deleteDialogVisible = true
+    const preparation = await this.vm.prepareDeleteSelection()
+    if (!preparation.ok) {
+      this.ui.deleteDialogVisible = false
+      this.getUIContext().getPromptAction().showToast({
+        message: this.localizedDeleteMessage(preparation)
+      })
       return
     }
     const summary = this.vm.deleteSummary()
     if (summary.allowedIds.length === 0) {
+      this.ui.deleteDialogVisible = false
       this.getUIContext().getPromptAction().showToast({
         message: $r('app.string.management_media_delete_no_eligible')
       })
       return
     }
-    this.ui.deleteDialogVisible = true
     ManagementMediaDeleteDialog.show(this.getUIContext(), summary, () => {
       this.ui.deleteDialogVisible = false
       this.vm.deleteSelection().then((result: ManagementLibraryOperationResult) => {
@@ -178,15 +187,19 @@ export struct VideoListPage {
   }
 
   @Builder
-  private selectionToolbar() {
+  private selectionToolbar(showTitle: boolean) {
     Row({ space: 8 }) {
-      Text(this.routeTitle())
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.primaryTextColor(this.useNativeSurface()))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
+      if (showTitle) {
+        Text(this.routeTitle())
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor(this.useNativeSurface()))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      } else {
+        Blank().layoutWeight(1)
+      }
       Button({ type: ButtonType.Circle, stateEffect: true }) {
         SymbolGlyph($r('sys.symbol.trash'))
           .fontSize(20)
@@ -218,7 +231,7 @@ export struct VideoListPage {
   private listContent(nativeSurface: boolean) {
     Column() {
       if (this.ui.selectionMode && (this.fromHome || !nativeSurface)) {
-        this.selectionToolbar()
+        this.selectionToolbar(this.fromHome)
       }
       Row() {
         Text(sortOptions[this.ui.selectedSortIndex].label)
@@ -323,7 +336,14 @@ export struct VideoListPage {
     Column() {
       if (showLegacyActionBar) {
         ActionBar({
-          title: this.routeTitle()
+          title: this.routeTitle(),
+          onBackClick: () => {
+            if (this.ui.selectionMode) {
+              this.vm.cancelSelection()
+            } else {
+              HMRouterMgr.pop()
+            }
+          }
         })
       }
       this.listContent(!showLegacyActionBar)

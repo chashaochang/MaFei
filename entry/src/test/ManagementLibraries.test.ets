@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium'
 import {
+  BaseItemDto,
   CollectionTypeOptions,
   CountryInfo,
   CultureDto,
@@ -53,6 +54,7 @@ import { ManagementLibraryEditorViewModel } from
 import { VideoItem } from '../main/ets/features/home/hometab/HomeUIState'
 import { VideoListUIState } from '../main/ets/features/videolist/VideoListUIState'
 import { VideoListViewModel } from '../main/ets/features/videolist/VideoListViewModel'
+import { MediaLibraryRefreshEvent } from '../main/ets/events/Events'
 
 class FakeLibraryHttpResponse {
   status: number = 0
@@ -85,6 +87,7 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
   requestedType: string = ''
   requestedIsNew: boolean = false
   deletedIds: string[] = []
+  mediaItems: BaseItemDto[] = []
 
   private record(name: string): void {
     this.calls.push(name)
@@ -197,6 +200,11 @@ class FakeManagementLibraryService extends ManagementLibraryApiService {
     this.record('startScheduledTask')
   }
 
+  async getItemsByIds(ids: string[]): Promise<BaseItemDto[]> {
+    this.record('getItemsByIds')
+    return this.mediaItems.filter((item: BaseItemDto) => item.Id && ids.includes(item.Id))
+  }
+
   async deleteItems(ids: string[]): Promise<void> {
     this.record('deleteItems')
     this.deletedIds = ids.slice()
@@ -207,6 +215,28 @@ class FailingMediaDeleteRepository extends ManagementMediaDeleteRepository {
   async deleteTargets(_targets: ManagementMediaDeleteTarget[]): Promise<ManagementLibraryOperationResult> {
     return ManagementLibraryOperationResult.failure(
       ManagementLibraryOperationCode.Conflict, 'management_media_delete_conflict')
+  }
+}
+
+class SuccessfulMediaDeleteRepository extends ManagementMediaDeleteRepository {
+  deleteCalls: number = 0
+
+  async deleteTargets(_targets: ManagementMediaDeleteTarget[]): Promise<ManagementLibraryOperationResult> {
+    this.deleteCalls++
+    return ManagementLibraryOperationResult.success()
+  }
+}
+
+class TestVideoListViewModel extends VideoListViewModel {
+  refreshCount: number = 0
+
+  constructor(ui: VideoListUIState, repository: ManagementMediaDeleteRepository,
+    publisher: () => void) {
+    super(ui, repository, publisher)
+  }
+
+  getVideoList(): void {
+    this.refreshCount++
   }
 }
 
@@ -380,6 +410,7 @@ export default function managementLibrariesTest() {
       ], true)
       expect(summary.allowedIds.length).assertEqual(1)
       expect(summary.allowedIds[0]).assertEqual('allowed')
+      expect(summary.allowedNames[0]).assertEqual('allowed')
       expect(summary.allowedPaths[0]).assertEqual('/media/a.mkv')
       expect(summary.blockedNames.length).assertEqual(1)
       expect(summary.blockedNames[0]).assertEqual('blocked')
@@ -426,6 +457,96 @@ export default function managementLibrariesTest() {
       expect(vm.dataSource.totalCount()).assertEqual(1)
       expect(ui.selectionMode).assertTrue()
       expect(ui.selectedIds[0]).assertEqual(item.id)
+    })
+
+    it('rechecksSelectedMediaCapabilitiesBeforeShowingDeleteConfirmation', 0, async () => {
+      const fake = new FakeManagementLibraryService()
+      fake.mediaItems = [{
+        Id: 'movie',
+        Name: 'Movie refreshed',
+        CanDelete: false,
+        Path: '/media/refreshed.mkv'
+      }]
+      const ui = new VideoListUIState({} as UIContext)
+      ui.isAdministrator = true
+      const vm = new VideoListViewModel(ui, new ManagementMediaDeleteRepository(fake))
+      const item: VideoItem = {
+        id: 'movie',
+        name: 'Movie',
+        image: '',
+        canDelete: true,
+        path: '/media/stale.mkv'
+      }
+      vm.dataSource.initData([item])
+      ui.enterSelection(item.id)
+
+      const result = await vm.prepareDeleteSelection()
+      const summary = vm.deleteSummary()
+
+      expect(result.ok).assertTrue()
+      expect(fake.calls.join(',')).assertEqual('getCurrentUser,getItemsByIds')
+      expect(summary.allowedIds.length).assertEqual(0)
+      expect(summary.blockedNames[0]).assertEqual('Movie refreshed')
+    })
+
+    it('clearsDeletedItemsRefreshesAndPublishesAfterBatchDeleteSuccess', 0, async () => {
+      const repository = new SuccessfulMediaDeleteRepository()
+      const ui = new VideoListUIState({} as UIContext)
+      ui.isAdministrator = true
+      ui.totalCount = '1'
+      const emittedEvents: string[] = []
+      const vm = new TestVideoListViewModel(ui, repository, () => {
+        emittedEvents.push(MediaLibraryRefreshEvent)
+      })
+      const item: VideoItem = {
+        id: 'movie',
+        name: 'Movie',
+        image: '',
+        canDelete: true,
+        path: '/media/movie.mkv'
+      }
+      vm.dataSource.initData([item])
+      ui.enterSelection(item.id)
+
+      const result = await vm.deleteSelection()
+
+      expect(result.ok).assertTrue()
+      expect(repository.deleteCalls).assertEqual(1)
+      expect(vm.dataSource.totalCount()).assertEqual(0)
+      expect(ui.totalCount).assertEqual('0')
+      expect(ui.selectionMode).assertFalse()
+      expect(vm.refreshCount).assertEqual(1)
+      expect(emittedEvents[0]).assertEqual(MediaLibraryRefreshEvent)
+    })
+
+    it('keepsServerBlockedItemsAfterPartialEligibleBatchDelete', 0, async () => {
+      const repository = new SuccessfulMediaDeleteRepository()
+      const ui = new VideoListUIState({} as UIContext)
+      ui.isAdministrator = true
+      const vm = new TestVideoListViewModel(ui, repository, () => {})
+      const allowed: VideoItem = {
+        id: 'allowed',
+        name: 'Allowed',
+        image: '',
+        canDelete: true,
+        path: '/media/allowed.mkv'
+      }
+      const blocked: VideoItem = {
+        id: 'blocked',
+        name: 'Blocked',
+        image: '',
+        canDelete: false,
+        path: '/media/blocked.mkv'
+      }
+      vm.dataSource.initData([allowed, blocked])
+      ui.enterSelection(allowed.id)
+      ui.enterSelection(blocked.id)
+
+      const result = await vm.deleteSelection()
+
+      expect(result.ok).assertTrue()
+      expect(vm.dataSource.totalCount()).assertEqual(1)
+      expect((vm.dataSource.getDataAll()[0] as VideoItem).id).assertEqual(blocked.id)
     })
 
     it('rechecksAdministratorBeforeDeletingMedia', 0, async () => {

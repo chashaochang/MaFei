@@ -98,3 +98,21 @@ test('requires long-press selection to outrank grid and image gestures', () => {
   sources.listPage = sources.listPage.replace('.priorityGesture(', '.gesture(')
   assert.throws(() => verifyBatchDeleteText(sources), /selection UI is incomplete/)
 })
+
+test('requires server capability recheck before delete confirmation', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listPage = sources.listPage.replace('await this.vm.prepareDeleteSelection()', 'this.vm.deleteSummary()')
+  assert.throws(() => verifyBatchDeleteText(sources), /selection UI is incomplete/)
+})
+
+test('requires successful deletion to publish shared media refresh', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listViewModel = sources.listViewModel.replace('eventHub.emit(MediaLibraryRefreshEvent)', 'eventHub.emit()')
+  assert.throws(() => verifyBatchDeleteText(sources), /batch-delete ownership is incomplete/)
+})
+
+test('requires batch confirmation to expose eligible names and count', () => {
+  const sources = loadBatchDeleteSources()
+  sources.deleteDialog = sources.deleteDialog.replaceAll('allowedIds.length', 'blockedNames.length')
+  assert.throws(() => verifyBatchDeleteText(sources), /confirmation scope is incomplete/)
+})

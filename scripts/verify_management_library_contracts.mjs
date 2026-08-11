@@ -19,7 +19,11 @@ export const batchDeletePaths = Object.freeze({
   homeState: 'entry/src/main/ets/features/home/hometab/HomeUIState.ets',
   listState: 'entry/src/main/ets/features/videolist/VideoListUIState.ets',
   listViewModel: 'entry/src/main/ets/features/videolist/VideoListViewModel.ets',
-  listPage: 'entry/src/main/ets/features/videolist/VideoListPage.ets'
+  listPage: 'entry/src/main/ets/features/videolist/VideoListPage.ets',
+  deleteDialog: 'entry/src/main/ets/features/management/library/ManagementMediaDeleteDialog.ets',
+  deletePolicy: 'entry/src/main/ets/features/management/library/ManagementMediaDeletePolicy.ets',
+  deleteRepository: 'entry/src/main/ets/features/management/library/ManagementMediaDeleteRepository.ets',
+  libraryService: 'entry/src/main/ets/features/management/library/ManagementLibraryApiService.ets'
 })
 
 const requiredEndpoints = Object.freeze([
@@ -139,8 +143,12 @@ export function verifyBatchDeleteText(sources) {
     'item.CanDelete === true',
     "item.Path || ''",
     'this.dataSource.getDataAll()',
+    'prepareDeleteSelection()',
+    'this.deleteRepository.prepareTargets(targets)',
     'this.deleteRepository.deleteTargets(targets)',
-    'this.ui.clearSelection()'
+    'this.ui.clearSelection()',
+    'eventHub.emit(MediaLibraryRefreshEvent)',
+    'this.dataSource.initData(remaining)'
   ]) {
     requireMarker(sources.listViewModel, marker, 'video list batch-delete ownership is incomplete')
   }
@@ -151,6 +159,7 @@ export function verifyBatchDeleteText(sources) {
   }
   for (const marker of [
     'ManagementMediaDeleteDialog.show',
+    'await this.vm.prepareDeleteSelection()',
     'LongPressGesture()',
     '.priorityGesture(',
     'selectionMenus()',
@@ -158,10 +167,22 @@ export function verifyBatchDeleteText(sources) {
     'selected:',
     'onLongPress:',
     'onSelect:',
+    'onBackClick: () =>',
     '.backgroundColor(0x38007DFF)'
   ]) {
     requireMarker(sources.listPage, marker, 'video list selection UI is incomplete')
   }
+
+  for (const marker of ['allowedNames', 'allowedIds.length', 'visibleCount']) {
+    requireMarker(sources.deleteDialog, marker, 'batch delete confirmation scope is incomplete')
+  }
+  requireMarker(sources.deletePolicy, 'summary.allowedNames.push',
+    'batch delete policy does not retain eligible names')
+  for (const marker of ['prepareTargets(', 'getItemsByIds(ids)', "item?.CanDelete === true", "item?.Path || ''"]) {
+    requireMarker(sources.deleteRepository, marker, 'delete capability recheck is incomplete')
+  }
+  requireMarker(sources.libraryService, 'getItemsByIds(ids: string[])',
+    'management service does not expose item capability lookup')
 }
 
 function collectUiFiles(directory) {

@@ -111,6 +111,24 @@ export class ManagementMediaDeleteTarget {
 export class ManagementMediaDeleteSummary {
   mediaName: string = ''
   allowedIds: string[] = []
+  allowedNames: string[] = []
   allowedPaths: string[] = []
   blockedNames: string[] = []
+}
+
+export class ManagementMediaDeletePreparation {
+  operation: ManagementLibraryOperationResult = ManagementLibraryOperationResult.success()
+  targets: ManagementMediaDeleteTarget[] = []
+
+  static success(targets: ManagementMediaDeleteTarget[]): ManagementMediaDeletePreparation {
+    const preparation = new ManagementMediaDeletePreparation()
+    preparation.targets = targets
+    return preparation
+  }
+
+  static failure(operation: ManagementLibraryOperationResult): ManagementMediaDeletePreparation {
+    const preparation = new ManagementMediaDeletePreparation()
+    preparation.operation = operation
+    return preparation
+  }
 }

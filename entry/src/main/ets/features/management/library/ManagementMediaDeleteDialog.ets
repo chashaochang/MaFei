@@ -31,13 +31,31 @@ export class ManagementMediaDeleteDialog {
 
   private static message(context: UIContext, summary: ManagementMediaDeleteSummary): string {
     const lines: string[] = []
-    if (summary.mediaName.length > 0) {
+    const isBatch = summary.allowedIds.length > 1
+    if (isBatch) {
+      lines.push(`${ManagementMediaDeleteDialog.getString(context, 'management_media_delete')} ` +
+        `(${summary.allowedIds.length})`)
+    } else if (summary.mediaName.length > 0) {
       lines.push(summary.mediaName)
     }
     lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_message'))
-    lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_path'))
-    if (summary.allowedPaths.length > 0) {
-      summary.allowedPaths.forEach((path: string) => lines.push(`• ${path}`))
+    if (isBatch) {
+      const visibleCount = Math.min(summary.allowedIds.length, 5)
+      for (let index = 0; index < visibleCount; index++) {
+        const name = summary.allowedNames[index] || summary.allowedIds[index]
+        lines.push(`• ${name}`)
+        if (summary.allowedPaths[index]) {
+          lines.push(`  ${summary.allowedPaths[index]}`)
+        }
+      }
+      if (summary.allowedIds.length > visibleCount) {
+        lines.push('...')
+      }
+    } else {
+      lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_path'))
+      if (summary.allowedPaths.length > 0) {
+        summary.allowedPaths.forEach((path: string) => lines.push(`• ${path}`))
+      }
     }
     lines.push('')
     lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_notice'))

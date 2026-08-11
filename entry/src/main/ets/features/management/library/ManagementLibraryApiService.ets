@@ -1,6 +1,8 @@
 import { AxiosInstance, AxiosResponse, RawAxiosRequestConfig } from '@ohos/axios'
 import {
   AddVirtualFolderDto,
+  BaseItemDto,
+  BaseItemDtoQueryResult,
   CountryInfo,
   CultureDto,
   FileSystemEntryInfo,
@@ -11,6 +13,7 @@ import {
   ValidatePathDto,
   VirtualFolderInfo
 } from 'sdk/src/main/ets/generated-client/models'
+import { getItemsApi } from 'sdk/src/main/ets/utils/api/items-api'
 import { getLibraryApi } from 'sdk/src/main/ets/utils/api/library-api'
 import { getUserApi } from 'sdk/src/main/ets/utils/api/user-api'
 import { ApiClient } from '../../../network/ApiClient'
@@ -71,6 +74,7 @@ export interface ManagementLibraryService {
   refreshItem(itemId: string): Promise<void>
   getScheduledTasks(): Promise<TaskInfo[]>
   startScheduledTask(taskId: string): Promise<void>
+  getItemsByIds(ids: string[]): Promise<BaseItemDto[]>
   deleteItems(ids: string[]): Promise<void>
 }
 
@@ -247,6 +251,17 @@ export class ManagementLibraryApiService implements ManagementLibraryService {
     const response: AxiosResponse<void> = await this.axios().post<void>(
       this.url(endpoint), undefined, this.config())
     this.ensureSuccess(response.status, 'start scheduled task')
+  }
+
+  async getItemsByIds(ids: string[]): Promise<BaseItemDto[]> {
+    const response: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
+      userId: ApiClient.Instance().userId,
+      ids: ids,
+      fields: ['CanDelete', 'Path'],
+      enableImages: false,
+      enableTotalRecordCount: false
+    })
+    return response.data.Items || []
   }
 
   async deleteItems(ids: string[]): Promise<void> {

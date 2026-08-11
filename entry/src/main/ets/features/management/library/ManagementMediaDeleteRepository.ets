@@ -1,4 +1,4 @@
-import { UserDto } from 'sdk/src/main/ets/generated-client/models'
+import { BaseItemDto, UserDto } from 'sdk/src/main/ets/generated-client/models'
 import {
   ManagementLibraryApiService,
   ManagementLibraryService
@@ -6,6 +6,7 @@ import {
 import {
   ManagementLibraryOperationCode,
   ManagementLibraryOperationResult,
+  ManagementMediaDeletePreparation,
   ManagementMediaDeleteTarget
 } from './ManagementLibraryModels'
 import { ManagementMediaDeletePolicy } from './ManagementMediaDeletePolicy'
@@ -58,6 +59,40 @@ export class ManagementMediaDeleteRepository {
       return ManagementLibraryOperationResult.success()
     } catch (error) {
       return this.failureFor(error as Object)
+    }
+  }
+
+  async prepareTargets(targets: ManagementMediaDeleteTarget[]): Promise<ManagementMediaDeletePreparation> {
+    const access = await this.requireAdministrator()
+    if (!access.ok) {
+      return ManagementMediaDeletePreparation.failure(access)
+    }
+    const ids: string[] = []
+    targets.forEach((target: ManagementMediaDeleteTarget) => {
+      const id = target.id.trim()
+      if (id.length > 0 && !ids.includes(id)) {
+        ids.push(id)
+      }
+    })
+    if (ids.length === 0) {
+      return ManagementMediaDeletePreparation.failure(
+        ManagementLibraryOperationResult.failure(
+          ManagementLibraryOperationCode.PermissionDenied, 'management_media_delete_no_eligible'))
+    }
+    try {
+      const items = await this.service.getItemsByIds(ids)
+      const refreshedTargets = targets.map((target: ManagementMediaDeleteTarget): ManagementMediaDeleteTarget => {
+        const item = items.find((candidate: BaseItemDto) => candidate.Id === target.id)
+        const refreshed = new ManagementMediaDeleteTarget()
+        refreshed.id = target.id
+        refreshed.name = item?.Name || target.name
+        refreshed.path = item?.Path || ''
+        refreshed.canDelete = item?.CanDelete === true
+        return refreshed
+      })
+      return ManagementMediaDeletePreparation.success(refreshedTargets)
+    } catch (error) {
+      return ManagementMediaDeletePreparation.failure(this.failureFor(error as Object))
     }
   }
 

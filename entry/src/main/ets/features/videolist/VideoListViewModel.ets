@@ -7,6 +7,7 @@ import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
+import { MediaLibraryRefreshEvent } from "../../events/Events";
 import { ApiClient } from "../../network/ApiClient";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
@@ -22,6 +23,7 @@ import { VideoListUIState } from "./VideoListUIState";
 
 export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
   private deleteRepository: ManagementMediaDeleteRepository
+  private mediaLibraryRefreshPublisher?: () => void
   controller: RefreshController = new RefreshController() //刷新控制器，声明全局变量
   dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
   mediaItem?: MediaItem
@@ -39,9 +41,11 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
   constructor(ui: VideoListUIState,
-    deleteRepository: ManagementMediaDeleteRepository = new ManagementMediaDeleteRepository()) {
+    deleteRepository: ManagementMediaDeleteRepository = new ManagementMediaDeleteRepository(),
+    mediaLibraryRefreshPublisher?: () => void) {
     super(ui)
     this.deleteRepository = deleteRepository
+    this.mediaLibraryRefreshPublisher = mediaLibraryRefreshPublisher
   }
 
   init(mediaItem: MediaItem) {
@@ -124,13 +128,58 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
       this.selectedTargets(), this.ui.isAdministrator)
   }
 
+  async prepareDeleteSelection(): Promise<ManagementLibraryOperationResult> {
+    const targets = this.selectedTargets()
+    if (targets.length === 0) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.PermissionDenied, 'management_media_delete_no_eligible')
+    }
+    const preparation = await this.deleteRepository.prepareTargets(targets)
+    if (!preparation.operation.ok) {
+      if (preparation.operation.code === ManagementLibraryOperationCode.PermissionDenied) {
+        this.ui.isAdministrator = false
+        this.clearSelectionAndReload()
+      }
+      return preparation.operation
+    }
+    const items = this.dataSource.getDataAll()
+    items.forEach((value: Object) => {
+      const item = value as VideoItem
+      const refreshed = preparation.targets.find(
+        (candidate: ManagementMediaDeleteTarget) => candidate.id === item.id)
+      if (refreshed) {
+        item.name = refreshed.name
+        item.path = refreshed.path
+        item.canDelete = refreshed.canDelete
+      }
+    })
+    this.dataSource.reloadData()
+    return preparation.operation
+  }
+
+  private publishMediaLibraryRefresh(): void {
+    if (this.mediaLibraryRefreshPublisher) {
+      this.mediaLibraryRefreshPublisher()
+      return
+    }
+    this.ui.context.getHostContext()?.eventHub.emit(MediaLibraryRefreshEvent)
+  }
+
+  private removeDeletedTargets(deletedIds: string[]): void {
+    const remaining = this.dataSource.getDataAll().filter((value: Object): boolean =>
+      !deletedIds.includes((value as VideoItem).id))
+    this.dataSource.initData(remaining)
+    this.ui.totalCount = this.dataSource.totalCount() + ''
+  }
+
   async deleteSelection(): Promise<ManagementLibraryOperationResult> {
     if (this.ui.deletingSelection) {
       return ManagementLibraryOperationResult.failure(
         ManagementLibraryOperationCode.Conflict, 'management_media_delete_conflict')
     }
     const targets = this.selectedTargets()
-    if (targets.length === 0) {
+    const summary = ManagementMediaDeletePolicy.summarize(targets, this.ui.isAdministrator)
+    if (summary.allowedIds.length === 0) {
       return ManagementLibraryOperationResult.failure(
         ManagementLibraryOperationCode.PermissionDenied, 'management_media_delete_no_eligible')
     }
@@ -138,7 +187,9 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     try {
       const result = await this.deleteRepository.deleteTargets(targets)
       if (result.ok) {
+        this.removeDeletedTargets(summary.allowedIds)
         this.clearSelectionAndReload()
+        this.publishMediaLibraryRefresh()
         this.startIndex = 0
         this.getVideoList()
       }
@@ -174,7 +225,6 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           } else {
             this.dataSource.pushDataArray(videoList)
           }
-          this.ui.totalCount = this.dataSource.totalCount() + ''
           this.controller.finishLoadMore(noMore)
           this.startIndex = this.dataSource.totalCount()
         } else {
@@ -187,6 +237,7 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
           this.controller.finishRefresh()
           this.controller.finishLoadMore(noMore)
         }
+        this.ui.totalCount = this.dataSource.totalCount() + ''
       }).catch(() => {
         if (this.startIndex === 0) {
           this.ui.pageState = PageState.Error

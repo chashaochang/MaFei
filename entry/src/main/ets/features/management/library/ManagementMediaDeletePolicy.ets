@@ -16,11 +16,12 @@ export class ManagementMediaDeletePolicy {
   static summarize(targets: ManagementMediaDeleteTarget[], administrator: boolean): ManagementMediaDeleteSummary {
     const summary = new ManagementMediaDeleteSummary()
     targets.forEach((target: ManagementMediaDeleteTarget) => {
-      if (summary.mediaName.length === 0 && target.name.trim().length > 0) {
-        summary.mediaName = target.name
-      }
       if (ManagementMediaDeletePolicy.canDeleteTarget(administrator, target)) {
+        if (summary.mediaName.length === 0 && target.name.trim().length > 0) {
+          summary.mediaName = target.name
+        }
         summary.allowedIds.push(target.id)
+        summary.allowedNames.push(target.name.trim())
         summary.allowedPaths.push(target.path.trim())
       } else {
         summary.blockedNames.push(target.name)
