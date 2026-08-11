@@ -69,9 +69,9 @@ export struct ManagementNativeSelect {
     Button() {
       Row({ space: 6 }) {
         Text(this.selectedLabel())
+          .layoutWeight(1)
           .fontSize(13)
           .fontColor(this.primaryTextColor())
-          .constraintSize({ minWidth: 72, maxWidth: 172 })
           .textAlign(this.valueTextAlign)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -79,12 +79,14 @@ export struct ManagementNativeSelect {
           .fontSize(12)
           .fontColor([this.secondaryTextColor()])
       }
+      .constraintSize({ minWidth: 88, maxWidth: 196 })
     }
     .width(this.selectorWidth)
     .constraintSize({ minWidth: 112, maxWidth: 220 })
     .height(40)
     .padding({ left: 12, right: 12 })
     .borderRadius(8)
+    .clip(true)
     .backgroundColor(this.useNativeMaterial() ?
       Color.Transparent : AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
     .systemMaterial(this.useNativeMaterial() ?
