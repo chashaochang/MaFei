@@ -22,9 +22,14 @@ import { MPVPlayerView } from "./MPVPlayerView"
 import { PlayerEngineType } from "../../entity/PlayerEngineType"
 import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
+import { WindowUtil } from "../../utils/WindowUtil"
+import { AppRouteDestination } from "../../component/AppRouteDestination"
+import { ThemeStyle } from "../../entity/ThemeStyle"
+import { HdsUiCapability } from "../../theme/HdsUiCapability"
 
 @HMRouter({
   pageUrl: RouterConsts.PlayerPage,
+  useNavDst: true,
   singleton: true,
   lifecycle: 'playerLifecycle',
 })
@@ -42,6 +47,15 @@ export struct PlayerPage {
 
   private restoreSystemBars(): void {
     this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+  }
+
+  private restorePlayerWindowState(): void {
+    this.vm.cancelPendingPlayback()
+    this.vm.appUIState.isFullScreen = false
+    this.restoreSystemBars()
+    if (OneMoreUtil.isNormalPhone() && canIUse('SystemCapability.Window.SessionManager')) {
+      WindowUtil.setMainWindowPortrait(getContext(this))
+    }
   }
 
   // @Monitor('lifecycle.options')
@@ -79,6 +93,23 @@ export struct PlayerPage {
     this.vm.ui.playerMenus?.onQueueItemChanged(mediaSource, this.vm.queueManager.hasNext())
   }
 
+  private async initializePlayback(): Promise<void> {
+    const result = await this.vm.queueManager.initializePlaybackQueue(this.options)
+    switch (result) {
+      case PlayerException.InvalidPlayOptions:
+        ToastUtil.showToast(this.getUIContext(), '无法解析播放信息')
+        break
+      case PlayerException.NetworkFailure:
+        ToastUtil.showToast(this.getUIContext(), '无法从服务器加载媒体信息')
+        break
+      case PlayerException.UnsupportedContent:
+        ToastUtil.showToast(this.getUIContext(), '该媒体无法在本设备上播放')
+        break
+      default:
+        break
+    }
+  }
+
   aboutToAppear(): void {
     // if (OneMoreUtil.isPc()) {
     //   this.options = this.lifecycle.options
@@ -110,25 +141,13 @@ export struct PlayerPage {
         }
       }
     })
-    switch (this.vm.queueManager.initializePlaybackQueue(this.options)) {
-      case PlayerException.InvalidPlayOptions:
-        ToastUtil.showToast(this.getUIContext(), '无法解析播放信息')
-        break
-      case PlayerException.NetworkFailure:
-        ToastUtil.showToast(this.getUIContext(), '无法从服务器加载媒体信息')
-        break
-      case PlayerException.UnsupportedContent:
-        ToastUtil.showToast(this.getUIContext(), '该媒体无法在本设备上播放')
-        break
-      default:
-        break
-    }
     // Create playback menus
     this.vm.ui.playerMenus = new PlayerMenus() //(this, playerBinding, playerControlsBinding)
+    this.initializePlayback()
   }
 
   aboutToDisappear() {
-    this.restoreSystemBars()
+    this.restorePlayerWindowState()
     this.vm.reportPlaybackStop()
     emitter.off(Constants.PLAYER_PAGE_EVENT.eventId)
     //后台播放音频
@@ -144,16 +163,27 @@ export struct PlayerPage {
   }
 
   onBackPress(): boolean | void {
-    if (this.vm.appUIState.isFullScreen) {
-      this.vm.appUIState.isFullScreen = false
-    }
-    this.restoreSystemBars()
+    this.restorePlayerWindowState()
     this.vm.reportPlaybackStop()
     HMRouterMgr.pop()
   }
 
-  build() {
-    //播放器
+  private usesNativeTopNavigation(): boolean {
+    return this.vm.appUIState.themeStyle === ThemeStyle.Native &&
+      HdsUiCapability.supportsNativeTheme()
+  }
+
+  private shouldShowNativeTopNavigation(): boolean {
+    return this.ui.controlsVisible && !this.vm.appUIState.isFullScreen
+  }
+
+  private handleNativeNavigationBack(): boolean {
+    this.onBackPress()
+    return true
+  }
+
+  @Builder
+  private playerContent(): void {
     Stack() {
       if (!this.ui.url) {
         Stack({ alignContent: Alignment.Center }) {
@@ -168,14 +198,15 @@ export struct PlayerPage {
         if (this.vm.getResolvedPlayerEngineType() === PlayerEngineType.AV) {
           AVPlayerView({
             videoUrl: this.ui.url,
+            nativeTopNavigationEnabled: this.usesNativeTopNavigation(),
             onNext: () => {
-              this.vm.queueManager.next()
+              this.vm.playNext()
             },
             onAudioTrackSelected: (stream: MediaStream) => {
-              this.vm.trackSelectionHelper.selectAudioTrack(stream)
+              this.vm.selectAudioTrack(stream)
             },
             onSubtitleSelected: (stream: MediaStream) => {
-              this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
+              this.vm.selectSubtitleTrack(stream)
             },
             onQualitySelected: (option: QualityOption) => {
               this.vm.changeBitrate(option.bitrate)
@@ -191,14 +222,15 @@ export struct PlayerPage {
         } else {
           MPVPlayerView({
             videoUrl: this.ui.url,
+            nativeTopNavigationEnabled: this.usesNativeTopNavigation(),
             onNext: () => {
-              this.vm.queueManager.next()
+              this.vm.playNext()
             },
             onAudioTrackSelected: (stream: MediaStream) => {
-              this.vm.trackSelectionHelper.selectAudioTrack(stream)
+              this.vm.selectAudioTrack(stream)
             },
             onSubtitleSelected: (stream: MediaStream) => {
-              this.vm.trackSelectionHelper.selectSubtitleTrack(stream)
+              this.vm.selectSubtitleTrack(stream)
             },
             onQualitySelected: (option: QualityOption) => {
               this.vm.changeBitrate(option.bitrate)
@@ -218,5 +250,22 @@ export struct PlayerPage {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
+  }
+
+  build() {
+    AppRouteDestination({
+      title: this.usesNativeTopNavigation() ? '' : this.ui.title,
+      titleBarVisible: this.usesNativeTopNavigation() && this.shouldShowNativeTopNavigation(),
+      contentExtendsUnderTitleBar: true,
+      heroTitleChrome: true,
+      titleMaterialFollowsSystem: false,
+      beforeBack: () => this.handleNativeNavigationBack(),
+      contentBuilder: () => {
+        this.playerContent()
+      },
+      legacyContentBuilder: () => {
+        this.playerContent()
+      }
+    })
   }
 }

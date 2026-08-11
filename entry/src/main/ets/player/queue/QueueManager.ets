@@ -3,7 +3,6 @@ import { PlayOptions } from "../interaction/PlayOptions";
 import { PlayerException } from "../PlayerException";
 import { JellyfinMediaSource } from "../source/JellyfinMediaSource";
 import { MediaSourceResolver } from "../source/MediaSourceResolver";
-import { BusinessError } from "@kit.BasicServicesKit";
 import { getItemsApi, getTvShowsApi, getVideosApi } from "sdk";
 import {
   BaseItemKind,
@@ -21,6 +20,7 @@ import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineResolver } from "../PlayerEngineResolver";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
+import { PlaybackRequestResult } from "./PlaybackRequestResult";
 
 @ObservedV2
 export class QueueManager {
@@ -34,6 +34,7 @@ export class QueueManager {
   @Trace currentQueueIndex: number = 0
   private mediaSourceResolver: MediaSourceResolver = new MediaSourceResolver()
   @Trace currentMediaSourceOrNull?: JellyfinMediaSource
+  private playbackRequestEpoch: number = 0
 
   private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
 
@@ -63,7 +64,7 @@ export class QueueManager {
     })
   }
 
-  initializePlaybackQueue(options: PlayOptions): PlayerException | null {
+  async initializePlaybackQueue(options: PlayOptions): Promise<PlayerException | null> {
     this.currentQueue = options.ids
     this.currentQueueIndex = options.startIndex
     let itemId: string | null
@@ -75,16 +76,28 @@ export class QueueManager {
     if (itemId == null) {
       return PlayerException.InvalidPlayOptions
     }
-    this.startPlayback(
+    const result = await this.startPlayback(
       itemId!,
       options.mediaSourceId,
       null,
       options.startPositionTicks,
       options.audioStreamIndex,
       options.subtitleStreamIndex,
-      true
+      true,
+      this.currentQueueIndex
     )
+    if (result === PlaybackRequestResult.Failure) {
+      return PlayerException.NetworkFailure
+    }
     return null
+  }
+
+  cancelPendingPlayback(): void {
+    this.playbackRequestEpoch++
+  }
+
+  private isPlaybackRequestCurrent(requestEpoch: number): boolean {
+    return requestEpoch === this.playbackRequestEpoch
   }
 
   async startPlayback(
@@ -94,51 +107,122 @@ export class QueueManager {
     startTimeTicks: number | null,
     audioStreamIndex: number | null | undefined,
     subtitleStreamIndex: number | null,
-    playWhenReady: boolean = true): Promise<PlayerException | null> {
-    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.getCurrentDeviceProfile(), maxStreamingBitrate,
-      startTimeTicks,
-      audioStreamIndex, subtitleStreamIndex, playWhenReady)
-    ?.then(async jellyfinMediaSource => {
-      if (this.currentMediaSourceOrNull) {
-        this.viewModel.stopTranscoding(this.currentMediaSourceOrNull)
+    playWhenReady: boolean = true,
+    targetQueueIndex?: number): Promise<PlaybackRequestResult> {
+    const requestEpoch = ++this.playbackRequestEpoch
+    let jellyfinMediaSource: JellyfinMediaSource | undefined
+    const previousMediaSource = this.currentMediaSourceOrNull
+    const previousQueueIndex = this.currentQueueIndex
+    try {
+      const resolveTask = this.mediaSourceResolver.resolveMediaSource(
+        itemId,
+        mediaSourceId,
+        this.getCurrentDeviceProfile(),
+        maxStreamingBitrate,
+        startTimeTicks,
+        audioStreamIndex,
+        subtitleStreamIndex,
+        playWhenReady
+      )
+      if (!resolveTask) {
+        return PlaybackRequestResult.Failure
+      }
+      jellyfinMediaSource = await resolveTask
+      if (!this.isPlaybackRequestCurrent(requestEpoch)) {
+        this.viewModel.stopTranscoding(jellyfinMediaSource)
+        return PlaybackRequestResult.Cancelled
+      }
+
+      const streams = await this.prepareStreams(jellyfinMediaSource)
+      if (!this.isPlaybackRequestCurrent(requestEpoch)) {
+        this.viewModel.stopTranscoding(jellyfinMediaSource)
+        return PlaybackRequestResult.Cancelled
+      }
+
+      if (targetQueueIndex !== undefined) {
+        this.currentQueueIndex = targetQueueIndex
       }
       this.currentMediaSourceOrNull = jellyfinMediaSource
-      this.viewModel.load(jellyfinMediaSource, await this.prepareStreams(jellyfinMediaSource), playWhenReady)
-      this.viewModel.getSubtitle(jellyfinMediaSource)
-    }).catch((e: BusinessError) => {
-      return e
-    })
-    return null
+      try {
+        this.viewModel.load(jellyfinMediaSource, streams, playWhenReady)
+        this.viewModel.getSubtitle(jellyfinMediaSource)
+      } catch (error) {
+        this.currentMediaSourceOrNull = previousMediaSource
+        this.currentQueueIndex = previousQueueIndex
+        throw new Error(`Failed to apply playback source: ${JSON.stringify(error)}`)
+      }
+      if (previousMediaSource) {
+        this.viewModel.stopTranscoding(previousMediaSource)
+      }
+      return PlaybackRequestResult.Success
+    } catch (error) {
+      if (jellyfinMediaSource) {
+        this.viewModel.stopTranscoding(jellyfinMediaSource)
+      }
+      if (!this.isPlaybackRequestCurrent(requestEpoch)) {
+        return PlaybackRequestResult.Cancelled
+      }
+      console.error(`[QueueManager] Failed to start playback: ${JSON.stringify(error)}`)
+      return PlaybackRequestResult.Failure
+    }
+  }
+
+  private isValidPlaybackPosition(position: number): boolean {
+    return Number.isFinite(position) && position >= 0
+  }
+
+  private restorePlaybackAfterFailure(result: PlaybackRequestResult): void {
+    if (result === PlaybackRequestResult.Failure && this.currentMediaSourceOrNull) {
+      this.viewModel.resumePlaybackAfterFailedRequest()
+    }
+  }
+
+  private async restartCurrentPlayback(
+    currentMediaSource: JellyfinMediaSource,
+    position: number,
+    maxStreamingBitrate: number | null | undefined,
+    audioStreamIndex: number | null | undefined,
+    subtitleStreamIndex: number | null): Promise<PlaybackRequestResult> {
+    const result = await this.startPlayback(
+      currentMediaSource.itemId,
+      currentMediaSource.id,
+      maxStreamingBitrate,
+      position * Constants.TICKS_PER_MILLISECOND,
+      audioStreamIndex,
+      subtitleStreamIndex,
+      true,
+      this.currentQueueIndex
+    )
+    this.restorePlaybackAfterFailure(result)
+    return result
   }
 
   /**
    * Change the maximum bitrate to the specified value.
    */
-  changeBitrate(bitrate?: number): boolean {
+  async changeBitrate(bitrate?: number): Promise<PlaybackRequestResult> {
     let currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
-      return false
+      return PlaybackRequestResult.Failure
     }
 
     // Bitrate didn't change, ignore
     if (currentMediaSource.maxStreamingBitrate == bitrate) {
-      return true
+      return PlaybackRequestResult.Success
     }
 
     let position = this.viewModel.getPositionAndPause()
-    if (!position) {
-      return false
+    if (!this.isValidPlaybackPosition(position)) {
+      return PlaybackRequestResult.Failure
     }
 
-    return this.startPlayback(
-      currentMediaSource.itemId,
-      currentMediaSource.id,
+    return await this.restartCurrentPlayback(
+      currentMediaSource,
+      position,
       bitrate,
-      position * Constants.TICKS_PER_MILLISECOND,
       currentMediaSource.selectedAudioStreamIndex,
-      currentMediaSource.selectedSubtitleStreamIndex,
-      true,
-    ) == null
+      currentMediaSource.selectedSubtitleStreamIndex
+    )
   }
 
   hasPrevious(): boolean {
@@ -149,63 +233,74 @@ export class QueueManager {
     return this.currentQueue.length > 0 && this.currentQueueIndex < this.currentQueue.length - 1
   }
 
-  async previous(): Promise<boolean> {
+  async previous(): Promise<PlaybackRequestResult> {
     if (!this.hasPrevious()) {
-      return false
+      return PlaybackRequestResult.Failure
     }
 
     if (!this.currentMediaSourceOrNull) {
-      return false
+      return PlaybackRequestResult.Failure
     }
-    this.currentQueueIndex--;
+    const targetQueueIndex = this.currentQueueIndex - 1
     let currentMediaSource = this.currentMediaSourceOrNull
 
-    await this.startPlayback(
-      this.currentQueue[this.currentQueueIndex],
+    const result = await this.startPlayback(
+      this.currentQueue[targetQueueIndex],
       null,
       currentMediaSource.maxStreamingBitrate ?? null,
       null,
       null,
-      null
+      null,
+      true,
+      targetQueueIndex
     )
-    return true
+    this.restorePlaybackAfterFailure(result)
+    return result
   }
 
-  async next(): Promise<boolean> {
+  async next(): Promise<PlaybackRequestResult> {
     if (!this.hasNext()) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     if (!this.currentMediaSourceOrNull) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     let currentMediaSource = this.currentMediaSourceOrNull
-    this.currentQueueIndex++;
-    await this.startPlayback(
-      this.currentQueue[this.currentQueueIndex],
+    const targetQueueIndex = this.currentQueueIndex + 1
+    const result = await this.startPlayback(
+      this.currentQueue[targetQueueIndex],
       null,
       currentMediaSource.maxStreamingBitrate ?? null,
       null,
       null,
-      null
+      null,
+      true,
+      targetQueueIndex
     )
-    return true
+    this.restorePlaybackAfterFailure(result)
+    return result
   }
 
-  async changeEpisode(index: number) {
+  async changeEpisode(index: number): Promise<PlaybackRequestResult> {
     if (!this.currentMediaSourceOrNull) {
-      return false
+      return PlaybackRequestResult.Failure
+    }
+    if (index < 0 || index >= this.currentQueue.length) {
+      return PlaybackRequestResult.Failure
     }
     let currentMediaSource = this.currentMediaSourceOrNull
-    this.currentQueueIndex = index
-    await this.startPlayback(
-      this.currentQueue[this.currentQueueIndex],
+    const result = await this.startPlayback(
+      this.currentQueue[index],
       null,
       currentMediaSource.maxStreamingBitrate ?? null,
       null,
       null,
-      null
+      null,
+      true,
+      index
     )
-    return true
+    this.restorePlaybackAfterFailure(result)
+    return result
   }
 
 
@@ -298,7 +393,7 @@ export class QueueManager {
     }
   }
 
-  selectAudioStreamAndRestartPlayback(selectedMediaStream: MediaStream): boolean {
+  async selectAudioStreamAndRestartPlayback(selectedMediaStream: MediaStream): Promise<PlaybackRequestResult> {
     // 验证选中的是音频流
     if (selectedMediaStream.Type !== MediaStreamType.Audio) {
       throw new Error('Selected stream must be an audio stream');
@@ -306,26 +401,23 @@ export class QueueManager {
 
     let currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     let position = this.viewModel.getPositionAndPause()
-    if (!position) {
-      return false
+    if (!this.isValidPlaybackPosition(position)) {
+      return PlaybackRequestResult.Failure
     }
 
-    this.startPlayback(
-      currentMediaSource.itemId,
-      currentMediaSource.id,
+    return await this.restartCurrentPlayback(
+      currentMediaSource,
+      position,
       currentMediaSource.maxStreamingBitrate,
-      position * Constants.TICKS_PER_MILLISECOND,
       selectedMediaStream.Index!,
-      currentMediaSource.selectedSubtitleStreamIndex,
-      true,
+      currentMediaSource.selectedSubtitleStreamIndex
     )
-    return true
   }
 
-  selectSubtitleStreamAndRestartPlayback(selectedMediaStream?: MediaStream): boolean {
+  async selectSubtitleStreamAndRestartPlayback(selectedMediaStream?: MediaStream): Promise<PlaybackRequestResult> {
     // 验证选中的是字幕
     if (selectedMediaStream?.Type !== MediaStreamType.Subtitle) {
       throw new Error('Selected stream must be an subtitle stream');
@@ -333,23 +425,20 @@ export class QueueManager {
 
     let currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     let position = this.viewModel.getPositionAndPause()
-    if (!position) {
-      return false
+    if (!this.isValidPlaybackPosition(position)) {
+      return PlaybackRequestResult.Failure
     }
 
-    this.startPlayback(
-      currentMediaSource.itemId,
-      currentMediaSource.id,
+    return await this.restartCurrentPlayback(
+      currentMediaSource,
+      position,
       currentMediaSource.maxStreamingBitrate,
-      position * Constants.TICKS_PER_MILLISECOND,
       currentMediaSource.selectedAudioStreamIndex,
-      selectedMediaStream?.Index ?? -1,
-      true,
+      selectedMediaStream?.Index ?? -1
     )
-    return true
   }
 
   async getItems(): Promise<AxiosResponse<BaseItemDtoQueryResult>> {

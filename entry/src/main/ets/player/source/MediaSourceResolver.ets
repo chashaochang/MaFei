@@ -121,6 +121,8 @@ export class MediaSourceResolver {
             reject(e)
           })
         }
+      }).catch((e: BusinessError) => {
+        reject(e)
       })
     })
   }

@@ -6,6 +6,7 @@ import {
 } from "sdk/src/main/ets/generated-client/models";
 import { PlayerPageViewModel } from "../features/player/PlayerPageViewModel";
 import { JellyfinMediaSource } from "./source/JellyfinMediaSource";
+import { PlaybackRequestResult } from "./queue/PlaybackRequestResult";
 
 const TAG = 'TrackSelectionHelper'
 export class TrackSelectionHelper {
@@ -36,10 +37,10 @@ export class TrackSelectionHelper {
    * @param mediaStreamIndex the [MediaStream.index] that should be selected
    * @return true if the audio track was changed
    */
-  selectAudioTrack(selectedMediaStream: MediaStream): boolean {
+  async selectAudioTrack(selectedMediaStream: MediaStream): Promise<PlaybackRequestResult> {
     let mediaSource = this.viewModel.mediaSourceOrNull
     if (!mediaSource) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     if (selectedMediaStream.Type != MediaStreamType.Audio) {
       throw new Error('Selected stream must be an audio stream');
@@ -47,13 +48,13 @@ export class TrackSelectionHelper {
 
     // For transcoding and external streams, we need to restart playback
     if (mediaSource.usesServerTranscoding() || selectedMediaStream.IsExternal) {
-      return this.viewModel.queueManager.selectAudioStreamAndRestartPlayback(selectedMediaStream)
+      return await this.viewModel.queueManager.selectAudioStreamAndRestartPlayback(selectedMediaStream)
     }
     let success = this.selectPlayerAudioTrack(mediaSource, selectedMediaStream, false)
     if (success) {
       this.viewModel.logTracks()
     }
-    return success
+    return success ? PlaybackRequestResult.Success : PlaybackRequestResult.Failure
   }
 
   private selectPlayerAudioTrack(mediaSource: JellyfinMediaSource, audioStream: MediaStream,
@@ -72,15 +73,16 @@ export class TrackSelectionHelper {
     return true
   }
 
-  selectSubtitleTrack(mediaStream: MediaStream): boolean {
+  async selectSubtitleTrack(mediaStream: MediaStream): Promise<PlaybackRequestResult> {
     let mediaSource = this.viewModel.mediaSourceOrNull
     if (!mediaSource) {
-      return false
+      return PlaybackRequestResult.Failure
     }
     if (mediaStream?.DeliveryMethod == SubtitleDeliveryMethod.Encode) {
-      return this.viewModel.queueManager.selectSubtitleStreamAndRestartPlayback(mediaStream)
+      return await this.viewModel.queueManager.selectSubtitleStreamAndRestartPlayback(mediaStream)
     }
-    return this.selectSubtitleTrack3(mediaSource, mediaStream, false)
+    return this.selectSubtitleTrack3(mediaSource, mediaStream, false) ?
+      PlaybackRequestResult.Success : PlaybackRequestResult.Failure
   }
 
   selectSubtitleTrack3(mediaSource: JellyfinMediaSource, subtitleStream: MediaStream | undefined,

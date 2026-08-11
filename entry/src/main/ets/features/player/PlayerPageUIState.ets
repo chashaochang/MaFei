@@ -65,6 +65,8 @@ export class PlayerPageUIState extends BaseUIState{
   @Trace isContentReported: boolean = false
   @Trace isReportSheetVisible: boolean = false
   @Trace reportContentDraft: string = ''
+  // Native-theme title bar and player controls must appear and disappear together.
+  @Trace controlsVisible: boolean = true
 
   playerMenus?: PlayerMenus
 

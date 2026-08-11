@@ -63,6 +63,22 @@ export class OneMoreUtil {
     return deviceInfo.deviceType == '2in1'
   }
 
+  static shouldRequestPlayerManualRotation(windowClass?: window.Window): boolean {
+    if (deviceInfo.deviceType !== 'phone' && deviceInfo.deviceType !== 'tablet') {
+      return false
+    }
+    if (!windowClass || !canIUse('SystemCapability.Window.SessionManager')) {
+      return false
+    }
+    try {
+      const windowStatus = windowClass.getWindowStatus()
+      return windowStatus !== window.WindowStatusType.FLOATING &&
+        windowStatus !== window.WindowStatusType.SPLIT_SCREEN
+    } catch (_error) {
+      return true
+    }
+  }
+
   static getNavigationMode(currentDisplay: display.Orientation): NavigationMode {
     switch (currentDisplay) {
       case display.Orientation.PORTRAIT:

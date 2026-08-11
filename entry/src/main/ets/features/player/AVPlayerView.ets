@@ -23,6 +23,7 @@ import { AppPreference } from "../../data/AppPreference";
 import { ImageKnifeComponent } from "@ohos/imageknifepro";
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 import { PlaybackInfoCard } from "../../player/ui/PlaybackInfoCard";
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 
 const PROGRESS_MAX_VALUE: number = 100;
 const SEEK_SYNC_TOLERANCE_MS: number = 1500;
@@ -47,6 +48,7 @@ function menuItemStyle() {
 @ComponentV2
 export struct AVPlayerView {
   @Param @Require videoUrl: string
+  @Param nativeTopNavigationEnabled: boolean = false
 
   @Monitor('videoUrl')
   onUrlChange() {
@@ -76,6 +78,7 @@ export struct AVPlayerView {
 
   @Monitor('showControls')
   onControlVisibilityChanged() {
+    this.syncNativeTopNavigationVisibility()
     this.changeSystemBar()
   }
 
@@ -83,7 +86,7 @@ export struct AVPlayerView {
   onScreenChanged() {
     this.changeSystemBar()
     if (this.vm.appUIState.isFullScreen) {
-      if (OneMoreUtil.isNormalPhone()) {
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
         }
@@ -91,6 +94,8 @@ export struct AVPlayerView {
     } else {
       if (OneMoreUtil.isNormalPhone()) {
         SmartDialog.dismiss()
+      }
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT)
         }
@@ -152,6 +157,16 @@ export struct AVPlayerView {
   @Param @Require onEpisodeChange: (index: number) => void
   @Param @Require stopCast: () => void
 
+  private shouldShowLegacyTopControl(): boolean {
+    return !this.nativeTopNavigationEnabled || this.vm.appUIState.isFullScreen
+  }
+
+  private syncNativeTopNavigationVisibility(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.ui.controlsVisible = this.showControls
+    }
+  }
+
   @Local progressValue: number = 0
   @Local currentTime: string = "00:00"
   @Local totalTime: string = "00:00"
@@ -207,6 +222,7 @@ export struct AVPlayerView {
   @Consumer() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
 
   aboutToAppear() {
+    this.syncNativeTopNavigationVisibility()
     try {
       this.mAudioManager = audio.getAudioManager()
       const volumeManager = this.mAudioManager.getVolumeManager()
@@ -286,6 +302,9 @@ export struct AVPlayerView {
   }
 
   aboutToDisappear() {
+    if (this.nativeTopNavigationEnabled) {
+      this.ui.controlsVisible = false
+    }
     this.resetSeekPreviewState()
     void this.seekPreviewHelper.release()
     this.updateWindowKeepScreenOn(false)
@@ -481,6 +500,27 @@ export struct AVPlayerView {
         this.sec--
       }
     }, 1000)
+  }
+
+  private onSurfaceTap(): void {
+    if (this.lock) {
+      this.timeLockCountdown()
+      return
+    }
+    if (this.loadingVisible === Visibility.Visible) {
+      return
+    }
+    if (OneMoreUtil.isPc()) {
+      this.startOrStop()
+      return
+    }
+    if (this.showControls) {
+      clearInterval(avUiTime)
+      this.showControls = false
+      this.fullShowLock = false
+    } else {
+      this.timeCountdown()
+    }
   }
 
   private startOrStop() {
@@ -937,6 +977,15 @@ export struct AVPlayerView {
 
   @Builder
   audioMenu() {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeAudioMenu()
+    } else {
+      this.legacyAudioMenu()
+    }
+  }
+
+  @Builder
+  private nativeAudioMenu(): void {
     Menu() {
       ForEach(this.ui.audioStreams, (item: MediaStream) => {
         MenuItem({
@@ -948,10 +997,37 @@ export struct AVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+  }
+
+  @Builder
+  private legacyAudioMenu(): void {
+    Menu() {
+      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+        MenuItem({
+          content: (item.DisplayTitle ?? '') as string
+        }).selectIcon(true)
+          .selected(this.ui.selectedAudioStream == item)
+          .onClick(() => {
+            this.onAudioTrackSelected(item)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
   }
 
   @Builder
   subtitleMenu() {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeSubtitleMenu()
+    } else {
+      this.legacySubtitleMenu()
+    }
+  }
+
+  @Builder
+  private nativeSubtitleMenu(): void {
     Menu() {
       ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
         MenuItem({
@@ -963,10 +1039,37 @@ export struct AVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+  }
+
+  @Builder
+  private legacySubtitleMenu(): void {
+    Menu() {
+      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+        MenuItem({
+          content: (item.DisplayTitle ?? '') as string
+        }).selectIcon(true)
+          .selected(this.ui.selectedSubtitleStream == item)
+          .onClick(() => {
+            this.onSubtitleSelected(item)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
   }
 
   @Builder
   qualityMenu() {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeQualityMenu()
+    } else {
+      this.legacyQualityMenu()
+    }
+  }
+
+  @Builder
+  private nativeQualityMenu(): void {
     Menu() {
       ForEach(this.ui.qualityOptions, (option: QualityOption) => {
         MenuItem({
@@ -978,6 +1081,24 @@ export struct AVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+  }
+
+  @Builder
+  private legacyQualityMenu(): void {
+    Menu() {
+      ForEach(this.ui.qualityOptions, (option: QualityOption) => {
+        MenuItem({
+          content: `${option.maxHeight}p - ${this.formatBitrate(option.bitrate)}`
+        }).selectIcon(true)
+          .selected(this.ui.selectedBitrate == option.bitrate)
+          .onClick(() => {
+            this.onQualitySelected(option)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
   }
 
   @Builder
@@ -1114,42 +1235,60 @@ export struct AVPlayerView {
   }
 
   @Builder
-  topControlView() {
-    Row() {
-      Image($r('app.media.ic_back'))
-        .width(44)
-        .height(44)
-        .padding(12)
-        .margin({ left: 16 })
-        .onClick(() => {
-          this.handleTopBackClick()
-        })
-      Text(this.ui.title)
-        .fontColor(Color.White)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .margin({ left: 4 })
-        .layoutWeight(1)
-        .textOverflow({ overflow: TextOverflow.MARQUEE })
-      Text(this.getReportButtonText())
-        .fontColor(this.ui.isContentReported ? 'rgba(255,255,255,0.72)' : Color.White)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor(this.ui.isContentReported ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)')
-        .borderRadius(999)
-        .margin({ right: 8 })
-        .onClick(() => {
-          this.vm.showReportComposer()
-        })
-        .bindSheet($$this.ui.isReportSheetVisible, this.reportSheetBuilder(), {
-          height: 360,
-          preferType: SheetType.BOTTOM,
-          title: { title: '内容举报' },
-          onDisappear: () => {
-            this.ui.isReportSheetVisible = false
-          }
-        })
+  private reportControl(): void {
+    Text(this.getReportButtonText())
+      .fontColor(this.ui.isContentReported ? 'rgba(255,255,255,0.72)' : Color.White)
+      .fontSize(12)
+      .fontWeight(FontWeight.Medium)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .backgroundColor(this.ui.isContentReported ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)')
+      .borderRadius(999)
+      .margin({ right: 8 })
+      .onClick(() => {
+        this.vm.showReportComposer()
+      })
+      .bindSheet($$this.ui.isReportSheetVisible, this.reportSheetBuilder(), {
+        height: 360,
+        preferType: SheetType.BOTTOM,
+        title: { title: '内容举报' },
+        onDisappear: () => {
+          this.ui.isReportSheetVisible = false
+        }
+      })
+  }
+
+  @Builder
+  private castControl(rightMargin: number): void {
+    AVCastPicker({
+      normalColor: Color.White,
+    })
+      .width(24)
+      .height(24)
+      .margin({ right: rightMargin })
+      .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private topControlItems(showEngineBadge: boolean): void {
+    Image($r('app.media.ic_back'))
+      .width(44)
+      .height(44)
+      .padding(12)
+      .margin({ left: 16 })
+      .onClick(() => {
+        this.handleTopBackClick()
+      })
+    Text(this.ui.title)
+      .fontColor(Color.White)
+      .fontSize(16)
+      .fontWeight(FontWeight.Bold)
+      .margin({ left: 4 })
+      .layoutWeight(1)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.MARQUEE })
+      .marqueeOptions({ start: true })
+    this.reportControl()
+    if (showEngineBadge) {
       Text(this.getEngineBadgeLabel())
         .fontColor(Color.White)
         .fontSize(10)
@@ -1158,18 +1297,49 @@ export struct AVPlayerView {
         .backgroundColor('rgba(255,255,255,0.18)')
         .borderRadius(999)
         .margin({ right: 12 })
-      AVCastPicker({
-        normalColor: Color.White,
-      })
-        .width(24)
-        .height(24)
-        .margin({ right: 32 })
-        .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
+    }
+    this.castControl(32)
+  }
+
+  @Builder
+  topControlView() {
+    if (this.nativeTopNavigationEnabled && this.vm.appUIState.isFullScreen) {
+      this.nativeLandscapeTopControlView()
+    } else {
+      this.legacyTopControlView()
+    }
+  }
+
+  @Builder
+  private nativeLandscapeTopControlView(): void {
+    Row() {
+      this.topControlItems(false)
+    }
+    .height(52)
+    .width('100%')
+    .justifyContent(FlexAlign.Start)
+    .padding({
+      left: 12,
+      right: 12,
+    })
+    .margin({
+      top: 12,
+      left: this.vm.appUIState.safeTop + 12,
+      right: this.vm.appUIState.safeTop + 12
+    })
+    .borderRadius(26)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private legacyTopControlView(): void {
+    Row() {
+      this.topControlItems(true)
     }
     .height(this.vm.appUIState.isFullScreen ? 76 : 56 + this.vm.appUIState.safeTop)
     .width('100%')
     .justifyContent(FlexAlign.Start)
-    .width('100%')
     .padding({
       top: this.vm.appUIState.isFullScreen ? 10 : this.vm.appUIState.safeTop,
       left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
@@ -1185,6 +1355,37 @@ export struct AVPlayerView {
       ]
     })
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private nativePortraitTopControlView(): void {
+    Row({ space: 8 }) {
+      Text(this.ui.title)
+        .fontColor(Color.White)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .marqueeOptions({ start: true })
+        .hitTestBehavior(HitTestMode.None)
+      Row({ space: 4 }) {
+        this.reportControl()
+        this.castControl(0)
+      }
+      .height(44)
+      .width(128)
+      .borderRadius(22)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+    }
+    .width('calc(100% - 88vp)')
+    .height(56)
+    .margin({ top: this.vm.appUIState.safeTop, left: 72, right: 16 })
+    .alignItems(VerticalAlign.Center)
+    .align(Alignment.Top)
+    .zIndex(2)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   private getReportButtonText(): string {
@@ -1292,8 +1493,16 @@ export struct AVPlayerView {
 
   @Builder
   bottomControlView() {
-    Column() {
-      Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
+    if (this.nativeTopNavigationEnabled && this.vm.appUIState.isFullScreen) {
+      this.nativeLandscapeBottomControlView()
+    } else {
+      this.legacyBottomControlView()
+    }
+  }
+
+  @Builder
+  private bottomControlItems(): void {
+    Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
         Text(this.currentTime)
           .fontColor(Color.White)
           .fontSize(13)
@@ -1327,9 +1536,9 @@ export struct AVPlayerView {
           .onClick(() => {
             this.vm.appUIState.isFullScreen = !this.vm.appUIState.isFullScreen
           })
-      }.width('100%')
+    }.width('100%')
 
-      Row() {
+    Row() {
         Image(this.ui.CONTROL_PlayStatus == PlayStatus.PLAY ? $r('app.media.ic_pause') : $r('app.media.ic_play'))
           .width(44)
           .height(44)
@@ -1446,12 +1655,39 @@ export struct AVPlayerView {
               }
             })
         }
-      }.height(44).padding({ left: 8, right: 8 })
-      .visibility(
-        this.vm.appUIState.isFullScreen || (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) ?
-          Visibility.Visible : Visibility.None
-      )
-    }.padding({
+    }.height(44).padding({ left: 8, right: 8 })
+    .visibility(
+      this.vm.appUIState.isFullScreen || (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) ?
+        Visibility.Visible : Visibility.None
+    )
+  }
+
+  @Builder
+  private nativeLandscapeBottomControlView(): void {
+    Column() {
+      this.bottomControlItems()
+    }
+    .padding({
+      top: 8,
+      bottom: 8,
+      left: 8,
+      right: 8
+    })
+    .margin({
+      bottom: 12,
+      left: this.vm.appUIState.safeTop + 12,
+      right: this.vm.appUIState.safeTop + 12
+    })
+    .borderRadius(24)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+  }
+
+  @Builder
+  private legacyBottomControlView(): void {
+    Column() {
+      this.bottomControlItems()
+    }
+    .padding({
       bottom: this.showControls && !this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeBottom : 10,
       left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
       right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
@@ -1566,6 +1802,9 @@ export struct AVPlayerView {
           type: XComponentType.SURFACE,
           controller: this.xComponentController
         })
+          .onClick(() => {
+            this.onSurfaceTap()
+          })
           .onLoad(async () => {
             this.mContext = getContext(this)
             this.surfaceId = this.xComponentController.getXComponentSurfaceId()
@@ -1587,9 +1826,6 @@ export struct AVPlayerView {
           .width('100%')
           .height('100%')
           .id('avplayer_xcomponent')
-          .onClick(() => {
-            this.timeCountdown()
-          })
       }
       .width(this.videoWidth)
       .aspectRatio(this.videoAspectRatio)
@@ -1625,8 +1861,14 @@ export struct AVPlayerView {
       .padding({ left: 36, right: 36 })
 
       Column() {
-        this.topControlView()
-        Blank().layoutWeight(1)
+        if (this.nativeTopNavigationEnabled && !this.vm.appUIState.isFullScreen) {
+          this.nativePortraitTopControlView()
+        } else if (this.shouldShowLegacyTopControl()) {
+          this.topControlView()
+        }
+        Blank()
+          .layoutWeight(1)
+          .hitTestBehavior(HitTestMode.None)
         this.bottomControlView()
       }.height('100%')
       .visibility(this.showControls ? Visibility.Visible : Visibility.Hidden)
@@ -1781,22 +2023,7 @@ export struct AVPlayerView {
         }
       }),
       TapGesture({ count: 1 }).onAction(() => {
-        if (this.lock) {
-          this.timeLockCountdown()
-          return
-        }
-        if (this.loadingVisible == Visibility.Visible) {
-          return
-        }
-        if (OneMoreUtil.isPc()) {
-          this.startOrStop()
-        } else {
-          if (this.showControls) {
-            this.showControls = false
-          } else {
-            this.timeCountdown()
-          }
-        }
+        this.onSurfaceTap()
       }),
       PanGesture(this.panOptionBrightAndVolume)
         .onActionStart((event: GestureEvent | undefined) => {

@@ -26,6 +26,7 @@ import { PlayerEngineType } from '../../entity/PlayerEngineType'
 import { ImageKnifeComponent } from '@ohos/imageknifepro'
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 import { PlaybackInfoCard } from '../../player/ui/PlaybackInfoCard'
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import type { MpvTrackInfo } from 'libmpvnative.so'
 
 const PROGRESS_MAX_VALUE: number = 100
@@ -61,6 +62,7 @@ function menuItemStyle() {
 @ComponentV2
 export struct MPVPlayerView {
   @Param @Require videoUrl: string
+  @Param nativeTopNavigationEnabled: boolean = false
   @Param @Require onNext: () => void
   @Param @Require onAudioTrackSelected: (stream: MediaStream) => void
   @Param @Require onSubtitleSelected: (stream: MediaStream) => void
@@ -156,6 +158,7 @@ export struct MPVPlayerView {
 
   @Monitor('showControls')
   onControlVisibilityChanged(): void {
+    this.syncNativeTopNavigationVisibility()
     this.changeSystemBar()
   }
 
@@ -166,7 +169,7 @@ export struct MPVPlayerView {
     }
     this.changeSystemBar()
     if (this.vm.appUIState.isFullScreen) {
-      if (OneMoreUtil.isNormalPhone()) {
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
         }
@@ -174,10 +177,22 @@ export struct MPVPlayerView {
     } else {
       if (OneMoreUtil.isNormalPhone()) {
         SmartDialog.dismiss()
+      }
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT)
         }
       }
+    }
+  }
+
+  private shouldShowLegacyTopControl(): boolean {
+    return !this.nativeTopNavigationEnabled || this.vm.appUIState.isFullScreen
+  }
+
+  private syncNativeTopNavigationVisibility(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.ui.controlsVisible = this.showControls
     }
   }
 
@@ -239,6 +254,7 @@ export struct MPVPlayerView {
   }
 
   aboutToAppear(): void {
+    this.syncNativeTopNavigationVisibility()
     try {
       this.mAudioManager = audio.getAudioManager()
       const volumeManager = this.mAudioManager.getVolumeManager()
@@ -300,6 +316,9 @@ export struct MPVPlayerView {
   }
 
   aboutToDisappear(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.ui.controlsVisible = false
+    }
     this.resetSeekPreviewState()
     void this.seekPreviewHelper.release()
     this.updateWindowKeepScreenOn(false)
@@ -1717,7 +1736,7 @@ export struct MPVPlayerView {
   }
 
   @Builder
-  private audioMenu(): void {
+  private nativeAudioMenu(): void {
     Menu() {
       ForEach(this.ui.audioStreams, (item: MediaStream) => {
         MenuItem({
@@ -1730,10 +1749,38 @@ export struct MPVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
   }
 
   @Builder
-  private subtitleMenu(): void {
+  private legacyAudioMenu(): void {
+    Menu() {
+      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+        MenuItem({
+          content: item.DisplayTitle
+        })
+          .selectIcon(true)
+          .selected(this.ui.selectedAudioStream == item)
+          .onClick(() => {
+            this.selectAudioTrack(item)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
+  }
+
+  @Builder
+  private audioMenu(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeAudioMenu()
+    } else {
+      this.legacyAudioMenu()
+    }
+  }
+
+  @Builder
+  private nativeSubtitleMenu(): void {
     Menu() {
       ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
         MenuItem({
@@ -1746,10 +1793,38 @@ export struct MPVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
   }
 
   @Builder
-  private qualityMenu(): void {
+  private legacySubtitleMenu(): void {
+    Menu() {
+      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+        MenuItem({
+          content: item.DisplayTitle
+        })
+          .selectIcon(true)
+          .selected(this.ui.selectedSubtitleStream == item)
+          .onClick(() => {
+            this.selectSubtitleTrack(item)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
+  }
+
+  @Builder
+  private subtitleMenu(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeSubtitleMenu()
+    } else {
+      this.legacySubtitleMenu()
+    }
+  }
+
+  @Builder
+  private nativeQualityMenu(): void {
     Menu() {
       ForEach(this.ui.qualityOptions, (option: QualityOption) => {
         MenuItem({
@@ -1762,45 +1837,89 @@ export struct MPVPlayerView {
           })
       })
     }
+    .backgroundBlurStyle(BlurStyle.NONE)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
   }
 
   @Builder
-  private topControlView(): void {
-    Row() {
-      Image($r('app.media.ic_back'))
-        .width(44)
-        .height(44)
-        .padding(12)
-        .margin({ left: 16 })
-        .onClick(() => {
-          this.handleTopBackClick()
+  private legacyQualityMenu(): void {
+    Menu() {
+      ForEach(this.ui.qualityOptions, (option: QualityOption) => {
+        MenuItem({
+          content: `${option.maxHeight}p - ${this.formatBitrate(option.bitrate)}`
         })
-      Text(this.ui.title)
-        .fontColor(Color.White)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .margin({ left: 4 })
-        .layoutWeight(1)
-        .textOverflow({ overflow: TextOverflow.MARQUEE })
-      Text(this.getReportButtonText())
-        .fontColor(this.ui.isContentReported ? 'rgba(255,255,255,0.72)' : Color.White)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor(this.ui.isContentReported ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)')
-        .borderRadius(999)
-        .margin({ right: 8 })
-        .onClick(() => {
-          this.vm.showReportComposer()
-        })
-        .bindSheet($$this.ui.isReportSheetVisible, this.reportSheetBuilder(), {
-          height: 360,
-          preferType: SheetType.BOTTOM,
-          title: { title: '内容举报' },
-          onDisappear: () => {
-            this.ui.isReportSheetVisible = false
-          }
-        })
+          .selectIcon(true)
+          .selected(this.ui.selectedBitrate == option.bitrate)
+          .onClick(() => {
+            this.onQualitySelected(option)
+          })
+      })
+    }
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
+  }
+
+  @Builder
+  private qualityMenu(): void {
+    if (this.nativeTopNavigationEnabled) {
+      this.nativeQualityMenu()
+    } else {
+      this.legacyQualityMenu()
+    }
+  }
+
+  @Builder
+  private reportActionButton(): void {
+    Text(this.getReportButtonText())
+      .fontColor(this.ui.isContentReported ? 'rgba(255,255,255,0.72)' : Color.White)
+      .fontSize(12)
+      .fontWeight(FontWeight.Medium)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .backgroundColor(this.ui.isContentReported ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)')
+      .borderRadius(999)
+      .onClick(() => {
+        this.vm.showReportComposer()
+      })
+      .bindSheet($$this.ui.isReportSheetVisible, this.reportSheetBuilder(), {
+        height: 360,
+        preferType: SheetType.BOTTOM,
+        title: { title: '内容举报' },
+        onDisappear: () => {
+          this.ui.isReportSheetVisible = false
+        }
+      })
+  }
+
+  @Builder
+  private castActionButton(): void {
+    AVCastPicker({
+      normalColor: Color.White,
+    })
+      .width(24)
+      .height(24)
+      .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private topControlContent(): void {
+    Image($r('app.media.ic_back'))
+      .width(44)
+      .height(44)
+      .padding(12)
+      .margin({ left: 16 })
+      .onClick(() => {
+        this.handleTopBackClick()
+      })
+    Text(this.ui.title)
+      .fontColor(Color.White)
+      .fontSize(16)
+      .fontWeight(FontWeight.Bold)
+      .margin({ left: 4 })
+      .layoutWeight(1)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.MARQUEE })
+      .marqueeOptions({ start: true })
+    this.reportActionButton()
+    if (!this.nativeTopNavigationEnabled) {
       Text(this.getEngineBadgeLabel())
         .fontColor(Color.White)
         .fontSize(10)
@@ -1809,13 +1928,33 @@ export struct MPVPlayerView {
         .backgroundColor('rgba(255,255,255,0.18)')
         .borderRadius(999)
         .margin({ right: 12 })
-      AVCastPicker({
-        normalColor: Color.White,
-      })
-        .width(24)
-        .height(24)
-        .margin({ right: 32 })
-        .visibility(this.ui.isCastPlaying ? Visibility.None : Visibility.Visible)
+    }
+    this.castActionButton()
+  }
+
+  @Builder
+  private nativeFullscreenTopControl(): void {
+    Row() {
+      this.topControlContent()
+    }
+    .height(52)
+    .width('100%')
+    .justifyContent(FlexAlign.Start)
+    .padding({ left: 12, right: 12 })
+    .margin({
+      top: 12,
+      left: this.vm.appUIState.safeTop + 12,
+      right: this.vm.appUIState.safeTop + 12
+    })
+    .borderRadius(26)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private legacyTopControl(): void {
+    Row() {
+      this.topControlContent()
     }
     .height(this.vm.appUIState.isFullScreen ? 76 : 56 + this.vm.appUIState.safeTop)
     .width('100%')
@@ -1835,6 +1974,50 @@ export struct MPVPlayerView {
       ]
     })
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private topControlView(): void {
+    if (this.nativeTopNavigationEnabled && this.vm.appUIState.isFullScreen) {
+      this.nativeFullscreenTopControl()
+    } else {
+      this.legacyTopControl()
+    }
+  }
+
+  @Builder
+  private nativePortraitTopActions(): void {
+    Row({ space: 8 }) {
+      Text(this.ui.title)
+        .fontColor(Color.White)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .marqueeOptions({ start: true })
+        .layoutWeight(1)
+        .hitTestBehavior(HitTestMode.None)
+      Row({ space: 4 }) {
+        this.reportActionButton()
+        this.castActionButton()
+      }
+      .height(44)
+      .width(128)
+      .borderRadius(22)
+      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+    }
+    .width('calc(100% - 88vp)')
+    .height(56)
+    .margin({
+      top: this.vm.appUIState.safeTop,
+      left: 72,
+      right: 16
+    })
+    .alignItems(VerticalAlign.Center)
+    .align(Alignment.Top)
+    .zIndex(2)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   private getReportButtonText(): string {
@@ -2025,8 +2208,7 @@ export struct MPVPlayerView {
   }
 
   @Builder
-  private bottomControls(): void {
-    Column() {
+  private bottomControlRows(): void {
       Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, justifyContent: FlexAlign.Start }) {
         Text(this.currentTime)
           .fontColor(Color.White)
@@ -2225,6 +2407,33 @@ export struct MPVPlayerView {
         this.vm.appUIState.isFullScreen || (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) ?
           Visibility.Visible : Visibility.None
       )
+  }
+
+  @Builder
+  private nativeBottomControls(): void {
+    Column() {
+      this.bottomControlRows()
+    }
+    .width('100%')
+    .padding({
+      top: 8,
+      bottom: 8,
+      left: 8,
+      right: 8
+    })
+    .margin({
+      bottom: 12,
+      left: this.vm.appUIState.safeTop + 12,
+      right: this.vm.appUIState.safeTop + 12
+    })
+    .borderRadius(24)
+    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+  }
+
+  @Builder
+  private legacyBottomControls(): void {
+    Column() {
+      this.bottomControlRows()
     }
     .width('100%')
     .padding({
@@ -2232,6 +2441,15 @@ export struct MPVPlayerView {
       left: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
       right: this.vm.appUIState.isFullScreen ? this.vm.appUIState.safeTop : 0,
     })
+  }
+
+  @Builder
+  private bottomControls(): void {
+    if (this.nativeTopNavigationEnabled && this.vm.appUIState.isFullScreen) {
+      this.nativeBottomControls()
+    } else {
+      this.legacyBottomControls()
+    }
   }
 
   @Builder
@@ -2397,8 +2615,18 @@ export struct MPVPlayerView {
         .height('100%')
         .padding({ left: 36, right: 36 })
 
+      if (this.nativeTopNavigationEnabled &&
+        !this.vm.appUIState.isFullScreen &&
+        this.showControls &&
+        !this.shouldShowStartupLandscapeLoading() &&
+        !OneMoreUtil.isPc()) {
+        this.nativePortraitTopActions()
+      }
+
       Column() {
-        this.topControlView()
+        if (this.shouldShowLegacyTopControl()) {
+          this.topControlView()
+        }
         Blank()
           .layoutWeight(1)
           .width('100%')

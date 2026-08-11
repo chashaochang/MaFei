@@ -32,6 +32,7 @@ import {
 } from "@ohos/danmakuflamemaster";
 import { PlayerPageUIState } from "./PlayerPageUIState";
 import { QueueManager } from "../../player/queue/QueueManager";
+import { PlaybackRequestResult } from "../../player/queue/PlaybackRequestResult";
 import { PlayStatus } from "./PlayStatus";
 import { TrackSelectionHelper } from "../../player/TrackSelectionHelper";
 import { parseXmlToCommentData } from "./danmu/DanmuUtil";
@@ -659,22 +660,60 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
 
   }
 
+  cancelPendingPlayback(): void {
+    this.queueManager.cancelPendingPlayback()
+  }
+
   release() {
+    this.cancelPendingPlayback()
     avSessionManager.unregisterSessionListener()
     //BackgroundTaskManager.stopContinuousTask(this.context);
   }
 
   getPositionAndPause(): number {
+    const position = this.getCurrentPlaybackPositionMs()
+    if (!Number.isFinite(position) || position < 0) {
+      return position
+    }
     emitter.emit(Constants.PLAYER_EVENT, {
       data: {
         'eventName': 'Pause'
       }
     })
-    return this.getCurrentPlaybackPositionMs()
+    return position
   }
 
-  changeBitrate(bitrate?: number) {
-    this.queueManager.changeBitrate(bitrate)
+  resumePlaybackAfterFailedRequest(): void {
+    emitter.emit(Constants.PLAYER_EVENT, {
+      data: {
+        'eventName': 'Resume'
+      }
+    })
+  }
+
+  private handlePlaybackRequestResult(result: PlaybackRequestResult, failureMessage: string): boolean {
+    if (result === PlaybackRequestResult.Success) {
+      return true
+    }
+    if (result === PlaybackRequestResult.Failure) {
+      ToastUtil.showToast(this.ui.context, failureMessage)
+    }
+    return false
+  }
+
+  async changeBitrate(bitrate?: number): Promise<boolean> {
+    const result = await this.queueManager.changeBitrate(bitrate)
+    return this.handlePlaybackRequestResult(result, '清晰度切换失败，已继续播放当前视频')
+  }
+
+  async selectAudioTrack(stream: MediaStream): Promise<boolean> {
+    const result = await this.trackSelectionHelper.selectAudioTrack(stream)
+    return this.handlePlaybackRequestResult(result, '音轨切换失败，已继续播放当前视频')
+  }
+
+  async selectSubtitleTrack(stream: MediaStream): Promise<boolean> {
+    const result = await this.trackSelectionHelper.selectSubtitleTrack(stream)
+    return this.handlePlaybackRequestResult(result, '字幕切换失败，已继续播放当前视频')
   }
 
   logTracks() {
@@ -789,14 +828,25 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     this.ui.isCastPlaying = true;
   };
   public playNextCallback = (): void => {
-    this.queueManager.next()
+    this.playNext()
   };
   public playPreviousCallback = (): void => {
-    this.queueManager.previous()
+    this.playPrevious()
   };
 
-  changeEpisode(index: number) {
-    this.queueManager.changeEpisode(index)
+  async playNext(): Promise<boolean> {
+    const result = await this.queueManager.next()
+    return this.handlePlaybackRequestResult(result, '无法播放下一项，已继续播放当前视频')
+  }
+
+  async playPrevious(): Promise<boolean> {
+    const result = await this.queueManager.previous()
+    return this.handlePlaybackRequestResult(result, '无法播放上一项，已继续播放当前视频')
+  }
+
+  async changeEpisode(index: number): Promise<boolean> {
+    const result = await this.queueManager.changeEpisode(index)
+    return this.handlePlaybackRequestResult(result, '选集失败，已继续播放当前视频')
   }
 
   async searchDanmuku() {

@@ -21,6 +21,17 @@ import Logger from './Logger';
 const TAG: string = '[WindowUtil]';
 
 export class WindowUtil {
+  private static orientationRequestSequence: number = 0;
+
+  private static beginOrientationRequest(): number {
+    WindowUtil.orientationRequestSequence++;
+    return WindowUtil.orientationRequestSequence;
+  }
+
+  private static isLatestOrientationRequest(requestSequence: number): boolean {
+    return requestSequence === WindowUtil.orientationRequestSequence;
+  }
+
   public static updateStatusBarColor(context: common.BaseContext, isDark: boolean) {
     window.getLastWindow(context).then((windowClass: window.Window) => {
       // windowClass.setWindowBackgroundColor(isDark ? '#101010' : '#FFFFFF')
@@ -83,7 +94,11 @@ export class WindowUtil {
   }
 
   static setMainWindowRestricted(context: Context): void {
+    const requestSequence = WindowUtil.beginOrientationRequest();
     window.getLastWindow(context).then((windowClass: window.Window) => {
+      if (!WindowUtil.isLatestOrientationRequest(requestSequence)) {
+        return;
+      }
       if (windowClass === undefined) {
         Logger.error(`MainWindowClass is undefined`);
         return;
@@ -96,7 +111,11 @@ export class WindowUtil {
   }
 
   static setMainWindowPortrait(context: Context): void {
+    const requestSequence = WindowUtil.beginOrientationRequest();
     window.getLastWindow(context).then((windowClass: window.Window) => {
+      if (!WindowUtil.isLatestOrientationRequest(requestSequence)) {
+        return;
+      }
       if (windowClass === undefined) {
         Logger.error(`MainWindowClass is undefined`);
         return;
@@ -107,7 +126,11 @@ export class WindowUtil {
   }
 
   static setMainWindowLandscape(context: Context): void {
+    const requestSequence = WindowUtil.beginOrientationRequest();
     window.getLastWindow(context).then((windowClass: window.Window) => {
+      if (!WindowUtil.isLatestOrientationRequest(requestSequence)) {
+        return;
+      }
       if (windowClass === undefined) {
         Logger.error(`MainWindowClass is undefined`);
         return;

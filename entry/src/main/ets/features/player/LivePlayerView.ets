@@ -90,13 +90,13 @@ export struct LivePlayerView {
   onScreenChanged(): void {
     this.changeSystemBar()
     if (this.vm.appUIState.isFullScreen) {
-      if (OneMoreUtil.isNormalPhone()) {
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_LANDSCAPE).catch()
         }
       }
     } else {
-      if (OneMoreUtil.isNormalPhone()) {
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
         if (canIUse('SystemCapability.Window.SessionManager')) {
           this.vm.appUIState.windowClass?.setPreferredOrientation(window.Orientation.USER_ROTATION_PORTRAIT).catch()
         }
