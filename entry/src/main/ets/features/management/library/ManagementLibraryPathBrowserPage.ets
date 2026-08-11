@@ -65,6 +65,18 @@ export struct ManagementLibraryPathBrowserPage {
       $r('sys.color.font_secondary') : $r('app.color.text_1')
   }
 
+  @Styles
+  pressedDirectoryRowStyle(): void {
+    .backgroundColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+      AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
+      Color.Transparent)
+  }
+
+  @Styles
+  normalDirectoryRowStyle(): void {
+    .backgroundColor(Color.Transparent)
+  }
+
   private getString(name: string): string {
     return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
   }
@@ -91,7 +103,8 @@ export struct ManagementLibraryPathBrowserPage {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.externaldrive'))
         .fontSize(20)
-        .fontColor([$r('app.color.color_main')])
+        .fontColor([AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+          $r('sys.color.icon_secondary') : $r('app.color.color_main')])
       Column({ space: 3 }) {
         Text(entry.name)
           .fontSize(16)
@@ -114,6 +127,7 @@ export struct ManagementLibraryPathBrowserPage {
     .width('calc(100% - 24vp)')
     .constraintSize({ minHeight: 60 })
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .stateStyles({ pressed: this.pressedDirectoryRowStyle, normal: this.normalDirectoryRowStyle })
     .onClick(() => this.vm.open(entry))
   }
 
@@ -270,9 +284,22 @@ export struct ManagementLibraryPathBrowserPage {
         .justifyContent(FlexAlign.Center)
       } else {
         List({ scroller: this.ui.scroller }) {
-          ForEach(this.ui.entries, (entry: ManagementLibraryPathEntry) => {
+          ForEach(this.ui.entries, (entry: ManagementLibraryPathEntry, index: number) => {
             ListItem() {
-              this.directoryRow(entry)
+              if (AppThemeTokens.isNative(this.vm.appUIState.themeStyle)) {
+                Column() {
+                  this.directoryRow(entry)
+                  if (index < this.ui.entries.length - 1) {
+                    Divider()
+                      .color(AppThemeSurfaceResolver.contentDivider(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                      .margin({ left: 44, right: 8 })
+                  }
+                }
+                .width('100%')
+              } else {
+                this.directoryRow(entry)
+              }
             }
           }, (entry: ManagementLibraryPathEntry) => entry.path)
         }

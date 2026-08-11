@@ -21,6 +21,18 @@ import {
 import { ManagementLibrariesUIState } from './ManagementLibrariesUIState'
 import { ManagementLibrariesViewModel } from './ManagementLibrariesViewModel'
 
+class ManagementLibraryMenuElement implements MenuElement {
+  value: ResourceStr
+  action: () => void
+  enabled?: boolean
+
+  constructor(value: ResourceStr, action: () => void, enabled: boolean = true) {
+    this.value = value
+    this.action = action
+    this.enabled = enabled
+  }
+}
+
 @HMRouter({
   pageUrl: RouterConsts.ManagementLibrariesPage,
   useNavDst: true
@@ -68,6 +80,10 @@ export struct ManagementLibrariesPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private isNativeTheme(): boolean {
+    return AppThemeTokens.isNative(this.vm.appUIState.themeStyle)
+  }
+
   private primaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
       $r('sys.color.font_primary') : $r('app.color.text_primary')
@@ -76,6 +92,18 @@ export struct ManagementLibrariesPage {
   private secondaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
       $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  @Styles
+  pressedLibraryRowStyle(): void {
+    .backgroundColor(this.isNativeTheme() ?
+      AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
+      Color.Transparent)
+  }
+
+  @Styles
+  normalLibraryRowStyle(): void {
+    .backgroundColor(Color.Transparent)
   }
 
   private getString(name: string): string {
@@ -179,8 +207,26 @@ export struct ManagementLibrariesPage {
     })
   }
 
+  private libraryMenuItems(item: ManagementLibraryItem): MenuElement[] {
+    const operationEnabled = !this.ui.scanningAll && this.ui.busyLibraryId.length === 0
+    return [
+      new ManagementLibraryMenuElement(
+        $r('app.string.management_library_scan_one'),
+        () => {
+          this.vm.scanOne(item).then((result: ManagementLibraryOperationResult) =>
+            this.showResult(result, $r('app.string.management_library_scan_started')))
+        }, operationEnabled),
+      new ManagementLibraryMenuElement(
+        $r('app.string.management_library_edit'),
+        () => this.vm.openEdit(item)),
+      new ManagementLibraryMenuElement(
+        $r('app.string.management_library_remove'),
+        () => this.requestRemove(item), operationEnabled)
+    ]
+  }
+
   @Builder
-  libraryMenu(item: ManagementLibraryItem) {
+  legacyLibraryMenu(item: ManagementLibraryItem) {
     Menu() {
       MenuItem({ content: $r('app.string.management_library_scan_one') })
         .enabled(!this.ui.scanningAll && this.ui.busyLibraryId.length === 0)
@@ -197,11 +243,48 @@ export struct ManagementLibrariesPage {
   }
 
   @Builder
+  libraryMoreButton(item: ManagementLibraryItem) {
+    if (this.isNativeTheme()) {
+      Button() {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(18)
+          .fontColor([this.secondaryTextColor()])
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(20)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(this.useNativeMaterial() ?
+        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+      .accessibilityText($r('app.string.management_library_more_actions'))
+      .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+      .bindMenu(this.libraryMenuItems(item), {
+        placement: Placement.BottomRight,
+        systemMaterial: this.useNativeMaterial() ?
+          AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) : undefined
+      })
+    } else {
+      Button() {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(18)
+          .fontColor([this.secondaryTextColor()])
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(20)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText($r('app.string.management_library_more_actions'))
+      .bindMenu(this.legacyLibraryMenu(item))
+    }
+  }
+
+  @Builder
   libraryRow(item: ManagementLibraryItem) {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.externaldrive'))
         .fontSize(20)
-        .fontColor([$r('app.color.color_main')])
+        .fontColor([AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+          $r('sys.color.icon_secondary') : $r('app.color.color_main')])
       Column({ space: 3 }) {
         Text(item.name)
           .fontSize(16)
@@ -221,21 +304,12 @@ export struct ManagementLibrariesPage {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      Button() {
-        SymbolGlyph($r('sys.symbol.more'))
-          .fontSize(18)
-          .fontColor([this.secondaryTextColor()])
-      }
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText($r('app.string.management_library_more_actions'))
-      .bindMenu(this.libraryMenu(item))
+      this.libraryMoreButton(item)
     }
     .width('calc(100% - 20vp)')
     .constraintSize({ minHeight: 72 })
     .padding({ left: 12, right: 8, top: 8, bottom: 8 })
+    .stateStyles({ pressed: this.pressedLibraryRowStyle, normal: this.normalLibraryRowStyle })
     .onClick(() => this.openLibrary(item))
   }
 
@@ -290,8 +364,26 @@ export struct ManagementLibrariesPage {
     }
     .width('calc(100% - 48vp)')
     .layoutWeight(1)
-    .padding(24)
+    .padding({
+      left: 24,
+      right: 24,
+      top: 24,
+      bottom: this.isNativeTheme() ? this.vm.appUIState.safeBottom + 24 : 24
+    })
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  loadingPane(width: Length) {
+    Column() {
+      this.loadingRows()
+    }
+    .width(width)
+    .height('100%')
+    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+    .clip(true)
+    .backgroundColor(this.useNativeMaterial() ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
   }
 
   @Builder
@@ -320,6 +412,8 @@ export struct ManagementLibrariesPage {
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
+          .systemMaterial(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
           .onClick(() => this.vm.load(true))
       }
       .width('calc(100% - 24vp)')
@@ -353,9 +447,22 @@ export struct ManagementLibrariesPage {
       .justifyContent(FlexAlign.Center)
     } else {
       List({ scroller: this.ui.scroller }) {
-        ForEach(this.ui.items, (item: ManagementLibraryItem) => {
+        ForEach(this.ui.items, (item: ManagementLibraryItem, index: number) => {
           ListItem() {
-            this.libraryRow(item)
+            if (this.isNativeTheme()) {
+              Column() {
+                this.libraryRow(item)
+                if (index < this.ui.items.length - 1) {
+                  Divider()
+                    .color(AppThemeSurfaceResolver.contentDivider(
+                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                    .margin({ left: 44, right: 8 })
+                }
+              }
+              .width('100%')
+            } else {
+              this.libraryRow(item)
+            }
           }
         }, (item: ManagementLibraryItem) => item.id)
       }
@@ -439,7 +546,16 @@ export struct ManagementLibrariesPage {
   @Builder
   pageBody() {
     if (this.ui.pageState === PageState.Loading) {
-      this.loadingRows()
+      if (this.isNativeTheme()) {
+        Column() {
+          this.loadingPane('100%')
+        }
+        .layoutWeight(1)
+        .width('calc(100% - 24vp)')
+        .padding({ left: 12, right: 12, top: 8, bottom: this.vm.appUIState.safeBottom + 12 })
+      } else {
+        this.loadingRows()
+      }
     } else if (this.ui.pageState === PageState.Error) {
       this.stateView($r('sys.symbol.exclamationmark_circle'), this.localizedMessage(this.ui.errorMessage))
     } else if (this.isLarge()) {

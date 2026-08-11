@@ -51,7 +51,8 @@ export struct ManagementLibraryPathsSection {
       Row({ space: 10 }) {
         SymbolGlyph($r('sys.symbol.externaldrive'))
           .fontSize(20)
-          .fontColor([$r('app.color.color_main')])
+          .fontColor([AppThemeTokens.isNative(this.themeStyle) ?
+            $r('sys.color.icon_secondary') : $r('app.color.color_main')])
         Column({ space: 4 }) {
           Text(path)
             .fontSize(14)
@@ -84,14 +85,25 @@ export struct ManagementLibraryPathsSection {
         .accessibilityText($r('app.string.management_library_path_remove'))
         .onClick(() => this.onRemove(path))
       }
-      .width('calc(100% - 24vp)')
+      .width(this.isNativeTheme() ? '100%' : 'calc(100% - 24vp)')
       .constraintSize({ minHeight: 58 })
-      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+      .padding({
+        left: this.isNativeTheme() ? 0 : 12,
+        right: this.isNativeTheme() ? 0 : 12,
+        top: 8,
+        bottom: 8
+      })
       if (index < this.paths.length - 1) {
-        Divider()
-          .color(this.secondaryTextColor())
-          .opacity(0.2)
-          .margin({ left: 42 })
+        if (this.isNativeTheme()) {
+          Divider()
+            .color(AppThemeSurfaceResolver.contentDivider(this.themeStyle, this.nativeThemeAvailable))
+            .margin({ left: 42 })
+        } else {
+          Divider()
+            .color(this.secondaryTextColor())
+            .opacity(0.2)
+            .margin({ left: 42 })
+        }
       }
     }
     .width('100%')
@@ -101,18 +113,27 @@ export struct ManagementLibraryPathsSection {
     Column() {
       Column({ space: 12 }) {
         Row({ space: 12 }) {
-          Column({ space: 3 }) {
+          if (this.isNativeTheme()) {
             Text($r('app.string.management_library_paths'))
-              .fontSize(18)
+              .layoutWeight(1)
+              .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.primaryTextColor())
-            Text($r('app.string.management_library_paths_hint'))
-              .fontSize(12)
-              .fontColor(this.secondaryTextColor())
-              .maxLines(3)
+              .textAlign(TextAlign.Start)
+          } else {
+            Column({ space: 3 }) {
+              Text($r('app.string.management_library_paths'))
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.primaryTextColor())
+              Text($r('app.string.management_library_paths_hint'))
+                .fontSize(12)
+                .fontColor(this.secondaryTextColor())
+                .maxLines(3)
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
           Button($r('app.string.management_library_add_path'), { type: ButtonType.Normal })
             .height(38)
             .padding({ left: 16, right: 16 })
@@ -138,8 +159,13 @@ export struct ManagementLibraryPathsSection {
           }
         }
       }
-      .width('calc(100% - 32vp)')
-      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+      .width(this.isNativeTheme() ? 'calc(100% - 24vp)' : 'calc(100% - 32vp)')
+      .padding({
+        left: this.isNativeTheme() ? 12 : 16,
+        right: this.isNativeTheme() ? 12 : 16,
+        top: this.isNativeTheme() ? 14 : 16,
+        bottom: this.isNativeTheme() ? 14 : 16
+      })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')

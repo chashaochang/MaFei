@@ -1941,6 +1941,22 @@
       "value": "不常用的扫描、元数据、字幕和图片选项"
     },
     {
+      "name": "management_library_advanced_scan_group",
+      "value": "扫描与媒体处理"
+    },
+    {
+      "name": "management_library_advanced_metadata_group",
+      "value": "元数据与识别"
+    },
+    {
+      "name": "management_library_advanced_subtitle_group",
+      "value": "字幕与歌词"
+    },
+    {
+      "name": "management_library_advanced_image_group",
+      "value": "图片、标签与合集"
+    },
+    {
       "name": "management_library_archive_media",
       "value": "启用压缩包媒体"
     },

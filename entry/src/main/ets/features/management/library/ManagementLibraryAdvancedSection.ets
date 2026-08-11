@@ -130,6 +130,19 @@ export struct ManagementLibraryAdvancedSection {
   }
 
   @Builder
+  sectionTitle(title: ResourceStr) {
+    if (this.isNativeTheme()) {
+      Text(title)
+        .width('100%')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.secondaryTextColor())
+        .textAlign(TextAlign.Start)
+        .padding({ top: 8, bottom: 2 })
+    }
+  }
+
+  @Builder
   booleanRow(label: ResourceStr, value: boolean, onChange: (value: boolean) => void) {
     Row({ space: 12 }) {
       Text(label)
@@ -217,7 +230,7 @@ export struct ManagementLibraryAdvancedSection {
         selectedIndex: this.languageIndex(),
         themeStyle: this.themeStyle,
         nativeThemeAvailable: this.nativeThemeAvailable,
-        selectorWidth: 184,
+        selectorWidth: this.isNativeTheme() ? 'auto' : 184,
         valueTextAlign: TextAlign.End,
         onSelect: (index: number) => {
           const next = this.cloneOptions()
@@ -239,7 +252,7 @@ export struct ManagementLibraryAdvancedSection {
         selectedIndex: this.countryIndex(),
         themeStyle: this.themeStyle,
         nativeThemeAvailable: this.nativeThemeAvailable,
-        selectorWidth: 184,
+        selectorWidth: this.isNativeTheme() ? 'auto' : 184,
         valueTextAlign: TextAlign.End,
         onSelect: (index: number) => {
           const next = this.cloneOptions()
@@ -316,6 +329,7 @@ export struct ManagementLibraryAdvancedSection {
   @Builder
   expandedContent() {
     Column({ space: 10 }) {
+      this.sectionTitle($r('app.string.management_library_advanced_scan_group'))
       this.booleanRow($r('app.string.management_library_enabled'), this.options.Enabled !== false,
         (value: boolean) => { const next = this.cloneOptions(); next.Enabled = value; this.onOptionsChange(next) })
       this.booleanRow($r('app.string.management_library_archive_media'),
@@ -348,6 +362,7 @@ export struct ManagementLibraryAdvancedSection {
         this.options.ExtractTrickplayImagesDuringLibraryScan === true,
         (value: boolean) => { const next = this.cloneOptions(); next.ExtractTrickplayImagesDuringLibraryScan = value;
           this.onOptionsChange(next) })
+      this.sectionTitle($r('app.string.management_library_advanced_metadata_group'))
       this.booleanRow($r('app.string.management_library_save_local_metadata'),
         this.options.SaveLocalMetadata === true,
         (value: boolean) => { const next = this.cloneOptions(); next.SaveLocalMetadata = value;
@@ -381,6 +396,7 @@ export struct ManagementLibraryAdvancedSection {
         this.options.SeasonZeroDisplayName || '', $r('app.string.management_library_season_zero_placeholder'),
         (value: string) => { const next = this.cloneOptions(); next.SeasonZeroDisplayName = value;
           this.onOptionsChange(next) })
+      this.sectionTitle($r('app.string.management_library_advanced_subtitle_group'))
       Row({ space: 12 }) {
         Text($r('app.string.management_library_embedded_subtitles'))
           .layoutWeight(1)
@@ -392,7 +408,7 @@ export struct ManagementLibraryAdvancedSection {
           selectedIndex: this.embeddedIndex(),
           themeStyle: this.themeStyle,
           nativeThemeAvailable: this.nativeThemeAvailable,
-          selectorWidth: 184,
+          selectorWidth: this.isNativeTheme() ? 'auto' : 184,
           valueTextAlign: TextAlign.End,
           onSelect: (index: number) => {
             const next = this.cloneOptions()
@@ -426,6 +442,7 @@ export struct ManagementLibraryAdvancedSection {
       this.booleanRow($r('app.string.management_library_save_lyrics'), this.options.SaveLyricsWithMedia === true,
         (value: boolean) => { const next = this.cloneOptions(); next.SaveLyricsWithMedia = value;
           this.onOptionsChange(next) })
+      this.sectionTitle($r('app.string.management_library_advanced_image_group'))
       this.booleanRow($r('app.string.management_library_save_trickplay'),
         this.options.SaveTrickplayWithMedia === true,
         (value: boolean) => { const next = this.cloneOptions(); next.SaveTrickplayWithMedia = value;
@@ -451,11 +468,13 @@ export struct ManagementLibraryAdvancedSection {
         (value: boolean) => { const next = this.cloneOptions(); next.AutomaticallyAddToCollection = value;
           this.onOptionsChange(next) })
       this.imageOptionRows()
-      Text($r('app.string.management_library_unsupported_option'))
-        .fontSize(12)
-        .fontColor(this.secondaryTextColor())
-        .maxLines(4)
-        .textAlign(TextAlign.Start)
+      if (!this.isNativeTheme()) {
+        Text($r('app.string.management_library_unsupported_option'))
+          .fontSize(12)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(4)
+          .textAlign(TextAlign.Start)
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -465,18 +484,27 @@ export struct ManagementLibraryAdvancedSection {
     Column() {
       Column({ space: 10 }) {
         Row({ space: 12 }) {
-          Column({ space: 3 }) {
+          if (this.isNativeTheme()) {
             Text($r('app.string.management_library_advanced'))
-              .fontSize(18)
+              .layoutWeight(1)
+              .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.primaryTextColor())
-            Text($r('app.string.management_library_advanced_hint'))
-              .fontSize(12)
-              .fontColor(this.secondaryTextColor())
-              .maxLines(3)
+              .textAlign(TextAlign.Start)
+          } else {
+            Column({ space: 3 }) {
+              Text($r('app.string.management_library_advanced'))
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.primaryTextColor())
+              Text($r('app.string.management_library_advanced_hint'))
+                .fontSize(12)
+                .fontColor(this.secondaryTextColor())
+                .maxLines(3)
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
           SymbolGlyph(this.expanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
             .fontSize(18)
             .fontColor([this.secondaryTextColor()])
@@ -485,8 +513,13 @@ export struct ManagementLibraryAdvancedSection {
         .onClick(() => this.onExpandedChange(!this.expanded))
         if (this.expanded) this.expandedContent()
       }
-      .width('calc(100% - 32vp)')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .width(this.isNativeTheme() ? 'calc(100% - 24vp)' : 'calc(100% - 32vp)')
+      .padding({
+        left: this.isNativeTheme() ? 12 : 16,
+        right: this.isNativeTheme() ? 12 : 16,
+        top: this.isNativeTheme() ? 10 : 12,
+        bottom: this.isNativeTheme() ? 10 : 12
+      })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')

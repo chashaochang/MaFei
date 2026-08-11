@@ -246,26 +246,35 @@ export struct ManagementLibraryEditorPage {
       }
       Blank().height(4)
     }
-    .width('calc(100% - 32vp)')
-    .margin({ left: 16, right: 16, top: 12, bottom: 12 })
+    .width(this.isNativeTheme() ? 'calc(100% - 24vp)' : 'calc(100% - 32vp)')
+    .margin({
+      left: this.isNativeTheme() ? 12 : 16,
+      right: this.isNativeTheme() ? 12 : 16,
+      top: 12,
+      bottom: 12
+    })
   }
 
   @Builder
   saveBar() {
     Row({ space: 12 }) {
-      Column({ space: 2 }) {
-        Text(this.ui.dirty ? $r('app.string.management_library_unsaved_state') :
-          $r('app.string.management_library_saved_state'))
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor())
-        if (this.ui.saving) {
-          Text($r('app.string.management_library_saving'))
-            .fontSize(11)
+      if (this.isNativeTheme()) {
+        Blank()
+      } else {
+        Column({ space: 2 }) {
+          Text(this.ui.dirty ? $r('app.string.management_library_unsaved_state') :
+            $r('app.string.management_library_saved_state'))
+            .fontSize(13)
             .fontColor(this.secondaryTextColor())
+          if (this.ui.saving) {
+            Text($r('app.string.management_library_saving'))
+              .fontSize(11)
+              .fontColor(this.secondaryTextColor())
+          }
         }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
       }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
       Button() {
         Row({ space: 8 }) {
           if (this.ui.saving) LoadingProgress().width(18).height(18)
@@ -293,10 +302,7 @@ export struct ManagementLibraryEditorPage {
       top: 8,
       bottom: Math.max(0, this.vm.appUIState.safeBottom) + 10
     })
-    .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-    .systemMaterial(this.useNativeMaterial() ?
-      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_1'))
   }
 
   @Builder

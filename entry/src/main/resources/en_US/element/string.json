@@ -1941,6 +1941,22 @@
       "value": "Less common scanning, metadata, subtitle, and image options"
     },
     {
+      "name": "management_library_advanced_scan_group",
+      "value": "Scanning and media processing"
+    },
+    {
+      "name": "management_library_advanced_metadata_group",
+      "value": "Metadata and identification"
+    },
+    {
+      "name": "management_library_advanced_subtitle_group",
+      "value": "Subtitles and lyrics"
+    },
+    {
+      "name": "management_library_advanced_image_group",
+      "value": "Images, tags, and collections"
+    },
+    {
       "name": "management_library_archive_media",
       "value": "Enable archive media files"
     },

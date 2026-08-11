@@ -59,7 +59,7 @@ export struct ManagementLibraryBasicSection {
     Column() {
       Column({ space: 14 }) {
         Text($r('app.string.management_library_basic'))
-          .fontSize(18)
+          .fontSize(this.isNativeTheme() ? 16 : 18)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.primaryTextColor())
           .textAlign(TextAlign.Start)
@@ -80,24 +80,32 @@ export struct ManagementLibraryBasicSection {
         }
         .alignItems(HorizontalAlign.Start)
         Row({ space: 12 }) {
-          Column({ space: 3 }) {
+          if (this.isNativeTheme()) {
             Text($r('app.string.management_library_type'))
+              .layoutWeight(1)
               .fontSize(14)
               .fontColor(this.primaryTextColor())
-            Text(this.isNew ? $r('app.string.management_library_type_create_hint') :
-              $r('app.string.management_library_type_locked_hint'))
-              .fontSize(12)
-              .fontColor(this.secondaryTextColor())
-              .maxLines(2)
+              .textAlign(TextAlign.Start)
+          } else {
+            Column({ space: 3 }) {
+              Text($r('app.string.management_library_type'))
+                .fontSize(14)
+                .fontColor(this.primaryTextColor())
+              Text(this.isNew ? $r('app.string.management_library_type_create_hint') :
+                $r('app.string.management_library_type_locked_hint'))
+                .fontSize(12)
+                .fontColor(this.secondaryTextColor())
+                .maxLines(2)
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
           ManagementNativeSelect({
             options: this.typeLabels(),
             selectedIndex: this.selectedTypeIndex(),
             themeStyle: this.themeStyle,
             nativeThemeAvailable: this.nativeThemeAvailable,
-            selectorWidth: 184,
+            selectorWidth: this.isNativeTheme() ? 'auto' : 184,
             valueTextAlign: TextAlign.End,
             isEnabled: this.isNew,
             onSelect: (index: number) => {
@@ -106,8 +114,13 @@ export struct ManagementLibraryBasicSection {
           })
         }
       }
-      .width('calc(100% - 32vp)')
-      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+      .width(this.isNativeTheme() ? 'calc(100% - 24vp)' : 'calc(100% - 32vp)')
+      .padding({
+        left: this.isNativeTheme() ? 12 : 16,
+        right: this.isNativeTheme() ? 12 : 16,
+        top: this.isNativeTheme() ? 14 : 16,
+        bottom: this.isNativeTheme() ? 14 : 16
+      })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
