@@ -144,9 +144,11 @@ export function validateSearchRequestGuards(sources) {
     'SearchPage changes must delegate every query to SearchViewModel')
   requirePattern(page, /\.onSubmit\([\s\S]*this\.vm\.search\(value,\s*true\)/,
     'SearchPage submit must request history persistence')
-  requirePattern(page, /left:\s*showLegacyActionBar\s*\?\s*0\s*:\s*16/,
+  requirePattern(page,
+    /left:\s*AppThemeTokens\.pageHorizontalPadding\s*\(\s*this\.vm\.appUIState\.themeStyle\s*,\s*this\.vm\.appUIState\.isBigScreen\s*\)/,
     'SearchPage must preserve Native left padding ownership')
-  requirePattern(page, /right:\s*showLegacyActionBar\s*\?\s*0\s*:\s*16/,
+  requirePattern(page,
+    /right:\s*AppThemeTokens\.pageHorizontalPadding\s*\(\s*this\.vm\.appUIState\.themeStyle\s*,\s*this\.vm\.appUIState\.isBigScreen\s*\)/,
     'SearchPage must preserve Native right padding ownership')
 }
 

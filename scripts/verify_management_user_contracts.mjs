@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const managementUserPaths = Object.freeze({
   entryAbility: 'entry/src/main/ets/entryability/EntryAbility.ets',
   breakpointPolicy: 'entry/src/main/ets/utils/BreakpointPolicy.ets',
+  nativePagePolicy: 'entry/src/main/ets/features/management/ManagementNativePagePolicy.ets',
   router: 'entry/src/main/ets/common/RouterConsts.ets',
   dashboardModels: 'entry/src/main/ets/features/management/ManagementModels.ets',
   dashboardState: 'entry/src/main/ets/features/management/ManagementDashboardUIState.ets',
@@ -430,8 +431,12 @@ export function validateManagementUserContracts(sources) {
   }
   requirePattern(sources, managementUserPaths.listPage, /300/,
     'large-screen user pane width is missing')
-  requirePattern(sources, managementUserPaths.listPage, /840/,
-    'large-screen breakpoint is missing')
+  requirePattern(sources, managementUserPaths.nativePagePolicy,
+    /static\s+readonly\s+EXPANDED_MIN_WIDTH\s*:\s*number\s*=\s*840/,
+    'management expanded breakpoint is missing')
+  requirePattern(sources, managementUserPaths.nativePagePolicy,
+    /return\s+width\s*>=\s*ManagementNativePagePolicy\.EXPANDED_MIN_WIDTH/,
+    'management expanded breakpoint policy is missing')
 
   requirePattern(sources, managementUserPaths.breakpointPolicy,
     /width\s*<\s*600[\s\S]*BreakpointTypeEnum\.SM/,
@@ -440,10 +445,10 @@ export function validateManagementUserContracts(sources) {
     /width\s*<\s*840[\s\S]*BreakpointTypeEnum\.MD/,
     '839/840 breakpoint boundary is missing')
   requirePattern(sources, managementUserPaths.listPage,
-    /deviceWidth\s*>=\s*840[\s\S]*userPane\(300\)/,
+    /return\s+ManagementNativePagePolicy\.isExpanded\s*\(\s*this\.vm\.appUIState\.deviceWidth\s*\)[\s\S]*if\s*\(\s*this\.isLarge\s*\(\s*\)\s*\)[\s\S]*userPane\(300\)/,
     '840vp split layout or 300vp list pane is missing')
   requirePattern(sources, managementUserPaths.listViewModel,
-    /!selectedExists\s*&&\s*this\.appUIState\.deviceWidth\s*>=\s*840/,
+    /!selectedExists\s*&&\s*ManagementNativePagePolicy\.isExpanded\s*\(\s*this\.appUIState\.deviceWidth\s*\)/,
     '840vp large-screen selection ownership is missing')
   for (const pagePath of [managementUserPaths.detailPage, managementUserPaths.createPage]) {
     requirePattern(sources, pagePath,
@@ -460,14 +465,14 @@ export function validateManagementUserContracts(sources) {
     /Stack\(\{\s*alignContent:\s*Alignment\.Bottom\s*\}\)/,
     'save bar must remain bottom-aligned')
   requirePattern(sources, managementUserPaths.detailPage,
-    /bottom:\s*this\.showSaveBar\(\)\s*\?\s*104\s*:\s*24/,
-    'editor content must reserve save-bar space')
+    /bottom:\s*ManagementNativePagePolicy\.contentBottomPadding\s*\(\s*this\.vm\.appUIState\.safeBottom\s*\+\s*24\s*,\s*this\.showSaveBar\(\)\s*\)/,
+    'Native editor content must reserve save-bar and safe-area space')
   requirePattern(sources, managementUserPaths.detailPage,
     /bottom:\s*this\.vm\.appUIState\.safeBottom\s*\+\s*10/,
     'save bar must own the bottom safe-area inset')
   requireMatchCount(sources, managementUserPaths.detailPage,
-    /this\.vm\.appUIState\.safeBottom/g, 1,
-    'detail page must not apply the bottom safe-area inset twice')
+    /this\.vm\.appUIState\.safeBottom/g, 2,
+    'detail page must keep safe-area use limited to content reservation and the save bar')
 
   requireSameLocaleKeys(sources)
 }

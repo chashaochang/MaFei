@@ -22,6 +22,7 @@ const managementTaskDetailPath = 'entry/src/main/ets/features/management/Managem
 const managementUserCreatePath = 'entry/src/main/ets/features/management/ManagementUserCreatePage.ets'
 const managementUserDetailPath = 'entry/src/main/ets/features/management/ManagementUserDetailPage.ets'
 const minePath = 'entry/src/main/ets/features/home/minetab/MineTab.ets'
+const settingPath = 'entry/src/main/ets/features/setting/SettingPage.ets'
 
 function validDestination() {
   return [
@@ -59,17 +60,19 @@ function validDestination() {
     '    return { content: { icon: item.icon, label: item.value, action: item.action } }',
     '  })',
     '}',
+    'private rootHomeLibraryPinned(): boolean { return false }',
+    "private nativeMainTitle(): ResourceStr { return this.rootHomeLibraryPinned() ? '' : this.title }",
     'private nativeTitleBarOptions(): HdsNavigationTitleBarOptions {',
     '  return {',
     '    avoidLayoutSafeArea: true,',
     '    enableComponentSafeArea: false,',
     '    content: {',
-    '      title: { mainTitle: this.title, mainTitleSize: TitleSize.TITLE_S },',
+    '      title: { mainTitle: this.nativeMainTitle(), mainTitleSize: TitleSize.TITLE_S },',
     '      menu: { value: this.nativeMenus(), maxCount: 3 }',
     '    },',
     '    style: {',
     '      scrollEffectOpts: {',
-    '        enableScrollEffect: true,',
+    '        enableScrollEffect: !this.rootHomeLibraryPinned(),',
     '        scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,',
     '        blurEffectiveStartOffset: LengthMetrics.vp(1),',
     '        blurEffectiveEndOffset: LengthMetrics.vp(24)',
@@ -103,8 +106,8 @@ function validDestination() {
     '      scrollEffectStyle: {',
     '        backgroundStyle: {',
     '          backgroundColor: Color.Transparent,',
-    '          maskExtraHeight: 0,',
-    '          blurRadius: 8',
+    '          maskExtraHeight: 32,',
+    '          blurRadius: 24',
     '        },',
     '        contentStyle: {',
     '          titleStyle: {',
@@ -126,6 +129,7 @@ function validDestination() {
     'private handleBackPressed(): boolean {',
     '  return this.beforeBack() || this.helper.onBackPressed()',
     '}',
+    '@Builder',
     'private hdsContent() {',
     '  Column() {',
     '    Blank().height(this.nativeContentTopInset())',
@@ -142,6 +146,7 @@ function validDestination() {
     "  .width('100%')",
     "  .height('100%')",
     '}',
+    '@Builder',
     'private hdsDestination() {',
     '  HdsNavDestination() {',
     '    this.hdsContent()',
@@ -152,7 +157,7 @@ function validDestination() {
     '    ))',
     '    .titleMode(HdsNavDestinationTitleMode.MINI)',
     '    .titleBar(this.nativeTitleBarOptions())',
-    '    .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome())',
+    '    .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome() || this.rootHomeLibraryPinned())',
     '    .hideBackButton(!this.backButtonVisible)',
     '    .hideToolBar(true)',
     '    .bindToScrollable(this.titleBarVisible && this.usesNativeChrome() ? this.scrollControllers : [])',
@@ -176,6 +181,7 @@ function validDestination() {
     "    .width('100%')",
     "    .height('100%')",
     '}',
+    '@Builder',
     'private legacyDestination() {',
     '  NavDestination() {',
     '    this.legacyContentBuilder()',
@@ -255,7 +261,11 @@ function validSearchPage() {
     '})',
     '@Builder',
     'private nativeSearchForm() {',
-    '  Row() { this.searchBarContent(true, false) }',
+    "  Search({ placeholder: '搜索' })",
+    '}',
+    '@Builder',
+    'private nativeSearchHeader() {',
+    '  Row() { this.nativeSearchForm() }',
     '}',
     '@Builder',
     'private feiniuSearchBar() {',
@@ -263,19 +273,21 @@ function validSearchPage() {
     '}',
     '@Builder',
     'private pageContent(showLegacyActionBar: boolean) {',
-    '  Column() {',
-    '    if (showLegacyActionBar) {',
+    '  if (showLegacyActionBar) {',
+    '    Column() {',
     '      this.feiniuSearchBar()',
-    '    } else {',
-    '      this.nativeSearchForm()',
     '    }',
+    "    .width('100%').height('100%').backgroundColor($r('app.color.bg_main'))",
+    '  } else {',
+    '    Stack() { this.nativeSearchHeader() }',
+    "      .width('100%').height('100%').backgroundColor(Color.Transparent)",
     '  }',
-    "  .width('100%').height('100%').backgroundColor(" +
-      "showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)",
     '}',
     'build() {',
     '  AppRouteDestination({',
     "    title: '搜索',",
+    '    titleBarVisible: false,',
+    '    contentExtendsUnderTitleBar: true,',
     '    contentBuilder: () => { this.pageContent(false) },',
     '    legacyContentBuilder: () => { this.pageContent(true) }',
     '  })',
@@ -355,6 +367,44 @@ function validManagementRoute(name) {
     '    legacyContentBuilder: () => { this.pageContent(true) }',
     '  })',
     '}'
+  ].join('\n')
+}
+
+function validSplitManagementRoute(name) {
+  return [
+    "import { AppRouteDestination } from '../../component/AppRouteDestination'",
+    '@HMRouter({',
+    `  pageUrl: RouterConsts.${name},`,
+    '  useNavDst: true',
+    '})',
+    '@Builder',
+    'private nativePage() {',
+    "  Column() {}.width('100%').height('100%')",
+    '}',
+    '@Builder',
+    'private legacyPage() {',
+    "  Column() { ActionBar({ title: 'Title' }) }",
+    "    .width('100%').height('100%')",
+    '    .backgroundColor(AppThemeSurfaceResolver.routeBackground(this.themeStyle, this.nativeThemeAvailable))',
+    '}',
+    '@Builder',
+    'private pageContent(showLegacyActionBar: boolean) {',
+    '  Column() {',
+    '    if (showLegacyActionBar) {',
+    '      this.legacyPage()',
+    '    } else {',
+    '      this.nativePage()',
+    '    }',
+    '  }',
+    "  .width('100%').height('100%').backgroundColor(Color.Transparent)",
+    '}',
+    'build() {',
+    '  AppRouteDestination({',
+    "    title: 'Title',",
+    '    contentBuilder: () => { this.pageContent(false) },',
+    '    legacyContentBuilder: () => { this.pageContent(true) }',
+    '  })',
+    '}',
   ].join('\n')
 }
 
@@ -473,13 +523,14 @@ function validSources() {
     [managementTaskDetailPath, validManagementRoute('ManagementTaskDetailPage')],
     [managementDevicesPath, validManagementRoute('ManagementDevicesPage')],
     [managementDeviceDetailPath, validManagementRoute('ManagementDeviceDetailPage')],
-    [managementActivityPath, validManagementRoute('ManagementActivityPage')],
+    [managementActivityPath, validSplitManagementRoute('ManagementActivityPage')],
     [managementUserCreatePath, validManagementRoute('ManagementUserCreatePage')],
     [managementUserDetailPath, validManagementUserDetailRoute()],
-    [minePath, [
-      'HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()',
-      'HMRouterMgr.push({ pageUrl: RouterConsts.AboutPage })'
-    ].join('\n')]
+    [minePath, 'HMRouterMgr.to(RouterConsts.SettingPage).push()'],
+    [settingPath, validPage('SettingPage', 'start_window_background')
+      .replace(".height('100%').backgroundColor(",
+        ".height('100%').justifyContent(FlexAlign.Start).backgroundColor(") +
+      '\nHMRouterMgr.to(RouterConsts.PlayerEnginePage).push()']
   ])
 }
 
@@ -590,7 +641,7 @@ test('rejects Native route content that no longer fills the destination body', (
 test('rejects hiding the system title bar in the Native route', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('.hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome())',
+    .replace('.hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome() || this.rootHomeLibraryPinned())',
       '.hideTitleBar(true)'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
@@ -643,8 +694,8 @@ test('requires the 24vp Native title blur end threshold', () => {
 test('requires the scrolled Native HDS title background to stay transparent', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('backgroundColor: Color.Transparent,\n          maskExtraHeight: 0,\n          blurRadius: 8',
-      "backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),\n          maskExtraHeight: 0,\n          blurRadius: 8"))
+    .replace('backgroundColor: Color.Transparent,\n          maskExtraHeight: 32,\n          blurRadius: 24',
+      "backgroundColor: $r('sys.color.ohos_id_color_titlebar_bg'),\n          maskExtraHeight: 32,\n          blurRadius: 24"))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
     /must keep both title backgrounds transparent/
@@ -1060,9 +1111,40 @@ test('rejects lifecycle contracts outside the first native migration boundary', 
   )
 })
 
-test('rejects an entry point that stops using HMRouter push', () => {
+test('rejects removing @Builder from a shared destination builder', () => {
+  const sources = validSources()
+  sources.set(destinationPath, sources.get(destinationPath)
+    .replace('@Builder\nprivate hdsContent()', 'private hdsContent()'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /must keep @Builder on hdsContent/
+  )
+})
+
+test('requires SettingPage to preserve the API24 legacy builder', () => {
+  const sources = validSources()
+  sources.set(settingPath, sources.get(settingPath)
+    .replace('legacyContentBuilder: () => { this.pageContent(true) }',
+      'legacyContentBuilder: () => {}'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /separate native and legacy title ownership/
+  )
+})
+
+test('rejects a Mine settings entry that stops using HMRouter push', () => {
   const sources = validSources()
   sources.set(minePath, sources.get(minePath)
+    .replace('HMRouterMgr.to(RouterConsts.SettingPage).push()', 'openSettings()'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /Mine settings entry must keep HMRouter push behavior/
+  )
+})
+
+test('rejects a player engine entry that stops using HMRouter push', () => {
+  const sources = validSources()
+  sources.set(settingPath, sources.get(settingPath)
     .replace('HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()', 'openPlayerEngine()'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
@@ -1070,13 +1152,75 @@ test('rejects an entry point that stops using HMRouter push', () => {
   )
 })
 
+test('rejects restoring the retired About entry', () => {
+  const sources = validSources()
+  sources.set(minePath, sources.get(minePath) + '\nHMRouterMgr.to(RouterConsts.AboutPage).push()')
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /retired About entry must stay removed from Mine and Settings/
+  )
+})
+
 test('rejects routing the Native search branch through the legacy cancel row', () => {
   const sources = validSources()
   sources.set(searchPath, sources.get(searchPath)
-    .replace('this.nativeSearchForm()', 'this.feiniuSearchBar()'))
+    .replace('this.nativeSearchHeader()', 'this.feiniuSearchBar()'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /Search Native content must use the system title/
+    /Search Native content must keep its immersive header/
+  )
+})
+
+test('rejects an opaque Native search root', () => {
+  const sources = validSources()
+  sources.set(searchPath, sources.get(searchPath)
+    .replace('backgroundColor(Color.Transparent)', "backgroundColor($r('app.color.bg_main'))"))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /route root must fill its host, be transparent in Native, and preserve its legacy background/
+  )
+})
+
+test('rejects changing the legacy search root background', () => {
+  const sources = validSources()
+  sources.set(searchPath, sources.get(searchPath)
+    .replace("backgroundColor($r('app.color.bg_main'))", 'backgroundColor(Color.Transparent)'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /route root must fill its host, be transparent in Native, and preserve its legacy background/
+  )
+})
+
+test('rejects an Activity ActionBar leaking into the Native page helper', () => {
+  const sources = validSources()
+  sources.set(managementActivityPath, sources.get(managementActivityPath)
+    .replace("Column() {}.width('100%').height('100%')",
+      "Column() { ActionBar({ title: 'Wrong' }) }.width('100%').height('100%')"))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /legacy ActionBar must remain isolated behind the legacy flag/
+  )
+})
+
+test('rejects an opaque Activity Native page helper', () => {
+  const sources = validSources()
+  sources.set(managementActivityPath, sources.get(managementActivityPath)
+    .replace("Column() {}.width('100%').height('100%')",
+      "Column() {}.width('100%').height('100%').backgroundColor($r('app.color.bg_main'))"))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /route root must fill its host, be transparent in Native/
+  )
+})
+
+test('rejects removing the Activity legacy-page background', () => {
+  const sources = validSources()
+  sources.set(managementActivityPath, sources.get(managementActivityPath)
+    .replace('AppThemeSurfaceResolver.routeBackground(this.themeStyle, this.nativeThemeAvailable)',
+      'Color.Transparent'))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /route root must fill its host, be transparent in Native, and preserve its legacy background/
   )
 })
 

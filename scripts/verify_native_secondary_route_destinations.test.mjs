@@ -23,7 +23,7 @@ function workspaceSources() {
   ]))
 }
 
-test('accepts the four remaining Native secondary route migrations', () => {
+test('accepts the remaining Native secondary route migrations', () => {
   assert.doesNotThrow(() => validateNativeSecondaryRouteDestinations(workspaceSources()))
 })
 
@@ -49,7 +49,7 @@ test('keeps the Setting title row in the Feiniu branch', () => {
 test('hides the AddAccount custom bar only in Native', () => {
   const sources = workspaceSources()
   sources.set(addAccountPath, sources.get(addAccountPath)
-    .replace('showRouteActionBar: false', 'showRouteActionBar: true'))
+    .replace('this.pageContent(false)', 'this.pageContent(true)'))
   assert.throws(
     () => validateNativeSecondaryRouteDestinations(sources),
     /hide the custom bar only in its Native destination/
@@ -116,10 +116,10 @@ test('keeps the WebITong bottom browser toolbar', () => {
   )
 })
 
-test('keeps the WebITong manual top inset out of Native content', () => {
+test('keeps the WebITong fullscreen top inset in both route branches', () => {
   const sources = workspaceSources()
   sources.set(webPath, sources.get(webPath)
-    .replace('this.pageContent(false)', 'this.pageContent(true)'))
+    .replace('this.pageContent(true)', 'this.pageContent(false)'))
   assert.throws(
     () => validateNativeSecondaryRouteDestinations(sources),
     /destination title and back hook/

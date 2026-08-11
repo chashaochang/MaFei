@@ -93,10 +93,12 @@ export function validateNativeHomeVisualContracts(sources) {
     'role === AppThemeMaterialRole.HomeLibraryChip')
   const selectedChipMaterial = branchBlock(material,
     'role === AppThemeMaterialRole.HomeLibraryChipSelected')
-  if (!/ImmersiveMaterial\s*\(\s*\{\s*interactive\s*:\s*true\s*\}\s*\)/.test(
-    normalChipMaterial) || /materialColor|colorInvert|applyShadow|ImmersiveStyle/.test(normalChipMaterial) ||
-    !/ImmersiveMaterial\s*\(\s*\{\s*interactive\s*:\s*true\s*\}\s*\)/.test(
-      selectedChipMaterial) || /materialColor|colorInvert|applyShadow|ImmersiveStyle/.test(selectedChipMaterial)) {
+  const shadowlessInteractiveMaterial =
+    /ImmersiveMaterial\s*\(\s*\{[\s\S]*?applyShadow\s*:\s*false[\s\S]*?interactive\s*:\s*true[\s\S]*?\}\s*\)/
+  if (!shadowlessInteractiveMaterial.test(normalChipMaterial) ||
+    /materialColor|colorInvert|ImmersiveStyle/.test(normalChipMaterial) ||
+    !shadowlessInteractiveMaterial.test(selectedChipMaterial) ||
+    /materialColor|colorInvert|ImmersiveStyle/.test(selectedChipMaterial)) {
     throw new Error('Home library Chips must follow the default system immersive material')
   }
 
@@ -154,19 +156,21 @@ export function validateNativeHomeVisualContracts(sources) {
   if (!/\.onReachEnd\s*\([\s\S]*this\.vm\.loadMoreLatestMedia\s*\(\s*\)/.test(homeList)) {
     throw new Error('Home list must page the selected media feed at the bottom')
   }
-  if (!/if\s*\(\s*this\.vm\.appUIState\.currentBreakpoint\.includes\s*\(\s*['"]s['"]\s*\)\s*&&\s*\(\s*!\s*this\.useNativeSurface\s*\(\s*\)\s*\|\|\s*!\s*this\.showNativeHero\s*\(\s*\)\s*\)\s*\)\s*\{\s*ListItem\s*\(\s*\)\.height\s*\(\s*this\.phoneContentTopInset\s*\(\s*\)\s*\)/.test(
+  if (!/if\s*\(\s*this\.vm\.appUIState\.currentBreakpoint\.includes\s*\(\s*['"]s['"]\s*\)\s*&&\s*\(\s*!\s*this\.useNativeSurface\s*\(\s*\)\s*\|\|\s*\(\s*!\s*this\.ui\.initialLoading\s*&&\s*!\s*this\.showNativeHero\s*\(\s*\)\s*\)\s*\)\s*\)\s*\{\s*ListItem\s*\(\s*\)\.height\s*\(\s*this\.phoneContentTopInset\s*\(\s*\)\s*\)/.test(
     homeList)) {
     throw new Error('HomeTab must own the Native empty-Hero top inset inside the stable root content branch')
   }
 
   const stickyHeader = methodBlock(homeTab, 'latestMediaStickyHeader')
   if (!/HomeLibraryChipSelector\s*\(/.test(stickyHeader) ||
+    !/nativeSurface\s*:\s*this\.useNativeSurface\s*\(\s*\)/.test(stickyHeader) ||
     !/fadeRightEdge\s*:\s*this\.latestChipStripMenuReserved/.test(stickyHeader) ||
     !/rightContentPadding\s*:\s*this\.latestChipStripMenuReserved\s*\?[\s\S]*HOME_LIBRARY_HEADER_EXTRA_MENU_GAP\s*:\s*0/.test(
       stickyHeader) ||
     !/right\s*:\s*this\.latestMediaHeaderMenuInset\s*\(\s*\)/.test(stickyHeader) ||
     !/backgroundColor\s*\(\s*Color\.Transparent\s*\)/.test(stickyHeader) ||
-    !/zIndex\s*\(\s*this\.latestChipStripPinned\s*\?\s*10\s*:\s*0\s*\)/.test(stickyHeader) ||
+    !/zIndex\s*\(\s*this\.latestChipStripPinned\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\?\s*10\s*:\s*0\s*\)/.test(
+      stickyHeader) ||
     !/hitTestBehavior\s*\(\s*HitTestMode\.Transparent\s*\)/.test(stickyHeader)) {
     throw new Error('The single sticky header must preserve a transparent lane beside the title-bar menus')
   }
@@ -174,7 +178,8 @@ export function validateNativeHomeVisualContracts(sources) {
     throw new Error('The whole Chip header row must not receive background material or blur')
   }
   const menuInset = methodBlock(homeTab, 'latestMediaHeaderMenuInset')
-  if (!/!this\.latestChipStripMenuReserved[\s\S]*return\s+0/.test(menuInset) ||
+  if (!/!this\.useNativeSurface\s*\(\s*\)\s*\|\|\s*!this\.latestChipStripMenuReserved[\s\S]*return\s+0/.test(
+    menuInset) ||
     !/HOME_LIBRARY_LIVE_MENU_WIDTH/.test(menuInset) ||
     !/HOME_LIBRARY_SEARCH_MENU_WIDTH/.test(menuInset) ||
     /HOME_LIBRARY_HEADER_EXTRA_MENU_GAP/.test(menuInset)) {
@@ -184,7 +189,8 @@ export function validateNativeHomeVisualContracts(sources) {
   const chipAlignment = methodBlock(homeTab, 'latestMediaChipAlignmentOffset')
   if (!/return\s+this\.latestMediaHeaderTopInset\s*\(\s*\)/.test(topPadding) ||
     /latestChipStripPinned|HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET/.test(topPadding) ||
-    !/latestChipStripPinned\s*\?\s*HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET\s*:\s*0/.test(chipAlignment) ||
+    !/latestChipStripPinned\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\?\s*HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET\s*:\s*0/.test(
+      chipAlignment) ||
     !/\.translate\s*\(\s*\{\s*y\s*:\s*this\.latestMediaChipAlignmentOffset\s*\(\s*\)\s*\}\s*\)/.test(
       stickyHeader)) {
     throw new Error('Only sticky Chips may receive the vertical alignment offset; search must remain fixed')
@@ -198,25 +204,29 @@ export function validateNativeHomeVisualContracts(sources) {
     throw new Error('The single header must publish its real sticky state')
   }
 
-  const chipOptions = methodBlock(chipSelector, 'chipOptions')
-  if (!/backgroundSystemMaterial\s*:\s*AppThemeSurfaceResolver\.material\s*\(\s*AppThemeMaterialRole\.HomeLibraryChip\s*\)/.test(
-    chipOptions) ||
-    !/activatedBackgroundSystemMaterial\s*:\s*AppThemeSurfaceResolver\.material\s*\(\s*AppThemeMaterialRole\.HomeLibraryChipSelected\s*\)/.test(
-      chipOptions) ||
-    !/activatedBackgroundColor\s*:\s*ColorMetrics\.rgba\(255,\s*255,\s*255,\s*0\.82\)/.test(
-      chipOptions) ||
-    !/activatedFontColor\s*:\s*ColorMetrics\.numeric\(0x000000\)/.test(chipOptions) ||
-    !/allowClose\s*:\s*false/.test(chipOptions)) {
+  const immersiveGate = methodBlock(chipSelector, 'useImmersiveChipSurface')
+  const chipBuild = methodBlock(chipSelector, 'build')
+  if (!/return\s+this\.nativeSurface\s*&&\s*HdsUiCapability\.supportsSystemMaterial\s*\(\s*\)/.test(
+    immersiveGate) ||
+    !/if\s*\(\s*this\.useImmersiveChipSurface\s*\(\s*\)\s*\)/.test(chipBuild) ||
+    !/fontColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*Color\.Black\s*:/.test(
+      chipBuild) ||
+    !/backgroundColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*['"]rgba\(255,255,255,0\.82\)['"]\s*:\s*Color\.Transparent\s*\)/.test(
+      chipBuild) ||
+    !/systemMaterial\s*\(\s*AppThemeSurfaceResolver\.material\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*AppThemeMaterialRole\.HomeLibraryChipSelected\s*:\s*AppThemeMaterialRole\.HomeLibraryChip\s*\)\s*\)/.test(
+      chipBuild) ||
+    !/backgroundColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*\$r\(\s*['"]app\.color\.color_main['"]\s*\)\s*:\s*\$r\(\s*['"]app\.color\.bg_1['"]\s*\)\s*\)/.test(
+      chipBuild) ||
+    /allowClose|sys\.symbol\.xmark|closeIcon/.test(chipSelector)) {
     throw new Error('Every Chip must use immersive material with translucent-white and black selected styling')
   }
-  const chipBuild = methodBlock(chipSelector, 'build')
   if (!/List\s*\([\s\S]*scroller\s*:\s*this\.chipScroller/.test(chipBuild) ||
-    !/ChipV2\s*\(/.test(chipBuild) ||
+    !/Text\s*\(\s*tab\.label\s*\)/.test(chipBuild) ||
     !/padding\s*\(\s*\{\s*right\s*:\s*this\.rightContentPadding\s*\}\s*\)/.test(chipBuild) ||
     !/listDirection\s*\(\s*Axis\.Horizontal\s*\)/.test(chipBuild) ||
     !/fadingEdge\s*\(\s*this\.fadeRightEdge[\s\S]*fadingEdgeLength\s*:\s*LengthMetrics\.vp\(32\)/.test(
       chipBuild)) {
-    throw new Error('Home library selector must be one horizontal ChipV2 group')
+    throw new Error('Home library selector must be one horizontal Chip group')
   }
   const revealSelected = methodBlock(chipSelector, 'revealSelected')
   if (!/chipScroller\.scrollToIndex\s*\(\s*index\s*,\s*smooth\s*,\s*ScrollAlign\.CENTER\s*\)/.test(
@@ -251,7 +261,7 @@ export function validateNativeHomeVisualContracts(sources) {
     !/ownsRootNavigationChrome\s*:\s*true/.test(indexPage)) {
     throw new Error('The pinned header must remove the HDS title-bar touch interception layer')
   }
-  if (!/if\s*\(\s*this\.latestChipStripPinned\s*\)[\s\S]*Button\s*\(\s*\{\s*type\s*:\s*ButtonType\.Circle/.test(
+  if (!/if\s*\(\s*this\.latestChipStripPinned\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\)[\s\S]*Button\s*\(\s*\{\s*type\s*:\s*ButtonType\.Circle/.test(
     stickyHeader)) {
     throw new Error('The interactive sticky header must own its search action')
   }
@@ -288,9 +298,12 @@ export function validateNativeHomeVisualContracts(sources) {
   }
 
   const loadLatestPage = methodBlock(homeViewModel, 'loadLatestMediaPage')
-  if (!/id\s*===\s*HOME_RECENT_MEDIA_ID[\s\S]*getLatestMedia\s*\([\s\S]*groupItems\s*:\s*true/.test(
-    loadLatestPage)) {
-    throw new Error('Recent media must use Jellyfin grouped latest-media semantics')
+  if (!/if\s*\(\s*id\s*===\s*HOME_RECENT_MEDIA_ID\s*\)/.test(loadLatestPage) ||
+    !/this\.ui\.mediaList[\s\S]*filter\s*\([\s\S]*isLegacyHomeLatestLibrary/.test(loadLatestPage) ||
+    !/getLatestMedia\s*\(\s*\{[\s\S]*parentId\s*:\s*library\.id/.test(loadLatestPage) ||
+    !/Promise\.all\s*\(\s*latestRequests\s*\)[\s\S]*interleaveRecentLibraryItems\s*\(\s*pages\s*,\s*HOME_FEED_PAGE_SIZE\s*\)/.test(
+      loadLatestPage)) {
+    throw new Error('Recent media must preserve the legacy per-library latest-media mix')
   }
   const mapFeedItem = methodBlock(homeViewModel, 'mapHomeFeedItem')
   if (!/BaseItemKind\.Episode\s*&&\s*seriesId\.length\s*>\s*0[\s\S]*id\s*:\s*seriesId[\s\S]*type\s*:\s*BaseItemKind\.Series/.test(

@@ -144,18 +144,19 @@ function validateLegacyNavigation(pageContent, route) {
 }
 
 function validateAccountEntry(source, pageContent) {
-  const guard = /if\s*\(\s*!\s*showLegacyActionBar\s*&&\s*!\s*this\.fromLogin\s*\)\s*\{/.exec(pageContent)
-  if (!guard) {
-    throw new Error('Native account content must guard the add-account entry')
+  const menus = methodBlock(source, 'navigationMenus')
+  if (!/if\s*\(\s*this\.fromLogin\s*\)\s*\{\s*return\s*\[\s*\]\s*\}/.test(menus)) {
+    throw new Error('Native account destination must guard the add-account menu')
   }
-  const nativeBranch = bracedBlock(pageContent, pageContent.indexOf('{', guard.index)).body
-  if (!/this\.nativeAddAccountEntry\s*\(\s*\)/.test(nativeBranch)) {
-    throw new Error('Native account content must render the add-account entry')
+  if (!/value\s*:\s*['"]新增账号['"]/.test(menus) ||
+    !/icon\s*:\s*\$r\(\s*['"]sys\.symbol\.plus['"]\s*\)/.test(menus) ||
+    !/action\s*:[\s\S]*this\.openAddAccount\s*\(\s*\)/.test(menus)) {
+    throw new Error('Native account add menu must keep its label, plus icon, and action')
   }
-  const entry = methodBlock(source, 'nativeAddAccountEntry')
-  if (!/Text\s*\(\s*['"]新增账号['"]\s*\)/.test(entry) ||
-    !/sys\.symbol\.plus/.test(entry) || !/this\.openAddAccount\s*\(\s*\)/.test(entry)) {
-    throw new Error('Native account add entry must keep a visible label, plus icon, and action')
+  const build = methodBlock(source, 'build')
+  if (!/menus\s*:\s*this\.navigationMenus\s*\(\s*\)/.test(build) ||
+    /nativeAddAccountEntry/.test(source)) {
+    throw new Error('Native account destination must expose one add-account menu action')
   }
   const opener = methodBlock(source, 'openAddAccount')
   if (!/this\.fromLogin/.test(opener) ||

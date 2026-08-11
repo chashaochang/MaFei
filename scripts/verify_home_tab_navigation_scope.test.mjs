@@ -19,7 +19,7 @@ test('scopes the pinned Home title-bar state to the active bottom tab', () => {
     /HomeTab\s*\(\s*\{[\s\S]*active\s*:\s*this\.ui\.selectedDestination\s*===\s*HomeDestination\.Home/)
   assert.match(homeTab, /@Param\s+active\s*:\s*boolean\s*=\s*true/)
   assert.match(homeTab,
-    /rootNavigationHomeLibraryPinned\s*=\s*this\.active\s*\?\s*this\.latestChipStripPinned\s*:\s*false/)
+    /rootNavigationHomeLibraryPinned\s*=\s*this\.active\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\?\s*this\.latestChipStripPinned\s*:\s*false/)
   assert.match(homeTab,
     /@Monitor\(\s*['"]active['"]\s*\)[\s\S]*onActiveChange\s*\(\s*\)[\s\S]*syncRootNavigationPinnedState\s*\(\s*\)/)
 })

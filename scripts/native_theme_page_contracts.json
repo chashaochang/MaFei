@@ -31,9 +31,9 @@
       "method": "nativeUnselectedFilterChip"
     },
     {
-      "path": "entry/src/main/ets/features/home/minetab/MineTab.ets",
-      "component": "MineTab",
-      "method": "nativeProfileHeader"
+      "path": "entry/src/main/ets/features/search/SearchPage.ets",
+      "component": "SearchPage",
+      "method": "nativeSearchForm"
     },
     {
       "path": "entry/src/main/ets/features/management/ManagementUserDetailPage.ets",
@@ -162,18 +162,6 @@
       "kind": "content-group"
     },
     {
-      "path": "entry/src/main/ets/features/connect/ConnectScreen.ets",
-      "component": "ConnectScreen",
-      "method": "nativeConnectionForm",
-      "kind": "content-group"
-    },
-    {
-      "path": "entry/src/main/ets/features/home/hometab/HomeTab.ets",
-      "component": "HomeTab",
-      "method": "nativeAllMediaCount",
-      "kind": "content-group"
-    },
-    {
       "path": "entry/src/main/ets/features/login/LoginPage.ets",
       "component": "LoginPage",
       "method": "nativeLoginForm",
@@ -218,7 +206,25 @@
     {
       "path": "entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets",
       "component": "ManagementSessionDetailPage",
-      "method": "content",
+      "method": "nativeStatusGroup",
+      "kind": "content-group"
+    },
+    {
+      "path": "entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets",
+      "component": "ManagementSessionDetailPage",
+      "method": "nativePlaybackGroup",
+      "kind": "content-group"
+    },
+    {
+      "path": "entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets",
+      "component": "ManagementSessionDetailPage",
+      "method": "nativeTranscodeGroup",
+      "kind": "content-group"
+    },
+    {
+      "path": "entry/src/main/ets/features/management/sessions/ManagementSessionDetailPage.ets",
+      "component": "ManagementSessionDetailPage",
+      "method": "nativeConnectionGroup",
       "kind": "content-group"
     },
     {
@@ -354,18 +360,6 @@
       "kind": "content-group"
     },
     {
-      "path": "entry/src/main/ets/features/search/SearchPage.ets",
-      "component": "SearchPage",
-      "method": "nativeSearchForm",
-      "kind": "content-group"
-    },
-    {
-      "path": "entry/src/main/ets/features/search/SearchPage.ets",
-      "component": "SearchPage",
-      "method": "nativeSearchHistory",
-      "kind": "content-group"
-    },
-    {
       "path": "entry/src/main/ets/features/serverdiscovery/ServerDiscoveryPage.ets",
       "component": "ServerDiscoveryPage",
       "method": "nativeDiscoveryArea",
@@ -416,7 +410,7 @@
     {
       "path": "entry/src/main/ets/features/setting/SettingPage.ets",
       "component": "SettingPage",
-      "method": "SettingGroup",
+      "method": "settingGroup",
       "kind": "content-group"
     },
     {
@@ -458,11 +452,6 @@
     {
       "path": "entry/src/main/ets/features/connect/ConnectScreen.ets",
       "component": "ConnectScreen",
-      "method": "build"
-    },
-    {
-      "path": "entry/src/main/ets/features/connect/ConnectingScreen.ets",
-      "component": "ConnectingScreen",
       "method": "build"
     },
     {
@@ -639,6 +628,7 @@
     "entry/src/main/ets/component/CastView.ets",
     "entry/src/main/ets/component/HorizontalVideoCard.ets",
     "entry/src/main/ets/component/VerticalVideoCard.ets",
+    "entry/src/main/ets/features/connect/ConnectingScreen.ets",
     "entry/src/main/ets/features/videodetail/components/VideoInfoDetail.ets"
   ],
   "opaqueBackgroundExceptions": []

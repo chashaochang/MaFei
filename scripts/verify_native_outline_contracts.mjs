@@ -38,7 +38,7 @@ const OUTLINE_TARGETS = [
   },
   {
     path: 'entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets',
-    widths: [0.5, 0.5, 1],
+    widths: [0.5, 0.5],
     whiteFrames: 1
   },
   {

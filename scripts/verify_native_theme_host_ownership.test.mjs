@@ -46,24 +46,31 @@ function validHomeScreen() {
     "  if (this.ui.selectedDestination === HomeDestination.Mine) { return '我的' }",
     "  return '首页'",
     '}',
-    'private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean): void {',
+    'private mediaAdministrator: boolean = false',
+    'private publishRootNavigationChrome(visible: boolean, title: string, homeActionsVisible: boolean,',
+    '  mediaAdminActionsVisible: boolean): void {',
     '  this.appUIState.rootNavigationTitleBarVisible = visible',
     '  this.appUIState.rootNavigationTitle = title',
     '  this.appUIState.rootNavigationHomeActionsVisible = homeActionsVisible',
+    '  this.appUIState.rootNavigationMediaAdminActionsVisible = mediaAdminActionsVisible',
     '}',
     'private updateRootNavigationTitleBar(): void {',
     '  const visible = this.resolveShell() === HomeShellKind.PhoneNativeHds',
     '  this.publishRootNavigationChrome(',
     '    visible,',
     '    this.rootNavigationTitle(),',
-    '    visible && this.ui.selectedDestination === HomeDestination.Home',
+    '    visible && this.ui.selectedDestination === HomeDestination.Home,',
+    '    visible && this.ui.selectedDestination === HomeDestination.Media && this.mediaAdministrator',
     '  )',
     '}',
     'aboutToDisappear() {',
-    "  this.publishRootNavigationChrome(false, '首页', false)",
+    "  this.publishRootNavigationChrome(false, '首页', false, false)",
     '}',
     'private get nativeFromHomeTopInset(): number {',
-    '  return 0',
+    '  if (this.shell !== HomeShellKind.PhoneNativeHds) {',
+    '    return 0',
+    '  }',
+    '  return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT',
     '}',
     '@Builder',
     'private homeTabContent() { HomeTab({ contentBottomInset: this.contentBottomInset }) }',
@@ -222,9 +229,9 @@ function validRootPage() {
     '    title: this.appUIState.rootNavigationTitle,',
     '    titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,',
     '    backButtonVisible: false,',
-    '    contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible,',
+    '    contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible,',
     '    heroTitleChrome: this.rootNavigationHeroChromeVisible(),',
-    '    titleMaterialFollowsSystem: !this.appUIState.rootNavigationHomeActionsVisible,',
+    '    titleMaterialFollowsSystem: true,',
     '    menus: this.rootNavigationMenus(),',
     '    contentBuilder: () => { this.pageContent() },',
     '    legacyContentBuilder: () => { this.pageContent() }',
@@ -317,6 +324,7 @@ function validSources() {
       "@Trace rootNavigationTitle: string = '首页'",
       '@Trace rootNavigationTitleBarVisible: boolean = false',
       '@Trace rootNavigationHomeActionsVisible: boolean = false',
+      '@Trace rootNavigationMediaAdminActionsVisible: boolean = false',
       '@Trace rootNavigationHomeHeroVisible: boolean = false',
       '@Trace rootNavigationLiveTvAvailable: boolean = false'
     ].join('\n')],
@@ -347,7 +355,7 @@ function validSources() {
       '@Param rootTitleBarOwned: boolean = false',
       'private contentTopSpacer(): number {',
       '  const safeTop = Math.max(0, this.appUIState.safeTop)',
-      '  return this.rootTitleBarOwned ? 0 : safeTop + UIConstants.ACTION_BAR_HEIGHT',
+      '  return safeTop + UIConstants.ACTION_BAR_HEIGHT',
       '}',
       'private topBar() {',
       '  if (!this.rootTitleBarOwned) {',
@@ -379,23 +387,23 @@ test('requires root content extension to remain stable while Hero data changes',
   const sources = validSources()
   sources.set(rootPagePath, sources.get(rootPagePath)
     .replace(
-      'contentExtendsUnderTitleBar: this.appUIState.rootNavigationHomeActionsVisible',
+      'contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible',
       'contentExtendsUnderTitleBar: this.rootNavigationHeroChromeVisible()'
     ))
   assert.throws(
     () => validateNativeThemeHostOwnership(sources),
-    /keep Home content extension stable/
+    /keep root content extension stable/
   )
 })
 
-test('keeps only the approved Home-tab title material while every other destination follows the system', () => {
+test('keeps the root title material system-following', () => {
   const sources = validSources()
   sources.set(rootPagePath, sources.get(rootPagePath)
-    .replace('titleMaterialFollowsSystem: !this.appUIState.rootNavigationHomeActionsVisible',
+    .replace('titleMaterialFollowsSystem: true',
       'titleMaterialFollowsSystem: false'))
   assert.throws(
     () => validateNativeThemeHostOwnership(sources),
-    /preserve only the approved Home-tab title material/
+    /root title material must follow the system/
   )
 })
 
@@ -565,7 +573,7 @@ test('synchronizes root destination chrome and clears it when HomeScreen leaves'
 
   const leakedSources = validSources()
   leakedSources.set(homeScreenPath, validHomeScreen().replace(
-    "  this.publishRootNavigationChrome(false, '首页', false)",
+    "  this.publishRootNavigationChrome(false, '首页', false, false)",
     '  this.updateRootNavigationTitleBar()'
   ))
   assert.throws(
@@ -756,21 +764,30 @@ test('requires five arrow closures that preserve the parent HomeScreen context',
   )
 })
 
-test('keeps the root destination as the only native top-inset owner', () => {
+test('reserves the native phone title bar inset for secondary home tabs', () => {
   const missingOwnerSources = validSources()
   missingOwnerSources.set(homeScreenPath, validHomeScreen()
     .replace('private get nativeFromHomeTopInset(): number {', 'private get otherInset(): number {'))
   assert.throws(
     () => validateNativeThemeHostOwnership(missingOwnerSources),
-    /must not duplicate the root destination top inset/
+    /must reserve the Native phone title bar and safe top for secondary tabs/
   )
 
-  const duplicateInsetSources = validSources()
-  duplicateInsetSources.set(homeScreenPath, validHomeScreen()
-    .replace('  return 0', '  return Math.max(0, this.appUIState.safeTop)'))
+  const leakedInsetSources = validSources()
+  leakedInsetSources.set(homeScreenPath, validHomeScreen()
+    .replace('if (this.shell !== HomeShellKind.PhoneNativeHds)', 'if (false)'))
   assert.throws(
-    () => validateNativeThemeHostOwnership(duplicateInsetSources),
-    /must not duplicate the root destination top inset/
+    () => validateNativeThemeHostOwnership(leakedInsetSources),
+    /must reserve the Native phone title bar and safe top for secondary tabs/
+  )
+
+  const missingSafeTopSources = validSources()
+  missingSafeTopSources.set(homeScreenPath, validHomeScreen()
+    .replace('Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT',
+      'UIConstants.ACTION_BAR_HEIGHT'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(missingSafeTopSources),
+    /must reserve the Native phone title bar and safe top for secondary tabs/
   )
 
   const missingChasingSources = validSources()
@@ -790,7 +807,7 @@ test('keeps the root destination as the only native top-inset owner', () => {
   )
 })
 
-test('lets only the phone Native destination own the MediaTab title and ActionBar spacer', () => {
+test('lets only the phone Native destination own the MediaTab title', () => {
   const ungatedOwnerSources = validSources()
   ungatedOwnerSources.set(homeScreenPath, validHomeScreen().replace(
     'rootTitleBarOwned: this.shell === HomeShellKind.PhoneNativeHds',
@@ -812,16 +829,16 @@ test('lets only the phone Native destination own the MediaTab title and ActionBa
   const legacySpacerRegressionSources = validSources()
   legacySpacerRegressionSources.set(mediaTabPath, validSources().get(mediaTabPath)
     .replace(
-      'return this.rootTitleBarOwned ? 0 : safeTop + UIConstants.ACTION_BAR_HEIGHT',
+      'return safeTop + UIConstants.ACTION_BAR_HEIGHT',
       'return safeTop'
     ))
   assert.throws(
     () => validateNativeThemeHostOwnership(legacySpacerRegressionSources),
-    /leave all Native top-inset ownership to the root destination/
+    /reserve the safe top and one title-bar height for its content/
   )
 })
 
-test('guards route pages and consumes their owned top inset exactly once as padding', () => {
+test('guards route pages and consumes their owned top inset as one top spacer', () => {
   const unguardedSources = validSources()
   unguardedSources.set(chasingTabPath, validFromHomeTopInsetOwner()
     .replace('this.fromHome ? Math.max(0, this.contentTopInset) : 0', 'Math.max(0, this.contentTopInset)'))
@@ -835,7 +852,7 @@ test('guards route pages and consumes their owned top inset exactly once as padd
     '\n.padding({ top: this.ownedContentTopInset() })')
   assert.throws(
     () => validateNativeThemeHostOwnership(duplicateSources),
-    /FavoriteListPage must consume the owned top inset exactly once/
+    /FavoriteListPage must consume the owned top inset as exactly one top spacer/
   )
 
   const wrongModifierSources = validSources()
@@ -843,7 +860,7 @@ test('guards route pages and consumes their owned top inset exactly once as padd
     .replace('.padding({ top:', '.margin({ top:'))
   assert.throws(
     () => validateNativeThemeHostOwnership(wrongModifierSources),
-    /ChasingTab must consume the owned top inset as top padding/
+    /ChasingTab must consume the owned top inset as exactly one top spacer/
   )
 })
 

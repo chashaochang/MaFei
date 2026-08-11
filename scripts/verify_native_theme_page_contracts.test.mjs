@@ -9,6 +9,7 @@ const pagePath = 'entry/src/main/ets/features/sample/SamplePage.ets'
 const overlayPath = 'entry/src/main/ets/features/sample/SampleOverlay.ets'
 const globalPath = 'entry/src/main/ets/component/GlobalMaterial.ets'
 const sharedPath = 'entry/src/main/ets/component/SharedCard.ets'
+const dialogPath = 'entry/src/main/ets/features/sample/SampleDialog.ets'
 
 function validPage() {
   return [
@@ -80,11 +81,24 @@ function validGlobalBuilder() {
   ].join('\n')
 }
 
+function validDialogClass() {
+  return [
+    'export class SampleDialog {',
+    '  static show(): void {',
+    '    promptAction.showDialog({',
+    '      systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()',
+    '    })',
+    '  }',
+    '}'
+  ].join('\n')
+}
+
 function validSources() {
   return new Map([
     [pagePath, validPage()],
     [overlayPath, validOverlay()],
-    [globalPath, validGlobalBuilder()]
+    [globalPath, validGlobalBuilder()],
+    [dialogPath, validDialogClass()]
   ])
 }
 
@@ -118,6 +132,23 @@ test('accepts legal Native material, plain surfaces, transparent roots, exact ex
 
 test('derives the default workspace root from the verifier location', () => {
   assert.equal(defaultWorkspaceRoot().endsWith('/ohosApp'), true)
+})
+
+test('accepts an unregistered material attribute in a component build method', () => {
+  const sources = validSources()
+  sources.set(sharedPath, [
+    '@ComponentV2',
+    'struct SharedCard {',
+    '  build() {',
+    '    Column() {}.systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))',
+    '  }',
+    '}'
+  ].join('\n'))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
+test('accepts an unregistered systemMaterial option in an ordinary class method', () => {
+  assert.doesNotThrow(() => validateNativeThemePageContracts(validSources(), validContract()))
 })
 
 for (const conflict of [
@@ -158,6 +189,25 @@ test('rejects a conditional material attribute instead of hiding material owners
   )
 })
 
+test('accepts a conditional material role inside an always-present material', () => {
+  const sources = validSources()
+  sources.set(globalPath, validGlobalBuilder().replace(
+    'AppThemeMaterialRole.Floating',
+    'this.selected ? AppThemeMaterialRole.Floating : AppThemeMaterialRole.AdaptiveInteractive'
+  ))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
+test('accepts a guarded Native material with an explicit disabled fallback', () => {
+  const sources = validSources()
+  sources.set(overlayPath, validOverlay().replace(
+    'AppThemeSurfaceResolver.disabledSystemMaterial()',
+    'this.useNativeMaterial() ? AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) : ' +
+      'AppThemeSurfaceResolver.disabledSystemMaterial()'
+  ))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
 test('rejects a conditional systemMaterial option', () => {
   const sources = validSources()
   sources.set(overlayPath, validOverlay().replace(
@@ -170,19 +220,19 @@ test('rejects a conditional systemMaterial option', () => {
   )
 })
 
-test('rejects material attributes and options outside their exact owners', () => {
+test('requires registered material owners to keep their exact calls', () => {
   const attributeContract = validContract()
   attributeContract.attributeOwners[0].method = 'missingOwner'
   assert.throws(
     () => validateNativeThemePageContracts(validSources(), attributeContract),
-    /unlisted \.systemMaterial attribute owner/
+    /contract attribute owner has no \.systemMaterial call/
   )
 
   const optionContract = validContract()
   optionContract.optionOwners[0].method = 'missingOwner'
   assert.throws(
     () => validateNativeThemePageContracts(validSources(), optionContract),
-    /unlisted systemMaterial option owner/
+    /contract option owner has no systemMaterial option/
   )
 })
 
@@ -224,14 +274,14 @@ for (const attribute of ['border', 'borderWidth', 'borderColor']) {
   })
 }
 
-test('allows only an exact top-level @Builder function material owner', () => {
+test('requires top-level material functions to be exact @Builder owners', () => {
   assert.doesNotThrow(() => validateNativeThemePageContracts(validSources(), validContract()))
 
   const sources = validSources()
   sources.set(globalPath, validGlobalBuilder().replace('@Builder\n', ''))
   assert.throws(
     () => validateNativeThemePageContracts(sources, validContract()),
-    /\.systemMaterial must belong to an @Builder method/
+    /\.systemMaterial must belong to an ArkUI build or @Builder method/
   )
 })
 
@@ -288,6 +338,29 @@ test('allows an opaque background only on the Feiniu side of a root conditional'
     validateNativeThemePageContracts(legacyPredicateSources, validContract()))
 })
 
+test('allows an opaque root only inside an explicit legacy branch block', () => {
+  const sources = validSources()
+  const originalBuild = [
+    '  build() {',
+    '    Column() {',
+    '      this.nativeCard()',
+    '    }',
+    '    .backgroundColor(this.pageBackground())',
+    '  }'
+  ].join('\n')
+  const branchedBuild = [
+    '  build() {',
+    '    if (this.showLegacyActionBar) {',
+    "      Column() {}.backgroundColor($r('app.color.bg_main'))",
+    '    } else {',
+    '      Column() {}.backgroundColor(Color.Transparent)',
+    '    }',
+    '  }'
+  ].join('\n')
+  sources.set(pagePath, validPage().replace(originalBuild, branchedBuild))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
 test('allows a non-theme root conditional when both branches stay Native-transparent', () => {
   const sources = validSources()
   sources.set(pagePath, validPage().replace(
@@ -340,6 +413,31 @@ test('allows an old color only on the Feiniu side of a Native conditional', () =
   sources.set(pagePath, validPage().replace(
     "Column() {}.backgroundColor($r('app.color.bg_1'))",
     "Column() {}.backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_1'))"
+  ))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
+test('finds a legacy-only visual inside nested loading and Native branches', () => {
+  const sources = validSources()
+  sources.set(pagePath, validPage().replace(
+    '  build() {',
+    [
+      '  @Builder',
+      '  private nestedCard(nativeSurface: boolean) {',
+      '    if (this.loading) {',
+      '      LoadingProgress()',
+      '    } else if (this.error) {',
+      "      Text('error')",
+      '    } else {',
+      '      if (nativeSurface) {',
+      "        Column() {}.backgroundColor(Color.Transparent)",
+      '      } else {',
+      "        Column() {}.backgroundColor($r('app.color.bg_1'))",
+      '      }',
+      '    }',
+      '  }',
+      '  build() {'
+    ].join('\n')
   ))
   assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
 })

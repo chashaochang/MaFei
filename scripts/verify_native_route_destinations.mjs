@@ -19,8 +19,10 @@ const MANAGEMENT_TASK_DETAIL = 'entry/src/main/ets/features/management/Managemen
 const MANAGEMENT_USER_CREATE = 'entry/src/main/ets/features/management/ManagementUserCreatePage.ets'
 const MANAGEMENT_USER_DETAIL = 'entry/src/main/ets/features/management/ManagementUserDetailPage.ets'
 const MINE_TAB = 'entry/src/main/ets/features/home/minetab/MineTab.ets'
+const SETTING_PAGE = 'entry/src/main/ets/features/setting/SettingPage.ets'
 const ROUTE_PAGES = [
   PLAYER_ENGINE,
+  SETTING_PAGE,
   ABOUT,
   SEARCH,
   VIDEO_LIST,
@@ -50,6 +52,7 @@ const RESOLVER_BACKGROUND_PAGES = new Set([
 ])
 const LEGACY_ROUTE_BACKGROUNDS = new Map([
   [PLAYER_ENGINE, 'start_window_background'],
+  [SETTING_PAGE, 'start_window_background'],
   [ABOUT, 'bg_main'],
   [SEARCH, 'bg_main'],
   [VIDEO_LIST, 'bg_main'],
@@ -183,6 +186,13 @@ function validateSharedDestination(source) {
     }
   }
 
+  for (const builderName of ['hdsContent', 'hdsDestination', 'legacyDestination']) {
+    const builderPattern = new RegExp('@Builder\\s+private\\s+' + builderName + '\\s*\\(')
+    if (!builderPattern.test(source)) {
+      throw new Error('shared destination must keep @Builder on ' + builderName)
+    }
+  }
+
   const contentTopInset = methodBlock(source, 'nativeContentTopInset')
   if (!/if\s*\(\s*this\.contentExtendsUnderTitleBar\s*\|\|\s*!\s*this\.titleBarVisible\s*\|\|\s*!\s*this\.usesNativeChrome\s*\(\s*\)\s*\)\s*\{\s*return\s+0/.test(contentTopInset) ||
     !/return\s+Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(contentTopInset)) {
@@ -197,7 +207,10 @@ function validateSharedDestination(source) {
   const titleContent = propertyBlock(titleOptions, 'content')
   const title = propertyBlock(titleContent, 'title')
   const menu = propertyBlock(titleContent, 'menu')
-  if (!/mainTitle\s*:\s*this\.title/.test(title) ||
+  const nativeMainTitle = methodBlock(source, 'nativeMainTitle')
+  if (!/return\s+this\.rootHomeLibraryPinned\s*\(\s*\)\s*\?\s*['"]{2}\s*:\s*this\.title/.test(
+    nativeMainTitle) ||
+    !/mainTitle\s*:\s*this\.nativeMainTitle\s*\(\s*\)/.test(title) ||
     !/mainTitleSize\s*:\s*TitleSize\.TITLE_S/.test(title) ||
     !/value\s*:\s*this\.nativeMenus\s*\(\s*\)/.test(menu) ||
     !/maxCount\s*:\s*3/.test(menu)) {
@@ -206,7 +219,7 @@ function validateSharedDestination(source) {
 
   const titleStyle = propertyBlock(titleOptions, 'style')
   const scrollEffect = propertyBlock(titleStyle, 'scrollEffectOpts')
-  if (!/enableScrollEffect\s*:\s*true/.test(scrollEffect) ||
+  if (!/enableScrollEffect\s*:\s*!\s*this\.rootHomeLibraryPinned\s*\(\s*\)/.test(scrollEffect) ||
     !/scrollEffectType\s*:\s*HdsScrollEffectType\.IMMERSIVE_GRADIENT_BLUR/.test(scrollEffect) ||
     !/blurEffectiveStartOffset\s*:\s*LengthMetrics\.vp\s*\(\s*1\s*\)/.test(scrollEffect) ||
     !/blurEffectiveEndOffset\s*:\s*LengthMetrics\.vp\s*\(\s*24\s*\)/.test(scrollEffect)) {
@@ -232,9 +245,9 @@ function validateSharedDestination(source) {
   }
   if (!/maskExtraHeight\s*:\s*0/.test(originalBackground) ||
     !/blurRadius\s*:\s*0/.test(originalBackground) ||
-    !/maskExtraHeight\s*:\s*0/.test(scrolledBackground) ||
-    !/blurRadius\s*:\s*8/.test(scrolledBackground)) {
-    throw new Error('Native HDS title must keep zero initial blur and 8vp scrolled blur')
+    !/maskExtraHeight\s*:\s*32/.test(scrolledBackground) ||
+    !/blurRadius\s*:\s*24/.test(scrolledBackground)) {
+    throw new Error('Native HDS title must keep zero initial blur and a 32vp/24vp scrolled blur mask')
   }
   const originalContentStyle = propertyBlock(originalStyle, 'contentStyle')
   const originalTitleStyle = propertyBlock(originalContentStyle, 'titleStyle')
@@ -323,7 +336,7 @@ function validateSharedDestination(source) {
   for (const required of [
     /\.titleMode\s*\(\s*HdsNavDestinationTitleMode\.MINI\s*\)/,
     /\.titleBar\s*\(\s*this\.nativeTitleBarOptions\s*\(\s*\)\s*\)/,
-    /\.hideTitleBar\s*\(\s*!\s*this\.titleBarVisible\s*\|\|\s*!\s*this\.usesNativeChrome\s*\(\s*\)\s*\)/,
+    /\.hideTitleBar\s*\(\s*!\s*this\.titleBarVisible\s*\|\|\s*!\s*this\.usesNativeChrome\s*\(\s*\)\s*\|\|\s*this\.rootHomeLibraryPinned\s*\(\s*\)\s*\)/,
     /\.hideBackButton\s*\(\s*!\s*this\.backButtonVisible\s*\)/,
     /\.hideToolBar\s*\(\s*true\s*\)/,
     /\.bindToScrollable\s*\(\s*this\.titleBarVisible\s*&&\s*this\.usesNativeChrome\s*\(\s*\)\s*\?\s*this\.scrollControllers\s*:\s*\[\s*\]\s*\)/,
@@ -554,26 +567,43 @@ function validateRoutePage(source, path) {
   }
 
   const pageContent = methodBlock(source, 'pageContent')
+  const usesSplitActivityPages = path === MANAGEMENT_ACTIVITY &&
+    /if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?this\.legacyPage\s*\(\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?this\.nativePage\s*\(\s*\)/.test(pageContent)
+  const legacyActivityPage = usesSplitActivityPages ? methodBlock(source, 'legacyPage') : ''
+  const nativeActivityPage = usesSplitActivityPages ? methodBlock(source, 'nativePage') : ''
   if (path === SEARCH) {
     if (count(pageContent, /\bActionBar\s*\(/g) !== 0 ||
-      !/if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?this\.feiniuSearchBar\s*\(\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?this\.nativeSearchForm\s*\(\s*\)/.test(pageContent)) {
-      throw new Error('Search Native content must use the system title and keep cancel in the legacy search bar')
+      !/if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?this\.feiniuSearchBar\s*\(\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?this\.nativeSearchHeader\s*\(\s*\)/.test(pageContent)) {
+      throw new Error('Search Native content must keep its immersive header and isolate the legacy cancel row')
     }
     const nativeSearchForm = methodBlock(source, 'nativeSearchForm')
+    const nativeSearchHeader = methodBlock(source, 'nativeSearchHeader')
     const legacySearchBar = methodBlock(source, 'feiniuSearchBar')
-    if (!/this\.searchBarContent\s*\(\s*true\s*,\s*false\s*\)/.test(nativeSearchForm) ||
-      !/this\.searchBarContent\s*\(\s*false\s*,\s*true\s*\)/.test(legacySearchBar)) {
-      throw new Error('Search Native content must use the system title and keep cancel in the legacy search bar')
+    if (!/\bSearch\s*\(/.test(nativeSearchForm) ||
+      !/this\.nativeSearchForm\s*\(\s*\)/.test(nativeSearchHeader) ||
+      !/this\.searchBarContent\s*\(\s*false\s*,\s*true\s*\)/.test(legacySearchBar) ||
+      !/titleBarVisible\s*:\s*false/.test(source) ||
+      !/contentExtendsUnderTitleBar\s*:\s*true/.test(source)) {
+      throw new Error('Search Native content must keep its immersive header and isolate the legacy cancel row')
     }
   } else if (!/if\s*\(\s*showLegacyActionBar\s*\)/.test(pageContent) ||
-    count(pageContent, /\bActionBar\s*\(/g) !== 1) {
+    (usesSplitActivityPages ?
+      count(legacyActivityPage, /\bActionBar\s*\(/g) !== 1 || count(nativeActivityPage, /\bActionBar\s*\(/g) !== 0 :
+      count(pageContent, /\bActionBar\s*\(/g) !== 1)) {
     throw new Error('legacy ActionBar must remain isolated behind the legacy flag: ' + path)
   }
   const legacyBackground = LEGACY_ROUTE_BACKGROUNDS.get(path)
-  const fillsTransparentNativeRoot = RESOLVER_BACKGROUND_PAGES.has(path) ?
+  const fillsTransparentNativeRoot = usesSplitActivityPages ?
+    /\}\s*\.width\s*\(\s*['"]100%['"]\s*\)\s*\.height\s*\(\s*['"]100%['"]\s*\)\s*\.backgroundColor\s*\(\s*Color\.Transparent\s*\)/.test(pageContent) &&
+      /\}\s*\.width\s*\(\s*['"]100%['"]\s*\)\s*\.height\s*\(\s*['"]100%['"]\s*\)[\s\S]*?\.backgroundColor\s*\(\s*AppThemeSurfaceResolver\.routeBackground\s*\(/.test(legacyActivityPage) &&
+      !/\.backgroundColor\s*\(/.test(nativeActivityPage) :
+    path === SEARCH ?
+    /if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?\.width\s*\(\s*['"]100%['"]\s*\)\s*\.height\s*\(\s*['"]100%['"]\s*\)\s*\.backgroundColor\s*\(\s*\$r\(\s*['"]app\.color\.bg_main['"]\s*\)\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?\.width\s*\(\s*['"]100%['"]\s*\)\s*\.height\s*\(\s*['"]100%['"]\s*\)\s*\.backgroundColor\s*\(\s*Color\.Transparent\s*\)/.test(pageContent) :
+    RESOLVER_BACKGROUND_PAGES.has(path) ?
     /\}\s*\.width\s*\(\s*['"]100%['"]\s*\)\s*\.height\s*\(\s*['"]100%['"]\s*\)\s*\.backgroundColor\s*\(\s*showLegacyActionBar\s*\?\s*AppThemeSurfaceResolver\.routeBackground\s*\([\s\S]*?\)\s*:\s*Color\.Transparent\s*\)/.test(pageContent) :
     Boolean(legacyBackground && new RegExp(
       '\\}\\s*\\.width\\s*\\(\\s*[\'\"]100%[\'\"]\\s*\\)\\s*\\.height\\s*\\(\\s*[\'\"]100%[\'\"]\\s*\\)\\s*' +
+      '(?:\\.justifyContent\\s*\\([^)]*\\)\\s*)?' +
       '\\.backgroundColor\\s*\\(\\s*showLegacyActionBar\\s*\\?\\s*\\$r\\(\\s*[\'\"]app\\.color\\.' +
       legacyBackground + '[\'\"]\\s*\\)\\s*:\\s*Color\\.Transparent\\s*\\)'
     ).test(pageContent))
@@ -614,12 +644,15 @@ function validateRoutePage(source, path) {
   }
 }
 
-function validateEntryPoints(source) {
-  if (!/HMRouterMgr\.to\s*\(\s*RouterConsts\.PlayerEnginePage\s*\)\.push\s*\(\s*\)/.test(source)) {
+function validateEntryPoints(mineSource, settingSource) {
+  if (!/HMRouterMgr\.to\s*\(\s*RouterConsts\.SettingPage\s*\)\.push\s*\(\s*\)/.test(mineSource)) {
+    throw new Error('Mine settings entry must keep HMRouter push behavior')
+  }
+  if (!/HMRouterMgr\.to\s*\(\s*RouterConsts\.PlayerEnginePage\s*\)\.push\s*\(\s*\)/.test(settingSource)) {
     throw new Error('player engine entry must keep HMRouter push behavior')
   }
-  if (!/HMRouterMgr\.push\s*\(\s*\{[\s\S]*?pageUrl\s*:\s*RouterConsts\.AboutPage[\s\S]*?\}\s*\)/.test(source)) {
-    throw new Error('about entry must keep HMRouter push behavior')
+  if (/RouterConsts\.AboutPage/.test(mineSource) || /RouterConsts\.AboutPage/.test(settingSource)) {
+    throw new Error('retired About entry must stay removed from Mine and Settings')
   }
 }
 
@@ -627,7 +660,7 @@ export function validateNativeRouteDestinations(sources) {
   validateSharedDestination(requiredSource(sources, DESTINATION))
   ROUTE_PAGES.forEach((path) => validateRoutePage(requiredSource(sources, path), path))
   validateAboutPublicContent(requiredSource(sources, ABOUT))
-  validateEntryPoints(requiredSource(sources, MINE_TAB))
+  validateEntryPoints(requiredSource(sources, MINE_TAB), requiredSource(sources, SETTING_PAGE))
 }
 
 export function defaultWorkspaceRoot() {

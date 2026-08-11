@@ -52,6 +52,8 @@ const ROOT_TITLE_STATE =
   /@Trace\s+rootNavigationTitle\s*:\s*string\s*=\s*['"]首页['"]/
 const ROOT_HOME_ACTIONS_STATE =
   /@Trace\s+rootNavigationHomeActionsVisible\s*:\s*boolean\s*=\s*false/
+const ROOT_MEDIA_ADMIN_ACTIONS_STATE =
+  /@Trace\s+rootNavigationMediaAdminActionsVisible\s*:\s*boolean\s*=\s*false/
 const ROOT_HOME_HERO_STATE =
   /@Trace\s+rootNavigationHomeHeroVisible\s*:\s*boolean\s*=\s*false/
 const ROOT_LIVE_TV_STATE =
@@ -64,6 +66,8 @@ const ROOT_TITLE_STATE_UPDATE =
   /this\.appUIState\.rootNavigationTitle\s*=\s*title/
 const ROOT_HOME_ACTIONS_STATE_UPDATE =
   /this\.appUIState\.rootNavigationHomeActionsVisible\s*=\s*homeActionsVisible/
+const ROOT_MEDIA_ADMIN_ACTIONS_STATE_UPDATE =
+  /this\.appUIState\.rootNavigationMediaAdminActionsVisible\s*=\s*mediaAdminActionsVisible/
 const RECOMMENDATION_LIST_MONITOR =
   /@Monitor\s*\(\s*['"]ui\.recommendationList['"]\s*\)/g
 const THEME_STYLE_MONITOR =
@@ -85,13 +89,15 @@ const NAV_SAFE_AREA_INITIALIZER =
 const THEME_SAFE_AREA_REFRESH =
   /this\.modifier\.updateLayoutSafeArea\s*\(\s*this\.appUIState\s*\)/
 const NATIVE_FROM_HOME_TOP_INSET =
-  /private\s+get\s+nativeFromHomeTopInset\s*\(\s*\)\s*:\s*number\s*\{\s*return\s+0\s*;?\s*\}/
+  /private\s+get\s+nativeFromHomeTopInset\s*\(\s*\)\s*:\s*number\s*\{\s*if\s*\(\s*this\.shell\s*!==\s*HomeShellKind\.PhoneNativeHds\s*\)\s*\{\s*return\s+0\s*;?\s*\}\s*return\s+Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT\s*;?\s*\}/
 const FROM_HOME_TOP_INSET_BODY =
   /^\s*return\s+this\.fromHome\s*\?\s*Math\.max\s*\(\s*0\s*,\s*this\.contentTopInset\s*\)\s*:\s*0\s*;?\s*$/
 const CONTENT_TOP_INSET_PARAM =
   /@Param\s+contentTopInset\s*:\s*number\s*=\s*0/
-const OWNED_TOP_PADDING =
-  /\.padding\s*\(\s*\{[\s\S]{0,400}\btop\s*:\s*this\.ownedContentTopInset\s*\(\s*\)/
+const OWNED_TOP_LAYOUT_USE =
+  /(?:\.padding\s*\(\s*\{[\s\S]{0,400}\btop\s*:\s*this\.ownedContentTopInset\s*\(\s*\)|\b(?:Blank|ListItem)\s*\(\s*\)\s*\.height\s*\(\s*this\.ownedContentTopInset\s*\(\s*\)\s*\))/
+const OWNED_TOP_POSITIVE_GUARD =
+  /if\s*\(\s*this\.ownedContentTopInset\s*\(\s*\)\s*>\s*0\s*\)/
 const CONTENT_BUILDERS = [
   ['HomeTab', 'homeTabContent', 'homeContentBuilder'],
   ['ChasingTab', 'chasingTabContent', 'chasingContentBuilder'],
@@ -230,11 +236,11 @@ function validateFromHomeTopInsetOwner(source, component) {
   if (count(source, /this\.contentTopInset\b/g) !== 1) {
     throw new Error(component + ' must read contentTopInset only inside its fromHome guard')
   }
-  if (count(source, /this\.ownedContentTopInset\s*\(\s*\)/g) !== 1) {
-    throw new Error(component + ' must consume the owned top inset exactly once')
-  }
-  if (!OWNED_TOP_PADDING.test(source)) {
-    throw new Error(component + ' must consume the owned top inset as top padding')
+  const ownedTopCallCount = count(source, /this\.ownedContentTopInset\s*\(\s*\)/g)
+  const layoutUseCount = count(source, new RegExp(OWNED_TOP_LAYOUT_USE.source, 'g'))
+  const guardCount = count(source, new RegExp(OWNED_TOP_POSITIVE_GUARD.source, 'g'))
+  if (layoutUseCount !== 1 || guardCount > 1 || ownedTopCallCount !== layoutUseCount + guardCount) {
+    throw new Error(component + ' must consume the owned top inset as exactly one top spacer')
   }
 }
 
@@ -330,6 +336,9 @@ export function validateNativeThemeHostOwnership(sources) {
   if (!ROOT_HOME_ACTIONS_STATE.test(appState)) {
     throw new Error('AppUIState must keep root Home actions hidden by default')
   }
+  if (!ROOT_MEDIA_ADMIN_ACTIONS_STATE.test(appState)) {
+    throw new Error('AppUIState must keep root media administrator actions hidden by default')
+  }
   if (!ROOT_HOME_HERO_STATE.test(appState)) {
     throw new Error('AppUIState must persist a default-hidden root Home Hero presence state')
   }
@@ -416,11 +425,11 @@ export function validateNativeThemeHostOwnership(sources) {
     }
   }
   const rootHeroChrome = methodBlock(rootPage, 'rootNavigationHeroChromeVisible')
-  if (!/contentExtendsUnderTitleBar\s*:\s*this\.appUIState\.rootNavigationHomeActionsVisible/.test(rootBuild)) {
-    throw new Error('IndexPage must keep Home content extension stable while Hero data changes')
+  if (!/contentExtendsUnderTitleBar\s*:\s*this\.appUIState\.rootNavigationTitleBarVisible/.test(rootBuild)) {
+    throw new Error('IndexPage must keep root content extension stable while Hero data changes')
   }
-  if (!/titleMaterialFollowsSystem\s*:\s*!\s*this\.appUIState\.rootNavigationHomeActionsVisible/.test(rootBuild)) {
-    throw new Error('IndexPage must preserve only the approved Home-tab title material')
+  if (!/titleMaterialFollowsSystem\s*:\s*true/.test(rootBuild)) {
+    throw new Error('IndexPage root title material must follow the system')
   }
   if (!/^\s*return\s+this\.appUIState\.rootNavigationHomeActionsVisible\s*&&\s*this\.appUIState\.rootNavigationHomeHeroVisible\s*;?\s*$/.test(
     rootHeroChrome) ||
@@ -458,22 +467,23 @@ export function validateNativeThemeHostOwnership(sources) {
   if (count(publishRootChrome, ROOT_TITLE_BAR_STATE_UPDATE) !== 1 ||
     count(publishRootChrome, ROOT_TITLE_STATE_UPDATE) !== 1 ||
     count(publishRootChrome, ROOT_HOME_ACTIONS_STATE_UPDATE) !== 1 ||
+    count(publishRootChrome, ROOT_MEDIA_ADMIN_ACTIONS_STATE_UPDATE) !== 1 ||
     /navInstance|hideTitleBar/.test(publishRootChrome)) {
     throw new Error('HomeScreen must publish only the current root destination chrome state')
   }
   const updateRootTitleBar = methodBlock(homeScreen, 'updateRootNavigationTitleBar')
   if (!/^\s*const\s+visible\s*=\s*this\.resolveShell\s*\(\s*\)\s*===\s*HomeShellKind\.PhoneNativeHds\s*$/m
       .test(updateRootTitleBar) ||
-    !/this\.publishRootNavigationChrome\s*\(\s*visible\s*,\s*this\.rootNavigationTitle\s*\(\s*\)\s*,\s*visible\s*&&\s*this\.ui\.selectedDestination\s*===\s*HomeDestination\.Home\s*\)/
+    !/this\.publishRootNavigationChrome\s*\(\s*visible\s*,\s*this\.rootNavigationTitle\s*\(\s*\)\s*,\s*visible\s*&&\s*this\.ui\.selectedDestination\s*===\s*HomeDestination\.Home\s*,\s*visible\s*&&\s*this\.ui\.selectedDestination\s*===\s*HomeDestination\.Media\s*&&\s*this\.mediaAdministrator\s*\)/
       .test(updateRootTitleBar)) {
-    throw new Error('HomeScreen must keep the Native title bar visible across tabs and limit actions to Home')
+    throw new Error('HomeScreen must keep the Native title bar visible across tabs and scope root actions')
   }
   const disappear = methodBlock(homeScreen, 'aboutToDisappear')
-  if (!/this\.publishRootNavigationChrome\s*\(\s*false\s*,\s*['"]首页['"]\s*,\s*false\s*\)/.test(disappear)) {
+  if (!/this\.publishRootNavigationChrome\s*\(\s*false\s*,\s*['"]首页['"]\s*,\s*false\s*,\s*false\s*\)/.test(disappear)) {
     throw new Error('HomeScreen must clear root destination chrome when leaving the page')
   }
   if (!NATIVE_FROM_HOME_TOP_INSET.test(homeScreen)) {
-    throw new Error('HomeScreen must not duplicate the root destination top inset')
+    throw new Error('HomeScreen must reserve the Native phone title bar and safe top for secondary tabs')
   }
 
   const syncLiveTv = methodBlock(homeTab, 'syncRootNavigationLiveTvAvailability')
@@ -629,8 +639,8 @@ export function validateNativeThemeHostOwnership(sources) {
   }
   const mediaTopSpacer = methodBlock(mediaTab, 'contentTopSpacer')
   if (!/const\s+safeTop\s*=\s*Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)/.test(mediaTopSpacer) ||
-    !/return\s+this\.rootTitleBarOwned\s*\?\s*0\s*:\s*safeTop\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(mediaTopSpacer)) {
-    throw new Error('MediaTab must leave all Native top-inset ownership to the root destination')
+    !/return\s+safeTop\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT/.test(mediaTopSpacer)) {
+    throw new Error('MediaTab must reserve the safe top and one title-bar height for its content')
   }
   const mediaTopBar = methodBlock(mediaTab, 'topBar')
   const mediaTitleGuard = /\bif\s*\(\s*!\s*this\.rootTitleBarOwned\s*\)\s*\{/.exec(mediaTopBar)

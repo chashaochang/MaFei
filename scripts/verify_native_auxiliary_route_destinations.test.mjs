@@ -57,12 +57,12 @@ test('rejects an opaque Native route root', () => {
   )
 })
 
-test('keeps the Native account add action in the content area', () => {
+test('keeps the Native account add action in the destination menu', () => {
   const sources = workspaceSources()
-  sources.set(accountPath, sources.get(accountPath).replace('        this.nativeAddAccountEntry()\n', ''))
+  sources.set(accountPath, sources.get(accountPath).replace('      menus: this.navigationMenus(),\n', ''))
   assert.throws(
     () => validateNativeAuxiliaryRouteDestinations(sources),
-    /Native account content must render the add-account entry/
+    /Native account destination must expose one add-account menu action/
   )
 })
 

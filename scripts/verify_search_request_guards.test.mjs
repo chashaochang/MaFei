@@ -89,8 +89,10 @@ function validSources() {
         private pageContent(showLegacyActionBar: boolean) {
           Column()
             .padding({
-              left: showLegacyActionBar ? 0 : 16,
-              right: showLegacyActionBar ? 0 : 16
+              left: AppThemeTokens.pageHorizontalPadding(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen),
+              right: AppThemeTokens.pageHorizontalPadding(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.isBigScreen)
             })
         }
       }
@@ -154,7 +156,7 @@ test('rejects removal of the Native page padding contract', () => {
   const sources = validSources()
   const page = sources.get(searchRequestGuardPaths.page)
   sources.set(searchRequestGuardPaths.page,
-    page.replace('left: showLegacyActionBar ? 0 : 16', 'left: 0'))
+    page.replace('left: AppThemeTokens.pageHorizontalPadding(', 'left: ignoredPadding('))
 
   assert.throws(
     () => validateSearchRequestGuards(sources),

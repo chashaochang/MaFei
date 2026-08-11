@@ -148,12 +148,34 @@ function componentRanges(source) {
     const end = matchingDelimiter(source, opening, '{', '}')
     components.push({
       name: match[1],
+      kind: 'struct',
       start: match.index,
       bodyStart: opening + 1,
       end
     })
   }
   return components
+}
+
+function materialOptionClassRanges(source) {
+  if (optionExpressions(source, 'systemMaterial').length === 0) {
+    return []
+  }
+  const structural = structuralSource(source)
+  const pattern = /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)[^\{]*\{/g
+  const classes = []
+  for (const match of structural.matchAll(pattern)) {
+    const opening = structural.indexOf('{', match.index)
+    const end = matchingDelimiter(source, opening, '{', '}')
+    classes.push({
+      name: match[1],
+      kind: 'class',
+      start: match.index,
+      bodyStart: opening + 1,
+      end
+    })
+  }
+  return classes
 }
 
 function directDepthAt(structural, start, position) {
@@ -175,7 +197,7 @@ function isBuilderDecorator(source, componentStart, methodStart) {
 
 function methodRanges(source) {
   const structural = structuralSource(source)
-  const components = componentRanges(source)
+  const components = [...componentRanges(source), ...materialOptionClassRanges(source)]
   const methods = []
   const signature = /^[ \t]*(?:(?:private|public|protected|static|async|export)[ \t]+)*([A-Za-z_$][\w$]*)[ \t]*\(/gm
 
@@ -213,6 +235,7 @@ function methodRanges(source) {
       const end = matchingDelimiter(source, cursor, '{', '}')
       methods.push({
         component: component.name,
+        ownerKind: component.kind,
         name: match[1],
         isBuilder: isBuilderDecorator(source, component.bodyStart, match.index),
         start: match.index,
@@ -241,6 +264,7 @@ function methodRanges(source) {
     const end = matchingDelimiter(source, openingBrace, '{', '}')
     methods.push({
       component: '@global',
+      ownerKind: 'global',
       name: match[1],
       isBuilder: true,
       start: match.index,
@@ -346,18 +370,50 @@ function optionExpressions(source, option) {
   return options
 }
 
-function containsConditionalMaterial(expression) {
-  return structuralSource(expression).includes('?')
+function isMaterialExpression(expression) {
+  return /^AppThemeSurfaceResolver\.material\s*\(/.test(structuralSource(expression).trim())
+}
+
+function isDisabledMaterialExpression(expression) {
+  return /^AppThemeSurfaceResolver\.disabledSystemMaterial\s*\(\s*\)$/.test(
+    structuralSource(expression).trim())
+}
+
+function containsUnsafeConditionalMaterial(expression) {
+  if (!structuralSource(expression).includes('?')) {
+    return false
+  }
+  if (isMaterialExpression(expression)) {
+    return false
+  }
+  const ternary = splitTopLevelTernary(stripOuterParentheses(expression))
+  if (!ternary) {
+    return true
+  }
+  const nativeBranch = nativeBranchForCondition(ternary.condition)
+  if (!nativeBranch) {
+    return true
+  }
+  const active = nativeBranch === 'true' ? ternary.whenTrue : ternary.whenFalse
+  const inactive = nativeBranch === 'true' ? ternary.whenFalse : ternary.whenTrue
+  return !isMaterialExpression(active) || !isDisabledMaterialExpression(inactive)
 }
 
 function conflictInBuilder(body) {
-  const structural = structuralSource(body)
   for (const conflict of VISUAL_CONFLICTS) {
-    if (new RegExp('\\.' + conflict + '\\s*\\(').test(structural)) {
+    const calls = attributeCalls(body, conflict)
+    const visibleCalls = calls.filter((call) =>
+      conflict !== 'backgroundColor' || normalizedExpression(call.expression) !== 'Color.Transparent')
+    if (visibleCalls.length > 0) {
       return conflict
     }
   }
   return undefined
+}
+
+function isVisualMaterialOwner(method) {
+  return method.ownerKind === 'struct' && (method.isBuilder || method.name === 'build') ||
+    method.ownerKind === 'global' && method.isBuilder
 }
 
 function forbiddenColor(expression) {
@@ -530,9 +586,10 @@ function branchRanges(body) {
 
 function occursOnlyInLegacyBranch(method, localPosition) {
   const containing = branchRanges(method.body)
-    .filter((branch) =>
+    .filter((branch) => branch.nativeBranch &&
       (branch.trueRange.start <= localPosition && localPosition < branch.trueRange.end) ||
-      (branch.falseRange && branch.falseRange.start <= localPosition && localPosition < branch.falseRange.end))
+      branch.nativeBranch && branch.falseRange &&
+      branch.falseRange.start <= localPosition && localPosition < branch.falseRange.end)
     .sort((left, right) =>
       (left.trueRange.end - left.trueRange.start) - (right.trueRange.end - right.trueRange.start))[0]
   if (!containing?.nativeBranch) {
@@ -554,8 +611,8 @@ function methodForEntry(methods, entry, label) {
 }
 
 function validateMaterialOwners(sources, contract, parsedMethods) {
-  const allowedAttributes = contractOwnerSet(contract.attributeOwners, 'attributeOwners')
-  const allowedOptions = contractOwnerSet(contract.optionOwners, 'optionOwners')
+  const requiredAttributes = contractOwnerSet(contract.attributeOwners, 'attributeOwners')
+  const requiredOptions = contractOwnerSet(contract.optionOwners, 'optionOwners')
   const seenAttributes = new Set()
   const seenOptions = new Set()
 
@@ -563,21 +620,20 @@ function validateMaterialOwners(sources, contract, parsedMethods) {
     const methods = parsedMethods.get(path) ?? []
     for (const call of attributeCalls(source, 'systemMaterial')) {
       const method = nearestMethod(methods, call.start)
-      if (!method || !method.isBuilder) {
-        throw new Error('.systemMaterial must belong to an @Builder method: ' + path)
+      if (!method || !isVisualMaterialOwner(method)) {
+        throw new Error('.systemMaterial must belong to an ArkUI build or @Builder method: ' + path)
       }
       const key = ownerKey(path, method.component, method.name)
-      if (!allowedAttributes.has(key)) {
-        throw new Error('unlisted .systemMaterial attribute owner: ' + key)
+      if (requiredAttributes.has(key)) {
+        if (containsUnsafeConditionalMaterial(call.expression)) {
+          throw new Error('conditional .systemMaterial is forbidden: ' + key)
+        }
+        const conflict = conflictInBuilder(method.body)
+        if (conflict) {
+          throw new Error('.systemMaterial Builder also owns .' + conflict + ': ' + key)
+        }
+        seenAttributes.add(key)
       }
-      if (containsConditionalMaterial(call.expression)) {
-        throw new Error('conditional .systemMaterial is forbidden: ' + key)
-      }
-      const conflict = conflictInBuilder(method.body)
-      if (conflict) {
-        throw new Error('.systemMaterial Builder also owns .' + conflict + ': ' + key)
-      }
-      seenAttributes.add(key)
     }
 
     for (const option of optionExpressions(source, 'systemMaterial')) {
@@ -586,22 +642,21 @@ function validateMaterialOwners(sources, contract, parsedMethods) {
         throw new Error('systemMaterial option must belong to a method: ' + path)
       }
       const key = ownerKey(path, method.component, method.name)
-      if (!allowedOptions.has(key)) {
-        throw new Error('unlisted systemMaterial option owner: ' + key)
+      if (requiredOptions.has(key)) {
+        if (containsUnsafeConditionalMaterial(option.expression)) {
+          throw new Error('conditional systemMaterial option is forbidden: ' + key)
+        }
+        seenOptions.add(key)
       }
-      if (containsConditionalMaterial(option.expression)) {
-        throw new Error('conditional systemMaterial option is forbidden: ' + key)
-      }
-      seenOptions.add(key)
     }
   }
 
-  for (const key of allowedAttributes) {
+  for (const key of requiredAttributes) {
     if (!seenAttributes.has(key)) {
       throw new Error('contract attribute owner has no .systemMaterial call: ' + key)
     }
   }
-  for (const key of allowedOptions) {
+  for (const key of requiredOptions) {
     if (!seenOptions.has(key)) {
       throw new Error('contract option owner has no systemMaterial option: ' + key)
     }
@@ -636,8 +691,12 @@ function validatePlainSurfaceOwners(sources, contract, parsedMethods) {
 
     if (entry.kind === 'content-group') {
       const hasSemanticBackground = attributeCalls(method.body, 'backgroundColor')
-        .some((call) => normalizedExpression(call.expression) ===
-          'AppThemeSurfaceResolver.contentGroupBackground()')
+        .some((call) => {
+          const expression = normalizedExpression(call.expression)
+          return expression === 'AppThemeSurfaceResolver.contentGroupBackground()' ||
+            (expression === 'native?AppThemeSurfaceResolver.contentGroupBackground():$r()' &&
+              /["']app\.color\.bg_1["']/.test(call.expression))
+        })
       if (!hasSemanticBackground) {
         throw new Error('plain content group must use contentGroupBackground: ' + key)
       }
@@ -720,6 +779,9 @@ function validateTransparentRoots(sources, contract, parsedMethods) {
         ownerKey(entry.path, entry.component, entry.method))
     }
     for (const call of rootBackgroundCalls(method)) {
+      if (occursOnlyInLegacyBranch(method, call.start)) {
+        continue
+      }
       if (call.name === 'background' || /\bthis\.cardColor\s*\(\s*\)/.test(call.expression) ||
         !transparentRootExpression(call.expression, methods, method.component)) {
         throw new Error('Native root must stay transparent: ' +
@@ -894,7 +956,11 @@ export function validateNativeThemePageContracts(sources, contract) {
   validateContractShape(contract)
   const parsedMethods = new Map()
   for (const [path, source] of sources.entries()) {
-    parsedMethods.set(path, methodRanges(source))
+    try {
+      parsedMethods.set(path, methodRanges(source))
+    } catch (error) {
+      throw new Error('failed to parse methods in ' + path + ': ' + error.message)
+    }
   }
   validatePlainSurfaceOwners(sources, contract, parsedMethods)
   validateMaterialOwners(sources, contract, parsedMethods)

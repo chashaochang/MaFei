@@ -105,7 +105,7 @@ function validateSetting(source) {
     source,
     SETTING,
     /pageUrl\s*:\s*['"]\/Setting['"]\s*(?:,|$)/,
-    /title\s*:\s*['"]设置['"]/
+    /title\s*:\s*\$r\(\s*['"]app\.string\.settings_title['"]\s*\)/
   )
   const content = methodBlock(source, 'pageContent')
   const legacyHeader = guardedBlock(
@@ -113,18 +113,26 @@ function validateSetting(source) {
     /if\s*\(\s*showLegacyActionBar\s*\)\s*\{/,
     'Setting legacy title row must be guarded'
   )
-  if (count(content, /\bRow\s*\(\s*\)\s*\{/g) !== 1 ||
-    !/app\.media\.ic_back/.test(legacyHeader) || !/HMRouterMgr\.pop\s*\(\s*\)/.test(legacyHeader) ||
-    !/Text\s*\(\s*['"]设置['"]\s*\)/.test(legacyHeader)) {
-    throw new Error('Setting custom title row must stay only in the Feiniu branch')
+  if (count(content, /\bActionBar\s*\(/g) !== 1 ||
+    !/ActionBar\s*\(\s*\{[\s\S]*title\s*:\s*\$r\(\s*['"]app\.string\.settings_title['"]\s*\)/.test(
+      legacyHeader)) {
+    throw new Error('Setting custom ActionBar must stay only in the Feiniu branch')
   }
-  if (!/\.backgroundColor\s*\(\s*showLegacyActionBar\s*\?\s*['"]#101010['"]\s*:\s*Color\.Transparent\s*\)/.test(content)) {
+  if (!/\.backgroundColor\s*\(\s*showLegacyActionBar\s*\?\s*\$r\(\s*['"]app\.color\.start_window_background['"]\s*\)\s*:\s*Color\.Transparent\s*\)/.test(
+    content)) {
     throw new Error('Setting Native route root must be transparent')
   }
-  if (/\bsafeTop\b|SafeAreaEdge\.TOP|\.safeAreaPadding\s*\(/.test(content)) {
-    throw new Error('Setting Native content must not own the top safe area')
+  const nativeTopSpacer = methodBlock(source, 'nativeTopSpacer')
+  if (!/^\s*return\s+Math\.max\s*\(\s*0\s*,\s*this\.appUIState\.safeTop\s*\)\s*\+\s*UIConstants\.ACTION_BAR_HEIGHT\s*;?\s*$/.test(
+    nativeTopSpacer) ||
+    !/if\s*\(\s*!\s*showLegacyActionBar\s*\)\s*\{\s*Blank\s*\(\s*\)\.height\s*\(\s*this\.nativeTopSpacer\s*\(\s*\)\s*\)/.test(
+      content) ||
+    /SafeAreaEdge\.TOP|\.safeAreaPadding\s*\(/.test(content)) {
+    throw new Error('Setting Native content must reserve exactly one system-title spacer')
   }
-  if (!/contentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*false\s*\)[\s\S]*?legacyContentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*true\s*\)/.test(build)) {
+  if (!/contentExtendsUnderTitleBar\s*:\s*true/.test(build) ||
+    !/scrollControllers\s*:\s*\[\s*this\.contentScroller\s*\]/.test(build) ||
+    !/contentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*false\s*\)[\s\S]*?legacyContentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*true\s*\)/.test(build)) {
     throw new Error('Setting must separate Native and Feiniu title ownership')
   }
 }
@@ -136,10 +144,12 @@ function validateAddAccount(routeSource, connectSource) {
     /pageUrl\s*:\s*RouterConsts\.AddAccountPage\b/,
     /title\s*:\s*['"]新增账号['"]/
   )
-  const options = componentOptions(build, 'ConnectScreen')
-  if (options.length !== 2 || options.some((value) => !/isFromAddAccount\s*:\s*true/.test(value)) ||
-    !/showRouteActionBar\s*:\s*false/.test(options[0]) ||
-    !/showRouteActionBar\s*:\s*true/.test(options[1])) {
+  const pageContent = methodBlock(routeSource, 'pageContent')
+  const options = componentOptions(pageContent, 'ConnectScreen')
+  if (options.length !== 1 || !/isFromAddAccount\s*:\s*true/.test(options[0]) ||
+    !/\bshowRouteActionBar\b/.test(options[0]) ||
+    !/contentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*false\s*\)[\s\S]*legacyContentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*true\s*\)/.test(
+      build)) {
     throw new Error('AddAccount must hide the custom bar only in its Native destination')
   }
   if (!/@Param\s+showRouteActionBar\s*:\s*boolean\s*=\s*true/.test(connectSource)) {
@@ -154,7 +164,8 @@ function validateAddAccount(routeSource, connectSource) {
   if (count(connectBuild, /\bActionBar\s*\(/g) !== 1 || count(legacyHeader, /\bActionBar\s*\(/g) !== 1) {
     throw new Error('ConnectScreen ActionBar must stay outside Native destination content')
   }
-  if (!/\.backgroundColor\s*\(\s*this\.showRouteActionBar\s*\?\s*AppThemeSurfaceResolver\.routeBackground\s*\([\s\S]*?\)\s*:\s*Color\.Transparent\s*\)/.test(connectBuild)) {
+  if (!/\.backgroundColor\s*\(\s*this\.showRouteActionBar\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\?\s*\$r\(\s*['"]app\.color\.native_canvas_background['"]\s*\)\s*:\s*Color\.Transparent\s*\)/.test(
+    connectBuild)) {
     throw new Error('AddAccount Native content must leave the route background transparent')
   }
 }
@@ -166,10 +177,17 @@ function validateMine(routeSource, tabSource) {
     /pageUrl\s*:\s*RouterConsts\.MinePage\b/,
     /title\s*:\s*['"]我的['"]/
   )
-  const options = componentOptions(build, 'MineTab')
-  if (options.length !== 2 || options.some((value) => !/fromHome\s*:\s*true/.test(value)) ||
-    !/destinationOwnsTitleBar\s*:\s*true/.test(options[0]) ||
-    !/destinationOwnsTitleBar\s*:\s*false/.test(options[1])) {
+  const nativeContent = methodBlock(routeSource, 'nativePageContent')
+  const legacyContent = methodBlock(routeSource, 'legacyPageContent')
+  const nativeOptions = componentOptions(nativeContent, 'MineTab')
+  const legacyOptions = componentOptions(legacyContent, 'MineTab')
+  if (nativeOptions.length !== 1 || legacyOptions.length !== 1 ||
+    !/fromHome\s*:\s*true/.test(nativeOptions[0]) ||
+    !/destinationOwnsTitleBar\s*:\s*true/.test(nativeOptions[0]) ||
+    !/fromHome\s*:\s*true/.test(legacyOptions[0]) ||
+    !/destinationOwnsTitleBar\s*:\s*false/.test(legacyOptions[0]) ||
+    !/contentBuilder\s*:[\s\S]*this\.nativePageContent\s*\(\s*\)[\s\S]*legacyContentBuilder\s*:[\s\S]*this\.legacyPageContent\s*\(\s*\)/.test(
+      build)) {
     throw new Error('MinePage must use the system title only in its Native destination')
   }
   if (!/@Param\s+destinationOwnsTitleBar\s*:\s*boolean\s*=\s*false/.test(tabSource)) {
@@ -200,8 +218,9 @@ function validateWebItong(source) {
     /pageUrl\s*:\s*RouterConsts\.WebITongPage\b/,
     /title\s*:\s*this\.routeTitle\s*\(\s*\)/
   )
-  if (!/beforeBack\s*:\s*\(\s*\)\s*=>\s*this\.handleRouteBack\s*\(\s*\)/.test(build) ||
-    !/contentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*false\s*\)[\s\S]*?legacyContentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*true\s*\)/.test(build)) {
+  if (!/titleBarVisible\s*:\s*false/.test(build) ||
+    !/beforeBack\s*:\s*\(\s*\)\s*=>\s*this\.handleRouteBack\s*\(\s*\)/.test(build) ||
+    !/contentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*true\s*\)[\s\S]*?legacyContentBuilder\s*:[\s\S]*?this\.pageContent\s*\(\s*true\s*\)/.test(build)) {
     throw new Error('WebITong must use the destination title and back hook only in the route host')
   }
   const back = methodBlock(source, 'handleRouteBack')
@@ -219,7 +238,7 @@ function validateWebItong(source) {
     'WebITong legacy safe-top spacer must be guarded'
   )
   if (count(content, /\bsafeTop\b/g) !== 1 || !/\bsafeTop\b/.test(legacyInset)) {
-    throw new Error('WebITong Native content must leave top safe-area ownership to the destination')
+    throw new Error('WebITong fullscreen content must preserve its guarded top inset')
   }
   if (!/Row\s*\(\s*\{\s*space\s*:\s*12\s*\}\s*\)/.test(content) ||
     count(content, /\.backgroundBlurStyle\s*\(/g) < 5 ||

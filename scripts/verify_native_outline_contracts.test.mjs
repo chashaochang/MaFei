@@ -16,7 +16,7 @@ const TARGETS = [
   ['entry/src/main/ets/features/home/hometab/HomeTab.ets', [0.5], false],
   ['entry/src/main/ets/features/videolist/VideoListPage.ets', [0.5], true],
   ['entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets', [0.5], true],
-  ['entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets', [0.5, 0.5, 1], true],
+  ['entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets', [0.5, 0.5], true],
   ['entry/src/main/ets/features/cast/CastDetailPage.ets', [0.5, 1], false],
   [VIDEO_DETAIL, [1, 1, 1, 1], false]
 ]

@@ -39,6 +39,12 @@ function validSources() {
     'if (width < 840) return BreakpointTypeEnum.MD',
     'return BreakpointTypeEnum.LG'
   ].join('\n'))
+  sources.set(managementUserPaths.nativePagePolicy, [
+    'static readonly EXPANDED_MIN_WIDTH: number = 840',
+    'static isExpanded(width: number): boolean {',
+    '  return width >= ManagementNativePagePolicy.EXPANDED_MIN_WIDTH',
+    '}'
+  ].join('\n'))
   sources.set(managementUserPaths.router, [
     'ManagementUsersPage',
     'ManagementUserDetailPage',
@@ -123,7 +129,8 @@ function validSources() {
     'embeddedUserId',
     'left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
     'right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16',
-    'bottom: this.showSaveBar() ? 104 : 24',
+    'bottom: ManagementNativePagePolicy.contentBottomPadding(',
+    '  this.vm.appUIState.safeBottom + 24, this.showSaveBar())',
     'Stack({ alignContent: Alignment.Bottom })',
     'bottom: this.vm.appUIState.safeBottom + 10',
     'showUnsavedDialog()',
@@ -196,12 +203,15 @@ function validSources() {
     'management_user_parental_admin_schedule_hidden'
   ].join('\n'))
   sources.set(managementUserPaths.listPage,
-    'AppThemeSurfaceResolver\nif (deviceWidth >= 840) userPane(300)\n' +
+    'AppThemeSurfaceResolver\n' +
+      'return ManagementNativePagePolicy.isExpanded(this.vm.appUIState.deviceWidth)\n' +
+      'if (this.isLarge()) userPane(300)\n' +
       '.width(44)\n.height(44)\n.constraintSize({ minHeight: 72 })\n' +
       'deleteProtected currentUserId enabledAdministratorCount\n' +
       'onDeleted refresh(false)')
   sources.set(managementUserPaths.listViewModel,
-    'if (!selectedExists && this.appUIState.deviceWidth >= 840) selectedUserId = users[0].id\n' +
+    'if (!selectedExists && ManagementNativePagePolicy.isExpanded(this.appUIState.deviceWidth)) ' +
+      'selectedUserId = users[0].id\n' +
       'async deleteUser() { const result = await repository.deleteUser(); await refresh(false) }')
   sources.set(managementUserPaths.createState, [
     'name: string',
@@ -273,6 +283,15 @@ test('requires the exact 599/600 and 839/840 breakpoint boundaries', () => {
     () => validateManagementUserContracts(largeBoundarySources),
     /839\/840 breakpoint boundary/
   )
+
+  const managementBoundarySources = validSources()
+  managementBoundarySources.set(managementUserPaths.nativePagePolicy,
+    managementBoundarySources.get(managementUserPaths.nativePagePolicy)
+      .replace('EXPANDED_MIN_WIDTH: number = 840', 'EXPANDED_MIN_WIDTH: number = 800'))
+  assert.throws(
+    () => validateManagementUserContracts(managementBoundarySources),
+    /management expanded breakpoint/
+  )
 })
 
 test('requires medium-width editor padding to begin at 600vp', () => {
@@ -286,14 +305,14 @@ test('requires medium-width editor padding to begin at 600vp', () => {
   )
 })
 
-test('rejects duplicate bottom safe-area ownership in the detail editor', () => {
+test('rejects a third bottom safe-area owner in the detail editor', () => {
   const sources = validSources()
   sources.set(managementUserPaths.detailPage,
     sources.get(managementUserPaths.detailPage) +
       '\nbottom: this.vm.appUIState.safeBottom + 24')
   assert.throws(
     () => validateManagementUserContracts(sources),
-    /must not apply the bottom safe-area inset twice/
+    /safe-area use limited to content reservation and the save bar/
   )
 })
 

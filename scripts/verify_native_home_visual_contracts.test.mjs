@@ -82,9 +82,17 @@ test('rejects removing the extra gap beside search and live menus', () => {
     /transparent lane/)
 })
 
+test('rejects sticky search actions leaking into the Feiniu theme', () => {
+  const homeTab = current.homeTab.replace(
+    'if (this.latestChipStripPinned && this.useNativeSurface()) {',
+    'if (this.latestChipStripPinned) {')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
+    /interactive sticky header/)
+})
+
 test('rejects reserving search width before the header sticks', () => {
   const homeTab = current.homeTab.replace(
-    "if (!this.latestChipStripMenuReserved) {\n      return 0\n    }", '')
+    "if (!this.useNativeSurface() || !this.latestChipStripMenuReserved) {\n      return 0\n    }", '')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
     /reserve only the menu width/)
 })
@@ -119,36 +127,37 @@ test('rejects removing the sticky vertical alignment offset', () => {
 })
 
 test('rejects opaque white selected Chip styling', () => {
-  const chipSelector = current.chipSelector.replace('ColorMetrics.rgba(255, 255, 255, 0.82)',
-    'ColorMetrics.rgba(255, 255, 255, 1)')
+  const chipSelector = current.chipSelector.replace("'rgba(255,255,255,0.82)'",
+    "'rgba(255,255,255,1)'")
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
     /translucent-white/)
 })
 
 test('rejects removing immersive material from unselected Chips', () => {
-  const chipSelector = current.chipSelector.replace('AppThemeMaterialRole.HomeLibraryChip)',
-    'AppThemeMaterialRole.HomeLibraryChipSelected)')
+  const chipSelector = current.chipSelector.replace(
+    ': AppThemeMaterialRole.HomeLibraryChip))',
+    ': AppThemeMaterialRole.HomeLibraryChipSelected))')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
     /Every Chip/)
 })
 
 test('rejects custom tint parameters on system Chip material', () => {
   const resolver = current.resolver.replace(
-    'AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          interactive: true',
-    "AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          interactive: true,\n          materialColor: '#FFFFFF'")
+    'AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          applyShadow: false,\n          interactive: true',
+    "AppThemeSurfaceResolver.homeLibraryChip = new uiMaterial.ImmersiveMaterial({\n          applyShadow: false,\n          interactive: true,\n          materialColor: '#FFFFFF'")
   assert.throws(() => validateNativeHomeVisualContracts(sources({ resolver })),
     /default system immersive material/)
 })
 
 test('rejects close icons on home library Chips', () => {
-  const chipSelector = current.chipSelector.replace('allowClose: false', 'allowClose: true')
+  const chipSelector = current.chipSelector + "\nSymbolGlyph($r('sys.symbol.xmark'))"
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
     /Every Chip/)
 })
 
 test('rejects title-bar blur over the pinned header', () => {
   const routeDestination = current.routeDestination.replace(
-    'enableScrollEffect: !this.appUIState.rootNavigationHomeLibraryPinned',
+    'enableScrollEffect: !this.rootHomeLibraryPinned()',
     'enableScrollEffect: true')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
     /stop blur/)
@@ -175,19 +184,19 @@ test('rejects a hard-clipped right edge beside search', () => {
     '.fadingEdge(this.fadeRightEdge, {',
     '.fadingEdge(false, {')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
-    /horizontal ChipV2 group/)
+    /horizontal Chip group/)
 })
 
 test('rejects a pinned header trapped below the HDS touch layer', () => {
   const homeTab = current.homeTab
-    .replace('.zIndex(this.latestChipStripPinned ? 10 : 0)', '.zIndex(0)')
+    .replace('.zIndex(this.latestChipStripPinned && this.useNativeSurface() ? 10 : 0)', '.zIndex(0)')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ homeTab })),
     /transparent lane/)
 })
 
 test('rejects keeping the HDS title-bar touch layer while pinned', () => {
   const routeDestination = current.routeDestination.replace(
-    ' ||\n      this.appUIState.rootNavigationHomeLibraryPinned', '')
+    ' ||\n      this.rootHomeLibraryPinned()', '')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ routeDestination })),
     /touch interception layer/)
 })
@@ -220,10 +229,10 @@ test('rejects a horizontal poster list', () => {
     /vertically expanding poster grid/)
 })
 
-test('rejects ungrouped recently-added requests', () => {
-  const homeViewModel = current.homeViewModel.replace('groupItems: true', 'groupItems: false')
+test('rejects recently-added requests that stop using their source library', () => {
+  const homeViewModel = current.homeViewModel.replace('parentId: library.id', 'parentId: undefined')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ homeViewModel })),
-    /grouped latest-media semantics/)
+    /legacy per-library latest-media mix/)
 })
 
 test('rejects sharing the Feiniu canvas with Native', () => {
