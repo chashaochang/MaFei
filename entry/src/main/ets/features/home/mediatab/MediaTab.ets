@@ -76,31 +76,59 @@ export struct MediaTab {
   }
 
   @Builder
-  private administratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
+  private administratorActionContent(title: ResourceStr, icon: Resource, primary: boolean) {
+    Row({ space: 6 }) {
+      SymbolGlyph(icon)
+        .fontSize(17)
+        .fontColor([this.actionTextColor(primary)])
+      Text(title)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.actionTextColor(primary))
+        .maxLines(1)
+    }
+  }
+
+  @Builder
+  private nativeAdministratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
     primary: boolean, action: () => void) {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: 6 }) {
-        SymbolGlyph(icon)
-          .fontSize(17)
-          .fontColor([this.actionTextColor(primary)])
-        Text(title)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.actionTextColor(primary))
-          .maxLines(1)
-      }
+      this.administratorActionContent(title, icon, primary)
     }
     .height(40)
     .padding({ left: 14, right: 14 })
     .borderRadius(20)
-    .backgroundColor(this.useNativeSurface() ? Color.Transparent :
-      (primary ? $r('app.color.color_main') : $r('app.color.bg_1')))
-    .systemMaterial(this.useNativeSurface() ? AppThemeSurfaceResolver.material(
-      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive) :
-      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(AppThemeSurfaceResolver.material(
+      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive))
     .enabled(enabled)
     .opacity(enabled ? 1 : 0.55)
     .onClick(action)
+  }
+
+  @Builder
+  private feiniuAdministratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
+    primary: boolean, action: () => void) {
+    Button({ type: ButtonType.Normal }) {
+      this.administratorActionContent(title, icon, primary)
+    }
+    .height(40)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(20)
+    .backgroundColor(primary ? $r('app.color.color_main') : $r('app.color.bg_1'))
+    .enabled(enabled)
+    .opacity(enabled ? 1 : 0.55)
+    .onClick(action)
+  }
+
+  @Builder
+  private administratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
+    primary: boolean, action: () => void) {
+    if (this.useNativeSurface()) {
+      this.nativeAdministratorAction(title, icon, enabled, primary, action)
+    } else {
+      this.feiniuAdministratorAction(title, icon, enabled, primary, action)
+    }
   }
 
   @Builder

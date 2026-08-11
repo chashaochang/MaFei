@@ -42,7 +42,6 @@ export class VideoDetailUIState extends BaseUIState {
 
   scroller: Scroller = new Scroller()
   @Trace blur: number = 0
-  @Trace actionBarOpacity: number = 0
   @Trace textSectionAttribute?: TextSectionAttribute
 
   @Trace percentageWatched: number = 0

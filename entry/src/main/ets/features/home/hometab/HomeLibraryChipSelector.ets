@@ -1,12 +1,6 @@
-import {
-  ChipV2,
-  ChipV2Label,
-  ChipV2Options,
-  ChipV2Size,
-  ColorMetrics,
-  LengthMetrics
-} from '@kit.ArkUI'
+import { LengthMetrics } from '@kit.ArkUI'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import { HdsUiCapability } from '../../../theme/HdsUiCapability'
 
 const HOME_LIBRARY_CHIP_GAP: number = 8
 
@@ -20,6 +14,7 @@ export struct HomeLibraryChipSelector {
   @Require @Param tabs: HomeFeedTabItem[]
   @Require @Param selectedId: string
   @Require @Param onSelectedIdChange: (id: string) => void
+  @Param nativeSurface: boolean = false
   @Param fadeRightEdge: boolean = false
   @Param rightContentPadding: number = 0
   private chipScroller: Scroller = new Scroller()
@@ -63,35 +58,47 @@ export struct HomeLibraryChipSelector {
     this.revealSelected(false)
   }
 
-  private chipOptions(tab: HomeFeedTabItem, index: number): ChipV2Options {
-    return new ChipV2Options({
-      label: new ChipV2Label({
-        text: tab.label,
-        fontColor: ColorMetrics.resourceColor($r('sys.color.font_primary')),
-        activatedFontColor: ColorMetrics.numeric(0x000000)
-      }),
-      size: ChipV2Size.NORMAL,
-      allowClose: false,
-      activated: index === this.selectedIndex(),
-      backgroundColor: ColorMetrics.rgba(255, 255, 255, 0.08),
-      activatedBackgroundColor: ColorMetrics.rgba(255, 255, 255, 0.82),
-      backgroundSystemMaterial: AppThemeSurfaceResolver.material(
-        AppThemeMaterialRole.HomeLibraryChip),
-      activatedBackgroundSystemMaterial: AppThemeSurfaceResolver.material(
-        AppThemeMaterialRole.HomeLibraryChipSelected),
-      onClicked: (): void => {
-        this.selectIndex(index)
-      }
-    })
+  private useImmersiveChipSurface(): boolean {
+    return this.nativeSurface && HdsUiCapability.supportsSystemMaterial()
   }
 
   build() {
     List({ space: HOME_LIBRARY_CHIP_GAP, scroller: this.chipScroller }) {
       ForEach(this.tabs, (tab: HomeFeedTabItem, index: number) => {
         ListItem() {
-          ChipV2({
-            chipV2Options: this.chipOptions(tab, index)
-          })
+          if (this.useImmersiveChipSurface()) {
+            Text(tab.label)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(index === this.selectedIndex() ? Color.Black : $r('sys.color.font_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .height(36)
+              .padding({ left: 14, right: 14 })
+              .borderRadius(18)
+              .backgroundColor(index === this.selectedIndex() ?
+                'rgba(255,255,255,0.82)' : Color.Transparent)
+              .systemMaterial(AppThemeSurfaceResolver.material(index === this.selectedIndex() ?
+                AppThemeMaterialRole.HomeLibraryChipSelected : AppThemeMaterialRole.HomeLibraryChip))
+              .onClick((): void => {
+                this.selectIndex(index)
+              })
+          } else {
+            Text(tab.label)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(index === this.selectedIndex() ? Color.White : $r('app.color.text_1'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .height(36)
+              .padding({ left: 14, right: 14 })
+              .borderRadius(18)
+              .backgroundColor(index === this.selectedIndex() ?
+                $r('app.color.color_main') : $r('app.color.bg_1'))
+              .onClick((): void => {
+                this.selectIndex(index)
+              })
+          }
         }
       }, (tab: HomeFeedTabItem) => tab.id)
     }

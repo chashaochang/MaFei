@@ -281,16 +281,33 @@ export struct VideoDetailPage {
     })
   }
 
+  private openDeleteActionMenu(): void {
+    if (!this.ui.isAdministrator || !this.ui.canDelete || this.ui.deleting) {
+      return
+    }
+    this.getUIContext().getPromptAction().showActionMenu({
+      buttons: [{
+        text: $r('app.string.management_media_delete'),
+        color: $r('sys.color.font_primary')
+      }]
+    }).then((result) => {
+      if (result.index === 0) {
+        this.openDeleteDialog()
+      }
+    }).catch(() => {
+    })
+  }
+
   private navigationMenus(): Array<NavigationMenuItem> {
     if (!this.useNativeSurface() || !this.ui.isAdministrator || !this.ui.canDelete) {
       return []
     }
     return [{
       value: $r('app.string.management_media_delete'),
-      icon: $r('sys.symbol.trash'),
+      icon: $r('sys.symbol.more'),
       isEnabled: !this.ui.deleting,
       action: () => {
-        this.openDeleteDialog()
+        this.openDeleteActionMenu()
       }
     }]
   }
@@ -1139,9 +1156,7 @@ export struct VideoDetailPage {
           this.ui.blur = y / 10
           if (y > 200) {
             this.ui.showActionBar = true
-            this.ui.actionBarOpacity = Math.min((y - 200) / 72, 0.6)
           } else {
-            this.ui.actionBarOpacity = 0
             this.ui.showActionBar = false
           }
         })
@@ -1158,7 +1173,7 @@ export struct VideoDetailPage {
 
   build() {
     AppRouteDestination({
-      title: this.ui.showActionBar ? this.ui.title : '',
+      title: '',
       contentExtendsUnderTitleBar: true,
       heroTitleChrome: true,
       menus: this.navigationMenus(),

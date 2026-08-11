@@ -18,15 +18,7 @@ import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 import { HomeLatestMediaSection } from "./HomeLatestMediaSection"
 import { HomeFeedTabItem, HomeLibraryChipSelector } from "./HomeLibraryChipSelector"
-import {
-  ChipV2,
-  ChipV2Label,
-  ChipV2Options,
-  ChipV2PrefixImageIcon,
-  ChipV2Size,
-  ColorMetrics,
-  curves
-} from "@kit.ArkUI"
+import { curves } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
 import { HomeInitialSkeleton } from './HomeInitialSkeleton'
 
@@ -196,7 +188,7 @@ export struct HomeTab {
   }
 
   private latestMediaHeaderMenuInset(): number {
-    if (!this.latestChipStripMenuReserved) {
+    if (!this.useNativeSurface() || !this.latestChipStripMenuReserved) {
       return 0
     }
     const menuWidth = this.ui.hasLiveTv ?
@@ -209,7 +201,8 @@ export struct HomeTab {
   }
 
   private latestMediaChipAlignmentOffset(): number {
-    return this.latestChipStripPinned ? HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0
+    return this.latestChipStripPinned && this.useNativeSurface() ?
+      HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0
   }
 
   private updateLatestChipStripPinned(pinned: boolean): void {
@@ -221,7 +214,7 @@ export struct HomeTab {
 
   private syncRootNavigationPinnedState(): void {
     this.vm.appUIState.rootNavigationHomeLibraryPinned =
-      this.active ? this.latestChipStripPinned : false
+      this.active && this.useNativeSurface() ? this.latestChipStripPinned : false
   }
 
   private selectLatestMedia(id: string): void {
@@ -297,29 +290,13 @@ export struct HomeTab {
     this.updateLatestChipStripPinned(globalY <= 0)
   }
 
-  private stickyLiveTvOptions(): ChipV2Options {
-    return new ChipV2Options({
-      label: new ChipV2Label({ text: '' }),
-      prefixIcon: new ChipV2PrefixImageIcon({
-        src: $r('app.media.iptv'),
-        fillColor: ColorMetrics.resourceColor($r('sys.color.icon_primary'))
-      }),
-      size: ChipV2Size.NORMAL,
-      allowClose: false,
-      backgroundSystemMaterial: AppThemeSurfaceResolver.material(
-        AppThemeMaterialRole.HomeLibraryChip),
-      onClicked: (): void => {
-        HMRouterMgr.to(RouterConsts.LiveTvPage).push()
-      }
-    })
-  }
-
   @Builder
   private latestMediaStickyHeader() {
     Row({ space: 8 }) {
       HomeLibraryChipSelector({
         tabs: this.latestMediaTabs(),
         selectedId: this.ui.selectedLatestMediaId,
+        nativeSurface: this.useNativeSurface(),
         fadeRightEdge: this.latestChipStripMenuReserved,
         rightContentPadding: this.latestChipStripMenuReserved ?
           HOME_LIBRARY_HEADER_EXTRA_MENU_GAP : 0,
@@ -330,9 +307,23 @@ export struct HomeTab {
         .layoutWeight(1)
         .translate({ y: this.latestMediaChipAlignmentOffset() })
 
-      if (this.latestChipStripPinned) {
+      if (this.latestChipStripPinned && this.useNativeSurface()) {
         if (this.ui.hasLiveTv) {
-          ChipV2({ chipV2Options: this.stickyLiveTvOptions() })
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            Image($r('app.media.iptv'))
+              .width(22)
+              .height(22)
+              .fillColor($r('sys.color.icon_primary'))
+          }
+          .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+          .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+          .buttonStyle(ButtonStyleMode.TEXTUAL)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
+          .accessibilityText('直播电视')
+          .onClick((): void => {
+            HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+          })
         }
         Button({ type: ButtonType.Circle, stateEffect: false }) {
           SymbolGlyph($r('sys.symbol.magnifyingglass'))
@@ -360,7 +351,7 @@ export struct HomeTab {
     })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(Color.Transparent)
-    .zIndex(this.latestChipStripPinned ? 10 : 0)
+    .zIndex(this.latestChipStripPinned && this.useNativeSurface() ? 10 : 0)
     .hitTestBehavior(HitTestMode.Transparent)
     .onAreaChange((_oldValue: Area, newValue: Area) => {
       this.updateLatestMediaHeaderPinned(newValue)

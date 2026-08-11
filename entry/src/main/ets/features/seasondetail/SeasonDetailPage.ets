@@ -549,9 +549,11 @@ export struct SeasonDetailPage {
                         loadSrc: this.ui.image,
                         objectFit: ImageFit.Fill,
                         border: {
-                          width: 0.5,
+                          width: AppThemeSurfaceResolver.outlineWidth(
+                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
                           radius: 12,
-                          color: $r('app.color.border_1')
+                          color: AppThemeSurfaceResolver.mediaOutline(
+                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
                         }
                       }
                     })
@@ -614,6 +616,7 @@ export struct SeasonDetailPage {
                   HomeLibraryChipSelector({
                     tabs: this.seasonTabs(),
                     selectedId: this.ui.id,
+                    nativeSurface: this.useNativeSurface(),
                     onSelectedIdChange: (id: string) => {
                       if (id === this.ui.id) {
                         return
@@ -639,6 +642,7 @@ export struct SeasonDetailPage {
                   HomeLibraryChipSelector({
                     tabs: this.episodeGroupTabs(),
                     selectedId: this.ui.selectGroupIndex.toString(),
+                    nativeSurface: this.useNativeSurface(),
                     onSelectedIdChange: (id: string) => {
                       this.ui.videoScroller.scrollEdge(Edge.Start)
                       this.ui.selectGroupIndex = Number(id)

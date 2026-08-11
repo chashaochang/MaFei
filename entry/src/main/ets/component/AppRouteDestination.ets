@@ -130,8 +130,8 @@ export struct AppRouteDestination {
         scrollEffectStyle: {
           backgroundStyle: {
             backgroundColor: Color.Transparent,
-            maskExtraHeight: 0,
-            blurRadius: 8
+            maskExtraHeight: 32,
+            blurRadius: 24
           },
           contentStyle: {
             titleStyle: {
