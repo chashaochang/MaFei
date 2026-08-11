@@ -33,12 +33,15 @@ export class ManagementMediaDeleteDialog {
     const lines: string[] = []
     const isBatch = summary.allowedIds.length > 1
     if (isBatch) {
-      lines.push(`${ManagementMediaDeleteDialog.getString(context, 'management_media_delete')} ` +
-        `(${summary.allowedIds.length})`)
+      lines.push(context.getHostContext()?.resourceManager.getStringSync(
+        $r('app.string.management_media_delete_count', summary.allowedIds.length)) ||
+        `${summary.allowedIds.length}`)
     } else if (summary.mediaName.length > 0) {
       lines.push(summary.mediaName)
     }
-    lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_message'))
+    if (!isBatch) {
+      lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_message'))
+    }
     if (isBatch) {
       const visibleCount = Math.min(summary.allowedIds.length, 5)
       for (let index = 0; index < visibleCount; index++) {
@@ -49,7 +52,9 @@ export class ManagementMediaDeleteDialog {
         }
       }
       if (summary.allowedIds.length > visibleCount) {
-        lines.push('...')
+        lines.push(context.getHostContext()?.resourceManager.getStringSync(
+          $r('app.string.management_media_delete_more', summary.allowedIds.length - visibleCount)) ||
+          `${summary.allowedIds.length - visibleCount}`)
       }
     } else {
       lines.push(ManagementMediaDeleteDialog.getString(context, 'management_media_delete_path'))

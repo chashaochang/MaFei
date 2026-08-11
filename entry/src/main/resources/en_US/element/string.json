@@ -33,6 +33,46 @@
       "value": "Viewing history failed to load. Tap to retry."
     },
     {
+      "name": "mine_history_title",
+      "value": "Playback history"
+    },
+    {
+      "name": "mine_history_more",
+      "value": "More"
+    },
+    {
+      "name": "mine_history_empty",
+      "value": "No playback history"
+    },
+    {
+      "name": "mine_history_loading_more",
+      "value": "Loading"
+    },
+    {
+      "name": "mine_history_load_more_failed",
+      "value": "Couldn't load more. Tap to retry."
+    },
+    {
+      "name": "mine_history_unnamed",
+      "value": "Untitled"
+    },
+    {
+      "name": "mine_history_episode_title_single",
+      "value": "%s · Episode %d"
+    },
+    {
+      "name": "mine_history_episode_title_season",
+      "value": "%s · S%d E%d"
+    },
+    {
+      "name": "mine_history_updated_to_episode",
+      "value": "Up to E%d"
+    },
+    {
+      "name": "mine_history_updated_to_season_episode",
+      "value": "Up to S%d E%d"
+    },
+    {
       "name": "playback_settings_title",
       "value": "Playback"
     },
@@ -2335,6 +2375,14 @@
     {
       "name": "management_media_delete_message",
       "value": "This media will be permanently deleted from the server and filesystem:"
+    },
+    {
+      "name": "management_media_delete_count",
+      "value": "Media files to permanently delete from the server and filesystem: %d"
+    },
+    {
+      "name": "management_media_delete_more",
+      "value": "%d more media files"
     },
     {
       "name": "management_media_delete_path",

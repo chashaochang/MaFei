@@ -9,8 +9,12 @@ import { bundleManager, common } from "@kit.AbilityKit";
 import { ApiClientController } from "../../../data/ApiClientController";
 import { AppPreference } from "../../../data/AppPreference";
 import { DBManager } from "../../../data/DBManager";
-import { MineHistoryPlanner } from "./MineHistoryPlanner";
-import { MineHistoryLoadResult, MineHistoryRepository } from "./MineHistoryRepository";
+import { MineHistoryCandidate, MineHistoryPlanner } from "./MineHistoryPlanner";
+import {
+  MineHistoryLoadResult,
+  MineHistoryRepository,
+  MineHistoryRequestSession
+} from "./MineHistoryRepository";
 import { MineHistoryState } from "./MineUIState";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
@@ -18,6 +22,8 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   private readonly historyRepository: MineHistoryRepository = new MineHistoryRepository()
   private readonly historyPlanner: MineHistoryPlanner = new MineHistoryPlanner()
   private historyRefreshing: boolean = false
+  private historyRequestEpoch: number = 0
+  private historyActiveScope: string = ''
 
   init() {
     this.ui.isAdministrator = false
@@ -78,29 +84,71 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   }
 
   async refreshHistory(): Promise<void> {
-    if (this.historyRefreshing) {
+    const requestScope = this.historyRepository.currentScope()
+    if (this.historyRefreshing && this.historyActiveScope === requestScope) {
       return
     }
+    const requestEpoch = ++this.historyRequestEpoch
     this.historyRefreshing = true
+    this.historyActiveScope = requestScope
     this.ui.historyState = MineHistoryState.Loading
     try {
-      const result: MineHistoryLoadResult = await this.historyRepository.load()
+      const result: MineHistoryLoadResult = await this.historyRepository.load({
+        resumeStartIndex: 0,
+        completedStartIndex: 0,
+        limit: 24,
+        loadResume: true,
+        loadCompleted: true
+      })
+      if (!this.isCurrentHistoryRequest(requestEpoch, result.scope)) {
+        return
+      }
       const items = this.historyPlanner.merge(result.resume.items, result.completed.items, 8)
+      const anyFailed = result.resume.failed || result.completed.failed
       this.ui.historyItems = items
-      if (result.resume.failed && result.completed.failed) {
+      if ((result.resume.failed && result.completed.failed) || (items.length === 0 && anyFailed)) {
         this.ui.historyState = MineHistoryState.Error
       } else if (items.length === 0) {
         this.ui.historyState = MineHistoryState.Empty
       } else {
         this.ui.historyState = MineHistoryState.Content
       }
+      if (items.length > 0 && result.session) {
+        this.enrichVisibleHistory(items, result.session, requestEpoch)
+      }
     } catch (error) {
+      if (!this.isCurrentHistoryRequest(requestEpoch, requestScope)) {
+        return
+      }
       console.error(`[MineHistory] refresh failed: ${JSON.stringify(error)}`)
       this.ui.historyItems = []
       this.ui.historyState = MineHistoryState.Error
     } finally {
-      this.historyRefreshing = false
+      if (requestEpoch === this.historyRequestEpoch) {
+        this.historyRefreshing = false
+      }
     }
+  }
+
+  private async enrichVisibleHistory(
+    items: MineHistoryCandidate[],
+    session: MineHistoryRequestSession,
+    requestEpoch: number
+  ): Promise<void> {
+    try {
+      await this.historyRepository.enrichSeriesPositions(items, session)
+      if (!this.isCurrentHistoryRequest(requestEpoch, session.scope)) {
+        return
+      }
+      this.ui.historyItems = this.historyPlanner.merge(items, [], 8)
+    } catch (error) {
+      console.warn(`[MineHistory] series enrichment failed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private isCurrentHistoryRequest(requestEpoch: number, scope: string): boolean {
+    return requestEpoch === this.historyRequestEpoch && scope === this.historyActiveScope &&
+      scope === this.historyRepository.currentScope()
   }
 
   logout() {

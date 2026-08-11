@@ -1,66 +1,9 @@
-import { ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro'
 import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../../theme/AppThemeTokens'
 import { ThemeStyle } from '../../../entity/ThemeStyle'
 import { MineHistoryItem } from './MineHistoryPlanner'
+import { MineHistoryPoster } from './MineHistoryPoster'
 import { MineHistoryState } from './MineUIState'
-
-@ComponentV2
-struct MineHistoryPoster {
-  @Require @Param image: string
-  @Require @Param name: string
-  @Require @Param percent: number
-  @Require @Param played: boolean
-  @Require @Param nativeSurface: boolean
-  @Local imageOption: ImageKnifeOption = {
-    loadSrc: this.image,
-    objectFit: ImageFit.Cover,
-    border: { radius: 10 },
-    placeholderSrc: $r('app.media.placeholder_video'),
-    placeholderObjectFit: ImageFit.CENTER
-  }
-
-  private primaryTextColor(): ResourceColor {
-    return this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
-  }
-
-  build() {
-    Column({ space: 8 }) {
-      Stack({ alignContent: Alignment.Bottom }) {
-        ImageKnifeComponent({ imageKnifeOption: this.imageOption })
-          .width('100%')
-          .aspectRatio(2 / 3)
-          .borderRadius(10)
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
-        if (!this.played && this.percent > 0) {
-          Progress({ value: this.percent, total: 100, type: ProgressType.Linear })
-            .width('100%')
-            .height(3)
-            .color(this.nativeSurface ? $r('sys.color.icon_primary') : $r('app.color.color_main'))
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
-            .style({
-              strokeWidth: 3,
-              strokeRadius: 1.5,
-              enableSmoothEffect: false,
-              enableScanEffect: false
-            })
-        }
-      }
-      .width('100%')
-      .aspectRatio(2 / 3)
-      .borderRadius(10)
-      .clip(true)
-      Text(this.name)
-        .fontSize(13)
-        .fontColor(this.primaryTextColor())
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-}
 
 @ComponentV2
 export struct MineHistorySection {
@@ -71,6 +14,7 @@ export struct MineHistorySection {
   @Require @Param themeStyle: ThemeStyle
   @Require @Param onItemClick: (item: MineHistoryItem) => void
   @Require @Param onRetry: () => void
+  @Require @Param onMore: () => void
 
   private columnCount(): number {
     return this.currentBreakpoint.includes('s') || this.currentBreakpoint === 'md' ? 3 : 4
@@ -88,6 +32,11 @@ export struct MineHistorySection {
     return this.columnCount() === 4 ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr'
   }
 
+  private historyItemKey(item: MineHistoryItem): string {
+    return `${item.id}|${item.latestSeasonNumber || 0}|${item.latestEpisodeNumber || 0}|` +
+      `${item.seriesHasMultipleSeasons ? 1 : 0}`
+  }
+
   private primaryTextColor(): ResourceColor {
     return this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
@@ -97,7 +46,7 @@ export struct MineHistorySection {
   }
 
   @Builder
-  private loadingGrid() {
+  private loadingGrid(nativeSurface: boolean) {
     Grid() {
       ForEach(this.skeletonItems(), (_index: number) => {
         GridItem() {
@@ -106,12 +55,14 @@ export struct MineHistorySection {
               .width('100%')
               .aspectRatio(2 / 3)
               .borderRadius(10)
-              .backgroundColor($r('sys.color.comp_background_tertiary'))
+              .backgroundColor(nativeSurface ?
+                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
             Column()
               .width('72%')
               .height(13)
               .borderRadius(6.5)
-              .backgroundColor($r('sys.color.comp_background_tertiary'))
+              .backgroundColor(nativeSurface ?
+                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -132,17 +83,14 @@ export struct MineHistorySection {
       ForEach(this.visibleItems(), (item: MineHistoryItem) => {
         GridItem() {
           MineHistoryPoster({
-            image: item.image,
-            name: item.name,
-            percent: item.percent,
-            played: item.played,
+            item,
             nativeSurface: this.nativeSurface
           })
         }
         .onClick(() => {
           this.onItemClick(item)
         })
-      }, (item: MineHistoryItem) => item.id)
+      }, (item: MineHistoryItem) => this.historyItemKey(item))
     }
     .width('100%')
     .columnsTemplate(this.columnsTemplate())
@@ -170,13 +118,34 @@ export struct MineHistorySection {
   build() {
     if (this.state !== MineHistoryState.Empty) {
       Column({ space: 12 }) {
-        Text($r('app.string.mine_recent_watching'))
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.primaryTextColor())
-          .width('100%')
+        Row() {
+          Text($r('app.string.mine_recent_watching'))
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.primaryTextColor())
+          Blank()
+          if (this.state === MineHistoryState.Content && this.items.length > 0) {
+            Button({ type: ButtonType.Normal }) {
+              Row({ space: 2 }) {
+                Text($r('app.string.mine_history_more'))
+                  .fontSize(14)
+                  .fontColor(this.secondaryTextColor())
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(16)
+                  .fontColor([this.secondaryTextColor()])
+              }
+              .alignItems(VerticalAlign.Center)
+            }
+              .height(36)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(18)
+              .onClick(() => this.onMore())
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
         if (this.state === MineHistoryState.Loading) {
-          this.loadingGrid()
+          this.loadingGrid(this.nativeSurface)
         } else if (this.state === MineHistoryState.Error) {
           this.errorState()
         } else {

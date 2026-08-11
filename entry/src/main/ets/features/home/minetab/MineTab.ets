@@ -26,11 +26,8 @@ export struct MineTab {
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
   private topSpacerHeight(): number {
-    if (this.destinationOwnsTitleBar) {
+    if (this.destinationOwnsTitleBar || this.compactTopInset) {
       return 0
-    }
-    if (this.compactTopInset) {
-      return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
     }
     return this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT
   }
@@ -156,6 +153,15 @@ export struct MineTab {
           Blank().height(this.topSpacerHeight())
           this.profileHeader()
 
+          if (this.ui.isAdministrator) {
+            ListGroup({
+              items: [new BaseGroupItem($r('app.string.management_title'), $r('app.media.ic_setting'))],
+              onItemClick: () => {
+                HMRouterMgr.to(RouterConsts.ManagementDashboardPage).push()
+              }
+            })
+          }
+
           MineHistorySection({
             state: this.ui.historyState,
             items: this.ui.historyItems,
@@ -167,6 +173,9 @@ export struct MineTab {
             },
             onRetry: () => {
               this.vm.refreshHistory()
+            },
+            onMore: () => {
+              HMRouterMgr.to(RouterConsts.MineHistoryPage).push()
             }
           })
 
@@ -186,14 +195,6 @@ export struct MineTab {
               }
             }
           })
-          if (this.ui.isAdministrator) {
-            ListGroup({
-              items: [new BaseGroupItem($r('app.string.management_title'), $r('app.media.ic_setting'))],
-              onItemClick: () => {
-                HMRouterMgr.to(RouterConsts.ManagementDashboardPage).push()
-              }
-            })
-          }
           ListGroup({
             items: [new BaseGroupItem(
               $r('app.string.settings_title'), $r('app.media.ic_setting'), '', true, '',

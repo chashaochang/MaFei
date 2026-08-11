@@ -53,6 +53,14 @@
       "value": "#99000000"
     },
     {
+      "name": "media_badge_background",
+      "value": "#99000000"
+    },
+    {
+      "name": "media_progress_track_on_image",
+      "value": "#55FFFFFF"
+    },
+    {
       "name": "safe_cancel_button_bg",
       "value": "#0D666666"
     },

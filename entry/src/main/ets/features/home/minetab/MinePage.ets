@@ -9,20 +9,30 @@ import { AppRouteDestination } from "../../../component/AppRouteDestination"
 })
 @ComponentV2
 export struct MinePage {
+  @Builder
+  private nativePageContent() {
+    MineTab({
+      fromHome: true,
+      destinationOwnsTitleBar: true
+    })
+  }
+
+  @Builder
+  private legacyPageContent() {
+    MineTab({
+      fromHome: true,
+      destinationOwnsTitleBar: false
+    })
+  }
+
   build() {
     AppRouteDestination({
       title: '我的',
       contentBuilder: () => {
-        MineTab({
-          fromHome: true,
-          destinationOwnsTitleBar: true
-        })
+        this.nativePageContent()
       },
       legacyContentBuilder: () => {
-        MineTab({
-          fromHome: true,
-          destinationOwnsTitleBar: false
-        })
+        this.legacyPageContent()
       }
     })
   }

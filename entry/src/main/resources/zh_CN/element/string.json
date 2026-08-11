@@ -33,6 +33,46 @@
       "value": "播放历史加载失败，点击重试"
     },
     {
+      "name": "mine_history_title",
+      "value": "播放历史"
+    },
+    {
+      "name": "mine_history_more",
+      "value": "更多"
+    },
+    {
+      "name": "mine_history_empty",
+      "value": "暂无播放记录"
+    },
+    {
+      "name": "mine_history_loading_more",
+      "value": "正在加载"
+    },
+    {
+      "name": "mine_history_load_more_failed",
+      "value": "加载更多失败，点击重试"
+    },
+    {
+      "name": "mine_history_unnamed",
+      "value": "未命名内容"
+    },
+    {
+      "name": "mine_history_episode_title_single",
+      "value": "%s · 第%d集"
+    },
+    {
+      "name": "mine_history_episode_title_season",
+      "value": "%s · 第%d季第%d集"
+    },
+    {
+      "name": "mine_history_updated_to_episode",
+      "value": "更新至%d集"
+    },
+    {
+      "name": "mine_history_updated_to_season_episode",
+      "value": "更新至%d季%d集"
+    },
+    {
       "name": "playback_settings_title",
       "value": "播放"
     },
@@ -2335,6 +2375,14 @@
     {
       "name": "management_media_delete_message",
       "value": "将从媒体服务器和文件系统中永久删除此媒体："
+    },
+    {
+      "name": "management_media_delete_count",
+      "value": "将从媒体服务器和文件系统中永久删除 %d 个媒体文件："
+    },
+    {
+      "name": "management_media_delete_more",
+      "value": "还有 %d 个媒体文件"
     },
     {
       "name": "management_media_delete_path",
