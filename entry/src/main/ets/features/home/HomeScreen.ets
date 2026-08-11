@@ -176,7 +176,11 @@ export struct HomeScreen {
 
   private updateFeiniuPointLightEnabled(): void {
     const shell = this.resolveShell()
-    const supportsPointLight = HdsUiCapability.supportsHdsComponents()
+    // API 20–25 must stay entirely on the legacy tablet shell.  Do not let
+    // the API-23 HDS effect capability pull a low-version wide screen into a
+    // partial API-26 visual path.
+    const supportsPointLight = this.appUIState.nativeThemeAvailable &&
+      HdsUiCapability.supportsNativeTheme()
     const isWideShell = shell === HomeShellKind.MediumDrawer ||
       shell === HomeShellKind.LargeSidebar
     this.appUIState.feiniuPointLightEnabled =
@@ -830,9 +834,40 @@ export struct HomeScreen {
   }
 
   @Builder
+  private legacyPadContent(shell: HomeShellKind) {
+    Row() {
+      if (shell === HomeShellKind.LargeSidebar) {
+        // Keep the content in the same column as the legacy large-screen
+        // chrome: 12vp outer gutter plus the visible 240vp sidebar.
+        Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)
+      }
+
+      Column() {
+        // The legacy pad title row owns this 88vp strip.  Without reserving
+        // it, the routed tab content starts behind the title row and status
+        // area on API 20–25.
+        Blank().height(88)
+        Stack() {
+          this.homeContentOwner()
+        }
+          .layoutWeight(1)
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .height('100%')
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
   private nonNativeHomeShell(shell: HomeShellKind) {
     Stack({ alignContent: Alignment.Bottom }) {
-      this.homeContentOwner()
+      if (shell === HomeShellKind.MediumDrawer || shell === HomeShellKind.LargeSidebar) {
+        this.legacyPadContent(shell)
+      } else {
+        this.homeContentOwner()
+      }
 
       if (shell === HomeShellKind.LargeSidebar) {
         this.largeSidebarBuilder()

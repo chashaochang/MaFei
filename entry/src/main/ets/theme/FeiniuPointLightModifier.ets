@@ -11,7 +11,10 @@ export interface FeiniuPointLightOptions {
 }
 
 export class FeiniuPointLightModifier {
-  static readonly MIN_API_VERSION: number = 23
+  // The legacy shell is the complete fallback for API 20–25.  Although the
+  // HDS effect API is present on some of those builds, constructing it there
+  // makes the wide/tablet shell diverge from the verified fallback path.
+  static readonly MIN_API_VERSION: number = 26
 
   static build(options: FeiniuPointLightOptions): VisualEffect {
     if (deviceInfo.sdkApiVersion < FeiniuPointLightModifier.MIN_API_VERSION ||

@@ -543,8 +543,20 @@ export function validateNativeThemeHostOwnership(sources) {
   }
 
   const contentOwner = methodBlock(homeScreen, 'homeContentOwner')
+  const legacyPadContent = methodBlock(homeScreen, 'legacyPadContent')
   const nonNativeShell = methodBlock(homeScreen, 'nonNativeHomeShell')
   const buildBlock = methodBlock(homeScreen, 'build')
+
+  if (!/Blank\s*\(\s*\)\.height\s*\(\s*88\s*\)/.test(legacyPadContent) ||
+    !/Blank\s*\(\s*\)\.width\s*\(\s*this\.ui\.isLeftSidebarVisible\s*\?\s*252\s*:\s*12\s*\)/
+      .test(legacyPadContent) ||
+    count(legacyPadContent, /this\.homeContentOwner\s*\(/g) !== 1) {
+    throw new Error('legacy tablet content must reserve the title strip and sidebar gutter')
+  }
+  if (!/shell\s*===\s*HomeShellKind\.MediumDrawer\s*\|\|\s*shell\s*===\s*HomeShellKind\.LargeSidebar[\s\S]*?this\.legacyPadContent\s*\(\s*shell\s*\)/
+    .test(nonNativeShell) || count(nonNativeShell, /this\.legacyPadContent\s*\(/g) !== 1) {
+    throw new Error('wide legacy shells must route through legacyPadContent')
+  }
 
   for (const [component, builder, builderParam] of CONTENT_BUILDERS) {
     const constructorSource = '\\b' + component + '\\s*\\(\\s*\\{'
@@ -713,6 +725,16 @@ export function validateNativeThemeHostOwnership(sources) {
     constructorIndex < 0 || versionGuardIndex > effectProbeIndex ||
     enabledGuardIndex > effectProbeIndex || effectProbeIndex > constructorIndex) {
     throw new Error('point-light guards and probe must precede construction')
+  }
+  if (!/static\s+readonly\s+MIN_API_VERSION\s*:\s*number\s*=\s*26\b/.test(
+    pointLightOwner
+  )) {
+    throw new Error('point-light must remain disabled on API 20–25')
+  }
+  const pointLightToggle = methodBlock(homeScreen, 'updateFeiniuPointLightEnabled')
+  if (!/this\.appUIState\.nativeThemeAvailable\s*&&\s*HdsUiCapability\.supportsNativeTheme\s*\(\s*\)/
+    .test(pointLightToggle)) {
+    throw new Error('wide-shell point light must require the API 26 Native capability')
   }
 }
 

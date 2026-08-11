@@ -35,6 +35,10 @@ function validHomeScreen() {
     '  }',
     '  this.contentTabsController.changeIndex(this.contentSelectedIndex())',
     '}',
+    'private updateFeiniuPointLightEnabled(): void {',
+    '  const supportsPointLight = this.appUIState.nativeThemeAvailable && HdsUiCapability.supportsNativeTheme()',
+    '  this.appUIState.feiniuPointLightEnabled = supportsPointLight',
+    '}',
     'private rootNavigationTitle(): string {',
     "  if (this.ui.selectedDestination === HomeDestination.Chasing) { return '追剧' }",
     "  if (this.ui.selectedDestination === HomeDestination.Favorite) { return '收藏' }",
@@ -99,8 +103,20 @@ function validHomeScreen() {
     '  }',
     '}',
     '@Builder',
-    'private nonNativeHomeShell(shell: HomeShellKind) {',
+    'private legacyPadContent(shell: HomeShellKind) {',
+    '  if (shell === HomeShellKind.LargeSidebar) {',
+    '    Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)',
+    '  }',
+    '  Blank().height(88)',
     '  this.homeContentOwner()',
+    '}',
+    '@Builder',
+    'private nonNativeHomeShell(shell: HomeShellKind) {',
+    '  if (shell === HomeShellKind.MediumDrawer || shell === HomeShellKind.LargeSidebar) {',
+    '    this.legacyPadContent(shell)',
+    '  } else {',
+    '    this.homeContentOwner()',
+    '  }',
     '  if (shell === HomeShellKind.LargeSidebar) {',
     '    this.largeSidebarBuilder()',
     '  } else if (shell === HomeShellKind.MediumDrawer) {',
@@ -316,6 +332,7 @@ function validSources() {
     ].join('\n')],
     [nativePath, validNativeHost()],
     [pointLightPath, [
+      'static readonly MIN_API_VERSION: number = 26',
       'if (deviceInfo.sdkApiVersion < FeiniuPointLightModifier.MIN_API_VERSION)',
       '!options.enabled',
       'return uiEffect.createEffect()',
@@ -854,7 +871,8 @@ test('keeps business pages in shared builders instead of navigation hosts', () =
 test('only the non-native shell may construct the separate content Tabs', () => {
   const sources = validSources()
   sources.set(homeScreenPath, validHomeScreen()
-    .replace('  this.homeContentOwner()\n', '')
+    .replace('  } else {\n    this.homeContentOwner()\n  }\n  if (shell === HomeShellKind.LargeSidebar) {',
+      '  } else {\n  }\n  if (shell === HomeShellKind.LargeSidebar) {')
     .replace('  if (this.shell === HomeShellKind.PhoneNativeHds) {', [
       '  this.homeContentOwner()',
       '  if (this.shell === HomeShellKind.PhoneNativeHds) {'
@@ -923,6 +941,44 @@ test('requires construction probes before HDS constructors', () => {
   assert.throws(
     () => validateNativeThemeHostOwnership(sources),
     /navigation probe must precede HdsTabsController construction/
+  )
+})
+
+test('keeps wide-shell point light out of the API 20–25 fallback', () => {
+  const oldApiSources = validSources()
+  oldApiSources.set(pointLightPath, validSources().get(pointLightPath)
+    .replace('MIN_API_VERSION: number = 26', 'MIN_API_VERSION: number = 23'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(oldApiSources),
+    /point-light must remain disabled on API 20–25/
+  )
+
+  const ungatedSources = validSources()
+  ungatedSources.set(homeScreenPath, validHomeScreen()
+    .replace(
+      'this.appUIState.nativeThemeAvailable && HdsUiCapability.supportsNativeTheme()',
+      'HdsUiCapability.supportsHdsComponents()'
+    ))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(ungatedSources),
+    /wide-shell point light must require the API 26 Native capability/
+  )
+})
+
+test('keeps the API 20–25 tablet content below legacy chrome', () => {
+  const missingTopStrip = validSources()
+  missingTopStrip.set(homeScreenPath, validHomeScreen().replace('Blank().height(88)', 'Blank().height(0)'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(missingTopStrip),
+    /legacy tablet content must reserve the title strip/
+  )
+
+  const directWideContent = validSources()
+  directWideContent.set(homeScreenPath, validHomeScreen()
+    .replace('this.legacyPadContent(shell)', 'this.homeContentOwner()'))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(directWideContent),
+    /wide legacy shells must route through legacyPadContent/
   )
 })
 
