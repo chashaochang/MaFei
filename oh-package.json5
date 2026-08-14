@@ -4,7 +4,7 @@
   "dependencies": {
     "@ohos/axios": "^2.2.6",
     "@ohos/node-polyfill": "^1.0.0",
-    "@hadss/hmrouter": "^1.2.3-rc.1",
+    "@hadss/hmrouter": "1.2.3-rc.1",
   },
   "devDependencies": {
     "@ohos/hypium": "1.0.19",

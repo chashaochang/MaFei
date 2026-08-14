@@ -26,8 +26,11 @@ export struct MineTab {
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
   private topSpacerHeight(): number {
-    if (this.destinationOwnsTitleBar || this.compactTopInset) {
+    if (this.destinationOwnsTitleBar) {
       return 0
+    }
+    if (this.compactTopInset) {
+      return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
     }
     return this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT
   }

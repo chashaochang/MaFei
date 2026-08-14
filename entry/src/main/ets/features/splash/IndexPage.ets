@@ -18,11 +18,13 @@ import { MediaLibraryRefreshEvent, TokenExpiredEvent } from "../../events/Events
 import { AppRouteDestination } from "../../component/AppRouteDestination";
 import { ManagementLibraryRepository } from "../management/library/ManagementLibraryRepository";
 import { ManagementLibraryOperationResult } from "../management/library/ManagementLibraryModels";
+import { MusicHomeLifecycle } from "../music/MusicHostLifecycle";
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
   singleton: true,
-  useNavDst: true
+  useNavDst: true,
+  lifecycle: 'musicHomeLifecycle'
 })
 @ComponentV2
 export struct IndexPage {
@@ -36,19 +38,12 @@ export struct IndexPage {
   private readonly libraryRepository: ManagementLibraryRepository = new ManagementLibraryRepository()
   //是否点了取消登录
   @Local isCancel: boolean = false
+  private musicLifecycle?: MusicHomeLifecycle =
+    HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as MusicHomeLifecycle
 
   aboutToAppear(): void {
     emitter.on(TokenExpiredEvent, () => {
-      //401
-      try {
-        this.getUIContext().getPromptAction().showToast({
-          message: "AccessToken已失效,请重新登录"
-        })
-      } catch (error) {
-
-      }
-      this.apiClientController.logout()
-      this.appUIState.isLogin = false
+      this.handleTokenExpired().catch((): void => {})
     })
     //token是永久有效的,只要有token就认为是登录状态
     let token = AppPreference.getInstance().getAccessToken()
@@ -65,9 +60,9 @@ export struct IndexPage {
             }
             if (state.type === CheckUrlStateType.Success) {
               const successState = state as Success
-              this.apiClientController.setupServer(serverEntity!.hostname, serverEntity?.servername,
+              await this.apiClientController.setupServer(serverEntity!.hostname, serverEntity?.servername,
                 serverEntity?.version, successState.serverId)
-              this.apiClientController.setupUser(serverEntity!.id, userId, token)
+              await this.apiClientController.setupUser(serverEntity!.id, userId, token)
               //数据库升级version1新增字段处理
               if (serverEntity?.servername === '' || serverEntity?.version === '') {
                 try {
@@ -96,6 +91,23 @@ export struct IndexPage {
 
   aboutToDisappear(): void {
     emitter.off(TokenExpiredEvent)
+  }
+
+  private async handleTokenExpired(): Promise<void> {
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: "AccessToken已失效,请重新登录"
+      })
+    } catch (_error) {
+    }
+    await this.apiClientController.logout()
+    this.appUIState.isLogin = false
+  }
+
+  private async cancelConnection(): Promise<void> {
+    this.isCancel = true
+    await this.apiClientController.logout()
+    this.appUIState.isConnecting = false
   }
 
   private rootNavigationHeroChromeVisible(): boolean {
@@ -205,9 +217,9 @@ export struct IndexPage {
         ConnectScreen()
         ConnectingScreen({
           onLogoutClick: () => {
-            this.isCancel = true
-            this.apiClientController.logout()
-            this.appUIState.isConnecting = false
+            this.cancelConnection().catch((): void => {
+              this.appUIState.isConnecting = false
+            })
           }
         })
           .visibility(this.appUIState.isConnecting ? Visibility.Visible : Visibility.Hidden)

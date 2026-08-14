@@ -53,12 +53,12 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
     this.ui.loading = true
     this.ui.externalError = false
     this.ui.checkUrlState = new Pending()
-    connectionHelper.checkServerUrl(this.ui.hostname).then((state) => {
+    connectionHelper.checkServerUrl(this.ui.hostname).then(async (state) => {
       this.ui.checkUrlState = state
       if (state.type === CheckUrlStateType.Success) {
         let successData = state as Success
         let successServerAddr = successData.address
-        this.apiClientController.setupServer(successData.address, successData.name, successData.version,
+        await this.apiClientController.setupServer(successData.address, successData.name, successData.version,
           successData.serverId)
         this.ui.hostname = successServerAddr
         let serverEntity = this.apiClientController.loadSavedServer()
@@ -80,11 +80,11 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
     })
   }
 
-  loginByAccessToken(isFromAddAccount: boolean, serverEntity: ServerEntity, token: string) {
+  async loginByAccessToken(isFromAddAccount: boolean, serverEntity: ServerEntity, token: string): Promise<void> {
     let userId = AppPreference.getInstance().getCurrentUserId()
     let userEntity = DBManager.getInstance().getUserDao().getByUserId(serverEntity.id, userId)
     if (userEntity != null) {
-      this.apiClientController.setupUser(AppPreference.getInstance().getCurrentServerId()!, userEntity!.userId,
+      await this.apiClientController.setupUser(AppPreference.getInstance().getCurrentServerId()!, userEntity!.userId,
         token, userEntity.username)
       this.appUIState.isLogin = true
       if (isFromAddAccount) {
@@ -103,10 +103,9 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         Username: this.ui.username,
         Pw: this.ui.password
       }
-    }).then((result: AxiosResponse<AuthenticationResult>) => {
+    }).then(async (result: AxiosResponse<AuthenticationResult>) => {
       if (result) {
         const preference = AppPreference.getInstance()
-        preference.setCurrentServerSystemId(result.data.ServerId || '')
         if (this.ui.rememberPwd) {
           let assetMap: asset.AssetMap = new Map
           assetMap.set(asset.Tag.SECRET, stringToArray(this.ui.password))
@@ -117,8 +116,9 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
           } catch (_error) {
           }
         }
-        this.apiClientController.setupUser(preference.getCurrentServerId()!, result.data.User!.Id!,
+        await this.apiClientController.setupUser(preference.getCurrentServerId()!, result.data.User!.Id!,
           result.data.AccessToken!, this.ui.username)
+        preference.setCurrentServerSystemId(result.data.ServerId || '')
         // A stored token marks the point at which all other login state has committed.
         preference.setAccessToken(result.data.AccessToken!)
         this.appUIState.isLogin = true

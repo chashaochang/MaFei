@@ -8,6 +8,7 @@ import ServerEntity from "./ServerEntity";
 import { UserDao } from "./UserDao";
 import { ValuesBucket } from "@kit.ArkData";
 import { webview } from "@kit.ArkWeb";
+import { MusicSessionGuard } from "../features/music/MusicSessionGuard";
 
 export class ApiClientController {
   appPreference: AppPreference
@@ -21,7 +22,10 @@ export class ApiClientController {
     this.userDao = DBManager.getInstance().getUserDao()
   }
 
-  setupUser(serverId: number, userId: string, accessToken: string, username?: string) {
+  async setupUser(serverId: number, userId: string, accessToken: string, username?: string): Promise<void> {
+    if (this.userScopeChanges(serverId, userId)) {
+      await MusicSessionGuard.stopAndClear()
+    }
     this.userDao.upsert(serverId, userId, accessToken, username)
     this.appPreference.setCurrentUserId(userId)
     if (!!username) {
@@ -39,7 +43,11 @@ export class ApiClientController {
     this.userDao.updateDataSync(valueBucket)
   }
 
-  setupServer(hostname: string, serverName?: string, version?: string, serverSystemId?: string) {
+  async setupServer(hostname: string, serverName?: string, version?: string,
+    serverSystemId?: string): Promise<void> {
+    if (this.serverIdentityChanges(hostname, serverSystemId)) {
+      await MusicSessionGuard.stopAndClear()
+    }
     let server = this.serverDao.getServerByHostname(hostname)
     let id: number
     if (!server && serverName !== undefined && version !== undefined) {
@@ -97,7 +105,8 @@ export class ApiClientController {
     ApiClient.Instance().deviceInfo = info
   }
 
-  logout() {
+  async logout(): Promise<void> {
+    await MusicSessionGuard.stopAndClear()
     //this.userDao.deleteUser()
     AppPreference.getInstance().setAccessToken('')
     AppPreference.getInstance().setCurrentUserId('')
@@ -105,5 +114,49 @@ export class ApiClientController {
     AppPreference.getInstance().setCurrentServerSystemId('')
     webview.WebviewController.removeAllCache(true)
     // ApiClient.Instance().logout()
+  }
+
+  private serverIdentityChanges(hostname: string, serverSystemId?: string): boolean {
+    const nextHostname = this.normalizeServerIdentity(hostname)
+    const currentHostname = this.currentServerIdentity()
+    const hostnameChanged = currentHostname.length > 0 && nextHostname.length > 0 &&
+      currentHostname !== nextHostname
+    const currentSystemId = this.appPreference.getCurrentServerSystemId().trim()
+    const nextSystemId = (serverSystemId || '').trim()
+    const systemIdChanged = currentSystemId.length > 0 && nextSystemId.length > 0 &&
+      currentSystemId !== nextSystemId
+    return hostnameChanged || systemIdChanged
+  }
+
+  private userScopeChanges(serverId: number, userId: string): boolean {
+    const currentServerId = this.appPreference.getCurrentServerId()
+    let currentUserId = this.appPreference.getCurrentUserId()
+    if (ApiClient.isInitialized()) {
+      currentUserId = String(ApiClient.Instance().userId || '')
+    }
+    if (currentUserId.length === 0) {
+      return false
+    }
+    return currentUserId !== userId || (currentServerId !== null && currentServerId !== serverId)
+  }
+
+  private currentServerIdentity(): string {
+    if (ApiClient.isInitialized()) {
+      return this.normalizeServerIdentity(String(ApiClient.Instance().basePath || ''))
+    }
+    const currentServerId = this.appPreference.getCurrentServerId()
+    if (currentServerId === null) {
+      return ''
+    }
+    const server = this.serverDao.getServer(currentServerId)
+    return server ? this.normalizeServerIdentity(server.hostname) : ''
+  }
+
+  private normalizeServerIdentity(hostname: string): string {
+    let normalized = hostname.trim()
+    while (normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1)
+    }
+    return normalized
   }
 }

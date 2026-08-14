@@ -3,6 +3,8 @@ import { emitter } from "@kit.BasicServicesKit";
 import { SmartDialog } from "ohos_smart_dialog";
 import { PlayOptions } from "../../player/interaction/PlayOptions";
 import { Constants } from "../../utils/Constants";
+import { RouterConsts } from "../../common/RouterConsts";
+import { connectMusicHostUIState, MusicHostUIState } from "../../features/music/MusicHostUIState";
 
 
 /**
@@ -14,6 +16,7 @@ import { Constants } from "../../utils/Constants";
 @HMLifecycle({ lifecycleName: 'playerLifecycle' })
 export class PlayerLifecycle implements IHMLifecycle {
   @Trace options: PlayOptions = HMRouterMgr.getCurrentParam() as PlayOptions
+  private musicHostState: MusicHostUIState = connectMusicHostUIState()
 
   //现阶段可以通过HMRouter提供的onPrepare生命周期来获取参数,需要依赖API19中新增的NavDestination的onNewParam生命周期来刷新参数，单例页面
   onPrepare(ctx: HMLifecycleContext): void {
@@ -39,6 +42,7 @@ export class PlayerLifecycle implements IHMLifecycle {
   }
 
   onShown(ctx: HMLifecycleContext): void {
+    this.updateMusicHostVisibility(ctx, true)
     emitter.emit(Constants.PLAYER_EVENT, {
       data: {
         'eventName': 'onPageShow'
@@ -47,10 +51,22 @@ export class PlayerLifecycle implements IHMLifecycle {
   }
 
   onHidden(ctx: HMLifecycleContext): void {
+    this.updateMusicHostVisibility(ctx, false)
     emitter.emit(Constants.PLAYER_EVENT, {
       data: {
         'eventName': 'onPageHide'
       }
     })
+  }
+
+  private updateMusicHostVisibility(ctx: HMLifecycleContext, visible: boolean): void {
+    const routeName = String(ctx.navContext?.pathInfo.name || '')
+    if (routeName === RouterConsts.LiveTvPage) {
+      this.musicHostState.livePlayerVisible = visible
+      return
+    }
+    if (routeName === RouterConsts.PlayerPage) {
+      this.musicHostState.videoPlayerVisible = visible
+    }
   }
 }

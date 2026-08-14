@@ -105,7 +105,7 @@ export class MediaViewModel {
         name: item.Name || '',
         image: ApiClient.Instance().basePath + new ImageUrlsApi()
           .getItemImageUrlById(item.Id, ImageType.Primary, {
-            tag: item.ImageTags![0]
+            tag: item.ImageTags?.[ImageType.Primary]
           }),
         id: item.Id || '',
         childCount: childResponse.data?.TotalRecordCount || 0,

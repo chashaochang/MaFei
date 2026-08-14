@@ -67,41 +67,38 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
   }
 
   // 切换账号逻辑
-  changeAccount(serverUser: ServerUser) {
-    new ApiClientController().logout()
+  async changeAccount(serverUser: ServerUser): Promise<void> {
+    await this.apiClientController.logout()
     HMRouterMgr.to(RouterConsts.IndexPage).pop()
     this.appUIState.isLogin = false
     this.appUIState.isConnecting = true
-    AppPreference.getInstance().setCurrentServerId(serverUser.server.id)
-    AppPreference.getInstance().setUserName(serverUser.user.username)
-    AppPreference.getInstance().setAccessToken(serverUser.user.accessToken || '')
-    connectionHelper.checkServerUrl(serverUser.server.hostname).then((state) => {
+    try {
+      const state = await connectionHelper.checkServerUrl(serverUser.server.hostname)
       if (state.type === CheckUrlStateType.Success) {
         let successData = state as Success
-        this.apiClientController.setupServer(successData.address, successData.name, successData.version,
+        await this.apiClientController.setupServer(successData.address, successData.name, successData.version,
           successData.serverId)
         let serverEntity = this.apiClientController.loadSavedServer()
         if (serverEntity !== null) {
           AppStorage.setOrCreate('server', serverEntity)
           let userEntity = DBManager.getInstance().getUserDao().getByUserId(serverEntity.id, serverUser.user.userId)
           if (userEntity != null) {
-            AppPreference.getInstance().setAccessToken(userEntity.accessToken!)
-            this.apiClientController.setupUser(serverEntity!.id, userEntity.userId, userEntity.accessToken!,
+            await this.apiClientController.setupUser(serverEntity!.id, userEntity.userId, userEntity.accessToken!,
               userEntity.username)
             //检查token是否有效
-            getSystemApi(ApiClient.Instance()).getSystemInfo()
-              .then(() => {
-                HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
-                setTimeout(() => {
-                  this.appUIState.isLogin = true
-                  this.appUIState.isConnecting = false
-                }, 1000)
-              })
-              .catch(() => {
-                this.loginByPwd(serverUser, serverEntity!)
-              })
+            try {
+              await getSystemApi(ApiClient.Instance()).getSystemInfo()
+              AppPreference.getInstance().setAccessToken(userEntity.accessToken!)
+              HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+              setTimeout(() => {
+                this.appUIState.isLogin = true
+                this.appUIState.isConnecting = false
+              }, 1000)
+            } catch (_error) {
+              await this.loginByPwd(serverUser, serverEntity!)
+            }
           } else {
-            this.loginByPwd(serverUser, serverEntity)
+            await this.loginByPwd(serverUser, serverEntity)
           }
         } else {
           HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
@@ -111,10 +108,13 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
         HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
         this.appUIState.isConnecting = false
       }
-    })
+    } catch (_error) {
+      HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+      this.appUIState.isConnecting = false
+    }
   }
 
-  loginByPwd(serverUser: ServerUser, serverEntity: ServerEntity) {
+  async loginByPwd(serverUser: ServerUser, serverEntity: ServerEntity): Promise<void> {
     //从密码管理器获取密码
     let query: asset.AssetMap = new Map();
     query.set(asset.Tag.ALIAS, stringToArray(serverEntity?.hostname + '_' + serverUser.user.username));
@@ -126,26 +126,28 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
       let arr = re.get(asset.Tag.SECRET) as Uint8Array
       let decoder = util.TextDecoder.create('utf-8');
       let passwd = decoder.decodeToString(arr)
-      getUserApi(ApiClient.Instance()).authenticateUserByName({
-        authenticateUserByName: {
-          Username: serverUser.user.username,
-          Pw: passwd
-        }
-      }).then((result: AxiosResponse<AuthenticationResult>) => {
-        AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
-        AppPreference.getInstance().setCurrentServerSystemId(result.data.ServerId || '')
-        this.apiClientController.setupUser(serverEntity!.id, result.data.User!.Id!, result.data.AccessToken!,
+      try {
+        const result: AxiosResponse<AuthenticationResult> =
+          await getUserApi(ApiClient.Instance()).authenticateUserByName({
+            authenticateUserByName: {
+              Username: serverUser.user.username,
+              Pw: passwd
+            }
+          })
+        await this.apiClientController.setupUser(serverEntity!.id, result.data.User!.Id!, result.data.AccessToken!,
           serverUser.user.username)
+        AppPreference.getInstance().setCurrentServerSystemId(result.data.ServerId || '')
+        AppPreference.getInstance().setAccessToken(result.data.AccessToken!)
         HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
         setTimeout(() => {
           this.appUIState.isLogin = true
           this.appUIState.isConnecting = false
         }, 1000)
-      }).catch((e: Error) => {
-        console.log(e.message);
+      } catch (e) {
+        console.log(String(e));
         HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
         this.appUIState.isConnecting = false
-      })
+      }
     } else {
       HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
       this.appUIState.isConnecting = false

@@ -45,6 +45,21 @@
               "action.system.home"
             ]
           },
+          {
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "mafei",
+                "host": "jellyfin",
+                "path": "open"
+              }
+            ]
+          },
         ],
         "backgroundModes": [
           // 长时任务类型的配置项

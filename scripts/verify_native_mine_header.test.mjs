@@ -24,8 +24,11 @@ function validSources() {
       '@Param compactTopInset: boolean = false',
       '@Param destinationOwnsTitleBar: boolean = false',
       'private topSpacerHeight(): number {',
-      '  if (this.destinationOwnsTitleBar || this.compactTopInset) {',
+      '  if (this.destinationOwnsTitleBar) {',
       '    return 0',
+      '  }',
+      '  if (this.compactTopInset) {',
+      '    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT',
       '  }',
       '  return this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT',
       '}',
@@ -91,13 +94,18 @@ test('rejects compact spacing outside the native phone shell', () => {
   )
 })
 
-test('suppresses all manual top inset when the root title bar owns it', () => {
+test('preserves covered content spacing when the root title bar owns the home chrome', () => {
   const sources = validSources()
   sources.set(mineTabPath, validSources().get(mineTabPath)
-    .replace('this.destinationOwnsTitleBar || this.compactTopInset', 'this.destinationOwnsTitleBar'))
+    .replace(
+      '  if (this.compactTopInset) {\n' +
+      '    return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT\n' +
+      '  }\n',
+      ''
+    ))
   assert.throws(
     () => validateNativeMineHeader(sources),
-    /suppress all manual top inset/
+    /preserve the covered content top inset/
   )
 })
 

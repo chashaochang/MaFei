@@ -6,9 +6,16 @@ import { ActivityEventType } from "./ActivityEvent";
 import { BusinessError } from "@kit.BasicServicesKit";
 import { Constants } from "../utils/Constants";
 import { RouterConsts } from "../common/RouterConsts";
+import { MusicPlaybackController } from "../features/music/MusicPlaybackController";
 
 export class ActivityEventHandler {
   eventHub: common.EventHub
+  private readonly onAppBackground = (): void => {
+    MusicPlaybackController.instance().reportProgressNow().catch((): void => {})
+  }
+  private readonly onAppForeground = (): void => {
+    MusicPlaybackController.instance().onAppForeground().catch((): void => {})
+  }
 
   constructor(eventHub: common.EventHub) {
     this.eventHub = eventHub
@@ -56,6 +63,8 @@ export class ActivityEventHandler {
         pageUrl:'/Setting'
       })
     })
+    this.eventHub.on('onBackground', this.onAppBackground)
+    this.eventHub.on('onForeground', this.onAppForeground)
   }
 
   unsubscribe() {
@@ -64,5 +73,7 @@ export class ActivityEventHandler {
     this.eventHub.off(ActivityEventType.RequestBluetoothPermission)
     this.eventHub.off(ActivityEventType.ExitApp)
     this.eventHub.off(ActivityEventType.LaunchNativePlayer)
+    this.eventHub.off('onBackground', this.onAppBackground)
+    this.eventHub.off('onForeground', this.onAppForeground)
   }
 }

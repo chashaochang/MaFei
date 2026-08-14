@@ -76,8 +76,7 @@ export struct HomeLibraryChipSelector {
               .height(36)
               .padding({ left: 14, right: 14 })
               .borderRadius(18)
-              .backgroundColor(index === this.selectedIndex() ?
-                'rgba(255,255,255,0.82)' : Color.Transparent)
+              .backgroundColor(Color.Transparent)
               .systemMaterial(AppThemeSurfaceResolver.material(index === this.selectedIndex() ?
                 AppThemeMaterialRole.HomeLibraryChipSelected : AppThemeMaterialRole.HomeLibraryChip))
               .onClick((): void => {

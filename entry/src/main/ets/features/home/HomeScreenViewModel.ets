@@ -90,11 +90,12 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
         name: e.Name || '',
         image: ApiClient.Instance().basePath + new ImageUrlsApi()
           .getItemImageUrlById(e.Id, ImageType.Primary, {
-            tag: e.ImageTags![0]
+            tag: e.ImageTags?.[ImageType.Primary]
           }),
         id: e.Id || '',
         childCount: childRes.data?.TotalRecordCount || 0,
-        type: getTypeByCollectionType(e.CollectionType)
+        type: getTypeByCollectionType(e.CollectionType),
+        collectionType: e.CollectionType
       } as MediaItem
     }))
     if (mediaItems.length > 0) {
@@ -111,6 +112,16 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
       } else if (item.type == BaseItemKind.Series) {
         menuItem = new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.tv'), $r('app.media.tv'),
           item.childCount)
+        menuItem.extra = item
+        this.datasource.pushData(menuItem)
+      } else if (item.collectionType === CollectionType.Music) {
+        menuItem = new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.ic_audio'),
+          $r('app.media.ic_audio'), item.childCount)
+        menuItem.extra = item
+        this.datasource.pushData(menuItem)
+      } else if (item.collectionType === CollectionType.Photos) {
+        menuItem = new PadMenuItem(PadMenuType.ITEM, item.name, $r('app.media.ic_photo'),
+          $r('app.media.ic_photo'), item.childCount)
         menuItem.extra = item
         this.datasource.pushData(menuItem)
       }

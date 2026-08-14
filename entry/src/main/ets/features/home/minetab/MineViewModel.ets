@@ -151,8 +151,8 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
       scope === this.historyRepository.currentScope()
   }
 
-  logout() {
-    this.apiClientController.logout()
+  async logout(): Promise<void> {
+    await this.apiClientController.logout()
     this.appUIState.isLogin = false
   }
 }

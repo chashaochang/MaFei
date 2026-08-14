@@ -127,7 +127,7 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
               return {
                 name: e.Name || '',
                 image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary, {
-                  tag: e.ImageTags![0]
+                  tag: e.ImageTags?.[ImageType.Primary]
                 }),
                 id: e.Id || '',
                 childCount: e.ChildCount || 0,

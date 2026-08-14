@@ -2415,6 +2415,370 @@
     {
       "name": "management_media_delete_failed",
       "value": "Failed to delete media file"
+    },
+    {
+      "name": "music_albums",
+      "value": "Albums"
+    },
+    {
+      "name": "music_artists",
+      "value": "Artists"
+    },
+    {
+      "name": "music_tracks",
+      "value": "Tracks"
+    },
+    {
+      "name": "music_popular_tracks",
+      "value": "Popular tracks"
+    },
+    {
+      "name": "music_play_all",
+      "value": "Play all"
+    },
+    {
+      "name": "music_favorite",
+      "value": "Favorite"
+    },
+    {
+      "name": "music_unfavorite",
+      "value": "Remove favorite"
+    },
+    {
+      "name": "music_refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "music_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "music_loading_more",
+      "value": "Loading more"
+    },
+    {
+      "name": "music_load_more_failed",
+      "value": "Load failed. Tap to retry"
+    },
+    {
+      "name": "music_load_failed",
+      "value": "Could not load music"
+    },
+    {
+      "name": "music_empty_albums",
+      "value": "No albums"
+    },
+    {
+      "name": "music_empty_artists",
+      "value": "No artists"
+    },
+    {
+      "name": "music_empty_tracks",
+      "value": "No tracks"
+    },
+    {
+      "name": "music_track_unit",
+      "value": "tracks"
+    },
+    {
+      "name": "music_no_overview",
+      "value": "No description"
+    },
+    {
+      "name": "media_library_type_unsupported",
+      "value": "This library type will be supported in a later version"
+    },
+    {
+      "name": "music_favorite_failed",
+      "value": "Could not update favorite status"
+    },
+    {
+      "name": "music_play",
+      "value": "Play"
+    },
+    {
+      "name": "music_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "music_previous",
+      "value": "Previous"
+    },
+    {
+      "name": "music_next",
+      "value": "Next"
+    },
+    {
+      "name": "music_close_player",
+      "value": "Close player"
+    },
+    {
+      "name": "music_queue",
+      "value": "Queue"
+    },
+    {
+      "name": "music_remove",
+      "value": "Remove from queue"
+    },
+    {
+      "name": "music_clear",
+      "value": "Clear"
+    },
+    {
+      "name": "music_clear_queue",
+      "value": "Clear queue"
+    },
+    {
+      "name": "music_clear_queue_message",
+      "value": "Clear all tracks from the queue?"
+    },
+    {
+      "name": "music_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "music_skip",
+      "value": "Skip"
+    },
+    {
+      "name": "music_playback_failed",
+      "value": "Playback failed"
+    },
+    {
+      "name": "music_error_authentication_expired",
+      "value": "Your session has expired. Sign in again"
+    },
+    {
+      "name": "music_error_permission_denied",
+      "value": "This account cannot play the track"
+    },
+    {
+      "name": "music_browse_error_permission_denied",
+      "value": "This account cannot access the music library"
+    },
+    {
+      "name": "music_error_not_found",
+      "value": "The track was removed or no longer exists"
+    },
+    {
+      "name": "music_error_offline",
+      "value": "The network connection is unavailable"
+    },
+    {
+      "name": "music_error_no_playable_source",
+      "value": "The server returned no playable audio source"
+    },
+    {
+      "name": "music_error_transcoding_failed",
+      "value": "The server could not transcode this audio"
+    },
+    {
+      "name": "music_error_system_player",
+      "value": "The system player could not play this audio"
+    },
+    {
+      "name": "music_repeat_off",
+      "value": "Repeat off"
+    },
+    {
+      "name": "music_repeat_all",
+      "value": "Repeat all"
+    },
+    {
+      "name": "music_repeat_one",
+      "value": "Repeat one"
+    },
+    {
+      "name": "music_back",
+      "value": "Back"
+    },
+    {
+      "name": "music_nothing_playing",
+      "value": "Nothing is playing"
+    },
+    {
+      "name": "photo_library_title",
+      "value": "Photos"
+    },
+    {
+      "name": "photo_tab_photos",
+      "value": "Photos"
+    },
+    {
+      "name": "photo_tab_albums",
+      "value": "Albums"
+    },
+    {
+      "name": "photo_refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "photo_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "photo_loading_more",
+      "value": "Loading more"
+    },
+    {
+      "name": "photo_load_more_failed",
+      "value": "Load failed. Tap to retry"
+    },
+    {
+      "name": "photo_load_failed",
+      "value": "Could not load photos"
+    },
+    {
+      "name": "photo_error_authentication_expired",
+      "value": "Your session has expired. Sign in again"
+    },
+    {
+      "name": "photo_error_permission_denied",
+      "value": "This account cannot view these photos"
+    },
+    {
+      "name": "photo_error_not_found",
+      "value": "The photo content was removed or no longer exists"
+    },
+    {
+      "name": "photo_error_offline",
+      "value": "The network connection is unavailable"
+    },
+    {
+      "name": "photo_empty_photos",
+      "value": "No photos"
+    },
+    {
+      "name": "photo_empty_albums",
+      "value": "No albums"
+    },
+    {
+      "name": "photo_unknown_date",
+      "value": "Unknown date"
+    },
+    {
+      "name": "photo_viewer_load_failed",
+      "value": "Could not open photo"
+    },
+    {
+      "name": "photo_back",
+      "value": "Back"
+    },
+    {
+      "name": "photo_favorite",
+      "value": "Favorite"
+    },
+    {
+      "name": "photo_unfavorite",
+      "value": "Remove favorite"
+    },
+    {
+      "name": "photo_favorite_failed",
+      "value": "Could not update favorite status"
+    },
+    {
+      "name": "photo_info",
+      "value": "Photo information"
+    },
+    {
+      "name": "photo_slideshow_start",
+      "value": "Start slideshow"
+    },
+    {
+      "name": "photo_slideshow_stop",
+      "value": "Stop slideshow"
+    },
+    {
+      "name": "photo_save_success",
+      "value": "Saved to Gallery"
+    },
+    {
+      "name": "photo_save_failed",
+      "value": "Could not save photo"
+    },
+    {
+      "name": "photo_save_authorization_failed",
+      "value": "Save authorization was not granted"
+    },
+    {
+      "name": "photo_save_authorization_unavailable",
+      "value": "Save authorization is unavailable. Try again"
+    },
+    {
+      "name": "photo_save_unavailable",
+      "value": "The server does not allow this photo to be downloaded"
+    },
+    {
+      "name": "photo_info_date",
+      "value": "Date"
+    },
+    {
+      "name": "photo_info_dimensions",
+      "value": "Dimensions"
+    },
+    {
+      "name": "photo_info_file_name",
+      "value": "File name"
+    },
+    {
+      "name": "photo_info_format",
+      "value": "Format"
+    },
+    {
+      "name": "photo_info_path",
+      "value": "Path"
+    },
+    {
+      "name": "photo_info_camera",
+      "value": "Camera"
+    },
+    {
+      "name": "photo_info_software",
+      "value": "Software"
+    },
+    {
+      "name": "photo_info_exposure",
+      "value": "Exposure time"
+    },
+    {
+      "name": "photo_info_focal_length",
+      "value": "Focal length"
+    },
+    {
+      "name": "photo_info_aperture",
+      "value": "Aperture"
+    },
+    {
+      "name": "photo_info_shutter_speed",
+      "value": "Shutter speed"
+    },
+    {
+      "name": "photo_info_iso",
+      "value": "ISO"
+    },
+    {
+      "name": "photo_info_location",
+      "value": "Location"
+    },
+    {
+      "name": "photo_info_orientation",
+      "value": "Orientation"
+    },
+    {
+      "name": "photo_orientation_normal",
+      "value": "Normal"
+    },
+    {
+      "name": "photo_orientation_mirrored",
+      "value": "Mirrored"
+    },
+    {
+      "name": "photo_loading_info",
+      "value": "Reading photo information"
+    },
+    {
+      "name": "photo_info_load_failed",
+      "value": "Could not load photo details"
     }
   ]
 }

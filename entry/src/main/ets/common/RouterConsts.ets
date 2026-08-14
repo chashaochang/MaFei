@@ -34,5 +34,12 @@ export class RouterConsts {
   static readonly ManagementLibrariesPage = 'ManagementLibrariesPage'
   static readonly ManagementLibraryEditorPage = 'ManagementLibraryEditorPage'
   static readonly ManagementLibraryPathBrowserPage = 'ManagementLibraryPathBrowserPage'
+  static readonly MusicLibraryPage = 'MusicLibraryPage'
+  static readonly MusicAlbumPage = 'MusicAlbumPage'
+  static readonly MusicArtistPage = 'MusicArtistPage'
+  static readonly MusicPlayerPage = 'MusicPlayerPage'
+  static readonly PhotoLibraryPage = 'PhotoLibraryPage'
+  static readonly PhotoAlbumPage = 'PhotoAlbumPage'
+  static readonly PhotoViewerPage = 'PhotoViewerPage'
 
 }

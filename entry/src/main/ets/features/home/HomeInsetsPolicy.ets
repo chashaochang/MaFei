@@ -1,4 +1,5 @@
 import { UIConstants } from '../../common/UIConstants'
+import { MusicHostVisibilityPolicy } from '../music/MusicHostVisibilityPolicy'
 import { HomeShellKind } from './HomeShellPolicy'
 
 export class HomeInsetsPolicy {
@@ -13,12 +14,15 @@ export class HomeInsetsPolicy {
     return 0
   }
 
-  static contentBottomInset(shell: HomeShellKind, safeBottom: number): number {
+  static contentBottomInset(shell: HomeShellKind, safeBottom: number,
+    miniPlayerVisible: boolean = false, nativeMiniPlayer: boolean = true): number {
     const normalizedSafeBottom = HomeInsetsPolicy.nonNegative(safeBottom)
+    const miniPlayerInset = miniPlayerVisible ?
+      MusicHostVisibilityPolicy.occupiedHeight(nativeMiniPlayer) : 0
     if (shell === HomeShellKind.PhoneStandard || shell === HomeShellKind.PhoneNativeHds) {
-      return UIConstants.BOTTOM_BAR_HEIGHT + normalizedSafeBottom
+      return UIConstants.BOTTOM_BAR_HEIGHT + normalizedSafeBottom + miniPlayerInset
     }
-    return normalizedSafeBottom
+    return normalizedSafeBottom + miniPlayerInset
   }
 
   static scrollTail(contentBottomInset: number | undefined, safeBottom: number): number {

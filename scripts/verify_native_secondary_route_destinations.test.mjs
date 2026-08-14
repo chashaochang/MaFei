@@ -86,6 +86,19 @@ test('removes the manual Mine top inset from Native destination content', () => 
   )
 })
 
+test('preserves the covered Mine top inset in compact home content', () => {
+  const sources = workspaceSources()
+  sources.set(mineTabPath, sources.get(mineTabPath)
+    .replace(
+      'return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT',
+      'return 0'
+    ))
+  assert.throws(
+    () => validateNativeSecondaryRouteDestinations(sources),
+    /preserve the root title-bar top inset/
+  )
+})
+
 test('wires WebITong system back through browser history', () => {
   const sources = workspaceSources()
   sources.set(webPath, sources.get(webPath)

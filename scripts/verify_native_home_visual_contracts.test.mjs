@@ -127,9 +127,9 @@ test('rejects removing the sticky vertical alignment offset', () => {
 })
 
 test('rejects opaque white selected Chip styling', () => {
-  const chipSelector = current.chipSelector.replace("'rgba(255,255,255,0.82)'",
+  const resolver = current.resolver.replace("'rgba(255,255,255,0.82)'",
     "'rgba(255,255,255,1)'")
-  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ resolver })),
     /translucent-white/)
 })
 

@@ -1,11 +1,14 @@
 import {
   DividerMode,
+  HdsAnimationMode,
   hdsMaterial,
   HdsTabs,
   HdsTabsController,
   HdsTabsModifier
 } from '@kit.UIDesignKit'
 import { UIConstants } from '../../../common/UIConstants'
+import { MusicHostVisibilityPolicy } from '../../music/MusicHostVisibilityPolicy'
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 import { NativeThemeConstructionProbe } from '../../../theme/NativeThemeConstructionProbe'
 
 @ComponentV2
@@ -13,6 +16,8 @@ export struct HomePhoneNativeTabs {
   @Require @Param selectedIndex: number
   @Require @Param chasingBadgeCount: number
   @Require @Param safeBottom: number
+  @Require @Param compactPlayerChrome: boolean
+  @Require @Param homeContentScroller: Scroller
   @Require @Param onSelectedIndexChange: (index: number) => void
   @BuilderParam homeContentBuilder: () => void
   @BuilderParam chasingContentBuilder: () => void
@@ -33,16 +38,36 @@ export struct HomePhoneNativeTabs {
     this.tabsController.changeIndex(this.selectedIndex)
   }
 
+  @Monitor('compactPlayerChrome')
+  onCompactPlayerChromeChange(): void {
+    if (this.compactPlayerChrome) {
+      this.tabsController.applyHideAnimation(HdsAnimationMode.SCROLL_ANIMATION)
+    } else {
+      this.tabsController.applyShowAnimation(HdsAnimationMode.SCROLL_ANIMATION)
+    }
+  }
+
   private notifySelectedIndexChange(index: number): void {
     if (index === this.selectedIndex || index === this.pendingSelectedIndex) {
+      if (index === 0 && this.compactPlayerChrome) {
+        this.homeContentToTop()
+      }
       return
     }
     this.pendingSelectedIndex = index
     this.onSelectedIndexChange(index)
   }
 
+  private homeContentToTop(): void {
+    this.homeContentScroller.scrollEdge(Edge.Start)
+  }
+
   private normalizedSafeBottom(): number {
     return Math.max(0, this.safeBottom)
+  }
+
+  aboutToAppear(): void {
+    this.onCompactPlayerChromeChange()
   }
 
   private tabsModifier(): HdsTabsModifier {
@@ -98,11 +123,12 @@ export struct HomePhoneNativeTabs {
   }
 
   build() {
-    HdsTabs({
-      index: this.selectedIndex,
-      barPosition: BarPosition.End,
-      controller: this.tabsController
-    }) {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      HdsTabs({
+        index: this.selectedIndex,
+        barPosition: BarPosition.End,
+        controller: this.tabsController
+      }) {
       TabContent() {
         this.homeContentBuilder()
       }
@@ -134,19 +160,49 @@ export struct HomePhoneNativeTabs {
       .tabBar(this.tabBuilder(
         '我的', 4, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel')
       ))
+      }
+      .barHeight(UIConstants.BOTTOM_BAR_HEIGHT)
+      .barMode(BarMode.Fixed, { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })
+      .vertical(false)
+      .divider({ mode: DividerMode.NONE })
+      .barOverlap(true)
+      .animationDuration(0)
+      .attributeModifier(this.tabsModifier())
+      .scrollable(false)
+      .width('100%')
+      .height('100%')
+      .onTabBarClick((index: number) => {
+        this.notifySelectedIndexChange(index)
+      })
+
+      if (this.compactPlayerChrome) {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          Image($r('app.media.ic_home_sel'))
+            .width(22)
+            .height(22)
+            .fillColor($r('app.color.color_main'))
+        }
+        .width(MusicHostVisibilityPolicy.COMPACT_HOME_BUTTON_SIZE)
+        .height(MusicHostVisibilityPolicy.COMPACT_HOME_BUTTON_SIZE)
+        .borderRadius(MusicHostVisibilityPolicy.COMPACT_HOME_BUTTON_SIZE / 2)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.MusicMiniPlayer))
+        .accessibilityText('首页')
+        .margin({
+          left: MusicHostVisibilityPolicy.COMPACT_HOME_SIDE_MARGIN,
+          bottom: this.normalizedSafeBottom() + MusicHostVisibilityPolicy.MINI_PLAYER_GAP
+        })
+        .onClick(() => {
+          if (this.selectedIndex === 0) {
+            this.homeContentToTop()
+            return
+          }
+          this.notifySelectedIndexChange(0)
+        })
+      }
     }
-    .barHeight(UIConstants.BOTTOM_BAR_HEIGHT)
-    .barMode(BarMode.Fixed, { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })
-    .vertical(false)
-    .divider({ mode: DividerMode.NONE })
-    .barOverlap(true)
-    .animationDuration(0)
-    .attributeModifier(this.tabsModifier())
-    .scrollable(false)
     .width('100%')
     .height('100%')
-    .onTabBarClick((index: number) => {
-      this.notifySelectedIndexChange(index)
-    })
   }
 }

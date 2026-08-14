@@ -14,6 +14,8 @@ import { ManagementLibraryOperationResult } from "../../management/library/Manag
 import { MediaUIState } from "./MediaUIState";
 import { MediaViewModel } from "./MediaViewModel";
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
+import { CollectionType } from "sdk/src/main/ets/generated-client/models";
+import { MediaItem } from "../hometab/HomeUIState";
 
 @ComponentV2
 export struct MediaTab {
@@ -59,6 +61,41 @@ export struct MediaTab {
 
   private emitLibraryRefresh(): void {
     this.getUIContext().getHostContext()?.eventHub.emit(MediaLibraryRefreshEvent)
+  }
+
+  private mediaIcon(item: MediaItem): Resource {
+    if (item.collectionType === CollectionType.Photos) {
+      return $r('app.media.ic_photo')
+    }
+    if (item.collectionType === CollectionType.Music) {
+      return $r('app.media.ic_audio')
+    }
+    if (item.collectionType === CollectionType.Movies) {
+      return $r('app.media.movie')
+    }
+    if (item.collectionType === CollectionType.Tvshows) {
+      return $r('app.media.tv')
+    }
+    return $r('app.media.placeholder_folder')
+  }
+
+  private openLibrary(item: MediaItem): void {
+    if (item.collectionType === CollectionType.Photos) {
+      HMRouterMgr.to(RouterConsts.PhotoLibraryPage).withParam(item).push()
+      return
+    }
+    if (item.collectionType === CollectionType.Music) {
+      HMRouterMgr.to(RouterConsts.MusicLibraryPage).withParam(item).push()
+      return
+    }
+    if (item.collectionType === CollectionType.Movies || item.collectionType === CollectionType.Tvshows ||
+      item.type !== undefined && item.collectionType === undefined) {
+      HMRouterMgr.to(RouterConsts.VideoListPage).withParam(item).push()
+      return
+    }
+    this.getUIContext().getPromptAction().showToast({
+      message: $r('app.string.media_library_type_unsupported')
+    })
   }
 
   private showScanResult(result: ManagementLibraryOperationResult): void {
@@ -196,17 +233,11 @@ export struct MediaTab {
               // Text('媒体库').fontColor($r('app.color.text_primary')).fontSize(14).fontWeight(FontWeight.Medium).margin({ top: 20 })
               ListGroup({
                 items: this.ui.mediaList.map((e) => {
-                  return new BaseGroupItem(e.name, e.type == 'Movie' ? $r('app.media.movie') : $r('app.media.tv'),
+                  return new BaseGroupItem(e.name, this.mediaIcon(e),
                     e.childCount + '')
                 }),
                 onItemClick: (index) => {
-                  // if (this.ui.mediaList[index].type == undefined) {
-                  //   ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
-                  //   return;
-                  // }
-                  HMRouterMgr.to(RouterConsts.VideoListPage)
-                    .withParam(this.ui.mediaList[index])
-                    .push()
+                  this.openLibrary(this.ui.mediaList[index])
                 }
               }).margin({ top: this.ui.isAdministrator && !this.rootTitleBarOwned ? 4 : 12 })
               Blank().height(this.scrollTail())

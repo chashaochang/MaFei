@@ -7,6 +7,7 @@ export enum AppThemeMaterialRole {
   InteractiveFloating = 'interactive_floating',
   PrimaryInteractive = 'primary_interactive',
   AdaptiveInteractive = 'adaptive_interactive',
+  MusicMiniPlayer = 'music_mini_player',
   HomeLibraryChip = 'home_library_chip',
   HomeLibraryChipSelected = 'home_library_chip_selected'
 }
@@ -17,6 +18,7 @@ export class AppThemeSurfaceResolver {
   private static interactiveFloating?: uiMaterial.Material
   private static primaryInteractive?: uiMaterial.Material
   private static adaptiveInteractive?: uiMaterial.Material
+  private static musicMiniPlayer?: uiMaterial.Material
   private static homeLibraryChip?: uiMaterial.Material
   private static homeLibraryChipSelected?: uiMaterial.Material
   private static interactiveLightEffect: uiMaterial.LightEffectOptions = {
@@ -104,6 +106,16 @@ export class AppThemeSurfaceResolver {
       }
       return AppThemeSurfaceResolver.adaptiveInteractive
     }
+    if (role === AppThemeMaterialRole.MusicMiniPlayer) {
+      if (!AppThemeSurfaceResolver.musicMiniPlayer) {
+        AppThemeSurfaceResolver.musicMiniPlayer = new uiMaterial.ImmersiveMaterial({
+          applyShadow: true,
+          interactive: true,
+          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+        })
+      }
+      return AppThemeSurfaceResolver.musicMiniPlayer
+    }
     if (role === AppThemeMaterialRole.InteractiveFloating) {
       if (!AppThemeSurfaceResolver.interactiveFloating) {
         AppThemeSurfaceResolver.interactiveFloating = new uiMaterial.ImmersiveMaterial({
@@ -142,8 +154,12 @@ export class AppThemeSurfaceResolver {
     if (role === AppThemeMaterialRole.HomeLibraryChipSelected) {
       if (!AppThemeSurfaceResolver.homeLibraryChipSelected) {
         AppThemeSurfaceResolver.homeLibraryChipSelected = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: 'rgba(255,255,255,0.82)',
+          colorInvert: false,
           applyShadow: false,
-          interactive: true
+          interactive: true,
+          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
         })
       }
       return AppThemeSurfaceResolver.homeLibraryChipSelected

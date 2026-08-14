@@ -14,6 +14,9 @@ import { HMRouterMgr } from "@hadss/hmrouter";
 import { process } from "@kit.ArkTS";
 import { FavoriteListPage } from "../favorite/FavoriteListPage";
 import { VideoListPage } from "../videolist/VideoListPage";
+import { MusicLibraryPage } from "../music/MusicLibraryPage";
+import { PhotoLibraryPage } from "../photo/PhotoLibraryPage";
+import { CollectionType } from "sdk/src/main/ets/generated-client/models";
 import { LoadingView } from "../../ui/components/LoadingView";
 import { MediaItem } from "./hometab/HomeUIState";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
@@ -33,6 +36,9 @@ import { HomeDestination, HomeDestinationMapper } from "./HomeDestination";
 import { HomePhoneNativeTabs } from "./phone/HomePhoneNativeTabs";
 import { HomePhoneStandardTabs } from "./phone/HomePhoneStandardTabs";
 import { UIConstants } from "../../common/UIConstants";
+import { connectMusicHostUIState, MusicHostUIState } from "../music/MusicHostUIState";
+import { MusicHostVisibilityPolicy } from "../music/MusicHostVisibilityPolicy";
+import { connectMusicPlaybackState, MusicPlaybackState } from "../music/MusicPlaybackState";
 
 @ComponentV2
 export struct HomeScreen {
@@ -45,6 +51,8 @@ export struct HomeScreen {
   private contentTabsController: TabsController = new TabsController()
   @Local ui: HomeScreenUIState = new HomeScreenUIState(this.getUIContext())
   @Local vm: HomeScreenViewModel = new HomeScreenViewModel(this.ui)
+  private musicHostUIState: MusicHostUIState = connectMusicHostUIState()
+  private musicPlaybackState: MusicPlaybackState = connectMusicPlaybackState()
   @Local mediaAdministrator: boolean = false
   private lastTime: number = 0;
   private themePromptChecked: boolean = false
@@ -106,7 +114,32 @@ export struct HomeScreen {
   private get contentBottomInset(): number {
     return HomeInsetsPolicy.contentBottomInset(
       this.shell,
-      this.appUIState.safeBottom
+      this.appUIState.safeBottom,
+      this.musicMiniPlayerVisible(),
+      this.useNativeSurface()
+    )
+  }
+
+  private musicMiniPlayerVisible(): boolean {
+    return MusicHostVisibilityPolicy.shouldShow({
+      queueSize: this.musicPlaybackState.queue.length,
+      isLogin: this.appUIState.isLogin,
+      isConnecting: this.appUIState.isConnecting,
+      loginVisible: this.musicHostUIState.loginVisible,
+      videoPlayerVisible: this.musicHostUIState.videoPlayerVisible,
+      livePlayerVisible: this.musicHostUIState.livePlayerVisible,
+      musicPlayerVisible: this.musicHostUIState.musicPlayerVisible,
+      photoViewerVisible: this.musicHostUIState.photoViewerVisible
+    })
+  }
+
+  private compactPlayerChrome(): boolean {
+    return MusicHostVisibilityPolicy.compactHomeChrome(
+      this.musicHostUIState.homeVisible,
+      this.shell,
+      this.ui.selectedDestination === HomeDestination.Home,
+      this.appUIState.rootNavigationHomeLibraryPinned,
+      this.musicMiniPlayerVisible()
     )
   }
 
@@ -649,10 +682,23 @@ export struct HomeScreen {
       LazyForEach(this.vm.datasource, (item: PadMenuItem) => {
         TabContent() {
           if (item.extra) {
-            VideoListPage({
-              fromHome: true,
-              mediaItem: item.extra as MediaItem
-            })
+            if ((item.extra as MediaItem).collectionType === CollectionType.Music) {
+              MusicLibraryPage({
+                fromHome: true,
+                mediaItem: item.extra as MediaItem
+              })
+            } else if ((item.extra as MediaItem).collectionType === CollectionType.Photos) {
+              PhotoLibraryPage({
+                fromHome: true,
+                mediaItem: item.extra as MediaItem,
+                contentBottomInset: this.contentBottomInset
+              })
+            } else {
+              VideoListPage({
+                fromHome: true,
+                mediaItem: item.extra as MediaItem
+              })
+            }
           } else {
             Stack()
           }
@@ -895,6 +941,8 @@ export struct HomeScreen {
           selectedIndex: this.phoneSelectedIndex(),
           chasingBadgeCount: this.ui.chasingCount,
           safeBottom: this.appUIState.safeBottom,
+          compactPlayerChrome: this.compactPlayerChrome(),
+          homeContentScroller: this.homeScroller,
           onSelectedIndexChange: (index: number) => {
             this.selectPhoneIndex(index)
           },

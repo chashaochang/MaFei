@@ -61,5 +61,35 @@ export default function homeInsetsPolicyTest() {
       expect(HomeInsetsPolicy.scrollTail(0, 12)).assertEqual(16)
       expect(HomeInsetsPolicy.scrollTail(undefined, 12)).assertEqual(28)
     })
+
+    it('addsTheMiniPlayerInsetExactlyOnce', 0, () => {
+      const base = HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.PhoneNativeHds,
+        12,
+        false
+      )
+      const withMini = HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.PhoneNativeHds,
+        12,
+        true
+      )
+      expect(withMini - base).assertEqual(60)
+      expect(HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.LargeSidebar,
+        12,
+        true
+      )).assertEqual(72)
+      expect(HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.LargeSidebar,
+        -12,
+        true
+      )).assertEqual(60)
+      expect(HomeInsetsPolicy.contentBottomInset(
+        HomeShellKind.PhoneStandard,
+        12,
+        true,
+        false
+      )).assertEqual(144)
+    })
   })
 }

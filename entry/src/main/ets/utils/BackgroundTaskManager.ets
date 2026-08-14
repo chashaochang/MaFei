@@ -20,15 +20,109 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const TAG = '[BackgroundTaskManager]';
 
+export enum BackgroundTaskOwner {
+  Video = 'video',
+  Music = 'music'
+}
+
+export class BackgroundTaskOwnerPolicy {
+  private owners: Set<string> = new Set<string>()
+
+  acquire(owner: string): boolean {
+    const normalizedOwner = owner.trim()
+    if (normalizedOwner.length === 0 || this.owners.has(normalizedOwner)) {
+      return false
+    }
+    const shouldStart = this.owners.size === 0
+    this.owners.add(normalizedOwner)
+    return shouldStart
+  }
+
+  release(owner: string): boolean {
+    const normalizedOwner = owner.trim()
+    if (normalizedOwner.length === 0 || !this.owners.delete(normalizedOwner)) {
+      return false
+    }
+    return this.owners.size === 0
+  }
+
+  hasOwners(): boolean {
+    return this.owners.size > 0
+  }
+}
+
 /**
  * Background task tool class.
  */
 export class BackgroundTaskManager {
-  public static startContinuousTask(context?: common.UIAbilityContext): void {
-    if (!context) {
-      return;
+  private static ownerPolicy: BackgroundTaskOwnerPolicy = new BackgroundTaskOwnerPolicy()
+  private static operationChain: Promise<void> = Promise.resolve()
+  private static systemRunning: boolean = false
+  private static systemContext?: common.UIAbilityContext
+
+  public static startContinuousTask(context?: common.UIAbilityContext,
+    owner: string = BackgroundTaskOwner.Video): void {
+    BackgroundTaskManager.acquireContinuousTask(context, owner).catch((): void => {})
+  }
+
+  /**
+   * Cancel continuous task
+   */
+  public static stopContinuousTask(context?: common.UIAbilityContext,
+    owner: string = BackgroundTaskOwner.Video): void {
+    BackgroundTaskManager.releaseContinuousTask(context, owner).catch((): void => {})
+  }
+
+  public static acquireContinuousTask(context?: common.UIAbilityContext,
+    owner: string = BackgroundTaskOwner.Music): Promise<void> {
+    if (!context || owner.trim().length === 0) {
+      return Promise.resolve()
     }
-    let wantAgentInfo: wantAgent.WantAgentInfo = {
+    BackgroundTaskManager.ownerPolicy.acquire(owner)
+    BackgroundTaskManager.systemContext = context
+    return BackgroundTaskManager.enqueueReconcile()
+  }
+
+  public static releaseContinuousTask(context?: common.UIAbilityContext,
+    owner: string = BackgroundTaskOwner.Music): Promise<void> {
+    if (!context || owner.trim().length === 0) {
+      return Promise.resolve()
+    }
+    BackgroundTaskManager.systemContext = context
+    BackgroundTaskManager.ownerPolicy.release(owner)
+    return BackgroundTaskManager.enqueueReconcile()
+  }
+
+  private static enqueueReconcile(): Promise<void> {
+    const operation = BackgroundTaskManager.operationChain.then(async (): Promise<void> => {
+      await BackgroundTaskManager.reconcile()
+    })
+    BackgroundTaskManager.operationChain = operation.catch((err: BusinessError): void => {
+      hilog.error(0x0000, TAG, `continuous task reconciliation failed, cause: ${JSON.stringify(err)}`)
+    })
+    return operation
+  }
+
+  private static async reconcile(): Promise<void> {
+    if (BackgroundTaskManager.ownerPolicy.hasOwners()) {
+      if (!BackgroundTaskManager.systemRunning && BackgroundTaskManager.systemContext) {
+        await BackgroundTaskManager.startSystemTask(BackgroundTaskManager.systemContext)
+        BackgroundTaskManager.systemRunning = true
+      }
+      return
+    }
+
+    if (BackgroundTaskManager.systemRunning && BackgroundTaskManager.systemContext) {
+      await BackgroundTaskManager.stopSystemTask(BackgroundTaskManager.systemContext)
+      BackgroundTaskManager.systemRunning = false
+    }
+    if (!BackgroundTaskManager.systemRunning) {
+      BackgroundTaskManager.systemContext = undefined
+    }
+  }
+
+  private static async startSystemTask(context: common.UIAbilityContext): Promise<void> {
+    const wantAgentInfo: wantAgent.WantAgentInfo = {
       wants: [
         {
           bundleName: context.abilityInfo.bundleName,
@@ -39,28 +133,14 @@ export class BackgroundTaskManager {
       requestCode: 0,
       wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     };
-
-    wantAgent.getWantAgent(wantAgentInfo).then((wantAgentObj) => {
-      backgroundTaskManager.startBackgroundRunning(context,
-        backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgentObj).then(() => {
-        hilog.info(0x0000, TAG, 'startBackgroundRunning succeeded');
-      }).catch((err: BusinessError) => {
-        hilog.error(0x0000, TAG, `startBackgroundRunning failed, cause:  ${JSON.stringify(err)}`);
-      });
-    });
+    const wantAgentObj = await wantAgent.getWantAgent(wantAgentInfo)
+    await backgroundTaskManager.startBackgroundRunning(context,
+      backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgentObj)
+    hilog.info(0x0000, TAG, 'startBackgroundRunning succeeded')
   }
 
-  /**
-   * Cancel continuous task
-   */
-  public static stopContinuousTask(context?: common.UIAbilityContext): void {
-    if (!context) {
-      return;
-    }
-    backgroundTaskManager.stopBackgroundRunning(context).then(() => {
-      hilog.info(0x0000, TAG, 'stopBackgroundRunning succeeded');
-    }).catch((err: BusinessError) => {
-      hilog.error(0x0000, TAG, `stopBackgroundRunning failed, cause:  ${JSON.stringify(err)}`);
-    });
+  private static async stopSystemTask(context: common.UIAbilityContext): Promise<void> {
+    await backgroundTaskManager.stopBackgroundRunning(context)
+    hilog.info(0x0000, TAG, 'stopBackgroundRunning succeeded')
   }
 }

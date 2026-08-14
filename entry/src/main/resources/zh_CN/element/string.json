@@ -2415,6 +2415,370 @@
     {
       "name": "management_media_delete_failed",
       "value": "删除媒体文件失败"
+    },
+    {
+      "name": "music_albums",
+      "value": "专辑"
+    },
+    {
+      "name": "music_artists",
+      "value": "艺术家"
+    },
+    {
+      "name": "music_tracks",
+      "value": "歌曲"
+    },
+    {
+      "name": "music_popular_tracks",
+      "value": "常听歌曲"
+    },
+    {
+      "name": "music_play_all",
+      "value": "播放全部"
+    },
+    {
+      "name": "music_favorite",
+      "value": "收藏"
+    },
+    {
+      "name": "music_unfavorite",
+      "value": "取消收藏"
+    },
+    {
+      "name": "music_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "music_retry",
+      "value": "重试"
+    },
+    {
+      "name": "music_loading_more",
+      "value": "正在加载更多"
+    },
+    {
+      "name": "music_load_more_failed",
+      "value": "加载失败，点击重试"
+    },
+    {
+      "name": "music_load_failed",
+      "value": "音乐内容加载失败"
+    },
+    {
+      "name": "music_empty_albums",
+      "value": "暂无专辑"
+    },
+    {
+      "name": "music_empty_artists",
+      "value": "暂无艺术家"
+    },
+    {
+      "name": "music_empty_tracks",
+      "value": "暂无歌曲"
+    },
+    {
+      "name": "music_track_unit",
+      "value": "首歌曲"
+    },
+    {
+      "name": "music_no_overview",
+      "value": "暂无简介"
+    },
+    {
+      "name": "media_library_type_unsupported",
+      "value": "此媒体库类型将在后续版本支持"
+    },
+    {
+      "name": "music_favorite_failed",
+      "value": "收藏状态更新失败"
+    },
+    {
+      "name": "music_play",
+      "value": "播放"
+    },
+    {
+      "name": "music_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "music_previous",
+      "value": "上一首"
+    },
+    {
+      "name": "music_next",
+      "value": "下一首"
+    },
+    {
+      "name": "music_close_player",
+      "value": "关闭播放器"
+    },
+    {
+      "name": "music_queue",
+      "value": "播放队列"
+    },
+    {
+      "name": "music_remove",
+      "value": "从队列移除"
+    },
+    {
+      "name": "music_clear",
+      "value": "清空"
+    },
+    {
+      "name": "music_clear_queue",
+      "value": "清空播放队列"
+    },
+    {
+      "name": "music_clear_queue_message",
+      "value": "确定要清空播放队列吗？"
+    },
+    {
+      "name": "music_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "music_skip",
+      "value": "跳过"
+    },
+    {
+      "name": "music_playback_failed",
+      "value": "播放失败"
+    },
+    {
+      "name": "music_error_authentication_expired",
+      "value": "登录状态已过期，请重新登录"
+    },
+    {
+      "name": "music_error_permission_denied",
+      "value": "当前账号没有播放此音乐的权限"
+    },
+    {
+      "name": "music_browse_error_permission_denied",
+      "value": "当前账号没有访问该音乐库的权限"
+    },
+    {
+      "name": "music_error_not_found",
+      "value": "音乐已被移除或不存在"
+    },
+    {
+      "name": "music_error_offline",
+      "value": "网络连接不可用"
+    },
+    {
+      "name": "music_error_no_playable_source",
+      "value": "服务器没有返回可播放的音频源"
+    },
+    {
+      "name": "music_error_transcoding_failed",
+      "value": "服务器音频转码失败"
+    },
+    {
+      "name": "music_error_system_player",
+      "value": "系统播放器无法播放此音频"
+    },
+    {
+      "name": "music_repeat_off",
+      "value": "关闭循环"
+    },
+    {
+      "name": "music_repeat_all",
+      "value": "列表循环"
+    },
+    {
+      "name": "music_repeat_one",
+      "value": "单曲循环"
+    },
+    {
+      "name": "music_back",
+      "value": "返回"
+    },
+    {
+      "name": "music_nothing_playing",
+      "value": "暂无正在播放的音乐"
+    },
+    {
+      "name": "photo_library_title",
+      "value": "照片"
+    },
+    {
+      "name": "photo_tab_photos",
+      "value": "照片"
+    },
+    {
+      "name": "photo_tab_albums",
+      "value": "相册"
+    },
+    {
+      "name": "photo_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "photo_retry",
+      "value": "重试"
+    },
+    {
+      "name": "photo_loading_more",
+      "value": "正在加载更多"
+    },
+    {
+      "name": "photo_load_more_failed",
+      "value": "加载失败，点击重试"
+    },
+    {
+      "name": "photo_load_failed",
+      "value": "照片内容加载失败"
+    },
+    {
+      "name": "photo_error_authentication_expired",
+      "value": "登录状态已过期，请重新登录"
+    },
+    {
+      "name": "photo_error_permission_denied",
+      "value": "当前账号没有查看照片的权限"
+    },
+    {
+      "name": "photo_error_not_found",
+      "value": "照片内容已被移除或不存在"
+    },
+    {
+      "name": "photo_error_offline",
+      "value": "网络连接不可用"
+    },
+    {
+      "name": "photo_empty_photos",
+      "value": "暂无照片"
+    },
+    {
+      "name": "photo_empty_albums",
+      "value": "暂无相册"
+    },
+    {
+      "name": "photo_unknown_date",
+      "value": "未知日期"
+    },
+    {
+      "name": "photo_viewer_load_failed",
+      "value": "无法打开照片"
+    },
+    {
+      "name": "photo_back",
+      "value": "返回"
+    },
+    {
+      "name": "photo_favorite",
+      "value": "收藏"
+    },
+    {
+      "name": "photo_unfavorite",
+      "value": "取消收藏"
+    },
+    {
+      "name": "photo_favorite_failed",
+      "value": "收藏状态更新失败"
+    },
+    {
+      "name": "photo_info",
+      "value": "照片信息"
+    },
+    {
+      "name": "photo_slideshow_start",
+      "value": "播放幻灯片"
+    },
+    {
+      "name": "photo_slideshow_stop",
+      "value": "停止幻灯片"
+    },
+    {
+      "name": "photo_save_success",
+      "value": "已保存到图库"
+    },
+    {
+      "name": "photo_save_failed",
+      "value": "保存照片失败"
+    },
+    {
+      "name": "photo_save_authorization_failed",
+      "value": "未获得保存授权"
+    },
+    {
+      "name": "photo_save_authorization_unavailable",
+      "value": "保存授权不可用，请重试"
+    },
+    {
+      "name": "photo_save_unavailable",
+      "value": "服务器不允许下载这张照片"
+    },
+    {
+      "name": "photo_info_date",
+      "value": "日期"
+    },
+    {
+      "name": "photo_info_dimensions",
+      "value": "尺寸"
+    },
+    {
+      "name": "photo_info_file_name",
+      "value": "文件名"
+    },
+    {
+      "name": "photo_info_format",
+      "value": "格式"
+    },
+    {
+      "name": "photo_info_path",
+      "value": "路径"
+    },
+    {
+      "name": "photo_info_camera",
+      "value": "相机"
+    },
+    {
+      "name": "photo_info_software",
+      "value": "软件"
+    },
+    {
+      "name": "photo_info_exposure",
+      "value": "曝光时间"
+    },
+    {
+      "name": "photo_info_focal_length",
+      "value": "焦距"
+    },
+    {
+      "name": "photo_info_aperture",
+      "value": "光圈"
+    },
+    {
+      "name": "photo_info_shutter_speed",
+      "value": "快门速度"
+    },
+    {
+      "name": "photo_info_iso",
+      "value": "ISO"
+    },
+    {
+      "name": "photo_info_location",
+      "value": "位置"
+    },
+    {
+      "name": "photo_info_orientation",
+      "value": "方向"
+    },
+    {
+      "name": "photo_orientation_normal",
+      "value": "正常"
+    },
+    {
+      "name": "photo_orientation_mirrored",
+      "value": "镜像"
+    },
+    {
+      "name": "photo_loading_info",
+      "value": "正在读取照片信息"
+    },
+    {
+      "name": "photo_info_load_failed",
+      "value": "照片详细信息加载失败"
     }
   ]
 }

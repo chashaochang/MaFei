@@ -12,6 +12,12 @@ import { RouterConsts } from '../common/RouterConsts';
 import { AppThemeSurfaceResolver } from '../theme/AppThemeSurfaceResolver';
 import { ThemeStyle } from '../entity/ThemeStyle';
 import { HdsUiCapability } from '../theme/HdsUiCapability';
+import { BreakpointTypeEnum } from '../utils/BreakpointPolicy';
+import { HomeShellKind, HomeShellPolicy } from '../features/home/HomeShellPolicy';
+import { connectMusicHostUIState, MusicHostUIState } from '../features/music/MusicHostUIState';
+import { MusicHostVisibilityPolicy } from '../features/music/MusicHostVisibilityPolicy';
+import { MusicMiniPlayer } from '../features/music/MusicMiniPlayer';
+import { connectMusicPlaybackState, MusicPlaybackState } from '../features/music/MusicPlaybackState';
 
 function usesNativeTopSafeArea(appUIState: AppUIState): boolean {
   return appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()
@@ -35,6 +41,65 @@ struct Index {
   modifier: NavModifier = new NavModifier();
   backController?: BackController
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  private musicHostUIState: MusicHostUIState = connectMusicHostUIState()
+  private musicPlaybackState: MusicPlaybackState = connectMusicPlaybackState()
+
+  private homeShell(): HomeShellKind {
+    return HomeShellPolicy.resolve(
+      this.appUIState.currentBreakpoint as BreakpointTypeEnum,
+      this.appUIState.themeStyle,
+      this.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private musicMiniPlayerVisible(): boolean {
+    return MusicHostVisibilityPolicy.shouldShow({
+      queueSize: this.musicPlaybackState.queue.length,
+      isLogin: this.appUIState.isLogin,
+      isConnecting: this.appUIState.isConnecting,
+      loginVisible: this.musicHostUIState.loginVisible,
+      videoPlayerVisible: this.musicHostUIState.videoPlayerVisible,
+      livePlayerVisible: this.musicHostUIState.livePlayerVisible,
+      musicPlayerVisible: this.musicHostUIState.musicPlayerVisible,
+      photoViewerVisible: this.musicHostUIState.photoViewerVisible
+    })
+  }
+
+  private musicMiniPlayerBottomOffset(): number {
+    return MusicHostVisibilityPolicy.miniPlayerBottomOffset(
+      this.musicHostUIState.homeVisible,
+      this.homeShell(),
+      this.appUIState.safeBottom,
+      this.musicMiniPlayerVisible(),
+      this.compactMusicChrome()
+    )
+  }
+
+  private compactMusicChrome(): boolean {
+    return MusicHostVisibilityPolicy.compactHomeChrome(
+      this.musicHostUIState.homeVisible,
+      this.homeShell(),
+      this.appUIState.rootNavigationHomeActionsVisible,
+      this.appUIState.rootNavigationHomeLibraryPinned,
+      this.musicMiniPlayerVisible()
+    )
+  }
+
+  private musicMiniPlayerWidth(): Length {
+    if (this.compactMusicChrome()) {
+      return MusicHostVisibilityPolicy.compactPlayerWidth(this.appUIState.deviceWidth)
+    }
+    return 'calc(100% - 32vp)'
+  }
+
+  private musicMiniPlayerHeight(): number {
+    return MusicHostVisibilityPolicy.miniPlayerHeight(
+      AppThemeSurfaceResolver.useNativeSurface(
+        this.appUIState.themeStyle,
+        this.appUIState.nativeThemeAvailable
+      )
+    )
+  }
 
   @Monitor('appUIState.orientation')
   onBreakpointChanged() {
@@ -92,6 +157,21 @@ struct Index {
           modifier: this.modifier,
         }
       })
+      Stack({ alignContent: this.compactMusicChrome() ? Alignment.BottomEnd : Alignment.Bottom }) {
+        MusicMiniPlayer({
+          visible: this.musicMiniPlayerVisible()
+        })
+          .width(this.musicMiniPlayerWidth())
+          .height(this.musicMiniPlayerHeight())
+          .constraintSize({ maxWidth: 720 })
+          .margin({
+            right: this.compactMusicChrome() ? MusicHostVisibilityPolicy.COMPACT_HOME_SIDE_MARGIN : 0,
+            bottom: this.musicMiniPlayerBottomOffset()
+          })
+      }
+      .width('100%')
+      .height('100%')
+      .hitTestBehavior(HitTestMode.Transparent)
       // here dialog init
       OhosSmartDialog()
     }

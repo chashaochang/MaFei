@@ -167,11 +167,11 @@ export struct WebViewScreen {
           }
           if (path.toLowerCase().endsWith(Constants.SESSION_CAPABILITIES_PATH)) {
             this.controller.runJavaScript("JSON.parse(window.localStorage.getItem('jellyfin_credentials'))")
-              .then(result => {
+              .then(async result => {
                 const credentials: Credentials | null = JSON.parse(result)
                 if (credentials) {
                   let server = credentials.Servers[0]
-                  this.apiClientController.setupUser(this.server.id, server.UserId, server.AccessToken)
+                  await this.apiClientController.setupUser(this.server.id, server.UserId, server.AccessToken)
                   this.isLogin = true
                 }
               })
@@ -210,8 +210,9 @@ export struct WebViewScreen {
                         .then(()=>{
                           this.controller.runJavaScript('window.localStorage.setItem("user-'+res.User?.Id+'-'+res.User?.ServerId+'", JSON.stringify(' +
                           JSON.stringify(res.User) + '))')
-                            .then(()=>{
-                              this.apiClientController.setupUser(this.server.id, server.UserId, server.AccessToken)
+                            .then(async ()=>{
+                              await this.apiClientController.setupUser(this.server.id, server.UserId,
+                                server.AccessToken)
                               AppStorage.setOrCreate('userId', server.UserId)
                               this.controller.loadUrl(ApiClient.Instance().basePath)
                               this.isLogin = true
@@ -236,7 +237,6 @@ export struct WebViewScreen {
     this.connected = true
   }
 }
-
 function getLastPathSegment(path: string): string {
   // 使用 split 方法
   const segments = path.split('/')

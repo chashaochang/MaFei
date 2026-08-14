@@ -7,10 +7,12 @@ import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../../entity/AppUIState";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
+import { MusicLoginLifecycle } from "../music/MusicHostLifecycle";
 
 @HMRouter({
   pageUrl: '/LoginPage',
-  singleton: true
+  singleton: true,
+  lifecycle: 'musicLoginLifecycle'
 })
 @ComponentV2
 export struct LoginPage {
@@ -20,6 +22,8 @@ export struct LoginPage {
   @Local loading: boolean = false
   @Local errorText: string = ''
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  private musicLifecycle?: MusicLoginLifecycle =
+    HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as MusicLoginLifecycle
 
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(

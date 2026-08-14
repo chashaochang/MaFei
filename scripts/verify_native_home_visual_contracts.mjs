@@ -96,10 +96,14 @@ export function validateNativeHomeVisualContracts(sources) {
   const shadowlessInteractiveMaterial =
     /ImmersiveMaterial\s*\(\s*\{[\s\S]*?applyShadow\s*:\s*false[\s\S]*?interactive\s*:\s*true[\s\S]*?\}\s*\)/
   if (!shadowlessInteractiveMaterial.test(normalChipMaterial) ||
-    /materialColor|colorInvert|ImmersiveStyle/.test(normalChipMaterial) ||
-    !shadowlessInteractiveMaterial.test(selectedChipMaterial) ||
-    /materialColor|colorInvert|ImmersiveStyle/.test(selectedChipMaterial)) {
-    throw new Error('Home library Chips must follow the default system immersive material')
+    /materialColor|colorInvert|ImmersiveStyle/.test(normalChipMaterial)) {
+    throw new Error('Unselected Home library Chips must follow the default system immersive material')
+  }
+  if (!/style\s*:\s*uiMaterial\.ImmersiveStyle\.REGULAR/.test(selectedChipMaterial) ||
+    !/materialColor\s*:\s*['"]rgba\(255,255,255,0\.82\)['"]/.test(selectedChipMaterial) ||
+    !/colorInvert\s*:\s*false/.test(selectedChipMaterial) ||
+    !shadowlessInteractiveMaterial.test(selectedChipMaterial)) {
+    throw new Error('Selected Home library Chips must own a translucent-white immersive material')
   }
 
   if (/buildLibraryBrowseSection|mediaBrowseItem\s*\(/.test(homeTab)) {
@@ -211,14 +215,13 @@ export function validateNativeHomeVisualContracts(sources) {
     !/if\s*\(\s*this\.useImmersiveChipSurface\s*\(\s*\)\s*\)/.test(chipBuild) ||
     !/fontColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*Color\.Black\s*:/.test(
       chipBuild) ||
-    !/backgroundColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*['"]rgba\(255,255,255,0\.82\)['"]\s*:\s*Color\.Transparent\s*\)/.test(
-      chipBuild) ||
+    !/backgroundColor\s*\(\s*Color\.Transparent\s*\)/.test(chipBuild) ||
     !/systemMaterial\s*\(\s*AppThemeSurfaceResolver\.material\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*AppThemeMaterialRole\.HomeLibraryChipSelected\s*:\s*AppThemeMaterialRole\.HomeLibraryChip\s*\)\s*\)/.test(
       chipBuild) ||
     !/backgroundColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*\$r\(\s*['"]app\.color\.color_main['"]\s*\)\s*:\s*\$r\(\s*['"]app\.color\.bg_1['"]\s*\)\s*\)/.test(
       chipBuild) ||
     /allowClose|sys\.symbol\.xmark|closeIcon/.test(chipSelector)) {
-    throw new Error('Every Chip must use immersive material with translucent-white and black selected styling')
+    throw new Error('Every Chip must use one immersive material with translucent-white and black selected styling')
   }
   if (!/List\s*\([\s\S]*scroller\s*:\s*this\.chipScroller/.test(chipBuild) ||
     !/Text\s*\(\s*tab\.label\s*\)/.test(chipBuild) ||
