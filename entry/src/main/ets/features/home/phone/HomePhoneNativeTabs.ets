@@ -14,13 +14,11 @@ import { NativeThemeConstructionProbe } from '../../../theme/NativeThemeConstruc
 @ComponentV2
 export struct HomePhoneNativeTabs {
   @Require @Param selectedIndex: number
-  @Require @Param chasingBadgeCount: number
   @Require @Param safeBottom: number
   @Require @Param compactPlayerChrome: boolean
   @Require @Param homeContentScroller: Scroller
   @Require @Param onSelectedIndexChange: (index: number) => void
   @BuilderParam homeContentBuilder: () => void
-  @BuilderParam chasingContentBuilder: () => void
   @BuilderParam favoriteContentBuilder: () => void
   @BuilderParam mediaContentBuilder: () => void
   @BuilderParam mineContentBuilder: () => void
@@ -35,7 +33,12 @@ export struct HomePhoneNativeTabs {
   @Monitor('selectedIndex')
   onExternalIndexChange(): void {
     this.pendingSelectedIndex = -1
-    this.tabsController.changeIndex(this.selectedIndex)
+    if (this.selectedIndex === 1) {
+      this.notifySelectedIndexChange(0)
+      this.tabsController.changeIndex(0)
+      return
+    }
+    this.tabsController.changeIndex(this.visibleTabIndex(this.selectedIndex))
   }
 
   @Monitor('compactPlayerChrome')
@@ -66,7 +69,36 @@ export struct HomePhoneNativeTabs {
     return Math.max(0, this.safeBottom)
   }
 
+  private visibleTabIndex(destinationIndex: number): number {
+    if (destinationIndex === 2) {
+      return 1
+    }
+    if (destinationIndex === 3) {
+      return 2
+    }
+    if (destinationIndex === 4) {
+      return 3
+    }
+    return 0
+  }
+
+  private destinationIndex(tabIndex: number): number {
+    if (tabIndex === 1) {
+      return 2
+    }
+    if (tabIndex === 2) {
+      return 3
+    }
+    if (tabIndex === 3) {
+      return 4
+    }
+    return 0
+  }
+
   aboutToAppear(): void {
+    if (this.selectedIndex === 1) {
+      this.notifySelectedIndexChange(0)
+    }
     this.onCompactPlayerChromeChange()
   }
 
@@ -125,7 +157,7 @@ export struct HomePhoneNativeTabs {
   build() {
     Stack({ alignContent: Alignment.BottomStart }) {
       HdsTabs({
-        index: this.selectedIndex,
+        index: this.visibleTabIndex(this.selectedIndex),
         barPosition: BarPosition.End,
         controller: this.tabsController
       }) {
@@ -134,13 +166,6 @@ export struct HomePhoneNativeTabs {
       }
       .tabBar(this.tabBuilder(
         '首页', 0, $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')
-      ))
-      TabContent() {
-        this.chasingContentBuilder()
-      }
-      .tabBar(this.tabBuilder(
-        '追剧', 1, $r('app.media.history'), $r('app.media.history'),
-        this.chasingBadgeCount
       ))
       TabContent() {
         this.favoriteContentBuilder()
@@ -172,7 +197,7 @@ export struct HomePhoneNativeTabs {
       .width('100%')
       .height('100%')
       .onTabBarClick((index: number) => {
-        this.notifySelectedIndexChange(index)
+        this.notifySelectedIndexChange(this.destinationIndex(index))
       })
 
       if (this.compactPlayerChrome) {

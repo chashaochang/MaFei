@@ -6,7 +6,6 @@ import { HomePhoneChromeTab } from './HomePhoneChromeTab'
 @ComponentV2
 export struct HomePhoneStandardTabs {
   @Require @Param selectedIndex: number
-  @Require @Param chasingBadgeCount: number
   @Require @Param navigationChromeInset: number
   @Require @Param onSelectedIndexChange: (index: number) => void
   private tabsController: TabsController = new TabsController()
@@ -65,7 +64,6 @@ export struct HomePhoneStandardTabs {
 
       CustomTab({
         selectIndex: this.selectedIndex,
-        chasingBadgeCount: this.chasingBadgeCount,
         onItemClick: (index: number) => {
           this.notifySelectedIndexChange(index)
           this.tabsController.changeIndex(index)
@@ -75,5 +73,6 @@ export struct HomePhoneStandardTabs {
     }
     .width('100%')
     .height(this.navigationChromeInset)
+    .backgroundColor($r('app.color.bg_main'))
   }
 }

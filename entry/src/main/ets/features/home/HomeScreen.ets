@@ -922,7 +922,6 @@ export struct HomeScreen {
       } else {
         HomePhoneStandardTabs({
           selectedIndex: this.phoneSelectedIndex(),
-          chasingBadgeCount: this.ui.chasingCount,
           navigationChromeInset: this.navigationChromeInset,
           onSelectedIndexChange: (index: number) => {
             this.selectPhoneIndex(index)
@@ -939,7 +938,6 @@ export struct HomeScreen {
       if (this.shell === HomeShellKind.PhoneNativeHds) {
         HomePhoneNativeTabs({
           selectedIndex: this.phoneSelectedIndex(),
-          chasingBadgeCount: this.ui.chasingCount,
           safeBottom: this.appUIState.safeBottom,
           compactPlayerChrome: this.compactPlayerChrome(),
           homeContentScroller: this.homeScroller,
@@ -948,9 +946,6 @@ export struct HomeScreen {
           },
           homeContentBuilder: () => {
             this.homeTabContent()
-          },
-          chasingContentBuilder: () => {
-            this.chasingTabContent()
           },
           favoriteContentBuilder: () => {
             this.favoriteTabContent()

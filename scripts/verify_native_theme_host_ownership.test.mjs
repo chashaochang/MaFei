@@ -138,9 +138,6 @@ function validHomeScreen() {
     '      homeContentBuilder: () => {',
     '        this.homeTabContent()',
     '      },',
-    '      chasingContentBuilder: () => {',
-    '        this.chasingTabContent()',
-    '      },',
     '      favoriteContentBuilder: () => {',
     '        this.favoriteTabContent()',
     '      },',
@@ -286,7 +283,6 @@ function validNativeHost() {
   return [
     "import { HdsTabs, HdsTabsController, HdsTabsModifier, hdsMaterial } from '@kit.UIDesignKit'",
     '@BuilderParam homeContentBuilder: () => void',
-    '@BuilderParam chasingContentBuilder: () => void',
     '@BuilderParam favoriteContentBuilder: () => void',
     '@BuilderParam mediaContentBuilder: () => void',
     '@BuilderParam mineContentBuilder: () => void',
@@ -301,9 +297,8 @@ function validNativeHost() {
     "  .width('100%')",
     '}',
     'build() {',
-    '  HdsTabs({ index: this.selectedIndex, controller: this.tabsController }) {',
+    '  HdsTabs({ index: this.visibleTabIndex(this.selectedIndex), controller: this.tabsController }) {',
     '    TabContent() { this.homeContentBuilder() }',
-    '    TabContent() { this.chasingContentBuilder() }',
     '    TabContent() { this.favoriteContentBuilder() }',
     '    TabContent() { this.mediaContentBuilder() }',
     '    TabContent() { this.mineContentBuilder() }',
@@ -582,7 +577,7 @@ test('synchronizes root destination chrome and clears it when HomeScreen leaves'
   )
 })
 
-test('keeps one Native title bar across all five tabs and maps each destination title', () => {
+test('keeps one Native title bar across visible tabs and maps each destination title', () => {
   const hiddenSecondarySources = validSources()
   hiddenSecondarySources.set(homeScreenPath, validHomeScreen().replace(
     '  const visible = this.resolveShell() === HomeShellKind.PhoneNativeHds',
@@ -670,7 +665,8 @@ test('requires external index binding in all tab owners', () => {
   )
 
   const nativeSources = validSources()
-  nativeSources.set(nativePath, validNativeHost().replace('index: this.selectedIndex, ', ''))
+  nativeSources.set(nativePath, validNativeHost()
+    .replace('index: this.visibleTabIndex(this.selectedIndex), ', ''))
   assert.throws(
     () => validateNativeThemeHostOwnership(nativeSources),
     /native host must bind external selectedIndex/
@@ -721,13 +717,13 @@ test('rejects a shortened native HDS host', () => {
   )
 })
 
-test('requires five real native TabContent pages and all shared builders', () => {
+test('requires four visible native TabContent pages and all visible builders', () => {
   const tabSources = validSources()
   tabSources.set(nativePath, validNativeHost()
     .replace('    TabContent() { this.mineContentBuilder() }\n', ''))
   assert.throws(
     () => validateNativeThemeHostOwnership(tabSources),
-    /native HDS tabs must own exactly five TabContent pages/
+    /native HDS tabs must own exactly four visible TabContent pages/
   )
 
   const builderSources = validSources()
@@ -743,7 +739,7 @@ test('requires five real native TabContent pages and all shared builders', () =>
   )
 })
 
-test('requires five arrow closures that preserve the parent HomeScreen context', () => {
+test('requires four visible arrow closures that preserve the parent HomeScreen context', () => {
   const bareReferenceSources = validSources()
   bareReferenceSources.set(homeScreenPath, validHomeScreen().replace([
     '      mineContentBuilder: () => {',

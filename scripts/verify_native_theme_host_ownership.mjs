@@ -31,7 +31,7 @@ const DIRECT_INSET =
 const STANDARD_INDEX =
   /Tabs\s*\(\s*\{[\s\S]{0,180}index\s*:\s*this\.selectedIndex/
 const NATIVE_INDEX =
-  /HdsTabs\s*\(\s*\{[\s\S]{0,180}index\s*:\s*this\.selectedIndex/
+  /HdsTabs\s*\(\s*\{[\s\S]{0,180}index\s*:\s*this\.visibleTabIndex\s*\(\s*this\.selectedIndex\s*\)/
 const NATIVE_BAR_HEIGHT =
   /\.barHeight\s*\(\s*UIConstants\.BOTTOM_BAR_HEIGHT\s*\)/g
 const NATIVE_SAFE_BOTTOM_MARGIN =
@@ -312,8 +312,11 @@ export function validateNativeThemeHostOwnership(sources) {
   if (!NATIVE_ROOT_HEIGHT.test(nativeHost) || nativeHost.includes('navigationChromeInset')) {
     throw new Error('native HDS tabs must be a full-page content host')
   }
-  if (count(nativeHost, /\bTabContent\s*\(\s*\)/g) !== 5) {
-    throw new Error('native HDS tabs must own exactly five TabContent pages')
+  if (count(nativeHost, /\bTabContent\s*\(\s*\)/g) !== 4) {
+    throw new Error('native HDS tabs must own exactly four visible TabContent pages')
+  }
+  if (/\b(?:chasingContentBuilder|chasingBadgeCount)\b|['"]追剧['"]/.test(nativeHost)) {
+    throw new Error('native HDS phone tabs must hide the chasing destination')
   }
   const tabBuilder = methodBlock(nativeHost, 'tabBuilder')
   if (NATIVE_FIXED_ITEM_WIDTH.test(tabBuilder) ||
@@ -584,6 +587,14 @@ export function validateNativeThemeHostOwnership(sources) {
     }
     if (count(contentOwner, new RegExp('this\\.' + builder + '\\s*\\(', 'g')) !== 1) {
       throw new Error('standard content Tabs must invoke ' + builder + ' exactly once')
+    }
+    if (builderParam === 'chasingContentBuilder') {
+      if (new RegExp('@BuilderParam\\s+' + builderParam + '\\s*:').test(nativeHost) ||
+        count(nativeHost, new RegExp('this\\.' + builderParam + '\\s*\\(', 'g')) !== 0 ||
+        count(buildBlock, new RegExp('\\b' + builderParam + '\\s*:', 'g')) !== 0) {
+        throw new Error('native HDS phone tabs must hide ' + builderParam)
+      }
+      continue
     }
     if (!new RegExp('@BuilderParam\\s+' + builderParam + '\\s*:').test(nativeHost) ||
       count(nativeHost, new RegExp('this\\.' + builderParam + '\\s*\\(', 'g')) !== 1) {
