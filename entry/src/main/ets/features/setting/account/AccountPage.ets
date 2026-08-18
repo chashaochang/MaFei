@@ -306,7 +306,7 @@ export struct AccountPage {
   private feiniuAccountList() {
     ListView({
       isLazyData: false,
-      itemGroupHeader: this.itemGroupHeader,
+      itemGroupHeader: (item, position) => this.itemGroupHeader(item, position),
       itemGroupData: this.ui.groupAccountList,
       itemLayout: (item, index) => this.feiniuItemLayout(item, index),
       enableRefresh: false,
