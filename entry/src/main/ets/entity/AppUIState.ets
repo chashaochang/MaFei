@@ -13,6 +13,7 @@ export class AppUIState {
   @Trace customColorMode: CustomColorMode = CustomColorMode.Auto
   @Trace themeStateReady: boolean = false
   @Trace nativeThemeAvailable: boolean = false
+  @Trace systemMaterialAvailable: boolean = false
   @Trace themePromptPending: boolean = false
   @Trace themeStyle: ThemeStyle = ThemeStyle.Feiniu
   @Trace safeTop: number = 0

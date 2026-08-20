@@ -74,7 +74,7 @@ export struct ColorModePage {
     this.appUIState.customColorMode = mode
   }
 
-  private useNativeMaterial(): boolean {
+  private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.appUIState.themeStyle,
       this.appUIState.nativeThemeAvailable
@@ -212,7 +212,7 @@ export struct ColorModePage {
 
   @Builder
   private themeChoicesSurface() {
-    if (this.useNativeMaterial()) {
+    if (this.useNativeSurface()) {
       this.themeChoicesGroup()
     } else {
       this.feiniuThemeChoicesGroup()
@@ -264,7 +264,7 @@ export struct ColorModePage {
 
   @Builder
   private colorModeSelectorSurface() {
-    if (this.useNativeMaterial()) {
+    if (this.useNativeSurface()) {
       this.colorModeSelector()
     } else {
       this.feiniuColorModeSelector()

@@ -1,3 +1,6 @@
+import { MediaImageRef } from '../../../media/catalog/MediaCatalogModels'
+import { MediaRef } from '../../../media/MediaRef'
+
 export enum MineHistoryMediaType {
   Movie = 'Movie',
   Episode = 'Episode'
@@ -15,15 +18,19 @@ export interface MineHistorySeriesPosition {
 }
 
 export interface MineHistoryCandidate {
-  /** Jellyfin item identifier. */
+  /** Provider-owned item identifier retained for stable list keys. */
   id: string
+  /** Provider/account scoped playable item. */
+  mediaRef: MediaRef
   /** Single-line display title. */
   name: string
   /** Resolved poster URL. */
   image: string
-  /** Jellyfin user-data playback timestamp. */
+  /** Provider-scoped image with request headers and stable cache identity. */
+  imageRef?: MediaImageRef
+  /** Provider playback timestamp. */
   lastPlayedDate: string
-  /** Whether Jellyfin considers the item fully played. */
+  /** Whether the provider considers the item fully played. */
   played: boolean
   /** Current playback percentage. */
   percent: number
@@ -33,6 +40,8 @@ export interface MineHistoryCandidate {
   communityRating?: number
   /** Owning series identifier for episode history. */
   seriesId: string
+  /** Provider/account scoped owning series. */
+  seriesRef?: MediaRef
   /** Current episode season number. */
   seasonNumber?: number
   /** Current episode number. */
@@ -60,14 +69,17 @@ export class MineHistoryPlanner {
       }
       const normalized: MineHistoryItem = {
         id: candidate.id,
+        mediaRef: candidate.mediaRef,
         name: candidate.name.trim(),
         image: candidate.image,
+        imageRef: candidate.imageRef,
         lastPlayedDate: candidate.lastPlayedDate,
         played: candidate.played,
         percent: Math.min(100, Math.max(0, Math.round(candidate.percent))),
         mediaType: candidate.mediaType,
         communityRating: this.normalizedRating(candidate.mediaType, candidate.communityRating),
         seriesId: candidate.seriesId,
+        seriesRef: candidate.seriesRef,
         seasonNumber: this.positiveInteger(candidate.seasonNumber),
         episodeNumber: this.positiveInteger(candidate.episodeNumber),
         latestSeasonNumber: this.positiveInteger(candidate.latestSeasonNumber),

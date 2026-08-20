@@ -1,6 +1,6 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { AppStorageV2, display, mediaquery, window } from '@kit.ArkUI';
+import { AppStorageV2, mediaquery, window } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import { DBManager } from '../data/DBManager';
@@ -11,6 +11,15 @@ import { PlayOptions } from '../player/interaction/PlayOptions';
 export default class PlayerAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener
   windowStage?: window.WindowStage
+
+  private useDefaultWindowDensity(windowStage: window.WindowStage): void {
+    try {
+      windowStage.setDefaultDensityEnabled(true)
+    } catch (error) {
+      hilog.warn(0x0000, 'Mafei',
+        'Failed to enable the default player window density. Cause: %{public}s', String(error))
+    }
+  }
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
@@ -24,7 +33,12 @@ export default class PlayerAbility extends UIAbility {
     let funcAbilityWant = want;
     let playerOptions: PlayOptions = funcAbilityWant?.parameters?.options as PlayOptions
     AppStorage.setOrCreate('playerOptions', playerOptions)
-    this.windowStage?.loadContent('pages/PcPlayerPage', (err) => {
+    const windowStage = this.windowStage
+    if (!windowStage) {
+      return
+    }
+    this.useDefaultWindowDensity(windowStage)
+    windowStage.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
         hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
         return;
@@ -39,6 +53,7 @@ export default class PlayerAbility extends UIAbility {
     this.windowStage = windowStage
     // Main window is created, set main page for this ability
     AppStorage.setOrCreate('playerWindowStage', windowStage);
+    this.useDefaultWindowDensity(windowStage)
     windowStage.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
         hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');

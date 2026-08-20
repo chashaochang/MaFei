@@ -1,5 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { ChasePlanner, ChasePlannerItem } from '../main/ets/features/home/chasing/ChasePlanner';
+import { MediaProviderKind } from '../main/ets/media/MediaProviderKind';
+import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef';
 
 export default function localUnitTest() {
   describe('ChasePlanner', () => {
@@ -73,6 +75,26 @@ export default function localUnitTest() {
       )
 
       expect(result.totalCount).assertEqual(1)
+    })
+
+    it('preservesMediaReferencesAcrossNormalizedSections', 0, () => {
+      const continueRef = new MediaRef(MediaProviderKind.Jellyfin, 'account', 'episode-continue',
+        MediaRefKind.Episode)
+      const nextUpRef = new MediaRef(MediaProviderKind.Jellyfin, 'account', 'episode-next',
+        MediaRefKind.Episode)
+      const completedRef = new MediaRef(MediaProviderKind.Jellyfin, 'account', 'series-completed',
+        MediaRefKind.Series)
+
+      const result = new ChasePlanner().plan(
+        [{ id: 'episode-continue', name: 'Continue', image: '', mediaRef: continueRef }],
+        [{ id: 'episode-next', name: 'Next', image: '', mediaRef: nextUpRef }],
+        [{ id: 'series-completed', name: 'Completed', image: '', mediaRef: completedRef,
+          unplayedItemCount: 0 }]
+      )
+
+      expect(result.sections[0].items[0].mediaRef === continueRef).assertTrue()
+      expect(result.sections[1].items[0].mediaRef === nextUpRef).assertTrue()
+      expect(result.sections[2].items[0].mediaRef === completedRef).assertTrue()
     })
   })
 }

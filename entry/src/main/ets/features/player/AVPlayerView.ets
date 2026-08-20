@@ -9,7 +9,11 @@ import { common } from "@kit.AbilityKit";
 import avSessionManager from "../../utils/AVSessionManager";
 import { Constants } from "../../utils/Constants";
 import { PlayStatus, PlayerStatus } from "./PlayStatus";
-import { BaseItemKind, MediaStream } from "sdk/src/main/ets/generated-client/models";
+import {
+  MediaPlaybackItemKind,
+  MediaPlaybackRequestHeader,
+  MediaPlaybackStream
+} from "../../media/playback/MediaPlaybackModels";
 import { QualityOption } from "../../player/qualityoptions/QualityOption";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PlayerPageUIState } from "./PlayerPageUIState";
@@ -20,7 +24,8 @@ import { SmartDialog } from "ohos_smart_dialog";
 import { QueueItem } from "../../entity/QueueItem";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { AppPreference } from "../../data/AppPreference";
-import { ImageKnifeComponent } from "@ohos/imageknifepro";
+import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro";
+import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter'
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 import { PlaybackInfoCard } from "../../player/ui/PlaybackInfoCard";
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
@@ -43,6 +48,15 @@ function menuItemStyle() {
   .backgroundColor('rgba(255,255,255,0.2)')
   .width('100%')
   .layoutWeight(1)
+}
+
+function queueImageOption(item: QueueItem): ImageKnifeOption {
+  const option = createMediaImageKnifeOption(item.imageRef, item.image)
+  option.objectFit = ImageFit.Cover
+  option.border = {
+    radius: 8
+  }
+  return option
 }
 
 @ComponentV2
@@ -151,8 +165,8 @@ export struct AVPlayerView {
   }
 
   @Param @Require onNext: () => void
-  @Param @Require onAudioTrackSelected: (stream: MediaStream) => void
-  @Param @Require onSubtitleSelected: (stream: MediaStream) => void
+  @Param @Require onAudioTrackSelected: (stream: MediaPlaybackStream) => void
+  @Param @Require onSubtitleSelected: (stream: MediaPlaybackStream) => void
   @Param @Require onQualitySelected: (option: QualityOption) => void
   @Param @Require onEpisodeChange: (index: number) => void
   @Param @Require stopCast: () => void
@@ -669,6 +683,7 @@ export struct AVPlayerView {
       if (this.duration > 0) {
         this.progressValue = (time / this.duration) * 100
       }
+      this.vm.reportPlaybackProgress(time, false)
     })
 
     player.on('durationUpdate', (duration: number) => {
@@ -707,11 +722,35 @@ export struct AVPlayerView {
     try {
       this.avPlayer = await media.createAVPlayer()
       this.setAVPlayerCallbacks(this.avPlayer)
-      this.avPlayer.url = this.videoUrl
+      await this.configureSource(this.avPlayer)
     } catch (err) {
       this.loadingVisible = Visibility.None
       this.replayVisible = Visibility.Visible
     }
+  }
+
+  private async configureSource(player: media.AVPlayer): Promise<void> {
+    const headers = this.toHeaderRecord(this.ui.videoHeaders)
+    if (headers) {
+      const mediaSource = media.createMediaSourceWithUrl(this.videoUrl, headers)
+      await player.setMediaSource(mediaSource)
+      return
+    }
+    player.url = this.videoUrl
+  }
+
+  private toHeaderRecord(headers: MediaPlaybackRequestHeader[]): Record<string, string> | undefined {
+    const result: Record<string, string> = {}
+    let count = 0
+    for (const header of headers) {
+      const name = header.name.trim()
+      if (name.length === 0 || header.value.length === 0) {
+        continue
+      }
+      result[name] = header.value
+      count++
+    }
+    return count > 0 ? result : undefined
   }
 
   private startPlay() {
@@ -732,6 +771,7 @@ export struct AVPlayerView {
     this.avPlayer?.pause()
     this.ui.CONTROL_PlayStatus = PlayStatus.PAUSE
     this.ui.playerStatus = PlayerStatus.PAUSED
+    this.vm.reportPlaybackProgress(this.currentPosition, true, true)
   }
 
   private stop() {
@@ -749,6 +789,7 @@ export struct AVPlayerView {
     if (this.avPlayer && this.ui.CONTROL_PlayStatus === PlayStatus.PAUSE) {
       try {
         this.avPlayer.play()
+        this.vm.reportPlaybackProgress(this.currentPosition, false, true)
       } catch (err) {
       }
     } else if (this.videoUrl) {
@@ -848,7 +889,14 @@ export struct AVPlayerView {
 
   private async loadSeekPreviewFrame(positionMs: number, requestToken: number): Promise<void> {
     try {
-      const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
+      if (!this.isSeekPreviewAvailable()) {
+        return
+      }
+      const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(
+        this.videoUrl,
+        positionMs,
+        this.ui.videoHeaders
+      )
       if (requestToken !== this.seekPreviewRequestToken) {
         pixelMap?.release()
         return
@@ -884,10 +932,14 @@ export struct AVPlayerView {
   }
 
   private prepareSeekPreview(): void {
-    if (this.videoUrl.length === 0) {
+    if (this.videoUrl.length === 0 || !this.isSeekPreviewAvailable()) {
       return
     }
-    void this.seekPreviewHelper.prepare(this.videoUrl)
+    void this.seekPreviewHelper.prepare(this.videoUrl, this.ui.videoHeaders)
+  }
+
+  private isSeekPreviewAvailable(): boolean {
+    return this.vm.mediaSourceOrNull?.capabilities.framePreviewAvailable === true
   }
 
   private speedFromString(s: string): media.PlaybackSpeed {
@@ -987,7 +1039,7 @@ export struct AVPlayerView {
   @Builder
   private nativeAudioMenu(): void {
     Menu() {
-      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+      ForEach(this.ui.audioStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: (item.DisplayTitle ?? '') as string
         }).selectIcon(true)
@@ -998,13 +1050,15 @@ export struct AVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
   private legacyAudioMenu(): void {
     Menu() {
-      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+      ForEach(this.ui.audioStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: (item.DisplayTitle ?? '') as string
         }).selectIcon(true)
@@ -1029,7 +1083,7 @@ export struct AVPlayerView {
   @Builder
   private nativeSubtitleMenu(): void {
     Menu() {
-      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+      ForEach(this.ui.subtitleStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: (item.DisplayTitle ?? '') as string
         }).selectIcon(true)
@@ -1040,13 +1094,15 @@ export struct AVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
   private legacySubtitleMenu(): void {
     Menu() {
-      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+      ForEach(this.ui.subtitleStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: (item.DisplayTitle ?? '') as string
         }).selectIcon(true)
@@ -1082,7 +1138,9 @@ export struct AVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
@@ -1109,13 +1167,7 @@ export struct AVPlayerView {
           ListItem() {
             Row({ space: 12 }) {
               ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: item.image,
-                  objectFit: ImageFit.Cover,
-                  border: {
-                    radius: 8
-                  }
-                }
+                imageKnifeOption: queueImageOption(item)
               })
                 .width(112)
                 .aspectRatio(16 / 9)
@@ -1328,7 +1380,9 @@ export struct AVPlayerView {
       right: this.vm.appUIState.safeTop + 12
     })
     .borderRadius(26)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
   }
 
@@ -1376,7 +1430,9 @@ export struct AVPlayerView {
       .height(44)
       .width(128)
       .borderRadius(22)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true,
+        this.vm.appUIState.systemMaterialAvailable))
       .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
     }
     .width('calc(100% - 88vp)')
@@ -1607,7 +1663,7 @@ export struct AVPlayerView {
         // })
 
         Blank().layoutWeight(1)
-        if (this.ui.mediaType == BaseItemKind.Episode) {
+        if (this.ui.mediaType == MediaPlaybackItemKind.Episode) {
           Text('选集')
             .fontColor(Color.White)
             .fontSize(16)
@@ -1679,7 +1735,9 @@ export struct AVPlayerView {
       right: this.vm.appUIState.safeTop + 12
     })
     .borderRadius(24)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder

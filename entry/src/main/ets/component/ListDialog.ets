@@ -95,7 +95,10 @@ function nativeListDialog(args: DialogArgs) {
     topRight: 16
   })
   .clip(true)
-  .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+  .attributeModifier(AppThemeSurfaceResolver.modifier(
+    AppThemeMaterialRole.Floating,
+    true
+  ))
 }
 
 @Builder

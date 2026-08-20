@@ -1,10 +1,9 @@
 import { HMRouterMgr } from "@hadss/hmrouter"
-import { ImageKnifeComponent } from "@ohos/imageknifepro"
+import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { HOME_RECENT_MEDIA_ID, HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
 import { HomeViewModel } from "./HomeViewModel"
 import { UIConstants } from "../../../common/UIConstants"
-import { BaseItemKind } from "sdk/src/main/ets/generated-client/models"
-import { playItems } from "../../../common/CommonFunc"
+import { playMediaRefs } from "../../../common/CommonFunc"
 import { HomeRefreshEvent } from "../../../events/Events"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { ToastUtil } from "../../../utils/ToastUtil"
@@ -21,6 +20,10 @@ import { HomeFeedTabItem, HomeLibraryChipSelector } from "./HomeLibraryChipSelec
 import { curves } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
 import { HomeInitialSkeleton } from './HomeInitialSkeleton'
+import { MediaLibraryKind } from '../../../media/catalog/MediaCatalogModels'
+import { createMediaImageKnifeOption } from '../../../media/catalog/MediaImageKnifeAdapter'
+import { MediaRef, MediaRefKind } from '../../../media/MediaRef'
+import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
@@ -52,6 +55,12 @@ export struct HomeTab {
   @Local latestChipStripMenuReserved: boolean = false
   private heroProgressTimer: number = -1
   private nativeHeroSpringCurve: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30)
+
+  private playItem(item: VideoItem): void {
+    if (item.mediaRef) {
+      playMediaRefs([item.mediaRef], this.getUIContext().getHostContext()!)
+    }
+  }
 
   private cancelHeroProgressStart(): void {
     if (this.heroProgressTimer >= 0) {
@@ -222,19 +231,41 @@ export struct HomeTab {
   }
 
   private openHeroDetails(item: VideoItem): void {
-    const seriesId = item.seriesId || ''
-    const openSeries = item.type === BaseItemKind.Series ||
-      (item.type === BaseItemKind.Episode && seriesId.length > 0)
-    const targetId = item.type === BaseItemKind.Episode && seriesId.length > 0 ? seriesId : item.id
+    const kind = item.kind || item.mediaRef?.kind
+    const seriesRef: MediaRef | undefined = item.seriesRef
+    const openSeries = kind === MediaRefKind.Series ||
+      (kind === MediaRefKind.Episode && seriesRef !== undefined)
+    const targetRef = kind === MediaRefKind.Episode && seriesRef ? seriesRef : item.mediaRef
+    const targetId = targetRef?.id || item.seriesId || item.id
     const mediaName = item.mediaName ||
-      (openSeries ? '电视节目' : item.type === BaseItemKind.Movie ? '电影' : '')
+      (openSeries ? '电视节目' : kind === MediaRefKind.Movie ? '电影' : '')
     HMRouterMgr.to(RouterConsts.VideoDetailPage)
       .withParam({
         id: targetId,
+        ref: targetRef ? toMediaRouteRefData(targetRef) : undefined,
         mediaName: mediaName,
         isTvShows: openSeries
       })
       .push()
+  }
+
+  private imageOption(item: MediaItem): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(item.imageRef, item.image)
+    option.objectFit = ImageFit.Contain
+    option.border = {
+      radius: 6
+    }
+    option.placeholderSrc = $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    return option
+  }
+
+  private heroImageOption(item: VideoItem): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(item.imageRef, item.image)
+    option.objectFit = ImageFit.Cover
+    option.placeholderSrc = $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    return option
   }
 
   private syncRootNavigationLiveTvAvailability(): void {
@@ -319,7 +350,11 @@ export struct HomeTab {
           .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
           .buttonStyle(ButtonStyleMode.TEXTUAL)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.HomeLibraryChip,
+            this.useNativeSurface(),
+            this.vm.appUIState.systemMaterialAvailable
+          ))
           .accessibilityText('直播电视')
           .onClick((): void => {
             HMRouterMgr.to(RouterConsts.LiveTvPage).push()
@@ -335,7 +370,11 @@ export struct HomeTab {
         .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.HomeLibraryChip,
+          this.useNativeSurface(),
+          this.vm.appUIState.systemMaterialAvailable
+        ))
         .accessibilityText('搜索')
         .onClick(() => {
           HMRouterMgr.to(RouterConsts.SearchPage).push()
@@ -542,15 +581,7 @@ export struct HomeTab {
           ListItem() {
             Stack() {
               ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: item.image,
-                  objectFit: ImageFit.Contain,
-                  border: {
-                    radius: 6
-                  },
-                  placeholderSrc: $r('app.media.placeholder_video'),
-                  placeholderObjectFit: ImageFit.CENTER
-                }
+                imageKnifeOption: this.imageOption(item)
               }).height(80)
             }
             .width(150)
@@ -567,13 +598,17 @@ export struct HomeTab {
               this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
             .borderRadius(8)
           }.onClick(() => {
-            if (item.type == undefined) {
-              ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
-              return;
-            } else if (item.type == BaseItemKind.LiveTvChannel) {
+            if (item.libraryKind === MediaLibraryKind.LiveTv || item.kind === MediaRefKind.LiveChannel) {
               HMRouterMgr.to(RouterConsts.LiveTvPage)
                 .push()
               return
+            }
+            if (item.libraryKind !== MediaLibraryKind.Movies &&
+              item.libraryKind !== MediaLibraryKind.Series &&
+              item.libraryKind !== MediaLibraryKind.Mixed &&
+              item.libraryKind !== MediaLibraryKind.Other) {
+              ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
+              return;
             }
             HMRouterMgr.to(RouterConsts.VideoListPage)
               .withParam(item)
@@ -695,7 +730,11 @@ export struct HomeTab {
     .height(44)
     .borderRadius(22)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating,
+      this.useNativeSurface(),
+      this.vm.appUIState.systemMaterialAvailable
+    ))
     .onClick(() => {
       this.openHeroDetails(item)
     })
@@ -734,12 +773,7 @@ export struct HomeTab {
   private nativeHomeHero(item: VideoItem) {
     Stack({ alignContent: Alignment.BottomStart }) {
       ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: item.image,
-          objectFit: ImageFit.Cover,
-          placeholderSrc: $r('app.media.placeholder_video'),
-          placeholderObjectFit: ImageFit.CENTER
-        }
+        imageKnifeOption: this.heroImageOption(item)
       })
         .width('100%')
         .height('100%')
@@ -789,7 +823,7 @@ export struct HomeTab {
           .borderRadius(22)
           .backgroundColor(Color.White)
           .onClick(() => {
-            playItems([item.id], this.getUIContext().getHostContext()!)
+            this.playItem(item)
           })
 
           this.nativeHeroDetailsButton(item)
@@ -824,13 +858,14 @@ export struct HomeTab {
           ListItem() {
             HorizontalVideoCard({
               image: item.image,
+              imageRef: item.imageRef,
               percent: item.percent,
               name: item.name,
               subtitle: item.subtitle,
               index: index
             })
           }.onClick(() => {
-            playItems([item.id], this.getUIContext().getHostContext()!)
+            this.playItem(item)
           })
         }, (item: VideoItem) => item.id)
         ListItem().width(8)
@@ -864,13 +899,14 @@ export struct HomeTab {
           ListItem() {
             HorizontalVideoCard({
               image: item.image,
+              imageRef: item.imageRef,
               percent: item.percent,
               name: item.name,
               subtitle: item.subtitle,
               index: index
             })
           }.onClick(() => {
-            playItems([item.id], this.getUIContext().getHostContext()!)
+            this.playItem(item)
           })
         })
         ListItem().width(8)

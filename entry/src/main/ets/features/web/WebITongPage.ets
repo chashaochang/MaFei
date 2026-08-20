@@ -141,9 +141,11 @@ export struct WebITongPage {
         .height(40)
         .borderRadius(26)
         .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
-        .systemMaterial(this.useNativeSurface() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.InteractiveFloating,
+          this.useNativeSurface(),
+          this.vm.appUIState.systemMaterialAvailable
+        ))
         .onClick(() => {
           if (this.vm.controller?.accessBackward()) {
             this.vm.controller?.backward()
@@ -164,9 +166,11 @@ export struct WebITongPage {
         .height(40)
         .borderRadius(26)
         .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
-        .systemMaterial(this.useNativeSurface() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.InteractiveFloating,
+          this.useNativeSurface(),
+          this.vm.appUIState.systemMaterialAvailable
+        ))
         .onClick(() => {
           HMRouterMgr.pop()
         })
@@ -186,9 +190,11 @@ export struct WebITongPage {
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
           .borderColor($r('app.color.border'))
           .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
-          .systemMaterial(this.useNativeSurface() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.Floating,
+            this.useNativeSurface(),
+            this.vm.appUIState.systemMaterialAvailable
+          ))
           .borderRadius(6)
           .padding({
             left: 12, right: 12
@@ -206,9 +212,11 @@ export struct WebITongPage {
         .height(40)
         .borderRadius(26)
         .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
-        .systemMaterial(this.useNativeSurface() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.InteractiveFloating,
+          this.useNativeSurface(),
+          this.vm.appUIState.systemMaterialAvailable
+        ))
         .onClick(() => {
           try {
             this.vm.controller?.refresh()
@@ -230,9 +238,11 @@ export struct WebITongPage {
         .height(40)
         .borderRadius(26)
         .backgroundBlurStyle(this.useNativeSurface() ? BlurStyle.NONE : BlurStyle.COMPONENT_ULTRA_THIN)
-        .systemMaterial(this.useNativeSurface() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.InteractiveFloating,
+          this.useNativeSurface(),
+          this.vm.appUIState.systemMaterialAvailable
+        ))
         .onClick(() => {
           this.ui.expandControl = !this.ui.expandControl
         })

@@ -1,83 +1,120 @@
-import { PlayerPageViewModel } from "../../features/player/PlayerPageViewModel";
-import { PlayOptions } from "../interaction/PlayOptions";
-import { PlayerException } from "../PlayerException";
-import { JellyfinMediaSource } from "../source/JellyfinMediaSource";
-import { MediaSourceResolver } from "../source/MediaSourceResolver";
-import { getItemsApi, getTvShowsApi, getVideosApi } from "sdk";
+import { AppPreference } from '../../data/AppPreference'
+import { PlayerEngineType } from '../../entity/PlayerEngineType'
+import { PlayerPageViewModel } from '../../features/player/PlayerPageViewModel'
+import { currentMediaPlaybackProvider } from '../../media/MediaPlaybackAccess'
+import { MediaRef } from '../../media/MediaRef'
+import { parseMediaRouteRefData, MediaRouteRefData } from '../../media/navigation/MediaRouteRef'
 import {
-  BaseItemKind,
-  BaseItemDtoQueryResult,
-  DeviceProfile,
-  ItemFields,
-  MediaProtocol,
-  MediaStream,
-  MediaStreamType,
-  PlayMethod} from "sdk/src/main/ets/generated-client/models";
-import { ApiClient } from "../../network/ApiClient";
-import { AxiosResponse } from "@ohos/axios";
-import { Constants } from "../../utils/Constants";
-import { DeviceProfileBuilder } from "../deviceprofile/DeviceProfileBuilder";
-import { AppPreference } from "../../data/AppPreference";
-import { PlayerEngineResolver } from "../PlayerEngineResolver";
-import { PlayerEngineType } from "../../entity/PlayerEngineType";
-import { PlaybackRequestResult } from "./PlaybackRequestResult";
+  MediaPlaybackEngineHint,
+  MediaPlaybackItemKind,
+  MediaPlaybackPreparedStreams,
+  MediaPlaybackQueueItem,
+  MediaPlaybackSource,
+  MediaPlaybackStream,
+  MediaPlaybackStreamType
+} from '../../media/playback/MediaPlaybackModels'
+import { MediaPlaybackProvider } from '../../media/playback/MediaPlaybackProvider'
+import { Constants } from '../../utils/Constants'
+import { PlayOptions } from '../interaction/PlayOptions'
+import { PlayerEngineResolver } from '../PlayerEngineResolver'
+import { PlayerException } from '../PlayerException'
+import { MediaSourceResolver } from '../source/MediaSourceResolver'
+import { PlaybackRequestResult } from './PlaybackRequestResult'
 
 @ObservedV2
 export class QueueManager {
-  private viewModel: PlayerPageViewModel
+  private readonly viewModel: PlayerPageViewModel
+  private readonly playbackProvider: MediaPlaybackProvider
+  private readonly mediaSourceResolver: MediaSourceResolver
 
-  constructor(viewModel: PlayerPageViewModel) {
-    this.viewModel = viewModel
-  }
-
-  @Trace currentQueue: string[] = []
+  @Trace currentQueue: MediaRef[] = []
   @Trace currentQueueIndex: number = 0
-  private mediaSourceResolver: MediaSourceResolver = new MediaSourceResolver()
-  @Trace currentMediaSourceOrNull?: JellyfinMediaSource
+  @Trace currentMediaSourceOrNull?: MediaPlaybackSource
   private playbackRequestEpoch: number = 0
 
-  private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
+  constructor(viewModel: PlayerPageViewModel,
+    playbackProvider: MediaPlaybackProvider = currentMediaPlaybackProvider()) {
+    this.viewModel = viewModel
+    this.playbackProvider = playbackProvider
+    this.mediaSourceResolver = new MediaSourceResolver(playbackProvider)
+  }
 
-  private getCurrentDeviceProfile(): DeviceProfile {
-    return this.deviceProfileBuilder.getDeviceProfile(
-      PlayerEngineResolver.getRequestProfileEngineType(AppPreference.getInstance().getPlayerEngineType())
+  private getCurrentEngineHint(): MediaPlaybackEngineHint {
+    const engineType = PlayerEngineResolver.getRequestProfileEngineType(
+      AppPreference.getInstance().getPlayerEngineType()
     )
+    if (engineType === PlayerEngineType.AV) {
+      return MediaPlaybackEngineHint.PreferAvPlayer
+    }
+    if (engineType === PlayerEngineType.MPV) {
+      return MediaPlaybackEngineHint.PreferMpvHardware
+    }
+    return MediaPlaybackEngineHint.Auto
   }
 
-  private shouldUseIsoStaticStreamFallback(source: JellyfinMediaSource): boolean {
-    const configuredEngine = AppPreference.getInstance().getPlayerEngineType()
-    const container = source.sourceInfo.Container?.trim().toLowerCase()
-    return configuredEngine !== PlayerEngineType.AV &&
-      source.sourceInfo.Protocol == MediaProtocol.File &&
-      container === 'iso'
+  private parseScopedRefs(values: MediaRouteRefData[]): MediaRef[] | undefined {
+    const refs: MediaRef[] = []
+    for (const value of values) {
+      const ref = parseMediaRouteRefData(value)
+      if (!ref || !ref.belongsTo(this.playbackProvider.session)) {
+        return undefined
+      }
+      refs.push(ref)
+    }
+    return refs
   }
 
-  private async createIsoStaticStreamUrl(source: JellyfinMediaSource): Promise<string> {
-    const sourceInfo = source.sourceInfo
-    return await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
-      itemId: source.itemId,
-      container: 'iso',
-      _static: true,
-      playSessionId: source.playSessionId,
-      mediaSourceId: sourceInfo.Id,
-      deviceId: ApiClient.Instance().deviceInfo.id,
-    })
+  private legacyRefs(ids: string[]): MediaRef[] | undefined {
+    const adapter = this.playbackProvider.legacyRefAdapter
+    if (!adapter) {
+      return undefined
+    }
+    const refs: MediaRef[] = []
+    for (const id of ids) {
+      const normalized = id.trim()
+      if (normalized.length === 0) {
+        return undefined
+      }
+      refs.push(adapter.createRef(normalized))
+    }
+    return refs
+  }
+
+  private resolveQueue(options: PlayOptions): MediaRef[] | undefined {
+    if (options.refs.length > 0) {
+      return this.parseScopedRefs(options.refs)
+    }
+    return this.legacyRefs(options.ids)
+  }
+
+  private resolveSingleItem(options: PlayOptions): MediaRef | undefined {
+    if (options.mediaSourceRef) {
+      const ref = parseMediaRouteRefData(options.mediaSourceRef)
+      return ref?.belongsTo(this.playbackProvider.session) ? ref : undefined
+    }
+    if (!options.mediaSourceId) {
+      return undefined
+    }
+    return this.playbackProvider.legacyRefAdapter?.createRef(options.mediaSourceId)
   }
 
   async initializePlaybackQueue(options: PlayOptions): Promise<PlayerException | null> {
-    this.currentQueue = options.ids
-    this.currentQueueIndex = options.startIndex
-    let itemId: string | null
-    if (this.currentQueue.length > 0) {
-      itemId = this.currentQueue[this.currentQueueIndex]
-    } else {
-      itemId = options.mediaSourceId
-    }
-    if (itemId == null) {
+    const queue = this.resolveQueue(options)
+    if (!queue) {
       return PlayerException.InvalidPlayOptions
     }
+    const startIndex = options.startIndex
+    if (queue.length > 0 && (startIndex < 0 || startIndex >= queue.length)) {
+      return PlayerException.InvalidPlayOptions
+    }
+    const itemRef = queue.length > 0 ? queue[startIndex] : this.resolveSingleItem(options)
+    if (!itemRef) {
+      return PlayerException.InvalidPlayOptions
+    }
+    this.currentQueue = queue
+    this.currentQueueIndex = queue.length > 0 ? startIndex : 0
     const result = await this.startPlayback(
-      itemId!,
+      itemRef,
       options.mediaSourceId,
       null,
       options.startPositionTicks,
@@ -100,65 +137,69 @@ export class QueueManager {
     return requestEpoch === this.playbackRequestEpoch
   }
 
+  private async closeSource(source?: MediaPlaybackSource): Promise<void> {
+    if (!source) {
+      return
+    }
+    try {
+      await this.playbackProvider.lifecycle.closeTranscode(source)
+    } catch (error) {
+      console.error(`[QueueManager] Failed to close transcode: ${JSON.stringify(error)}`)
+    }
+  }
+
   async startPlayback(
-    itemId: string,
+    ref: MediaRef,
     mediaSourceId: string | null,
     maxStreamingBitrate: number | null | undefined,
     startTimeTicks: number | null,
     audioStreamIndex: number | null | undefined,
     subtitleStreamIndex: number | null,
     playWhenReady: boolean = true,
-    targetQueueIndex?: number): Promise<PlaybackRequestResult> {
+    targetQueueIndex?: number
+  ): Promise<PlaybackRequestResult> {
     const requestEpoch = ++this.playbackRequestEpoch
-    let jellyfinMediaSource: JellyfinMediaSource | undefined
+    let mediaSource: MediaPlaybackSource | undefined
     const previousMediaSource = this.currentMediaSourceOrNull
     const previousQueueIndex = this.currentQueueIndex
     try {
-      const resolveTask = this.mediaSourceResolver.resolveMediaSource(
-        itemId,
+      mediaSource = await this.mediaSourceResolver.resolveMediaSource(
+        ref,
         mediaSourceId,
-        this.getCurrentDeviceProfile(),
+        this.getCurrentEngineHint(),
         maxStreamingBitrate,
         startTimeTicks,
         audioStreamIndex,
         subtitleStreamIndex,
         playWhenReady
       )
-      if (!resolveTask) {
-        return PlaybackRequestResult.Failure
-      }
-      jellyfinMediaSource = await resolveTask
       if (!this.isPlaybackRequestCurrent(requestEpoch)) {
-        this.viewModel.stopTranscoding(jellyfinMediaSource)
+        await this.closeSource(mediaSource)
         return PlaybackRequestResult.Cancelled
       }
 
-      const streams = await this.prepareStreams(jellyfinMediaSource)
+      const streams = await this.prepareStreams(mediaSource)
       if (!this.isPlaybackRequestCurrent(requestEpoch)) {
-        this.viewModel.stopTranscoding(jellyfinMediaSource)
+        await this.closeSource(mediaSource)
         return PlaybackRequestResult.Cancelled
       }
 
       if (targetQueueIndex !== undefined) {
         this.currentQueueIndex = targetQueueIndex
       }
-      this.currentMediaSourceOrNull = jellyfinMediaSource
+      this.currentMediaSourceOrNull = mediaSource
       try {
-        this.viewModel.load(jellyfinMediaSource, streams, playWhenReady)
-        this.viewModel.getSubtitle(jellyfinMediaSource)
+        this.viewModel.load(mediaSource, streams, playWhenReady)
+        void this.viewModel.getSubtitle(mediaSource)
       } catch (error) {
         this.currentMediaSourceOrNull = previousMediaSource
         this.currentQueueIndex = previousQueueIndex
         throw new Error(`Failed to apply playback source: ${JSON.stringify(error)}`)
       }
-      if (previousMediaSource) {
-        this.viewModel.stopTranscoding(previousMediaSource)
-      }
+      await this.closeSource(previousMediaSource)
       return PlaybackRequestResult.Success
     } catch (error) {
-      if (jellyfinMediaSource) {
-        this.viewModel.stopTranscoding(jellyfinMediaSource)
-      }
+      await this.closeSource(mediaSource)
       if (!this.isPlaybackRequestCurrent(requestEpoch)) {
         return PlaybackRequestResult.Cancelled
       }
@@ -178,13 +219,14 @@ export class QueueManager {
   }
 
   private async restartCurrentPlayback(
-    currentMediaSource: JellyfinMediaSource,
+    currentMediaSource: MediaPlaybackSource,
     position: number,
     maxStreamingBitrate: number | null | undefined,
     audioStreamIndex: number | null | undefined,
-    subtitleStreamIndex: number | null): Promise<PlaybackRequestResult> {
+    subtitleStreamIndex: number | null
+  ): Promise<PlaybackRequestResult> {
     const result = await this.startPlayback(
-      currentMediaSource.itemId,
+      currentMediaSource.ref,
       currentMediaSource.id,
       maxStreamingBitrate,
       position * Constants.TICKS_PER_MILLISECOND,
@@ -197,25 +239,18 @@ export class QueueManager {
     return result
   }
 
-  /**
-   * Change the maximum bitrate to the specified value.
-   */
   async changeBitrate(bitrate?: number): Promise<PlaybackRequestResult> {
-    let currentMediaSource = this.currentMediaSourceOrNull
+    const currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
       return PlaybackRequestResult.Failure
     }
-
-    // Bitrate didn't change, ignore
     if (currentMediaSource.maxStreamingBitrate == bitrate) {
       return PlaybackRequestResult.Success
     }
-
-    let position = this.viewModel.getPositionAndPause()
+    const position = this.viewModel.getPositionAndPause()
     if (!this.isValidPlaybackPosition(position)) {
       return PlaybackRequestResult.Failure
     }
-
     return await this.restartCurrentPlayback(
       currentMediaSource,
       position,
@@ -234,16 +269,11 @@ export class QueueManager {
   }
 
   async previous(): Promise<PlaybackRequestResult> {
-    if (!this.hasPrevious()) {
-      return PlaybackRequestResult.Failure
-    }
-
-    if (!this.currentMediaSourceOrNull) {
+    if (!this.hasPrevious() || !this.currentMediaSourceOrNull) {
       return PlaybackRequestResult.Failure
     }
     const targetQueueIndex = this.currentQueueIndex - 1
-    let currentMediaSource = this.currentMediaSourceOrNull
-
+    const currentMediaSource = this.currentMediaSourceOrNull
     const result = await this.startPlayback(
       this.currentQueue[targetQueueIndex],
       null,
@@ -259,13 +289,10 @@ export class QueueManager {
   }
 
   async next(): Promise<PlaybackRequestResult> {
-    if (!this.hasNext()) {
+    if (!this.hasNext() || !this.currentMediaSourceOrNull) {
       return PlaybackRequestResult.Failure
     }
-    if (!this.currentMediaSourceOrNull) {
-      return PlaybackRequestResult.Failure
-    }
-    let currentMediaSource = this.currentMediaSourceOrNull
+    const currentMediaSource = this.currentMediaSourceOrNull
     const targetQueueIndex = this.currentQueueIndex + 1
     const result = await this.startPlayback(
       this.currentQueue[targetQueueIndex],
@@ -282,13 +309,10 @@ export class QueueManager {
   }
 
   async changeEpisode(index: number): Promise<PlaybackRequestResult> {
-    if (!this.currentMediaSourceOrNull) {
+    if (!this.currentMediaSourceOrNull || index < 0 || index >= this.currentQueue.length) {
       return PlaybackRequestResult.Failure
     }
-    if (index < 0 || index >= this.currentQueue.length) {
-      return PlaybackRequestResult.Failure
-    }
-    let currentMediaSource = this.currentMediaSourceOrNull
+    const currentMediaSource = this.currentMediaSourceOrNull
     const result = await this.startPlayback(
       this.currentQueue[index],
       null,
@@ -303,111 +327,32 @@ export class QueueManager {
     return result
   }
 
-
-  async prepareStreams(source: JellyfinMediaSource): Promise<string[]> {
-    let videoSource = await this.createVideoMediaSource(source)
-    let subtitleSources = this.createExternalSubtitleMediaSources(source)
-    return [videoSource, ...subtitleSources]
+  async prepareStreams(source: MediaPlaybackSource): Promise<MediaPlaybackPreparedStreams> {
+    return await this.playbackProvider.prepareStreams(source)
   }
 
-  createExternalSubtitleMediaSources(source: JellyfinMediaSource): string[] {
-    return source.externalSubtitleStreams.map(stream => {
-      return stream.deliveryUrl
-    })
+  createExternalSubtitleMediaSources(source: MediaPlaybackSource): string[] {
+    return source.externalSubtitleStreams.map((stream): string => stream.deliveryUrl)
   }
 
-  async createVideoMediaSource(source: JellyfinMediaSource): Promise<string> {
-    let sourceInfo = source.sourceInfo
-    if (this.shouldUseIsoStaticStreamFallback(source)) {
-      const isoStaticUrl = await this.createIsoStaticStreamUrl(source)
-      console.info(
-        `[PlaybackUrl] playMethod=IsoStaticFallback, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
-        `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
-        `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${isoStaticUrl}`
-      )
-      return isoStaticUrl
-    }
-    switch (source.playMethod) {
-      case PlayMethod.DirectPlay:
-        if (sourceInfo.Protocol == MediaProtocol.File) {
-          const staticUrl = await getVideosApi(ApiClient.Instance()).getVideoStream({
-            itemId: source.itemId,
-            _static: true,
-            playSessionId: source.playSessionId,
-            mediaSourceId: sourceInfo.Id,
-            deviceId: ApiClient.Instance().deviceInfo.id,
-          })
-          console.info(
-            `[PlaybackUrl] playMethod=DirectPlay/File, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
-            `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
-            `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${staticUrl}`
-          )
-          return staticUrl
-        } else if (sourceInfo.Protocol == MediaProtocol.Http) {
-          console.info(
-            `[PlaybackUrl] playMethod=DirectPlay/Http, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
-            `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
-            `finalUrl=${sourceInfo.Path ?? 'none'}`
-          )
-          return sourceInfo.Path!
-        } else {
-          throw new Error(`Unsupported protocol ${sourceInfo.Protocol}`)
-        }
-      case PlayMethod.DirectStream:
-        let container = sourceInfo.Container
-        if (container) {
-          const directStreamUrl = await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
-            itemId: source.itemId,
-            container: container,
-            playSessionId: source.playSessionId,
-            mediaSourceId: source.id,
-            deviceId: ApiClient.Instance().deviceInfo.id,
-          })
-          console.info(
-            `[PlaybackUrl] playMethod=DirectStream, itemId=${source.itemId}, mediaSourceId=${source.id}, ` +
-            `container=${container}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
-            `sourcePath=${sourceInfo.Path ?? 'none'}, finalUrl=${directStreamUrl}`
-          )
-          return directStreamUrl
-        } else {
-          throw new Error('Missing direct stream container')
-        }
-      case PlayMethod.Transcode:
-        let transcodingPath = sourceInfo.TranscodingUrl
-        if (transcodingPath) {
-          let protocol = sourceInfo.TranscodingSubProtocol
-          if (protocol == 'hls') {
-            let transcodingUrl = ApiClient.Instance().createUrl(transcodingPath)
-            console.info(
-              `[PlaybackUrl] playMethod=Transcode, itemId=${source.itemId}, mediaSourceId=${sourceInfo.Id ?? 'none'}, ` +
-              `container=${sourceInfo.Container ?? 'unknown'}, isoType=${sourceInfo.IsoType ?? 'none'}, ` +
-              `sourcePath=${sourceInfo.Path ?? 'none'}, transcodingPath=${transcodingPath}, finalUrl=${transcodingUrl}`
-            )
-            return transcodingUrl
-          } else {
-            throw new Error(`Unsupported transcode protocol "${protocol}"`)
-          }
-        } else {
-          throw new Error('Missing transcode URL')
-        }
-    }
+  async createVideoMediaSource(source: MediaPlaybackSource): Promise<string> {
+    return (await this.playbackProvider.prepareStreams(source)).videoUrl
   }
 
-  async selectAudioStreamAndRestartPlayback(selectedMediaStream: MediaStream): Promise<PlaybackRequestResult> {
-    // 验证选中的是音频流
-    if (selectedMediaStream.Type !== MediaStreamType.Audio) {
-      throw new Error('Selected stream must be an audio stream');
+  async selectAudioStreamAndRestartPlayback(
+    selectedMediaStream: MediaPlaybackStream
+  ): Promise<PlaybackRequestResult> {
+    if (selectedMediaStream.Type !== MediaPlaybackStreamType.Audio) {
+      throw new Error('Selected stream must be an audio stream')
     }
-
-    let currentMediaSource = this.currentMediaSourceOrNull
+    const currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
       return PlaybackRequestResult.Failure
     }
-    let position = this.viewModel.getPositionAndPause()
+    const position = this.viewModel.getPositionAndPause()
     if (!this.isValidPlaybackPosition(position)) {
       return PlaybackRequestResult.Failure
     }
-
     return await this.restartCurrentPlayback(
       currentMediaSource,
       position,
@@ -417,21 +362,20 @@ export class QueueManager {
     )
   }
 
-  async selectSubtitleStreamAndRestartPlayback(selectedMediaStream?: MediaStream): Promise<PlaybackRequestResult> {
-    // 验证选中的是字幕
-    if (selectedMediaStream?.Type !== MediaStreamType.Subtitle) {
-      throw new Error('Selected stream must be an subtitle stream');
+  async selectSubtitleStreamAndRestartPlayback(
+    selectedMediaStream?: MediaPlaybackStream
+  ): Promise<PlaybackRequestResult> {
+    if (selectedMediaStream && selectedMediaStream.Type !== MediaPlaybackStreamType.Subtitle) {
+      throw new Error('Selected stream must be an subtitle stream')
     }
-
-    let currentMediaSource = this.currentMediaSourceOrNull
+    const currentMediaSource = this.currentMediaSourceOrNull
     if (!currentMediaSource) {
       return PlaybackRequestResult.Failure
     }
-    let position = this.viewModel.getPositionAndPause()
+    const position = this.viewModel.getPositionAndPause()
     if (!this.isValidPlaybackPosition(position)) {
       return PlaybackRequestResult.Failure
     }
-
     return await this.restartCurrentPlayback(
       currentMediaSource,
       position,
@@ -441,51 +385,27 @@ export class QueueManager {
     )
   }
 
-  async getItems(): Promise<AxiosResponse<BaseItemDtoQueryResult>> {
-    return getItemsApi(ApiClient.Instance()).getItems({
-      ids: this.currentQueue
-    })
+  async getItems(): Promise<MediaPlaybackQueueItem[]> {
+    return await this.playbackProvider.getQueueItems(this.currentQueue)
   }
 
   async expandEpisodeQueueIfNeeded(): Promise<boolean> {
     const currentMediaSource = this.currentMediaSourceOrNull
-    if (!currentMediaSource) {
+    if (!currentMediaSource || this.currentQueue.length > 1 ||
+      currentMediaSource.item.Type !== MediaPlaybackItemKind.Episode) {
       return false
     }
-    const currentItem = currentMediaSource.item
-    if (this.currentQueue.length > 1 || currentItem.Type !== BaseItemKind.Episode || !currentItem.SeriesId) {
-      return false
-    }
-
-    return getTvShowsApi(ApiClient.Instance()).getEpisodes({
-      userId: ApiClient.Instance().userId,
-      fields: [ItemFields.Chapters, ItemFields.Trickplay],
-      isMissing: false,
-      seriesId: currentItem.SeriesId,
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      const episodeItems = res.data?.Items
-      if (!episodeItems || episodeItems.length <= 1) {
+    try {
+      const queue = await this.playbackProvider.expandEpisodeQueue(currentMediaSource)
+      if (!queue || this.currentMediaSourceOrNull?.ref.identity !== currentMediaSource.ref.identity) {
         return false
       }
-      if (this.currentMediaSourceOrNull?.itemId !== currentMediaSource.itemId) {
-        return false
-      }
-      const ids = episodeItems.map<string>((item) => item.Id!).filter((id) => id.length > 0)
-      const currentIndex = ids.findIndex((id) => id === currentMediaSource.itemId)
-      if (ids.length <= 1 || currentIndex < 0) {
-        return false
-      }
-      this.currentQueue = ids
-      this.currentQueueIndex = currentIndex
+      this.currentQueue = queue.refs.slice()
+      this.currentQueueIndex = queue.currentIndex
       return true
-    }).catch(() => false)
-  }
-
-  async getItem(id: string): Promise<AxiosResponse<BaseItemDtoQueryResult>> {
-    return getItemsApi(ApiClient.Instance()).getItems({
-      ids: Array.of(id),
-      includeItemTypes: ['Series','Movie'],
-      fields: ['Overview', 'Genres'],
-    })
+    } catch (error) {
+      console.error(`[QueueManager] Failed to expand episode queue: ${JSON.stringify(error)}`)
+      return false
+    }
   }
 }

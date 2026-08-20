@@ -94,8 +94,20 @@ export function validateManagementActivity(sources) {
     /openMedia[\s\S]*try\s*\{[\s\S]*management_activity_item_unavailable[\s\S]*HMRouterMgr\.to[\s\S]*catch\s*\([^)]*\)[\s\S]*management_activity_item_failed/,
     'activity media loading and navigation must catch non-404 failures')
   requirePattern(sources, managementActivityPaths.page,
-    /deviceInfo\.sdkApiVersion\s*>=\s*26[\s\S]*AppThemeSurfaceResolver\.material\s*\(\s*AppThemeMaterialRole\.Floating\s*\)[\s\S]*disabledSystemMaterial\s*\(\s*\)[\s\S]*else\s*\{[\s\S]*showDialog/,
-    'activity overview dialog must use themed API 26 material with a legacy fallback')
+    /AppThemeOverlayPolicy\.resolve\s*\([\s\S]*OverlaySurfaceRole\.AppFloating[\s\S]*this\.vm\.appUIState\.systemMaterialAvailable[\s\S]*this\.vm\.appUIState\.nativeThemeAvailable/,
+    'activity overlays must use the runtime system-material capability')
+  requirePattern(sources, managementActivityPaths.page,
+    /showOverview[\s\S]*OverlayMaterialDecision\.UseBlurFallback[\s\S]*backgroundColor:\s*Color\.Transparent[\s\S]*backgroundBlurStyle:\s*BlurStyle\.Thin/,
+    'activity overview must provide the API 24-25 blur fallback')
+  requirePattern(sources, managementActivityPaths.page,
+    /showOverview[\s\S]*OverlayMaterialDecision\.UseFloatingMaterial[\s\S]*systemMaterial:\s*AppThemeSurfaceResolver\.material\s*\(\s*AppThemeMaterialRole\.Floating\s*\)/,
+    'activity overview must provide the system-material branch')
+  requirePattern(sources, managementActivityPaths.page,
+    /showOverview[\s\S]*OverlayMaterialDecision\.DisableSystemMaterial[\s\S]*systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\s*\(\s*\)/,
+    'activity overview must preserve the disabled-material legacy branch')
+  rejectPattern(sources, managementActivityPaths.page,
+    /deviceInfo\.sdkApiVersion\s*>=\s*26/,
+    'activity overlays must not hard-code an API 26 SDK guard')
   for (const path of [
     managementActivityPaths.baseStrings,
     managementActivityPaths.zhStrings,

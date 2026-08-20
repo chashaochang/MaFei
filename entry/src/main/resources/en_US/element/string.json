@@ -2779,6 +2779,150 @@
     {
       "name": "photo_info_load_failed",
       "value": "Could not load photo details"
+    },
+    {
+      "name": "feiniu_video_service_name",
+      "value": "Feiniu Video"
+    },
+    {
+      "name": "feiniu_video_connect_title",
+      "value": "Connect to Feiniu Video"
+    },
+    {
+      "name": "feiniu_video_address_placeholder",
+      "value": "FNID or server address"
+    },
+    {
+      "name": "feiniu_video_login_action",
+      "value": "Sign in"
+    },
+    {
+      "name": "feiniu_video_logging_in",
+      "value": "Signing in"
+    },
+    {
+      "name": "feiniu_video_password_notice",
+      "value": "Your password is used only for this sign-in and is not stored in the app"
+    },
+    {
+      "name": "feiniu_video_username_placeholder",
+      "value": "Username"
+    },
+    {
+      "name": "feiniu_video_password_placeholder",
+      "value": "Password"
+    },
+    {
+      "name": "feiniu_video_connection_error",
+      "value": "Could not connect to Feiniu Video. Check the FNID, server address, and network"
+    },
+    {
+      "name": "feiniu_video_invalid_address_error",
+      "value": "Enter a valid FNID or HTTP/HTTPS server address"
+    },
+    {
+      "name": "feiniu_video_invalid_credentials_error",
+      "value": "Sign-in failed. Check the username and password"
+    },
+    {
+      "name": "feiniu_video_login_failed_error",
+      "value": "Could not sign in to Feiniu Video. Try again later"
+    },
+    {
+      "name": "feiniu_video_invalid_response_error",
+      "value": "Feiniu Video returned an invalid response. Check the service and try again"
+    },
+    {
+      "name": "feiniu_video_credentials_required_error",
+      "value": "Enter a username and password"
+    },
+    {
+      "name": "feiniu_video_session_expired",
+      "value": "Your Feiniu Video sign-in has expired. Sign in again"
+    },
+    {
+      "name": "account_add_title",
+      "value": "Add account"
+    },
+    {
+      "name": "account_add_description",
+      "value": "Choose a media service to connect"
+    },
+    {
+      "name": "provider_jellyfin_name",
+      "value": "Jellyfin"
+    },
+    {
+      "name": "provider_jellyfin_description",
+      "value": "Connect an existing Jellyfin server"
+    },
+    {
+      "name": "provider_feiniu_video_description",
+      "value": "Connect Feiniu Video with an FNID or server address"
+    },
+    {
+      "name": "jellyfin_connect_title",
+      "value": "Connect to Jellyfin"
+    },
+    {
+      "name": "account_history_title",
+      "value": "Sign-in history"
+    },
+    {
+      "name": "account_switch_title",
+      "value": "Switch account"
+    },
+    {
+      "name": "account_current",
+      "value": "Current account"
+    },
+    {
+      "name": "account_empty",
+      "value": "No saved accounts"
+    },
+    {
+      "name": "account_delete_title",
+      "value": "Delete account"
+    },
+    {
+      "name": "account_delete_message",
+      "value": "Delete this account?"
+    },
+    {
+      "name": "account_delete_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "account_delete_confirm",
+      "value": "Delete"
+    },
+    {
+      "name": "account_switch_failed",
+      "value": "Could not switch accounts. Try again later"
+    },
+    {
+      "name": "account_delete_failed",
+      "value": "Could not delete the account. Try again later"
+    },
+    {
+      "name": "jellyfin_session_expired",
+      "value": "Your Jellyfin sign-in has expired. Sign in again"
+    },
+    {
+      "name": "feiniu_video_restore_failed_title",
+      "value": "Feiniu Video is temporarily unavailable"
+    },
+    {
+      "name": "feiniu_video_restore_connection_error",
+      "value": "Your account and sign-in data are preserved. Check the network and try again"
+    },
+    {
+      "name": "common_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "account_choose_other",
+      "value": "Choose another account"
     }
   ]
 }

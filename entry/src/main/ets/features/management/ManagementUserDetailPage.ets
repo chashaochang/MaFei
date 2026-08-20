@@ -1,5 +1,4 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { PageState } from '../../common/base/BaseUIState';
 import { RouterConsts } from '../../common/RouterConsts';
 import { UIConstants } from '../../common/UIConstants';
@@ -9,6 +8,11 @@ import {
   AppThemeMaterialRole,
   AppThemeSurfaceResolver
 } from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementPermissionState } from './ManagementModels';
@@ -79,6 +83,15 @@ export struct ManagementUserDetailPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private dangerousDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
   }
 
   private primaryTextColor(): ResourceColor {
@@ -168,7 +181,7 @@ export struct ManagementUserDetailPage {
   }
 
   private confirmResetPassword(): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_reset_password_title'),
         message: $r('app.string.management_user_reset_password_message'),
@@ -208,7 +221,7 @@ export struct ManagementUserDetailPage {
   }
 
   private confirmClearPassword(): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_clear_password_title'),
         message: $r('app.string.management_user_clear_password_message'),
@@ -255,7 +268,7 @@ export struct ManagementUserDetailPage {
   }
 
   private confirmRemoveAvatar(): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_remove_avatar_title'),
         message: $r('app.string.management_user_remove_avatar_message'),
@@ -329,7 +342,7 @@ export struct ManagementUserDetailPage {
   }
 
   private confirmDelete(): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_delete_title'),
         message: `${this.getString('management_user_delete_message')} ${this.ui.userName}\n\n${
@@ -446,7 +459,7 @@ export struct ManagementUserDetailPage {
   }
 
   private showUnsavedDialog(onContinue: () => void): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_unsaved_title'),
         message: $r('app.string.management_user_unsaved_message'),
@@ -601,9 +614,8 @@ export struct ManagementUserDetailPage {
       .borderRadius(this.useNativeMaterial() ? 22 : 10)
       .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
         AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
-      .systemMaterial(this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-        AppThemeSurfaceResolver.disabledSystemMaterial())
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
       .enabled(!this.vm.isSaving())
       .accessibilityText($r('app.string.management_user_change_avatar'))
       .onClick(() => this.updateAvatar())
@@ -617,9 +629,8 @@ export struct ManagementUserDetailPage {
         .height(44)
         .borderRadius(this.useNativeMaterial() ? 22 : 10)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
@@ -768,9 +779,8 @@ export struct ManagementUserDetailPage {
         .height(42)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
@@ -868,9 +878,8 @@ export struct ManagementUserDetailPage {
         .borderRadius(this.useNativeMaterial() ? 20 : 8)
         .fontColor(this.secondaryTextColor())
         .backgroundColor(Color.Transparent)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .onClick(() => this.vm.discardCurrentTab())
       Button(this.currentStatus() === ManagementUserOperationStatus.Saving ?
         $r('app.string.management_user_saving') : $r('app.string.management_user_save'),
@@ -880,9 +889,8 @@ export struct ManagementUserDetailPage {
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(this.useNativeMaterial() ? 20 : 10)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .enabled(this.currentStatus() !== ManagementUserOperationStatus.Saving)
         .onClick(() => this.vm.saveCurrentTab())
     }
@@ -896,7 +904,7 @@ export struct ManagementUserDetailPage {
       this.saveBarContent()
     }
     .width('100%')
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
   }
 
   @Builder
@@ -934,9 +942,8 @@ export struct ManagementUserDetailPage {
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
           .borderRadius(this.useNativeMaterial() ? 20 : 10)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.reload())
       }
     }

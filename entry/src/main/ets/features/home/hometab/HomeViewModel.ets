@@ -1,49 +1,25 @@
-import { AxiosError, AxiosInstance, AxiosResponse } from "@ohos/axios";
-import { getItemsApi, getTvShowsApi, getUserLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
+import { BaseViewModel } from "../../../common/base/BaseViewModel"
+import { currentMediaCatalogProvider } from "../../../media/MediaCatalogAccess"
 import {
-  BaseItemDto,
-  BaseItemDtoQueryResult,
-  BaseItemKind,
-  CollectionType,
-  ImageType,
-  ItemFields,
-  RecommendationDto,
-} from "sdk/src/main/ets/generated-client/models";
-import { BaseViewModel } from "../../../common/base/BaseViewModel";
-import {
-  getItemBackDropImageUrl,
-  getItemImageUrl,
-  getTypeByCollectionType
-} from "../../../common/CommonFunc";
-import { ApiClient } from "../../../network/ApiClient";
+  MediaImageRef,
+  MediaLibrary,
+  MediaLibraryKind,
+  MediaPage,
+  MediaSummary
+} from "../../../media/catalog/MediaCatalogModels"
+import { MediaCatalogProvider } from "../../../media/catalog/MediaCatalogProvider"
+import { MediaRefKind } from "../../../media/MediaRef"
 import {
   HOME_RECENT_MEDIA_ID,
   HomeUIState,
   MediaItem,
   VideoItem
-} from "./HomeUIState";
+} from "./HomeUIState"
 
 const HOME_FEED_PAGE_SIZE: number = 30
-const HOME_RECENT_LIBRARY_LIMIT: number = 16
-
-interface HomeFeedSourceItem {
-  item: BaseItemDto
-  mediaName: string
-}
-
-interface HomeFeedPage {
-  items: HomeFeedSourceItem[]
-  nextStartIndex: number
-  hasMore: boolean
-}
-
-interface HomeRecentLibraryPage {
-  media: MediaItem
-  items: BaseItemDto[]
-}
 
 export class HomeViewModel extends BaseViewModel<HomeUIState> {
-  imageApi: ImageUrlsApi = new ImageUrlsApi()
+  private catalog?: MediaCatalogProvider
   private initialLoadCompleted: boolean = false
   private initVersion: number = 0
   private latestStartIndexes: Map<string, number> = new Map<string, number>()
@@ -58,19 +34,45 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     if (!this.initialLoadCompleted) {
       this.ui.initialLoading = true
     }
-    // 使用 Promise 链，init 立即返回不阻塞
-    this.getMediaList().then(() => {
+    let catalog: MediaCatalogProvider
+    try {
+      catalog = currentMediaCatalogProvider()
+    } catch (_error) {
+      this.catalog = undefined
+      this.clearUnavailableCatalogState()
+      this.finishInit(requestVersion)
+      return
+    }
+    this.catalog = catalog
+    this.getMediaList(catalog, requestVersion).then(() => {
       return Promise.all([
-        this.getRecommendationList(),
-        this.getResumeList(),
-        this.getNextUpList(),
-        this.getLatestList()
+        this.getRecommendationList(catalog, requestVersion),
+        this.getResumeList(catalog, requestVersion),
+        this.getNextUpList(catalog, requestVersion),
+        this.getLatestList(catalog, requestVersion)
       ])
     }).then(() => {
       this.finishInit(requestVersion)
     }).catch(() => {
       this.finishInit(requestVersion)
     })
+  }
+
+  private clearUnavailableCatalogState(): void {
+    this.ui.mediaList = []
+    this.ui.resumeList = []
+    this.ui.recommendationList = []
+    this.ui.nextUpList = []
+    this.ui.latestMediaList = []
+    this.ui.latestMap = new Map<string, VideoItem[]>()
+    this.ui.hasLiveTv = false
+    if (this.appUIState.rootNavigationHomeHeroVisible) {
+      this.appUIState.rootNavigationHomeHeroVisible = false
+    }
+  }
+
+  private isCurrentRequest(catalog: MediaCatalogProvider, requestVersion: number): boolean {
+    return this.catalog === catalog && this.initVersion === requestVersion
   }
 
   private finishInit(requestVersion: number): void {
@@ -82,27 +84,18 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.ui.isRefreshing = false
   }
 
-  private getRecommendationList(): Promise<void> {
-    const api = ApiClient.Instance()
-    const axiosInstance = api.axiosInstance as AxiosInstance
-    const requestUrl = `${api.basePath}/Movies/Recommendations?userId=${encodeURIComponent(api.userId)}` +
-      '&categoryLimit=4&itemLimit=4&fields=Overview%2CPrimaryImageAspectRatio'
-    return axiosInstance.get<RecommendationDto[]>(requestUrl, {
-      headers: { Authorization: api.authorizationHeader }
-    }).then((res: AxiosResponse<RecommendationDto[]>) => {
-      const recommendations: VideoItem[] = []
-      const seenIds: Set<string> = new Set<string>()
-      const groups: RecommendationDto[] = res.data || []
-      for (let groupIndex = 0; groupIndex < groups.length && recommendations.length < 6; groupIndex++) {
-        const items: BaseItemDto[] = groups[groupIndex].Items || []
-        for (let itemIndex = 0; itemIndex < items.length && recommendations.length < 6; itemIndex++) {
-          const mapped = mapRecommendationItem(items[itemIndex], this.imageApi)
-          if (mapped && !seenIds.has(mapped.id)) {
-            seenIds.add(mapped.id)
-            recommendations.push(mapped)
-          }
-        }
+  private getRecommendationList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
+    return catalog.recommendations({
+      categoryLimit: 4,
+      itemLimit: 4,
+      resultLimit: 6
+    }).then((items: MediaSummary[]) => {
+      if (!this.isCurrentRequest(catalog, requestVersion)) {
+        return
       }
+      const recommendations: VideoItem[] = items.map((item: MediaSummary): VideoItem => {
+        return mapRecommendationItem(item)
+      })
       this.ui.recommendationList = recommendations
       const heroVisible = recommendations.length > 0
       if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {
@@ -112,121 +105,58 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     })
   }
 
-  private getMediaList(): Promise<void> {
-    this.ui.hasLiveTv = false
-    return new Promise((resolve, reject) => {
-      getUserViewsApi(ApiClient.Instance()).getUserViews({
-        userId: ApiClient.Instance().userId
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res.data) {
-          if (res.data.TotalRecordCount && res.data.TotalRecordCount > 0) {
-            this.ui.mediaList = res.data.Items?.map<MediaItem>((e: BaseItemDto) => {
-              if (e.CollectionType == CollectionType.Livetv) {
-                this.ui.hasLiveTv = true
-              }
-              return {
-                name: e.Name || '',
-                image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary, {
-                  tag: e.ImageTags?.[ImageType.Primary]
-                }),
-                id: e.Id || '',
-                childCount: e.ChildCount || 0,
-                type: getTypeByCollectionType(e.CollectionType),
-                collectionType: e.CollectionType
-              }
-            }) || []
-            resolve()
-          } else {
-            resolve()
-          }
-        } else {
-          resolve()
-        }
-      }).catch((e: AxiosError) => {
-        resolve()
-      })
+  private getMediaList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
+    if (this.isCurrentRequest(catalog, requestVersion)) {
+      this.ui.hasLiveTv = false
+    }
+    return catalog.getLibraries().then((libraries: MediaLibrary[]) => {
+      if (!this.isCurrentRequest(catalog, requestVersion)) {
+        return
+      }
+      this.ui.mediaList = libraries.map((library: MediaLibrary): MediaItem => mapLibraryItem(library))
+      this.ui.hasLiveTv = catalog.session.capabilities.liveTv && libraries.some(
+        (library: MediaLibrary): boolean => library.kind === MediaLibraryKind.LiveTv)
+    }).catch(() => {
     })
   }
 
-  private getResumeList(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      ///Users/4ce4745330314948b8791958423de149/Items/Resume?Limit=12&Recursive=true&Fields=PrimaryImageAspectRatio&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CThumb&EnableTotalRecordCount=false&MediaTypes=Video
-      getItemsApi(ApiClient.Instance()).getResumeItems({
-        limit: 12,
-        fields: [ItemFields.PrimaryImageAspectRatio],
-        imageTypeLimit: 1,
-        enableImages: true,
-        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
-        enableTotalRecordCount: false,
-        mediaTypes: ['Video'],
-        userId: ApiClient.Instance().userId
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res && res.data) {
-          if (res.data.Items && res.data.Items.length > 0) {
-            let list = res.data.Items.map<VideoItem>((e: BaseItemDto) => {
-              return mapResumeItem(e, new ImageUrlsApi());
-            }) || []
-            this.ui.resumeList = list
-
-            resolve()
-          } else {
-            resolve()
-          }
-        } else {
-          resolve()
-        }
-      }).catch((e: Error) => {
-        resolve()
-      })
+  private getResumeList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
+    return catalog.resume({
+      kinds: [MediaRefKind.Movie, MediaRefKind.Episode, MediaRefKind.Video],
+      limit: 12
+    }).then((page: MediaPage<MediaSummary>) => {
+      if (!this.isCurrentRequest(catalog, requestVersion)) {
+        return
+      }
+      this.ui.resumeList = page.items.map((item: MediaSummary): VideoItem => mapResumeItem(item))
+    }).catch(() => {
     })
   }
 
-  private getNextUpList(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      let now = new Date()
-      now.setFullYear(now.getFullYear() - 1)
-      //Shows/NextUp?Limit=24&UserId=4ce4745330314948b8791958423de149&ImageTypeLimit=1&EnableImageTypes=Primary%2CBackdrop%2CBanner%2CThumb&EnableTotalRecordCount=false&DisableFirstEpisode=false&NextUpDateCutoff=2024-10-13T18%3A57%3A41.687Z&EnableResumable=false&EnableRewatching=false
-      getTvShowsApi(ApiClient.Instance()).getNextUp({
-        limit: 24,
-        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
-          ItemFields.MediaSourceCount],
-        userId: ApiClient.Instance().userId,
-        imageTypeLimit: 1,
-        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb],
-        enableTotalRecordCount: false,
-        disableFirstEpisode: false,
-        nextUpDateCutoff: (now).toISOString(),
-        enableResumable: false,
-        enableRewatching: false
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        if (res && res.data) {
-          if (res.data.Items && res.data.Items.length > 0) {
-            let list = res.data.Items.map<VideoItem>((e: BaseItemDto) => {
-              return {
-                id: e.Id || '',
-                name: e.SeriesName || '',
-                image: getItemBackDropImageUrl(e) || resolveImageUrl(e, this.imageApi),
-                subtitle: `S${e.ParentIndexNumber}:E${e.IndexNumber} - ${e.Name}`,
-              }
-            }) || []
-            this.ui.nextUpList = list
-
-            resolve()
-          } else {
-            resolve()
-          }
-        } else {
-          resolve()
-        }
-      }).catch((e: Error) => {
-        resolve()
-      })
+  private getNextUpList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
+    const now = new Date()
+    now.setFullYear(now.getFullYear() - 1)
+    return catalog.nextUp({
+      limit: 24,
+      dateCutoff: now.toISOString(),
+      disableFirstEpisode: false,
+      enableResumable: false,
+      enableRewatching: false
+    }).then((page: MediaPage<MediaSummary>) => {
+      if (!this.isCurrentRequest(catalog, requestVersion)) {
+        return
+      }
+      this.ui.nextUpList = page.items.map((item: MediaSummary): VideoItem => mapNextUpItem(item))
+    }).catch(() => {
     })
   }
 
-  private getLatestList(): Promise<void> {
+  private getLatestList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
+    if (!this.isCurrentRequest(catalog, requestVersion)) {
+      return Promise.resolve()
+    }
     this.latestRequestVersion += 1
-    const requestVersion = this.latestRequestVersion
+    const latestRequestVersion = this.latestRequestVersion
     this.latestStartIndexes = new Map<string, number>()
     this.latestHasMoreById = new Map<string, boolean>()
     this.latestLoadedIds = new Set<string>()
@@ -241,7 +171,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.ui.latestMediaLoadingMore = false
     this.ui.latestMediaHasMore = true
     this.ui.latestMediaLoadFailed = false
-    return this.loadLatestMediaPage(this.ui.selectedLatestMediaId, true, requestVersion)
+    return this.loadLatestMediaPage(
+      this.ui.selectedLatestMediaId, true, latestRequestVersion, catalog)
   }
 
   selectLatestMedia(id: string): void {
@@ -278,8 +209,10 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.loadLatestMediaPage(id, currentItems.length === 0, this.latestRequestVersion)
   }
 
-  private loadLatestMediaPage(id: string, replace: boolean, requestVersion: number): Promise<void> {
-    if (this.latestLoadingIds.has(id)) {
+  private loadLatestMediaPage(id: string, replace: boolean, requestVersion: number,
+    requestedCatalog?: MediaCatalogProvider): Promise<void> {
+    const catalog = requestedCatalog || this.catalog
+    if (!catalog || this.catalog !== catalog || this.latestLoadingIds.has(id)) {
       return Promise.resolve()
     }
     this.latestLoadingIds.add(id)
@@ -291,77 +224,19 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     }
     const media = id === HOME_RECENT_MEDIA_ID ? undefined :
       this.ui.latestMediaList.find((item: MediaItem): boolean => item.id === id)
-    let request: Promise<HomeFeedPage>
-    if (id === HOME_RECENT_MEDIA_ID) {
-      const latestRequests: Promise<HomeRecentLibraryPage>[] = this.ui.mediaList
-        .filter((library: MediaItem): boolean => isLegacyHomeLatestLibrary(library))
-        .map(
-          (library: MediaItem): Promise<HomeRecentLibraryPage> => {
-            return getUserLibraryApi(ApiClient.Instance()).getLatestMedia({
-              userId: ApiClient.Instance().userId,
-              parentId: library.id,
-              limit: HOME_RECENT_LIBRARY_LIMIT,
-              fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
-              imageTypeLimit: 1,
-              enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
-            }).then((res: AxiosResponse<BaseItemDto[]>): HomeRecentLibraryPage => {
-              return {
-                media: library,
-                items: res.data || []
-              }
-            }).catch((): HomeRecentLibraryPage => {
-              return {
-                media: library,
-                items: []
-              }
-            })
-          })
-      request = Promise.all(latestRequests).then((pages: HomeRecentLibraryPage[]): HomeFeedPage => {
-        const items = interleaveRecentLibraryItems(pages, HOME_FEED_PAGE_SIZE)
-        return {
-          items: items,
-          nextStartIndex: items.length,
-          hasMore: false
-        }
-      })
-    } else {
-      request = getItemsApi(ApiClient.Instance()).getItems({
-        userId: ApiClient.Instance().userId,
-        parentId: media?.id,
-        recursive: true,
-        startIndex: startIndex,
-        limit: HOME_FEED_PAGE_SIZE,
-        includeItemTypes: homeFeedItemTypes(media),
-        sortBy: ['DateCreated'],
-        sortOrder: ['Descending'],
-        fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
-          ItemFields.MediaSourceCount],
-        imageTypeLimit: 1,
-        enableImages: true,
-        enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>): HomeFeedPage => {
-        const items: BaseItemDto[] = res.data?.Items || []
-        const nextStartIndex = startIndex + items.length
-        const totalCount = res.data?.TotalRecordCount || 0
-        return {
-          items: items.map((item: BaseItemDto): HomeFeedSourceItem => {
-            return {
-              item: item,
-              mediaName: media?.name || ''
-            }
-          }),
-          nextStartIndex: nextStartIndex,
-          hasMore: items.length === HOME_FEED_PAGE_SIZE &&
-            (totalCount === 0 || nextStartIndex < totalCount)
-        }
-      })
-    }
-    return request.then((page: HomeFeedPage) => {
-      if (requestVersion !== this.latestRequestVersion) {
+    return catalog.latest({
+      libraryRef: media?.mediaRef,
+      kinds: homeFeedItemTypes(media),
+      startIndex: startIndex,
+      limit: HOME_FEED_PAGE_SIZE,
+      recursive: true
+    }).then((page: MediaPage<MediaSummary>) => {
+      if (requestVersion !== this.latestRequestVersion || this.catalog !== catalog) {
         return
       }
-      const mappedItems: VideoItem[] = page.items.map((source: HomeFeedSourceItem): VideoItem => {
-        return mapHomeFeedItem(source.item, source.mediaName || '最近添加', this.imageApi)
+      const mediaName = media?.name || '最近添加'
+      const mappedItems: VideoItem[] = page.items.map((item: MediaSummary): VideoItem => {
+        return mapHomeFeedItem(item, mediaName)
       })
       const previousItems: VideoItem[] = replace ? [] : (this.ui.latestMap.get(id) || [])
       const mergedItems: VideoItem[] = appendUniqueVideoItems(previousItems, mappedItems)
@@ -369,16 +244,18 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       nextMap.set(id, mergedItems)
       this.ui.latestMap = nextMap
       this.latestStartIndexes.set(id, page.nextStartIndex)
-      this.latestHasMoreById.set(id, page.hasMore)
+      const hasMore = id === HOME_RECENT_MEDIA_ID ? false : page.hasMore
+      this.latestHasMoreById.set(id, hasMore)
       this.latestLoadedIds.add(id)
       if (this.ui.selectedLatestMediaId === id) {
         this.ui.latestMediaLoading = false
         this.ui.latestMediaLoadingMore = false
-        this.ui.latestMediaHasMore = page.hasMore
+        this.ui.latestMediaHasMore = hasMore
         this.ui.latestMediaLoadFailed = false
       }
     }).catch(() => {
-      if (requestVersion === this.latestRequestVersion && this.ui.selectedLatestMediaId === id) {
+      if (requestVersion === this.latestRequestVersion && this.catalog === catalog &&
+        this.ui.selectedLatestMediaId === id) {
         this.ui.latestMediaLoading = false
         this.ui.latestMediaLoadingMore = false
         this.ui.latestMediaLoadFailed = true
@@ -393,7 +270,7 @@ export function resolveLatestMediaSelection(currentId: string, mediaList: MediaI
   if (currentId === HOME_RECENT_MEDIA_ID) {
     return HOME_RECENT_MEDIA_ID
   }
-  if (mediaList.some((item: MediaItem) => item.id === currentId)) {
+  if (mediaList.some((item: MediaItem): boolean => item.id === currentId)) {
     return currentId
   }
   return HOME_RECENT_MEDIA_ID
@@ -401,214 +278,118 @@ export function resolveLatestMediaSelection(currentId: string, mediaList: MediaI
 
 export function appendUniqueVideoItems(current: VideoItem[], incoming: VideoItem[]): VideoItem[] {
   const result: VideoItem[] = current.slice()
-  const ids: Set<string> = new Set<string>()
+  const identities: Set<string> = new Set<string>()
   result.forEach((item: VideoItem): void => {
-    ids.add(item.id)
+    identities.add(videoItemIdentity(item))
   })
   incoming.forEach((item: VideoItem): void => {
-    if (!ids.has(item.id)) {
-      ids.add(item.id)
+    const identity = videoItemIdentity(item)
+    if (!identities.has(identity)) {
+      identities.add(identity)
       result.push(item)
     }
   })
   return result
 }
 
-function interleaveRecentLibraryItems(pages: HomeRecentLibraryPage[], limit: number): HomeFeedSourceItem[] {
-  const result: HomeFeedSourceItem[] = []
-  let itemIndex = 0
-  let appended = true
-  while (result.length < limit && appended) {
-    appended = false
-    for (let pageIndex = 0; pageIndex < pages.length && result.length < limit; pageIndex++) {
-      const page = pages[pageIndex]
-      const item = page.items[itemIndex]
-      if (item) {
-        result.push({
-          item: item,
-          mediaName: page.media.name
-        })
-        appended = true
-      }
-    }
-    itemIndex += 1
-  }
-  return result
-}
-
-function isLegacyHomeLatestLibrary(item: MediaItem): boolean {
-  return item.type !== BaseItemKind.LiveTvChannel && item.type !== BaseItemKind.Audio
+function videoItemIdentity(item: VideoItem): string {
+  return item.mediaRef?.identity || item.id
 }
 
 export function isSupportedHomeVideoLibrary(item: MediaItem): boolean {
-  return item.collectionType === undefined ||
-    item.collectionType === CollectionType.Unknown ||
-    item.collectionType === CollectionType.Movies ||
-    item.collectionType === CollectionType.Tvshows ||
-    item.collectionType === CollectionType.Homevideos ||
-    item.collectionType === CollectionType.Folders
+  return item.libraryKind === undefined || item.libraryKind === MediaLibraryKind.Movies ||
+    item.libraryKind === MediaLibraryKind.Series || item.libraryKind === MediaLibraryKind.Mixed ||
+    item.libraryKind === MediaLibraryKind.Other
 }
 
-export function homeFeedItemTypes(media?: MediaItem): BaseItemKind[] {
+export function homeFeedItemTypes(media?: MediaItem): MediaRefKind[] {
   if (!media) {
-    return [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode, BaseItemKind.Video]
+    return [MediaRefKind.Movie, MediaRefKind.Series, MediaRefKind.Episode, MediaRefKind.Video]
   }
-  if (media.type === BaseItemKind.Movie) {
-    return [BaseItemKind.Movie]
+  if (media.libraryKind === MediaLibraryKind.Movies || media.kind === MediaRefKind.Movie) {
+    return [MediaRefKind.Movie]
   }
-  if (media.type === BaseItemKind.Series) {
-    return [BaseItemKind.Series]
+  if (media.libraryKind === MediaLibraryKind.Series || media.kind === MediaRefKind.Series) {
+    return [MediaRefKind.Series]
   }
-  return [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Video]
+  return [MediaRefKind.Movie, MediaRefKind.Series, MediaRefKind.Video]
 }
 
-function mapHomeFeedItem(item: BaseItemDto, mediaName: string, imageApi: ImageUrlsApi): VideoItem {
-  let subtitle = item.ProductionYear ? item.ProductionYear.toString() : ''
-  if (item.Type === BaseItemKind.Episode) {
-    subtitle = `S${item.ParentIndexNumber || 0}:E${item.IndexNumber || 0} - ${item.Name || ''}`
-  }
-  const seriesId = item.SeriesId || ''
-  if (item.Type === BaseItemKind.Episode && seriesId.length > 0) {
-    const tag = item.SeriesPrimaryImageTag
-    return {
-      id: seriesId,
-      name: item.SeriesName || item.Name || '',
-      image: ApiClient.Instance().basePath + imageApi.getItemImageUrlById(
-        seriesId,
-        ImageType.Primary,
-        tag ? { tag: tag } : {}
-      ),
-      seriesId: seriesId,
-      subtitle: subtitle,
-      mediaName: '电视节目',
-      type: BaseItemKind.Series
-    }
-  }
+function mapLibraryItem(library: MediaLibrary): MediaItem {
   return {
-    id: item.Id || '',
-    name: item.Name || '',
-    image: getItemImageUrl(item),
-    seriesId: item.SeriesId || undefined,
-    subtitle: subtitle,
-    mediaName: item.Type === BaseItemKind.Movie ? '电影' : mediaName,
-    type: item.Type
+    name: library.title,
+    image: library.primaryImage?.url || '',
+    mediaRef: library.ref,
+    imageRef: library.primaryImage,
+    id: library.ref.id,
+    childCount: library.itemCount,
+    kind: libraryContentKind(library.kind),
+    libraryKind: library.kind
   }
 }
 
-function resolveImageUrl(e: BaseItemDto, imageApi: ImageUrlsApi, baseFallback?: string): string {
-  // 预取各类型标签
-  const tags = e.ImageTags || {};
-  const thumbTag = tags[ImageType.Thumb];
-  const primaryTag = tags[ImageType.Primary];
-  const backdropTags: string[] = e.BackdropImageTags || [];
-
-  if (e.ParentThumbItemId) {
-    return imageApi.getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb, { tag: thumbTag });
+function libraryContentKind(kind: MediaLibraryKind): MediaRefKind | undefined {
+  if (kind === MediaLibraryKind.Movies) {
+    return MediaRefKind.Movie
   }
-
-  if (e.ParentBackdropItemId) {
-    return imageApi.getItemImageUrlById(e.ParentBackdropItemId, ImageType.Backdrop, { tag: thumbTag });
+  if (kind === MediaLibraryKind.Series) {
+    return MediaRefKind.Series
   }
-
-  // 如果自身有 Thumb
-  if (thumbTag) {
-    return imageApi.getItemImageUrlById(e.Id, ImageType.Thumb, { tag: thumbTag });
+  if (kind === MediaLibraryKind.LiveTv) {
+    return MediaRefKind.LiveChannel
   }
-
-  // 自身 Primary
-  if (primaryTag) {
-    return imageApi.getItemImageUrlById(e.Id, ImageType.Primary, { tag: primaryTag });
-  }
-
-  // 自身 Backdrop 第一张
-  if (backdropTags.length > 0) {
-    return imageApi.getItemImageUrlById(e.Id, ImageType.Backdrop, { tag: backdropTags[0] });
-  }
-
-  // Episode 特殊：父级缩略图
-  if (e.Type === BaseItemKind.Episode) {
-    // ParentThumbItemId
-    if (e.ParentThumbItemId) {
-      return imageApi.getItemImageUrlById(e.ParentThumbItemId, ImageType.Thumb);
-    }
-    // SeriesId 回退
-    if (e.SeriesId) {
-      return imageApi.getItemImageUrlById(e.SeriesId, ImageType.Primary);
-    }
-    // SeasonId 回退
-    if (e.SeasonId) {
-      return imageApi.getItemImageUrlById(e.SeasonId, ImageType.Primary);
-    }
-  }
-
-  // 通用父级 Backdrop
-  if (e.ParentBackdropItemId && e.ParentBackdropImageTags?.length) {
-    return imageApi.getItemImageUrlById(
-      e.ParentBackdropItemId,
-      ImageType.Backdrop,
-      { tag: e.ParentBackdropImageTags[0] }
-    );
-  }
-
-  // 失败则占位图
-  return baseFallback || '/assets/placeholder-video.png';
+  return undefined
 }
 
-function mapResumeItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem {
-  let name = '';
-  let subtitle = '';
-  switch (e.Type) {
-    case BaseItemKind.Movie:
-      name = e.Name || '';
-      subtitle = '电影';
-      break;
-    case BaseItemKind.Episode:
-      name = e.SeriesName || e.Name || '';
-      subtitle = `${e.SeasonName || ''} · ${e.Name || ''}`;
-      break;
-    default:
-      name = e.Name || '';
-      subtitle = e.Type || '';
-      break;
-  }
+function mapHomeFeedItem(item: MediaSummary, mediaName: string): VideoItem {
+  return mapSummaryItem(item, item.primaryImage, item.ref.kind === MediaRefKind.Movie ? '电影' : mediaName)
+}
 
+function mapResumeItem(item: MediaSummary): VideoItem {
+  const mapped = mapSummaryItem(item, preferredLandscapeImage(item), mediaNameForKind(item.ref.kind))
+  mapped.percent = Math.round(item.userState.watched.playedPercentage)
+  return mapped
+}
+
+function mapNextUpItem(item: MediaSummary): VideoItem {
+  return mapSummaryItem(item, preferredLandscapeImage(item), '电视节目')
+}
+
+function mapRecommendationItem(item: MediaSummary): VideoItem {
+  return mapSummaryItem(item, preferredLandscapeImage(item), mediaNameForKind(item.ref.kind))
+}
+
+function mapSummaryItem(item: MediaSummary, image: MediaImageRef | undefined,
+  mediaName: string): VideoItem {
   return {
-    id: e.Id || '',
-    name,
-    subtitle,
-    image: getItemBackDropImageUrl(e) || resolveImageUrl(e, new ImageUrlsApi()),
-    seriesId: e.SeriesId || undefined,
-    type: e.Type,
-    percent: e.UserData?.PlayedPercentage ? Math.round(e.UserData.PlayedPercentage) : 0
-  };
+    id: item.ref.id,
+    name: item.title,
+    image: image?.url || '',
+    mediaRef: item.ref,
+    imageRef: image,
+    kind: item.ref.kind,
+    seriesRef: item.seriesRef,
+    seriesId: item.seriesRef?.id,
+    mediaName: mediaName,
+    subtitle: item.subtitle || (item.year !== undefined ? item.year.toString() : ''),
+    description: item.overview,
+    score: item.communityRating,
+    tags: item.tags.slice(),
+    canDelete: item.canDelete,
+    path: item.path
+  }
 }
 
-function mapRecommendationItem(e: BaseItemDto, imageApi: ImageUrlsApi): VideoItem | undefined {
-  if (!e.Id || e.Type !== BaseItemKind.Movie) {
-    return undefined
+function preferredLandscapeImage(item: MediaSummary): MediaImageRef | undefined {
+  return item.backdropImage || item.thumbnailImage || item.primaryImage
+}
+
+function mediaNameForKind(kind: MediaRefKind): string {
+  if (kind === MediaRefKind.Movie) {
+    return '电影'
   }
-  const metadata: string[] = ['电影']
-  if (e.ProductionYear) {
-    metadata.push(e.ProductionYear.toString())
+  if (kind === MediaRefKind.Series || kind === MediaRefKind.Episode || kind === MediaRefKind.Season) {
+    return '电视节目'
   }
-  if (e.CommunityRating) {
-    metadata.push(`${e.CommunityRating.toFixed(1)} 分`)
-  }
-  let image = ''
-  if (e.BackdropImageTags && e.BackdropImageTags.length > 0) {
-    image = ApiClient.Instance().basePath + imageApi.getItemImageUrlById(
-      e.Id, ImageType.Backdrop, { tag: e.BackdropImageTags[0] })
-  } else {
-    image = getItemBackDropImageUrl(e) || resolveImageUrl(e, imageApi)
-  }
-  return {
-    id: e.Id,
-    name: e.Name || '',
-    image: image,
-    mediaName: '电影',
-    type: e.Type,
-    subtitle: metadata.join(' · '),
-    description: e.Overview || '',
-    score: e.CommunityRating || undefined
-  }
+  return ''
 }

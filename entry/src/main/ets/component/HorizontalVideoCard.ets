@@ -6,11 +6,14 @@ import { AppThemeTokens } from "../theme/AppThemeTokens";
 import { ColorUtils } from "../utils/ColorUtils";
 import { FeiniuPointLightModifier } from "../theme/FeiniuPointLightModifier";
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
+import { MediaImageRef } from "../media/catalog/MediaCatalogModels";
+import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter";
 
 @ComponentV2
 export struct HorizontalVideoCard {
   //图片
   @Require @Param image: string
+  @Param imageRef?: MediaImageRef = undefined
   //标题
   @Param name: string = ''
   //副标题
@@ -22,20 +25,22 @@ export struct HorizontalVideoCard {
   @Local pointLightColor: string = '#FFFFFF'
   private imageLoadCompleted: boolean = false
   private pointLightColorSource: string = ''
-  @Local option: ImageKnifeOption = {
-    loadSrc: this.image,
-    objectFit: ImageFit.Cover,
-    border: {
+  @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  private imageOption(): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(this.imageRef, this.image)
+    option.objectFit = ImageFit.Cover
+    option.border = {
       radius: 10
-    },
-    placeholderSrc: $r('app.media.placeholder_video'),
-    placeholderObjectFit: ImageFit.CENTER,
-    onComplete: () => {
+    }
+    option.placeholderSrc = $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    option.onComplete = () => {
       this.imageLoadCompleted = true
       this.refreshPointLightColor()
     }
+    return option
   }
-  @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
 
   @Monitor('appUIState.feiniuPointLightEnabled')
   onPointLightEnabledChange(): void {
@@ -46,26 +51,30 @@ export struct HorizontalVideoCard {
 
   private refreshPointLightColor(): void {
     if (!this.imageLoadCompleted || !this.appUIState.feiniuPointLightEnabled ||
-      this.index !== 0 || this.image.length === 0) {
+      this.index !== 0 || this.imageSource().length === 0) {
       return
     }
-    const image = this.image
+    const image = this.imageSource()
     if (this.pointLightColorSource === image) {
       return
     }
     this.pointLightColorSource = image
     ColorUtils.extractLeftEdgeColor(image).then((color) => {
-      if (this.image === image) {
+      if (this.imageSource() === image) {
         this.pointLightColor = color
       }
     })
+  }
+
+  private imageSource(): string {
+    return this.imageRef?.url || this.image
   }
 
   build() {
     Column({ space: 8 }) {
       Stack() {
         ImageKnifeComponent({
-          imageKnifeOption: this.option
+          imageKnifeOption: this.imageOption()
         })
           .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
           .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))

@@ -10,6 +10,7 @@ const overlayPath = 'entry/src/main/ets/features/sample/SampleOverlay.ets'
 const globalPath = 'entry/src/main/ets/component/GlobalMaterial.ets'
 const sharedPath = 'entry/src/main/ets/component/SharedCard.ets'
 const dialogPath = 'entry/src/main/ets/features/sample/SampleDialog.ets'
+const modifierPath = 'entry/src/main/ets/theme/AppThemeSurfaceModifier.ets'
 
 function validPage() {
   return [
@@ -145,6 +146,24 @@ test('accepts an unregistered material attribute in a component build method', (
     '}'
   ].join('\n'))
   assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
+test('accepts the shared API-gated AttributeModifier as the single system material owner', () => {
+  const sources = validSources()
+  sources.set(modifierPath, [
+    'export class AppThemeSurfaceModifier implements AttributeModifier<CommonAttribute> {',
+    '  applyNormalAttribute(instance: CommonAttribute): void {',
+    '    instance.systemMaterial(this.systemMaterial)',
+    '  }',
+    '}'
+  ].join('\n'))
+  const contract = validContract()
+  contract.attributeOwners.push({
+    path: modifierPath,
+    component: 'AppThemeSurfaceModifier',
+    method: 'applyNormalAttribute'
+  })
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, contract))
 })
 
 test('accepts an unregistered systemMaterial option in an ordinary class method', () => {
@@ -440,6 +459,69 @@ test('finds a legacy-only visual inside nested loading and Native branches', () 
     ].join('\n')
   ))
   assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+})
+
+test('allows an opaque legacy color only in an explicit disabled overlay-material branch', () => {
+  const sources = validSources()
+  sources.set(pagePath, validPage().replace(
+    '  build() {',
+    [
+      '  private overlayDialog(decision: OverlayMaterialDecision): void {',
+      '    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {',
+      "      this.showDialog({ backgroundColor: $r('app.color.bg_1') })",
+      '    }',
+      '  }',
+      '  build() {'
+    ].join('\n')
+  ))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+
+  sources.set(pagePath, sources.get(pagePath).replace(
+    'decision === OverlayMaterialDecision.DisableSystemMaterial',
+    'decision === OverlayMaterialDecision.UseFloatingMaterial'
+  ))
+  assert.throws(
+    () => validateNativeThemePageContracts(sources, validContract()),
+    /opaque legacy background can reach the Native theme: .*#overlayDialog/
+  )
+})
+
+test('allows the legacy fallthrough only after every AppFloating material decision returns', () => {
+  const sources = validSources()
+  const overlayOptions = [
+    '  private floatingDecision(): OverlayMaterialDecision {',
+    '    return AppThemeOverlayPolicy.resolve(OverlaySurfaceRole.AppFloating, this.themeStyle, true, true)',
+    '  }',
+    '  private overlayOptions(): SheetOptions {',
+    '    const decision = this.floatingDecision()',
+    '    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {',
+    '      return { backgroundColor: Color.Transparent }',
+    '    }',
+    '    if (decision === OverlayMaterialDecision.UseBlurFallback) {',
+    '      return { backgroundColor: Color.Transparent }',
+    '    }',
+    '    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {',
+    '      return { backgroundColor: Color.Transparent }',
+    '    }',
+    "    return { backgroundColor: $r('app.color.bg_1') }",
+    '  }'
+  ].join('\n')
+  sources.set(pagePath, validPage().replace('  build() {', overlayOptions + '\n  build() {'))
+  assert.doesNotThrow(() => validateNativeThemePageContracts(sources, validContract()))
+
+  sources.set(pagePath, sources.get(pagePath).replace(
+    [
+      '    if (decision === OverlayMaterialDecision.UseBlurFallback) {',
+      '      return { backgroundColor: Color.Transparent }',
+      '    }',
+      ''
+    ].join('\n'),
+    ''
+  ))
+  assert.throws(
+    () => validateNativeThemePageContracts(sources, validContract()),
+    /opaque legacy background can reach the Native theme: .*#overlayOptions/
+  )
 })
 
 test('rejects legacy borders and hardcoded placeholders in audited Native paths', () => {

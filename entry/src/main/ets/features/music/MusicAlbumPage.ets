@@ -123,7 +123,9 @@ export struct MusicAlbumPage {
       .width(44)
       .height(44)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive, nativeSurface,
+        this.vm.appUIState.systemMaterialAvailable))
       .enabled(!this.ui.favoritePending)
       .accessibilityText(this.ui.album?.favorite ?
         $r('app.string.music_unfavorite') : $r('app.string.music_favorite'))
@@ -182,7 +184,9 @@ export struct MusicAlbumPage {
       .borderRadius(24)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.PrimaryInteractive, nativeSurface,
+        this.vm.appUIState.systemMaterialAvailable))
       .enabled(this.ui.tracks.length > 0)
       .accessibilityText($r('app.string.music_play_all'))
       .onClick(() => this.playAll())

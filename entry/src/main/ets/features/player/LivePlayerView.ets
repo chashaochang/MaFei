@@ -13,6 +13,7 @@ import { LiveTvUIState } from '../livetv/LiveTvUIState'
 import { LiveTvViewModel } from '../livetv/LiveTvViewModel'
 import { BaseItemDto } from 'sdk/src/main/ets/generated-client/models'
 import { ImageKnifeComponent } from '@ohos/imageknifepro'
+import { MediaPlaybackRequestHeader } from '../../media/playback/MediaPlaybackModels'
 
 const LIVE_MPV_XCOMPONENT_ID: string = 'liveMpvSurface'
 let uiTime: number = 0
@@ -65,6 +66,7 @@ export struct LivePlayerView {
     this.playbackCompleted = false
     this.currentPosition = 0
     this.playbackStarted = false
+    this.clearPlaybackHeaders()
     if (this.initialized) {
       this.loadCurrentVideo()
     } else {
@@ -187,6 +189,7 @@ export struct LivePlayerView {
     }
     this.stopInitializeTimer()
     this.stopProgressTimer()
+    this.clearPlaybackHeaders()
     this.stop()
     this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
   }
@@ -360,8 +363,25 @@ export struct LivePlayerView {
     this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
     this.ui.playerStatus = PlayerStatus.PLAYING
     this.logVideoDiagnostics('load-current-video')
+    this.applyPlaybackHeaders(this.ui.videoHeaders)
     this.mpvPlayer.load(this.videoUrl)
     this.startProgressTimer()
+  }
+
+  private applyPlaybackHeaders(headers: MediaPlaybackRequestHeader[]): void {
+    const fields: string[] = []
+    for (const header of headers) {
+      const name = header.name.trim()
+      if (name.length === 0 || header.value.length === 0) {
+        continue
+      }
+      fields.push(`${name}: ${header.value}`)
+    }
+    this.mpvPlayer.runCommand(['set', 'http-header-fields', fields.join(',')])
+  }
+
+  private clearPlaybackHeaders(): void {
+    this.mpvPlayer.runCommand(['set', 'http-header-fields', ''])
   }
 
   private startPlayOrResumePlay(): void {

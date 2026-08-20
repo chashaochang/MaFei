@@ -1,6 +1,6 @@
 import { HMRouter } from '@hadss/hmrouter'
 import { RouterConsts } from '../../../common/RouterConsts'
-import { playItems } from '../../../common/CommonFunc'
+import { playMediaRefs } from '../../../common/CommonFunc'
 import { AppRouteDestination } from '../../../component/AppRouteDestination'
 import { BreakpointTypeEnum } from '../../../utils/BreakpointSystem'
 import { MineHistoryItem } from './MineHistoryPlanner'
@@ -53,7 +53,7 @@ export struct MineHistoryPage {
   }
 
   private historyItemKey(item: MineHistoryItem): string {
-    return `${item.id}|${item.latestSeasonNumber || 0}|${item.latestEpisodeNumber || 0}|` +
+    return `${item.mediaRef.identity}|${item.latestSeasonNumber || 0}|${item.latestEpisodeNumber || 0}|` +
       `${item.seriesHasMultipleSeasons ? 1 : 0}`
   }
 
@@ -155,7 +155,7 @@ export struct MineHistoryPage {
             nativeSurface
           })
         }
-        .onClick(() => playItems([item.id], this.getUIContext().getHostContext()!))
+        .onClick(() => playMediaRefs([item.mediaRef], this.getUIContext().getHostContext()!))
       }, (item: MineHistoryItem) => this.historyItemKey(item))
       if (this.ui.loadingMore || this.ui.loadMoreFailed) {
         GridItem() {

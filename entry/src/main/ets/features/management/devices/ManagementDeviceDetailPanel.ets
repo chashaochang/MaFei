@@ -108,7 +108,8 @@ export struct ManagementDeviceDetailPanel {
           .borderRadius(21)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .enabled(this.ui.pendingDeviceId.length === 0 && !this.ui.batchPending)
           .onClick(() => this.onRename())
       }
@@ -130,7 +131,8 @@ export struct ManagementDeviceDetailPanel {
         .borderRadius(22)
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(!this.device.current && this.ui.pendingDeviceId.length === 0 && !this.ui.batchPending)
         .onClick(() => this.onRevoke())
       if (this.device.current) {

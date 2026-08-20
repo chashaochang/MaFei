@@ -59,7 +59,19 @@ test('rejects a system material call moved outside an MPV native builder', () =>
     fixture.mpvPlayerSource,
     fixture.mpvPlayerSource.replace('private nativeAudioMenu()', 'private materialAudioMenu()')
   )
-  assert.throws(() => validatePlayerApiCompatContracts(fixture), /systemMaterial calls must exist only in native builders/)
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /material modifiers must exist only in native builders/)
+})
+
+test('rejects a native material modifier without the runtime capability gate', () => {
+  const fixture = workspaceFixture()
+  fixture.avPlayerSource = requireMutation(
+    fixture.avPlayerSource,
+    fixture.avPlayerSource.replace(
+      'AppThemeMaterialRole.InteractiveFloating, true,\n      this.vm.appUIState.systemMaterialAvailable))',
+      'AppThemeMaterialRole.InteractiveFloating, true))'
+    )
+  )
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must pass systemMaterialAvailable/)
 })
 
 test('rejects removal of the AV native portrait report action', () => {
@@ -121,8 +133,8 @@ test('rejects first-load playback that is not awaited', () => {
   fixture.queueManagerSource = requireMutation(
     fixture.queueManagerSource,
     fixture.queueManagerSource.replace(
-      'const result = await this.startPlayback(\n      itemId!',
-      'const result = this.startPlayback(\n      itemId!'
+      'const result = await this.startPlayback(\n      itemRef,',
+      'const result = this.startPlayback(\n      itemRef,'
     )
   )
   assert.throws(() => validatePlayerApiCompatContracts(fixture), /must await startPlayback/)
@@ -130,14 +142,38 @@ test('rejects first-load playback that is not awaited', () => {
 
 test('rejects an item request failure that cannot reach the first-load Toast', () => {
   const fixture = workspaceFixture()
-  const catchBlock = '      }).catch((e: BusinessError) => {\n        reject(e)\n      })'
-  const catchIndex = fixture.mediaSourceResolverSource.lastIndexOf(catchBlock)
-  assert.ok(catchIndex >= 0, 'fixture must include the outer item-request rejection handler')
-  fixture.mediaSourceResolverSource =
-    fixture.mediaSourceResolverSource.slice(0, catchIndex) +
-    '      })' +
-    fixture.mediaSourceResolverSource.slice(catchIndex + catchBlock.length)
-  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must reject item and playback-info request failures/)
+  fixture.mediaSourceResolverSource = requireMutation(
+    fixture.mediaSourceResolverSource,
+    fixture.mediaSourceResolverSource.replace(
+      'return this.provider.resolveSource({',
+      'void this.provider.resolveSource({'
+    )
+  )
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must propagate provider item and playback-info request failures/)
+})
+
+test('rejects a neutral playback entry that forces unspecified resume to zero', () => {
+  const fixture = workspaceFixture()
+  fixture.commonFuncSource = requireMutation(
+    fixture.commonFuncSource,
+    fixture.commonFuncSource.replace(
+      'options.startPositionTicks = startPositionTicks ?? null',
+      'options.startPositionTicks = startPositionTicks ?? 0'
+    )
+  )
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must preserve an unspecified resume position/)
+})
+
+test('rejects a Jellyfin provider that ignores the server resume point', () => {
+  const fixture = workspaceFixture()
+  fixture.jellyfinPlaybackProviderSource = requireMutation(
+    fixture.jellyfinPlaybackProviderSource,
+    fixture.jellyfinPlaybackProviderSource.replace(
+      'request.startTimeTicks ?? item.UserData?.PlaybackPositionTicks ?? 0',
+      'request.startTimeTicks ?? 0'
+    )
+  )
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must restore the server resume point/)
 })
 
 test('rejects playback position zero as invalid', () => {

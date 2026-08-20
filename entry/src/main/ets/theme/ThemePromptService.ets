@@ -13,6 +13,7 @@ export interface ThemeLaunchState {
   persistedTheme: ThemeStyle
   effectiveTheme: ThemeStyle
   nativeThemeAvailable: boolean
+  systemMaterialAvailable: boolean
   shouldShowPrompt: boolean
 }
 
@@ -75,6 +76,7 @@ export class ThemePromptService {
         persistedTheme,
         effectiveTheme: ThemeStyle.Feiniu,
         nativeThemeAvailable: false,
+        systemMaterialAvailable: false,
         shouldShowPrompt: false
       }
     }
@@ -84,6 +86,7 @@ export class ThemePromptService {
       persistedTheme,
       effectiveTheme: shouldShowPrompt ? ThemeStyle.Feiniu : persistedTheme,
       nativeThemeAvailable: true,
+      systemMaterialAvailable: capability.systemMaterialAvailable,
       shouldShowPrompt
     }
   }

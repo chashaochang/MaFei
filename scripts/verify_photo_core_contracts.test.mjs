@@ -64,15 +64,15 @@ function validPhotoFixture() {
   `)
   sources.set(mediaTabPath, `
     private openLibrary(item: MediaItem): void {
-      if (item.collectionType === CollectionType.Photos) {
+      if (item.libraryKind === MediaLibraryKind.Photos) {
         HMRouterMgr.to(RouterConsts.PhotoLibraryPage).withParam(item).push()
         return
       }
-      if (item.collectionType === CollectionType.Music) {
+      if (item.libraryKind === MediaLibraryKind.Music) {
         HMRouterMgr.to(RouterConsts.MusicLibraryPage).withParam(item).push()
         return
       }
-      if (item.collectionType === CollectionType.Movies || item.collectionType === CollectionType.Tvshows) {
+      if (item.libraryKind === MediaLibraryKind.Movies || item.libraryKind === MediaLibraryKind.Series) {
         HMRouterMgr.to(RouterConsts.VideoListPage).withParam(item).push()
         return
       }
@@ -80,7 +80,7 @@ function validPhotoFixture() {
     }
   `)
   sources.set(homePath, `
-    if (item.collectionType === CollectionType.Photos) {
+    if (item.libraryKind === MediaLibraryKind.Photos) {
       PhotoLibraryPage({
         fromHome: true,
         mediaItem: item
@@ -266,12 +266,12 @@ test('rejects a missing photo route', () => {
   assert.throws(() => validatePhotoCoreContracts(fixture), /photo route constant/)
 })
 
-test('rejects routing Homevideos through the photo library', () => {
+test('rejects routing photo libraries through the video list', () => {
   const fixture = validPhotoFixture()
   fixture.sources.set(mediaTabPath, fixture.sources.get(mediaTabPath).replace(
-    'item.collectionType === CollectionType.Photos',
-    'item.collectionType === CollectionType.Photos || item.collectionType === CollectionType.Homevideos'))
-  assert.throws(() => validatePhotoCoreContracts(fixture), /Homevideos must remain unsupported/)
+    'item.libraryKind === MediaLibraryKind.Movies',
+    'item.libraryKind === MediaLibraryKind.Photos || item.libraryKind === MediaLibraryKind.Movies'))
+  assert.throws(() => validatePhotoCoreContracts(fixture), /photo libraries must not reuse video routing/)
 })
 
 test('rejects serializing photos into the viewer route payload', () => {

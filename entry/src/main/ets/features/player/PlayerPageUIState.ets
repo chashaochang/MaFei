@@ -1,5 +1,8 @@
-import { MediaStream } from "sdk/src/main/ets/generated-client/models"
-import { BaseItemKind } from "sdk/src/main/ets/generated-client/models/base-item-kind"
+import {
+  MediaPlaybackItemKind,
+  MediaPlaybackRequestHeader,
+  MediaPlaybackStream
+} from "../../media/playback/MediaPlaybackModels"
 import { QueueItem } from "../../entity/QueueItem"
 import { QualityOption } from "../../player/qualityoptions/QualityOption"
 import { SubtitleItem } from "../../utils/SubtitleManager"
@@ -14,6 +17,7 @@ import { PlayerEngineType } from "../../entity/PlayerEngineType"
 @ObservedV2
 export class PlayerPageUIState extends BaseUIState{
   @Trace url?: string
+  @Trace videoHeaders: MediaPlaybackRequestHeader[] = []
   //集名称
   @Trace title: string = ''
   //电视剧名称
@@ -31,15 +35,15 @@ export class PlayerPageUIState extends BaseUIState{
   //当前播放视频id
   @Trace currentPlayId: string = ''
   //媒体类型
-  @Trace mediaType: BaseItemKind = BaseItemKind.Video
+  @Trace mediaType: MediaPlaybackItemKind = MediaPlaybackItemKind.Video
   //音频列表
-  @Trace audioStreams: MediaStream[] = []
+  @Trace audioStreams: MediaPlaybackStream[] = []
   //字幕列表
-  @Trace subtitleStreams: MediaStream[] = []
+  @Trace subtitleStreams: MediaPlaybackStream[] = []
   //选中音频
-  selectedAudioStream?: MediaStream
+  selectedAudioStream?: MediaPlaybackStream
   //选中字幕
-  selectedSubtitleStream?: MediaStream
+  selectedSubtitleStream?: MediaPlaybackStream
   //质量列表
   qualityOptions: QualityOption[] = []
   //选中码率

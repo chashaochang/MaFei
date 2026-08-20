@@ -1,49 +1,9 @@
 {
   "attributeOwners": [
     {
-      "path": "entry/src/main/ets/component/ActionBar.ets",
-      "component": "ActionBar",
-      "method": "nativeBar"
-    },
-    {
-      "path": "entry/src/main/ets/component/ListDialog.ets",
-      "component": "@global",
-      "method": "nativeListDialog"
-    },
-    {
-      "path": "entry/src/main/ets/component/tabbar/PadTopTab.ets",
-      "component": "PadTopTab",
-      "method": "nativeTab"
-    },
-    {
-      "path": "entry/src/main/ets/features/home/HomeScreen.ets",
-      "component": "HomeScreen",
-      "method": "nativeLeftMenuBuilder"
-    },
-    {
-      "path": "entry/src/main/ets/features/home/hometab/HomeTab.ets",
-      "component": "HomeTab",
-      "method": "nativeHeroDetailsButton"
-    },
-    {
-      "path": "entry/src/main/ets/features/home/chasing/ChasingTab.ets",
-      "component": "ChasingTab",
-      "method": "nativeUnselectedFilterChip"
-    },
-    {
-      "path": "entry/src/main/ets/features/search/SearchPage.ets",
-      "component": "SearchPage",
-      "method": "nativeSearchForm"
-    },
-    {
-      "path": "entry/src/main/ets/features/management/ManagementUserDetailPage.ets",
-      "component": "ManagementUserDetailPage",
-      "method": "saveBar"
-    },
-    {
-      "path": "entry/src/main/ets/features/management/ManagementUserParentalSection.ets",
-      "component": "ManagementUserParentalSection",
-      "method": "tagDialog"
+      "path": "entry/src/main/ets/theme/AppThemeSurfaceModifier.ets",
+      "component": "AppThemeSurfaceModifier",
+      "method": "applyNormalAttribute"
     }
   ],
   "optionOwners": [

@@ -145,9 +145,8 @@ export struct ManagementLibraryPathBrowserPage {
           .height(36)
           .borderRadius(18)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.goParent())
         }
         Text(this.ui.currentPath.length > 0 ? this.ui.currentPath :
@@ -164,9 +163,8 @@ export struct ManagementLibraryPathBrowserPage {
             .borderRadius(18)
             .fontColor($r('app.color.on_primary'))
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
             .enabled(!this.ui.isValidating)
             .onClick(() => this.chooseCurrentPath())
         }
@@ -212,9 +210,8 @@ export struct ManagementLibraryPathBrowserPage {
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
           .fontColor($r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .enabled(!this.ui.isValidating && this.ui.manualPath.trim().length > 0)
           .onClick(() => this.vm.validateManualPath())
         Button($r('app.string.management_library_path_use'), { type: ButtonType.Normal })
@@ -223,9 +220,8 @@ export struct ManagementLibraryPathBrowserPage {
           .borderRadius(20)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .enabled(this.vm.canReturnManualPath())
           .onClick(() => this.vm.returnManualPath())
       }
@@ -261,9 +257,8 @@ export struct ManagementLibraryPathBrowserPage {
           .borderRadius(20)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.loadRoot())
       }
       .layoutWeight(1)

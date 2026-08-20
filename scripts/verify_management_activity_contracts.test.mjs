@@ -64,12 +64,20 @@ test('requires non-404 media failures to be caught', () => {
   assert.throws(() => validateManagementActivity(sources), /catch non-404/)
 })
 
-test('requires the API 26 overview material guard', () => {
+test('requires the overview overlay policy to use runtime system-material capability', () => {
   const sources = validSources()
   sources.set(managementActivityPaths.page,
     sources.get(managementActivityPaths.page)
-      .replace('deviceInfo.sdkApiVersion >= 26', 'deviceInfo.sdkApiVersion >= 25'))
-  assert.throws(() => validateManagementActivity(sources), /themed API 26/)
+      .replace('this.vm.appUIState.systemMaterialAvailable',
+        'this.vm.appUIState.nativeThemeAvailable'))
+  assert.throws(() => validateManagementActivity(sources), /runtime system-material capability/)
+})
+
+test('rejects a direct SDK version guard for the activity overlay', () => {
+  const sources = validSources()
+  sources.set(managementActivityPaths.page,
+    sources.get(managementActivityPaths.page) + '\nif (deviceInfo.sdkApiVersion >= 26) {}')
+  assert.throws(() => validateManagementActivity(sources), /must not hard-code/)
 })
 
 test('requires localized media failure feedback', () => {

@@ -1,4 +1,5 @@
 import { ImageKnifeComponent } from '@ohos/imageknifepro';
+import promptAction from '@ohos.promptAction';
 import {
   HMLifecycleContext,
   HMLifecycleState,
@@ -6,12 +7,16 @@ import {
   HMRouterMgr,
   IHMLifecycleOwner
 } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../../theme/AppThemeTokens';
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
@@ -24,6 +29,10 @@ import {
 } from './ManagementSessionModels';
 import { ManagementSessionsUIState } from './ManagementSessionsUIState';
 import { ManagementSessionsViewModel } from './ManagementSessionsViewModel';
+
+interface ManagementSessionStopDialogOptions extends promptAction.ShowDialogOptions {
+  systemMaterial?: Object
+}
 
 @HMRouter({
   pageUrl: RouterConsts.ManagementSessionDetailPage,
@@ -76,6 +85,15 @@ export struct ManagementSessionDetailPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private stopDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
   }
 
   private primaryTextColor(): ResourceColor {
@@ -166,8 +184,8 @@ export struct ManagementSessionDetailPage {
 
   private confirmStop(item: ManagementSessionItem): void {
     const message = `${item.userName} · ${item.deviceName}\n${item.itemName}`
-    if (deviceInfo.sdkApiVersion >= 26) {
-      this.getUIContext().getPromptAction().showDialog({
+    if (this.stopDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      const options: ManagementSessionStopDialogOptions = {
         title: $r('app.string.management_session_stop_title'),
         message: message,
         buttons: [
@@ -178,7 +196,8 @@ export struct ManagementSessionDetailPage {
           $r('sys.color.comp_background_primary') : $r('app.color.bg_1'),
         backgroundBlurStyle: BlurStyle.NONE,
         systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      }).then((response) => {
+      }
+      this.getUIContext().getPromptAction().showDialog(options).then((response) => {
         if (response.index === 1) {
           this.vm.stopPlayback().then((result: ManagementSessionActionResult) =>
             this.showResult(result, $r('app.string.management_session_action_sent')))
@@ -246,9 +265,8 @@ export struct ManagementSessionDetailPage {
         .fontSize(12)
         .fontColor($r('app.color.color_main'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .onClick(() => this.vm.refresh())
     }
     .width('100%')
@@ -521,7 +539,8 @@ export struct ManagementSessionDetailPage {
           .borderRadius(21)
           .fontColor(this.primaryTextColor())
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, true))
           .enabled(this.ui.pendingAction === ManagementSessionAction.None)
           .onClick(() => this.playPause())
       }
@@ -540,7 +559,8 @@ export struct ManagementSessionDetailPage {
         .borderRadius(21)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, true))
         .enabled(this.ui.pendingAction === ManagementSessionAction.None &&
           this.ui.messageDraft.trim().length > 0)
         .onClick(() => this.sendMessage())
@@ -551,14 +571,15 @@ export struct ManagementSessionDetailPage {
           .borderRadius(21)
           .fontColor($r('app.color.main_red_color'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, true))
           .enabled(this.ui.pendingAction === ManagementSessionAction.None)
           .onClick(() => this.confirmStop(item))
       }
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
   }
 
   @Builder
@@ -612,9 +633,8 @@ export struct ManagementSessionDetailPage {
           .borderRadius(this.useNativeMaterial() ? 21 : 10)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => HMRouterMgr.pop())
       } else {
         Button($r('app.string.management_retry'), { type: ButtonType.Normal })
@@ -623,9 +643,8 @@ export struct ManagementSessionDetailPage {
           .borderRadius(this.useNativeMaterial() ? 21 : 10)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.refresh())
       }
     }

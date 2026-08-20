@@ -6,6 +6,7 @@ import { HMRouterMgr } from '@hadss/hmrouter';
 import { AppPreference } from '../data/AppPreference';
 import { DBManager } from '../data/DBManager';
 import { AppUIState } from '../entity/AppUIState';
+import { MediaProviderComposition } from '../features/setting/account/MediaProviderComposition';
 import { ThemeStyle } from '../entity/ThemeStyle';
 import { nativeThemeCapability } from '../theme/NativeThemeCapability';
 import { themePromptService } from '../theme/ThemePromptService';
@@ -22,6 +23,7 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
   private systemDensityChangeListenerRegistered: boolean = false
+  private defaultDensityEnabled: boolean = false
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
       this.refreshWindowMetrics(this.mainWindow)
@@ -69,10 +71,12 @@ export default class EntryAbility extends UIAbility {
       const capability = nativeThemeCapability.initialize()
       const launchState = themePromptService.resolveLaunch(capability)
       this.appUIState.nativeThemeAvailable = launchState.nativeThemeAvailable
+      this.appUIState.systemMaterialAvailable = launchState.systemMaterialAvailable
       this.appUIState.themePromptPending = launchState.shouldShowPrompt
       this.appUIState.themeStyle = launchState.effectiveTheme
     } catch (error) {
       this.appUIState.nativeThemeAvailable = false
+      this.appUIState.systemMaterialAvailable = false
       this.appUIState.themePromptPending = false
       this.appUIState.themeStyle = ThemeStyle.Feiniu
       hilog.error(0x0000, 'Mafei',
@@ -95,6 +99,12 @@ export default class EntryAbility extends UIAbility {
 
   private async initializeApplication(): Promise<void> {
     await DBManager.getInstance().init(this.context)
+    const providerComposition = await MediaProviderComposition.initialize(this.context)
+    if (!providerComposition.isFeiniuAvailable()) {
+      hilog.error(0x0000, 'Mafei',
+        'Feiniu Video provider initialization failed; continuing with Jellyfin. Type: %{public}s',
+        providerComposition.feiniuInitializationFailureType())
+    }
     // 弹幕功能暂不上线，先注释初始化代码。
     // GlobalContext.getContext().setValue("path", this.context.filesDir);
     // 如果需要用文件缓存，需要提前初始化文件缓存
@@ -104,6 +114,9 @@ export default class EntryAbility extends UIAbility {
   private resolveWindowDensity(windowClass: window.Window): number {
     try {
       const densityInfo = windowClass.getWindowDensityInfo()
+      if (this.defaultDensityEnabled && densityInfo.defaultDensity > 0) {
+        return densityInfo.defaultDensity
+      }
       if (densityInfo.customDensity > 0) {
         return densityInfo.customDensity
       }
@@ -123,6 +136,18 @@ export default class EntryAbility extends UIAbility {
       hilog.warn(0x0000, 'Mafei',
         'Failed to resolve display density; falling back to raw pixels. Cause: %{public}s', String(error))
       return 1
+    }
+  }
+
+  private useDefaultWindowDensity(windowStage: window.WindowStage): void {
+    try {
+      windowStage.setDefaultDensityEnabled(true)
+      this.defaultDensityEnabled = true
+    } catch (error) {
+      this.defaultDensityEnabled = false
+      hilog.warn(0x0000, 'Mafei',
+        'Failed to enable the default window density; continuing with system density. Cause: %{public}s',
+        String(error))
     }
   }
 
@@ -280,6 +305,7 @@ export default class EntryAbility extends UIAbility {
             JSON.stringify(error) ?? '')
           return
         }
+        this.refreshWindowMetrics(windowClass)
         windowClass.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
         this.initializeContentBindings(windowClass)
       })
@@ -292,6 +318,7 @@ export default class EntryAbility extends UIAbility {
   private loadMainWindowAsync(windowStage: window.WindowStage): void {
     try {
       windowStage.getMainWindow().then(async (windowClass: window.Window) => {
+        this.useDefaultWindowDensity(windowStage)
         if (!await this.initializeMainWindow(windowClass)) {
           return
         }
@@ -317,6 +344,7 @@ export default class EntryAbility extends UIAbility {
       return
     }
 
+    this.useDefaultWindowDensity(windowStage)
     if (!await this.initializeMainWindow(windowClass)) {
       return
     }
@@ -339,6 +367,7 @@ export default class EntryAbility extends UIAbility {
   onWindowStageDestroy(): void {
     this.contentLoadStarted = false
     this.clearMainWindowBindings()
+    this.defaultDensityEnabled = false
   }
 
   onForeground(): void {

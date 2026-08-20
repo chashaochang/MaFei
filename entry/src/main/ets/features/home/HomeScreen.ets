@@ -16,9 +16,9 @@ import { FavoriteListPage } from "../favorite/FavoriteListPage";
 import { VideoListPage } from "../videolist/VideoListPage";
 import { MusicLibraryPage } from "../music/MusicLibraryPage";
 import { PhotoLibraryPage } from "../photo/PhotoLibraryPage";
-import { CollectionType } from "sdk/src/main/ets/generated-client/models";
 import { LoadingView } from "../../ui/components/LoadingView";
 import { MediaItem } from "./hometab/HomeUIState";
+import { MediaLibraryKind } from "../../media/catalog/MediaCatalogModels";
 import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
@@ -39,6 +39,7 @@ import { UIConstants } from "../../common/UIConstants";
 import { connectMusicHostUIState, MusicHostUIState } from "../music/MusicHostUIState";
 import { MusicHostVisibilityPolicy } from "../music/MusicHostVisibilityPolicy";
 import { connectMusicPlaybackState, MusicPlaybackState } from "../music/MusicPlaybackState";
+import { MediaProviderRegistry } from "../../media/MediaProviderRegistry";
 
 @ComponentV2
 export struct HomeScreen {
@@ -121,6 +122,9 @@ export struct HomeScreen {
   }
 
   private musicMiniPlayerVisible(): boolean {
+    if (!this.musicCapabilityEnabled()) {
+      return false
+    }
     return MusicHostVisibilityPolicy.shouldShow({
       queueSize: this.musicPlaybackState.queue.length,
       isLogin: this.appUIState.isLogin,
@@ -131,6 +135,14 @@ export struct HomeScreen {
       musicPlayerVisible: this.musicHostUIState.musicPlayerVisible,
       photoViewerVisible: this.musicHostUIState.photoViewerVisible
     })
+  }
+
+  private musicCapabilityEnabled(): boolean {
+    return MediaProviderRegistry.instance().getActiveSession()?.capabilities.music !== false
+  }
+
+  private photoCapabilityEnabled(): boolean {
+    return MediaProviderRegistry.instance().getActiveSession()?.capabilities.photos !== false
   }
 
   private compactPlayerChrome(): boolean {
@@ -209,11 +221,7 @@ export struct HomeScreen {
 
   private updateFeiniuPointLightEnabled(): void {
     const shell = this.resolveShell()
-    // API 20–25 must stay entirely on the legacy tablet shell.  Do not let
-    // the API-23 HDS effect capability pull a low-version wide screen into a
-    // partial API-26 visual path.
-    const supportsPointLight = this.appUIState.nativeThemeAvailable &&
-      HdsUiCapability.supportsNativeTheme()
+    const supportsPointLight = HdsUiCapability.supportsSystemMaterial()
     const isWideShell = shell === HomeShellKind.MediumDrawer ||
       shell === HomeShellKind.LargeSidebar
     this.appUIState.feiniuPointLightEnabled =
@@ -295,23 +303,40 @@ export struct HomeScreen {
     }
     this.themePromptChecked = true
     this.themePromptCompleted = false
-    this.getUIContext().getPromptAction().openCustomDialog({
-      builder: () => {
-        this.themePromptDialogBuilder()
-      },
-      alignment: DialogAlignment.Center,
-      autoCancel: true,
-      backgroundColor: Color.Transparent,
-      backgroundBlurStyle: BlurStyle.NONE,
-      systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial(),
-      onWillDismiss: (action: DismissDialogAction) => {
-        if (!this.themePromptCompleted && !this.saveThemePrompt(ThemeStyle.Feiniu, false)) {
-          return
-        }
-        this.themeDialogId = -1
-        action.dismiss()
+    const promptAction = this.getUIContext().getPromptAction()
+    const onWillDismiss = (action: DismissDialogAction): void => {
+      if (!this.themePromptCompleted && !this.saveThemePrompt(ThemeStyle.Feiniu, false)) {
+        return
       }
-    }).then((dialogId: number) => {
+      this.themeDialogId = -1
+      action.dismiss()
+    }
+    let openPromise: Promise<number>
+    if (this.appUIState.systemMaterialAvailable) {
+      openPromise = promptAction.openCustomDialog({
+        builder: () => {
+          this.themePromptDialogBuilder()
+        },
+        alignment: DialogAlignment.Center,
+        autoCancel: true,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial(),
+        onWillDismiss
+      })
+    } else {
+      openPromise = promptAction.openCustomDialog({
+        builder: () => {
+          this.themePromptDialogBuilder()
+        },
+        alignment: DialogAlignment.Center,
+        autoCancel: true,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        onWillDismiss
+      })
+    }
+    openPromise.then((dialogId: number) => {
       this.themeDialogId = dialogId
       if (this.themePromptCompleted) {
         try {
@@ -527,7 +552,14 @@ export struct HomeScreen {
       bottom: 32
     })
     .borderRadius(20)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating,
+      true,
+      this.appUIState.systemMaterialAvailable
+    ))
+    .borderColor(this.appUIState.systemMaterialAvailable ?
+      Color.Transparent : $r('sys.color.comp_divider'))
+    .borderWidth(this.appUIState.systemMaterialAvailable ? 0 : 1)
   }
 
   @Builder
@@ -682,17 +714,25 @@ export struct HomeScreen {
       LazyForEach(this.vm.datasource, (item: PadMenuItem) => {
         TabContent() {
           if (item.extra) {
-            if ((item.extra as MediaItem).collectionType === CollectionType.Music) {
-              MusicLibraryPage({
-                fromHome: true,
-                mediaItem: item.extra as MediaItem
-              })
-            } else if ((item.extra as MediaItem).collectionType === CollectionType.Photos) {
-              PhotoLibraryPage({
-                fromHome: true,
-                mediaItem: item.extra as MediaItem,
-                contentBottomInset: this.contentBottomInset
-              })
+            if ((item.extra as MediaItem).libraryKind === MediaLibraryKind.Music) {
+              if (this.musicCapabilityEnabled()) {
+                MusicLibraryPage({
+                  fromHome: true,
+                  mediaItem: item.extra as MediaItem
+                })
+              } else {
+                Stack()
+              }
+            } else if ((item.extra as MediaItem).libraryKind === MediaLibraryKind.Photos) {
+              if (this.photoCapabilityEnabled()) {
+                PhotoLibraryPage({
+                  fromHome: true,
+                  mediaItem: item.extra as MediaItem,
+                  contentBottomInset: this.contentBottomInset
+                })
+              } else {
+                Stack()
+              }
             } else {
               VideoListPage({
                 fromHome: true,
@@ -891,7 +931,7 @@ export struct HomeScreen {
       Column() {
         // The legacy pad title row owns this 88vp strip.  Without reserving
         // it, the routed tab content starts behind the title row and status
-        // area on API 20–25.
+        // area on the API 24–25 blur fallback.
         Blank().height(88)
         Stack() {
           this.homeContentOwner()

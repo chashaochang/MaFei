@@ -79,7 +79,11 @@ export struct PadTopTab {
       .padding(3)
       .height(UIConstants.PAD_TOP_BAR_HEIGHT)
       .borderRadius(UIConstants.PAD_TOP_BAR_HEIGHT / 2)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.Floating,
+        true,
+        this.appUIState.systemMaterialAvailable
+      ))
     }
   }
 

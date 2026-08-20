@@ -134,7 +134,9 @@ export struct MusicArtistPage {
     .borderRadius(24)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.PrimaryInteractive, true,
+      this.vm.appUIState.systemMaterialAvailable))
     .enabled(this.ui.popularTracks.length > 0)
     .accessibilityText($r('app.string.music_play_all'))
     .onClick(() => this.playAll())

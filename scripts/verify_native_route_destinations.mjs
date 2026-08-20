@@ -163,14 +163,16 @@ function validateSharedDestination(source) {
     throw new Error('shared route title must use the destination system back action exactly once')
   }
   const destinationGate = methodBlock(source, 'usesHdsDestination')
-  if (!/return\s+HdsUiCapability\.supportsNativeTheme\s*\(\s*\)/.test(destinationGate) ||
-    /ThemeStyle\./.test(destinationGate)) {
-    throw new Error('API 26 support must keep one HDS destination stable across Native and Feiniu themes')
+  if (!/^\s*return\s+HdsUiCapability\.supportsHdsComponents\s*\(\s*\)\s*;?\s*$/.test(
+    destinationGate) ||
+    /usesNativeChrome|supportsSystemMaterial|ThemeStyle\./.test(destinationGate)) {
+    throw new Error('HDS destination host must remain stable across theme changes on API 24+')
   }
   const chromeGate = methodBlock(source, 'usesNativeChrome')
-  if (!/ThemeStyle\.Native/.test(chromeGate) ||
+  if (!/HdsUiCapability\.supportsHdsComponents\s*\(\s*\)/.test(chromeGate) ||
+    !/ThemeStyle\.Native/.test(chromeGate) ||
     !/HdsUiCapability\.supportsNativeTheme\s*\(\s*\)/.test(chromeGate)) {
-    throw new Error('Native chrome must require both Native theme and API 26 capability')
+    throw new Error('Native chrome must require HDS components, Native theme, and Native theme capability')
   }
   for (const configurable of [
     /@Prop\s+titleBarVisible\s*:\s*boolean\s*=\s*true/,
@@ -567,8 +569,11 @@ function validateRoutePage(source, path) {
   }
 
   const pageContent = methodBlock(source, 'pageContent')
+  const delegatesPageContentBody =
+    /this\.pageContentBody\s*\(\s*showLegacyActionBar\s*\)/.test(pageContent)
+  const titleOwnerContent = delegatesPageContentBody ? methodBlock(source, 'pageContentBody') : pageContent
   const usesSplitActivityPages = path === MANAGEMENT_ACTIVITY &&
-    /if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?this\.legacyPage\s*\(\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?this\.nativePage\s*\(\s*\)/.test(pageContent)
+    /if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*?this\.legacyPage\s*\(\s*\)[\s\S]*?\}\s*else\s*\{[\s\S]*?this\.nativePage\s*\(\s*\)/.test(titleOwnerContent)
   const legacyActivityPage = usesSplitActivityPages ? methodBlock(source, 'legacyPage') : ''
   const nativeActivityPage = usesSplitActivityPages ? methodBlock(source, 'nativePage') : ''
   if (path === SEARCH) {
@@ -586,10 +591,12 @@ function validateRoutePage(source, path) {
       !/contentExtendsUnderTitleBar\s*:\s*true/.test(source)) {
       throw new Error('Search Native content must keep its immersive header and isolate the legacy cancel row')
     }
-  } else if (!/if\s*\(\s*showLegacyActionBar\s*\)/.test(pageContent) ||
+  } else if (!/if\s*\(\s*showLegacyActionBar\s*\)/.test(titleOwnerContent) ||
     (usesSplitActivityPages ?
       count(legacyActivityPage, /\bActionBar\s*\(/g) !== 1 || count(nativeActivityPage, /\bActionBar\s*\(/g) !== 0 :
-      count(pageContent, /\bActionBar\s*\(/g) !== 1)) {
+      count(titleOwnerContent, /\bActionBar\s*\(/g) !== 1 ||
+        (delegatesPageContentBody && (count(pageContent, /\bActionBar\s*\(/g) !== 0 ||
+          count(source, /\bActionBar\s*\(/g) !== count(titleOwnerContent, /\bActionBar\s*\(/g))))) {
     throw new Error('legacy ActionBar must remain isolated behind the legacy flag: ' + path)
   }
   const legacyBackground = LEGACY_ROUTE_BACKGROUNDS.get(path)

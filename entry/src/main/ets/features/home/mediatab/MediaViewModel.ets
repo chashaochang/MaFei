@@ -1,53 +1,79 @@
-import { AxiosResponse } from "@ohos/axios";
-import { getItemsApi, getLibraryApi, getUserViewsApi, ImageUrlsApi } from "sdk";
+import { PageState } from "../../../common/base/BaseUIState"
+import { currentMediaCatalogProvider } from "../../../media/MediaCatalogAccess"
 import {
-  BaseItemDto,
-  BaseItemDtoQueryResult,
-  BaseItemKind,
-  CollectionType,
-  ImageType,
-  ItemCounts,
-} from "sdk/src/main/ets/generated-client/models";
-import { PageState } from "../../../common/base/BaseUIState";
-import { getTypeByCollectionType } from "../../../common/CommonFunc";
-import { ApiClient } from "../../../network/ApiClient";
-import { MediaItem } from "../hometab/HomeUIState";
+  MediaLibrary,
+  MediaLibraryKind
+} from "../../../media/catalog/MediaCatalogModels"
+import { MediaCatalogProvider } from "../../../media/catalog/MediaCatalogProvider"
+import { MediaRefKind } from "../../../media/MediaRef"
+import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry"
+import { MediaItem } from "../hometab/HomeUIState"
 import {
   ManagementLibraryOperationCode,
   ManagementLibraryOperationResult
-} from "../../management/library/ManagementLibraryModels";
-import { ManagementLibraryRepository } from "../../management/library/ManagementLibraryRepository";
-import { MediaUIState } from "./MediaUIState";
+} from "../../management/library/ManagementLibraryModels"
+import { ManagementLibraryRepository } from "../../management/library/ManagementLibraryRepository"
+import { MediaUIState } from "./MediaUIState"
 
 export class MediaViewModel {
   ui: MediaUIState
   private libraryRepository: ManagementLibraryRepository = new ManagementLibraryRepository()
+  private catalog?: MediaCatalogProvider
+  private requestGeneration: number = 0
 
   constructor(ui: MediaUIState) {
     this.ui = ui
   }
 
   async init(): Promise<void> {
+    const generation = ++this.requestGeneration
     this.ui.pageState = PageState.Loading
+    let catalog: MediaCatalogProvider
     try {
-      //获取收藏数量
-      // await this.getFavoriteCount()
-      //获取媒体库列表
-      const administratorResult = this.libraryRepository.requireAdministrator()
-      this.ui.mediaList = await this.getMediaList()
-      this.ui.isAdministrator = (await administratorResult).ok
+      catalog = currentMediaCatalogProvider()
+      this.catalog = catalog
+      const mediaList = await this.getMediaList(catalog)
+      if (!this.isCurrent(catalog, generation)) {
+        return
+      }
+      this.ui.mediaList = mediaList
+      if (catalog.session.capabilities.management) {
+        const administratorResult = await this.libraryRepository.requireAdministrator()
+        if (!this.isCurrent(catalog, generation)) {
+          return
+        }
+        this.ui.isAdministrator = administratorResult.ok
+      } else {
+        this.ui.isAdministrator = false
+      }
       this.ui.pageState = PageState.Content
     } catch (_error) {
+      if (generation !== this.requestGeneration) {
+        return
+      }
       console.error('[MediaVM] init failed')
+      this.catalog = undefined
       this.ui.mediaList = []
       this.ui.isAdministrator = false
       this.ui.pageState = PageState.Error
     } finally {
-      this.ui.isRefreshing = false
+      if (generation === this.requestGeneration) {
+        this.ui.isRefreshing = false
+      }
     }
   }
 
+  private isCurrent(catalog: MediaCatalogProvider, generation: number): boolean {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    return this.catalog === catalog && generation === this.requestGeneration &&
+      (!activeSession || activeSession.accountScope === catalog.session.accountScope)
+  }
+
   async scanAll(): Promise<ManagementLibraryOperationResult> {
+    if (!this.catalog?.session.capabilities.management) {
+      return ManagementLibraryOperationResult.failure(
+        ManagementLibraryOperationCode.Unsupported, 'management_library_unsupported')
+    }
     if (this.ui.isScanBusy) {
       return ManagementLibraryOperationResult.failure(
         ManagementLibraryOperationCode.Conflict, 'management_library_operation_in_progress')
@@ -60,58 +86,40 @@ export class MediaViewModel {
     }
   }
 
-  // async getFavoriteCount() {
-  //   try {
-  //     let res: AxiosResponse<ItemCounts> = await getLibraryApi(ApiClient.Instance()).getItemCounts({
-  //       userId: ApiClient.Instance().userId,
-  //       isFavorite: true,
-  //     })
-  //     if (res.data) {
-  //       //设置收藏数量
-  //       this.ui.favoriteCount = 0
-  //         // (res.data.ArtistCount || 0)
-  //         // + (res.data.AlbumCount || 0)
-  //         // + (res.data.ProgramCount || 0)
-  //         + (res.data.MovieCount || 0)
-  //         + (res.data.EpisodeCount || 0)
-  //         + (res.data.SeriesCount || 0)
-  //         // + (res.data.BookCount || 0)
-  //         // + (res.data.MusicVideoCount || 0)
-  //         // + (res.data.TrailerCount || 0)
-  //         // + (res.data.SongCount || 0)
-  //         // + (res.data.BoxSetCount || 0)
-  //         + (res.data.ItemCount || 0);
-  //     }
-  //   } catch (e) {
-  //
-  //   }
-  // }
-
-  private async getMediaList(): Promise<MediaItem[]> {
-    const response: AxiosResponse<BaseItemDtoQueryResult> =
-      await getUserViewsApi(ApiClient.Instance()).getUserViews({
-        userId: ApiClient.Instance().userId
-      })
-    const views: BaseItemDto[] = (response.data?.Items || [])
-      .filter((item: BaseItemDto): boolean => item.CollectionType !== CollectionType.Livetv)
-
-    return Promise.all(views.map(async (item: BaseItemDto): Promise<MediaItem> => {
-      const childResponse: AxiosResponse<BaseItemDtoQueryResult> =
-        await getItemsApi(ApiClient.Instance()).getItems({
-          userId: ApiClient.Instance().userId,
-          parentId: item.Id,
-        })
+  private async getMediaList(catalog: MediaCatalogProvider): Promise<MediaItem[]> {
+    const libraries = (await catalog.getLibraries()).filter((library: MediaLibrary): boolean => {
+      if (library.kind === MediaLibraryKind.LiveTv) {
+        return false
+      }
+      if (library.kind === MediaLibraryKind.Music) {
+        return catalog.session.capabilities.music
+      }
+      if (library.kind === MediaLibraryKind.Photos) {
+        return catalog.session.capabilities.photos
+      }
+      return true
+    })
+    return libraries.map((library: MediaLibrary): MediaItem => {
       return {
-        name: item.Name || '',
-        image: ApiClient.Instance().basePath + new ImageUrlsApi()
-          .getItemImageUrlById(item.Id, ImageType.Primary, {
-            tag: item.ImageTags?.[ImageType.Primary]
-          }),
-        id: item.Id || '',
-        childCount: childResponse.data?.TotalRecordCount || 0,
-        type: getTypeByCollectionType(item.CollectionType),
-        collectionType: item.CollectionType
-      } as MediaItem
-    }))
+        name: library.title,
+        image: library.primaryImage?.url || '',
+        mediaRef: library.ref,
+        imageRef: library.primaryImage,
+        id: library.ref.id,
+        childCount: library.itemCount,
+        kind: libraryContentKind(library.kind),
+        libraryKind: library.kind
+      }
+    })
   }
+}
+
+function libraryContentKind(kind: MediaLibraryKind): MediaRefKind | undefined {
+  if (kind === MediaLibraryKind.Movies) {
+    return MediaRefKind.Movie
+  }
+  if (kind === MediaLibraryKind.Series) {
+    return MediaRefKind.Series
+  }
+  return undefined
 }

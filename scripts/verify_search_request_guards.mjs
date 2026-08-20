@@ -65,10 +65,10 @@ function requireEmptyQueryBoundary(search) {
   const emptyIndex = search.indexOf("if (query === '')")
   const clearIndex = search.indexOf('this.clearResults()', emptyIndex)
   const returnIndex = search.indexOf('return', clearIndex)
-  const requestIndex = search.indexOf('getItemsApi(')
+  const requestIndex = search.indexOf('catalog.search(')
   if (emptyIndex < 0 || clearIndex < emptyIndex || returnIndex < clearIndex ||
     requestIndex < returnIndex) {
-    throw new Error('empty query must clear and return before getItems')
+    throw new Error('empty query must clear and return before catalog search')
   }
 }
 
@@ -86,22 +86,48 @@ export function validateSearchRequestGuards(sources) {
   requirePattern(search, /const\s+generation\s*=\s*\+\+this\.requestGeneration/,
     'search must claim a request generation')
   requireEmptyQueryBoundary(search)
-  requireMatchCount(search, /generation\s*!==\s*this\.requestGeneration/g, 2,
-    'success and failure must reject stale generations')
+  requirePattern(search, /catalog\s*=\s*currentMediaCatalogProvider\s*\(\s*\)/,
+    'search must capture the active catalog provider')
+  requirePattern(search, /request\s*=\s*catalog\.search\s*\(\s*\{/,
+    'search must use the provider-neutral catalog search')
+  rejectPattern(search, /getItemsApi|ApiClient\.Instance\s*\(/,
+    'search must not bypass the provider-neutral catalog')
+  requirePattern(search, /if\s*\(\s*!this\.isCurrent\s*\(\s*catalog\s*,\s*generation\s*\)\s*\)/,
+    'search success must reject stale provider requests')
+  requirePattern(search, /this\.finishSearchFailure\s*\(\s*generation\s*,\s*catalog\s*\)/,
+    'search failure must retain the captured provider')
   requirePattern(search, /\.catch\s*\(/,
     'search must handle request failures')
   requirePattern(search, /PageState\.Loading/,
     'search loading state is missing')
   requirePattern(search, /PageState\.Content/,
     'search content state is missing')
-  requirePattern(search, /PageState\.Error/,
-    'search error state is missing')
   requirePattern(search, /this\.saveHistory\(query\)/,
     'submitted history must use the normalized current query')
 
   const cancel = methodBlock(viewModel, 'cancelPendingSearch')
   requirePattern(cancel, /this\.requestGeneration\s*\+=\s*1/,
     'cancelPendingSearch must invalidate the active generation')
+  requirePattern(cancel, /this\.catalog\s*=\s*undefined/,
+    'cancelPendingSearch must release the captured provider')
+
+  const failure = methodBlock(viewModel, 'finishSearchFailure')
+  requirePattern(failure, /generation\s*!==\s*this\.requestGeneration/,
+    'search failure must reject stale generations')
+  requirePattern(failure, /!this\.isCurrent\s*\(\s*catalog\s*,\s*generation\s*\)/,
+    'search failure must reject a stale provider')
+  requirePattern(failure, /PageState\.Error/,
+    'search error state is missing')
+
+  const current = methodBlock(viewModel, 'isCurrent')
+  requirePattern(current, /MediaProviderRegistry\.instance\s*\(\s*\)\.getActiveSession\s*\(\s*\)/,
+    'search guard must read the active provider session')
+  requirePattern(current, /this\.catalog\s*===\s*catalog/,
+    'search guard must retain provider identity')
+  requirePattern(current, /generation\s*===\s*this\.requestGeneration/,
+    'search guard must retain request generation')
+  requirePattern(current, /activeSession\.accountScope\s*===\s*catalog\.session\.accountScope/,
+    'search guard must retain the active account scope')
 
   const retry = methodBlock(viewModel, 'retrySearch')
   requirePattern(retry, /this\.search\(this\.ui\.searchText\)/,

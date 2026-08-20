@@ -1,17 +1,12 @@
-import { AxiosResponse } from '@ohos/axios'
-import { getItemsApi, ImageUrlsApi } from 'sdk'
-import { ItemsApi } from 'sdk/src/main/ets/generated-client/api/items-api'
+import { currentMediaCatalogProvider } from '../../../media/MediaCatalogAccess'
+import { MediaEpisode, MediaSummary } from '../../../media/catalog/MediaCatalogModels'
 import {
-  BaseItemDto,
-  BaseItemDtoQueryResult,
-  BaseItemKind,
-  ImageType,
-  ItemFields,
-  ItemSortBy,
-  MediaType,
-  SortOrder
-} from 'sdk/src/main/ets/generated-client/models'
-import { ApiClient } from '../../../network/ApiClient'
+  MediaCatalogProvider,
+  MediaCatalogSortDirection,
+  MediaCatalogSortField,
+  MediaEpisodeQueryProfile
+} from '../../../media/catalog/MediaCatalogProvider'
+import { MediaRef, MediaRefKind } from '../../../media/MediaRef'
 import {
   MineHistoryCandidate,
   MineHistoryMediaType,
@@ -30,15 +25,11 @@ export interface MineHistoryLoadRequest {
 
 export class MineHistoryRequestSession {
   scope: string
-  basePath: string
-  userId: string
-  itemsApi: ItemsApi
+  catalog: MediaCatalogProvider
 
-  constructor(scope: string, basePath: string, userId: string, itemsApi: ItemsApi) {
-    this.scope = scope
-    this.basePath = basePath
-    this.userId = userId
-    this.itemsApi = itemsApi
+  constructor(catalog: MediaCatalogProvider) {
+    this.scope = catalog.session.accountScope
+    this.catalog = catalog
   }
 }
 
@@ -60,6 +51,8 @@ export class MineHistoryLoadResult {
 class MineHistoryFetchResult {
   items: MineHistoryCandidate[] = []
   rawCount: number = 0
+  hasMore: boolean = false
+  nextStartIndex: number = 0
 }
 
 class MineHistorySeriesCacheEntry {
@@ -73,7 +66,6 @@ class MineHistorySeriesCacheEntry {
 }
 
 export class MineHistoryRepository {
-  private readonly imageApi: ImageUrlsApi = new ImageUrlsApi()
   private readonly planner: MineHistoryPlanner = new MineHistoryPlanner()
   private readonly latestSeriesCache: Map<string, MineHistorySeriesCacheEntry> =
     new Map<string, MineHistorySeriesCacheEntry>()
@@ -81,12 +73,13 @@ export class MineHistoryRepository {
     new Map<string, Promise<MineHistorySeriesPosition | undefined>>()
   private readonly latestSeriesCacheTtlMs: number = 5 * 60 * 1000
   private readonly enrichmentConcurrency: number = 4
-  private readonly latestSeriesQueryLimit: number = 12
-  private readonly latestSeriesTimeoutMs: number = 8000
 
   currentScope(): string {
-    const api = ApiClient.Instance()
-    return this.scopeFor(String(api.basePath || ''), api.userId)
+    try {
+      return currentMediaCatalogProvider().session.accountScope
+    } catch (_error) {
+      return ''
+    }
   }
 
   async load(request: MineHistoryLoadRequest): Promise<MineHistoryLoadResult> {
@@ -94,16 +87,14 @@ export class MineHistoryRepository {
     this.pruneExpiredSeriesCache()
     const resumePromise: Promise<MineHistorySourceResult> = request.loadResume ?
       this.fetchResume(session, request.resumeStartIndex, request.limit)
-        .then((fetchResult: MineHistoryFetchResult): MineHistorySourceResult =>
-          this.success(fetchResult, request.resumeStartIndex, request.limit))
+        .then((fetchResult: MineHistoryFetchResult): MineHistorySourceResult => this.success(fetchResult))
         .catch((error: Error): MineHistorySourceResult => {
           console.warn(`[MineHistory] resume request failed: ${error.message}`)
           return this.failure(request.resumeStartIndex)
         }) : Promise.resolve(this.skipped(request.resumeStartIndex))
     const completedPromise: Promise<MineHistorySourceResult> = request.loadCompleted ?
       this.fetchCompleted(session, request.completedStartIndex, request.limit)
-        .then((fetchResult: MineHistoryFetchResult): MineHistorySourceResult =>
-          this.success(fetchResult, request.completedStartIndex, request.limit))
+        .then((fetchResult: MineHistoryFetchResult): MineHistorySourceResult => this.success(fetchResult))
         .catch((error: Error): MineHistorySourceResult => {
           console.warn(`[MineHistory] completed request failed: ${error.message}`)
           return this.failure(request.completedStartIndex)
@@ -119,36 +110,32 @@ export class MineHistoryRepository {
   }
 
   async enrichSeriesPositions(items: MineHistoryCandidate[], session: MineHistoryRequestSession): Promise<void> {
-    const seriesIds: string[] = []
-    const seen: Map<string, boolean> = new Map<string, boolean>()
-    items.forEach((item: MineHistoryCandidate) => {
-      if (item.mediaType === MineHistoryMediaType.Episode && item.seriesId.length > 0 &&
-        !seen.has(item.seriesId)) {
-        seen.set(item.seriesId, true)
-        seriesIds.push(item.seriesId)
+    const seriesRefs: MediaRef[] = []
+    const seen: Set<string> = new Set<string>()
+    items.forEach((item: MineHistoryCandidate): void => {
+      const seriesRef = item.seriesRef
+      if (item.mediaType === MineHistoryMediaType.Episode && seriesRef && !seen.has(seriesRef.identity)) {
+        seen.add(seriesRef.identity)
+        seriesRefs.push(seriesRef)
       }
     })
-    if (seriesIds.length === 0) {
-      return
-    }
+    if (seriesRefs.length === 0) return
 
     const bySeries: Map<string, MineHistorySeriesPosition> = new Map<string, MineHistorySeriesPosition>()
-    for (let batchStart = 0; batchStart < seriesIds.length; batchStart += this.enrichmentConcurrency) {
-      const batchIds = seriesIds.slice(batchStart, batchStart + this.enrichmentConcurrency)
+    for (let batchStart = 0; batchStart < seriesRefs.length; batchStart += this.enrichmentConcurrency) {
+      const batchRefs = seriesRefs.slice(batchStart, batchStart + this.enrichmentConcurrency)
       const requests: Promise<MineHistorySeriesPosition | undefined>[] = []
-      batchIds.forEach((seriesId: string) => {
-        requests.push(this.latestSeriesPosition(session, seriesId))
+      batchRefs.forEach((seriesRef: MediaRef): void => {
+        requests.push(this.latestSeriesPosition(session, seriesRef))
       })
       const positions = await Promise.all(requests)
-      positions.forEach((position: MineHistorySeriesPosition | undefined, index: number) => {
-        if (position) {
-          bySeries.set(batchIds[index], position)
-        }
+      positions.forEach((position: MineHistorySeriesPosition | undefined, index: number): void => {
+        if (position) bySeries.set(batchRefs[index].identity, position)
       })
     }
 
-    items.forEach((item: MineHistoryCandidate) => {
-      const position = bySeries.get(item.seriesId)
+    items.forEach((item: MineHistoryCandidate): void => {
+      const position = item.seriesRef ? bySeries.get(item.seriesRef.identity) : undefined
       if (position) {
         item.latestSeasonNumber = position.seasonNumber
         item.latestEpisodeNumber = position.episodeNumber
@@ -158,129 +145,88 @@ export class MineHistoryRepository {
   }
 
   private createSession(): MineHistoryRequestSession {
-    const api = ApiClient.Instance()
-    const basePath = this.normalizedBasePath(String(api.basePath || ''))
-    const userId = api.userId
-    return new MineHistoryRequestSession(
-      this.scopeFor(basePath, userId), basePath, userId, getItemsApi(api))
+    return new MineHistoryRequestSession(currentMediaCatalogProvider())
   }
 
-  private fetchResume(
-    session: MineHistoryRequestSession,
-    startIndex: number,
-    limit: number
-  ): Promise<MineHistoryFetchResult> {
-    try {
-      return session.itemsApi.getResumeItems({
-        userId: session.userId,
-        startIndex,
-        limit,
-        fields: [ItemFields.PrimaryImageAspectRatio],
-        mediaTypes: [MediaType.Video],
-        includeItemTypes: [BaseItemKind.Movie, BaseItemKind.Episode],
-        enableUserData: true,
-        enableImages: true,
-        imageTypeLimit: 1,
-        enableImageTypes: [ImageType.Primary, ImageType.Thumb],
-        enableTotalRecordCount: false
-      }).then((response: AxiosResponse<BaseItemDtoQueryResult>): MineHistoryFetchResult =>
-        this.mapResponse(response.data?.Items || [], session.basePath))
-    } catch (_) {
-      return Promise.reject(new Error('Unable to request resumable history'))
-    }
+  private async fetchResume(session: MineHistoryRequestSession, startIndex: number,
+    limit: number): Promise<MineHistoryFetchResult> {
+    const page = await session.catalog.resume({
+      kinds: [MediaRefKind.Movie, MediaRefKind.Episode],
+      limit: Math.max(1, startIndex + limit)
+    })
+    const selected = page.items.slice(startIndex, startIndex + limit)
+    return this.mapPage(selected, startIndex,
+      page.hasMore || page.items.length >= startIndex + limit)
   }
 
-  private fetchCompleted(
-    session: MineHistoryRequestSession,
-    startIndex: number,
-    limit: number
-  ): Promise<MineHistoryFetchResult> {
-    try {
-      return session.itemsApi.getItems({
-        userId: session.userId,
-        startIndex,
-        limit,
-        recursive: true,
-        includeItemTypes: [BaseItemKind.Movie, BaseItemKind.Episode],
-        mediaTypes: [MediaType.Video],
-        isPlayed: true,
-        sortBy: [ItemSortBy.DatePlayed],
-        sortOrder: [SortOrder.Descending],
-        fields: [ItemFields.PrimaryImageAspectRatio],
-        enableUserData: true,
-        enableImages: true,
-        imageTypeLimit: 1,
-        enableImageTypes: [ImageType.Primary, ImageType.Thumb],
-        enableTotalRecordCount: false
-      }).then((response: AxiosResponse<BaseItemDtoQueryResult>): MineHistoryFetchResult =>
-        this.mapResponse(response.data?.Items || [], session.basePath))
-    } catch (_) {
-      return Promise.reject(new Error('Unable to request completed history'))
-    }
-  }
-
-  private mapResponse(items: BaseItemDto[], basePath: string): MineHistoryFetchResult {
-    const result = new MineHistoryFetchResult()
-    result.rawCount = items.length
-    result.items = this.mapItems(items, basePath)
+  private async fetchCompleted(session: MineHistoryRequestSession, startIndex: number,
+    limit: number): Promise<MineHistoryFetchResult> {
+    const page = await session.catalog.getItems({
+      kinds: [MediaRefKind.Movie, MediaRefKind.Episode],
+      startIndex: startIndex,
+      limit: limit,
+      sortFields: [MediaCatalogSortField.DatePlayed],
+      sortDirections: [MediaCatalogSortDirection.Descending],
+      recursive: true,
+      collapseBoxSetItems: false,
+      favoriteOnly: false,
+      watched: true
+    })
+    const result = this.mapPage(page.items, page.startIndex, page.hasMore || page.items.length >= limit)
+    result.nextStartIndex = page.nextStartIndex
     return result
   }
 
-  private mapItems(items: BaseItemDto[], basePath: string): MineHistoryCandidate[] {
+  private mapPage(items: MediaSummary[], startIndex: number, hasMore: boolean): MineHistoryFetchResult {
+    const result = new MineHistoryFetchResult()
+    result.rawCount = items.length
+    result.hasMore = hasMore
+    result.nextStartIndex = startIndex + items.length
+    result.items = this.mapItems(items)
+    return result
+  }
+
+  private mapItems(items: MediaSummary[]): MineHistoryCandidate[] {
     const result: MineHistoryCandidate[] = []
-    items.forEach((item: BaseItemDto) => {
-      const candidate = this.mapItem(item, basePath)
-      if (candidate) {
-        result.push(candidate)
-      }
+    items.forEach((item: MediaSummary): void => {
+      const candidate = this.mapItem(item)
+      if (candidate) result.push(candidate)
     })
     return result
   }
 
-  private mapItem(item: BaseItemDto, basePath: string): MineHistoryCandidate | undefined {
-    const id = item.Id || ''
-    const lastPlayedDate = item.UserData?.LastPlayedDate || ''
-    if (id.length === 0 || lastPlayedDate.length === 0) {
-      return undefined
-    }
-    const isEpisode = item.Type === BaseItemKind.Episode
-    const seasonNumber = item.ParentIndexNumber === null ? undefined : item.ParentIndexNumber
+  private mapItem(item: MediaSummary): MineHistoryCandidate | undefined {
+    const lastPlayedDate = item.lastPlayedDate || ''
+    if (item.ref.id.length === 0 || lastPlayedDate.length === 0) return undefined
+    const isEpisode = item.ref.kind === MediaRefKind.Episode
+    const imageRef = item.primaryImage || item.thumbnailImage || item.backdropImage
     return {
-      id,
-      name: isEpisode ? (item.SeriesName || item.Name || '') : (item.Name || ''),
-      image: this.resolvePoster(item, basePath),
-      lastPlayedDate,
-      played: item.UserData?.Played === true,
-      percent: item.UserData?.PlayedPercentage || 0,
+      id: item.ref.id,
+      mediaRef: item.ref,
+      name: isEpisode ? (item.seriesTitle || item.title) : item.title,
+      image: imageRef?.url || '',
+      imageRef: imageRef,
+      lastPlayedDate: lastPlayedDate,
+      played: item.userState.watched.watched,
+      percent: item.userState.watched.playedPercentage,
       mediaType: isEpisode ? MineHistoryMediaType.Episode : MineHistoryMediaType.Movie,
-      communityRating: item.CommunityRating === null ? undefined : item.CommunityRating,
-      seriesId: item.SeriesId || '',
-      seasonNumber,
-      episodeNumber: item.IndexNumber === null ? undefined : item.IndexNumber,
+      communityRating: item.communityRating,
+      seriesId: item.seriesRef?.id || '',
+      seriesRef: item.seriesRef,
+      seasonNumber: item.seasonNumber,
+      episodeNumber: item.episodeNumber,
       latestSeasonNumber: undefined,
       latestEpisodeNumber: undefined,
-      seriesHasMultipleSeasons: seasonNumber !== undefined && Number.isFinite(seasonNumber) && seasonNumber > 1
+      seriesHasMultipleSeasons: item.seasonNumber !== undefined && item.seasonNumber > 1
     }
   }
 
-  private resolvePoster(item: BaseItemDto, basePath: string): string {
-    let imageItemId = item.Id || ''
-    if (item.Type === BaseItemKind.Episode) {
-      imageItemId = item.SeriesId || item.ParentThumbItemId || imageItemId
-    }
-    return basePath + this.imageApi.getItemImageUrlById(imageItemId, ImageType.Primary)
-  }
-
-  private success(
-    fetchResult: MineHistoryFetchResult,
-    startIndex: number,
-    limit: number
-  ): MineHistorySourceResult {
+  private success(fetchResult: MineHistoryFetchResult): MineHistorySourceResult {
     const result = new MineHistorySourceResult()
     result.items = fetchResult.items
     result.requested = true
-    result.nextStartIndex = startIndex + fetchResult.rawCount
-    result.hasMore = fetchResult.rawCount === limit
+    result.nextStartIndex = fetchResult.nextStartIndex
+    result.hasMore = fetchResult.hasMore
     return result
   }
 
@@ -299,32 +245,24 @@ export class MineHistoryRepository {
     return result
   }
 
-  private latestSeriesPosition(
-    session: MineHistoryRequestSession,
-    seriesId: string
-  ): Promise<MineHistorySeriesPosition | undefined> {
-    const cacheKey = `${session.scope}|${seriesId}`
+  private latestSeriesPosition(session: MineHistoryRequestSession,
+    seriesRef: MediaRef): Promise<MineHistorySeriesPosition | undefined> {
+    const cacheKey = `${session.scope}|${seriesRef.identity}`
     const now = Date.now()
     const cached = this.latestSeriesCache.get(cacheKey)
-    if (cached && cached.expiresAt > now) {
-      return Promise.resolve(cached.position)
-    }
-    if (cached) {
-      this.latestSeriesCache.delete(cacheKey)
-    }
+    if (cached && cached.expiresAt > now) return Promise.resolve(cached.position)
+    if (cached) this.latestSeriesCache.delete(cacheKey)
     const pending = this.latestSeriesPending.get(cacheKey)
-    if (pending) {
-      return pending
-    }
+    if (pending) return pending
 
-    const request = this.fetchLatestSeriesPosition(session, seriesId)
+    const request = this.fetchLatestSeriesPosition(session, seriesRef)
       .then((position: MineHistorySeriesPosition | undefined): MineHistorySeriesPosition | undefined => {
         this.latestSeriesCache.set(cacheKey,
           new MineHistorySeriesCacheEntry(position, Date.now() + this.latestSeriesCacheTtlMs))
         return position
       })
       .catch((error: Error): MineHistorySeriesPosition | undefined => {
-        console.warn(`[MineHistory] latest series request failed: ${seriesId}, ${error.message}`)
+        console.warn(`[MineHistory] latest series request failed: ${seriesRef.id}, ${error.message}`)
         return undefined
       })
       .then((position: MineHistorySeriesPosition | undefined): MineHistorySeriesPosition | undefined => {
@@ -335,56 +273,29 @@ export class MineHistoryRepository {
     return request
   }
 
-  private fetchLatestSeriesPosition(
-    session: MineHistoryRequestSession,
-    seriesId: string
-  ): Promise<MineHistorySeriesPosition | undefined> {
-    return session.itemsApi.getItems({
-      userId: session.userId,
-      parentId: seriesId,
-      recursive: true,
-      includeItemTypes: [BaseItemKind.Episode],
-      mediaTypes: [MediaType.Video],
-      isMissing: false,
-      isPlaceHolder: false,
-      sortBy: [ItemSortBy.ParentIndexNumber, ItemSortBy.IndexNumber],
-      sortOrder: [SortOrder.Descending, SortOrder.Descending],
-      limit: this.latestSeriesQueryLimit,
-      enableImages: false,
-      enableUserData: false,
-      enableTotalRecordCount: false
-    }, {
-      timeout: this.latestSeriesTimeoutMs
-    }).then((response: AxiosResponse<BaseItemDtoQueryResult>): MineHistorySeriesPosition | undefined => {
-      const episodeCandidates: MineHistorySeriesEpisodeCandidate[] = []
-      ;(response.data?.Items || []).forEach((episode: BaseItemDto) => {
-        episodeCandidates.push({
-          seasonNumber: episode.ParentIndexNumber === null ? undefined : episode.ParentIndexNumber,
-          episodeNumber: episode.IndexNumber === null ? undefined : episode.IndexNumber
-        })
-      })
-      return this.planner.latestSeriesPosition(episodeCandidates)
+  private async fetchLatestSeriesPosition(session: MineHistoryRequestSession,
+    seriesRef: MediaRef): Promise<MineHistorySeriesPosition | undefined> {
+    if (!seriesRef.belongsTo(session.catalog.session)) return undefined
+    const page = await session.catalog.getEpisodes({
+      seriesRef: seriesRef,
+      startIndex: 0,
+      limit: 1000,
+      profile: MediaEpisodeQueryProfile.Display
     })
+    const episodeCandidates: MineHistorySeriesEpisodeCandidate[] = []
+    page.items.forEach((episode: MediaEpisode): void => {
+      episodeCandidates.push({
+        seasonNumber: episode.seasonNumber,
+        episodeNumber: episode.episodeNumber
+      })
+    })
+    return this.planner.latestSeriesPosition(episodeCandidates)
   }
 
   private pruneExpiredSeriesCache(): void {
     const now = Date.now()
-    this.latestSeriesCache.forEach((entry: MineHistorySeriesCacheEntry, key: string) => {
-      if (entry.expiresAt <= now) {
-        this.latestSeriesCache.delete(key)
-      }
+    this.latestSeriesCache.forEach((entry: MineHistorySeriesCacheEntry, key: string): void => {
+      if (entry.expiresAt <= now) this.latestSeriesCache.delete(key)
     })
-  }
-
-  private scopeFor(basePath: string, userId: string): string {
-    return `${this.normalizedBasePath(basePath)}|${userId}`
-  }
-
-  private normalizedBasePath(basePath: string): string {
-    let normalized = basePath.trim()
-    while (normalized.endsWith('/')) {
-      normalized = normalized.slice(0, -1)
-    }
-    return normalized
   }
 }

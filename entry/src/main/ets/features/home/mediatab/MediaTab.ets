@@ -14,8 +14,8 @@ import { ManagementLibraryOperationResult } from "../../management/library/Manag
 import { MediaUIState } from "./MediaUIState";
 import { MediaViewModel } from "./MediaViewModel";
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
-import { CollectionType } from "sdk/src/main/ets/generated-client/models";
 import { MediaItem } from "../hometab/HomeUIState";
+import { MediaLibraryKind } from "../../../media/catalog/MediaCatalogModels";
 
 @ComponentV2
 export struct MediaTab {
@@ -64,32 +64,33 @@ export struct MediaTab {
   }
 
   private mediaIcon(item: MediaItem): Resource {
-    if (item.collectionType === CollectionType.Photos) {
+    if (item.libraryKind === MediaLibraryKind.Photos) {
       return $r('app.media.ic_photo')
     }
-    if (item.collectionType === CollectionType.Music) {
+    if (item.libraryKind === MediaLibraryKind.Music) {
       return $r('app.media.ic_audio')
     }
-    if (item.collectionType === CollectionType.Movies) {
+    if (item.libraryKind === MediaLibraryKind.Movies) {
       return $r('app.media.movie')
     }
-    if (item.collectionType === CollectionType.Tvshows) {
+    if (item.libraryKind === MediaLibraryKind.Series) {
       return $r('app.media.tv')
     }
     return $r('app.media.placeholder_folder')
   }
 
   private openLibrary(item: MediaItem): void {
-    if (item.collectionType === CollectionType.Photos) {
+    if (item.libraryKind === MediaLibraryKind.Photos) {
       HMRouterMgr.to(RouterConsts.PhotoLibraryPage).withParam(item).push()
       return
     }
-    if (item.collectionType === CollectionType.Music) {
+    if (item.libraryKind === MediaLibraryKind.Music) {
       HMRouterMgr.to(RouterConsts.MusicLibraryPage).withParam(item).push()
       return
     }
-    if (item.collectionType === CollectionType.Movies || item.collectionType === CollectionType.Tvshows ||
-      item.type !== undefined && item.collectionType === undefined) {
+    if (item.libraryKind === MediaLibraryKind.Movies || item.libraryKind === MediaLibraryKind.Series ||
+      item.libraryKind === MediaLibraryKind.Mixed || item.libraryKind === MediaLibraryKind.Other ||
+      item.kind !== undefined && item.libraryKind === undefined) {
       HMRouterMgr.to(RouterConsts.VideoListPage).withParam(item).push()
       return
     }
@@ -136,8 +137,11 @@ export struct MediaTab {
     .padding({ left: 14, right: 14 })
     .borderRadius(20)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(
-      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive,
+      this.useNativeSurface(),
+      this.appUIState.systemMaterialAvailable
+    ))
     .enabled(enabled)
     .opacity(enabled ? 1 : 0.55)
     .onClick(action)

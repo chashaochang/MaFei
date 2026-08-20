@@ -147,9 +147,8 @@ export struct ManagementUserPasswordSection {
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(this.useNativeMaterial() ? 21 : 9)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .enabled(!this.actionLocked())
         .onClick(() => this.onSetPassword())
     }
@@ -199,9 +198,8 @@ export struct ManagementUserPasswordSection {
           color: $r('app.color.main_red_color')
         })
         .borderRadius(this.useNativeMaterial() ? 21 : 8)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(!this.actionLocked())
         .onClick(() => this.onResetPassword())
       Button($r('app.string.management_user_clear_password'), { type: ButtonType.Normal })
@@ -214,9 +212,8 @@ export struct ManagementUserPasswordSection {
           color: $r('app.color.main_red_color')
         })
         .borderRadius(this.useNativeMaterial() ? 21 : 8)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(!this.actionLocked() && this.ui.user.hasPassword)
         .onClick(() => this.onClearPassword())
     }

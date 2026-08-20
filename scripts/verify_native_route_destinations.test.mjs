@@ -38,10 +38,11 @@ function validDestination() {
     '@Prop menus: Array<NavigationMenuItem> = []',
     '@Prop scrollControllers: Array<Scroller> = []',
     'private usesNativeChrome(): boolean {',
-    '  return this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()',
+    '  return HdsUiCapability.supportsHdsComponents() &&',
+    '    this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()',
     '}',
     'private usesHdsDestination(): boolean {',
-    '  return HdsUiCapability.supportsNativeTheme()',
+    '  return HdsUiCapability.supportsHdsComponents()',
     '}',
     'private nativeSafeAreaTypes(): Array<LayoutSafeAreaType> {',
     '  return this.usesNativeChrome() ? [LayoutSafeAreaType.SYSTEM] : []',
@@ -370,6 +371,39 @@ function validManagementRoute(name) {
   ].join('\n')
 }
 
+function validDelegatedManagementRoute(name) {
+  return [
+    "import { AppRouteDestination } from '../../component/AppRouteDestination'",
+    '@HMRouter({',
+    `  pageUrl: RouterConsts.${name},`,
+    '  useNavDst: true',
+    '})',
+    '@Builder',
+    'private pageContentBody(showLegacyActionBar: boolean) {',
+    '  if (showLegacyActionBar) {',
+    "    ActionBar({ title: 'Title' })",
+    '  } else {',
+    '    Blank()',
+    '  }',
+    '}',
+    '@Builder',
+    'private pageContent(showLegacyActionBar: boolean) {',
+    '  Column() {',
+    '    this.pageContentBody(showLegacyActionBar)',
+    '  }',
+    "  .width('100%').height('100%').backgroundColor(showLegacyActionBar ? " +
+      'AppThemeSurfaceResolver.routeBackground(this.themeStyle, this.nativeThemeAvailable) : Color.Transparent)',
+    '}',
+    'build() {',
+    '  AppRouteDestination({',
+    "    title: 'Title',",
+    '    contentBuilder: () => { this.pageContent(false) },',
+    '    legacyContentBuilder: () => { this.pageContent(true) }',
+    '  })',
+    '}'
+  ].join('\n')
+}
+
 function validSplitManagementRoute(name) {
   return [
     "import { AppRouteDestination } from '../../component/AppRouteDestination'",
@@ -538,14 +572,20 @@ test('accepts shared native and legacy route ownership', () => {
   assert.doesNotThrow(() => validateNativeRouteDestinations(validSources()))
 })
 
-test('keeps the HDS destination stable when the active theme changes', () => {
+test('keeps the HDS destination stable across theme changes on every supported API', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('return HdsUiCapability.supportsNativeTheme()',
-      'return this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()'))
+    .replace(
+      'private usesHdsDestination(): boolean {\n' +
+      '  return HdsUiCapability.supportsHdsComponents()\n' +
+      '}',
+      'private usesHdsDestination(): boolean {\n' +
+      '  return HdsUiCapability.supportsHdsComponents() && this.usesNativeChrome()\n' +
+      '}'
+    ))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /keep one HDS destination stable across Native and Feiniu themes/
+    /stable across theme changes on API 24\+/
   )
 })
 
@@ -562,14 +602,15 @@ test('rejects switching the HDS content host when title underlap changes', () =>
   )
 })
 
-test('requires Native chrome to be gated by both theme and API capability', () => {
+test('requires Native chrome to be gated by HDS components, theme, and capability', () => {
   const sources = validSources()
   sources.set(destinationPath, sources.get(destinationPath)
-    .replace('return this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()',
-      'return HdsUiCapability.supportsNativeTheme()'))
+    .replace('return HdsUiCapability.supportsHdsComponents() &&\n' +
+      '    this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()',
+      'return this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
-    /Native chrome must require both Native theme and API 26 capability/
+    /Native chrome must require HDS components/
   )
 })
 
@@ -1196,6 +1237,22 @@ test('rejects an Activity ActionBar leaking into the Native page helper', () => 
   sources.set(managementActivityPath, sources.get(managementActivityPath)
     .replace("Column() {}.width('100%').height('100%')",
       "Column() { ActionBar({ title: 'Wrong' }) }.width('100%').height('100%')"))
+  assert.throws(
+    () => validateNativeRouteDestinations(sources),
+    /legacy ActionBar must remain isolated behind the legacy flag/
+  )
+})
+
+test('accepts a delegated page body that keeps ActionBar behind the legacy flag', () => {
+  const sources = validSources()
+  sources.set(managementDevicesPath, validDelegatedManagementRoute('ManagementDevicesPage'))
+  assert.doesNotThrow(() => validateNativeRouteDestinations(sources))
+})
+
+test('rejects a delegated page body that leaks ActionBar into Native', () => {
+  const sources = validSources()
+  sources.set(managementDevicesPath, validDelegatedManagementRoute('ManagementDevicesPage')
+    .replace('if (showLegacyActionBar)', 'if (true)'))
   assert.throws(
     () => validateNativeRouteDestinations(sources),
     /legacy ActionBar must remain isolated behind the legacy flag/

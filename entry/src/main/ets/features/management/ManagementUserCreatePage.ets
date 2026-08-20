@@ -574,9 +574,8 @@ export struct ManagementUserCreatePage {
             .fontColor($r('app.color.on_primary'))
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
             .borderRadius(this.useNativeMaterial() ? 20 : 9)
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
             .enabled(!this.ui.saving)
             .onClick(() => this.retryAccess())
           Button($r('app.string.management_user_open_details'),
@@ -585,9 +584,8 @@ export struct ManagementUserCreatePage {
             .padding({ left: 16, right: 16 })
             .fontColor(this.primaryTextColor())
             .backgroundColor(Color.Transparent)
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
             .border({
               width: 1,
               color: AppThemeSurfaceResolver.contentOutline(
@@ -665,7 +663,8 @@ export struct ManagementUserCreatePage {
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
         .borderRadius(23)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, true))
         .enabled(this.createEnabled())
         .onClick(() => this.submit())
     }
@@ -677,7 +676,7 @@ export struct ManagementUserCreatePage {
   private nativeCreateBar() {
     Column() { this.createBarContent() }
       .width('100%')
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
   }
 
   @Builder
@@ -734,9 +733,8 @@ export struct ManagementUserCreatePage {
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
           .borderRadius(this.useNativeMaterial() ? 20 : 10)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.init())
       }
     }

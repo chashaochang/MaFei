@@ -5,11 +5,11 @@ import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { ApiClient } from "../../network/ApiClient";
 import { LiveTvUIState } from "./LiveTvUIState";
 import { QueueManager } from "./QueueManager";
-import { JellyfinMediaSource } from "../../player/source/JellyfinMediaSource";
 import { PlayerException } from "../../player/PlayerException";
 import { ToastUtil } from "../../utils/ToastUtil";
 import { PlayOptions } from "../../player/interaction/PlayOptions";
 import { getItemImageUrl } from "../../common/CommonFunc";
+import { MediaPlaybackPreparedStreams, MediaPlaybackSource } from '../../media/playback/MediaPlaybackModels'
 
 @ObservedV2
 export class LiveTvViewModel extends BaseViewModel<LiveTvUIState> {
@@ -18,7 +18,7 @@ export class LiveTvViewModel extends BaseViewModel<LiveTvUIState> {
   @Trace channelList: BaseItemDto[] = []
   @Trace playIndex: number = 0
   //由于这个player要设置完url才能得到,暂时保存初始化信息
-  initSource?: JellyfinMediaSource
+  initSource?: MediaPlaybackSource
   private channelInfoTimer?: number // 频道信息显示定时器
 
   getChannelList() {
@@ -62,16 +62,10 @@ export class LiveTvViewModel extends BaseViewModel<LiveTvUIState> {
     }
   }
 
-  load(source: JellyfinMediaSource, url: string[], playWhenReady: boolean) {
+  load(source: MediaPlaybackSource, streams: MediaPlaybackPreparedStreams, playWhenReady: boolean) {
     this.initSource = source
-    for (let index = 0; index < url.length; index++) {
-      let element = url[index];
-      if (index === 0) {
-        this.ui.url = element
-      } else {
-        console.log('外挂字幕:' + element);
-      }
-    }
+    this.ui.videoHeaders = streams.videoHeaders.slice()
+    this.ui.url = streams.videoUrl
   }
 
   playNext(){

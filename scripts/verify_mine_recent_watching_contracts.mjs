@@ -85,6 +85,11 @@ export function validateMineRecentWatching(sources) {
     'Mine overview key must follow async episode badge data')
   requireText(mineTab, 'HMRouterMgr.to(RouterConsts.MineHistoryPage).push()',
     'Mine history More must open the full page')
+  requireText(mineTab, 'playMediaRefs([item.mediaRef]',
+    'Mine history playback must preserve the provider/account-scoped MediaRef')
+  if (/\bplayItems\s*\(/.test(mineTab)) {
+    throw new Error('Mine history must not use the legacy Jellyfin playback entry')
+  }
 
   const administratorBlocks = mineTab.match(/if \(this\.ui\.isAdministrator\)/g) || []
   if (administratorBlocks.length !== 1) {

@@ -10,6 +10,8 @@ import {
 
 const settingPath = 'entry/src/main/ets/features/setting/SettingPage.ets'
 const addAccountPath = 'entry/src/main/ets/features/setting/account/AddAccountPage.ets'
+const jellyfinConnectPath = 'entry/src/main/ets/features/setting/account/JellyfinConnectPage.ets'
+const feiniuConnectPath = 'entry/src/main/ets/features/feiniuvideo/account/FeiniuVideoConnectPage.ets'
 const connectPath = 'entry/src/main/ets/features/connect/ConnectScreen.ets'
 const minePagePath = 'entry/src/main/ets/features/home/minetab/MinePage.ets'
 const mineTabPath = 'entry/src/main/ets/features/home/minetab/MineTab.ets'
@@ -46,13 +48,46 @@ test('keeps the Setting title row in the Feiniu branch', () => {
   )
 })
 
-test('hides the AddAccount custom bar only in Native', () => {
+test('separates AddAccount provider-selector chrome by destination ownership', () => {
   const sources = workspaceSources()
   sources.set(addAccountPath, sources.get(addAccountPath)
     .replace('this.pageContent(false)', 'this.pageContent(true)'))
   assert.throws(
     () => validateNativeSecondaryRouteDestinations(sources),
-    /hide the custom bar only in its Native destination/
+    /separate Native and Feiniu provider-selector chrome/
+  )
+})
+
+test('requires both provider choices to remain reachable from AddAccount', () => {
+  const sources = workspaceSources()
+  sources.set(addAccountPath, sources.get(addAccountPath)
+    .replace(
+      'HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()',
+      'HMRouterMgr.to(RouterConsts.JellyfinConnectPage).push()'
+    ))
+  assert.throws(
+    () => validateNativeSecondaryRouteDestinations(sources),
+    /reachable Jellyfin and Feiniu provider selector/
+  )
+})
+
+test('keeps the existing Jellyfin ConnectScreen behind its own route', () => {
+  const sources = workspaceSources()
+  sources.set(jellyfinConnectPath, sources.get(jellyfinConnectPath)
+    .replace('isFromAddAccount: true', 'isFromAddAccount: false'))
+  assert.throws(
+    () => validateNativeSecondaryRouteDestinations(sources),
+    /own the existing add-account ConnectScreen route/
+  )
+})
+
+test('keeps Feiniu authentication independent from the Jellyfin connection flow', () => {
+  const sources = workspaceSources()
+  sources.set(feiniuConnectPath, sources.get(feiniuConnectPath)
+    .replace('await this.vm.onLogin()', 'true'))
+  assert.throws(
+    () => validateNativeSecondaryRouteDestinations(sources),
+    /independent reachable login flow/
   )
 })
 

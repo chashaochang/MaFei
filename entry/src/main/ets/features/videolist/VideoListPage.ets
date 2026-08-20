@@ -1,7 +1,6 @@
 import { GridView, RefreshLayoutStatus } from "@abner/refresh_v2";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
-import { ImageKnifeComponent } from "@ohos/imageknifepro";
-import { BaseItemKind } from "sdk/src/main/ets/generated-client/models";
+import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro";
 import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
@@ -23,6 +22,9 @@ import {
   ManagementLibraryOperationResult
 } from "../management/library/ManagementLibraryModels";
 import { ManagementMediaDeleteDialog } from "../management/library/ManagementMediaDeleteDialog";
+import { createMediaImageKnifeOption } from "../../media/catalog/MediaImageKnifeAdapter";
+import { MediaRefKind } from "../../media/MediaRef";
+import { toMediaRouteRefData } from "../../media/navigation/MediaRouteRef";
 
 @HMRouter({
   pageUrl: RouterConsts.VideoListPage,
@@ -401,8 +403,12 @@ export struct VideoListPage {
         HMRouterMgr.to(RouterConsts.VideoDetailPage)
           .withParam({
             id: (item as VideoItem).id,
+            ref: (item as VideoItem).mediaRef ?
+              toMediaRouteRefData((item as VideoItem).mediaRef!) : undefined,
             mediaName: (item as VideoItem).mediaName,
-            isTvShows: (item as VideoItem).type === 'Series',
+            isTvShows: (item as VideoItem).kind === MediaRefKind.Series ||
+              (item as VideoItem).mediaRef?.kind === MediaRefKind.Series ||
+              (item as VideoItem).type === 'Series',
           })
           .push()
       }
@@ -427,20 +433,24 @@ export struct VideoCard {
   @Event onOpen: () => void = () => {}
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
+  private posterImageOption(): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(this.item.imageRef, this.item.image)
+    option.objectFit = ImageFit.Cover
+    option.border = {
+      radius: 6
+    }
+    option.placeholderSrc = this.item.kind === MediaRefKind.Season ||
+      this.item.mediaRef?.kind === MediaRefKind.Season || this.item.type === 'Season' ?
+      $r('app.media.placeholder_folder') : $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    return option
+  }
+
   build() {
     Column() {
       RelativeContainer() {
         ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: this.item.image,
-            objectFit: ImageFit.Cover,
-            border: {
-              radius: 6
-            },
-            placeholderSrc: this.item.type == BaseItemKind.Season ? $r('app.media.placeholder_folder') :
-              $r('app.media.placeholder_video'),
-            placeholderObjectFit: ImageFit.CENTER
-          }
+          imageKnifeOption: this.posterImageOption()
         })
           .aspectRatio(2 / 3)
           .width('100%')

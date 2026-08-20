@@ -75,10 +75,25 @@ test('rejects Media root actions without administrator and destination scoping',
   `), /administrator scoped/)
 })
 
-test('requires CanDelete and Path in every video list query', () => {
+test('requires CanDelete and Path through the neutral catalog boundary', () => {
   const sources = loadBatchDeleteSources()
-  sources.listViewModel = sources.listViewModel.replace("'CanDelete', 'Path'", "'Path'")
-  assert.throws(() => verifyBatchDeleteText(sources), /every video list query/)
+  sources.jellyfinCatalogProvider = sources.jellyfinCatalogProvider.replaceAll(
+    'ItemFields.CanDelete', 'ItemFields.ChildCount')
+  assert.throws(() => verifyBatchDeleteText(sources), /must request CanDelete/)
+})
+
+test('requires Jellyfin delete capability mapping into MediaSummary', () => {
+  const sources = loadBatchDeleteSources()
+  sources.jellyfinCatalogMapper = sources.jellyfinCatalogMapper.replaceAll(
+    'canDelete: item.CanDelete ?? undefined', 'canDelete: undefined')
+  assert.throws(() => verifyBatchDeleteText(sources), /must retain CanDelete/)
+})
+
+test('requires VideoListViewModel to propagate neutral delete capability', () => {
+  const sources = loadBatchDeleteSources()
+  sources.listViewModel = sources.listViewModel.replaceAll(
+    'item.canDelete === true', 'false')
+  assert.throws(() => verifyBatchDeleteText(sources), /batch-delete ownership is incomplete/)
 })
 
 test('rejects direct batch-delete submission from VideoListPage', () => {

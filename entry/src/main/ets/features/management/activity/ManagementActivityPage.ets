@@ -5,12 +5,16 @@ import {
   HMRouterMgr,
   IHMLifecycleOwner
 } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../../theme/AppThemeTokens';
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
@@ -85,6 +89,15 @@ export struct ManagementActivityPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private floatingOverlayMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
   }
 
   private primaryTextColor(): ResourceColor {
@@ -213,16 +226,32 @@ export struct ManagementActivityPage {
   }
 
   private showOverview(item: ManagementActivityItem): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    const decision = this.floatingOverlayMaterialDecision()
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
       this.getUIContext().getPromptAction().showDialog({
         title: item.name,
         message: item.overview,
         buttons: [{ text: $r('app.string.management_confirm'), color: $r('app.color.color_main') }],
-        backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
-        backgroundBlurStyle: BlurStyle.NONE,
-        systemMaterial: this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-          AppThemeSurfaceResolver.disabledSystemMaterial()
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.Thin
+      }).catch(() => {
+      })
+    } else if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      this.getUIContext().getPromptAction().showDialog({
+        title: item.name,
+        message: item.overview,
+        buttons: [{ text: $r('app.string.management_confirm'), color: $r('app.color.color_main') }],
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }).catch(() => {
+      })
+    } else if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      this.getUIContext().getPromptAction().showDialog({
+        title: item.name,
+        message: item.overview,
+        buttons: [{ text: $r('app.string.management_confirm'), color: $r('app.color.color_main') }],
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       }).catch(() => {
       })
     } else {
@@ -265,7 +294,8 @@ export struct ManagementActivityPage {
           .layoutWeight(1)
           .height(40)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onChange((value: string) => {
             this.ui.query = value
             this.vm.applyFilters()
@@ -280,7 +310,8 @@ export struct ManagementActivityPage {
           .height(40)
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .accessibilityText($r('app.string.management_activity_filter_title'))
           .onClick(() => this.showFilterSheet())
           if (this.activeFilterCount() > 0) {
@@ -315,7 +346,9 @@ export struct ManagementActivityPage {
       .width('100%')
       .padding(2)
       .borderRadius(20)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .backgroundColor(Color.Transparent)
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 10 })
@@ -474,9 +507,8 @@ export struct ManagementActivityPage {
         .padding({ left: 16, right: 16 })
         .borderRadius(this.useNativeMaterial() ? 18 : 8)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(this.ui.displayedPageIndex > 0)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex - 1))
       Text(`${this.ui.displayedPageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
@@ -487,9 +519,8 @@ export struct ManagementActivityPage {
         .padding({ left: 16, right: 16 })
         .borderRadius(this.useNativeMaterial() ? 18 : 8)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(this.ui.displayedPageIndex + 1 < this.ui.pageCount)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex + 1))
     }
@@ -510,9 +541,8 @@ export struct ManagementActivityPage {
         .padding({ left: 12, right: 12 })
         .borderRadius(this.useNativeMaterial() ? 16 : 8)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .enabled(!this.ui.refreshing)
         .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
     }
@@ -537,9 +567,8 @@ export struct ManagementActivityPage {
             .borderRadius(this.useNativeMaterial() ? 20 : 10)
             .fontColor($r('app.color.on_primary'))
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
             .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
         }
       }
@@ -672,7 +701,8 @@ export struct ManagementActivityPage {
         .borderRadius(22)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .enabled(this.ui.pendingItemId.length === 0)
         .onClick(() => this.openMedia(item))
     }
@@ -748,11 +778,31 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private pageSheet() {
+  private pageSheetBody() {
     if (this.sheetKind === ManagementActivitySheetKind.Filter) {
       this.filterSheet()
     } else {
       this.activityDetailSheet()
+    }
+  }
+
+  @Builder
+  private pageSheet() {
+    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+      Column() {
+        this.pageSheetBody()
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .backgroundBlurStyle(BlurStyle.Thin)
+    } else {
+      Column() {
+        this.pageSheetBody()
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
     }
   }
 
@@ -802,26 +852,70 @@ export struct ManagementActivityPage {
   }
 
   @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Column() {
-      if (showLegacyActionBar) {
-        this.legacyPage()
-      } else {
-        this.nativePage()
-      }
+  private pageContentBody(showLegacyActionBar: boolean) {
+    if (showLegacyActionBar) {
+      this.legacyPage()
+    } else {
+      this.nativePage()
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(Color.Transparent)
-    .bindSheet($$this.sheetVisible, this.pageSheet(), {
-      height: '70%',
-      preferType: SheetType.BOTTOM,
-      showClose: true,
-      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
-      systemMaterial: this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-        AppThemeSurfaceResolver.disabledSystemMaterial()
-    })
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
+    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .bindSheet($$this.sheetVisible, this.pageSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent
+      })
+    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .bindSheet($$this.sheetVisible, this.pageSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .bindSheet($$this.sheetVisible, this.pageSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    } else {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .bindSheet($$this.sheetVisible, this.pageSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true
+      })
+    }
   }
 
   build() {

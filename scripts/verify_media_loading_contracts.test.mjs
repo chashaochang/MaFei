@@ -11,9 +11,18 @@ function validSources() {
     [mediaLoadingPaths.viewModel, [
       'class MediaViewModel {',
       '  async init(): Promise<void> {',
+      '    const generation = ++this.requestGeneration',
       '    this.ui.pageState = PageState.Loading',
       '    try {',
-      '      this.ui.mediaList = await this.getMediaList()',
+      '      const catalog = currentMediaCatalogProvider()',
+      '      const mediaList = await this.getMediaList(catalog)',
+      '      if (!this.isCurrent(catalog, generation)) {',
+      '        return',
+      '      }',
+      '      this.ui.mediaList = mediaList',
+      '      if (catalog.session.capabilities.management) {',
+      '        await this.libraryRepository.requireAdministrator()',
+      '      }',
       '      this.ui.pageState = PageState.Content',
       '    } catch (error) {',
       '      this.ui.mediaList = []',
@@ -22,10 +31,9 @@ function validSources() {
       '      this.ui.isRefreshing = false',
       '    }',
       '  }',
-      '  private async getMediaList(): Promise<MediaItem[]> {',
-      '    const response = await api.getUserViews()',
-      '    const views: BaseItemDto[] = (response.data?.Items || [])',
-      '    return Promise.all(views.map(async (item: BaseItemDto): Promise<MediaItem> => item))',
+      '  private async getMediaList(catalog: MediaCatalogProvider): Promise<MediaItem[]> {',
+      '    const libraries = await catalog.getLibraries()',
+      '    return libraries.map((item: MediaLibrary): MediaItem => item)',
       '  }',
       '}'
     ].join('\n')],
@@ -64,27 +72,40 @@ test('accepts the current workspace implementation', () => {
     validateMediaLoadingContracts(loadMediaLoadingSources()))
 })
 
-test('rejects a Promise that resolves before child requests settle', () => {
+test('rejects wrapping Catalog loading in an early-settling Promise', () => {
   const sources = validSources()
   sources.set(mediaLoadingPaths.viewModel,
     sources.get(mediaLoadingPaths.viewModel).replace(
-      'return Promise.all(views.map(async (item: BaseItemDto): Promise<MediaItem> => item))',
-      'return new Promise((resolve) => { Promise.all(views.map(loadItem)); resolve() })'))
+      'return libraries.map((item: MediaLibrary): MediaItem => item)',
+      'return new Promise((resolve) => { catalog.getLibraries(); resolve([]) })'))
   assert.throws(
     () => validateMediaLoadingContracts(sources),
-    /must not wrap SDK calls in a manual Promise/
+    /must not wrap Catalog calls in a manual Promise/
   )
 })
 
-test('rejects an empty response path without a normalized return', () => {
+test('rejects bypassing the neutral Catalog library contract', () => {
   const sources = validSources()
   sources.set(mediaLoadingPaths.viewModel,
     sources.get(mediaLoadingPaths.viewModel).replace(
-      'const views: BaseItemDto[] = (response.data?.Items || [])',
-      'if (response.data?.Items) { return Promise.all(response.data.Items.map(loadItem)) }'))
+      'const libraries = await catalog.getLibraries()',
+      'const libraries = await legacyApi.getUserViews()'))
   assert.throws(
     () => validateMediaLoadingContracts(sources),
-    /normalize an empty response/
+    /neutral Catalog/
+  )
+})
+
+test('rejects publishing a media list before the active request guard', () => {
+  const sources = validSources()
+  sources.set(mediaLoadingPaths.viewModel,
+    sources.get(mediaLoadingPaths.viewModel).replace(
+      '      if (!this.isCurrent(catalog, generation)) {\n        return\n      }\n' +
+        '      this.ui.mediaList = mediaList',
+      '      this.ui.mediaList = mediaList'))
+  assert.throws(
+    () => validateMediaLoadingContracts(sources),
+    /await the complete media list/
   )
 })
 

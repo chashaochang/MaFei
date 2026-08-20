@@ -11,6 +11,7 @@ function validSources() {
     [searchRequestGuardPaths.viewModel, `
       class SearchViewModel {
         private requestGeneration: number = 0
+        private catalog?: MediaCatalogProvider
 
         search(value: string, saveHistory: boolean = false): void {
           const query = value.trim()
@@ -22,22 +23,44 @@ function validSources() {
           }
           this.clearResults()
           this.ui.pageState = PageState.Loading
-          getItemsApi(ApiClient.Instance()).getItems({ searchTerm: query })
-            .then(() => {
-              if (generation !== this.requestGeneration) { return }
+          let request: Promise<MediaSummary[]>
+          let catalog: MediaCatalogProvider
+          try {
+            catalog = currentMediaCatalogProvider()
+            this.catalog = catalog
+            request = catalog.search({ query: query }).then((page) => page.items)
+          } catch (_error) {
+            this.finishSearchFailure(generation)
+            return
+          }
+          request.then(() => {
+              if (!this.isCurrent(catalog, generation)) { return }
               this.ui.pageState = PageState.Content
               if (saveHistory) {
                 this.saveHistory(query)
               }
             })
             .catch(() => {
-              if (generation !== this.requestGeneration) { return }
-              this.ui.pageState = PageState.Error
+              this.finishSearchFailure(generation, catalog)
             })
         }
 
         cancelPendingSearch(): void {
           this.requestGeneration += 1
+          this.catalog = undefined
+        }
+
+        private finishSearchFailure(generation: number, catalog?: MediaCatalogProvider): void {
+          if (generation !== this.requestGeneration || (catalog && !this.isCurrent(catalog, generation))) {
+            return
+          }
+          this.ui.pageState = PageState.Error
+        }
+
+        private isCurrent(catalog: MediaCatalogProvider, generation: number): boolean {
+          const activeSession = MediaProviderRegistry.instance().getActiveSession()
+          return this.catalog === catalog && generation === this.requestGeneration &&
+            (!activeSession || activeSession.accountScope === catalog.session.accountScope)
         }
 
         retrySearch(): void {
@@ -108,11 +131,11 @@ test('rejects a missing stale-response guard', () => {
   const sources = validSources()
   const viewModel = sources.get(searchRequestGuardPaths.viewModel)
   sources.set(searchRequestGuardPaths.viewModel,
-    viewModel.replace('if (generation !== this.requestGeneration) { return }', ''))
+    viewModel.replace('if (!this.isCurrent(catalog, generation)) { return }', ''))
 
   assert.throws(
     () => validateSearchRequestGuards(sources),
-    /success and failure must reject stale generations/
+    /success must reject stale provider requests/
   )
 })
 
@@ -124,7 +147,19 @@ test('rejects an empty query that reaches the server', () => {
 
   assert.throws(
     () => validateSearchRequestGuards(sources),
-    /empty query must clear and return before getItems/
+    /empty query must clear and return before catalog search/
+  )
+})
+
+test('rejects a search guard without active account scope', () => {
+  const sources = validSources()
+  const viewModel = sources.get(searchRequestGuardPaths.viewModel)
+  sources.set(searchRequestGuardPaths.viewModel,
+    viewModel.replace('activeSession.accountScope === catalog.session.accountScope', 'true'))
+
+  assert.throws(
+    () => validateSearchRequestGuards(sources),
+    /retain the active account scope/
   )
 })
 

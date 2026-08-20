@@ -1,4 +1,8 @@
-import { MediaSourceInfo, MediaStream, MediaStreamType } from "sdk/src/main/ets/generated-client/models"
+import {
+  MediaFileInfo,
+  MediaStreamInfo,
+  MediaStreamKind
+} from '../../../media/catalog/MediaCatalogModels'
 import { LanguageUtil } from "../../../utils/LanguageUtil"
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppUIState } from '../../../entity/AppUIState'
@@ -6,10 +10,10 @@ import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 
 @ComponentV2
 export struct VideoInfoDetail {
-  @Require @Param source: MediaSourceInfo
-  @Local videos: MediaStream[] = []
-  @Local audios: MediaStream[] = []
-  @Local subtitles: MediaStream[] = []
+  @Require @Param source: MediaFileInfo
+  @Local videos: MediaStreamInfo[] = []
+  @Local audios: MediaStreamInfo[] = []
+  @Local subtitles: MediaStreamInfo[] = []
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
   private groupBackground(): ResourceColor {
@@ -49,12 +53,12 @@ export struct VideoInfoDetail {
     this.videos = []
     this.subtitles = []
     this.audios = []
-    this.source.MediaStreams?.forEach((stream) => {
-      if (stream.Type === MediaStreamType.Video) {
+    this.source.streams.forEach((stream: MediaStreamInfo) => {
+      if (stream.kind === MediaStreamKind.Video) {
         this.videos.push(stream)
-      } else if (stream.Type === MediaStreamType.Audio) {
+      } else if (stream.kind === MediaStreamKind.Audio) {
         this.audios.push(stream)
-      } else if (stream.Type === MediaStreamType.Subtitle) {
+      } else if (stream.kind === MediaStreamKind.Subtitle) {
         this.subtitles.push(stream)
       }
     })
@@ -63,56 +67,59 @@ export struct VideoInfoDetail {
   build() {
     Column({ space: 8 }) {
       Text('视频').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.headingTextColor())
-      ForEach(this.videos, (video: MediaStream) => {
+      ForEach(this.videos, (video: MediaStreamInfo) => {
         Column({ space: 16 }) {
-          Text(video.DisplayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
+          Text(video.displayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
           Row() {
             Text(`编码器`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.Codec).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.codec).fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`配置`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.Profile).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.profile || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`等级`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.Level + '').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.level !== undefined ? video.level.toString() : '--')
+              .fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`分辨率`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(`${video.Width} * ${video.Height}`).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.width && video.height ? `${video.width} * ${video.height}` : '--')
+              .fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`宽高比`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.AspectRatio).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.aspectRatio || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Divider()
           Row() {
             Text(`隔行扫描`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.IsInterlaced ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.interlaced ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`帧率`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.RealFrameRate + ' fps').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.frameRate !== undefined ? `${video.frameRate} fps` : '--')
+              .fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`码率`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(((video.BitRate || 0) * 1e-6).toFixed(2) + ' mbps')
+            Text(video.bitrate !== undefined ? (video.bitrate * 1e-6).toFixed(2) + ' mbps' : '--')
               .fontSize(12)
               .fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
@@ -120,13 +127,13 @@ export struct VideoInfoDetail {
           Row() {
             Text(`视频动态范围`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.VideoRangeType).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.videoRangeType || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`色彩原色`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.ColorPrimaries || '--').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.colorPrimaries || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Divider()
@@ -134,31 +141,33 @@ export struct VideoInfoDetail {
           Row() {
             Text(`色彩空间`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.ColorSpace || '--').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.colorSpace || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`色彩转换`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.ColorTransfer || '--').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.colorTransfer || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`位深度`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.BitDepth + ' bit').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.bitDepth !== undefined ? `${video.bitDepth} bit` : '--')
+              .fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`像素格式`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.PixelFormat).fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.pixelFormat || '--').fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
           Row() {
             Text(`参考帧`).fontSize(12).fontColor(this.secondaryTextColor())
             Blank().layoutWeight(1)
-            Text(video.RefFrames + '').fontSize(12).fontColor(this.secondaryTextColor())
+            Text(video.refFrames !== undefined ? video.refFrames.toString() : '--')
+              .fontSize(12).fontColor(this.secondaryTextColor())
           }.justifyContent(FlexAlign.SpaceBetween)
 
         }
@@ -172,13 +181,13 @@ export struct VideoInfoDetail {
       if (this.audios.length > 0) {
         Blank().height(8)
         Text('音频').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.headingTextColor())
-        ForEach(this.audios, (audio: MediaStream) => {
+        ForEach(this.audios, (audio: MediaStreamInfo) => {
           Column({ space: 16 }) {
-            Text(audio.DisplayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
+            Text(audio.displayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
             Row() {
               Text(`语言`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(LanguageUtil.getLanguageDisplayNameBy6392T(audio.Language || ''))
+              Text(LanguageUtil.getLanguageDisplayNameBy6392T(audio.language || ''))
                 .fontSize(12)
                 .fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
@@ -186,45 +195,48 @@ export struct VideoInfoDetail {
             Row() {
               Text(`编码器`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.Codec).fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.codec).fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Row() {
               Text(`配置`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.Profile || '--').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.profile || '--').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Divider()
             Row() {
               Text(`声道`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.Channels + ' ch').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.channels !== undefined ? `${audio.channels} ch` : '--')
+                .fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Row() {
               Text(`采样率`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.SampleRate + ' Hz').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.sampleRate !== undefined ? `${audio.sampleRate} Hz` : '--')
+                .fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Row() {
               Text(`码率`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.BitRate + ' bps').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.bitrate !== undefined ? `${audio.bitrate} bps` : '--')
+                .fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Divider()
             Row() {
               Text(`布局`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.ChannelLayout || '--').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.channelLayout || '--').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Row() {
               Text(`默认`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(audio.IsDefault ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(audio.default ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
           }
           .width('100%')
@@ -239,13 +251,13 @@ export struct VideoInfoDetail {
       if (this.subtitles.length > 0) {
         Blank().height(8)
         Text('字幕').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.headingTextColor())
-        ForEach(this.subtitles, (subtitle: MediaStream) => {
+        ForEach(this.subtitles, (subtitle: MediaStreamInfo) => {
           Column({ space: 16 }) {
-            Text(subtitle.DisplayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
+            Text(subtitle.displayTitle).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
             Row() {
               Text(`语言`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(LanguageUtil.getLanguageDisplayNameBy6392T(subtitle.Language || ''))
+              Text(LanguageUtil.getLanguageDisplayNameBy6392T(subtitle.language || ''))
                 .fontSize(12)
                 .fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
@@ -253,27 +265,27 @@ export struct VideoInfoDetail {
             Row() {
               Text(`编码器`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(subtitle.Codec || '--').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(subtitle.codec || '--').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Divider()
             Row() {
               Text(`默认`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(subtitle.IsDefault ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(subtitle.default ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Row() {
               Text(`强制`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(subtitle.IsForced ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(subtitle.forced ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
 
             Divider()
             Row() {
               Text(`外部`).fontSize(12).fontColor(this.secondaryTextColor())
               Blank().layoutWeight(1)
-              Text(subtitle.IsExternal ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
+              Text(subtitle.external ? '是' : '否').fontSize(12).fontColor(this.secondaryTextColor())
             }.justifyContent(FlexAlign.SpaceBetween)
           }
           .width('100%')

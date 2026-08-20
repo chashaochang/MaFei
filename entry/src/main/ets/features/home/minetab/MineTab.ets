@@ -5,7 +5,7 @@ import { MineUIState } from "./MineUIState"
 import { MineViewModel } from "./MineViewModel"
 import { BaseGroupItem, ListGroup } from "../../../component/ListGroup"
 import { RouterConsts } from "../../../common/RouterConsts"
-import { getUIAbilityContext, playItems } from "../../../common/CommonFunc"
+import { getUIAbilityContext, playMediaRefs } from "../../../common/CommonFunc"
 import { wantConstant } from "@kit.AbilityKit"
 import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 import { ActionBar } from "../../../component/ActionBar"
@@ -88,9 +88,10 @@ export struct MineTab {
             $r('sys.color.font_secondary') : $r('app.color.text_1'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-        if (!this.useNativeSurface()) {
+        if (this.ui.serverVersion.length > 0) {
           Text(this.ui.serverVersion)
-            .fontColor($r('app.color.text_2'))
+            .fontColor(this.useNativeSurface() ?
+              $r('sys.color.font_tertiary') : $r('app.color.text_2'))
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
         }
@@ -156,7 +157,7 @@ export struct MineTab {
           Blank().height(this.topSpacerHeight())
           this.profileHeader()
 
-          if (this.ui.isAdministrator) {
+          if (this.ui.managementAvailable && this.ui.isAdministrator) {
             ListGroup({
               items: [new BaseGroupItem($r('app.string.management_title'), $r('app.media.ic_setting'))],
               onItemClick: () => {
@@ -172,7 +173,7 @@ export struct MineTab {
             nativeSurface: this.useNativeSurface(),
             themeStyle: this.vm.appUIState.themeStyle,
             onItemClick: (item: MineHistoryItem) => {
-              playItems([item.id], this.getUIContext().getHostContext()!)
+              playMediaRefs([item.mediaRef], this.getUIContext().getHostContext()!)
             },
             onRetry: () => {
               this.vm.refreshHistory()
@@ -182,22 +183,31 @@ export struct MineTab {
             }
           })
 
-          ListGroup({
-            items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch')),
-              new BaseGroupItem('网(Web)易通', $r('app.media.web'))],
-            onItemClick: (index) => {
-              switch (index) {
-                case 0: {
-                  HMRouterMgr.to(RouterConsts.AccountPage).push()
-                  break
-                }
-                case 1: {
-                  HMRouterMgr.to(RouterConsts.WebITongPage).push()
-                  break
+          if (this.ui.webITongAvailable) {
+            ListGroup({
+              items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch')),
+                new BaseGroupItem('网(Web)易通', $r('app.media.web'))],
+              onItemClick: (index) => {
+                switch (index) {
+                  case 0: {
+                    HMRouterMgr.to(RouterConsts.AccountPage).push()
+                    break
+                  }
+                  case 1: {
+                    HMRouterMgr.to(RouterConsts.WebITongPage).push()
+                    break
+                  }
                 }
               }
-            }
-          })
+            })
+          } else {
+            ListGroup({
+              items: [new BaseGroupItem('切换账号', $r('app.media.ic_account_switch'))],
+              onItemClick: () => {
+                HMRouterMgr.to(RouterConsts.AccountPage).push()
+              }
+            })
+          }
           ListGroup({
             items: [new BaseGroupItem(
               $r('app.string.settings_title'), $r('app.media.ic_setting'), '', true, '',

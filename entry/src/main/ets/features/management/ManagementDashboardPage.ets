@@ -5,7 +5,6 @@ import {
   HMRouterMgr,
   IHMLifecycleOwner
 } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { PageState } from '../../common/base/BaseUIState';
 import { CustomRefreshComponent } from '../../common/CustomRefreshComponent';
 import { RouterConsts } from '../../common/RouterConsts';
@@ -13,6 +12,11 @@ import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ManagementActivityDashboardSection } from './activity/ManagementActivityDashboardSection';
 import { ManagementActivityDashboardUIState } from './activity/ManagementActivityUIState';
@@ -108,6 +112,15 @@ export struct ManagementDashboardPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private dangerousDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
   }
 
   private progressTrackColor(): ResourceColor {
@@ -309,9 +322,8 @@ export struct ManagementDashboardPage {
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(this.useNativeMaterial() ? 22 : 12)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .enabled(!this.ui.isLibraryScanRunning && !this.ui.isStartingScan && !this.ui.isScanSubmissionLocked)
         .opacity(this.ui.isLibraryScanRunning || this.ui.isStartingScan ||
           this.ui.isScanSubmissionLocked ? 0.55 : 1)
@@ -474,9 +486,8 @@ export struct ManagementDashboardPage {
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(onRetry)
       }
     }
@@ -716,9 +727,8 @@ export struct ManagementDashboardPage {
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
         .borderRadius(this.useNativeMaterial() ? 20 : 12)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .onClick(() => this.vm.init())
     }
     .layoutWeight(1)
@@ -728,7 +738,7 @@ export struct ManagementDashboardPage {
   }
 
   private confirmLibraryScan(): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_scan_confirm_title'),
         message: $r('app.string.management_scan_confirm_content'),

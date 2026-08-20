@@ -23,7 +23,11 @@ export struct EmptyView {
         .width(88)
         .height(88)
         .borderRadius(24)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.Floating,
+          true,
+          this.appUIState.systemMaterialAvailable
+        ))
         Text(this.title)
           .fontSize(14)
           .fontColor($r('sys.color.font_secondary'))

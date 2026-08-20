@@ -1,16 +1,9 @@
 import { uiMaterial } from '@kit.ArkUI'
 import { ThemeStyle } from '../entity/ThemeStyle'
+import { HdsUiCapability } from './HdsUiCapability'
+import { AppThemeMaterialRole, AppThemeSurfaceModifier } from './AppThemeSurfaceModifier'
 
-export enum AppThemeMaterialRole {
-  ContentGroup = 'content_group',
-  Floating = 'floating',
-  InteractiveFloating = 'interactive_floating',
-  PrimaryInteractive = 'primary_interactive',
-  AdaptiveInteractive = 'adaptive_interactive',
-  MusicMiniPlayer = 'music_mini_player',
-  HomeLibraryChip = 'home_library_chip',
-  HomeLibraryChipSelected = 'home_library_chip_selected'
-}
+export { AppThemeMaterialRole, AppThemeSurfaceModifier } from './AppThemeSurfaceModifier'
 
 export class AppThemeSurfaceResolver {
   private static contentGroup?: uiMaterial.Material
@@ -21,8 +14,15 @@ export class AppThemeSurfaceResolver {
   private static musicMiniPlayer?: uiMaterial.Material
   private static homeLibraryChip?: uiMaterial.Material
   private static homeLibraryChipSelected?: uiMaterial.Material
-  private static interactiveLightEffect: uiMaterial.LightEffectOptions = {
-    color: Color.White
+  private static interactiveLightEffect?: uiMaterial.LightEffectOptions
+
+  private static lightEffect(): uiMaterial.LightEffectOptions {
+    if (!AppThemeSurfaceResolver.interactiveLightEffect) {
+      AppThemeSurfaceResolver.interactiveLightEffect = {
+        color: Color.White
+      }
+    }
+    return AppThemeSurfaceResolver.interactiveLightEffect
   }
 
   static useNativeSurface(style: ThemeStyle, available: boolean): boolean {
@@ -85,7 +85,20 @@ export class AppThemeSurfaceResolver {
     return $r('sys.color.comp_background_primary')
   }
 
-  static material(role: AppThemeMaterialRole): uiMaterial.Material {
+  static modifier(role: AppThemeMaterialRole, nativeSurface: boolean,
+    systemMaterialAvailable?: boolean): AppThemeSurfaceModifier {
+    const capabilityAvailable = HdsUiCapability.supportsSystemMaterial()
+    const useSystemMaterial = capabilityAvailable && (systemMaterialAvailable ?? true)
+    const material = useSystemMaterial ?
+      (nativeSurface ? AppThemeSurfaceResolver.material(role) :
+        AppThemeSurfaceResolver.disabledSystemMaterial()) : undefined
+    return new AppThemeSurfaceModifier(role, nativeSurface, useSystemMaterial, material)
+  }
+
+  static material(role: AppThemeMaterialRole): uiMaterial.Material | undefined {
+    if (!HdsUiCapability.supportsSystemMaterial()) {
+      return undefined
+    }
     if (role === AppThemeMaterialRole.ContentGroup) {
       if (!AppThemeSurfaceResolver.contentGroup) {
         AppThemeSurfaceResolver.contentGroup = new uiMaterial.ImmersiveMaterial({
@@ -111,7 +124,7 @@ export class AppThemeSurfaceResolver {
         AppThemeSurfaceResolver.musicMiniPlayer = new uiMaterial.ImmersiveMaterial({
           applyShadow: true,
           interactive: true,
-          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+          lightEffect: AppThemeSurfaceResolver.lightEffect()
         })
       }
       return AppThemeSurfaceResolver.musicMiniPlayer
@@ -124,7 +137,7 @@ export class AppThemeSurfaceResolver {
           colorInvert: false,
           applyShadow: true,
           interactive: true,
-          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+          lightEffect: AppThemeSurfaceResolver.lightEffect()
         })
       }
       return AppThemeSurfaceResolver.interactiveFloating
@@ -137,7 +150,7 @@ export class AppThemeSurfaceResolver {
           colorInvert: false,
           applyShadow: true,
           interactive: true,
-          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+          lightEffect: AppThemeSurfaceResolver.lightEffect()
         })
       }
       return AppThemeSurfaceResolver.primaryInteractive
@@ -159,7 +172,7 @@ export class AppThemeSurfaceResolver {
           colorInvert: false,
           applyShadow: false,
           interactive: true,
-          lightEffect: AppThemeSurfaceResolver.interactiveLightEffect
+          lightEffect: AppThemeSurfaceResolver.lightEffect()
         })
       }
       return AppThemeSurfaceResolver.homeLibraryChipSelected
@@ -176,7 +189,10 @@ export class AppThemeSurfaceResolver {
     return AppThemeSurfaceResolver.floating
   }
 
-  static disabledSystemMaterial(): uiMaterial.Material {
+  static disabledSystemMaterial(): uiMaterial.Material | undefined {
+    if (!HdsUiCapability.supportsSystemMaterial()) {
+      return undefined
+    }
     return uiMaterial.Material.empty
   }
 }

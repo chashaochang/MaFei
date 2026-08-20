@@ -58,9 +58,8 @@ export struct ManagementActivityDashboardSection {
           .height(32).borderRadius(this.useNativeMaterial() ? 16 : 8)
           .fontSize(13).fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(() => this.onOpenAll())
       }
       .width('100%')
@@ -91,13 +90,24 @@ export struct ManagementActivityDashboardSection {
         Column({ space: 10 }) {
           Text($r('app.string.management_activity_failed'))
             .fontSize(13).fontColor(this.secondaryTextColor())
-          Button($r('app.string.management_retry'), { type: ButtonType.Normal })
-            .height(34).borderRadius(this.useNativeMaterial() ? 17 : 8)
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
-            .enabled(!this.ui.refreshing)
-            .onClick(() => this.onRetry())
+          if (this.useNativeMaterial()) {
+            Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+              .height(34)
+              .borderRadius(17)
+              .backgroundColor(Color.Transparent)
+              .attributeModifier(AppThemeSurfaceResolver.modifier(
+                AppThemeMaterialRole.AdaptiveInteractive, true))
+              .enabled(!this.ui.refreshing)
+              .onClick(() => this.onRetry())
+          } else {
+            Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+              .height(34)
+              .borderRadius(8)
+              .attributeModifier(AppThemeSurfaceResolver.modifier(
+                AppThemeMaterialRole.AdaptiveInteractive, false))
+              .enabled(!this.ui.refreshing)
+              .onClick(() => this.onRetry())
+          }
         }
         .width('100%').alignItems(HorizontalAlign.Start)
       } else if (this.ui.status === ManagementSectionStatus.Loading) {

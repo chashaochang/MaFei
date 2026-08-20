@@ -1,23 +1,26 @@
-import { AxiosResponse } from "@ohos/axios";
-import { getPlaystateApi, getTvShowsApi, getUserLibraryApi, ImageUrlsApi } from "sdk";
-import {
-  BaseItemDto,
-  BaseItemDtoQueryResult,
-  BaseItemKind,
-  ImageType,
-  ItemFields
-} from "sdk/src/main/ets/generated-client/models";
-import { BaseViewModel } from "../../common/base/BaseViewModel";
-import { getItemImageUrl, getTagBase64, getVideoTagsByStreams, openUrlByBrowser, playItems } from "../../common/CommonFunc";
-import { ApiClient } from "../../network/ApiClient";
-import { VideoItem } from "../home/hometab/HomeUIState";
-import { VideoDetailUIState } from "./VideoDetailUIState";
-import { common, Want } from "@kit.AbilityKit";
-import { curves } from '@kit.ArkUI';
-import { ToastUtil } from "../../utils/ToastUtil";
-import { ReportService } from "../../network/ReportService";
-import { AppPreference } from "../../data/AppPreference";
+import { common, Want } from '@kit.AbilityKit'
+import { curves } from '@kit.ArkUI'
+import { BaseViewModel } from '../../common/base/BaseViewModel'
+import { getTagBase64, playMediaRefs } from '../../common/CommonFunc'
+import { AppPreference } from '../../data/AppPreference'
 import { MediaLibraryRefreshEvent } from '../../events/Events'
+import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess'
+import {
+  MediaDetail,
+  MediaEpisode,
+  MediaFileInfo,
+  MediaSeason,
+  MediaStreamInfo,
+  MediaStreamKind,
+  MediaSummary
+} from '../../media/catalog/MediaCatalogModels'
+import {
+  MediaCatalogProvider,
+  MediaEpisodeQueryProfile
+} from '../../media/catalog/MediaCatalogProvider'
+import { MediaRef, MediaRefKind } from '../../media/MediaRef'
+import { ToastUtil } from '../../utils/ToastUtil'
+import { VideoItem } from '../home/hometab/HomeUIState'
 import {
   ManagementLibraryOperationCode,
   ManagementLibraryOperationResult,
@@ -26,69 +29,293 @@ import {
 } from '../management/library/ManagementLibraryModels'
 import { ManagementMediaDeletePolicy } from '../management/library/ManagementMediaDeletePolicy'
 import { ManagementMediaDeleteRepository } from '../management/library/ManagementMediaDeleteRepository'
+import { VideoDetailUIState, VideoTag } from './VideoDetailUIState'
+
+interface EpisodeQueueSelection {
+  readonly refs: MediaRef[]
+  readonly startIndex: number
+  readonly label: string
+}
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
-  private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
   private deleteRepository: ManagementMediaDeleteRepository = new ManagementMediaDeleteRepository()
-  private originImageHeight: number = 0;
-  private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
-  episodeList: string[] = []
+  private originImageHeight: number = 0
+  private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30)
+  private catalog?: MediaCatalogProvider
+  private requestGeneration: number = 0
+  episodeList: MediaRef[] = []
   episodeStartIndex: number = 0
 
-  private normalizeSeasonName(seasonName?: string | null): string {
-    const value = (seasonName || '').trim()
-    if (value.length === 0) {
+  private formatDuration(durationMs: number): string {
+    if (durationMs <= 0) {
       return ''
     }
-    const compact = value.replace(/\s+/g, ' ').trim()
-    if (/season\s*unknown/i.test(compact) || /unknown/i.test(compact)) {
-      return ''
+    const totalMinutes = Math.max(1, Math.floor(durationMs / 60000))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours > 0 && minutes > 0) {
+      return `${hours}小时${minutes}分钟`
     }
-    const englishSeason = compact.match(/^season\s*(\d+)$/i)
-    if (englishSeason) {
-      return `第 ${englishSeason[1]} 季`
+    if (hours > 0) {
+      return `${hours}小时`
     }
-    if (/^specials?$/i.test(compact)) {
-      return '特别篇'
-    }
-    if (compact.startsWith('第') && compact.endsWith('季')) {
-      return compact.replace(/\s+/g, '').replace('第', '第 ').replace('季', ' 季')
-    }
-    return compact
+    return `${minutes}分钟`
   }
 
-  private formatEpisodePlayText(item: BaseItemDto): string {
-    const seasonName = this.normalizeSeasonName(item.SeasonName)
-    return (seasonName !== '' ? seasonName + '  ' : '') + '第 ' + item.IndexNumber + ' 集'
+  private formatEpisodePlayText(episode: MediaEpisode | MediaSummary): string {
+    const parts: string[] = []
+    if (episode.seasonNumber !== undefined) {
+      parts.push(`第 ${episode.seasonNumber} 季`)
+    }
+    parts.push(`第 ${episode.episodeNumber || 1} 集`)
+    return parts.join('  ')
   }
 
-  private updateEpisodeQueue(items: BaseItemDto[], startIndex: number) {
-    if (items.length === 0) {
-      this.episodeList = []
-      this.episodeStartIndex = 0
-      return
-    }
-    this.episodeList = items.map<string>((e) => e.Id!)
-    this.episodeStartIndex = Math.min(Math.max(startIndex, 0), this.episodeList.length - 1)
+  private isCurrent(catalog: MediaCatalogProvider, ref: MediaRef, generation: number): boolean {
+    return this.catalog === catalog && generation === this.requestGeneration &&
+      this.ui.mediaRef?.equals(ref) === true && ref.belongsTo(catalog.session)
   }
 
-  private loadEpisodeQueueForEpisode(itemData: BaseItemDto) {
-    if (!itemData.SeriesId) {
-      return
-    }
-    getTvShowsApi(ApiClient.Instance()).getEpisodes({
-      userId: ApiClient.Instance().userId,
-      fields: [ItemFields.Chapters, ItemFields.Trickplay],
-      isMissing: false,
-      seriesId: itemData.SeriesId,
-      seasonId: itemData.SeasonId
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      if (res.data?.Items && res.data.Items.length > 0) {
-        const episodeItems = res.data.Items
-        const currentIndex = episodeItems.findIndex((episode) => episode.Id === itemData.Id)
-        this.updateEpisodeQueue(episodeItems, currentIndex >= 0 ? currentIndex : 0)
+  private applyDeleteCapability(detail: MediaDetail, catalog: MediaCatalogProvider): void {
+    const firstPath = detail.mediaFiles.length > 0 ? detail.mediaFiles[0].path : ''
+    this.ui.deletePath = detail.path || firstPath
+    this.ui.canDelete = catalog.session.capabilities.management && detail.canDelete === true &&
+      this.ui.deletePath.trim().length > 0
+  }
+
+  private mediaInfo(detail: MediaDetail): string {
+    const parts: string[] = []
+    if (detail.officialRating.length > 0) parts.push(detail.officialRating)
+    if (detail.productionYear !== undefined) parts.push(detail.productionYear.toString())
+    detail.genres.forEach((genre: string): void => {
+      if (genre.length > 0) parts.push(genre)
+    })
+    const duration = this.formatDuration(detail.durationMs)
+    if (duration.length > 0) parts.push(duration)
+    if (this.ui.mediaName.length > 0) parts.push(this.ui.mediaName)
+    return parts.join('  /  ')
+  }
+
+  private applyDetail(detail: MediaDetail, catalog: MediaCatalogProvider): void {
+    this.ui.mediaRef = detail.ref
+    this.ui.seriesRef = detail.seriesRef
+    this.ui.seasonRef = detail.seasonRef
+    this.ui.id = detail.ref.id
+    this.ui.title = detail.title
+    this.ui.isTvShows = detail.ref.kind === MediaRefKind.Series
+    this.ui.isMovie = detail.ref.kind === MediaRefKind.Movie
+    this.ui.imageRef = detail.backdropImage || detail.primaryImage
+    this.ui.image = this.ui.imageRef?.url || ''
+    this.ui.logoRef = detail.logoImage
+    this.ui.logo = detail.logoImage?.url || ''
+    this.ui.score = detail.communityRating || 0
+    this.ui.overview = detail.overview
+    this.ui.people = detail.personCredits.slice()
+    this.ui.isFavorite = detail.userState.favorite.favorite
+    this.ui.played = detail.userState.watched.watched
+    this.ui.isChasing = this.ui.isTvShows && AppPreference.getInstance().isChasingSeries(detail.ref.id)
+    this.ui.mediaSources = detail.mediaFiles.slice()
+    this.ui.externalUrls = detail.externalLinks.slice()
+    this.ui.playbackPositionMs = detail.userState.watched.playbackPositionMs
+    this.ui.percentageWatched = detail.userState.watched.playedPercentage
+    this.ui.remainingTime = ''
+    this.ui.playButtonText = '播放'
+    this.ui.subtitle = ''
+    this.ui.episodeName = ''
+    this.ui.selectedMediaSourceIndex = 0
+    this.ui.selectedAudio = undefined
+    this.ui.selectedSubtitle = undefined
+    this.applyDeleteCapability(detail, catalog)
+
+    if (detail.ref.kind === MediaRefKind.Episode) {
+      const episode: MediaEpisode = {
+        ref: detail.ref,
+        seriesRef: detail.seriesRef || detail.ref,
+        seasonRef: detail.seasonRef,
+        title: detail.title,
+        seriesTitle: detail.seriesTitle || '',
+        overview: detail.overview,
+        seasonNumber: detail.seasonNumber,
+        episodeNumber: detail.episodeNumber,
+        premiereDate: detail.premiereDate,
+        durationMs: detail.durationMs,
+        communityRating: detail.communityRating,
+        tags: detail.tags.slice(),
+        primaryImage: detail.primaryImage,
+        backdropImage: detail.backdropImage,
+        userState: detail.userState
       }
-    }).catch()
+      this.ui.episodeName = this.formatEpisodePlayText(episode)
+      const episodeParts: string[] = []
+      if ((detail.seriesTitle || '').length > 0) episodeParts.push(detail.seriesTitle || '')
+      if ((detail.seasonTitle || '').length > 0) {
+        episodeParts.push(detail.seasonTitle || '')
+      } else if (detail.seasonNumber !== undefined) {
+        episodeParts.push(`第 ${detail.seasonNumber} 季`)
+      }
+      episodeParts.push(`第 ${detail.episodeNumber || 1} 集`)
+      this.ui.subtitle = episodeParts.join(' · ')
+    }
+    this.ui.info = this.mediaInfo(detail)
+    if (this.ui.playbackPositionMs > 0) {
+      const remainingMs = Math.max(0, detail.durationMs - this.ui.playbackPositionMs)
+      const remainingMinutes = Math.max(0, Math.floor(remainingMs / 60000))
+      const hours = Math.floor(remainingMinutes / 60)
+      const minutes = remainingMinutes % 60
+      this.ui.remainingTime = hours > 0 ? `剩余 ${hours} 小时 ${minutes} 分钟` : `剩余 ${minutes} 分钟`
+      this.ui.playButtonText = '继续播放'
+    }
+    this.getFileInfo()
+    this.getVideoInfo()
+  }
+
+  private mapSeasons(seasons: MediaSeason[]): VideoItem[] {
+    return seasons.map<VideoItem>((season: MediaSeason): VideoItem => {
+      const image = season.primaryImage || season.backdropImage
+      const subtitleParts: string[] = [`共${season.episodeCount}集`]
+      if (season.productionYear !== undefined) subtitleParts.push(season.productionYear.toString())
+      return {
+        id: season.ref.id,
+        mediaRef: season.ref,
+        seriesRef: season.seriesRef,
+        kind: season.ref.kind,
+        name: season.title,
+        image: image?.url || '',
+        imageRef: image,
+        subtitle: subtitleParts.join(' · '),
+        score: season.communityRating || 0,
+        tags: [],
+        mediaName: this.ui.title,
+        type: 'Season'
+      }
+    })
+  }
+
+  private applyEpisodeQueue(selection: EpisodeQueueSelection): void {
+    this.episodeList = selection.refs.slice()
+    this.episodeStartIndex = selection.startIndex
+    this.ui.episodeName = selection.label
+    if (selection.label.length > 0) this.ui.playButtonText = selection.label
+  }
+
+  private async seriesQueue(catalog: MediaCatalogProvider, seriesRef: MediaRef): Promise<EpisodeQueueSelection> {
+    let preferredId = ''
+    let preferredLabel = ''
+    try {
+      const nextPage = await catalog.nextUp({
+        seriesRef: seriesRef,
+        limit: 1,
+        disableFirstEpisode: false,
+        enableResumable: true,
+        enableRewatching: true
+      })
+      if (nextPage.items.length > 0) {
+        preferredId = nextPage.items[0].ref.id
+        preferredLabel = this.formatEpisodePlayText(nextPage.items[0])
+      }
+    } catch (_error) {
+    }
+    const episodePage = await catalog.getEpisodes({
+      seriesRef: seriesRef,
+      startIndex: 0,
+      limit: 1000,
+      profile: MediaEpisodeQueryProfile.PlaybackQueue
+    })
+    if (episodePage.items.length === 0) return { refs: [], startIndex: 0, label: '' }
+    let startIndex = preferredId.length > 0 ?
+      episodePage.items.findIndex((episode: MediaEpisode): boolean => episode.ref.id === preferredId) : -1
+    if (startIndex < 0) startIndex = 0
+    const target = episodePage.items[startIndex]
+    return {
+      refs: episodePage.items.map((episode: MediaEpisode): MediaRef => episode.ref),
+      startIndex: startIndex,
+      label: preferredLabel.length > 0 ? preferredLabel : this.formatEpisodePlayText(target)
+    }
+  }
+
+  private async episodeQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
+    if (!detail.seriesRef) return { refs: [detail.ref], startIndex: 0, label: this.ui.episodeName }
+    const episodePage = await catalog.getEpisodes({
+      seriesRef: detail.seriesRef,
+      seasonRef: detail.seasonRef,
+      startIndex: 0,
+      limit: 1000,
+      profile: MediaEpisodeQueryProfile.PlaybackQueue
+    })
+    if (episodePage.items.length === 0) {
+      return { refs: [detail.ref], startIndex: 0, label: this.ui.episodeName }
+    }
+    let startIndex = episodePage.items.findIndex((episode: MediaEpisode): boolean => episode.ref.equals(detail.ref))
+    if (startIndex < 0) startIndex = 0
+    return {
+      refs: episodePage.items.map((episode: MediaEpisode): MediaRef => episode.ref),
+      startIndex: startIndex,
+      label: this.formatEpisodePlayText(episodePage.items[startIndex])
+    }
+  }
+
+  async getDetail(ref: MediaRef): Promise<void> {
+    const generation = ++this.requestGeneration
+    this.ui.firstLoading = true
+    let catalog: MediaCatalogProvider
+    try {
+      catalog = currentMediaCatalogProvider()
+    } catch (_error) {
+      this.ui.firstLoading = false
+      return
+    }
+    if (!ref.belongsTo(catalog.session)) {
+      this.ui.firstLoading = false
+      return
+    }
+    this.catalog = catalog
+    this.ui.mediaRef = ref
+    this.ui.id = ref.id
+    try {
+      const detail = await catalog.getDetail(ref)
+      if (!this.isCurrent(catalog, ref, generation)) return
+      this.applyDetail(detail, catalog)
+      if (detail.ref.kind === MediaRefKind.Series) {
+        const seasonsPromise: Promise<MediaSeason[]> = detail.seasons.length > 0 ?
+          Promise.resolve(detail.seasons.slice()) : catalog.getSeasons(detail.ref)
+        const queuePromise: Promise<EpisodeQueueSelection> = this.seriesQueue(catalog, detail.ref)
+        try {
+          const seasons = await seasonsPromise
+          if (this.isCurrent(catalog, ref, generation)) this.ui.seasons = this.mapSeasons(seasons)
+        } catch (_error) {
+          if (this.isCurrent(catalog, ref, generation)) this.ui.seasons = []
+        }
+        try {
+          const selection = await queuePromise
+          if (this.isCurrent(catalog, ref, generation)) this.applyEpisodeQueue(selection)
+        } catch (_error) {
+          if (this.isCurrent(catalog, ref, generation)) {
+            this.episodeList = []
+            this.episodeStartIndex = 0
+          }
+        }
+      } else if (detail.ref.kind === MediaRefKind.Episode) {
+        try {
+          const selection = await this.episodeQueue(catalog, detail)
+          if (this.isCurrent(catalog, ref, generation)) {
+            this.episodeList = selection.refs.slice()
+            this.episodeStartIndex = selection.startIndex
+          }
+        } catch (_error) {
+          if (this.isCurrent(catalog, ref, generation)) {
+            this.episodeList = [detail.ref]
+            this.episodeStartIndex = 0
+          }
+        }
+      } else {
+        this.ui.seasons = []
+        this.episodeList = []
+        this.episodeStartIndex = 0
+      }
+    } catch (_error) {
+    } finally {
+      if (this.isCurrent(catalog, ref, generation)) this.ui.firstLoading = false
+    }
   }
 
   hasEpisodeQueue(): boolean {
@@ -97,13 +324,10 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
 
   async loadDeleteAccess(): Promise<void> {
     this.ui.isAdministrator = false
+    const catalog = this.catalog
+    if (!catalog || !catalog.session.capabilities.management) return
     const result = await this.deleteRepository.requireAdministrator()
-    this.ui.isAdministrator = result.ok
-  }
-
-  private applyDeleteCapability(itemData: BaseItemDto): void {
-    this.ui.deletePath = itemData.Path || itemData.MediaSources?.[0]?.Path || ''
-    this.ui.canDelete = itemData.CanDelete === true && this.ui.deletePath.trim().length > 0
+    if (this.catalog === catalog) this.ui.isAdministrator = result.ok
   }
 
   private currentDeleteTarget(): ManagementMediaDeleteTarget {
@@ -142,333 +366,198 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }
   }
 
-  getVideoDetail(id: string) {
-    getUserLibraryApi(ApiClient.Instance()).getItem({
-      userId: ApiClient.Instance().userId,
-      itemId: id,
-    }).then((res: AxiosResponse<BaseItemDto>) => {
-      if (res.data) {
-        let itemData = res.data
-        this.applyDeleteCapability(itemData)
-        this.ui.title = itemData.Name || ''
-        if (itemData.Type === BaseItemKind.Movie) {
-          this.ui.isMovie = true
-          this.ui.image =
-            ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Backdrop)
-          this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
-        } else {//电视剧
-          this.ui.image =
-            ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(itemData.Id, ImageType.Primary)
-        }
-        this.ui.score = itemData.CommunityRating ? itemData.CommunityRating : 0
-        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
-        this.ui.played = itemData.UserData?.Played || false
-        this.ui.isChasing = false
-        if (itemData.Type == BaseItemKind.Episode) {
-          const normalizedSeasonName = this.normalizeSeasonName(itemData.SeasonName)
-          this.ui.episodeName = this.formatEpisodePlayText(itemData)
-          this.ui.subtitle =
-            `${itemData.SeriesName || ''}${normalizedSeasonName ? ' ' + normalizedSeasonName : ''} · ${itemData.IndexNumber}集`
-          this.ui.info = ` ${itemData.ProductionYear}  /  ${itemData.RunTimeTicks ?
-            Math.floor(itemData.RunTimeTicks / 10000000 / 60 / 60) + '小时' +
-            Math.floor(itemData.RunTimeTicks / 10000000 / 60 % 60) + '分钟' : ''}`
-          this.loadEpisodeQueueForEpisode(itemData)
-        } else {
-          this.ui.info =
-            `${itemData.OfficialRating ? '/  ' + itemData.OfficialRating + '  ' :
-              ''}/  ${itemData.ProductionYear}  /  ${itemData.Genres?.join('  ')}\n${itemData.RunTimeTicks ?
-              Math.floor(itemData.RunTimeTicks / 10000000 / 60 / 60) + '小时' +
-              Math.floor(itemData.RunTimeTicks / 10000000 / 60 % 60) + '分钟' : ''}  /  ${this.ui.mediaName}`
-        }
-        this.ui.overview = itemData.Overview || ''
-        this.ui.people = itemData.People || []
-        this.ui.mediaSources = itemData.MediaSources || []
-        this.getFileInfo()
-        // this.ui.createDate = itemData.DateCreated ? itemData.DateCreated.split('T')[0] : ''
-        this.getVideoInfo()
-        this.ui.externalUrls = itemData.ExternalUrls || []
-        if (res.data.UserData?.PlaybackPositionTicks && res.data.UserData?.PlaybackPositionTicks > 0) {
-          this.ui.playbackPositionTicks = res.data.UserData.PlaybackPositionTicks
-          this.ui.percentageWatched = res.data.UserData.PlayedPercentage || 0
-          //剩余 1 小时 19 分钟
-          this.ui.remainingTime = "剩余 " +
-          Math.floor(((itemData.RunTimeTicks! - res.data.UserData.PlaybackPositionTicks) / 10000000) / 60 / 60) +
-            " 小时 " +
-          Math.floor(((itemData.RunTimeTicks! - res.data.UserData.PlaybackPositionTicks) / 10000000) / 60 % 60) + " 分钟"
-          this.ui.playButtonText = '继续播放'
-        }
-        this.ui.firstLoading = false
-      }
-    }).catch(() => {
-      this.ui.firstLoading = false
-    })
-  }
-
-  getTvShowDetail(id: string) {
-    getUserLibraryApi(ApiClient.Instance()).getItem({
-      userId: ApiClient.Instance().userId,
-      itemId: id,
-    }).then((res: AxiosResponse<BaseItemDto>) => {
-      if (res.data) {
-        let itemData = res.data
-        this.applyDeleteCapability(itemData)
-        this.ui.title = itemData.Name || ''
-        this.ui.image = getItemImageUrl(itemData, ImageType.Backdrop)
-        this.ui.logo = getItemImageUrl(itemData, ImageType.Logo)
-        this.ui.score = itemData.CommunityRating || 0
-        this.ui.info =
-          `${itemData.ProductionYear ? itemData.ProductionYear + '  /  ' : ''}` +
-            `${itemData.Genres?.join('  ') || ''}` +
-            `${this.ui.mediaName ? '  /  ' + this.ui.mediaName : ''}`
-        this.ui.overview = itemData.Overview || ''
-        //this.ui.people = itemData.People || []
-        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
-        this.ui.played = itemData.UserData?.Played || false
-        this.ui.isChasing = AppPreference.getInstance().isChasingSeries(id)
-        getTvShowsApi(ApiClient.Instance()).getSeasons({
-          userId: ApiClient.Instance().userId,
-          seriesId: id,
-          fields: [ItemFields.ItemCounts, ItemFields.PrimaryImageAspectRatio, ItemFields.CanDelete,
-            ItemFields.MediaSourceCount, ItemFields.ChildCount],
-        }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-          if (res.data && res.data.Items && res.data.Items.length > 0) {
-            this.ui.seasons = res.data.Items.map<VideoItem>((e) => {
-              return {
-                id: e.Id || '',
-                name: e.Name || '',
-                image: getItemImageUrl(e),
-                subtitle: `共${e.ChildCount}集${e.ProductionYear != undefined ? ' · ' + e.ProductionYear : ''}`,
-                score: e.CommunityRating ? e.CommunityRating : 0,
-                tags: getVideoTagsByStreams(e.MediaStreams),
-                mediaName: this.ui.title,
-                type: e.Type,
-              }
-            })
-            this.ui.firstLoading = false
-          }
-        }).catch(() => {
-          this.ui.firstLoading = false
-        })
-      }
-    }).catch(() => {
-      this.ui.firstLoading = false
-    })
-  }
-
-  changeChasingState() {
-    if (!this.ui.isTvShows || this.ui.id.length === 0) {
-      return
-    }
-    this.ui.isChasing = AppPreference.getInstance().toggleChasingSeries(this.ui.id)
+  changeChasingState(): void {
+    const ref = this.ui.mediaRef
+    if (!this.ui.isTvShows || !ref) return
+    this.ui.isChasing = AppPreference.getInstance().toggleChasingSeries(ref.id)
     ToastUtil.showToast(this.ui.context, this.ui.isChasing ? '已加入追剧' : '已取消追剧')
   }
 
-  getNextUp() {
-    getTvShowsApi(ApiClient.Instance()).getNextUp({
-      userId: ApiClient.Instance().userId,
-      seriesId: this.ui.id,
-      fields: ['MediaSourceCount']
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      if (res.data && res.data.Items && res.data.Items.length > 0) {
-        let nextUp = res.data.Items[0]
-        this.ui.episodeName = this.formatEpisodePlayText(nextUp)
-        this.ui.playButtonText = this.ui.episodeName
-        this.getEpisodes(nextUp.Id!)
-      } else {
-        this.getEpisodes()
-      }
-    }).catch()
-  }
-
-  getEpisodes(preferredEpisodeId?: string) {
-    getTvShowsApi(ApiClient.Instance()).getEpisodes({
-      userId: ApiClient.Instance().userId,
-      fields: [ItemFields.Chapters, ItemFields.Trickplay],
-      isMissing: false,
-      seriesId: this.ui.id,
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      if (res.data && res.data.Items && res.data.Items.length > 0) {
-        const episodeItems = res.data.Items
-        const preferredIndex = preferredEpisodeId ?
-          episodeItems.findIndex((episode) => episode.Id === preferredEpisodeId) : -1
-        const startIndex = preferredIndex >= 0 ? preferredIndex : 0
-        const targetEpisode = episodeItems[startIndex]
-        this.ui.episodeName = this.formatEpisodePlayText(targetEpisode)
-        this.ui.playButtonText = this.ui.episodeName
-        this.updateEpisodeQueue(episodeItems, startIndex)
-      }
-    }).catch()
-  }
-
-  playFirst() {
-    if (this.episodeList.length === 0) {
+  playCurrent(): void {
+    const ref = this.ui.mediaRef
+    if (!ref) return
+    if (this.ui.isTvShows) {
+      this.playFirst()
       return
     }
-    playItems(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
+    let refs: MediaRef[] = [ref]
+    let startIndex = 0
+    if (ref.kind === MediaRefKind.Episode && this.episodeList.length > 0) {
+      refs = this.episodeList.slice()
+      startIndex = this.episodeStartIndex
+    }
+    const source = this.currentMediaFile()
+    playMediaRefs(refs, getContext(), this.ui.selectedAudio?.index, this.ui.selectedSubtitle?.index,
+      startIndex, this.ui.playbackPositionMs > 0 ? this.ui.playbackPositionMs * 10000 : undefined,
+      source?.id)
   }
 
-  openExternalUrl(url: string) {
-    if (url.length > 0) {
-      try {
-        let context = this.ui.context.getHostContext() as common.UIAbilityContext;
-        let want: Want = {
-          action: 'ohos.want.action.viewData',
-          entities: ['entity.system.browsable'],
-          uri: url
-        };
-        context.startAbility(want).then(() => {
-          console.info('Open URL success');
-        }).catch(() => {
-          console.error('Open URL failed');
-        });
-      } catch (error) {
-        console.error('Failed to open URL:', error);
+  playFirst(): void {
+    if (this.episodeList.length === 0) return
+    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
+  }
+
+  openExternalUrl(url: string): void {
+    if (url.length === 0) return
+    try {
+      const context = this.ui.context.getHostContext() as common.UIAbilityContext
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
       }
+      context.startAbility(want).catch((): void => {
+      })
+    } catch (_error) {
     }
   }
 
   calculateImageHeight(param: CalculateHeightParam): boolean {
-    if (param.yOffset === 0) {
-      this.ui.hasEdgeEffect = false;
-    } else {
-      this.ui.hasEdgeEffect = param.offset > 0;
-    }
-    if (param.yOffset > 0) {
-      return false;
-    }
+    if (param.yOffset === 0) this.ui.hasEdgeEffect = false
+    else this.ui.hasEdgeEffect = param.offset > 0
+    if (param.yOffset > 0) return false
     if (param.state === ScrollState.Scroll && param.offset !== 0) {
-      this.ui.currentScrollState = ScrollState.Scroll;
-      const currentBannerHeight: number = this.ui.imageHeight - param.offset;
+      this.ui.currentScrollState = ScrollState.Scroll
+      const currentBannerHeight: number = this.ui.imageHeight - param.offset
       if (currentBannerHeight < this.originImageHeight) {
-        this.ui.currentScrollState = ScrollState.Fling;
-        this.ui.imageHeight = this.originImageHeight;
-        return false;
+        this.ui.currentScrollState = ScrollState.Fling
+        this.ui.imageHeight = this.originImageHeight
+        return false
       }
-      const bannerOffset: number = -(param.offset / BANNER_SCALE_FACTOR);
-      this.ui.imageHeight += bannerOffset
-      return true;
+      this.ui.imageHeight += -(param.offset / BANNER_SCALE_FACTOR)
+      return true
     } else if (this.ui.currentScrollState === ScrollState.Scroll && param.state === ScrollState.Fling) {
-      this.bannerSpringBack();
-      return true;
+      this.bannerSpringBack()
+      return true
     }
-    return false;
+    return false
   }
 
-  bannerSpringBack() {
-    this.ui.currentScrollState = 2;
-    this.ui.context.animateTo({ curve: this.springBackAnimation, duration: 250 }, () => {
-      this.changeImageHeight();
-    });
+  bannerSpringBack(): void {
+    this.ui.currentScrollState = ScrollState.Fling
+    this.ui.context.animateTo({ curve: this.springBackAnimation, duration: 250 }, (): void => {
+      this.changeImageHeight()
+    })
   }
 
   protected changeImageHeight(): void {
     this.ui.imageHeight = this.ui.imageBaseHeight
-    this.originImageHeight = this.ui.imageHeight;
+    this.originImageHeight = this.ui.imageHeight
   }
 
-  changeFavorite() {
-    if (this.ui.isFavorite) {
-      getUserLibraryApi(ApiClient.Instance()).unmarkFavoriteItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.isFavorite = false
-        ToastUtil.showToast(this.ui.context, '已取消收藏')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '取消收藏失败')
-      })
-    } else {
-      getUserLibraryApi(ApiClient.Instance()).markFavoriteItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.isFavorite = true
-        ToastUtil.showToast(this.ui.context, '已收藏')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '收藏失败')
-      })
-    }
+  changeFavorite(): void {
+    const catalog = this.catalog
+    const ref = this.ui.mediaRef
+    if (!catalog || !ref || !catalog.session.capabilities.favorites || !ref.belongsTo(catalog.session)) return
+    const favorite = !this.ui.isFavorite
+    catalog.setFavorite(ref, favorite).then((state): void => {
+      if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
+        this.ui.isFavorite = state.favorite
+        ToastUtil.showToast(this.ui.context, state.favorite ? '已收藏' : '已取消收藏')
+      }
+    }).catch((): void => ToastUtil.showToast(this.ui.context, favorite ? '收藏失败' : '取消收藏失败'))
   }
 
-  changePlayedState() {
-    if (this.ui.played) {
-      getPlaystateApi(ApiClient.Instance()).markUnplayedItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.played = false
-        ToastUtil.showToast(this.ui.context, '标记为未观看')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '操作失败')
-      })
-    } else {
-      getPlaystateApi(ApiClient.Instance()).markPlayedItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.played = true
-        ToastUtil.showToast(this.ui.context, '标记为已观看')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '操作失败')
-      })
-    }
+  changePlayedState(): void {
+    const catalog = this.catalog
+    const ref = this.ui.mediaRef
+    if (!catalog || !ref || !catalog.session.capabilities.watched || !ref.belongsTo(catalog.session)) return
+    const watched = !this.ui.played
+    catalog.setWatched(ref, watched).then((state): void => {
+      if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
+        this.ui.played = state.watched
+        ToastUtil.showToast(this.ui.context, state.watched ? '标记为已观看' : '标记为未观看')
+      }
+    }).catch((): void => ToastUtil.showToast(this.ui.context, '操作失败'))
+  }
+
+  private currentMediaFile(): MediaFileInfo | undefined {
+    if (this.ui.mediaSources.length === 0) return undefined
+    const index = Math.min(Math.max(this.ui.selectedMediaSourceIndex, 0), this.ui.mediaSources.length - 1)
+    return this.ui.mediaSources[index]
+  }
+
+  private videoTagsByStreams(streams: MediaStreamInfo[]): VideoTag[] {
+    const tags: VideoTag[] = []
+    streams.forEach((stream: MediaStreamInfo): void => {
+      if (stream.kind === MediaStreamKind.Video) {
+        if ((stream.width || 0) >= 3800 || (stream.height || 0) >= 2000) {
+          if (!tags.includes('4K')) tags.push('4K')
+        } else if ((stream.width || 0) >= 1900 || (stream.height || 0) >= 1000) {
+          if (!tags.includes('1080')) tags.push('1080')
+        }
+        const range = (stream.videoRangeType || '').toUpperCase()
+        if ((range.includes('DOVI') || range.includes('DOLBY')) && !tags.includes('DOLBY_VISION')) {
+          tags.push('DOLBY_VISION')
+        } else if (range.includes('HDR') && !tags.includes('HDR')) {
+          tags.push('HDR')
+        } else if (range.includes('SDR') && !tags.includes('SDR')) {
+          tags.push('SDR')
+        }
+      } else if (stream.kind === MediaStreamKind.Audio) {
+        const layout = (stream.channelLayout || '').toLowerCase()
+        const codec = stream.codec.toLowerCase()
+        if (layout.includes('stereo') && !tags.includes('STEREO')) tags.push('STEREO')
+        if (codec.includes('dts') && !tags.includes('DTS')) {
+          tags.push('DTS')
+        } else if (codec.includes('dolby') || codec.includes('ac3') || codec.includes('eac3')) {
+          if (layout.includes('7.1') && !tags.includes('DOLBY_SURROUND')) tags.push('DOLBY_SURROUND')
+          else if (layout.includes('5.1') && !tags.includes('DOLBY_ATOMS')) tags.push('DOLBY_ATOMS')
+        }
+      }
+    })
+    return tags
   }
 
   getTags(): string[] {
-    this.ui.tags =
-      getVideoTagsByStreams(this.ui.mediaSources[this.ui.selectedMediaSourceIndex].MediaStreams).map((e) => {
-        return getTagBase64(e)
-      }).filter((e) => {
-        return e !== ''
-      })
-    return this.ui.tags;
+    const source = this.currentMediaFile()
+    this.ui.tags = source ? this.videoTagsByStreams(source.streams).map((tag: VideoTag): string => {
+      return getTagBase64(tag)
+    }).filter((value: string): boolean => value.length > 0) : []
+    return this.ui.tags
   }
 
-  getFileInfo() {
-    let source = this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
-    this.ui.path = source.Path || ''
-    this.ui.size = source.Size ? (source.Size! / 1024 /
-    1024 / 1024
-    )
-    .
-    toFixed(2) + ' GB' :
-    ''
+  getFileInfo(): void {
+    const source = this.currentMediaFile()
+    if (!source) {
+      this.ui.path = ''
+      this.ui.size = ''
+      return
+    }
+    this.ui.path = source.path
+    this.ui.size = source.sizeBytes > 0 ? (source.sizeBytes / 1024 / 1024 / 1024).toFixed(2) + ' GB' : ''
   }
 
-  getVideoInfo() {
-    let source = this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
-
-    //1080p H264 7 mbps · 8 bit
-    this.ui.videoInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
-      source.MediaStreams.filter((e) => {
-        return e.Type === 'Video'
-      }).map((e) => {
-        return `${e.DisplayTitle} ${e.BitRate ? Math.floor(e.BitRate / 1000000) + ' mbps' :
-          ''} · ${e.BitDepth ? e.BitDepth + ' bit' : ''}`
-      }).join('\n') : ''
-    //英语 AAC · 48000 Hz
-    this.ui.audioInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
-      source.MediaStreams.filter((e) => {
-        return e.Type === 'Audio'
-      }).map((e) => {
-        return `${e.DisplayTitle} · ${e.SampleRate ?
-          e.SampleRate + ' Hz' : ''}`
-      }).join('\n') : ''
-    //法语 SUBRIP
-    this.ui.subtitleInfo = source.MediaStreams && source.MediaStreams.length > 0 ?
-      source.MediaStreams.filter((e) => {
-        return e.Type === 'Subtitle'
-      }).map((e) => {
-        return `${e.Language} ${e.Codec}`
-      }).join('\n') : ''
+  getVideoInfo(): void {
+    const source = this.currentMediaFile()
+    if (!source) {
+      this.ui.videoInfo = ''
+      this.ui.audioInfo = ''
+      this.ui.subtitleInfo = ''
+      return
+    }
+    this.ui.videoInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
+      return stream.kind === MediaStreamKind.Video
+    }).map((stream: MediaStreamInfo): string => {
+      const bitrate = stream.bitrate ? `${Math.floor(stream.bitrate / 1000000)} mbps` : ''
+      const bitDepth = stream.bitDepth ? `${stream.bitDepth} bit` : ''
+      return [stream.displayTitle, bitrate, bitDepth].filter((value: string): boolean => value.length > 0).join(' · ')
+    }).join('\n')
+    this.ui.audioInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
+      return stream.kind === MediaStreamKind.Audio
+    }).map((stream: MediaStreamInfo): string => {
+      return `${stream.displayTitle}${stream.sampleRate ? ` · ${stream.sampleRate} Hz` : ''}`
+    }).join('\n')
+    this.ui.subtitleInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
+      return stream.kind === MediaStreamKind.Subtitle
+    }).map((stream: MediaStreamInfo): string => `${stream.language} ${stream.codec}`.trim()).join('\n')
   }
 }
 
-// Banner magnification effect factor.
-export const BANNER_SCALE_FACTOR: number = 3.00;
+export const BANNER_SCALE_FACTOR: number = 3.00
 
 export interface CalculateHeightParam {
-  yOffset: number;
-  offset: number;
-  state: ScrollState;
+  yOffset: number
+  offset: number
+  state: ScrollState
 }

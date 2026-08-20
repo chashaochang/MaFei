@@ -2,6 +2,12 @@ import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { ThemeStyle } from '../../entity/ThemeStyle'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../theme/AppThemeTokens'
+import { HdsUiCapability } from '../../theme/HdsUiCapability'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy'
 
 class ManagementSelectMenuElement implements MenuElement {
   value: ResourceStr
@@ -65,6 +71,41 @@ export struct ManagementNativeSelect {
         this.menuIcon(index === this.selectedIndex)))
   }
 
+  private menuMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.themeStyle,
+      HdsUiCapability.supportsSystemMaterial(),
+      this.nativeThemeAvailable
+    )
+  }
+
+  private menuOptions(): MenuOptions {
+    const decision = this.menuMaterialDecision()
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        placement: this.menuPlacement,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }
+    }
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        placement: this.menuPlacement,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.Thin
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        placement: this.menuPlacement,
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    return { placement: this.menuPlacement }
+  }
+
   build() {
     Button() {
       Row({ space: 6 }) {
@@ -89,13 +130,9 @@ export struct ManagementNativeSelect {
     .clip(true)
     .backgroundColor(this.useNativeMaterial() ?
       Color.Transparent : AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
-    .systemMaterial(this.useNativeMaterial() ?
-      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
     .enabled(this.isEnabled && this.options.length > 0)
-    .bindMenu(this.menuItems(), {
-      placement: this.menuPlacement,
-      systemMaterial: this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) : undefined
-    })
+    .bindMenu(this.menuItems(), this.menuOptions())
   }
 }

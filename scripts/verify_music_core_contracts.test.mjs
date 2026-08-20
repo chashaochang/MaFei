@@ -190,11 +190,11 @@ function validMusicCoreFixture() {
   `)
   sources.set(mediaTabPath, `
     private openLibrary(item: MediaItem): void {
-      if (item.collectionType === CollectionType.Music) {
+      if (item.libraryKind === MediaLibraryKind.Music) {
         HMRouterMgr.to(RouterConsts.MusicLibraryPage).withParam(item).push()
         return
       }
-      if (item.collectionType === CollectionType.Movies || item.collectionType === CollectionType.Tvshows) {
+      if (item.libraryKind === MediaLibraryKind.Movies || item.libraryKind === MediaLibraryKind.Series) {
         HMRouterMgr.to(RouterConsts.VideoListPage).withParam(item).push()
         return
       }
@@ -441,8 +441,8 @@ test('rejects converting the video session to audio', () => {
 test('rejects routing photos through the video list', () => {
   const fixture = validMusicCoreFixture()
   fixture.sources.set(mediaTabPath, fixture.sources.get(mediaTabPath).replace(
-    'item.collectionType === CollectionType.Movies',
-    'item.collectionType === CollectionType.Photos || item.collectionType === CollectionType.Movies'
+    'item.libraryKind === MediaLibraryKind.Movies',
+    'item.libraryKind === MediaLibraryKind.Photos || item.libraryKind === MediaLibraryKind.Movies'
   ))
   assert.throws(() => validateMusicCoreContracts(fixture), /unsupported photo libraries/)
 })

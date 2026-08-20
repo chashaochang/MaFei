@@ -255,8 +255,8 @@ export struct ManagementActivityFilterSheet {
           .borderRadius(22)
           .fontColor($r('sys.color.font_primary'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(() => this.reset())
         Button($r('app.string.management_filter_apply'))
           .layoutWeight(1)
@@ -264,7 +264,8 @@ export struct ManagementActivityFilterSheet {
           .borderRadius(22)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.onApply(this.draftRecentDays, this.draftSeverities.slice(),
             this.draftUsers.slice(), this.draftSortField, this.draftAscending))
       }

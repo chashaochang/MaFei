@@ -14,7 +14,8 @@ import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
 import { UIConstants } from "../../common/UIConstants";
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { toMediaRouteRefData } from "../../media/navigation/MediaRouteRef";
+import { MediaRefKind } from "../../media/MediaRef";
 
 @HMRouter({
   pageUrl: RouterConsts.SearchPage,
@@ -124,7 +125,11 @@ export struct SearchPage {
       .backgroundColor(Color.Transparent)
       .borderRadius(24)
       .clip(true)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive,
+        true,
+        this.vm.appUIState.systemMaterialAvailable
+      ))
       .onFocus(() => {
         this.ui.focus = true
       })
@@ -153,7 +158,11 @@ export struct SearchPage {
       .height(48)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive,
+        true,
+        this.vm.appUIState.systemMaterialAvailable
+      ))
       .accessibilityText('返回')
       .onClick(() => {
         HMRouterMgr.pop()
@@ -288,7 +297,7 @@ export struct SearchPage {
         .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
         .onClick(() => {
           let uiContext: UIContext = this.getUIContext();
-          if (deviceInfo.sdkApiVersion >= 26) {
+          if (this.vm.appUIState.systemMaterialAvailable) {
             uiContext.getPromptAction().openCustomDialog({
               builder: () => {
                 this.dialogBuilder();
@@ -324,7 +333,11 @@ export struct SearchPage {
           .margin({ right: 10, bottom: 10 })
           .buttonStyle(ButtonStyleMode.TEXTUAL)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.HomeLibraryChip))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.HomeLibraryChip,
+            true,
+            this.vm.appUIState.systemMaterialAvailable
+          ))
           .onClick(() => {
             this.ui.searchText = item
             this.vm.search(item)
@@ -445,11 +458,14 @@ export struct SearchPage {
     // 自定义item
     VideoCard({ item: item as VideoItem })
       .onClick(() => {
+        const videoItem = item as VideoItem
         HMRouterMgr.to(RouterConsts.VideoDetailPage)
           .withParam({
-            id: (item as VideoItem).id,
-            mediaName: (item as VideoItem).mediaName,
-            isTvShows: (item as VideoItem).type === 'Series',
+            id: videoItem.id,
+            ref: videoItem.mediaRef ? toMediaRouteRefData(videoItem.mediaRef) : undefined,
+            mediaName: videoItem.mediaName,
+            isTvShows: videoItem.kind === MediaRefKind.Series ||
+              videoItem.mediaRef?.kind === MediaRefKind.Series || videoItem.type === 'Series',
           })
           .push()
         this.vm.saveHistory(this.ui.searchText)

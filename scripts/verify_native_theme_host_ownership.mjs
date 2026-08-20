@@ -11,6 +11,9 @@ const CHROME_TAB = 'entry/src/main/ets/features/home/phone/HomePhoneChromeTab.et
 const STANDARD_HOST = 'entry/src/main/ets/features/home/phone/HomePhoneStandardTabs.ets'
 const NATIVE_HOST = 'entry/src/main/ets/features/home/phone/HomePhoneNativeTabs.ets'
 const POINT_LIGHT_OWNER = 'entry/src/main/ets/theme/FeiniuPointLightModifier.ets'
+const HDS_CAPABILITY = 'entry/src/main/ets/theme/HdsUiCapability.ets'
+const NATIVE_THEME_CAPABILITY = 'entry/src/main/ets/theme/NativeThemeCapability.ets'
+const HOME_SHELL_POLICY = 'entry/src/main/ets/features/home/HomeShellPolicy.ets'
 const HOME_TAB = 'entry/src/main/ets/features/home/hometab/HomeTab.ets'
 const HOME_VIEW_MODEL = 'entry/src/main/ets/features/home/hometab/HomeViewModel.ets'
 const CHASING_TAB = 'entry/src/main/ets/features/home/chasing/ChasingTab.ets'
@@ -257,6 +260,9 @@ export function validateNativeThemeHostOwnership(sources) {
   const standardHost = requiredSource(sources, STANDARD_HOST)
   const nativeHost = requiredSource(sources, NATIVE_HOST)
   const pointLightOwner = requiredSource(sources, POINT_LIGHT_OWNER)
+  const hdsCapability = requiredSource(sources, HDS_CAPABILITY)
+  const nativeThemeCapability = requiredSource(sources, NATIVE_THEME_CAPABILITY)
+  const homeShellPolicy = requiredSource(sources, HOME_SHELL_POLICY)
   const chasingTab = requiredSource(sources, CHASING_TAB)
   const favoriteTab = requiredSource(sources, FAVORITE_TAB)
   const homeTab = requiredSource(sources, HOME_TAB)
@@ -330,6 +336,42 @@ export function validateNativeThemeHostOwnership(sources) {
   if (!appState.includes('feiniuPointLightEnabled') || appState.includes('illuminatedType')) {
     throw new Error('AppUIState must expose only the generic point-light boolean')
   }
+  if (!/static\s+readonly\s+MIN_API_VERSION\s*:\s*number\s*=\s*24\b/.test(nativeThemeCapability) ||
+    !/static\s+readonly\s+MIN_SYSTEM_MATERIAL_API_VERSION\s*:\s*number\s*=\s*26\b/.test(
+      nativeThemeCapability)) {
+    throw new Error('Native theme must start at API 24 while system material remains API 26-only')
+  }
+  const unsupportedApiIndex = nativeThemeCapability.indexOf(
+    'sdkApiVersion < NativeThemeCapability.MIN_API_VERSION'
+  )
+  const blurFallbackIndex = nativeThemeCapability.indexOf(
+    'sdkApiVersion < NativeThemeCapability.MIN_SYSTEM_MATERIAL_API_VERSION'
+  )
+  const materialReadIndex = nativeThemeCapability.indexOf('try {', blurFallbackIndex)
+  if (unsupportedApiIndex < 0 || blurFallbackIndex < 0 || materialReadIndex < 0 ||
+    unsupportedApiIndex > blurFallbackIndex || blurFallbackIndex > materialReadIndex) {
+    throw new Error('Native theme capability must split unsupported, blur fallback, and system material')
+  }
+  const blurFallbackBranch = nativeThemeCapability.slice(blurFallbackIndex, materialReadIndex)
+  if (!/available\s*:\s*true/.test(blurFallbackBranch) ||
+    !/systemMaterialAvailable\s*:\s*false/.test(blurFallbackBranch) ||
+    !/renderMode\s*:\s*NativeThemeRenderMode\.BlurFallback/.test(blurFallbackBranch)) {
+    throw new Error('API 24–25 Native theme must use blur fallback without system material')
+  }
+  if (!/static\s+readonly\s+MIN_HDS_API_VERSION\s*:\s*number\s*=\s*24\b/.test(hdsCapability) ||
+    !/^\s*return\s+deviceInfo\.sdkApiVersion\s*>=\s*HdsUiCapability\.MIN_HDS_API_VERSION\s*;?\s*$/
+      .test(methodBlock(hdsCapability, 'supportsHdsComponents')) ||
+    !/^\s*return\s+nativeThemeCapability\.isAvailable\s*\(\s*\)\s*;?\s*$/
+      .test(methodBlock(hdsCapability, 'supportsNativeTheme')) ||
+    !/^\s*return\s+nativeThemeCapability\.isSystemMaterialAvailable\s*\(\s*\)\s*;?\s*$/
+      .test(methodBlock(hdsCapability, 'supportsSystemMaterial'))) {
+    throw new Error('HDS capability must separate API 24 components from API 26 system material')
+  }
+  if (!/if\s*\(\s*theme\s*===\s*ThemeStyle\.Native\s*&&\s*nativeAvailable\s*\)\s*\{\s*return\s+HomeShellKind\.PhoneNativeHds/.test(
+    homeShellPolicy) ||
+    !/return\s+HomeShellKind\.PhoneStandard/.test(homeShellPolicy)) {
+    throw new Error('phone shell must allow API 24–25 Native HDS while keeping Feiniu legacy')
+  }
   if (!ROOT_TITLE_BAR_STATE.test(appState)) {
     throw new Error('AppUIState must persist a default-hidden root title-bar state')
   }
@@ -363,7 +405,7 @@ export function validateNativeThemeHostOwnership(sources) {
 
   const navSafeAreaGate = methodBlock(index, 'usesNativeTopSafeArea')
   if (!NATIVE_NAV_SAFE_AREA_GATE_BODY.test(navSafeAreaGate)) {
-    throw new Error('Navigation safe-area expansion must require Native theme and API 26 capability')
+    throw new Error('Navigation safe-area expansion must require Native theme availability')
   }
   const navSafeAreaTypes = methodBlock(index, 'nativeTopSafeAreaTypes')
   const navSafeAreaEdges = methodBlock(index, 'nativeTopSafeAreaEdges')
@@ -750,12 +792,15 @@ export function validateNativeThemeHostOwnership(sources) {
   if (!/static\s+readonly\s+MIN_API_VERSION\s*:\s*number\s*=\s*26\b/.test(
     pointLightOwner
   )) {
-    throw new Error('point-light must remain disabled on API 20–25')
+    throw new Error('point-light must remain disabled on API 24–25')
   }
   const pointLightToggle = methodBlock(homeScreen, 'updateFeiniuPointLightEnabled')
-  if (!/this\.appUIState\.nativeThemeAvailable\s*&&\s*HdsUiCapability\.supportsNativeTheme\s*\(\s*\)/
-    .test(pointLightToggle)) {
-    throw new Error('wide-shell point light must require the API 26 Native capability')
+  if (!/const\s+supportsPointLight\s*=\s*HdsUiCapability\.supportsSystemMaterial\s*\(\s*\)/
+    .test(pointLightToggle) ||
+    !/this\.appUIState\.themeStyle\s*===\s*ThemeStyle\.Feiniu/.test(pointLightToggle) ||
+    !/shell\s*===\s*HomeShellKind\.MediumDrawer[\s\S]*shell\s*===\s*HomeShellKind\.LargeSidebar/
+      .test(pointLightToggle)) {
+    throw new Error('wide-shell point light must require API 26 system material and Feiniu theme')
   }
 }
 

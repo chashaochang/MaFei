@@ -9,17 +9,30 @@ export enum NativeThemeCapabilityReason {
   MaterialReadFailed = 'material_read_failed'
 }
 
+export enum NativeThemeRenderMode {
+  Unsupported = 'unsupported',
+  BlurFallback = 'blur_fallback',
+  SystemMaterial = 'system_material'
+}
+
+export interface NativeThemeMaterialInfo {
+  state: number
+  type: number
+}
+
 export interface NativeThemeCapabilityResult {
   available: boolean
+  systemMaterialAvailable: boolean
+  renderMode: NativeThemeRenderMode
   reason: NativeThemeCapabilityReason
   sdkApiVersion: number
-  materialState?: uiMaterial.MaterialState
-  materialType?: uiMaterial.MaterialType
+  materialState?: number
+  materialType?: number
 }
 
 export interface NativeThemeRuntime {
   getSdkApiVersion(): number
-  getMaterialInfo(): uiMaterial.MaterialInfo
+  getMaterialInfo(): NativeThemeMaterialInfo
 }
 
 class SystemNativeThemeRuntime implements NativeThemeRuntime {
@@ -27,13 +40,16 @@ class SystemNativeThemeRuntime implements NativeThemeRuntime {
     return deviceInfo.sdkApiVersion
   }
 
-  getMaterialInfo(): uiMaterial.MaterialInfo {
+  getMaterialInfo(): NativeThemeMaterialInfo {
     return uiMaterial.getMaterialInfo()
   }
 }
 
 export class NativeThemeCapability {
-  static readonly MIN_API_VERSION: number = 26
+  static readonly MIN_API_VERSION: number = 24
+  static readonly MIN_SYSTEM_MATERIAL_API_VERSION: number = 26
+  private static readonly DEFAULT_MATERIAL_STATE: number = 0
+  private static readonly IMMERSIVE_MATERIAL_TYPE: number = 2
   private runtime: NativeThemeRuntime
   private cachedResult?: NativeThemeCapabilityResult
 
@@ -49,35 +65,54 @@ export class NativeThemeCapability {
     if (sdkApiVersion < NativeThemeCapability.MIN_API_VERSION) {
       this.cachedResult = {
         available: false,
+        systemMaterialAvailable: false,
+        renderMode: NativeThemeRenderMode.Unsupported,
         reason: NativeThemeCapabilityReason.UnsupportedApi,
+        sdkApiVersion
+      }
+      return this.cachedResult
+    }
+    if (sdkApiVersion < NativeThemeCapability.MIN_SYSTEM_MATERIAL_API_VERSION) {
+      this.cachedResult = {
+        available: true,
+        systemMaterialAvailable: false,
+        renderMode: NativeThemeRenderMode.BlurFallback,
+        reason: NativeThemeCapabilityReason.Available,
         sdkApiVersion
       }
       return this.cachedResult
     }
     try {
       const info = this.runtime.getMaterialInfo()
-      const available = info.state === uiMaterial.MaterialState.DEFAULT &&
-        info.type === uiMaterial.MaterialType.IMMERSIVE
+      const systemMaterialAvailable =
+        info.state === NativeThemeCapability.DEFAULT_MATERIAL_STATE &&
+        info.type === NativeThemeCapability.IMMERSIVE_MATERIAL_TYPE
       this.cachedResult = {
-        available,
-        reason: available ? NativeThemeCapabilityReason.Available :
+        available: true,
+        systemMaterialAvailable,
+        renderMode: systemMaterialAvailable ? NativeThemeRenderMode.SystemMaterial :
+          NativeThemeRenderMode.BlurFallback,
+        reason: systemMaterialAvailable ? NativeThemeCapabilityReason.Available :
           NativeThemeCapabilityReason.MaterialConfigurationMismatch,
         sdkApiVersion,
         materialState: info.state,
         materialType: info.type
       }
-      if (!available) {
+      if (!systemMaterialAvailable) {
         hilog.error(0x0000, 'Mafei',
-          'Native material configuration mismatch. state=%{public}d type=%{public}d',
+          'Native material configuration mismatch; using blur fallback. state=%{public}d type=%{public}d',
           info.state, info.type)
       }
     } catch (error) {
       this.cachedResult = {
-        available: false,
+        available: true,
+        systemMaterialAvailable: false,
+        renderMode: NativeThemeRenderMode.BlurFallback,
         reason: NativeThemeCapabilityReason.MaterialReadFailed,
         sdkApiVersion
       }
-      hilog.error(0x0000, 'Mafei', 'Failed to read native material info: %{public}s', String(error))
+      hilog.error(0x0000, 'Mafei',
+        'Failed to read native material info; using blur fallback: %{public}s', String(error))
     }
     return this.cachedResult
   }
@@ -88,6 +123,10 @@ export class NativeThemeCapability {
 
   isAvailable(): boolean {
     return this.initialize().available
+  }
+
+  isSystemMaterialAvailable(): boolean {
+    return this.initialize().systemMaterialAvailable
   }
 
   resetForTest(): void {

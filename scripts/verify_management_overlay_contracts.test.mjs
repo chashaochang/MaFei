@@ -28,20 +28,65 @@ function source(relativePath) {
   return fs.readFileSync(path.join(sourceRoot, relativePath), 'utf8')
 }
 
+function managementSources(directory = sourceRoot, prefix = '') {
+  const result = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = path.join(prefix, entry.name)
+    const absolutePath = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      result.push(...managementSources(absolutePath, relativePath))
+    } else if (entry.isFile() && entry.name.endsWith('.ets')) {
+      result.push([relativePath, fs.readFileSync(absolutePath, 'utf8')])
+    }
+  }
+  return result
+}
+
 test('filter sheets rely on the platform close affordance', () => {
   for (const relativePath of filterSheets) {
     assert.doesNotMatch(source(relativePath), /sys\.symbol\.xmark/)
   }
 })
 
-test('sheet hosts own close and system material once', () => {
+test('management surfaces use the capability modifier instead of direct API 26 component calls', () => {
+  for (const [relativePath, value] of managementSources()) {
+    assert.doesNotMatch(value, /\.systemMaterial\s*\(/,
+      `${relativePath} must route component material through attributeModifier`)
+    assert.doesNotMatch(value, /deviceInfo\.sdkApiVersion\s*>=\s*26/,
+      `${relativePath} must not hard-code an API 26 material guard`)
+  }
+})
+
+test('sheet hosts own close and branch through OverlayPolicy', () => {
   for (const relativePath of sheetHosts) {
     const value = source(relativePath)
     assert.match(value, /showClose:\s*true/)
+    assert.match(value, /AppThemeOverlayPolicy\.resolve\s*\(/)
+    assert.match(value, /OverlaySurfaceRole\.AppFloating/)
+    assert.match(value, /appUIState\.systemMaterialAvailable/)
+    assert.match(value, /OverlayMaterialDecision\.UseBlurFallback/)
+    assert.match(value, /OverlayMaterialDecision\.UseFloatingMaterial/)
+    assert.match(value, /OverlayMaterialDecision\.DisableSystemMaterial/)
     assert.match(value,
-      /backgroundColor:\s*this\.useNativeMaterial\(\)\s*\?\s*Color\.Transparent\s*:\s*\$r\('app\.color\.bg_1'\)/)
+      /systemMaterial:\s*AppThemeSurfaceResolver\.material\(AppThemeMaterialRole\.Floating\)/)
     assert.match(value,
-      /systemMaterial:\s*this\.useNativeMaterial\(\)\s*\?[\s\S]*AppThemeMaterialRole\.Floating[\s\S]*disabledSystemMaterial\(\)/)
+      /systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\(\)/)
+    assert.doesNotMatch(value, /\.bindSheet\([\s\S]{0,500}?backgroundBlurStyle\s*:/)
+  }
+})
+
+test('sheet blur fallback belongs to the sheet content root', () => {
+  const userSheet = source('ManagementUserFilterSheet.ets')
+  assert.match(userSheet,
+    /\.attributeModifier\(AppThemeSurfaceResolver\.modifier\([\s\S]*AppThemeMaterialRole\.Floating,[\s\S]*OverlayMaterialDecision\.UseBlurFallback,[\s\S]*false\)\)/)
+
+  for (const relativePath of [
+    'devices/ManagementDevicesPage.ets',
+    'activity/ManagementActivityPage.ets'
+  ]) {
+    const value = source(relativePath)
+    assert.match(value,
+      /OverlayMaterialDecision\.UseBlurFallback[\s\S]*\.backgroundColor\(Color\.Transparent\)[\s\S]*\.backgroundBlurStyle\(BlurStyle\.Thin\)/)
   }
 })
 
@@ -68,6 +113,10 @@ test('shared management selector owns right aligned compact trigger and material
   assert.match(value, /\.borderRadius\(8\)/)
   assert.match(value, /AppThemeMaterialRole\.AdaptiveInteractive/)
   assert.match(value, /AppThemeMaterialRole\.Floating/)
+  assert.match(value, /AppThemeOverlayPolicy\.resolve\s*\(/)
+  assert.match(value, /HdsUiCapability\.supportsSystemMaterial\(\)/)
+  assert.match(value,
+    /\.attributeModifier\(AppThemeSurfaceResolver\.modifier\([\s\S]*AppThemeMaterialRole\.AdaptiveInteractive/)
   assert.match(value, /\.bindMenu\(this\.menuItems\(\)/)
 })
 
@@ -84,7 +133,8 @@ test('native user management actions use capsule material controls without visib
   const listPage = source('ManagementUsersPage.ets')
   const detailPage = source('ManagementUserDetailPage.ets')
   assert.match(listPage, /\.borderRadius\(18\)/)
-  assert.match(listPage, /\.borderRadius\(20\)\s*\n\s*\.systemMaterial/)
+  assert.match(listPage,
+    /\.borderRadius\(20\)[\s\S]{0,180}?\.attributeModifier\(AppThemeSurfaceResolver\.modifier\(/)
   assert.match(detailPage, /\.borderRadius\(this\.useNativeMaterial\(\) \? 22 : 10\)/)
   assert.match(detailPage, /\.borderRadius\(this\.useNativeMaterial\(\) \? 21 : 8\)/)
   assert.match(detailPage, /AppThemeMaterialRole\.AdaptiveInteractive/)
@@ -95,7 +145,8 @@ test('native user management actions use capsule material controls without visib
 test('native user creation keeps fields quiet and uses capsule material actions', () => {
   const value = source('ManagementUserCreatePage.ets')
   assert.ok((value.match(/sys\.color\.comp_background_tertiary/g) || []).length >= 2)
-  assert.match(value, /\.borderRadius\(23\)\s*\n\s*\.systemMaterial\(AppThemeSurfaceResolver\.material/)
+  assert.match(value,
+    /\.borderRadius\(23\)\s*\n\s*\.attributeModifier\(AppThemeSurfaceResolver\.modifier\([\s\S]*?AppThemeMaterialRole\.PrimaryInteractive,\s*true\)\)/)
   assert.match(value, /\.borderRadius\(this\.useNativeMaterial\(\) \? 20 : 9\)/)
   assert.match(value, /AppThemeMaterialRole\.AdaptiveInteractive/)
   assert.match(value, /AppThemeMaterialRole\.PrimaryInteractive/)
@@ -206,8 +257,17 @@ test('native transparent filter groups do not retain a second outer content gutt
 test('filter action rows do not stack a second floating material', () => {
   for (const relativePath of filterSheets) {
     const value = source(relativePath)
-    const footerStart = value.lastIndexOf("Button($r('app.string.management_filter_reset'))")
-    assert.notEqual(footerStart, -1)
-    assert.doesNotMatch(value.slice(footerStart), /\.systemMaterial\(AppThemeSurfaceResolver\.material\(AppThemeMaterialRole\.Floating\)\)/)
+    const resetStart = value.lastIndexOf("Button($r('app.string.management_filter_reset'))")
+    const applyStart = value.lastIndexOf("Button($r('app.string.management_filter_apply'))")
+    assert.notEqual(resetStart, -1)
+    assert.ok(applyStart > resetStart)
+    const resetAction = value.slice(resetStart, applyStart)
+    const applyEnd = value.indexOf('.onClick(', applyStart)
+    assert.ok(applyEnd > applyStart)
+    const applyAction = value.slice(applyStart, applyEnd)
+    assert.match(resetAction, /AppThemeMaterialRole\.AdaptiveInteractive/)
+    assert.match(applyAction, /AppThemeMaterialRole\.PrimaryInteractive/)
+    assert.doesNotMatch(resetAction, /AppThemeMaterialRole\.Floating/)
+    assert.doesNotMatch(applyAction, /AppThemeMaterialRole\.Floating/)
   }
 })

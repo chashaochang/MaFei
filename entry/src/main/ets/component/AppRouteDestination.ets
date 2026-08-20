@@ -37,11 +37,12 @@ export struct AppRouteDestination {
   private helper: NavDestinationHelper = new NavDestinationHelper(this)
 
   private usesNativeChrome(): boolean {
-    return this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()
+    return HdsUiCapability.supportsHdsComponents() &&
+      this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()
   }
 
   private usesHdsDestination(): boolean {
-    return HdsUiCapability.supportsNativeTheme()
+    return HdsUiCapability.supportsHdsComponents()
   }
 
   private nativeSafeAreaTypes(): Array<LayoutSafeAreaType> {

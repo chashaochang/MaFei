@@ -5,6 +5,8 @@ import {
   MineHistoryPlanner,
   MineHistorySeriesEpisodeCandidate
 } from '../main/ets/features/home/minetab/MineHistoryPlanner'
+import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
+import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
 
 function candidate(
   id: string,
@@ -18,6 +20,12 @@ function candidate(
 ): MineHistoryCandidate {
   return {
     id,
+    mediaRef: new MediaRef(
+      MediaProviderKind.Jellyfin,
+      'Jellyfin:test-account',
+      id,
+      mediaType === MineHistoryMediaType.Episode ? MediaRefKind.Episode : MediaRefKind.Movie
+    ),
     name: id,
     image: `${id}.jpg`,
     lastPlayedDate,

@@ -184,9 +184,8 @@ export struct ManagementLibraryEditorPage {
         .borderRadius(20)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .onClick(() => this.loadRoute())
     }
     .width('calc(100% - 48vp)')
@@ -289,9 +288,8 @@ export struct ManagementLibraryEditorPage {
       .borderRadius(22)
       .fontColor($r('app.color.on_primary'))
       .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-      .systemMaterial(this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-        AppThemeSurfaceResolver.disabledSystemMaterial())
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
       .enabled(this.ui.dirty && !this.ui.saving)
       .onClick(() => this.save())
     }

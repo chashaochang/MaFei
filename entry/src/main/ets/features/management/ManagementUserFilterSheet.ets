@@ -1,6 +1,11 @@
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppUIState } from '../../entity/AppUIState'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy'
 import { ManagementNativeSelect } from './ManagementNativeSelect'
 import {
   ManagementUserSortField,
@@ -36,6 +41,15 @@ export struct ManagementUserFilterSheet {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
+  }
+
+  private sheetMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.appUIState.themeStyle,
+      this.appUIState.systemMaterialAvailable,
+      this.appUIState.nativeThemeAvailable
+    )
   }
 
   private statusIndex(): number {
@@ -192,8 +206,10 @@ export struct ManagementUserFilterSheet {
           .borderRadius(22)
           .fontColor($r('sys.color.font_primary'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive,
+            this.useNativeMaterial(),
+            this.appUIState.systemMaterialAvailable))
           .onClick(() => this.reset())
         Button($r('app.string.management_filter_apply'))
           .layoutWeight(1)
@@ -201,7 +217,10 @@ export struct ManagementUserFilterSheet {
           .borderRadius(22)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive,
+            this.useNativeMaterial(),
+            this.appUIState.systemMaterialAvailable))
           .onClick(() => this.apply())
       }
       .width('calc(100% - 32vp)')
@@ -212,5 +231,9 @@ export struct ManagementUserFilterSheet {
     .height('100%')
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(Color.Transparent)
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating,
+      this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback,
+      false))
   }
 }

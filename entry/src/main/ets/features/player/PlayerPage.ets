@@ -6,7 +6,7 @@ import { AppStorageV2, display, window } from "@kit.ArkUI"
 import { Constants } from "../../utils/Constants"
 import { common } from "@kit.AbilityKit"
 import { emitter } from "@kit.BasicServicesKit"
-import { MediaStream } from "sdk/src/main/ets/generated-client/models"
+import { MediaPlaybackStream } from "../../media/playback/MediaPlaybackModels"
 import { QualityOption } from "../../player/qualityoptions/QualityOption"
 import { avSession } from "@kit.AVSessionKit"
 import { MediaStreamUtil } from "../../utils/MediaStreamUtil"
@@ -202,10 +202,10 @@ export struct PlayerPage {
             onNext: () => {
               this.vm.playNext()
             },
-            onAudioTrackSelected: (stream: MediaStream) => {
+            onAudioTrackSelected: (stream: MediaPlaybackStream) => {
               this.vm.selectAudioTrack(stream)
             },
-            onSubtitleSelected: (stream: MediaStream) => {
+            onSubtitleSelected: (stream: MediaPlaybackStream) => {
               this.vm.selectSubtitleTrack(stream)
             },
             onQualitySelected: (option: QualityOption) => {
@@ -226,10 +226,10 @@ export struct PlayerPage {
             onNext: () => {
               this.vm.playNext()
             },
-            onAudioTrackSelected: (stream: MediaStream) => {
+            onAudioTrackSelected: (stream: MediaPlaybackStream) => {
               this.vm.selectAudioTrack(stream)
             },
-            onSubtitleSelected: (stream: MediaStream) => {
+            onSubtitleSelected: (stream: MediaPlaybackStream) => {
               this.vm.selectSubtitleTrack(stream)
             },
             onQualitySelected: (option: QualityOption) => {

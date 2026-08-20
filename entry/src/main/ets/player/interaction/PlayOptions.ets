@@ -1,3 +1,5 @@
+import { MediaRouteRefData } from '../../media/navigation/MediaRouteRef'
+
 export class PlayOptions {
   // 属性定义
   ids: string[] // UUID 在 ArkTS 中可以用 string 表示
@@ -6,6 +8,10 @@ export class PlayOptions {
   startPositionTicks: number | null
   audioStreamIndex: number | null
   subtitleStreamIndex: number | null
+  /** Provider/account scoped queue. New native callers must prefer this over ids. */
+  refs: MediaRouteRefData[]
+  /** Scoped single-item fallback used when no queue is supplied. */
+  mediaSourceRef?: MediaRouteRefData
 
   constructor(
     ids?: string[],
@@ -13,7 +19,9 @@ export class PlayOptions {
     startIndex?: number | null,
     startPositionTicks?: number | null,
     audioStreamIndex?: number | null,
-    subtitleStreamIndex?: number | null
+    subtitleStreamIndex?: number | null,
+    refs?: MediaRouteRefData[],
+    mediaSourceRef?: MediaRouteRefData
   ) {
     this.ids = ids ?? []
     this.mediaSourceId = mediaSourceId ?? null
@@ -21,6 +29,8 @@ export class PlayOptions {
     this.startPositionTicks = startPositionTicks ?? null
     this.audioStreamIndex = audioStreamIndex ?? null
     this.subtitleStreamIndex = subtitleStreamIndex ?? null
+    this.refs = refs ? refs.slice() : []
+    this.mediaSourceRef = mediaSourceRef
   }
 
   static fromJson(json: string): PlayOptions {
@@ -31,7 +41,9 @@ export class PlayOptions {
       object.startIndex ?? 0,
       object.startPositionTicks ?? null,
       object.audioStreamIndex ?? null,
-      object.subtitleStreamIndex ?? null
+      object.subtitleStreamIndex ?? null,
+      object.refs ?? [],
+      object.mediaSourceRef
     )
   }
 }

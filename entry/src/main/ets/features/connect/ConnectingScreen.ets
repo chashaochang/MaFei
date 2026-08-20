@@ -83,7 +83,11 @@ export struct ConnectingScreen {
       .width(88)
       .height(88)
       .borderRadius(44)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.Floating,
+        this.useNativeSurface(),
+        this.appUIState.systemMaterialAvailable
+      ))
       LoadingProgress()
         .width(28)
         .height(28)
@@ -104,7 +108,11 @@ export struct ConnectingScreen {
       .height(44)
       .padding({ left: 24, right: 24 })
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive,
+        this.useNativeSurface(),
+        this.appUIState.systemMaterialAvailable
+      ))
       .onClick(() => {
         this.onLogoutClick()
       })

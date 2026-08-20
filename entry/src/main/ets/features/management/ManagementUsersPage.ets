@@ -5,7 +5,6 @@ import {
   HMRouterMgr,
   IHMLifecycleOwner
 } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { PageState } from '../../common/base/BaseUIState';
 import { CustomRefreshComponent } from '../../common/CustomRefreshComponent';
 import { RouterConsts } from '../../common/RouterConsts';
@@ -13,6 +12,11 @@ import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { ManagementNativePagePolicy } from './ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from './ManagementModels';
@@ -95,6 +99,60 @@ export struct ManagementUsersPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private floatingOverlayMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private dangerousDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private filterSheetOptions(): SheetOptions {
+    const decision = this.floatingOverlayMaterialDecision()
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }
+    }
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    return {
+      height: '70%',
+      preferType: SheetType.BOTTOM,
+      showClose: true,
+      backgroundColor: $r('app.color.bg_1')
+    }
   }
 
   private primaryTextColor(): ResourceColor {
@@ -258,7 +316,7 @@ export struct ManagementUsersPage {
       })
       return
     }
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_user_delete_title'),
         message: `${this.getString('management_user_delete_message')} ${user.name}\n\n${
@@ -327,7 +385,8 @@ export struct ManagementUsersPage {
           .layoutWeight(1)
           .height(40)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, true))
           .onChange((value: string) => this.ui.query = value)
         Stack({ alignContent: Alignment.TopEnd }) {
           Button() {
@@ -339,7 +398,8 @@ export struct ManagementUsersPage {
           .height(40)
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, true))
           .accessibilityText($r('app.string.management_user_filter_title'))
           .onClick(() => this.ui.filterSheetVisible = true)
           if (this.ui.activeAdvancedFilterCount > 0) {
@@ -377,7 +437,8 @@ export struct ManagementUsersPage {
       .width('100%')
       .padding(2)
       .borderRadius(20)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive, true))
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 10 })
@@ -615,9 +676,8 @@ export struct ManagementUsersPage {
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
           .borderRadius(20)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(onAction)
       }
     }
@@ -703,9 +763,8 @@ export struct ManagementUsersPage {
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.refresh())
       }
       .width('100%')
@@ -856,15 +915,7 @@ export struct ManagementUsersPage {
     .height('100%')
     .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-    .bindSheet($$this.ui.filterSheetVisible, this.userFilterSheet(), {
-      height: '70%',
-      preferType: SheetType.BOTTOM,
-      showClose: true,
-      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
-      systemMaterial: this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-        AppThemeSurfaceResolver.disabledSystemMaterial()
-    })
+    .bindSheet($$this.ui.filterSheetVisible, this.userFilterSheet(), this.filterSheetOptions())
   }
 
   build() {

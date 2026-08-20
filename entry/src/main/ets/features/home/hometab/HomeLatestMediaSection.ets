@@ -1,5 +1,4 @@
 import { HMRouterMgr } from '@hadss/hmrouter'
-import { BaseItemKind } from 'sdk/src/main/ets/generated-client/models'
 import {
   HORIZONTAL_CARD_SPACE,
   VERTICAL_CARD_HEIGHT,
@@ -7,6 +6,8 @@ import {
 } from '../../../common/OneMoreConst'
 import { RouterConsts } from '../../../common/RouterConsts'
 import { VerticalVideoCard } from '../../../component/VerticalVideoCard'
+import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
+import { MediaRefKind } from '../../../media/MediaRef'
 import { HOME_RECENT_MEDIA_ID, VideoItem } from './HomeUIState'
 
 const LATEST_CONTENT_GAP: number = 16
@@ -47,8 +48,9 @@ export struct HomeLatestMediaSection {
     HMRouterMgr.to(RouterConsts.VideoDetailPage)
       .withParam({
         id: item.id,
+        ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
         mediaName: item.mediaName,
-        isTvShows: item.type === BaseItemKind.Series
+        isTvShows: item.kind === MediaRefKind.Series || item.mediaRef?.kind === MediaRefKind.Series
       })
       .push()
   }
@@ -61,6 +63,7 @@ export struct HomeLatestMediaSection {
           Row() {
             VerticalVideoCard({
               image: item.image,
+              imageRef: item.imageRef,
               name: item.name,
               subtitle: item.subtitle,
               index: index

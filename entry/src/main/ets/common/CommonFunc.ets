@@ -16,6 +16,8 @@ import { common, Want } from '@kit.AbilityKit'
 import { util } from '@kit.ArkTS'
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppUIState } from '../entity/AppUIState'
+import { MediaRef } from '../media/MediaRef'
+import { toMediaRouteRefData } from '../media/navigation/MediaRouteRef'
 
 export function parseVideoType(type?: BaseItemKind): string {
   let res = ''
@@ -406,6 +408,33 @@ export function playItems(ids: string[], context: Context,
       context.eventHub.emit(ActivityEventType.LaunchNativePlayer, options)
     }
   }).catch()
+}
+
+/** Provider/account-scoped native playback entry for neutral catalog pages. */
+export function playMediaRefs(refs: MediaRef[], context: Context,
+  audioStreamIndex?: number,
+  subtitleStreamIndex?: number,
+  startIndex?: number,
+  startPositionTicks?: number,
+  mediaSourceId?: string): void {
+  if (refs.length === 0) {
+    return
+  }
+  const targetIndex = Math.min(Math.max(startIndex ?? 0, 0), refs.length - 1)
+  const options = new PlayOptions()
+  options.refs = refs.map(toMediaRouteRefData)
+  options.startIndex = targetIndex
+  options.mediaSourceId = mediaSourceId || null
+  // Keep "not specified" distinct from an explicit zero so each provider can
+  // restore the server-side resume position for the selected item.
+  options.startPositionTicks = startPositionTicks ?? null
+  if (audioStreamIndex !== undefined) {
+    options.audioStreamIndex = audioStreamIndex
+  }
+  if (subtitleStreamIndex !== undefined) {
+    options.subtitleStreamIndex = subtitleStreamIndex
+  }
+  context.eventHub.emit(ActivityEventType.LaunchNativePlayer, options)
 }
 
 export function openUrlByBrowser(url: string) {

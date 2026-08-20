@@ -1,4 +1,5 @@
-import { ImageKnifeComponent } from '@ohos/imageknifepro'
+import { ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro'
+import { createMediaImageKnifeOption } from '../../../media/catalog/MediaImageKnifeAdapter'
 import { MineHistoryItem, MineHistoryMediaType } from './MineHistoryPlanner'
 
 @ComponentV2
@@ -49,17 +50,20 @@ export struct MineHistoryPoster {
     return this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
 
+  private posterOption(): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(this.item.imageRef, this.item.image)
+    option.objectFit = ImageFit.Cover
+    option.border = { radius: 10 }
+    option.placeholderSrc = $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    return option
+  }
+
   build() {
     Column({ space: 8 }) {
       Stack({ alignContent: Alignment.BottomEnd }) {
         ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: this.item.image,
-            objectFit: ImageFit.Cover,
-            border: { radius: 10 },
-            placeholderSrc: $r('app.media.placeholder_video'),
-            placeholderObjectFit: ImageFit.CENTER
-          }
+          imageKnifeOption: this.posterOption()
         })
           .width('100%')
           .height('100%')

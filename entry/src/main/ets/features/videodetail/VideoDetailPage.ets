@@ -1,14 +1,12 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnife, ImageKnifeComponent } from '@ohos/imageknifepro';
+import { ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { VideoDetailUIState } from './VideoDetailUIState';
 import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
-import { ExternalUrl, MediaSourceInfo, MediaStream, MediaStreamType } from 'sdk/src/main/ets/generated-client/models';
 import { VideoItem } from '../home/hometab/HomeUIState';
 import { VideoCard } from '../videolist/VideoListPage';
-import { playItems } from '../../common/CommonFunc';
 import { TextExpandView } from '../../component/textexpand/TextExpand';
 import { LastSpanAttribute } from '../../component/textexpand/Model';
 import { RouterConsts } from '../../common/RouterConsts';
@@ -19,7 +17,6 @@ import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView'
 import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
 import { VideoInfoDetail } from './components/VideoInfoDetail';
 import { VideoDetailRefreshEvent } from '../../events/Events';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import {
   AppThemeMaterialRole,
   AppThemeSurfaceResolver
@@ -36,10 +33,24 @@ import {
   ManagementLibraryOperationCode,
   ManagementLibraryOperationResult
 } from '../management/library/ManagementLibraryModels'
+import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess'
+import {
+  MediaExternalLink,
+  MediaFileInfo,
+  MediaImageRef
+} from '../../media/catalog/MediaCatalogModels'
+import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter'
+import { MediaRef, MediaRefKind } from '../../media/MediaRef'
+import {
+  MediaRouteRefData,
+  parseMediaRouteRefData,
+  toMediaRouteRefData
+} from '../../media/navigation/MediaRouteRef'
 
 @ComponentV2
 struct NativeDetailPlayAction {
   @Require @Param label: string
+  @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
@@ -63,7 +74,8 @@ struct NativeDetailPlayAction {
     .borderRadius(25)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
     .accessibilityText(this.label)
     .onClick(() => {
       this.onAction()
@@ -78,6 +90,7 @@ struct NativeDetailIconAction {
   @Require @Param label: string
   @Require @Param accessibilityLabel: string
   @Require @Param selected: boolean
+  @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
@@ -101,7 +114,8 @@ struct NativeDetailIconAction {
       .width(50)
       .height(50)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
       .accessibilityText(this.accessibilityLabel)
       .onClick(() => {
         this.onAction()
@@ -318,11 +332,40 @@ export struct VideoDetailPage {
     this.ui.imageHeight = this.ui.imageBaseHeight
   }
 
+  private imageOption(imageRef: MediaImageRef | undefined, fallback: string,
+    objectFit: ImageFit = ImageFit.Cover): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(imageRef, fallback)
+    option.objectFit = objectFit
+    return option
+  }
+
+  private heroImageOption(onComplete?: () => void): ImageKnifeOption {
+    const option = this.imageOption(this.ui.imageRef, this.ui.image)
+    if (onComplete) option.onComplete = onComplete
+    return option
+  }
+
+  private logoImageOption(): ImageKnifeOption {
+    return this.imageOption(this.ui.logoRef, this.ui.logo, ImageFit.Contain)
+  }
+
+  private legacyMediaRef(id: string, isTvShows: boolean): MediaRef | undefined {
+    const normalizedId = id.trim()
+    if (normalizedId.length === 0) return undefined
+    try {
+      const catalog = currentMediaCatalogProvider()
+      return new MediaRef(catalog.session.provider, catalog.session.accountScope, normalizedId,
+        isTvShows ? MediaRefKind.Series : MediaRefKind.Unknown)
+    } catch (_error) {
+      return undefined
+    }
+  }
+
   private sheetMaterialDecision(): OverlayMaterialDecision {
     return AppThemeOverlayPolicy.resolve(
       OverlaySurfaceRole.AppFloating,
       this.vm.appUIState.themeStyle,
-      deviceInfo.sdkApiVersion >= 26,
+      this.vm.appUIState.systemMaterialAvailable,
       this.vm.appUIState.nativeThemeAvailable
     )
   }
@@ -338,17 +381,12 @@ export struct VideoDetailPage {
           .transition(TransitionEffect.OPACITY)
       } else {
         ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: this.ui.image,
-            objectFit: ImageFit.Cover,
-            onComplete: () => {
-              this.prepareHeroPixelMap(this.ui.image)
-            }
-          }
+          imageKnifeOption: this.heroImageOption(() => {
+            this.prepareHeroPixelMap(this.ui.image)
+          })
         })
           .width('100%')
           .height('100%')
-          .opacity(0)
           .hitTestBehavior(HitTestMode.None)
       }
 
@@ -373,10 +411,7 @@ export struct VideoDetailPage {
   private nativePageBackdrop() {
     Stack() {
       ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: this.ui.image,
-          objectFit: ImageFit.Cover
-        }
+        imageKnifeOption: this.heroImageOption()
       })
         .width('100%')
         .height('100%')
@@ -406,10 +441,7 @@ export struct VideoDetailPage {
     Column({ space: 10 }) {
       if (this.ui.isMovie && this.ui.logo.length > 0) {
         ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: this.ui.logo,
-            objectFit: ImageFit.Contain,
-          }
+          imageKnifeOption: this.logoImageOption()
         })
           .height(76)
           .aspectRatio(80 / 31)
@@ -462,14 +494,9 @@ export struct VideoDetailPage {
     Column({ space: 14 }) {
       NativeDetailPlayAction({
         label: this.ui.playButtonText,
+        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
         onAction: () => {
-          if (this.ui.isTvShows) {
-            this.vm.playFirst()
-          } else {
-            let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
-            playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
-              this.ui.selectedSubtitle?.Index)
-          }
+          this.vm.playCurrent()
         }
       })
         .width('100%')
@@ -480,6 +507,7 @@ export struct VideoDetailPage {
           label: this.ui.isFavorite ? '已收藏' : '收藏',
           accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
           selected: this.ui.isFavorite,
+          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
           onAction: () => {
             this.vm.changeFavorite()
           }
@@ -491,6 +519,7 @@ export struct VideoDetailPage {
             label: this.ui.isChasing ? '已追剧' : '追剧',
             accessibilityLabel: this.ui.isChasing ? '取消追剧' : '追剧',
             selected: this.ui.isChasing,
+            systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
             onAction: () => {
               this.vm.changeChasingState()
             }
@@ -501,6 +530,7 @@ export struct VideoDetailPage {
           label: this.ui.played ? '已观看' : '标记已看',
           accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
           selected: this.ui.played,
+          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
           onAction: () => {
             this.vm.changePlayedState()
           }
@@ -535,13 +565,7 @@ export struct VideoDetailPage {
       .margin({ right: 12 })
       .borderRadius(25)
       .onClick(() => {
-        if (this.ui.isTvShows) {
-          this.vm.playFirst()
-        } else {
-          let id = this.ui.mediaSources[this.ui.selectedMediaSourceIndex].Id || this.ui.id
-          playItems([id], this.getUIContext().getHostContext()!, this.ui.selectedAudio?.Index,
-            this.ui.selectedSubtitle?.Index)
-        }
+        this.vm.playCurrent()
       })
 
       Button() {
@@ -609,10 +633,7 @@ export struct VideoDetailPage {
   private feiniuHeroBackdrop() {
     Column() {
       ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: this.ui.image,
-          objectFit: ImageFit.Cover
-        }
+        imageKnifeOption: this.heroImageOption()
       }).width('100%')
         .height('100%')
         .blur(this.ui.blur)
@@ -638,28 +659,34 @@ export struct VideoDetailPage {
   }
 
   private refreshDetail(): void {
-    if (!this.ui.id) {
-      return
-    }
-    if (this.useNativeSurface()) {
-      this.vm.loadDeleteAccess()
-    }
-    if (this.ui.isTvShows) {
-      this.vm.getTvShowDetail(this.ui.id)
-      this.vm.getNextUp()
-    } else {
-      this.vm.getVideoDetail(this.ui.id)
-    }
+    const ref = this.ui.mediaRef
+    if (!ref) return
+    this.vm.getDetail(ref)
+    if (this.useNativeSurface()) this.vm.loadDeleteAccess()
   }
 
   aboutToAppear(): void {
     this.configureHeroHeight()
-    let param = HMRouterMgr.getCurrentParam() as object
-    if (param) {
-      this.ui.id = param['id'] as string
-      this.ui.mediaName = param['mediaName'] as string
-      this.ui.isTvShows = param['isTvShows'] ?? false
-      this.refreshDetail()
+    const raw = HMRouterMgr.getCurrentParam()
+    if (raw && typeof raw !== 'string') {
+      const param = raw as object
+      const isTvShows = param['isTvShows'] === true
+      this.ui.mediaName = typeof param['mediaName'] === 'string' ? param['mediaName'] as string : ''
+      const ref = parseMediaRouteRefData(param['ref'] as MediaRouteRefData) ||
+        this.legacyMediaRef(typeof param['id'] === 'string' ? param['id'] as string : '', isTvShows)
+      if (ref) {
+        this.ui.mediaRef = ref
+        this.ui.id = ref.id
+        this.ui.isTvShows = ref.kind === MediaRefKind.Series || isTvShows
+        this.refreshDetail()
+      }
+    } else if (typeof raw === 'string') {
+      const ref = this.legacyMediaRef(raw, false)
+      if (ref) {
+        this.ui.mediaRef = ref
+        this.ui.id = ref.id
+        this.refreshDetail()
+      }
     }
     this.getUIContext().getHostContext()?.eventHub.on(VideoDetailRefreshEvent, () => {
       setTimeout(() => {
@@ -691,16 +718,17 @@ export struct VideoDetailPage {
 
   @Builder
   private overviewSheetTrigger() {
-    if (deviceInfo.sdkApiVersion < 26) {
+    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
       Row() {
         this.overviewTriggerContent()
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(true), {
         height: 420,
         preferType: SheetType.BOTTOM,
         title: { title: '简介' },
+        backgroundColor: Color.Transparent
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Row() {
@@ -708,12 +736,24 @@ export struct VideoDetailPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
         height: 420,
         preferType: SheetType.BOTTOM,
         title: { title: '简介' },
         backgroundColor: Color.Transparent,
         systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     } else {
       Row() {
@@ -721,11 +761,10 @@ export struct VideoDetailPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(), {
+      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
         height: 420,
         preferType: SheetType.BOTTOM,
-        title: { title: '简介' },
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+        title: { title: '简介' }
       })
     }
   }
@@ -745,7 +784,7 @@ export struct VideoDetailPage {
 
   @Builder
   private videoInfoSheetTrigger() {
-    if (deviceInfo.sdkApiVersion < 26) {
+    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
       Row({ space: 10 }) {
         this.videoInfoTriggerContent()
       }
@@ -754,10 +793,11 @@ export struct VideoDetailPage {
       .onClick(() => {
         this.ui.isShowVideoInfoSheet = true
       })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(true), {
         height: '70%',
         preferType: SheetType.BOTTOM,
         title: { title: '文件媒体信息' },
+        backgroundColor: Color.Transparent
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Row({ space: 10 }) {
@@ -768,12 +808,27 @@ export struct VideoDetailPage {
       .onClick(() => {
         this.ui.isShowVideoInfoSheet = true
       })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
         height: '70%',
         preferType: SheetType.BOTTOM,
         title: { title: '文件媒体信息' },
         backgroundColor: Color.Transparent,
         systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      Row({ space: 10 }) {
+        this.videoInfoTriggerContent()
+      }
+      .width('100%')
+      .padding({ top: 4, left: 4, bottom: 8 })
+      .onClick(() => {
+        this.ui.isShowVideoInfoSheet = true
+      })
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        title: { title: '文件媒体信息' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     } else {
       Row({ space: 10 }) {
@@ -784,11 +839,10 @@ export struct VideoDetailPage {
       .onClick(() => {
         this.ui.isShowVideoInfoSheet = true
       })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(), {
+      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
         height: '70%',
         preferType: SheetType.BOTTOM,
-        title: { title: '文件媒体信息' },
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+        title: { title: '文件媒体信息' }
       })
     }
   }
@@ -830,10 +884,7 @@ export struct VideoDetailPage {
                 this.nativeHeroMetadata()
               } else if (this.ui.isMovie) {
                 ImageKnifeComponent({
-                  imageKnifeOption: {
-                    loadSrc: this.ui.logo,
-                    objectFit: ImageFit.Contain,
-                  }
+                  imageKnifeOption: this.logoImageOption()
                 })
                   .height(80)
                   .aspectRatio(80 / 31) // 刮削的logo都是800x310
@@ -912,7 +963,7 @@ export struct VideoDetailPage {
                 }.padding({ left: 16, right: 16 })
               }
 
-              if (this.ui.playbackPositionTicks > 0) {
+              if (this.ui.playbackPositionMs > 0) {
                 Blank().height(16)
                 Row({ space: 8 }) {
                   Progress({
@@ -943,9 +994,9 @@ export struct VideoDetailPage {
               if (this.ui.mediaSources.length > 1) {
                 Blank().height(16)
                 List({ space: 8 }) {
-                  ForEach(this.ui.mediaSources, (item: MediaSourceInfo, index: number) => {
+                  ForEach(this.ui.mediaSources, (item: MediaFileInfo, index: number) => {
                     ListItem() {
-                      Text(item.Name)
+                      Text(item.name)
                         .fontSize(14)
                         .fontColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
                           $r('app.color.text_1'))
@@ -996,10 +1047,12 @@ export struct VideoDetailPage {
                         HMRouterMgr.to(RouterConsts.SeasonDetailPage)
                           .withParam({
                             id: item.id,
+                            ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
                             mediaName: this.ui.mediaName,
                             seasons: this.ui.seasons,
                             info: this.ui.info,
-                            parentId: this.ui.id
+                            parentId: this.ui.id,
+                            seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
                           })
                           .push()
                       })
@@ -1103,8 +1156,8 @@ export struct VideoDetailPage {
                   .fontColor($r('app.color.text_primary'))
                   .padding({ left: 16, right: 16 })
                 Row({ space: 6 }) {
-                  ForEach(this.ui.externalUrls, (item: ExternalUrl) => {
-                    Text(item.Name)
+                  ForEach(this.ui.externalUrls, (item: MediaExternalLink) => {
+                    Text(item.title)
                       .fontSize(12)
                       .fontColor($r('app.color.text_1'))
                       .backgroundColor(this.detailInformationBackground())
@@ -1116,7 +1169,7 @@ export struct VideoDetailPage {
                         bottom: 8
                       })
                       .onClick(() => {
-                        this.vm.openExternalUrl(item.Url || '')
+                        this.vm.openExternalUrl(item.url)
                       })
                   })
                 }.margin({ top: 12 }).padding({ left: 16, right: 16 })
@@ -1188,7 +1241,7 @@ export struct VideoDetailPage {
   }
 
   @Builder
-  overviewSheetBuilder() {
+  overviewSheetBuilder(blurFallback: boolean) {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
@@ -1213,10 +1266,12 @@ export struct VideoDetailPage {
       scrollForward: NestedScrollMode.PARENT_FIRST,
       scrollBackward: NestedScrollMode.SELF_FIRST,
     })
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 
   @Builder
-  videoInfoSheetBuilder() {
+  videoInfoSheetBuilder(blurFallback: boolean) {
     Scroll() {
       VideoInfoDetail({
         source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
@@ -1237,5 +1292,7 @@ export struct VideoDetailPage {
       scrollForward: NestedScrollMode.PARENT_FIRST,
       scrollBackward: NestedScrollMode.SELF_FIRST,
     })
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 }

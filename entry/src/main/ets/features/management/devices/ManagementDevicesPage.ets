@@ -5,12 +5,16 @@ import {
   HMRouterMgr,
   IHMLifecycleOwner
 } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../../theme/AppThemeTokens';
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
@@ -76,6 +80,24 @@ export struct ManagementDevicesPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private floatingOverlayMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private dangerousDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
   }
 
   private primaryTextColor(): ResourceColor {
@@ -154,7 +176,7 @@ export struct ManagementDevicesPage {
       return
     }
     const message = `${device.displayName}\n${device.appName} ${device.appVersion}\n${device.lastUserName}`
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_device_revoke_title'),
         message: message,
@@ -196,7 +218,7 @@ export struct ManagementDevicesPage {
     if (count <= 0) return
     const message = `${this.getString('management_device_revoke_others_count')} ${count}\n${
       this.getString('management_device_current_will_remain')}`
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_device_revoke_others'),
         message: message,
@@ -345,7 +367,8 @@ export struct ManagementDevicesPage {
         .layoutWeight(1)
         .height(40)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .onChange((value: string) => {
           this.ui.query = value
           this.vm.applyQuery(true)
@@ -360,7 +383,8 @@ export struct ManagementDevicesPage {
         .height(40)
         .borderRadius(20)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .accessibilityText($r('app.string.management_device_filter_title'))
         .onClick(() => this.ui.filterSheetVisible = true)
         if (this.activeFilterCount() > 0) {
@@ -493,9 +517,8 @@ export struct ManagementDevicesPage {
             .padding({ left: 16, right: 16 })
             .borderRadius(18)
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
             .enabled(this.ui.pageIndex > 0)
             .onClick(() => this.vm.setPage(this.ui.pageIndex - 1))
           Text(`${this.ui.pageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
@@ -505,9 +528,8 @@ export struct ManagementDevicesPage {
             .padding({ left: 16, right: 16 })
             .borderRadius(18)
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
             .enabled(this.ui.pageIndex + 1 < this.ui.pageCount)
             .onClick(() => this.vm.setPage(this.ui.pageIndex + 1))
         }
@@ -529,7 +551,7 @@ export struct ManagementDevicesPage {
   }
 
   @Builder
-  private deviceFilterSheet() {
+  private deviceFilterSheetBody() {
     ManagementDeviceFilterSheet({
       initialRecentDays: this.ui.recentDays,
       initialUsers: this.ui.selectedUsers,
@@ -544,49 +566,113 @@ export struct ManagementDevicesPage {
   }
 
   @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Column() {
-      if (showLegacyActionBar) {
-        ActionBar({ title: $r('app.string.management_devices_title') })
-      } else {
-        Blank().height(this.nativeTopSpacer())
+  private deviceFilterSheet() {
+    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+      Column() {
+        this.deviceFilterSheetBody()
       }
-      if (this.isLarge()) {
-        Row({ space: 12 }) {
-          Column() { this.listContent() }.width(320).height('100%')
-          if (this.selectedDevice()) {
-            Scroll() {
-              ManagementDeviceDetailPanel({
-                ui: this.ui,
-                device: this.selectedDevice()!,
-                themeStyle: this.vm.appUIState.themeStyle,
-                nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-                onRename: () => this.renameSelected(),
-                onRevoke: () => this.confirmRevoke(this.selectedDevice()!)
-              })
-            }
-            .layoutWeight(1).height('100%').padding(16)
-          } else {
-            Blank().layoutWeight(1)
-          }
-        }
-        .layoutWeight(1).width('100%').padding({ left: 12, right: 12 })
-      } else {
-        this.listContent()
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .backgroundBlurStyle(BlurStyle.Thin)
+    } else {
+      Column() {
+        this.deviceFilterSheetBody()
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%').height('100%')
-    .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-    .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
-      height: '70%',
-      preferType: SheetType.BOTTOM,
-      showClose: true,
-      backgroundColor: this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'),
-      systemMaterial: this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-        AppThemeSurfaceResolver.disabledSystemMaterial()
-    })
+  }
+
+  @Builder
+  private pageContentBody(showLegacyActionBar: boolean) {
+    if (showLegacyActionBar) {
+      ActionBar({ title: $r('app.string.management_devices_title') })
+    } else {
+      Blank().height(this.nativeTopSpacer())
+    }
+    if (this.isLarge()) {
+      Row({ space: 12 }) {
+        Column() { this.listContent() }.width(320).height('100%')
+        if (this.selectedDevice()) {
+          Scroll() {
+            ManagementDeviceDetailPanel({
+              ui: this.ui,
+              device: this.selectedDevice()!,
+              themeStyle: this.vm.appUIState.themeStyle,
+              nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+              onRename: () => this.renameSelected(),
+              onRevoke: () => this.confirmRevoke(this.selectedDevice()!)
+            })
+          }
+          .layoutWeight(1).height('100%').padding(16)
+        } else {
+          Blank().layoutWeight(1)
+        }
+      }
+      .layoutWeight(1).width('100%').padding({ left: 12, right: 12 })
+    } else {
+      this.listContent()
+    }
+  }
+
+  @Builder
+  private pageContent(showLegacyActionBar: boolean) {
+    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%').height('100%')
+      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent
+      })
+    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%').height('100%')
+      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%').height('100%')
+      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      })
+    } else {
+      Column() {
+        this.pageContentBody(showLegacyActionBar)
+      }
+      .width('100%').height('100%')
+      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true
+      })
+    }
   }
 
   build() {

@@ -304,7 +304,9 @@ export struct MusicPlayerPage {
       .height(52)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true,
+        this.appUIState.systemMaterialAvailable))
       .enabled(enabled)
       .accessibilityText(accessibilityText)
       .onClick(action)
@@ -342,7 +344,9 @@ export struct MusicPlayerPage {
       .height(68)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.PrimaryInteractive, true,
+        this.appUIState.systemMaterialAvailable))
       .accessibilityText(this.isPlaying() ?
         $r('app.string.music_pause') : $r('app.string.music_play'))
       .onClick(() => this.togglePlayback())
@@ -544,10 +548,16 @@ export struct MusicPlayerPage {
   }
 
   @Builder
-  private queueContent() {
-    MusicQueueSheet({
-      onCleared: () => this.showQueue = false
-    })
+  private queueContent(blurFallback: boolean) {
+    Column() {
+      MusicQueueSheet({
+        onCleared: () => this.showQueue = false
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 
   @Builder
@@ -622,14 +632,21 @@ export struct MusicPlayerPage {
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showQueue, this.queueContent(), {
-      height: '70%',
-      preferType: SheetType.BOTTOM,
-      showClose: false,
-      dragBar: true,
-      backgroundColor: Color.Transparent,
-      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
-    })
+    .bindSheet($$this.showQueue, this.queueContent(!this.appUIState.systemMaterialAvailable),
+      this.appUIState.systemMaterialAvailable ? {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: false,
+        dragBar: true,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      } : {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: false,
+        dragBar: true,
+        backgroundColor: Color.Transparent
+      })
   }
 
   @Builder
@@ -639,7 +656,7 @@ export struct MusicPlayerPage {
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showQueue, this.queueContent(), {
+    .bindSheet($$this.showQueue, this.queueContent(false), {
       height: '70%',
       preferType: SheetType.BOTTOM,
       showClose: false,

@@ -133,12 +133,20 @@ test('rejects opaque white selected Chip styling', () => {
     /translucent-white/)
 })
 
+test('keeps Native Chip styling on the API 24-25 blur fallback', () => {
+  const chipSelector = current.chipSelector.replace(
+    'return this.nativeSurface',
+    'return this.nativeSurface && HdsUiCapability.supportsSystemMaterial()')
+  assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
+    /Every Native Chip/)
+})
+
 test('rejects removing immersive material from unselected Chips', () => {
   const chipSelector = current.chipSelector.replace(
-    ': AppThemeMaterialRole.HomeLibraryChip))',
-    ': AppThemeMaterialRole.HomeLibraryChipSelected))')
+    'AppThemeMaterialRole.HomeLibraryChip,\n                true',
+    'AppThemeMaterialRole.HomeLibraryChipSelected,\n                true')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
-    /Every Chip/)
+    /Every Native Chip/)
 })
 
 test('rejects custom tint parameters on system Chip material', () => {
@@ -152,7 +160,7 @@ test('rejects custom tint parameters on system Chip material', () => {
 test('rejects close icons on home library Chips', () => {
   const chipSelector = current.chipSelector + "\nSymbolGlyph($r('sys.symbol.xmark'))"
   assert.throws(() => validateNativeHomeVisualContracts(sources({ chipSelector })),
-    /Every Chip/)
+    /Every Native Chip/)
 })
 
 test('rejects title-bar blur over the pinned header', () => {
@@ -229,10 +237,10 @@ test('rejects a horizontal poster list', () => {
     /vertically expanding poster grid/)
 })
 
-test('rejects recently-added requests that stop using their source library', () => {
-  const homeViewModel = current.homeViewModel.replace('parentId: library.id', 'parentId: undefined')
+test('rejects recently-added requests that stop using their scoped source library', () => {
+  const homeViewModel = current.homeViewModel.replace('libraryRef: media?.mediaRef', 'libraryRef: undefined')
   assert.throws(() => validateNativeHomeVisualContracts(sources({ homeViewModel })),
-    /legacy per-library latest-media mix/)
+    /per-library mix/)
 })
 
 test('rejects sharing the Feiniu canvas with Native', () => {

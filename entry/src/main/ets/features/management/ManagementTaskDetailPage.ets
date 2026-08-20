@@ -473,10 +473,10 @@ export struct ManagementTaskDetailPage {
       .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
         (this.task?.busy ? Color.Transparent : $r('app.color.color_main')))
       .borderRadius(this.useNativeMaterial() ? 23 : 10)
-      .systemMaterial(this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(this.task?.busy ?
-          AppThemeMaterialRole.AdaptiveInteractive : AppThemeMaterialRole.PrimaryInteractive) :
-        AppThemeSurfaceResolver.disabledSystemMaterial())
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        this.task?.busy ? AppThemeMaterialRole.AdaptiveInteractive :
+          AppThemeMaterialRole.PrimaryInteractive,
+        this.useNativeMaterial()))
       .enabled(!this.actionPending)
       .onClick(() => this.runTaskAction())
   }
@@ -488,9 +488,8 @@ export struct ManagementTaskDetailPage {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 10, bottom: this.appUIState.safeBottom + 10 })
-    .systemMaterial(this.useNativeMaterial() ?
-      AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) :
-      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, this.useNativeMaterial()))
     .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
   }
 
@@ -519,9 +518,8 @@ export struct ManagementTaskDetailPage {
             .fontColor($r('app.color.on_primary'))
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
             .borderRadius(this.useNativeMaterial() ? 19 : 12)
-            .systemMaterial(this.useNativeMaterial() ?
-              AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-              AppThemeSurfaceResolver.disabledSystemMaterial())
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
             .onClick(() => this.checkAdministratorAccess())
         }
       }

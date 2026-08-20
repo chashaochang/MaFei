@@ -89,9 +89,8 @@ export struct ManagementSessionsDashboardSection {
         .fontSize(13)
         .fontColor($r('app.color.color_main'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
         .onClick(() => this.onOpenDevices())
     }
     .width('100%')

@@ -104,7 +104,11 @@ export struct ActionBar {
       })
       .alignItems(VerticalAlign.Center)
       .renderGroup(true)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.Floating,
+        true,
+        this.appUIState.systemMaterialAvailable
+      ))
     } else {
       this.nativeBarContent()
     }

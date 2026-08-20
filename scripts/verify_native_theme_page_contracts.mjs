@@ -158,7 +158,8 @@ function componentRanges(source) {
 }
 
 function materialOptionClassRanges(source) {
-  if (optionExpressions(source, 'systemMaterial').length === 0) {
+  if (optionExpressions(source, 'systemMaterial').length === 0 &&
+    attributeCalls(source, 'systemMaterial').length === 0) {
     return []
   }
   const structural = structuralSource(source)
@@ -416,6 +417,12 @@ function isVisualMaterialOwner(method) {
     method.ownerKind === 'global' && method.isBuilder
 }
 
+function isSharedSurfaceModifierOwner(path, method) {
+  return path === 'entry/src/main/ets/theme/AppThemeSurfaceModifier.ets' &&
+    method.ownerKind === 'class' && method.component === 'AppThemeSurfaceModifier' &&
+    method.name === 'applyNormalAttribute'
+}
+
 function forbiddenColor(expression) {
   for (const color of FORBIDDEN_COLORS) {
     if (new RegExp("app\\.color\\." + color + "(?:['\"]|\\b)").test(expression)) {
@@ -502,6 +509,20 @@ function nativeBranchForCondition(condition) {
   return undefined
 }
 
+function opaqueOverlayBranchForCondition(condition) {
+  const normalized = structuralSource(condition).replace(/\s+/g, ' ').trim()
+  const decision = 'OverlayMaterialDecision\\.(?:DisableSystemMaterial|LegacyStyle)'
+  if (new RegExp('(?:^|\\W)' + decision + '\\s*(?:!==|!=)').test(normalized) ||
+    new RegExp('(?:!==|!=)\\s*' + decision + '(?:$|\\W)').test(normalized)) {
+    return 'false'
+  }
+  if (new RegExp('(?:^|\\W)' + decision + '\\s*(?:===|==)').test(normalized) ||
+    new RegExp('(?:===|==)\\s*' + decision + '(?:$|\\W)').test(normalized)) {
+    return 'true'
+  }
+  return undefined
+}
+
 function avoidsForbiddenColorInNative(expression, methods = [], component, seen = new Set()) {
   const stripped = stripOuterParentheses(expression)
   const helper = /^this\.([A-Za-z_$][\w$]*)\s*\(\s*\)$/.exec(
@@ -575,8 +596,12 @@ function branchRanges(body) {
         falseRange = { start: cursor + 1, end: matchingDelimiter(body, cursor, '{', '}') }
       }
     }
+    const condition = body.slice(openingParen + 1, closingParen)
     ranges.push({
-      nativeBranch: nativeBranchForCondition(body.slice(openingParen + 1, closingParen)),
+      start: match.index,
+      depth: directDepthAt(structural, 0, match.index),
+      condition,
+      nativeBranch: nativeBranchForCondition(condition),
       trueRange: { start: openingBrace + 1, end: trueEnd },
       falseRange
     })
@@ -600,6 +625,114 @@ function occursOnlyInLegacyBranch(method, localPosition) {
     (containing.nativeBranch === 'false' && inTrue)
 }
 
+function occursOnlyInOpaqueOverlayBranch(method, localPosition) {
+  const containing = branchRanges(method.body)
+    .map((branch) => ({
+      ...branch,
+      opaqueOverlayBranch: opaqueOverlayBranchForCondition(branch.condition)
+    }))
+    .filter((branch) => branch.opaqueOverlayBranch &&
+      (branch.trueRange.start <= localPosition && localPosition < branch.trueRange.end ||
+        branch.falseRange && branch.falseRange.start <= localPosition &&
+        localPosition < branch.falseRange.end))
+    .sort((left, right) =>
+      (left.trueRange.end - left.trueRange.start) - (right.trueRange.end - right.trueRange.start))[0]
+  if (!containing?.opaqueOverlayBranch) {
+    return false
+  }
+  const inTrue = containing.trueRange.start <= localPosition && localPosition < containing.trueRange.end
+  return (containing.opaqueOverlayBranch === 'true' && inTrue) ||
+    (containing.opaqueOverlayBranch === 'false' && !inTrue)
+}
+
+function overlayDecisionComparison(condition) {
+  const normalized = structuralSource(condition).replace(/\s+/g, '').trim()
+  let match = /^(.+?)(===|!==|==|!=)OverlayMaterialDecision\.([A-Za-z_$][\w$]*)$/.exec(normalized)
+  if (match) {
+    return { subject: stripOuterParentheses(match[1]), operator: match[2], decision: match[3] }
+  }
+  match = /^OverlayMaterialDecision\.([A-Za-z_$][\w$]*)(===|!==|==|!=)(.+)$/.exec(normalized)
+  if (!match) {
+    return undefined
+  }
+  return { subject: stripOuterParentheses(match[3]), operator: match[2], decision: match[1] }
+}
+
+function overlayRoleForExpression(expression, methods, component, seen = new Set()) {
+  const structural = structuralSource(expression).trim()
+  const direct = /AppThemeOverlayPolicy\.resolve\s*\(\s*OverlaySurfaceRole\.([A-Za-z_$][\w$]*)/.exec(
+    structural)
+  if (direct) {
+    return direct[1]
+  }
+  const helper = /^this\.([A-Za-z_$][\w$]*)\s*\(\s*\)$/.exec(structural)
+  if (!helper || !component || seen.has(helper[1])) {
+    return undefined
+  }
+  const helperMethods = methods.filter((candidate) =>
+    candidate.component === component && candidate.name === helper[1])
+  if (helperMethods.length !== 1) {
+    return undefined
+  }
+  const nextSeen = new Set(seen)
+  nextSeen.add(helper[1])
+  return overlayRoleForExpression(helperMethods[0].body, methods, component, nextSeen)
+}
+
+function overlayRoleForSubject(subject, method, localPosition, methods) {
+  const direct = overlayRoleForExpression(subject, methods, method.component)
+  if (direct) {
+    return direct
+  }
+  if (!/^[A-Za-z_$][\w$]*$/.test(subject)) {
+    return undefined
+  }
+  const prefix = method.body.slice(0, localPosition)
+  const declarations = [...prefix.matchAll(
+    /\b(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*[^=;\n]+)?\s*=\s*([^;\n]+)/g)]
+    .filter((match) => match[1] === subject)
+  if (declarations.length === 0) {
+    return undefined
+  }
+  return overlayRoleForExpression(
+    declarations[declarations.length - 1][2], methods, method.component)
+}
+
+function occursOnlyInLegacyOverlayFallthrough(method, localPosition, methods) {
+  const requiredByRole = new Map([
+    ['AppFloating', new Set(['UseBlurFallback', 'UseFloatingMaterial', 'DisableSystemMaterial'])],
+    ['PlatformDefault', new Set(['UseBlurFallback', 'UsePlatformDefault', 'DisableSystemMaterial'])],
+    ['Dangerous', new Set(['DisableSystemMaterial'])]
+  ])
+  const excludedBySubject = new Map()
+  for (const branch of branchRanges(method.body)) {
+    if (branch.depth !== 0 || branch.trueRange.end >= localPosition) {
+      continue
+    }
+    const comparison = overlayDecisionComparison(branch.condition)
+    if (!comparison) {
+      continue
+    }
+    const equalityBranch = comparison.operator === '===' || comparison.operator === '==' ?
+      branch.trueRange : branch.falseRange
+    if (!equalityBranch || !/\breturn\b/.test(
+      method.body.slice(equalityBranch.start, equalityBranch.end))) {
+      continue
+    }
+    const excluded = excludedBySubject.get(comparison.subject) ?? new Set()
+    excluded.add(comparison.decision)
+    excludedBySubject.set(comparison.subject, excluded)
+  }
+  for (const [subject, excluded] of excludedBySubject.entries()) {
+    const role = overlayRoleForSubject(subject, method, localPosition, methods)
+    const required = role ? requiredByRole.get(role) : undefined
+    if (required && [...required].every((decision) => excluded.has(decision))) {
+      return true
+    }
+  }
+  return false
+}
+
 function methodForEntry(methods, entry, label) {
   const matches = methods.filter((method) =>
     method.component === entry.component && method.name === entry.method)
@@ -620,7 +753,7 @@ function validateMaterialOwners(sources, contract, parsedMethods) {
     const methods = parsedMethods.get(path) ?? []
     for (const call of attributeCalls(source, 'systemMaterial')) {
       const method = nearestMethod(methods, call.start)
-      if (!method || !isVisualMaterialOwner(method)) {
+      if (!method || !isVisualMaterialOwner(method) && !isSharedSurfaceModifierOwner(path, method)) {
         throw new Error('.systemMaterial must belong to an ArkUI build or @Builder method: ' + path)
       }
       const key = ownerKey(path, method.component, method.name)
@@ -888,7 +1021,9 @@ function validateOpaqueBackgrounds(sources, contract, parsedMethods) {
       }
       if (isLegacyOnlyMethod(method) ||
         avoidsLegacyColorInNative ||
-        occursOnlyInLegacyBranch(method, localPosition)) {
+        occursOnlyInLegacyBranch(method, localPosition) ||
+        occursOnlyInOpaqueOverlayBranch(method, localPosition) ||
+        occursOnlyInLegacyOverlayFallthrough(method, localPosition, methods)) {
         continue
       }
       throw new Error('opaque legacy background can reach the Native theme: ' + key)

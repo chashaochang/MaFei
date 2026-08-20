@@ -212,7 +212,10 @@ export struct HomePhoneNativeTabs {
         .borderRadius(MusicHostVisibilityPolicy.COMPACT_HOME_BUTTON_SIZE / 2)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.MusicMiniPlayer))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.MusicMiniPlayer,
+          true
+        ))
         .accessibilityText('首页')
         .margin({
           left: MusicHostVisibilityPolicy.COMPACT_HOME_SIDE_MARGIN,

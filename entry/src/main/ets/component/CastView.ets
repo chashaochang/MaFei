@@ -1,18 +1,25 @@
 import { HMRouterMgr } from "@hadss/hmrouter"
-import { ImageKnifeComponent } from "@ohos/imageknifepro"
-import { ImageUrlsApi } from "sdk"
-import { BaseItemPerson, ImageType, PersonKind } from "sdk/src/main/ets/generated-client/models"
+import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { RouterConsts } from "../common/RouterConsts"
-import { ApiClient } from "../network/ApiClient"
 import { AppStorageV2 } from "@kit.ArkUI"
 import { AppUIState } from "../entity/AppUIState"
+import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter"
+import { MediaPersonCredit, MediaPersonKind } from "../media/catalog/MediaCatalogModels"
+import { toMediaRouteRefData } from "../media/navigation/MediaRouteRef"
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
 export struct CastView {
-  @Param @Require peopleList: Array<BaseItemPerson>
+  @Param @Require peopleList: Array<MediaPersonCredit>
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
-  imageUrlsApi: ImageUrlsApi = new ImageUrlsApi()
+
+  private imageOption(item: MediaPersonCredit): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(item.primaryImage, item.primaryImage?.url || '')
+    option.objectFit = ImageFit.Cover
+    option.border = { radius: 33 }
+    option.placeholderSrc = $r('app.media.ic_avatar')
+    return option
+  }
 
   build() {
     Column() {
@@ -23,19 +30,11 @@ export struct CastView {
         .margin({ left: 16 })
       List({ space: 12 }) {
         ListItem().width(8)
-        ForEach(this.peopleList, (item: BaseItemPerson) => {
+        ForEach(this.peopleList, (item: MediaPersonCredit) => {
           ListItem() {
             Column({ space: 8 }) {
               ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: ApiClient.Instance().basePath +
-                  this.imageUrlsApi.getItemImageUrlById(item.Id || '', ImageType.Primary),
-                  objectFit: ImageFit.Cover,
-                  border: {
-                    radius: 33
-                  },
-                  placeholderSrc: $r('app.media.ic_avatar'),
-                }
+                imageKnifeOption: this.imageOption(item)
               })
                 .width(66)
                 .height(66)
@@ -43,7 +42,7 @@ export struct CastView {
                 .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
                   this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
 
-              Text(item.Name)
+              Text(item.name)
                 .fontColor($r('app.color.text_primary'))
                 .fontSize(12)
                 .fontWeight(FontWeight.Medium)
@@ -54,8 +53,8 @@ export struct CastView {
                   overflow: TextOverflow.Ellipsis
                 })
                 .textAlign(TextAlign.Center)
-              Text(item.Type == PersonKind.Actor ? `饰${item.Role}` :
-                (item.Type == PersonKind.Director ? '导演' : item.Role))
+              Text(item.kind === MediaPersonKind.Actor ? `饰${item.role}` :
+                (item.kind === MediaPersonKind.Director ? '导演' : item.role))
                 .fontColor($r('app.color.text_2'))
                 .fontSize(10)
                 .width(66)
@@ -66,7 +65,10 @@ export struct CastView {
                 })
                 .textAlign(TextAlign.Center)
             }.onClick(() => {
-              HMRouterMgr.to(RouterConsts.CastDetailPage).withParam(item.Id).push()
+              HMRouterMgr.to(RouterConsts.CastDetailPage).withParam({
+                id: item.personRef.id,
+                ref: toMediaRouteRefData(item.personRef)
+              }).push()
             })
           }
         })

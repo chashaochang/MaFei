@@ -169,6 +169,30 @@ function methodBlock(source, methodName) {
   return bracedBlock(source, source.indexOf('{', match.index))
 }
 
+function conditionForRoute(source, route) {
+  const routeIndex = source.indexOf(route)
+  if (routeIndex < 0) {
+    throw new Error('missing route: ' + route)
+  }
+  const ifIndex = source.lastIndexOf('if (', routeIndex)
+  if (ifIndex < 0) {
+    throw new Error('missing route condition: ' + route)
+  }
+  const openingParenthesis = source.indexOf('(', ifIndex)
+  let depth = 0
+  for (let index = openingParenthesis; index < routeIndex; index += 1) {
+    if (source[index] === '(') {
+      depth += 1
+    } else if (source[index] === ')') {
+      depth -= 1
+      if (depth === 0) {
+        return source.slice(openingParenthesis + 1, index)
+      }
+    }
+  }
+  throw new Error('unterminated route condition: ' + route)
+}
+
 function sorted(values) {
   return Array.from(values).sort()
 }
@@ -220,15 +244,16 @@ function validateRoutes(sources) {
 
 function validateMediaRouting(sources) {
   const openLibrary = methodBlock(requiredSource(sources, MEDIA_TAB), 'openLibrary')
-  if (!/CollectionType\.Music/.test(openLibrary) ||
-    !/HMRouterMgr\.to\s*\(\s*RouterConsts\.MusicLibraryPage\s*\)/.test(openLibrary)) {
+  const musicCondition = conditionForRoute(openLibrary, 'RouterConsts.MusicLibraryPage')
+  if (!/MediaLibraryKind\.Music/.test(musicCondition)) {
     throw new Error('music libraries must route to MusicLibraryPage')
   }
-  if (!/CollectionType\.Movies/.test(openLibrary) || !/CollectionType\.Tvshows/.test(openLibrary) ||
-    !/RouterConsts\.VideoListPage/.test(openLibrary)) {
+  const videoCondition = conditionForRoute(openLibrary, 'RouterConsts.VideoListPage')
+  if (!/MediaLibraryKind\.Movies/.test(videoCondition) ||
+    !/MediaLibraryKind\.Series/.test(videoCondition)) {
     throw new Error('video library routing must remain explicit')
   }
-  if (/CollectionType\.(?:Photos|Homevideos)[\s\S]{0,240}RouterConsts\.VideoListPage/.test(openLibrary)) {
+  if (/MediaLibraryKind\.Photos/.test(videoCondition)) {
     throw new Error('unsupported photo libraries must not route to the video list')
   }
   if (!/media_library_type_unsupported/.test(openLibrary)) {
@@ -284,7 +309,7 @@ function validateMusicDependencies(sources) {
       throw new Error('music must not import UIDesignKit directly: ' + path)
     }
     if (/disabledSystemMaterial\s*\(/.test(source)) {
-      throw new Error('API 20-25 music paths must not construct disabled system material: ' + path)
+      throw new Error('API 24-25 music paths must not construct disabled system material: ' + path)
     }
     if (/systemMaterial\s*:\s*[^\n]+\?/.test(source)) {
       throw new Error('music Sheet material must use separate native and legacy branches: ' + path)

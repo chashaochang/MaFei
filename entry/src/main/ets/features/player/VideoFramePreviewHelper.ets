@@ -1,7 +1,7 @@
 import { image } from '@kit.ImageKit'
 import { media } from '@kit.MediaKit'
 import { BusinessError } from '@kit.BasicServicesKit'
-import { ApiClient } from '../../network/ApiClient'
+import { MediaPlaybackRequestHeader } from '../../media/playback/MediaPlaybackModels'
 
 const PREVIEW_FRAME_MAX_EDGE: number = 256
 const DEFAULT_PREVIEW_FRAME_WIDTH: number = 256
@@ -15,27 +15,29 @@ interface PreviewFrameSize {
 export class VideoFramePreviewHelper {
   private extractor?: media.AVMetadataExtractor
   private currentSourceUrl: string = ''
+  private currentSourceHeaders: MediaPlaybackRequestHeader[] = []
   private currentPreviewFrameSize?: PreviewFrameSize
   private previewFrameSizeTask?: Promise<void>
 
-  async prepare(videoUrl: string): Promise<void> {
+  async prepare(videoUrl: string, headers: MediaPlaybackRequestHeader[] = []): Promise<void> {
     if (!this.supportsPreview(videoUrl) || !canIUse('SystemCapability.Multimedia.Media.AVMetadataExtractor')) {
       return
     }
     try {
-      const extractor = await this.ensureExtractor(videoUrl)
+      const extractor = await this.ensureExtractor(videoUrl, headers)
       await this.ensurePreviewFrameSizeReady(extractor)
     } catch (err) {
       console.error(`[VideoFramePreview] prepare failed: ${JSON.stringify(err as BusinessError)}`)
     }
   }
 
-  async fetchFrameByTime(videoUrl: string, timeMs: number): Promise<image.PixelMap | undefined> {
+  async fetchFrameByTime(videoUrl: string, timeMs: number,
+    headers: MediaPlaybackRequestHeader[] = []): Promise<image.PixelMap | undefined> {
     if (!this.supportsPreview(videoUrl) || !canIUse('SystemCapability.Multimedia.Media.AVMetadataExtractor')) {
       return undefined
     }
     try {
-      const extractor = await this.ensureExtractor(videoUrl)
+      const extractor = await this.ensureExtractor(videoUrl, headers)
       this.ensurePreviewFrameSizeReady(extractor).catch(() => {
       })
       const previewFrameSize = this.currentPreviewFrameSize ?? {
@@ -57,6 +59,7 @@ export class VideoFramePreviewHelper {
     const extractor = this.extractor
     this.extractor = undefined
     this.currentSourceUrl = ''
+    this.currentSourceHeaders = []
     this.currentPreviewFrameSize = undefined
     this.previewFrameSizeTask = undefined
     if (!extractor) {
@@ -69,21 +72,45 @@ export class VideoFramePreviewHelper {
     }
   }
 
-  private async ensureExtractor(videoUrl: string): Promise<media.AVMetadataExtractor> {
-    if (this.extractor && this.currentSourceUrl === videoUrl) {
+  private async ensureExtractor(videoUrl: string,
+    headers: MediaPlaybackRequestHeader[]): Promise<media.AVMetadataExtractor> {
+    if (this.extractor && this.currentSourceUrl === videoUrl && this.headersEqual(headers, this.currentSourceHeaders)) {
       return this.extractor
     }
     await this.release()
     const extractor = await media.createAVMetadataExtractor()
-    const headers: Record<string, string> = {}
-    const authorizationHeader = ApiClient.Instance().authorizationHeader
-    if (authorizationHeader.length > 0) {
-      headers.Authorization = authorizationHeader
-    }
-    extractor.setUrlSource(videoUrl, Object.keys(headers).length > 0 ? headers : undefined)
+    const headerRecord = this.toHeaderRecord(headers)
+    extractor.setUrlSource(videoUrl, headerRecord)
     this.extractor = extractor
     this.currentSourceUrl = videoUrl
+    this.currentSourceHeaders = headers.slice()
     return extractor
+  }
+
+  private toHeaderRecord(headers: MediaPlaybackRequestHeader[]): Record<string, string> | undefined {
+    const result: Record<string, string> = {}
+    let count = 0
+    for (const header of headers) {
+      const name = header.name.trim()
+      if (name.length === 0 || header.value.length === 0) {
+        continue
+      }
+      result[name] = header.value
+      count++
+    }
+    return count > 0 ? result : undefined
+  }
+
+  private headersEqual(left: MediaPlaybackRequestHeader[], right: MediaPlaybackRequestHeader[]): boolean {
+    if (left.length !== right.length) {
+      return false
+    }
+    for (let index = 0; index < left.length; index++) {
+      if (left[index].name !== right[index].name || left[index].value !== right[index].value) {
+        return false
+      }
+    }
+    return true
   }
 
   private async ensurePreviewFrameSizeReady(extractor: media.AVMetadataExtractor): Promise<void> {

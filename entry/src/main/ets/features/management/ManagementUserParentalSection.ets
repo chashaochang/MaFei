@@ -634,7 +634,7 @@ export struct ManagementUserParentalSection {
       .constraintSize({ maxWidth: '90%' })
       .borderRadius(12)
       .clip(true)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
   }
 
   @Builder

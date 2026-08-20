@@ -1,4 +1,3 @@
-import { BaseItemKind, MediaStream, MediaStreamType, PlayMethod, SubtitleDeliveryMethod } from 'sdk/src/main/ets/generated-client/models'
 import { image } from '@kit.ImageKit'
 import { media } from '@kit.MediaKit'
 import { audio } from '@kit.AudioKit'
@@ -16,18 +15,54 @@ import avSessionManager from '../../utils/AVSessionManager'
 import { common } from '@kit.AbilityKit'
 import { SmartDialog } from 'ohos_smart_dialog'
 import { QueueItem } from '../../entity/QueueItem'
-import { JellyfinMediaSource } from '../../player/source/JellyfinMediaSource'
-import { ExternalSubtitleStream } from '../../player/source/ExternalSubtitleStream'
+import {
+  MediaPlaybackExternalSubtitle,
+  MediaPlaybackItemKind,
+  MediaPlaybackRequestHeader,
+  MediaPlaybackSource,
+  MediaPlaybackStream,
+  MediaPlaybackStreamType,
+  MediaPlaybackSubtitleDeliveryMethod
+} from '../../media/playback/MediaPlaybackModels'
 // 弹幕功能暂不上线，先注释引用，后续恢复时取消注释即可。
 // import { DanmakuViewV2 } from '@ohos/danmakuflamemaster'
 import { OneMoreUtil } from '../../utils/OneMoreUtil'
 import { display, window } from '@kit.ArkUI'
 import { PlayerEngineType } from '../../entity/PlayerEngineType'
-import { ImageKnifeComponent } from '@ohos/imageknifepro'
+import { ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro'
+import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter'
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper'
 import { PlaybackInfoCard } from '../../player/ui/PlaybackInfoCard'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import type { MpvTrackInfo } from 'libmpvnative.so'
+
+class NativeMediaPlaybackStream implements MediaPlaybackStream {
+  readonly Type: MediaPlaybackStreamType
+  readonly Index: number
+  readonly DisplayTitle: string
+  readonly Language?: string
+  readonly Codec?: string
+  readonly IsDefault: boolean
+  readonly IsExternal: boolean
+  readonly DeliveryMethod?: MediaPlaybackSubtitleDeliveryMethod
+
+  constructor(track: MpvTrackInfo, isSubtitle: boolean, index: number) {
+    const title = track.title?.trim()
+    const language = track.lang?.trim()
+    this.Type = isSubtitle ? MediaPlaybackStreamType.Subtitle : MediaPlaybackStreamType.Audio
+    this.Index = track.id
+    this.DisplayTitle = title && title.length > 0
+      ? title
+      : `${isSubtitle ? '字幕' : '音轨'} ${index + 1}${language ? ` (${language})` : ''}`
+    this.Language = language
+    this.Codec = track.codec?.trim()
+    this.IsDefault = track.selected === true
+    this.IsExternal = track.external === true
+    this.DeliveryMethod = isSubtitle
+      ? (this.IsExternal ? MediaPlaybackSubtitleDeliveryMethod.External : MediaPlaybackSubtitleDeliveryMethod.Embed)
+      : undefined
+  }
+}
 
 const PROGRESS_MAX_VALUE: number = 100
 const MPV_XCOMPONENT_ID: string = 'mpvPlayerSurface'
@@ -59,13 +94,22 @@ function menuItemStyle() {
   .layoutWeight(1)
 }
 
+function queueImageOption(item: QueueItem): ImageKnifeOption {
+  const option = createMediaImageKnifeOption(item.imageRef, item.image)
+  option.objectFit = ImageFit.Cover
+  option.border = {
+    radius: 8
+  }
+  return option
+}
+
 @ComponentV2
 export struct MPVPlayerView {
   @Param @Require videoUrl: string
   @Param nativeTopNavigationEnabled: boolean = false
   @Param @Require onNext: () => void
-  @Param @Require onAudioTrackSelected: (stream: MediaStream) => void
-  @Param @Require onSubtitleSelected: (stream: MediaStream) => void
+  @Param @Require onAudioTrackSelected: (stream: MediaPlaybackStream) => void
+  @Param @Require onSubtitleSelected: (stream: MediaPlaybackStream) => void
   @Param @Require onQualitySelected: (option: QualityOption) => void
   @Param @Require onEpisodeChange: (index: number) => void
   @Param @Require stopCast: () => void
@@ -113,7 +157,7 @@ export struct MPVPlayerView {
   private osdXComponentReady: boolean = false
   private initializeRequested: boolean = false
   private shouldResumeOnPageShow: boolean = false
-  private pendingSubtitleSelection?: MediaStream
+  private pendingSubtitleSelection?: MediaPlaybackStream
   private pendingSubtitleSelectionAllowFallback: boolean = false
   private pendingSubtitleSelectionWaitingLogged: boolean = false
   private loadedExternalSubtitleUrls: string[] = []
@@ -247,6 +291,7 @@ export struct MPVPlayerView {
     this.currentTime = '00:00'
     this.loadedExternalSubtitleUrls = []
     this.clearPendingSubtitleSelection(false)
+    this.clearPlaybackHeaders()
     this.prepareSeekPreview()
     if (this.initialized) {
       this.loadCurrentVideo()
@@ -295,6 +340,10 @@ export struct MPVPlayerView {
         case 'Resume':
           this.resumePlayback()
           break
+        case 'Stop':
+        case 'Destroy':
+          this.stopScopedPlayback()
+          break
         case 'Seek':
           let ms = data.data['args'] as number | undefined
           if (ms !== undefined) {
@@ -332,6 +381,7 @@ export struct MPVPlayerView {
     this.stopLoadingDelayTimer()
     this.stopStartupEndFileErrorTimer()
     this.stopSubtitleBootstrapTimer()
+    this.clearPlaybackHeaders()
     this.mpvPlayer.release()
     this.mpvPlayer.clearOsdSurface()
     this.initialized = false
@@ -669,6 +719,7 @@ export struct MPVPlayerView {
     this.startProgressTimer()
     const startPositionSeconds = this.ui.initSeek > 0 ? this.ui.initSeek / 1000 : 0
     this.logMpv(`load video with mode=${this.mpvPlayer.getCurrentModeLabel()}`)
+    this.applyPlaybackHeaders()
     this.mpvPlayer.load(this.videoUrl, startPositionSeconds)
     if (this.ui.initSeek > 0) {
       this.currentPosition = this.ui.initSeek
@@ -754,6 +805,7 @@ export struct MPVPlayerView {
           const bufferedPosition = Math.min(this.duration, position + cacheDuration)
           this.cacheProgressValue = Math.min(PROGRESS_MAX_VALUE, (bufferedPosition / this.duration) * PROGRESS_MAX_VALUE)
         }
+        this.vm.reportPlaybackProgress(position, this.ui.CONTROL_PlayStatus === PlayStatus.PAUSE)
       }
     }, 500)
   }
@@ -887,9 +939,24 @@ export struct MPVPlayerView {
     this.mpvPlayer.pause()
     this.ui.CONTROL_PlayStatus = PlayStatus.PAUSE
     this.ui.playerStatus = PlayerStatus.PAUSED
+    this.vm.reportPlaybackProgress(this.currentPosition, true, true)
     if (rememberResume) {
       this.shouldResumeOnPageShow = true
     }
+  }
+
+  private stopScopedPlayback(): void {
+    this.stopProgressTimer()
+    this.stopDiagnosticsTimer()
+    this.stopLoadingDelayTimer()
+    this.stopStartupEndFileErrorTimer()
+    this.stopSubtitleBootstrapTimer()
+    this.clearPlaybackHeaders()
+    this.mpvPlayer.runCommand(['stop'])
+    this.sourceLoaded = false
+    this.playbackCompleted = false
+    this.ui.CONTROL_PlayStatus = PlayStatus.INIT
+    this.ui.playerStatus = PlayerStatus.IDLE
   }
 
   private resumePlayback(): void {
@@ -900,6 +967,7 @@ export struct MPVPlayerView {
     this.ui.CONTROL_PlayStatus = PlayStatus.PLAY
     this.ui.playerStatus = PlayerStatus.PLAYING
     this.shouldResumeOnPageShow = false
+    this.vm.reportPlaybackProgress(this.currentPosition, false, true)
   }
 
   private seekTo(positionMs: number): void {
@@ -945,7 +1013,14 @@ export struct MPVPlayerView {
 
   private async loadSeekPreviewFrame(positionMs: number, requestToken: number): Promise<void> {
     try {
-      const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(this.videoUrl, positionMs)
+      if (!this.isSeekPreviewAvailable()) {
+        return
+      }
+      const pixelMap = await this.seekPreviewHelper.fetchFrameByTime(
+        this.videoUrl,
+        positionMs,
+        this.ui.videoHeaders
+      )
       if (requestToken !== this.seekPreviewRequestToken) {
         pixelMap?.release()
         return
@@ -982,10 +1057,14 @@ export struct MPVPlayerView {
   }
 
   private prepareSeekPreview(): void {
-    if (this.videoUrl.length === 0) {
+    if (this.videoUrl.length === 0 || !this.isSeekPreviewAvailable()) {
       return
     }
-    void this.seekPreviewHelper.prepare(this.videoUrl)
+    void this.seekPreviewHelper.prepare(this.videoUrl, this.ui.videoHeaders)
+  }
+
+  private isSeekPreviewAvailable(): boolean {
+    return this.vm.mediaSourceOrNull?.capabilities.framePreviewAvailable === true
   }
 
   @Builder
@@ -1207,33 +1286,17 @@ export struct MPVPlayerView {
     )
   }
 
-  private createNativeTrackStream(track: MpvTrackInfo, isSubtitle: boolean, index: number): MediaStream {
-    const title = track.title?.trim()
-    const language = track.lang?.trim()
-    const codec = track.codec?.trim()
-    const displayTitle = title && title.length > 0
-      ? title
-      : `${isSubtitle ? '字幕' : '音轨'} ${index + 1}${language ? ` (${language})` : ''}`
-    return {
-      Type: isSubtitle ? MediaStreamType.Subtitle : MediaStreamType.Audio,
-      Index: track.id,
-      DisplayTitle: displayTitle,
-      Language: language,
-      Codec: codec,
-      IsDefault: track.selected === true,
-      IsExternal: track.external === true,
-      DeliveryMethod: isSubtitle
-        ? (track.external === true ? SubtitleDeliveryMethod.External : SubtitleDeliveryMethod.Embed)
-        : undefined,
-    } as MediaStream
+  private createNativeTrackStream(track: MpvTrackInfo, isSubtitle: boolean,
+    index: number): MediaPlaybackStream {
+    return new NativeMediaPlaybackStream(track, isSubtitle, index)
   }
 
   private resolveSelectedStreamFromNativeTrack(
-    streams: MediaStream[],
+    streams: MediaPlaybackStream[],
     nativeTracks: MpvTrackInfo[],
     selectedTrackId: number,
     isSubtitle: boolean
-  ): MediaStream | undefined {
+  ): MediaPlaybackStream | undefined {
     if (streams.length === 0 || nativeTracks.length === 0) {
       return undefined
     }
@@ -1246,7 +1309,7 @@ export struct MPVPlayerView {
       streams.find((stream) => this.findTrackIdByStream(stream, isSubtitle) === nativeTrack.id)
   }
 
-  private loadExternalSubtitles(source: JellyfinMediaSource | undefined): void {
+  private loadExternalSubtitles(source: MediaPlaybackSource | undefined): void {
     if (!source) {
       return
     }
@@ -1255,11 +1318,12 @@ export struct MPVPlayerView {
     })
   }
 
-  private ensureExternalSubtitleLoaded(stream: ExternalSubtitleStream): void {
+  private ensureExternalSubtitleLoaded(stream: MediaPlaybackExternalSubtitle): void {
     if (this.loadedExternalSubtitleUrls.includes(stream.deliveryUrl)) {
       return
     }
     this.loadedExternalSubtitleUrls.push(stream.deliveryUrl)
+    this.applyPlaybackHeaders(stream.headers)
     this.mpvPlayer.runCommand([
       'sub-add',
       stream.deliveryUrl,
@@ -1267,7 +1331,38 @@ export struct MPVPlayerView {
       stream.displayTitle.length > 0 ? stream.displayTitle : `external-${stream.index}`,
       stream.language
     ])
-    this.logMpv(`queued external subtitle: ${stream.displayTitle || stream.language || stream.deliveryUrl}`)
+    this.logMpv(`queued external subtitle: ${stream.displayTitle || stream.language || `external-${stream.index}`}`)
+  }
+
+  private applyPlaybackHeaders(extraHeaders: MediaPlaybackRequestHeader[] = []): void {
+    const values = new Map<string, string>()
+    this.appendPlaybackHeaders(values, this.ui.videoHeaders)
+    const source = this.vm.mediaSourceOrNull
+    if (source) {
+      for (const subtitle of source.externalSubtitleStreams) {
+        this.appendPlaybackHeaders(values, subtitle.headers)
+      }
+    }
+    this.appendPlaybackHeaders(values, extraHeaders)
+    const fields: string[] = []
+    values.forEach((value: string, name: string): void => {
+      fields.push(`${name}: ${value}`)
+    })
+    this.mpvPlayer.runCommand(['set', 'http-header-fields', fields.join(',')])
+  }
+
+  private appendPlaybackHeaders(values: Map<string, string>, headers: MediaPlaybackRequestHeader[]): void {
+    for (const header of headers) {
+      const name = header.name.trim()
+      if (name.length === 0 || header.value.length === 0) {
+        continue
+      }
+      values.set(name, header.value)
+    }
+  }
+
+  private clearPlaybackHeaders(): void {
+    this.mpvPlayer.runCommand(['set', 'http-header-fields', ''])
   }
 
   private applyInitialTrackSelections(): void {
@@ -1297,7 +1392,7 @@ export struct MPVPlayerView {
     }
   }
 
-  private resolveInitialSubtitleStream(source: JellyfinMediaSource): MediaStream | undefined {
+  private resolveInitialSubtitleStream(source: MediaPlaybackSource): MediaPlaybackStream | undefined {
     if (source.selectedSubtitleStream) {
       return source.selectedSubtitleStream
     }
@@ -1332,7 +1427,7 @@ export struct MPVPlayerView {
       normalizedExpectedValue.includes(normalizedTrackValue)
   }
 
-  private findExternalSubtitleSource(stream: MediaStream): ExternalSubtitleStream | undefined {
+  private findExternalSubtitleSource(stream: MediaPlaybackStream): MediaPlaybackExternalSubtitle | undefined {
     const source = this.vm.mediaSourceOrNull
     if (!source || stream.Index === undefined || stream.Index === null) {
       return undefined
@@ -1340,7 +1435,7 @@ export struct MPVPlayerView {
     return source.externalSubtitleStreams.find((item) => item.index === stream.Index)
   }
 
-  private hasSubtitleSelectionInCurrentUrl(stream: MediaStream): boolean {
+  private hasSubtitleSelectionInCurrentUrl(stream: MediaPlaybackStream): boolean {
     if (stream.Index === undefined || stream.Index === null) {
       return false
     }
@@ -1349,13 +1444,13 @@ export struct MPVPlayerView {
       this.videoUrl.includes(`subtitleStreamIndex=${subtitleIndex}`)
   }
 
-  private requiresSubtitleRestart(stream: MediaStream): boolean {
+  private requiresSubtitleRestart(stream: MediaPlaybackStream): boolean {
     const source = this.vm.mediaSourceOrNull
     if (!source) {
       return false
     }
     return source.usesServerTranscoding() ||
-      stream.DeliveryMethod == SubtitleDeliveryMethod.Encode
+      stream.DeliveryMethod == MediaPlaybackSubtitleDeliveryMethod.Encode
   }
 
   private describeTracks(isSubtitle: boolean): string {
@@ -1368,7 +1463,7 @@ export struct MPVPlayerView {
     ).join(' | ')}]`
   }
 
-  private findTrackIdByStream(stream: MediaStream, isSubtitle: boolean): number {
+  private findTrackIdByStream(stream: MediaPlaybackStream, isSubtitle: boolean): number {
     const nativeTracks = isSubtitle ? this.mpvPlayer.getSubtitleTrackList() : this.mpvPlayer.getAudioTrackList()
     if (nativeTracks.length === 0) {
       return -1
@@ -1426,8 +1521,8 @@ export struct MPVPlayerView {
     const orderedStreams = isSubtitle ? source?.subtitleStreams : source?.audioStreams
     if (orderedStreams) {
       let embeddedIndex = orderedStreams
-        .filter((item: MediaStream) => (item.IsExternal === true) === expectedExternal)
-        .findIndex((item: MediaStream) => item === stream)
+        .filter((item: MediaPlaybackStream) => (item.IsExternal === true) === expectedExternal)
+        .findIndex((item: MediaPlaybackStream) => item === stream)
       if (embeddedIndex >= 0 && embeddedIndex < filteredTracks.length) {
         return filteredTracks[embeddedIndex].id
       }
@@ -1440,7 +1535,7 @@ export struct MPVPlayerView {
     return -1
   }
 
-  private selectAudioTrack(stream: MediaStream, allowFallback: boolean = true): boolean {
+  private selectAudioTrack(stream: MediaPlaybackStream, allowFallback: boolean = true): boolean {
     const source = this.vm.mediaSourceOrNull
     if (!source || source.usesServerTranscoding() || stream.IsExternal === true) {
       if (allowFallback) {
@@ -1526,7 +1621,7 @@ export struct MPVPlayerView {
     }
   }
 
-  private queuePendingSubtitleSelection(stream: MediaStream, allowFallback: boolean): boolean {
+  private queuePendingSubtitleSelection(stream: MediaPlaybackStream, allowFallback: boolean): boolean {
     if (stream.IsExternal === true) {
       const externalStream = this.findExternalSubtitleSource(stream)
       if (!externalStream) {
@@ -1542,7 +1637,7 @@ export struct MPVPlayerView {
     return true
   }
 
-  private trySelectSubtitleTrackDirect(stream: MediaStream): boolean {
+  private trySelectSubtitleTrackDirect(stream: MediaPlaybackStream): boolean {
     const source = this.vm.mediaSourceOrNull
     if (!source || this.requiresSubtitleRestart(stream)) {
       return false
@@ -1562,7 +1657,7 @@ export struct MPVPlayerView {
     return true
   }
 
-  private selectSubtitleTrack(stream: MediaStream, allowFallback: boolean = true): boolean {
+  private selectSubtitleTrack(stream: MediaPlaybackStream, allowFallback: boolean = true): boolean {
     if (this.requiresSubtitleRestart(stream)) {
       if (this.hasSubtitleSelectionInCurrentUrl(stream)) {
         this.logMpv(`subtitle already active in transcode url: ${stream.DisplayTitle ?? ''}`)
@@ -1596,13 +1691,7 @@ export struct MPVPlayerView {
           ListItem() {
             Row({ space: 12 }) {
               ImageKnifeComponent({
-                imageKnifeOption: {
-                  loadSrc: item.image,
-                  objectFit: ImageFit.Cover,
-                  border: {
-                    radius: 8
-                  }
-                }
+                imageKnifeOption: queueImageOption(item)
               })
                 .width(112)
                 .aspectRatio(16 / 9)
@@ -1738,7 +1827,7 @@ export struct MPVPlayerView {
   @Builder
   private nativeAudioMenu(): void {
     Menu() {
-      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+      ForEach(this.ui.audioStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: item.DisplayTitle
         })
@@ -1750,13 +1839,15 @@ export struct MPVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
   private legacyAudioMenu(): void {
     Menu() {
-      ForEach(this.ui.audioStreams, (item: MediaStream) => {
+      ForEach(this.ui.audioStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: item.DisplayTitle
         })
@@ -1782,7 +1873,7 @@ export struct MPVPlayerView {
   @Builder
   private nativeSubtitleMenu(): void {
     Menu() {
-      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+      ForEach(this.ui.subtitleStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: item.DisplayTitle
         })
@@ -1794,13 +1885,15 @@ export struct MPVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
   private legacySubtitleMenu(): void {
     Menu() {
-      ForEach(this.ui.subtitleStreams, (item: MediaStream) => {
+      ForEach(this.ui.subtitleStreams, (item: MediaPlaybackStream) => {
         MenuItem({
           content: item.DisplayTitle
         })
@@ -1838,7 +1931,9 @@ export struct MPVPlayerView {
       })
     }
     .backgroundBlurStyle(BlurStyle.NONE)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder
@@ -1947,7 +2042,9 @@ export struct MPVPlayerView {
       right: this.vm.appUIState.safeTop + 12
     })
     .borderRadius(26)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
     .visibility(OneMoreUtil.isPc() ? Visibility.None : Visibility.Visible)
   }
 
@@ -2004,7 +2101,9 @@ export struct MPVPlayerView {
       .height(44)
       .width(128)
       .borderRadius(22)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true,
+        this.vm.appUIState.systemMaterialAvailable))
       .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
     }
     .width('calc(100% - 88vp)')
@@ -2346,7 +2445,7 @@ export struct MPVPlayerView {
         Blank()
           .layoutWeight(1)
 
-        if (this.ui.mediaType == BaseItemKind.Episode) {
+        if (this.ui.mediaType == MediaPlaybackItemKind.Episode) {
           Text('选集')
             .fontColor(Color.White)
             .fontSize(16)
@@ -2427,7 +2526,9 @@ export struct MPVPlayerView {
       right: this.vm.appUIState.safeTop + 12
     })
     .borderRadius(24)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true,
+      this.vm.appUIState.systemMaterialAvailable))
   }
 
   @Builder

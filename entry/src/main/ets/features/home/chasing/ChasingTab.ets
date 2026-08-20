@@ -3,7 +3,7 @@ import { ImageKnifeComponent } from "@ohos/imageknifepro"
 import { PageState } from "../../../common/base/BaseUIState"
 import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent"
 import { HORIZONTAL_CARD_LIST_HEIGHT, HORIZONTAL_CARD_SPACE } from "../../../common/OneMoreConst"
-import { playItems } from "../../../common/CommonFunc"
+import { playMediaRefs } from "../../../common/CommonFunc"
 import { ActionBar } from "../../../component/ActionBar"
 import { EmptyView } from "../../../component/EmptyView"
 import { FailedView } from "../../../component/FailedView"
@@ -14,6 +14,7 @@ import { ChaseSection, ChasingUIState } from "./ChasingUIState"
 import { ChasingViewModel } from "./ChasingViewModel"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
+import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry"
 
 @ComponentV2
 export struct ChasingTab {
@@ -104,10 +105,18 @@ export struct ChasingTab {
 
   private openItem(item: VideoItem): void {
     if (item.type === 'Episode') {
-      playItems([item.id], this.getUIContext().getHostContext()!)
+      this.playItem(item)
       return
     }
     this.openSeriesDetail(item)
+  }
+
+  private playItem(item: VideoItem): void {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    if (!activeSession || !item.mediaRef || !item.mediaRef.belongsTo(activeSession)) {
+      return
+    }
+    playMediaRefs([item.mediaRef], this.getUIContext().getHostContext()!)
   }
 
   private openSeriesDetail(item: VideoItem): void {
@@ -328,7 +337,11 @@ export struct ChasingTab {
       .height(36)
       .padding({ left: 8, right: 8 })
       .borderRadius(18)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating,
+        this.useNativeSurface(),
+        this.vm.appUIState.systemMaterialAvailable
+      ))
       .onClick(() => {
         this.selectedFilterIndex = index
       })
@@ -483,7 +496,7 @@ export struct ChasingTab {
               return
             }
             if (kind === 'continue') {
-              playItems([item.id], this.getUIContext().getHostContext()!)
+              this.playItem(item)
               return
             }
             this.openItem(item)

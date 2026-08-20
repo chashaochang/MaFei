@@ -191,7 +191,9 @@ export struct PhotoViewerPage {
       .height(50)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true,
+        this.vm.appUIState.systemMaterialAvailable))
       .accessibilityText(accessibilityText)
       .enabled(!pending)
       .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
@@ -229,7 +231,9 @@ export struct PhotoViewerPage {
         .fontSize(13)
         .fontColor(Color.White)
         .textAlign(TextAlign.Center)
-        .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.Floating, true,
+          this.vm.appUIState.systemMaterialAvailable))
         .hitTestBehavior(HitTestMode.None)
     } else {
       Text(this.indexText())
@@ -389,16 +393,22 @@ export struct PhotoViewerPage {
   }
 
   @Builder
-  private infoContent(nativeSurface: boolean) {
-    PhotoInfoSheet({
-      photo: this.ui.infoPhoto,
-      loading: this.ui.infoLoading,
-      loadFailed: this.ui.infoErrorCode !== PhotoBrowseErrorCode.None,
-      nativeSurface: nativeSurface,
-      onRetry: () => {
-        this.vm.loadCurrentInfo(true).catch((): void => {})
-      }
-    })
+  private infoContent(nativeSurface: boolean, blurFallback: boolean) {
+    Column() {
+      PhotoInfoSheet({
+        photo: this.ui.infoPhoto,
+        loading: this.ui.infoLoading,
+        loadFailed: this.ui.infoErrorCode !== PhotoBrowseErrorCode.None,
+        nativeSurface: nativeSurface,
+        onRetry: () => {
+          this.vm.loadCurrentInfo(true).catch((): void => {})
+        }
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 
   @Builder
@@ -434,16 +444,28 @@ export struct PhotoViewerPage {
       [SafeAreaType.SYSTEM],
       [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
     )
-    .bindSheet($$this.ui.infoVisible, this.infoContent(nativeSurface), nativeSurface ? {
-      height: PHOTO_VIEWER_SHEET_HEIGHT,
-      preferType: SheetType.BOTTOM,
-      showClose: false,
-      dragBar: true,
-      scrollSizeMode: ScrollSizeMode.CONTINUOUS,
-      backgroundColor: Color.Transparent,
-      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating),
-      onDisappear: () => this.vm.hideInfo()
-    } : {
+    .bindSheet($$this.ui.infoVisible, this.infoContent(
+      nativeSurface,
+      nativeSurface && !this.vm.appUIState.systemMaterialAvailable
+    ), nativeSurface ?
+      (this.vm.appUIState.systemMaterialAvailable ? {
+        height: PHOTO_VIEWER_SHEET_HEIGHT,
+        preferType: SheetType.BOTTOM,
+        showClose: false,
+        dragBar: true,
+        scrollSizeMode: ScrollSizeMode.CONTINUOUS,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating),
+        onDisappear: () => this.vm.hideInfo()
+      } : {
+        height: PHOTO_VIEWER_SHEET_HEIGHT,
+        preferType: SheetType.BOTTOM,
+        showClose: false,
+        dragBar: true,
+        scrollSizeMode: ScrollSizeMode.CONTINUOUS,
+        backgroundColor: Color.Transparent,
+        onDisappear: () => this.vm.hideInfo()
+      }) : {
       height: PHOTO_VIEWER_SHEET_HEIGHT,
       preferType: SheetType.BOTTOM,
       showClose: false,

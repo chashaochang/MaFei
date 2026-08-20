@@ -1,69 +1,43 @@
 import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro";
-import { ImageUrlsApi } from "sdk";
-import { BaseItemDto, BaseItemKind } from "sdk/src/main/ets/generated-client/models";
-import { resolveLatestImageUrl } from "../common/CommonFunc";
-import { ApiClient } from "../network/ApiClient";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
+import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter";
+import { MediaSummary } from "../media/catalog/MediaCatalogModels";
+import { MediaRefKind } from "../media/MediaRef";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 
 @ComponentV2
 export struct BaseItemCard {
-  @Param @Require item: BaseItemDto;
+  @Param @Require item: MediaSummary;
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-  @Local image: string = ''
-  @Local option: ImageKnifeOption = {
-    loadSrc: this.image,
-    objectFit: ImageFit.Cover,
-    border: {
-      radius: 10
-    },
-    placeholderSrc: this.item.Type == BaseItemKind.Season ? $r('app.media.placeholder_folder') :
-      $r('app.media.placeholder_video'),
-    placeholderObjectFit: ImageFit.CENTER
-  }
-  @Local score: number = 0
-  @Local tags: string[] = []
-  @Local title: string = ''
   @Local textAlign: TextAlign = TextAlign.Start
-  @Local subtitle: string = ''
-  imageApi: ImageUrlsApi = new ImageUrlsApi()
 
-  aboutToAppear(): void {
-    switch (this.item.Type) {
-      case BaseItemKind.Movie: {
-        this.title = this.item.Name || ''
-        this.subtitle = this.item.ProductionYear ? this.item.ProductionYear.toString() : ''
-        this.image = ApiClient.Instance().basePath + resolveLatestImageUrl(this.item, this.imageApi)
-        break
-      }
-      case BaseItemKind.Series:{
-        this.title = this.item.SeriesName || ''
-        this.subtitle = this.item.ProductionYear ? this.item.ProductionYear.toString() : ''
-        this.image = ApiClient.Instance().basePath + resolveLatestImageUrl(this.item, this.imageApi)
-        break
-      }
-      case BaseItemKind.Episode:{
-        this.title = this.item.Name || ''
-        this.subtitle = `S${this.item.ParentIndexNumber}:E${this.item.IndexNumber} - ${this.item.Name}`
-        this.image = ApiClient.Instance().basePath + resolveLatestImageUrl(this.item, this.imageApi)
-        break
-      }
-      default:
-        this.title = this.item.Name || ''
-        this.subtitle = this.item.ProductionYear ? this.item.ProductionYear.toString() : ''
-        this.image = ApiClient.Instance().basePath + resolveLatestImageUrl(this.item, this.imageApi)
-        break
+  private imageOption(): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(this.item.primaryImage, this.item.primaryImage?.url || '')
+    option.objectFit = ImageFit.Cover
+    option.border = { radius: 10 }
+    option.placeholderSrc = this.item.ref.kind === MediaRefKind.Season ?
+      $r('app.media.placeholder_folder') : $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    return option
+  }
+
+  private subtitle(): string {
+    if (this.item.ref.kind === MediaRefKind.Episode) {
+      return `S${this.item.seasonNumber || 0}:E${this.item.episodeNumber || 0} - ${this.item.title}`
     }
-    this.option.loadSrc = this.image
+    if (this.item.year !== undefined) {
+      return this.item.year.toString()
+    }
+    return this.item.subtitle
   }
 
   build() {
     Column() {
       RelativeContainer() {
         ImageKnifeComponent({
-          imageKnifeOption: this.option
+          imageKnifeOption: this.imageOption()
         })
           .aspectRatio(2 / 3)
           .width('100%')
@@ -77,8 +51,8 @@ export struct BaseItemCard {
             AppThemeSurfaceResolver.mediaPlaceholderBackground(
               this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : '#CBD2D3')
         // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
-        if (this.score) {
-          Text(this.score.toFixed(1) + '')
+        if (this.item.communityRating) {
+          Text(this.item.communityRating.toFixed(1) + '')
             .fontSize(11)
             .fontColor(Color.Yellow)
             .fontWeight(FontWeight.Medium)
@@ -103,9 +77,9 @@ export struct BaseItemCard {
             // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
             .borderRadius(4)
         }
-        if (this.tags && this.tags.length > 0) {
+        if (this.item.tags.length > 0) {
           Row({ space: 4 }) {
-            ForEach(this.tags, (tag: string) => {
+            ForEach(this.item.tags, (tag: string) => {
               if (tag === '4K') {
                 Image($r('app.media.4K')).height(20).width(28).opacity(0.7).objectFit(ImageFit.Fill)
               } else {
@@ -144,7 +118,7 @@ export struct BaseItemCard {
       .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
       .clip(true)
 
-      Text(this.title)
+      Text(this.item.title)
         .fontColor($r('app.color.text_primary'))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
@@ -158,7 +132,7 @@ export struct BaseItemCard {
           top: 8
         })
         .textAlign(this.textAlign)
-      Text(this.subtitle)
+      Text(this.subtitle())
         .fontColor(Color.Gray)
         .fontSize(12)
         .width('100%')

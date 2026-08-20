@@ -8,12 +8,39 @@ import {
 
 export default function appThemeOverlayPolicyTest() {
   describe('AppThemeOverlayPolicy', () => {
-    it('keepsLegacyStyleBelowApi26', 0, () => {
+    it('keepsLegacyStyleForFeiniuWithoutSystemMaterial', 0, () => {
       const decision = AppThemeOverlayPolicy.resolve(
         OverlaySurfaceRole.AppFloating,
         ThemeStyle.Feiniu,
         false,
         false
+      )
+      expect(decision).assertEqual(OverlayMaterialDecision.LegacyStyle)
+    })
+
+    it('usesBlurFallbackForNativeOverlayWithoutSystemMaterial', 0, () => {
+      const platformDefault = AppThemeOverlayPolicy.resolve(
+        OverlaySurfaceRole.PlatformDefault,
+        ThemeStyle.Native,
+        false,
+        true
+      )
+      const appFloating = AppThemeOverlayPolicy.resolve(
+        OverlaySurfaceRole.AppFloating,
+        ThemeStyle.Native,
+        false,
+        true
+      )
+      expect(platformDefault).assertEqual(OverlayMaterialDecision.UseBlurFallback)
+      expect(appFloating).assertEqual(OverlayMaterialDecision.UseBlurFallback)
+    })
+
+    it('keepsLegacyStyleForDangerousBlurFallbackOverlay', 0, () => {
+      const decision = AppThemeOverlayPolicy.resolve(
+        OverlaySurfaceRole.Dangerous,
+        ThemeStyle.Native,
+        false,
+        true
       )
       expect(decision).assertEqual(OverlayMaterialDecision.LegacyStyle)
     })

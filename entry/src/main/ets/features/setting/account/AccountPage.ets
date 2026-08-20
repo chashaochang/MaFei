@@ -1,17 +1,18 @@
-import { ListView } from '@abner/refresh_v2';
-import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { RouterConsts } from '../../../common/RouterConsts';
-import { ActionBar } from '../../../component/ActionBar';
-import { AppRouteDestination } from '../../../component/AppRouteDestination';
-import { AppPreference } from '../../../data/AppPreference';
-import ServerUser from '../../../data/ServerUser';
-import { AppUIState } from '../../../entity/AppUIState';
-import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
-import { AppThemeTokens } from '../../../theme/AppThemeTokens';
-import { AccountUIState, ItemGroup } from './AccountUIState';
-import { AccountViewModel } from './AccountViewModel';
-import { AlertDialogV2, AdvancedDialogV2Button, AppStorageV2 } from '@kit.ArkUI';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { AlertDialogV2, AdvancedDialogV2Button, AppStorageV2 } from '@kit.ArkUI'
+import { ListView } from '@abner/refresh_v2'
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
+import { RouterConsts } from '../../../common/RouterConsts'
+import { ActionBar } from '../../../component/ActionBar'
+import { AppRouteDestination } from '../../../component/AppRouteDestination'
+import { AppUIState } from '../../../entity/AppUIState'
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import { AppThemeTokens } from '../../../theme/AppThemeTokens'
+import {
+  AccountItemGroup,
+  AccountRowViewModel,
+  AccountUIState
+} from './AccountUIState'
+import { AccountViewModel } from './AccountViewModel'
 
 @HMRouter({
   pageUrl: RouterConsts.AccountPage,
@@ -23,28 +24,28 @@ export struct AccountPage {
   @Local vm: AccountViewModel = new AccountViewModel(this.ui)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
   @Local fromLogin: boolean =
-    HMRouterMgr.getCurrentParam() ? (HMRouterMgr.getCurrentParam() as Record<string, boolean>)['fromLogin'] : false
+    HMRouterMgr.getCurrentParam() ?
+      (HMRouterMgr.getCurrentParam() as Record<string, boolean>)['fromLogin'] : false
 
   aboutToAppear(): void {
-    this.vm.getAccountList()
+    this.vm.getAccountList(!this.fromLogin).then((): void => {
+      this.showErrorIfNeeded()
+    }).catch((): void => {
+      this.showErrorIfNeeded()
+    })
   }
 
-  private isCurrentAccount(item: ServerUser): boolean {
-    if (this.fromLogin) {
-      return false
-    }
-    const preference = AppPreference.getInstance()
-    const currentUserId = preference.getCurrentUserId()
-    const currentServerId = preference.getCurrentServerId()
-    return currentUserId.length > 0 && currentServerId !== null &&
-      item.user.userId === currentUserId && item.server.id === currentServerId
-  }
-
-  private onAccountClick(item: ServerUser): void {
-    if (this.isCurrentAccount(item)) {
+  private onAccountClick(item: AccountRowViewModel): void {
+    if (item.isCurrent) {
       return
     }
-    this.vm.changeAccount(item)
+    this.vm.changeAccount(item).then((switched: boolean): void => {
+      if (!switched) {
+        this.showErrorIfNeeded()
+      }
+    }).catch((): void => {
+      this.showErrorIfNeeded()
+    })
   }
 
   private openAddAccount(): void {
@@ -59,7 +60,7 @@ export struct AccountPage {
       return []
     }
     return [{
-      value: '新增账号',
+      value: $r('app.string.account_add_title'),
       icon: $r('sys.symbol.plus'),
       action: () => {
         this.openAddAccount()
@@ -84,76 +85,93 @@ export struct AccountPage {
 
   private cancelDialogButton(): AdvancedDialogV2Button {
     return new AdvancedDialogV2Button({
-      content: '取消',
+      content: $r('app.string.account_delete_cancel'),
       action: () => {
       }
     })
   }
 
-  private deleteDialogButton(item: ServerUser): AdvancedDialogV2Button {
+  private deleteDialogButton(item: AccountRowViewModel): AdvancedDialogV2Button {
     return new AdvancedDialogV2Button({
-      content: '确认',
+      content: $r('app.string.account_delete_confirm'),
       role: ButtonRole.ERROR,
       action: () => {
-        this.vm.deleteAccount(item)
+        this.vm.deleteAccount(item).then((deleted: boolean): void => {
+          if (!deleted) {
+            this.showErrorIfNeeded()
+          }
+        }).catch((): void => {
+          this.showErrorIfNeeded()
+        })
       }
     })
   }
 
   @Builder
-  dialogBuilder(item: ServerUser): void {
+  dialogBuilder(item: AccountRowViewModel): void {
     AlertDialogV2({
-      primaryTitle: '提示',
-      content: '确定要删除吗?',
+      primaryTitle: $r('app.string.account_delete_title'),
+      content: $r('app.string.account_delete_message'),
       primaryButton: this.cancelDialogButton(),
       secondaryButton: this.deleteDialogButton(item)
     })
   }
 
-  private openDeleteDialog(item: ServerUser): void {
-    if (deviceInfo.sdkApiVersion >= 26) {
+  private openDeleteDialog(item: AccountRowViewModel): void {
+    if (this.appUIState.systemMaterialAvailable) {
       this.getUIContext().getPromptAction().openCustomDialog({
         builder: () => {
           this.dialogBuilder(item)
         },
         systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      }).catch(() => {
+      }).catch((): void => {
       })
     } else {
       this.getUIContext().getPromptAction().openCustomDialog({
         builder: () => {
           this.dialogBuilder(item)
         }
-      }).catch(() => {
+      }).catch((): void => {
       })
     }
   }
 
+  private showErrorIfNeeded(): void {
+    if (this.ui.errorText.length === 0) {
+      return
+    }
+    this.getUIContext().getPromptAction().showToast({
+      message: this.ui.errorText
+    })
+    this.ui.errorText = ''
+  }
+
   @Builder
-  private accountRowContent(item: ServerUser) {
-    Text(item.user.username.substring(0, 1))
-      .fontColor(Color.White)
-      .fontWeight(FontWeight.Bold)
-      .fontSize(24)
-      .backgroundColor('#ffb88e')
+  private providerLogo(item: AccountRowViewModel) {
+    Image(item.isFeiniuVideo ?
+      $r('app.media.feiniu_video_logo') : $r('app.media.app_icon'))
       .width(48)
       .height(48)
-      .borderRadius(24)
-      .align(Alignment.Center)
-      .textAlign(TextAlign.Center)
-    Column({ space: 6 }) {
-      Row() {
-        Text(item.user.username)
+      .objectFit(ImageFit.Contain)
+      .borderRadius(12)
+  }
+
+  @Builder
+  private accountRowContent(item: AccountRowViewModel) {
+    this.providerLogo(item)
+    Column({ space: 5 }) {
+      Row({ space: 6 }) {
+        Text(item.displayName.length > 0 ? item.displayName : item.avatarText)
           .fontSize(16)
           .fontColor(this.primaryTextColor())
           .textAlign(TextAlign.Start)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .ellipsisMode(EllipsisMode.END)
           .maxLines(1)
           .layoutWeight(1)
-        if (this.isCurrentAccount(item)) {
-          Text('当前用户')
+        if (item.isCurrent) {
+          Text($r('app.string.account_current'))
             .fontColor($r('app.color.color_main'))
             .fontSize(12)
             .padding({ left: 6, right: 6, top: 2, bottom: 2 })
@@ -161,29 +179,40 @@ export struct AccountPage {
             .borderRadius(4)
         }
       }
-
-      Text(item.server.hostname)
-        .fontSize(10)
-        .fontColor(this.primaryTextColor())
-        .textAlign(TextAlign.Start)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .ellipsisMode(EllipsisMode.END)
-        .width('100%')
+      Row({ space: 6 }) {
+        Text(item.isFeiniuVideo ?
+          $r('app.string.feiniu_video_service_name') : $r('app.string.provider_jellyfin_name'))
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.color_main'))
+          .maxLines(1)
+        Text(item.address)
+          .fontSize(11)
+          .fontColor(this.secondaryTextColor())
+          .textAlign(TextAlign.Start)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .ellipsisMode(EllipsisMode.END)
+          .layoutWeight(1)
+      }
     }
-    .padding({ top: 6, bottom: 6 })
     .height('100%')
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
-    .justifyContent(FlexAlign.SpaceBetween)
+    .justifyContent(FlexAlign.Center)
 
-    if (!this.isCurrentAccount(item)) {
+    if (this.ui.switchingAccountKey === item.accountKey ||
+      this.ui.deletingAccountKey === item.accountKey) {
+      LoadingProgress()
+        .width(24)
+        .height(24)
+    } else if (!item.isCurrent) {
       Image($r('app.media.icon_del'))
         .width(32)
         .height(32)
         .fillColor(this.iconColor())
         .padding(8)
-        .onClick(() => {
+        .onClick((): void => {
           this.openDeleteDialog(item)
         })
     }
@@ -192,29 +221,29 @@ export struct AccountPage {
   @Builder
   private feiniuItemLayout(item: Object, _index: number) {
     Row({ space: 12 }) {
-      this.accountRowContent(item as ServerUser)
+      this.accountRowContent(item as AccountRowViewModel)
     }
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
     .margin({ bottom: 10 })
     .width('100%')
-    .height(72)
+    .height(80)
     .backgroundColor($r('app.color.bg_1'))
     .borderRadius(8)
-    .onClick(() => {
-      this.onAccountClick(item as ServerUser)
+    .onClick((): void => {
+      this.onAccountClick(item as AccountRowViewModel)
     })
   }
 
   @Builder
-  private nativeItemLayout(item: ServerUser, index: number, itemCount: number) {
+  private nativeItemLayout(item: AccountRowViewModel, index: number, itemCount: number) {
     Column() {
       Row({ space: 12 }) {
         this.accountRowContent(item)
       }
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .width('100%')
-      .height(72)
-      .onClick(() => {
+      .height(80)
+      .onClick((): void => {
         this.onAccountClick(item)
       })
 
@@ -228,7 +257,7 @@ export struct AccountPage {
   }
 
   @Builder
-  private nativeAccountGroup(itemGroup: ItemGroup) {
+  private nativeAccountGroup(itemGroup: AccountItemGroup) {
     Column() {
       Text(itemGroup.title)
         .fontSize(14)
@@ -239,9 +268,9 @@ export struct AccountPage {
         .padding({ left: 16, right: 16 })
         .textAlign(TextAlign.Start)
 
-      ForEach(itemGroup.items, (item: ServerUser, index: number) => {
+      ForEach(itemGroup.items, (item: AccountRowViewModel, index: number) => {
         this.nativeItemLayout(item, index, itemGroup.items.length)
-      }, (item: ServerUser) => `${item.server.id}_${item.user.userId}`)
+      }, (item: AccountRowViewModel) => item.accountKey)
     }
     .width('100%')
     .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
@@ -251,46 +280,58 @@ export struct AccountPage {
 
   @Builder
   itemGroupHeader(item: Object, _position: number) {
-    Text((item as ItemGroup).title)
+    Text((item as AccountItemGroup).title)
       .fontSize(14)
       .fontWeight(FontWeight.Bold)
       .fontColor(this.primaryTextColor())
-      .width("100%")
+      .width('100%')
       .height(32)
       .textAlign(TextAlign.Start)
   }
 
   @Builder
   emptyLayout() {
-    Stack() {
+    Column({ space: 16 }) {
       Image($r('app.media.no_history'))
-        .width(240)
-        .height(240)
-      Text('无历史登录记录')
+        .width(200)
+        .height(200)
+      Text($r('app.string.account_empty'))
         .fontSize(14)
         .fontColor(this.secondaryTextColor())
-        .margin({
-          top: 180
+      Button($r('app.string.account_add_title'))
+        .height(44)
+        .padding({ left: 24, right: 24 })
+        .fontColor(Color.White)
+        .backgroundColor($r('app.color.color_main'))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive,
+          AppThemeTokens.isNative(this.appUIState.themeStyle)
+        ))
+        .onClick((): void => {
+          this.openAddAccount()
         })
     }
     .width('100%')
     .height('100%')
-    .padding({
-      bottom: 100
-    })
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
   private nativeAccountList() {
-    if (this.ui.groupAccountList.length === 0) {
+    if (this.ui.loading && this.ui.groupAccountList.length === 0) {
+      LoadingProgress()
+        .width(36)
+        .height(36)
+        .layoutWeight(1)
+    } else if (this.ui.groupAccountList.length === 0) {
       this.emptyLayout()
     } else {
       List({ space: 12 }) {
-        ForEach(this.ui.groupAccountList, (itemGroup: ItemGroup) => {
+        ForEach(this.ui.groupAccountList, (itemGroup: AccountItemGroup) => {
           ListItem() {
             this.nativeAccountGroup(itemGroup)
           }
-        }, (itemGroup: ItemGroup, index: number) => `${itemGroup.title}_${index}`)
+        }, (itemGroup: AccountItemGroup) => itemGroup.key)
       }
       .width('100%')
       .constraintSize({ maxWidth: 560 })
@@ -315,10 +356,10 @@ export struct AccountPage {
       showEmptyLayout: this.ui.groupAccountList.length === 0,
       lazyCachedCount: 10
     })
-    .width('100%')
-    .padding({ top: 10, bottom: 10, left: 16, right: 16 })
-    .layoutWeight(1)
-    .backgroundColor($r('app.color.bg_main'))
+      .width('100%')
+      .padding({ top: 10, bottom: 10, left: 16, right: 16 })
+      .layoutWeight(1)
+      .backgroundColor($r('app.color.bg_main'))
   }
 
   @Builder
@@ -326,7 +367,8 @@ export struct AccountPage {
     Column() {
       if (showLegacyActionBar) {
         ActionBar({
-          title: this.fromLogin ? '历史登录' : '切换账号',
+          title: this.fromLogin ?
+            $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
           rightBtnIcon: this.fromLogin ? undefined : $r('app.media.add'),
           onRightBtnClick: () => {
             this.openAddAccount()
@@ -346,7 +388,8 @@ export struct AccountPage {
 
   build() {
     AppRouteDestination({
-      title: this.fromLogin ? '历史登录' : '切换账号',
+      title: this.fromLogin ?
+        $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
       menus: this.navigationMenus(),
       contentBuilder: () => {
         this.pageContent(false)

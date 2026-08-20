@@ -4,6 +4,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const SETTING = 'entry/src/main/ets/features/setting/SettingPage.ets'
 const ADD_ACCOUNT = 'entry/src/main/ets/features/setting/account/AddAccountPage.ets'
+const JELLYFIN_CONNECT = 'entry/src/main/ets/features/setting/account/JellyfinConnectPage.ets'
+const FEINIU_CONNECT = 'entry/src/main/ets/features/feiniuvideo/account/FeiniuVideoConnectPage.ets'
 const CONNECT_SCREEN = 'entry/src/main/ets/features/connect/ConnectScreen.ets'
 const MINE_PAGE = 'entry/src/main/ets/features/home/minetab/MinePage.ets'
 const MINE_TAB = 'entry/src/main/ets/features/home/minetab/MineTab.ets'
@@ -12,6 +14,8 @@ const WEB_ITONG = 'entry/src/main/ets/features/web/WebITongPage.ets'
 export const SECONDARY_ROUTE_PATHS = [
   SETTING,
   ADD_ACCOUNT,
+  JELLYFIN_CONNECT,
+  FEINIU_CONNECT,
   CONNECT_SCREEN,
   MINE_PAGE,
   MINE_TAB,
@@ -137,31 +141,82 @@ function validateSetting(source) {
   }
 }
 
-function validateAddAccount(routeSource, connectSource) {
+function validateAddAccount(routeSource, jellyfinSource, feiniuSource, connectSource) {
   const build = validateRouteRoot(
     routeSource,
     ADD_ACCOUNT,
     /pageUrl\s*:\s*RouterConsts\.AddAccountPage\b/,
-    /title\s*:\s*['"]新增账号['"]/
+    /title\s*:\s*\$r\(\s*['"]app\.string\.account_add_title['"]\s*\)/
   )
   const pageContent = methodBlock(routeSource, 'pageContent')
-  const options = componentOptions(pageContent, 'ConnectScreen')
-  if (options.length !== 1 || !/isFromAddAccount\s*:\s*true/.test(options[0]) ||
-    !/\bshowRouteActionBar\b/.test(options[0]) ||
+  const jellyfinRoute = methodBlock(routeSource, 'openJellyfin')
+  const feiniuRoute = methodBlock(routeSource, 'openFeiniuVideo')
+  if (/\bConnectScreen\s*\(/.test(routeSource) ||
+    !/HMRouterMgr\.to\(\s*RouterConsts\.JellyfinConnectPage\s*\)\.push\(\s*\)/.test(jellyfinRoute) ||
+    !/HMRouterMgr\.to\(\s*RouterConsts\.FeiniuVideoConnectPage\s*\)\.push\(\s*\)/.test(feiniuRoute) ||
+    count(routeSource, /this\.openJellyfin\s*\(\s*\)/g) < 2 ||
+    count(routeSource, /this\.openFeiniuVideo\s*\(\s*\)/g) < 2) {
+    throw new Error('AddAccount must remain a reachable Jellyfin and Feiniu provider selector')
+  }
+  const addAccountLegacyHeader = guardedBlock(
+    pageContent,
+    /if\s*\(\s*showLegacyActionBar\s*\)\s*\{/,
+    'AddAccount legacy title row must be guarded'
+  )
+  if (count(pageContent, /\bActionBar\s*\(/g) !== 1 ||
+    count(addAccountLegacyHeader, /\bActionBar\s*\(/g) !== 1 ||
+    !/if\s*\(\s*showLegacyActionBar\s*\)\s*\{[\s\S]*this\.feiniuProviderList\s*\(\s*\)[\s\S]*\}\s*else\s*\{[\s\S]*this\.nativeProviderList\s*\(\s*\)/.test(pageContent) ||
     !/contentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*false\s*\)[\s\S]*legacyContentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*true\s*\)/.test(
       build)) {
-    throw new Error('AddAccount must hide the custom bar only in its Native destination')
+    throw new Error('AddAccount must separate Native and Feiniu provider-selector chrome')
   }
+
+  const jellyfinBuild = validateRouteRoot(
+    jellyfinSource,
+    JELLYFIN_CONNECT,
+    /pageUrl\s*:\s*RouterConsts\.JellyfinConnectPage\b/,
+    /title\s*:\s*\$r\(\s*['"]app\.string\.jellyfin_connect_title['"]\s*\)/
+  )
+  const jellyfinContent = methodBlock(jellyfinSource, 'pageContent')
+  const jellyfinOptions = componentOptions(jellyfinContent, 'ConnectScreen')
+  if (jellyfinOptions.length !== 1 ||
+    !/isFromAddAccount\s*:\s*true/.test(jellyfinOptions[0]) ||
+    !/showRouteActionBar\s*:\s*showRouteActionBar/.test(jellyfinOptions[0]) ||
+    !/contentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*false\s*\)[\s\S]*legacyContentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*true\s*\)/.test(
+      jellyfinBuild)) {
+    throw new Error('JellyfinConnectPage must own the existing add-account ConnectScreen route')
+  }
+
+  const feiniuBuild = validateRouteRoot(
+    feiniuSource,
+    FEINIU_CONNECT,
+    /pageUrl\s*:\s*RouterConsts\.FeiniuVideoConnectPage\b/,
+    /title\s*:\s*\$r\(\s*['"]app\.string\.feiniu_video_connect_title['"]\s*\)/
+  )
+  const feiniuContent = methodBlock(feiniuSource, 'pageContent')
+  const feiniuOptions = componentOptions(feiniuContent, 'FeiniuVideoConnectScreen')
+  if (feiniuOptions.length !== 1 ||
+    !/showRouteActionBar\s*:\s*showRouteActionBar/.test(feiniuOptions[0]) ||
+    !/@Param\s+showRouteActionBar\s*:\s*boolean\s*=\s*true/.test(feiniuSource) ||
+    !/FeiniuVideoConnectionViewModel/.test(feiniuSource) ||
+    /\bConnectScreen\s*\(|\bConnectionViewModel\b/.test(feiniuSource) ||
+    !/await\s+this\.vm\.onLogin\s*\(\s*\)/.test(feiniuSource) ||
+    !/contentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*false\s*\)[\s\S]*legacyContentBuilder\s*:[\s\S]*this\.pageContent\s*\(\s*true\s*\)/.test(
+      feiniuBuild)) {
+    throw new Error('FeiniuVideoConnectPage must keep an independent reachable login flow')
+  }
+
   if (!/@Param\s+showRouteActionBar\s*:\s*boolean\s*=\s*true/.test(connectSource)) {
     throw new Error('ConnectScreen route bar visibility must preserve its legacy default')
   }
   const connectBuild = methodBlock(connectSource, 'build')
-  const legacyHeader = guardedBlock(
+  const connectLegacyHeader = guardedBlock(
     connectBuild,
     /if\s*\(\s*this\.showRouteActionBar\s*\)\s*\{/,
     'ConnectScreen ActionBar must be guarded by route ownership'
   )
-  if (count(connectBuild, /\bActionBar\s*\(/g) !== 1 || count(legacyHeader, /\bActionBar\s*\(/g) !== 1) {
+  if (count(connectBuild, /\bActionBar\s*\(/g) !== 1 ||
+    count(connectLegacyHeader, /\bActionBar\s*\(/g) !== 1) {
     throw new Error('ConnectScreen ActionBar must stay outside Native destination content')
   }
   if (!/\.backgroundColor\s*\(\s*this\.showRouteActionBar\s*&&\s*this\.useNativeSurface\s*\(\s*\)\s*\?\s*\$r\(\s*['"]app\.color\.native_canvas_background['"]\s*\)\s*:\s*Color\.Transparent\s*\)/.test(
@@ -255,6 +310,8 @@ export function validateNativeSecondaryRouteDestinations(sources) {
   validateSetting(requiredSource(sources, SETTING))
   validateAddAccount(
     requiredSource(sources, ADD_ACCOUNT),
+    requiredSource(sources, JELLYFIN_CONNECT),
+    requiredSource(sources, FEINIU_CONNECT),
     requiredSource(sources, CONNECT_SCREEN)
   )
   validateMine(

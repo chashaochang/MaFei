@@ -1,7 +1,7 @@
-import { MediaStream } from "sdk/src/main/ets/generated-client/models"
+import { MediaPlaybackStream } from "../media/playback/MediaPlaybackModels"
 
 export class MediaStreamUtil {
-  static isLandscape(mediaStream?: MediaStream): boolean {
+  static isLandscape(mediaStream?: MediaPlaybackStream): boolean {
     if (mediaStream?.Width && mediaStream?.Height) {
       return mediaStream.Width > mediaStream.Height
     } else {

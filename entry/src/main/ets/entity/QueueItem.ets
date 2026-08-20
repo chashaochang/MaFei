@@ -1,3 +1,5 @@
+import { MediaImageRef } from '../media/catalog/MediaCatalogModels'
+
 //队列中
 export interface QueueItem {
   //播放id
@@ -11,6 +13,9 @@ export interface QueueItem {
 
   //封面
   image: string
+
+  //带鉴权和稳定缓存键的封面引用
+  imageRef?: MediaImageRef
 
   //时长
   durationText: string

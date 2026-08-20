@@ -62,6 +62,13 @@ function validCleanupFixture() {
     [minePath, `
       class MineViewModel {
         async logout(): Promise<void> {
+          if (activeSession?.provider === MediaProviderKind.FeiniuVideo) {
+            const loggedOut = await composition.coordinator().logoutFeiniu(providerAccountId)
+            if (loggedOut) {
+              this.appUIState.isLogin = false
+            }
+            return
+          }
           await this.apiClientController.logout()
           this.appUIState.isLogin = false
         }
@@ -70,14 +77,17 @@ function validCleanupFixture() {
     [accountPath, `
       class AccountViewModel {
         async changeAccount(): Promise<void> {
+          const switched = await this.changeJellyfinAccount()
+          this.navigateHome()
+        }
+        async changeJellyfinAccount(): Promise<void> {
           await this.apiClientController.logout()
-          HMRouterMgr.to('/IndexPage').pop()
           await this.apiClientController.setupServer()
           await this.apiClientController.setupUser()
         }
-        async loginByPwd(): Promise<void> {
+        async loginByStoredPassword(): Promise<boolean> {
           await this.apiClientController.setupUser()
-          HMRouterMgr.to('/IndexPage').replace()
+          return true
         }
       }
     `],
@@ -136,6 +146,19 @@ test('rejects login state committed before logout finishes', () => {
           await this.apiClientController.logout()`
   ))
   assert.throws(() => validateMusicSessionCleanup(fixture), /before changing login state/)
+})
+
+test('rejects Feiniu login state committed before provider logout finishes', () => {
+  const fixture = validCleanupFixture()
+  fixture.set(minePath, fixture.get(minePath).replace(
+    `const loggedOut = await composition.coordinator().logoutFeiniu(providerAccountId)
+            if (loggedOut) {
+              this.appUIState.isLogin = false
+            }`,
+    `this.appUIState.isLogin = false
+            const loggedOut = await composition.coordinator().logoutFeiniu(providerAccountId)`
+  ))
+  assert.throws(() => validateMusicSessionCleanup(fixture), /Feiniu logout/)
 })
 
 test('derives the workspace root from the verifier location', () => {

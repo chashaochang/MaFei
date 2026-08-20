@@ -6,7 +6,7 @@ const validProfile = {
   app: {
     compileSdkVersion: '26.0.0.23',
     targetAPIVersion: 260000026,
-    minAPIVersion: 60000020
+    minAPIVersion: 60101024
   },
   module: {
     abilities: [
@@ -65,11 +65,21 @@ test('rejects a non-string compile SDK that looks valid after coercion', () => {
   )
 })
 
+test('rejects a minimum below API 24', () => {
+  assert.throws(
+    () => validateMergedProfile({
+      ...validProfile,
+      app: { ...validProfile.app, minAPIVersion: 60000020 }
+    }),
+    /minimum API must remain 6\.1\.1\(24\)/
+  )
+})
+
 const invalidApiFields = [
   ['target API string', 'targetAPIVersion', '260000026', /target API must equal 260000026/],
   ['target API array', 'targetAPIVersion', [260000026], /target API must equal 260000026/],
-  ['minimum API string', 'minAPIVersion', '60000020', /minimum API must remain 6\.0\.0\(20\)/],
-  ['minimum API array', 'minAPIVersion', [60000020], /minimum API must remain 6\.0\.0\(20\)/]
+  ['minimum API string', 'minAPIVersion', '60101024', /minimum API must remain 6\.1\.1\(24\)/],
+  ['minimum API array', 'minAPIVersion', [60101024], /minimum API must remain 6\.1\.1\(24\)/]
 ]
 
 invalidApiFields.forEach(([name, field, value, expectedError]) => {

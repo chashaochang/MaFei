@@ -1,9 +1,12 @@
-import { AxiosResponse } from "@ohos/axios";
-import { getPlaystateApi, getTvShowsApi, getUserLibraryApi, ImageUrlsApi } from "sdk";
-import { BaseItemDto, BaseItemDtoQueryResult, ImageType, ItemFields } from "sdk/src/main/ets/generated-client/models";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
-import { getItemImageUrl, getVideoTagsByStreams, playItems } from "../../common/CommonFunc";
-import { ApiClient } from "../../network/ApiClient";
+import { playMediaRefs } from "../../common/CommonFunc";
+import { currentMediaCatalogProvider } from "../../media/MediaCatalogAccess";
+import { MediaDetail, MediaEpisode, MediaPage } from "../../media/catalog/MediaCatalogModels";
+import {
+  MediaCatalogProvider,
+  MediaEpisodeQueryProfile
+} from "../../media/catalog/MediaCatalogProvider";
+import { MediaRef } from "../../media/MediaRef";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { SeasonDetailUIState } from "./SeasonDetailUIState";
 import { curves } from '@kit.ArkUI';
@@ -13,24 +16,29 @@ import { ToastUtil } from "../../utils/ToastUtil";
 export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   private originImageHeight: number = 0;
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
-  episodeList: string[] = []
+  private catalog?: MediaCatalogProvider
+  private requestGeneration: number = 0
+  episodeList: MediaRef[] = []
   episodeStartIndex: number = 0
 
   // 将剧集按30个一组分组，并生成组名与视频列表
-  private groupEpisodes(items: BaseItemDto[]) {
+  private groupEpisodes(items: MediaEpisode[]): void {
     // 先映射为 VideoItem 列表
-    const mapped: VideoItem[] = items.map<VideoItem>((e: BaseItemDto) => {
+    const mapped: VideoItem[] = items.map<VideoItem>((episode: MediaEpisode) => {
       return {
-        id: e.Id || '',
-        name: `${e.IndexNumber}.${e.Name ?? ''}`.trim(),
-        image: ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(e.Id, ImageType.Primary),
-        subtitle: e.Overview || '',
-        score: e.CommunityRating ? e.CommunityRating : 0,
-        tags: getVideoTagsByStreams(e.MediaStreams),
+        id: episode.ref.id,
+        mediaRef: episode.ref,
+        kind: episode.ref.kind,
+        name: `${episode.episodeNumber || ''}.${episode.title}`.trim(),
+        image: episode.primaryImage?.url || '',
+        imageRef: episode.primaryImage,
+        subtitle: episode.overview,
+        score: episode.communityRating || 0,
+        tags: episode.tags.slice(),
         mediaName: this.ui.title,
-        type: e.Type,
-        time: `${e.RunTimeTicks ? (() => {
-          const totalSeconds = Math.floor(e.RunTimeTicks / 10000000)
+        type: 'Episode',
+        time: `${episode.durationMs > 0 ? (() => {
+          const totalSeconds = Math.floor(episode.durationMs / 1000)
           const hours = Math.floor(totalSeconds / 3600)
           const minutes = Math.floor((totalSeconds % 3600) / 60)
           const seconds = totalSeconds % 60
@@ -77,74 +85,101 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     this.ui.selectGroupIndex = 0
   }
 
-  getSeasonDetail() {
-    getUserLibraryApi(ApiClient.Instance()).getItem({
-      userId: ApiClient.Instance().userId,
-      itemId: this.ui.id,
-    }).then((res: AxiosResponse<BaseItemDto>) => {
-      if (res.data) {
-        let itemData = res.data
-        this.ui.title = `${itemData.SeriesName} ${itemData.Name}`
-        this.ui.image = getItemImageUrl(itemData, ImageType.Primary)
-        this.ui.backgroundImage = ApiClient.Instance().basePath +
-        new ImageUrlsApi().getItemImageUrlById(itemData.SeriesId, ImageType.Backdrop)
-        this.ui.seriesName = itemData.SeriesName || ''
-        this.ui.seasonName = itemData.Name || ''
-        this.ui.info = this.ui.preInfo || (itemData.ProductionYear ? itemData.ProductionYear.toString() : '')
-        this.ui.overview = itemData.Overview || ''
-        this.ui.people = itemData.People || []
-        this.ui.isFavorite = itemData.UserData?.IsFavorite || false
-        this.ui.played = itemData.UserData?.Played || false
-        getTvShowsApi(ApiClient.Instance()).getEpisodes({
-          userId: ApiClient.Instance().userId,
-          seasonId: this.ui.id,
-          seriesId: itemData.SeriesId || '',
-          fields: ['ItemCounts', 'PrimaryImageAspectRatio', 'CanDelete', 'MediaSourceCount', 'Overview'],
-        }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-          if (res.data && res.data.Items && res.data.Items.length > 0) {
-            // 分组剧集
-            this.groupEpisodes(res.data.Items)
-            this.getEpisodes(this.ui.id)
-            this.ui.firstLoading = false
-          } else {
-            // 清空
-            this.ui.videoGroups = []
-            this.ui.videos = []
-            this.ui.firstLoading = false
-          }
-        }).catch(() => {
-          this.ui.firstLoading = false
-        })
-      }
-    }).catch(() => {
+  async getSeasonDetail(ref: MediaRef, seriesRef: MediaRef): Promise<void> {
+    const generation = ++this.requestGeneration
+    this.ui.firstLoading = true
+    let catalog: MediaCatalogProvider
+    try {
+      catalog = currentMediaCatalogProvider()
+    } catch (_error) {
       this.ui.firstLoading = false
-    })
-  }
-
-  getEpisodes(seasonId: string) {
-    getTvShowsApi(ApiClient.Instance()).getEpisodes({
-      userId: ApiClient.Instance().userId,
-      fields: [ItemFields.Chapters, ItemFields.Trickplay],
-      isMissing: false,
-      seriesId: this.ui.parentId,
-      seasonId: seasonId
-    }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-      if (res.data && res.data.Items && res.data.Items.length > 0) {
-        const episodeItems = res.data.Items
-        const firstNotPlayedIndex = episodeItems.findIndex((e) => e.UserData?.Played == false)
-        this.episodeStartIndex = firstNotPlayedIndex >= 0 ? firstNotPlayedIndex : 0
-        const targetEpisode = episodeItems[this.episodeStartIndex]
-        this.ui.episodeName = '第 ' + targetEpisode.IndexNumber + ' 集'
-        this.episodeList = episodeItems.map<string>((e) => e.Id!)
+      return
+    }
+    if (!ref.belongsTo(catalog.session) || !seriesRef.belongsTo(catalog.session)) {
+      this.ui.firstLoading = false
+      return
+    }
+    this.catalog = catalog
+    this.ui.mediaRef = ref
+    this.ui.seriesRef = seriesRef
+    this.ui.id = ref.id
+    this.ui.parentId = seriesRef.id
+    try {
+      const detail = await catalog.getDetail(ref)
+      if (!this.isCurrent(catalog, ref, generation)) {
+        return
       }
-    }).catch()
+      this.applyDetail(detail)
+      const requests: Promise<MediaPage<MediaEpisode>>[] = [
+        catalog.getEpisodes({
+          seriesRef: seriesRef,
+          seasonRef: ref,
+          startIndex: 0,
+          limit: 1000,
+          profile: MediaEpisodeQueryProfile.Display
+        }),
+        catalog.getEpisodes({
+          seriesRef: seriesRef,
+          seasonRef: ref,
+          startIndex: 0,
+          limit: 1000,
+          profile: MediaEpisodeQueryProfile.PlaybackQueue
+        })
+      ]
+      const pages = await Promise.all(requests)
+      if (!this.isCurrent(catalog, ref, generation)) {
+        return
+      }
+      this.groupEpisodes(pages[0].items)
+      this.applyEpisodeQueue(pages[1].items)
+    } catch (_error) {
+      if (this.isCurrent(catalog, ref, generation)) {
+        this.ui.videoGroups = []
+        this.ui.videos = []
+        this.episodeList = []
+      }
+    } finally {
+      if (this.isCurrent(catalog, ref, generation)) {
+        this.ui.firstLoading = false
+      }
+    }
   }
 
-  playFirst() {
+  private applyDetail(detail: MediaDetail): void {
+    this.ui.title = `${detail.seriesTitle || this.ui.mediaName} ${detail.title}`.trim()
+    this.ui.image = detail.primaryImage?.url || ''
+    this.ui.imageRef = detail.primaryImage
+    this.ui.backgroundImage = (detail.backdropImage || detail.primaryImage)?.url || ''
+    this.ui.backgroundImageRef = detail.backdropImage || detail.primaryImage
+    this.ui.seriesName = detail.seriesTitle || this.ui.mediaName
+    this.ui.seasonName = detail.title
+    this.ui.info = this.ui.preInfo || (detail.productionYear !== undefined ? detail.productionYear.toString() : '')
+    this.ui.overview = detail.overview
+    this.ui.people = detail.personCredits.slice()
+    this.ui.isFavorite = detail.userState.favorite.favorite
+    this.ui.played = detail.userState.watched.watched
+  }
+
+  private applyEpisodeQueue(items: MediaEpisode[]): void {
+    if (items.length === 0) {
+      this.episodeList = []
+      this.episodeStartIndex = 0
+      this.ui.episodeName = ''
+      return
+    }
+    const firstNotPlayedIndex = items.findIndex((episode: MediaEpisode): boolean =>
+      !episode.userState.watched.watched)
+    this.episodeStartIndex = firstNotPlayedIndex >= 0 ? firstNotPlayedIndex : 0
+    const targetEpisode = items[this.episodeStartIndex]
+    this.ui.episodeName = '第 ' + (targetEpisode.episodeNumber || this.episodeStartIndex + 1) + ' 集'
+    this.episodeList = items.map((episode: MediaEpisode): MediaRef => episode.ref)
+  }
+
+  playFirst(): void {
     if (this.ui.episodeName == '' || this.episodeList.length === 0) {
       return
     }
-    playItems(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
+    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
   }
 
   calculateImageHeight(param: CalculateHeightParam): boolean {
@@ -186,51 +221,38 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     this.originImageHeight = this.ui.imageHeight;
   }
 
-  changeFavorite() {
-    if (this.ui.isFavorite) {
-      getUserLibraryApi(ApiClient.Instance()).unmarkFavoriteItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.isFavorite = false
-        ToastUtil.showToast(this.ui.context, '已取消收藏')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '取消收藏失败')
-      })
-    } else {
-      getUserLibraryApi(ApiClient.Instance()).markFavoriteItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.isFavorite = true
-        ToastUtil.showToast(this.ui.context, '已收藏')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '收藏失败')
-      })
+  changeFavorite(): void {
+    const catalog = this.catalog
+    const ref = this.ui.mediaRef
+    if (!catalog || !ref || !catalog.session.capabilities.favorites || !ref.belongsTo(catalog.session)) {
+      return
     }
+    const favorite = !this.ui.isFavorite
+    catalog.setFavorite(ref, favorite).then((state) => {
+      if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
+        this.ui.isFavorite = state.favorite
+        ToastUtil.showToast(this.ui.context, state.favorite ? '已收藏' : '已取消收藏')
+      }
+    }).catch((): void => ToastUtil.showToast(this.ui.context, favorite ? '收藏失败' : '取消收藏失败'))
   }
 
-  changePlayedState() {
-    if (this.ui.played) {
-      getPlaystateApi(ApiClient.Instance()).markUnplayedItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.played = false
-        ToastUtil.showToast(this.ui.context, '标记为未观看')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '操作失败')
-      })
-    } else {
-      getPlaystateApi(ApiClient.Instance()).markPlayedItem({
-        userId: ApiClient.Instance().userId,
-        itemId: this.ui.id,
-      }).then(() => {
-        this.ui.played = true
-        ToastUtil.showToast(this.ui.context, '标记为已观看')
-      }).catch(() => {
-        ToastUtil.showToast(this.ui.context, '操作失败')
-      })
+  changePlayedState(): void {
+    const catalog = this.catalog
+    const ref = this.ui.mediaRef
+    if (!catalog || !ref || !catalog.session.capabilities.watched || !ref.belongsTo(catalog.session)) {
+      return
     }
+    const watched = !this.ui.played
+    catalog.setWatched(ref, watched).then((state) => {
+      if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
+        this.ui.played = state.watched
+        ToastUtil.showToast(this.ui.context, state.watched ? '标记为已观看' : '标记为未观看')
+      }
+    }).catch((): void => ToastUtil.showToast(this.ui.context, '操作失败'))
+  }
+
+  private isCurrent(catalog: MediaCatalogProvider, ref: MediaRef, generation: number): boolean {
+    return this.catalog === catalog && generation === this.requestGeneration &&
+      this.ui.mediaRef?.equals(ref) === true && ref.belongsTo(catalog.session)
   }
 }

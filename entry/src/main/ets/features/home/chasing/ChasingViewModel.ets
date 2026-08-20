@@ -11,6 +11,9 @@ import { BaseViewModel } from "../../../common/base/BaseViewModel";
 import { PageState } from "../../../common/base/BaseUIState";
 import { getItemBackDropImageUrl } from "../../../common/CommonFunc";
 import { AppPreference } from "../../../data/AppPreference";
+import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry";
+import { MediaProviderSession } from "../../../media/MediaProviderSession";
+import { MediaRef, MediaRefKind } from "../../../media/MediaRef";
 import { ApiClient } from "../../../network/ApiClient";
 import { VideoItem } from "../hometab/HomeUIState";
 import { ChasingUIState } from "./ChasingUIState";
@@ -18,8 +21,18 @@ import { ChaseFollowedSeriesItem, ChasePlanner } from "./ChasePlanner";
 
 export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
   private imageApi: ImageUrlsApi = new ImageUrlsApi()
+  private refreshVersion: number = 0
 
   async refresh(): Promise<void> {
+    const requestVersion = ++this.refreshVersion
+    const session = this.activeChasingSession()
+    if (!session) {
+      this.applyPlan([], [], [])
+      this.ui.followedCount = 0
+      this.ui.pageState = PageState.Content
+      this.ui.isRefreshing = false
+      return
+    }
     this.ui.pageState = PageState.Loading
     try {
       const chasingSeriesIds = AppPreference.getInstance().getChasingSeriesIds()
@@ -30,21 +43,39 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
         return
       }
       const lists = await Promise.all([
-        this.getResumeList(chasingSeriesIds),
-        this.getNextUpList(chasingSeriesIds),
-        this.getFollowedSeriesList(chasingSeriesIds)
+        this.getResumeList(chasingSeriesIds, session),
+        this.getNextUpList(chasingSeriesIds, session),
+        this.getFollowedSeriesList(chasingSeriesIds, session)
       ])
+      if (!this.isCurrentRequest(session, requestVersion)) {
+        return
+      }
       this.applyPlan(lists[0], lists[1], lists[2])
       this.ui.pageState = PageState.Content
     } catch (e) {
-      console.error(`[ChasingVM] refresh failed: ${JSON.stringify(e)}`)
-      this.ui.pageState = PageState.Error
+      if (this.isCurrentRequest(session, requestVersion)) {
+        console.error(`[ChasingVM] refresh failed: ${JSON.stringify(e)}`)
+        this.ui.pageState = PageState.Error
+      }
     } finally {
-      this.ui.isRefreshing = false
+      if (requestVersion === this.refreshVersion) {
+        this.ui.isRefreshing = false
+      }
     }
   }
 
-  private async getResumeList(chasingSeriesIds: string[]): Promise<VideoItem[]> {
+  private activeChasingSession(): MediaProviderSession | undefined {
+    const session = MediaProviderRegistry.instance().getActiveSession()
+    return session?.capabilities.chasing ? session : undefined
+  }
+
+  private isCurrentRequest(session: MediaProviderSession, requestVersion: number): boolean {
+    const activeSession = this.activeChasingSession()
+    return requestVersion === this.refreshVersion && activeSession?.accountScope === session.accountScope
+  }
+
+  private async getResumeList(chasingSeriesIds: string[],
+    session: MediaProviderSession): Promise<VideoItem[]> {
     const res: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getResumeItems({
       limit: 100,
       fields: [ItemFields.PrimaryImageAspectRatio],
@@ -53,14 +84,15 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
       enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb],
       enableTotalRecordCount: false,
       mediaTypes: ['Video'],
-      userId: ApiClient.Instance().userId
+      userId: session.userId
     })
     return (res.data?.Items || [])
       .filter((item: BaseItemDto): boolean => this.isFollowedSeriesItem(item, chasingSeriesIds))
-      .map((item: BaseItemDto): VideoItem => this.mapResumeItem(item))
+      .map((item: BaseItemDto): VideoItem => this.mapResumeItem(item, session))
   }
 
-  private async getNextUpList(chasingSeriesIds: string[]): Promise<VideoItem[]> {
+  private async getNextUpList(chasingSeriesIds: string[],
+    session: MediaProviderSession): Promise<VideoItem[]> {
     const cutoff = new Date()
     cutoff.setFullYear(cutoff.getFullYear() - 1)
     const tasks: Promise<VideoItem[]>[] = chasingSeriesIds.map((seriesId: string): Promise<VideoItem[]> => {
@@ -69,7 +101,7 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
         limit: 1,
         fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path,
           ItemFields.MediaSourceCount],
-        userId: ApiClient.Instance().userId,
+        userId: session.userId,
         imageTypeLimit: 1,
         enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb],
         enableTotalRecordCount: false,
@@ -78,7 +110,7 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
         enableResumable: false,
         enableRewatching: false
       }).then((res: AxiosResponse<BaseItemDtoQueryResult>): VideoItem[] => {
-        return (res.data?.Items || []).map((item: BaseItemDto): VideoItem => this.mapNextUpItem(item))
+        return (res.data?.Items || []).map((item: BaseItemDto): VideoItem => this.mapNextUpItem(item, session))
       }).catch((): VideoItem[] => {
         console.warn(`[ChasingVM] get next up failed, seriesId=${seriesId}`)
         return []
@@ -94,9 +126,10 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     return items
   }
 
-  private async getFollowedSeriesList(chasingSeriesIds: string[]): Promise<ChaseFollowedSeriesItem[]> {
+  private async getFollowedSeriesList(chasingSeriesIds: string[],
+    session: MediaProviderSession): Promise<ChaseFollowedSeriesItem[]> {
     const res: AxiosResponse<BaseItemDtoQueryResult> = await getItemsApi(ApiClient.Instance()).getItems({
-      userId: ApiClient.Instance().userId,
+      userId: session.userId,
       ids: chasingSeriesIds,
       includeItemTypes: [BaseItemKind.Series],
       fields: [ItemFields.PrimaryImageAspectRatio],
@@ -107,7 +140,7 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
       enableTotalRecordCount: false
     })
     return (res.data?.Items || [])
-      .map((item: BaseItemDto): ChaseFollowedSeriesItem => this.mapFollowedSeriesItem(item))
+      .map((item: BaseItemDto): ChaseFollowedSeriesItem => this.mapFollowedSeriesItem(item, session))
   }
 
   private applyPlan(
@@ -124,7 +157,7 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     this.ui.sections = result.sections
   }
 
-  private mapResumeItem(item: BaseItemDto): VideoItem {
+  private mapResumeItem(item: BaseItemDto, session: MediaProviderSession): VideoItem {
     let name = ''
     let subtitle = ''
     switch (item.Type) {
@@ -143,6 +176,7 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     }
     return {
       id: item.Id || '',
+      mediaRef: this.mediaRef(item.Id, item.Type, session),
       name,
       subtitle,
       image: this.resolveDisplayImage(item),
@@ -152,9 +186,10 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     }
   }
 
-  private mapNextUpItem(item: BaseItemDto): VideoItem {
+  private mapNextUpItem(item: BaseItemDto, session: MediaProviderSession): VideoItem {
     return {
       id: item.Id || '',
+      mediaRef: this.mediaRef(item.Id, item.Type, session),
       name: item.SeriesName || item.Name || '',
       image: this.resolveDisplayImage(item),
       seriesId: item.SeriesId || '',
@@ -164,9 +199,11 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
     }
   }
 
-  private mapFollowedSeriesItem(item: BaseItemDto): ChaseFollowedSeriesItem {
+  private mapFollowedSeriesItem(item: BaseItemDto,
+    session: MediaProviderSession): ChaseFollowedSeriesItem {
     return {
       id: item.Id || '',
+      mediaRef: this.mediaRef(item.Id, item.Type, session),
       name: item.Name || '',
       image: this.resolveDisplayImage(item),
       seriesId: item.Id || '',
@@ -176,6 +213,23 @@ export class ChasingViewModel extends BaseViewModel<ChasingUIState> {
       unplayedItemCount: item.UserData?.UnplayedItemCount,
       played: item.UserData?.Played
     }
+  }
+
+  private mediaRef(id: string | undefined, type: BaseItemKind | undefined,
+    session: MediaProviderSession): MediaRef | undefined {
+    const normalizedId = id?.trim() || ''
+    if (normalizedId.length === 0) {
+      return undefined
+    }
+    let kind = MediaRefKind.Unknown
+    if (type === BaseItemKind.Movie) {
+      kind = MediaRefKind.Movie
+    } else if (type === BaseItemKind.Episode) {
+      kind = MediaRefKind.Episode
+    } else if (type === BaseItemKind.Series) {
+      kind = MediaRefKind.Series
+    }
+    return new MediaRef(session.provider, session.accountScope, normalizedId, kind)
   }
 
   private resolveDisplayImage(item: BaseItemDto): string {

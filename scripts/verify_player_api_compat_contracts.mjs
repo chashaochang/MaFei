@@ -10,6 +10,8 @@ const QUEUE_MANAGER = 'entry/src/main/ets/player/queue/QueueManager.ets'
 const TRACK_SELECTION_HELPER = 'entry/src/main/ets/player/TrackSelectionHelper.ets'
 const PLAYBACK_REQUEST_RESULT = 'entry/src/main/ets/player/queue/PlaybackRequestResult.ets'
 const MEDIA_SOURCE_RESOLVER = 'entry/src/main/ets/player/source/MediaSourceResolver.ets'
+const COMMON_FUNC = 'entry/src/main/ets/common/CommonFunc.ets'
+const JELLYFIN_PLAYBACK_PROVIDER = 'entry/src/main/ets/media/jellyfin/JellyfinPlaybackProvider.ets'
 
 function requireValue(condition, message) {
   if (!condition) {
@@ -143,16 +145,33 @@ function validateMaterialBuilders(source, label) {
       !builder.source.includes('.systemMaterial('),
       `${label}.${builder.name} must not call systemMaterial`
     )
+    requireValue(
+      !builder.source.includes('AppThemeSurfaceResolver.modifier('),
+      `${label}.${builder.name} must not apply a native material modifier`
+    )
   }
 
   const nativeMaterialCount = builders
     .filter((builder) => builder.name.startsWith('native'))
-    .reduce((count, builder) => count + countOccurrences(builder.source, '.systemMaterial('), 0)
-  const totalMaterialCount = countOccurrences(source, '.systemMaterial(')
-  requireValue(totalMaterialCount > 0, `${label} must retain native material builders`)
+    .reduce((count, builder) => {
+      const modifierCount = countOccurrences(builder.source, 'AppThemeSurfaceResolver.modifier(')
+      if (modifierCount > 0) {
+        requireValue(
+          countOccurrences(builder.source, 'this.vm.appUIState.systemMaterialAvailable') >= modifierCount,
+          `${label}.${builder.name} must pass systemMaterialAvailable to every native material modifier`
+        )
+      }
+      return count + modifierCount
+    }, 0)
+  const totalMaterialCount = countOccurrences(source, 'AppThemeSurfaceResolver.modifier(')
+  requireValue(totalMaterialCount > 0, `${label} must retain native material modifiers`)
   requireValue(
     nativeMaterialCount === totalMaterialCount,
-    `${label} systemMaterial calls must exist only in native builders`
+    `${label} material modifiers must exist only in native builders`
+  )
+  requireValue(
+    countOccurrences(source, '.systemMaterial(') === 0,
+    `${label} must route native material through the capability-aware modifier`
   )
 
   const names = new Set(builders.map((builder) => builder.name))
@@ -194,7 +213,8 @@ function validateNativePortraitActions(source, label) {
     `${label} native portrait layer must reserve back and action widths without overflowing`
   )
   requireValue(
-    portraitSource.includes('.systemMaterial('),
+    portraitSource.includes('AppThemeSurfaceResolver.modifier(') &&
+      portraitSource.includes('this.vm.appUIState.systemMaterialAvailable'),
     `${label} native portrait action group must use native material`
   )
 
@@ -293,8 +313,34 @@ function validatePlaybackResultContract(queueManagerSource, playbackRequestResul
 
   const resolverSource = extractMethod(mediaSourceResolverSource, 'resolveMediaSource')
   requireValue(
-    countOccurrences(resolverSource, '}).catch((e: BusinessError) => {') === 3,
-    'MediaSourceResolver must reject item and playback-info request failures'
+    resolverSource.includes('return this.provider.resolveSource({') &&
+      !resolverSource.includes('.catch('),
+    'MediaSourceResolver must propagate provider item and playback-info request failures'
+  )
+}
+
+function validateProviderResumeContract(commonFuncSource, mediaSourceResolverSource,
+  jellyfinPlaybackProviderSource) {
+  const entrySource = extractMethod(commonFuncSource, 'playMediaRefs')
+  requireValue(
+    entrySource.includes('options.startPositionTicks = startPositionTicks ?? null'),
+    'neutral playback entry must preserve an unspecified resume position'
+  )
+
+  const resolverSource = extractMethod(mediaSourceResolverSource, 'resolveMediaSource')
+  requireValue(
+    resolverSource.includes('startTimeTicks: startTimeTicks ?? undefined'),
+    'MediaSourceResolver must distinguish unspecified resume from explicit zero'
+  )
+
+  const providerSource = extractMethod(jellyfinPlaybackProviderSource, 'resolveSource')
+  requireValue(
+    /const\s+effectiveStartTicks\s*=\s*request\.startTimeTicks\s*\?\?\s*item\.UserData\?\.PlaybackPositionTicks\s*\?\?\s*0/.test(providerSource),
+    'Jellyfin playback must restore the server resume point when no position is specified'
+  )
+  requireValue(
+    countOccurrences(providerSource, 'effectiveStartTicks') >= 3,
+    'Jellyfin playback must use the effective resume point for negotiation and the resolved source'
   )
 }
 
@@ -405,6 +451,11 @@ export function validatePlayerApiCompatContracts(sources) {
     sources.playbackRequestResultSource,
     sources.mediaSourceResolverSource
   )
+  validateProviderResumeContract(
+    sources.commonFuncSource,
+    sources.mediaSourceResolverSource,
+    sources.jellyfinPlaybackProviderSource
+  )
   validatePlaybackPositionAndRecovery(
     sources.queueManagerSource,
     sources.playerViewModelSource,
@@ -427,7 +478,9 @@ export function readWorkspacePlayerApiCompatSources(workspaceRoot = defaultWorks
     queueManagerSource: readFileSync(resolve(workspaceRoot, QUEUE_MANAGER), 'utf8'),
     trackSelectionSource: readFileSync(resolve(workspaceRoot, TRACK_SELECTION_HELPER), 'utf8'),
     playbackRequestResultSource: readFileSync(resolve(workspaceRoot, PLAYBACK_REQUEST_RESULT), 'utf8'),
-    mediaSourceResolverSource: readFileSync(resolve(workspaceRoot, MEDIA_SOURCE_RESOLVER), 'utf8')
+    mediaSourceResolverSource: readFileSync(resolve(workspaceRoot, MEDIA_SOURCE_RESOLVER), 'utf8'),
+    commonFuncSource: readFileSync(resolve(workspaceRoot, COMMON_FUNC), 'utf8'),
+    jellyfinPlaybackProviderSource: readFileSync(resolve(workspaceRoot, JELLYFIN_PLAYBACK_PROVIDER), 'utf8')
   }
 }
 

@@ -12,6 +12,11 @@ import { MediaLibraryRefreshEvent } from '../../../events/Events'
 import { ActionBar } from '../../../component/ActionBar'
 import { AppRouteDestination } from '../../../component/AppRouteDestination'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy'
 import { AppThemeTokens } from '../../../theme/AppThemeTokens'
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy'
 import {
@@ -31,6 +36,10 @@ class ManagementLibraryMenuElement implements MenuElement {
     this.action = action
     this.enabled = enabled
   }
+}
+
+interface ManagementLibraryMenuOptions extends MenuOptions {
+  systemMaterial?: Object
 }
 
 @HMRouter({
@@ -78,6 +87,41 @@ export struct ManagementLibrariesPage {
   private useNativeMaterial(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+  }
+
+  private menuMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
+  private libraryMenuOptions(): ManagementLibraryMenuOptions {
+    const decision = this.menuMaterialDecision()
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.Thin
+      }
+    }
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    return { placement: Placement.BottomRight }
   }
 
   private isNativeTheme(): boolean {
@@ -254,15 +298,11 @@ export struct ManagementLibrariesPage {
       .height(40)
       .borderRadius(20)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(this.useNativeMaterial() ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
       .accessibilityText($r('app.string.management_library_more_actions'))
       .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
-      .bindMenu(this.libraryMenuItems(item), {
-        placement: Placement.BottomRight,
-        systemMaterial: this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) : undefined
-      })
+      .bindMenu(this.libraryMenuItems(item), this.libraryMenuOptions())
     } else {
       Button() {
         SymbolGlyph($r('sys.symbol.more'))
@@ -357,9 +397,8 @@ export struct ManagementLibrariesPage {
         .borderRadius(20)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .onClick(() => this.vm.load(false))
     }
     .width('calc(100% - 48vp)')
@@ -412,8 +451,8 @@ export struct ManagementLibrariesPage {
           .fontSize(12)
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) : undefined)
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.load(true))
       }
       .width('calc(100% - 24vp)')
@@ -437,9 +476,8 @@ export struct ManagementLibrariesPage {
           .borderRadius(20)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.openCreate())
       }
       .width('100%')
@@ -527,9 +565,8 @@ export struct ManagementLibrariesPage {
           .borderRadius(20)
           .fontColor($r('app.color.on_primary'))
           .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .systemMaterial(this.useNativeMaterial() ?
-            AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-            AppThemeSurfaceResolver.disabledSystemMaterial())
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
           .onClick(() => this.vm.openEdit(this.vm.selectedLibrary()!))
       } else {
         Text($r('app.string.management_library_select_hint'))

@@ -79,9 +79,16 @@ export function validateManagementDevices(sources) {
   requirePattern(sources, managementDevicePaths.detailPage,
     /management_device_login_will_expire[\s\S]*showDialog/,
     'device revoke must require an invalidation confirmation')
-  requirePattern(sources, managementDevicePaths.detailPage,
-    /deviceInfo\.sdkApiVersion\s*>=\s*26[\s\S]*disabledSystemMaterial\s*\(\s*\)/,
-    'device confirmation must keep its API 26 material guard')
+  for (const path of [managementDevicePaths.listPage, managementDevicePaths.detailPage]) {
+    requirePattern(sources, path,
+      /AppThemeOverlayPolicy\.resolve\s*\([\s\S]*OverlaySurfaceRole\.Dangerous[\s\S]*this\.vm\.appUIState\.systemMaterialAvailable[\s\S]*this\.vm\.appUIState\.nativeThemeAvailable/,
+      'device confirmation must use the runtime dangerous-overlay policy')
+    requirePattern(sources, path,
+      /OverlayMaterialDecision\.DisableSystemMaterial[\s\S]*systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\s*\(\s*\)/,
+      'device confirmation must keep the disabled-material branch')
+    rejectPattern(sources, path, /deviceInfo\.sdkApiVersion\s*>=\s*26/,
+      'device confirmation must not hard-code an API 26 SDK guard')
+  }
   requirePattern(sources, managementDevicePaths.detailPage,
     /ManagementSectionStatus\.Loading/,
     'device detail must expose a loading state')

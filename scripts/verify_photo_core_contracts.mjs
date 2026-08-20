@@ -166,6 +166,30 @@ function methodBlock(source, methodName) {
   return bracedBlock(source, openingBrace)
 }
 
+function conditionForRoute(source, route) {
+  const routeIndex = source.indexOf(route)
+  if (routeIndex < 0) {
+    throw new Error('missing route: ' + route)
+  }
+  const ifIndex = source.lastIndexOf('if (', routeIndex)
+  if (ifIndex < 0) {
+    throw new Error('missing route condition: ' + route)
+  }
+  const openingParenthesis = source.indexOf('(', ifIndex)
+  let depth = 0
+  for (let index = openingParenthesis; index < routeIndex; index += 1) {
+    if (source[index] === '(') {
+      depth += 1
+    } else if (source[index] === ')') {
+      depth -= 1
+      if (depth === 0) {
+        return source.slice(openingParenthesis + 1, index)
+      }
+    }
+  }
+  throw new Error('unterminated route condition: ' + route)
+}
+
 function sorted(values) {
   return Array.from(values).sort()
 }
@@ -216,13 +240,13 @@ function validateRoutes(sources) {
 
 function validateMediaRouting(sources) {
   const openLibrary = methodBlock(requiredSource(sources, MEDIA_TAB), 'openLibrary')
-  if (!/CollectionType\.Photos/.test(openLibrary) ||
-    !/HMRouterMgr\.to\s*\(\s*RouterConsts\.PhotoLibraryPage\s*\)/.test(openLibrary)) {
+  const photoCondition = conditionForRoute(openLibrary, 'RouterConsts.PhotoLibraryPage')
+  if (!/MediaLibraryKind\.Photos/.test(photoCondition)) {
     throw new Error('photo libraries must route to PhotoLibraryPage')
   }
-  if (/CollectionType\.Homevideos[\s\S]{0,260}RouterConsts\.(?:PhotoLibraryPage|VideoListPage)/.test(openLibrary) ||
-    /CollectionType\.Photos\s*\|\|\s*item\.collectionType\s*===\s*CollectionType\.Homevideos/.test(openLibrary)) {
-    throw new Error('Homevideos must remain unsupported and must not reuse photo or video routing')
+  const videoCondition = conditionForRoute(openLibrary, 'RouterConsts.VideoListPage')
+  if (/MediaLibraryKind\.Photos/.test(videoCondition)) {
+    throw new Error('photo libraries must not reuse video routing')
   }
   if (!/media_library_type_unsupported/.test(openLibrary)) {
     throw new Error('unsupported media libraries must retain the typed prompt')
@@ -231,7 +255,7 @@ function validateMediaRouting(sources) {
 
 function validateEmbeddedHome(sources) {
   const home = requiredSource(sources, HOME_SCREEN)
-  if (!/CollectionType\.Photos[\s\S]{0,320}PhotoLibraryPage\s*\(\s*\{[\s\S]{0,220}fromHome\s*:\s*true/.test(home)) {
+  if (!/MediaLibraryKind\.Photos[\s\S]{0,320}PhotoLibraryPage\s*\(\s*\{[\s\S]{0,220}fromHome\s*:\s*true/.test(home)) {
     throw new Error('large-screen home must embed PhotoLibraryPage for photo destinations')
   }
 }
@@ -376,7 +400,7 @@ function validateSaveFlow(sources) {
 function validateMaterialGates(sources) {
   for (const [path, source] of photoSources(sources)) {
     if (/disabledSystemMaterial\s*\(/.test(source)) {
-      throw new Error('API 20-25 photo paths must not construct disabled system material: ' + path)
+      throw new Error('API 24-25 photo paths must not construct disabled system material: ' + path)
     }
     if (/systemMaterial\s*:\s*[^\n]+\?/.test(source)) {
       throw new Error('photo material must use separate native and legacy branches: ' + path)
@@ -396,7 +420,9 @@ function validateMaterialGates(sources) {
   let coveredMaterialUses = 0
   for (const name of new Set(methodNames)) {
     const block = methodBlock(viewer, name)
-    const materialUses = countMatches(block, /(?:\.systemMaterial\s*\(|\bsystemMaterial\s*:)/g)
+    const directMaterialUses = countMatches(block, /(?:\.systemMaterial\s*\(|\bsystemMaterial\s*:)/g)
+    const modifierUses = countMatches(block, /AppThemeSurfaceResolver\.modifier\s*\(/g)
+    const materialUses = directMaterialUses + modifierUses
     if (materialUses === 0) {
       continue
     }
@@ -404,14 +430,18 @@ function validateMaterialGates(sources) {
     if (name.startsWith('legacy')) {
       throw new Error('legacy viewer branch must not construct API 26 material: ' + name)
     }
-    const guardedByCapability = name.startsWith('native') ||
+    const directMaterialGuarded = directMaterialUses === 0 || name.startsWith('native') ||
       /if\s*\(\s*this\.useNativeSurface\s*\(\s*\)\s*\)/.test(block) ||
+      /systemMaterialAvailable\s*\?\s*\{[\s\S]*?systemMaterial\s*:/.test(block) ||
       /nativeSurface\s*\?\s*\{[\s\S]*?systemMaterial\s*:/.test(block)
-    if (!guardedByCapability) {
+    const safeModifierUses = countMatches(block,
+      /AppThemeSurfaceResolver\.modifier\s*\([\s\S]{0,180}?(?:systemMaterialAvailable|,\s*false\s*)\s*\)/g)
+    if (!directMaterialGuarded || safeModifierUses !== modifierUses) {
       throw new Error('viewer material construction must stay behind a native capability branch: ' + name)
     }
   }
-  const totalMaterialUses = countMatches(viewer, /(?:\.systemMaterial\s*\(|\bsystemMaterial\s*:)/g)
+  const totalMaterialUses = countMatches(viewer,
+    /(?:\.systemMaterial\s*\(|\bsystemMaterial\s*:|AppThemeSurfaceResolver\.modifier\s*\()/g)
   if (coveredMaterialUses !== totalMaterialUses) {
     throw new Error('viewer material construction must be owned by an explicit guarded method')
   }

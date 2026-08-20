@@ -21,6 +21,8 @@ export class MineUIState extends BaseUIState {
   @Trace
   userPolicy: string = ''
   @Trace isAdministrator: boolean = false
+  @Trace managementAvailable: boolean = true
+  @Trace webITongAvailable: boolean = true
   @Trace versionName: string = ''
   @Trace historyState: MineHistoryState = MineHistoryState.Loading
   @Trace historyItems: MineHistoryItem[] = []

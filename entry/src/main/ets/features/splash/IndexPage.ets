@@ -19,6 +19,16 @@ import { AppRouteDestination } from "../../component/AppRouteDestination";
 import { ManagementLibraryRepository } from "../management/library/ManagementLibraryRepository";
 import { ManagementLibraryOperationResult } from "../management/library/ManagementLibraryModels";
 import { MusicHomeLifecycle } from "../music/MusicHostLifecycle";
+import {
+  MediaProviderComposition,
+  MediaProviderRestoreStatus
+} from '../setting/account/MediaProviderComposition';
+import { MediaProviderKind } from '../../media/MediaProviderKind';
+import { MediaProviderRegistry } from '../../media/MediaProviderRegistry';
+import {
+  AppThemeMaterialRole,
+  AppThemeSurfaceResolver
+} from '../../theme/AppThemeSurfaceResolver';
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
@@ -38,65 +48,55 @@ export struct IndexPage {
   private readonly libraryRepository: ManagementLibraryRepository = new ManagementLibraryRepository()
   //是否点了取消登录
   @Local isCancel: boolean = false
+  @Local restoreBusy: boolean = false
+  @Local feiniuRestoreConnectionError: boolean = false
+  private tokenExpiredSubscribed: boolean = false
   private musicLifecycle?: MusicHomeLifecycle =
     HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as MusicHomeLifecycle
 
   aboutToAppear(): void {
-    emitter.on(TokenExpiredEvent, () => {
-      this.handleTokenExpired().catch((): void => {})
-    })
-    //token是永久有效的,只要有token就认为是登录状态
-    let token = AppPreference.getInstance().getAccessToken()
-    let userId = AppPreference.getInstance().getCurrentUserId()
-    let isLogin = token.length > 0 && userId.length > 0
-    if (isLogin) {
-      let serverEntity = this.apiClientController.loadSavedServer()
-      if (serverEntity != null) {
-        this.appUIState.isConnecting = true
-        connectionHelper.checkServerUrl(serverEntity.hostname)
-          .then(async (state) => {
-            if (this.isCancel) {
-              return
-            }
-            if (state.type === CheckUrlStateType.Success) {
-              const successState = state as Success
-              await this.apiClientController.setupServer(serverEntity!.hostname, serverEntity?.servername,
-                serverEntity?.version, successState.serverId)
-              await this.apiClientController.setupUser(serverEntity!.id, userId, token)
-              //数据库升级version1新增字段处理
-              if (serverEntity?.servername === '' || serverEntity?.version === '') {
-                try {
-                  let res: AxiosResponse<PublicSystemInfo> =
-                    await getSystemApi(ApiClient.Instance()).getPublicSystemInfo()
-                  if (res.data != undefined) {
-                    serverEntity!.servername = res.data.ServerName || ''
-                    serverEntity!.version = res.data.Version || ''
-                  }
-                } catch (e) {
-                }
-                this.apiClientController.updateServerName(serverEntity!)
-              }
-              this.appUIState.isLogin = true
-            } else {
-              this.appUIState.isLogin = false
-            }
-            this.appUIState.isConnecting = false
-          })
-          .catch(() => {
-            this.appUIState.isConnecting = false
-          })
-      }
-    }
+    this.restoreSelectedAccount()
+      .catch((): void => {
+        this.appUIState.isConnecting = false
+        this.appUIState.isLogin = false
+      })
+      .finally((): void => {
+        this.syncTokenExpiredSubscription()
+      })
   }
 
   aboutToDisappear(): void {
-    emitter.off(TokenExpiredEvent)
+    if (this.tokenExpiredSubscribed) {
+      emitter.off(TokenExpiredEvent)
+      this.tokenExpiredSubscribed = false
+    }
+  }
+
+  private syncTokenExpiredSubscription(): void {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    const shouldSubscribe = activeSession?.provider === MediaProviderKind.Jellyfin
+    if (shouldSubscribe && !this.tokenExpiredSubscribed) {
+      emitter.on(TokenExpiredEvent, () => {
+        this.handleTokenExpired().catch((): void => {})
+      })
+      this.tokenExpiredSubscribed = true
+    } else if (!shouldSubscribe && this.tokenExpiredSubscribed) {
+      emitter.off(TokenExpiredEvent)
+      this.tokenExpiredSubscribed = false
+    }
   }
 
   private async handleTokenExpired(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext()
+    if (hostContext) {
+      const composition = await MediaProviderComposition.initialize(hostContext)
+      if (composition.selectedProvider() === MediaProviderKind.FeiniuVideo) {
+        return
+      }
+    }
     try {
       this.getUIContext().getPromptAction().showToast({
-        message: "AccessToken已失效,请重新登录"
+        message: $r('app.string.jellyfin_session_expired')
       })
     } catch (_error) {
     }
@@ -106,13 +106,222 @@ export struct IndexPage {
 
   private async cancelConnection(): Promise<void> {
     this.isCancel = true
+    const hostContext = this.getUIContext().getHostContext()
+    if (hostContext) {
+      const composition = await MediaProviderComposition.initialize(hostContext)
+      if (composition.selectedProvider() === MediaProviderKind.FeiniuVideo) {
+        await composition.clearSelectedFeiniu()
+        this.feiniuRestoreConnectionError = false
+        this.appUIState.isLogin = false
+        this.appUIState.isConnecting = false
+        return
+      }
+    }
     await this.apiClientController.logout()
     this.appUIState.isConnecting = false
+  }
+
+  private async restoreSelectedAccount(): Promise<void> {
+    if (this.restoreBusy) {
+      return
+    }
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      return
+    }
+    this.restoreBusy = true
+    this.isCancel = false
+    try {
+      const composition = await MediaProviderComposition.initialize(hostContext)
+      if (composition.hasActiveSelectedSession()) {
+        this.feiniuRestoreConnectionError = false
+        this.appUIState.isLogin = true
+        this.appUIState.isConnecting = false
+        return
+      }
+      const selectedProvider = composition.selectedProvider()
+      if (selectedProvider === MediaProviderKind.FeiniuVideo) {
+        await this.restoreSelectedFeiniu(composition)
+        return
+      }
+      this.feiniuRestoreConnectionError = false
+      if (selectedProvider === MediaProviderKind.Jellyfin ||
+        composition.shouldRestoreLegacyJellyfin() || this.appUIState.isLogin) {
+        await this.restoreLegacyJellyfin(composition)
+      } else {
+        this.appUIState.isLogin = false
+        this.appUIState.isConnecting = false
+      }
+    } finally {
+      this.restoreBusy = false
+    }
+  }
+
+  private async restoreSelectedFeiniu(composition: MediaProviderComposition): Promise<void> {
+    this.appUIState.isConnecting = true
+    const status = await composition.restoreSelectedFeiniu()
+    if (this.isCancel) {
+      await composition.clearSelectedFeiniu()
+      this.appUIState.isLogin = false
+      this.appUIState.isConnecting = false
+      return
+    }
+    if (status === MediaProviderRestoreStatus.Restored) {
+      this.feiniuRestoreConnectionError = false
+      this.appUIState.isLogin = true
+    } else if (status === MediaProviderRestoreStatus.AuthenticationExpired) {
+      this.feiniuRestoreConnectionError = false
+      this.appUIState.isLogin = false
+      this.showToast($r('app.string.feiniu_video_session_expired'))
+    } else if (status === MediaProviderRestoreStatus.RetryableFailure) {
+      this.feiniuRestoreConnectionError = true
+      this.appUIState.isLogin = false
+    } else {
+      this.feiniuRestoreConnectionError = false
+      this.appUIState.isLogin = false
+    }
+    this.appUIState.isConnecting = false
+  }
+
+  private async restoreLegacyJellyfin(composition: MediaProviderComposition): Promise<void> {
+    const token = AppPreference.getInstance().getAccessToken()
+    const userId = AppPreference.getInstance().getCurrentUserId()
+    if (token.length === 0 || userId.length === 0) {
+      this.appUIState.isLogin = false
+      this.appUIState.isConnecting = false
+      return
+    }
+    const serverEntity = this.apiClientController.loadSavedServer()
+    if (!serverEntity) {
+      this.appUIState.isLogin = false
+      this.appUIState.isConnecting = false
+      return
+    }
+    this.appUIState.isConnecting = true
+    try {
+      const state = await connectionHelper.checkServerUrl(serverEntity.hostname)
+      if (this.isCancel) {
+        return
+      }
+      if (state.type !== CheckUrlStateType.Success) {
+        this.appUIState.isLogin = false
+        return
+      }
+      const successState = state as Success
+      await this.apiClientController.setupServer(
+        serverEntity.hostname,
+        serverEntity.servername,
+        serverEntity.version,
+        successState.serverId
+      )
+      await this.apiClientController.setupUser(serverEntity.id, userId, token)
+      if (serverEntity.servername === '' || serverEntity.version === '') {
+        try {
+          const response: AxiosResponse<PublicSystemInfo> =
+            await getSystemApi(ApiClient.Instance()).getPublicSystemInfo()
+          if (response.data !== undefined) {
+            serverEntity.servername = response.data.ServerName || ''
+            serverEntity.version = response.data.Version || ''
+          }
+        } catch (_error) {
+        }
+        this.apiClientController.updateServerName(serverEntity)
+      }
+      this.appUIState.isLogin = await composition.mirrorLegacyJellyfinSession()
+    } catch (_error) {
+      this.appUIState.isLogin = false
+    } finally {
+      this.appUIState.isConnecting = false
+    }
+  }
+
+  private showToast(message: ResourceStr): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message })
+    } catch (_error) {
+    }
+  }
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle,
+      this.appUIState.nativeThemeAvailable
+    )
+  }
+
+  @Builder
+  private feiniuRestoreErrorContent() {
+    Column({ space: 14 }) {
+      Image($r('app.media.feiniu_video_logo'))
+        .width(88)
+        .height(88)
+        .objectFit(ImageFit.Contain)
+      Text($r('app.string.feiniu_video_restore_failed_title'))
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.useNativeSurface() ?
+          $r('sys.color.font_primary') : $r('app.color.text_primary'))
+      Text($r('app.string.feiniu_video_restore_connection_error'))
+        .fontSize(14)
+        .fontColor(this.useNativeSurface() ?
+          $r('sys.color.font_secondary') : $r('app.color.text_2'))
+        .textAlign(TextAlign.Center)
+        .margin({ left: 28, right: 28 })
+      Button($r('app.string.common_retry'))
+        .width(220)
+        .height(48)
+        .fontColor(Color.White)
+        .backgroundColor($r('app.color.color_main'))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive,
+          this.useNativeSurface(),
+          this.appUIState.systemMaterialAvailable
+        ))
+        .onClick((): void => {
+          this.restoreSelectedAccount().catch((): void => {
+            this.appUIState.isConnecting = false
+          })
+        })
+      Button($r('app.string.account_choose_other'))
+        .width(220)
+        .height(44)
+        .backgroundColor(Color.Transparent)
+        .fontColor(this.useNativeSurface() ?
+          $r('sys.color.font_primary') : $r('app.color.text_primary'))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveInteractive,
+          this.useNativeSurface(),
+          this.appUIState.systemMaterialAvailable
+        ))
+        .onClick((): void => {
+          HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.useNativeSurface() ?
+      $r('app.color.native_canvas_background') : $r('app.color.bg_main'))
   }
 
   private rootNavigationHeroChromeVisible(): boolean {
     return this.appUIState.rootNavigationHomeActionsVisible &&
       this.appUIState.rootNavigationHomeHeroVisible
+  }
+
+  private providerSupportsManagement(): boolean {
+    const session = MediaProviderRegistry.instance().getActiveSession()
+    return session === undefined || session.capabilities.management
+  }
+
+  private providerSupportsLiveTv(): boolean {
+    const session = MediaProviderRegistry.instance().getActiveSession()
+    return session === undefined || session.capabilities.liveTv
+  }
+
+  private providerSupportsSearch(): boolean {
+    const session = MediaProviderRegistry.instance().getActiveSession()
+    return session === undefined || session.capabilities.search
   }
 
   private showLibraryOperationResult(result: ManagementLibraryOperationResult): void {
@@ -167,13 +376,14 @@ export struct IndexPage {
 
   private rootNavigationMenus(): Array<NavigationMenuItem> {
     let menus: Array<NavigationMenuItem> = []
-    if (this.appUIState.rootNavigationMediaAdminActionsVisible) {
+    if (this.appUIState.rootNavigationMediaAdminActionsVisible &&
+      this.providerSupportsManagement()) {
       return this.mediaAdministratorMenus()
     }
     if (!this.appUIState.rootNavigationHomeActionsVisible) {
       return menus
     }
-    if (this.appUIState.rootNavigationLiveTvAvailable) {
+    if (this.appUIState.rootNavigationLiveTvAvailable && this.providerSupportsLiveTv()) {
       menus.push({
         value: '电视直播',
         icon: $r('app.media.iptv'),
@@ -182,13 +392,15 @@ export struct IndexPage {
         }
       })
     }
-    menus.push({
-      value: '搜索',
-      icon: $r('sys.symbol.magnifyingglass'),
-      action: () => {
-        HMRouterMgr.to(RouterConsts.SearchPage).push()
-      }
-    })
+    if (this.providerSupportsSearch()) {
+      menus.push({
+        value: '搜索',
+        icon: $r('sys.symbol.magnifyingglass'),
+        action: () => {
+          HMRouterMgr.to(RouterConsts.SearchPage).push()
+        }
+      })
+    }
     return menus
   }
 
@@ -213,6 +425,8 @@ export struct IndexPage {
           mediaScroller: this.mediaScroller,
           mineScroller: this.mineScroller
         })
+      } else if (this.feiniuRestoreConnectionError) {
+        this.feiniuRestoreErrorContent()
       } else {
         ConnectScreen()
         ConnectingScreen({

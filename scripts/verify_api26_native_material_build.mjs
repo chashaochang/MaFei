@@ -42,8 +42,8 @@ export function validateMergedProfile(profile) {
     throw new Error(`target API must equal 260000026, got ${JSON.stringify(targetApiVersion)}`)
   }
   if (typeof minApiVersion !== 'number' ||
-    !Number.isInteger(minApiVersion) || minApiVersion !== 60000020) {
-    throw new Error(`minimum API must remain 6.0.0(20), got ${JSON.stringify(minApiVersion)}`)
+    !Number.isInteger(minApiVersion) || minApiVersion !== 60101024) {
+    throw new Error(`minimum API must remain 6.1.1(24), got ${JSON.stringify(minApiVersion)}`)
   }
   if (metadata.some((item) => item?.name === 'ohos.arkui.UIMaterial.state')) {
     throw new Error('ohos.arkui.UIMaterial.state must remain absent for DEFAULT policy')

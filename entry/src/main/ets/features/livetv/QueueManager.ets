@@ -1,40 +1,41 @@
-import { BusinessError } from "@kit.BasicServicesKit";
-import { getItemsApi, getVideosApi } from "sdk";
-import {
-  BaseItemDtoQueryResult,
-  DeviceProfile,
-  MediaProtocol,
-  PlayMethod} from "sdk/src/main/ets/generated-client/models";
-import { ApiClient } from "../../network/ApiClient";
-import { AxiosResponse } from "@ohos/axios";
 import { LiveTvViewModel } from "./LiveTvViewModel";
 import { MediaSourceResolver } from "../../player/source/MediaSourceResolver";
-import { JellyfinMediaSource } from "../../player/source/JellyfinMediaSource";
-import { DeviceProfileBuilder } from "../../player/deviceprofile/DeviceProfileBuilder";
 import { PlayOptions } from "../../player/interaction/PlayOptions";
 import { PlayerException } from "../../player/PlayerException";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineResolver } from "../../player/PlayerEngineResolver";
+import { PlayerEngineType } from '../../entity/PlayerEngineType'
+import { currentMediaPlaybackProvider } from '../../media/MediaPlaybackAccess'
+import { MediaPlaybackEngineHint, MediaPlaybackSource } from '../../media/playback/MediaPlaybackModels'
+import { MediaPlaybackProvider } from '../../media/playback/MediaPlaybackProvider'
 
 @ObservedV2
 export class QueueManager {
   private viewModel: LiveTvViewModel
+  private readonly playbackProvider: MediaPlaybackProvider
+  private readonly mediaSourceResolver: MediaSourceResolver
 
-  constructor(viewModel: LiveTvViewModel) {
+  constructor(viewModel: LiveTvViewModel,
+    playbackProvider: MediaPlaybackProvider = currentMediaPlaybackProvider()) {
     this.viewModel = viewModel
+    this.playbackProvider = playbackProvider
+    this.mediaSourceResolver = new MediaSourceResolver(playbackProvider)
   }
 
   @Trace currentQueue: string[] = []
   @Trace currentQueueIndex: number = 0
-  private mediaSourceResolver: MediaSourceResolver = new MediaSourceResolver()
-  @Trace currentMediaSourceOrNull?: JellyfinMediaSource
+  @Trace currentMediaSourceOrNull?: MediaPlaybackSource
 
-  private deviceProfileBuilder: DeviceProfileBuilder = new DeviceProfileBuilder()
-
-  private getCurrentDeviceProfile(): DeviceProfile {
-    return this.deviceProfileBuilder.getDeviceProfile(
-      PlayerEngineResolver.getRequestProfileEngineType(AppPreference.getInstance().getPlayerEngineType())
-    )
+  private getCurrentEngineHint(): MediaPlaybackEngineHint {
+    const engineType = PlayerEngineResolver.getRequestProfileEngineType(
+      AppPreference.getInstance().getPlayerEngineType())
+    if (engineType === PlayerEngineType.AV) {
+      return MediaPlaybackEngineHint.PreferAvPlayer
+    }
+    if (engineType === PlayerEngineType.MPV) {
+      return MediaPlaybackEngineHint.PreferMpvHardware
+    }
+    return MediaPlaybackEngineHint.Auto
   }
 
   initializePlaybackQueue(options: PlayOptions): PlayerException | null {
@@ -49,7 +50,7 @@ export class QueueManager {
     if (itemId == null) {
       return PlayerException.InvalidPlayOptions
     }
-    this.startPlayback(
+    void this.startPlayback(
       itemId!,
       options.mediaSourceId,
       null,
@@ -69,16 +70,29 @@ export class QueueManager {
     audioStreamIndex: number | null | undefined,
     subtitleStreamIndex: number | null,
     playWhenReady: boolean = true): Promise<PlayerException | null> {
-    this.mediaSourceResolver.resolveMediaSource(itemId, mediaSourceId, this.getCurrentDeviceProfile(), maxStreamingBitrate,
-      startTimeTicks,
-      audioStreamIndex, subtitleStreamIndex, playWhenReady)
-    ?.then(async jellyfinMediaSource => {
-      this.currentMediaSourceOrNull = jellyfinMediaSource
-      this.viewModel.load(jellyfinMediaSource, await this.prepareStreams(jellyfinMediaSource), playWhenReady)
-    }).catch((e: BusinessError) => {
-      return e
-    })
-    return null
+    const ref = this.playbackProvider.legacyRefAdapter?.createRef(itemId)
+    if (!ref) {
+      return PlayerException.InvalidPlayOptions
+    }
+    try {
+      const source = await this.mediaSourceResolver.resolveMediaSource(
+        ref,
+        mediaSourceId,
+        this.getCurrentEngineHint(),
+        maxStreamingBitrate,
+        startTimeTicks,
+        audioStreamIndex,
+        subtitleStreamIndex,
+        true
+      )
+      const streams = await this.playbackProvider.prepareStreams(source)
+      this.currentMediaSourceOrNull = source
+      this.viewModel.load(source, streams, playWhenReady)
+      return null
+    } catch (error) {
+      console.error(`[LiveTV] resolve playback source failed: ${JSON.stringify(error)}`)
+      return PlayerException.NetworkFailure
+    }
   }
 
   hasPrevious(): boolean {
@@ -146,78 +160,5 @@ export class QueueManager {
       null
     )
     return true
-  }
-
-
-  async prepareStreams(source: JellyfinMediaSource): Promise<string[]> {
-    let videoSource = await this.createVideoMediaSource(source)
-    let subtitleSources = this.createExternalSubtitleMediaSources(source)
-    return [videoSource, ...subtitleSources]
-  }
-
-  createExternalSubtitleMediaSources(source: JellyfinMediaSource): string[] {
-    return source.externalSubtitleStreams.map(stream => {
-      return stream.deliveryUrl
-    })
-  }
-
-  async createVideoMediaSource(source: JellyfinMediaSource): Promise<string> {
-    let sourceInfo = source.sourceInfo
-    switch (source.playMethod) {
-      case PlayMethod.DirectPlay:
-        if (sourceInfo.Protocol == MediaProtocol.File) {
-          return await getVideosApi(ApiClient.Instance()).getVideoStream({
-            itemId: source.itemId,
-            _static: true,
-            playSessionId: source.playSessionId,
-            mediaSourceId: sourceInfo.Id,
-            deviceId: ApiClient.Instance().deviceInfo.id,
-          })
-        } else if (sourceInfo.Protocol == MediaProtocol.Http) {
-          return sourceInfo.Path!
-        } else {
-          throw new Error(`Unsupported protocol ${sourceInfo.Protocol}`)
-        }
-      case PlayMethod.DirectStream:
-        let container = sourceInfo.Container
-        if (container) {
-          return await getVideosApi(ApiClient.Instance()).getVideoStreamByContainer({
-            itemId: source.itemId,
-            container: container,
-            playSessionId: source.playSessionId,
-            mediaSourceId: source.id,
-            deviceId: ApiClient.Instance().deviceInfo.id,
-          })
-        } else {
-          throw new Error('Missing direct stream container')
-        }
-      case PlayMethod.Transcode:
-        let transcodingPath = sourceInfo.TranscodingUrl
-        if (transcodingPath) {
-          let protocol = sourceInfo.TranscodingSubProtocol
-          if (protocol == 'hls') {
-            let transcodingUrl = ApiClient.Instance().createUrl(transcodingPath)
-            return transcodingUrl
-          } else {
-            throw new Error(`Unsupported transcode protocol "${protocol}"`)
-          }
-        } else {
-          throw new Error('Missing transcode URL')
-        }
-    }
-  }
-
-  async getItems(): Promise<AxiosResponse<BaseItemDtoQueryResult>> {
-    return getItemsApi(ApiClient.Instance()).getItems({
-      ids: this.currentQueue
-    })
-  }
-
-  async getItem(id: string): Promise<AxiosResponse<BaseItemDtoQueryResult>> {
-    return getItemsApi(ApiClient.Instance()).getItems({
-      ids: Array.of(id),
-      includeItemTypes: ['Series','Movie'],
-      fields: ['Overview', 'Genres'],
-    })
   }
 }

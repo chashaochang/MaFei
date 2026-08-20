@@ -8,7 +8,8 @@ import {
 } from '../main/ets/theme/ThemePromptService'
 import {
   NativeThemeCapabilityReason,
-  NativeThemeCapabilityResult
+  NativeThemeCapabilityResult,
+  NativeThemeRenderMode
 } from '../main/ets/theme/NativeThemeCapability'
 
 class FakeThemePreferenceStore implements ThemePreferenceStore {
@@ -50,14 +51,26 @@ class FakeThemePreferenceStore implements ThemePreferenceStore {
 
 const availableCapability: NativeThemeCapabilityResult = {
   available: true,
+  systemMaterialAvailable: true,
+  renderMode: NativeThemeRenderMode.SystemMaterial,
   reason: NativeThemeCapabilityReason.Available,
   sdkApiVersion: 26
 }
 
-const unavailableCapability: NativeThemeCapabilityResult = {
+const blurFallbackCapability: NativeThemeCapabilityResult = {
+  available: true,
+  systemMaterialAvailable: false,
+  renderMode: NativeThemeRenderMode.BlurFallback,
+  reason: NativeThemeCapabilityReason.Available,
+  sdkApiVersion: 24
+}
+
+const unsupportedCapability: NativeThemeCapabilityResult = {
   available: false,
+  systemMaterialAvailable: false,
+  renderMode: NativeThemeRenderMode.Unsupported,
   reason: NativeThemeCapabilityReason.UnsupportedApi,
-  sdkApiVersion: 25
+  sdkApiVersion: 23
 }
 
 export default function themePromptServiceTest() {
@@ -75,16 +88,30 @@ export default function themePromptServiceTest() {
       expect(store.markerReadCount).assertEqual(0)
     })
 
-    it('keepsLowApiPreferenceUntouched', 0, () => {
+    it('keepsUnsupportedApiPreferenceUntouched', 0, () => {
       const store = new FakeThemePreferenceStore()
       store.themeStyle = ThemeStyle.Native
       store.promptVersion = 'old-marker'
-      const state = new ThemePromptService(store).resolveLaunch(unavailableCapability)
+      const state = new ThemePromptService(store).resolveLaunch(unsupportedCapability)
 
       expect(state.effectiveTheme).assertEqual(ThemeStyle.Feiniu)
+      expect(state.nativeThemeAvailable).assertFalse()
+      expect(state.systemMaterialAvailable).assertFalse()
       expect(state.shouldShowPrompt).assertFalse()
       expect(store.themeWriteCount).assertEqual(0)
       expect(store.markerWriteCount).assertEqual(0)
+    })
+
+    it('offersNativeThemeWithBlurFallbackOnApi24To25', 0, () => {
+      const store = new FakeThemePreferenceStore()
+      store.themeStyle = ThemeStyle.Native
+      store.promptVersion = ThemePromptService.CURRENT_PROMPT_VERSION
+      const state = new ThemePromptService(store).resolveLaunch(blurFallbackCapability)
+
+      expect(state.effectiveTheme).assertEqual(ThemeStyle.Native)
+      expect(state.nativeThemeAvailable).assertTrue()
+      expect(state.systemMaterialAvailable).assertFalse()
+      expect(state.shouldShowPrompt).assertFalse()
     })
 
     it('keepsFeiniuUntilCurrentPromptIsCompleted', 0, () => {
@@ -93,6 +120,7 @@ export default function themePromptServiceTest() {
       const state = new ThemePromptService(store).resolveLaunch(availableCapability)
 
       expect(state.effectiveTheme).assertEqual(ThemeStyle.Feiniu)
+      expect(state.systemMaterialAvailable).assertTrue()
       expect(state.shouldShowPrompt).assertTrue()
     })
 
@@ -145,7 +173,7 @@ export default function themePromptServiceTest() {
       const result = new ThemePromptService(store).saveTheme(
         ThemeStyle.Feiniu,
         ThemeStyle.Feiniu,
-        unavailableCapability
+        unsupportedCapability
       )
 
       expect(result.status).assertEqual(ThemeWriteStatus.Success)

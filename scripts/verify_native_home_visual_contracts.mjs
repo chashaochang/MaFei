@@ -210,18 +210,18 @@ export function validateNativeHomeVisualContracts(sources) {
 
   const immersiveGate = methodBlock(chipSelector, 'useImmersiveChipSurface')
   const chipBuild = methodBlock(chipSelector, 'build')
-  if (!/return\s+this\.nativeSurface\s*&&\s*HdsUiCapability\.supportsSystemMaterial\s*\(\s*\)/.test(
-    immersiveGate) ||
+  if (!/return\s+this\.nativeSurface/.test(immersiveGate) ||
+    /supportsSystemMaterial/.test(immersiveGate) ||
     !/if\s*\(\s*this\.useImmersiveChipSurface\s*\(\s*\)\s*\)/.test(chipBuild) ||
     !/fontColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*Color\.Black\s*:/.test(
       chipBuild) ||
     !/backgroundColor\s*\(\s*Color\.Transparent\s*\)/.test(chipBuild) ||
-    !/systemMaterial\s*\(\s*AppThemeSurfaceResolver\.material\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*AppThemeMaterialRole\.HomeLibraryChipSelected\s*:\s*AppThemeMaterialRole\.HomeLibraryChip\s*\)\s*\)/.test(
+    !/attributeModifier\s*\(\s*AppThemeSurfaceResolver\.modifier\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*AppThemeMaterialRole\.HomeLibraryChipSelected\s*:\s*AppThemeMaterialRole\.HomeLibraryChip\s*,\s*true\s*\)\s*\)/.test(
       chipBuild) ||
     !/backgroundColor\s*\(\s*index\s*===\s*this\.selectedIndex\s*\(\s*\)\s*\?\s*\$r\(\s*['"]app\.color\.color_main['"]\s*\)\s*:\s*\$r\(\s*['"]app\.color\.bg_1['"]\s*\)\s*\)/.test(
       chipBuild) ||
     /allowClose|sys\.symbol\.xmark|closeIcon/.test(chipSelector)) {
-    throw new Error('Every Chip must use one immersive material with translucent-white and black selected styling')
+    throw new Error('Every Native Chip must use one compatible material modifier with translucent-white and black selected styling')
   }
   if (!/List\s*\([\s\S]*scroller\s*:\s*this\.chipScroller/.test(chipBuild) ||
     !/Text\s*\(\s*tab\.label\s*\)/.test(chipBuild) ||
@@ -271,7 +271,7 @@ export function validateNativeHomeVisualContracts(sources) {
   if (!/Button\s*\(\s*\{\s*type\s*:\s*ButtonType\.Circle\s*,\s*stateEffect\s*:\s*false\s*\}\s*\)/.test(
     stickyHeader) ||
     !/SymbolGlyph\s*\(\s*\$r\(['"]sys\.symbol\.magnifyingglass['"]\)\s*\)/.test(stickyHeader) ||
-    !/\.systemMaterial\s*\(\s*AppThemeSurfaceResolver\.material\s*\(\s*AppThemeMaterialRole\.HomeLibraryChip\s*\)\s*\)/.test(
+    !/\.attributeModifier\s*\(\s*AppThemeSurfaceResolver\.modifier\s*\(\s*AppThemeMaterialRole\.HomeLibraryChip\s*,\s*this\.useNativeSurface\s*\(\s*\)\s*,\s*this\.vm\.appUIState\.systemMaterialAvailable\s*\)\s*\)/.test(
       stickyHeader) ||
     !/RouterConsts\.SearchPage/.test(stickyHeader) ||
     /stickySearchOptions|ChipV2PrefixSymbolIcon/.test(homeTab)) {
@@ -301,17 +301,19 @@ export function validateNativeHomeVisualContracts(sources) {
   }
 
   const loadLatestPage = methodBlock(homeViewModel, 'loadLatestMediaPage')
-  if (!/if\s*\(\s*id\s*===\s*HOME_RECENT_MEDIA_ID\s*\)/.test(loadLatestPage) ||
-    !/this\.ui\.mediaList[\s\S]*filter\s*\([\s\S]*isLegacyHomeLatestLibrary/.test(loadLatestPage) ||
-    !/getLatestMedia\s*\(\s*\{[\s\S]*parentId\s*:\s*library\.id/.test(loadLatestPage) ||
-    !/Promise\.all\s*\(\s*latestRequests\s*\)[\s\S]*interleaveRecentLibraryItems\s*\(\s*pages\s*,\s*HOME_FEED_PAGE_SIZE\s*\)/.test(
+  if (!/const\s+media\s*=\s*id\s*===\s*HOME_RECENT_MEDIA_ID\s*\?\s*undefined/.test(loadLatestPage) ||
+    !/catalog\.latest\s*\(\s*\{[\s\S]*libraryRef\s*:\s*media\?\.mediaRef[\s\S]*kinds\s*:\s*homeFeedItemTypes\s*\(\s*media\s*\)/.test(
+      loadLatestPage) ||
+    !/const\s+hasMore\s*=\s*id\s*===\s*HOME_RECENT_MEDIA_ID\s*\?\s*false\s*:\s*page\.hasMore/.test(
       loadLatestPage)) {
-    throw new Error('Recent media must preserve the legacy per-library latest-media mix')
+    throw new Error('Recent media must delegate the same per-library mix to the neutral Catalog provider')
   }
   const mapFeedItem = methodBlock(homeViewModel, 'mapHomeFeedItem')
-  if (!/BaseItemKind\.Episode\s*&&\s*seriesId\.length\s*>\s*0[\s\S]*id\s*:\s*seriesId[\s\S]*type\s*:\s*BaseItemKind\.Series/.test(
-    mapFeedItem)) {
-    throw new Error('Recent episodes must collapse into one series card')
+  const mapSummaryItem = methodBlock(homeViewModel, 'mapSummaryItem')
+  if (!/mapSummaryItem\s*\(\s*item\s*,\s*item\.primaryImage/.test(mapFeedItem) ||
+    !/id\s*:\s*item\.ref\.id[\s\S]*mediaRef\s*:\s*item\.ref[\s\S]*kind\s*:\s*item\.ref\.kind[\s\S]*seriesRef\s*:\s*item\.seriesRef/.test(
+      mapSummaryItem)) {
+    throw new Error('Recent media must preserve provider-collapsed series identity and scoped references')
   }
 
   const segmentProgress = methodBlock(homeTab, 'heroSegmentProgress')

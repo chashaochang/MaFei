@@ -5,7 +5,7 @@ import { getUserApi } from "sdk/src/main/ets/utils/api/user-api";
 import { BaseViewModel } from "../../../common/base/BaseViewModel";
 import { ApiClient } from "../../../network/ApiClient";
 import { MineUIState } from "./MineUIState";
-import { bundleManager, common } from "@kit.AbilityKit";
+import { bundleManager } from "@kit.AbilityKit";
 import { ApiClientController } from "../../../data/ApiClientController";
 import { AppPreference } from "../../../data/AppPreference";
 import { DBManager } from "../../../data/DBManager";
@@ -16,6 +16,10 @@ import {
   MineHistoryRequestSession
 } from "./MineHistoryRepository";
 import { MineHistoryState } from "./MineUIState";
+import { MediaProviderKind } from "../../../media/MediaProviderKind";
+import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry";
+import { MediaProviderSession } from "../../../media/MediaProviderSession";
+import { MediaProviderComposition } from "../../setting/account/MediaProviderComposition";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
   apiClientController: ApiClientController = new ApiClientController()
@@ -25,11 +29,38 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   private historyRequestEpoch: number = 0
   private historyActiveScope: string = ''
 
-  init() {
-    this.ui.isAdministrator = false
-    this.ui.userName = AppPreference.getInstance().getUserName()
-    this.getServerInfo()
+  init(): void {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    if (activeSession?.provider === MediaProviderKind.FeiniuVideo) {
+      this.initFeiniuProfile(activeSession)
+      this.getAppVersion()
+      return
+    }
+    this.initJellyfinProfile(activeSession)
     this.getAppVersion()
+  }
+
+  private initFeiniuProfile(session: MediaProviderSession): void {
+    const address = session.originalAddress || session.baseUrl
+    this.ui.userName = session.displayName || session.userId
+    this.ui.userAvatar = ''
+    this.ui.serverName = session.serverName || address
+    this.ui.serverVersion = address
+    this.ui.isAdministrator = false
+    this.ui.managementAvailable = session.capabilities.management
+    this.ui.webITongAvailable = false
+    this.ui.userPolicy = '普通用户'
+  }
+
+  private initJellyfinProfile(session?: MediaProviderSession): void {
+    this.ui.userAvatar = ''
+    this.ui.serverName = ''
+    this.ui.serverVersion = ''
+    this.ui.userName = AppPreference.getInstance().getUserName()
+    this.ui.managementAvailable = session?.capabilities.management !== false
+    this.ui.webITongAvailable = true
+    this.ui.userPolicy = '普通用户'
+    this.getServerInfo()
     getUserApi(ApiClient.Instance()).getUserById({
       userId: ApiClient.Instance().userId
     }).then((res: AxiosResponse<UserDto>) => {
@@ -69,7 +100,9 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
 
   private getAppVersion() {
     try {
-      const context = this.ui.context.getHostContext() as common.UIAbilityContext;
+      if (!this.ui.context.getHostContext()) {
+        return
+      }
 
       bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
         .then((bundleInfo) => {
@@ -152,6 +185,19 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   }
 
   async logout(): Promise<void> {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    if (activeSession?.provider === MediaProviderKind.FeiniuVideo) {
+      const hostContext = this.ui.context.getHostContext()
+      if (!hostContext) {
+        return
+      }
+      const composition = await MediaProviderComposition.initialize(hostContext)
+      const loggedOut = await composition.coordinator().logoutFeiniu(activeSession.providerAccountId)
+      if (loggedOut) {
+        this.appUIState.isLogin = false
+      }
+      return
+    }
     await this.apiClientController.logout()
     this.appUIState.isLogin = false
   }

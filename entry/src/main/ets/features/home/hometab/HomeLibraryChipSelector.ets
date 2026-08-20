@@ -1,6 +1,5 @@
 import { LengthMetrics } from '@kit.ArkUI'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
-import { HdsUiCapability } from '../../../theme/HdsUiCapability'
 
 const HOME_LIBRARY_CHIP_GAP: number = 8
 
@@ -59,7 +58,7 @@ export struct HomeLibraryChipSelector {
   }
 
   private useImmersiveChipSurface(): boolean {
-    return this.nativeSurface && HdsUiCapability.supportsSystemMaterial()
+    return this.nativeSurface
   }
 
   build() {
@@ -77,8 +76,11 @@ export struct HomeLibraryChipSelector {
               .padding({ left: 14, right: 14 })
               .borderRadius(18)
               .backgroundColor(Color.Transparent)
-              .systemMaterial(AppThemeSurfaceResolver.material(index === this.selectedIndex() ?
-                AppThemeMaterialRole.HomeLibraryChipSelected : AppThemeMaterialRole.HomeLibraryChip))
+              .attributeModifier(AppThemeSurfaceResolver.modifier(
+                index === this.selectedIndex() ? AppThemeMaterialRole.HomeLibraryChipSelected :
+                  AppThemeMaterialRole.HomeLibraryChip,
+                true
+              ))
               .onClick((): void => {
                 this.selectIndex(index)
               })

@@ -3,7 +3,7 @@ import { ThemeStyle } from '../entity/ThemeStyle';
 import { nativeThemeCapability } from './NativeThemeCapability';
 
 export class HdsUiCapability {
-  static readonly MIN_HDS_API_VERSION: number = 23
+  static readonly MIN_HDS_API_VERSION: number = 24
 
   static supportsHdsComponents(): boolean {
     return deviceInfo.sdkApiVersion >= HdsUiCapability.MIN_HDS_API_VERSION
@@ -14,7 +14,7 @@ export class HdsUiCapability {
   }
 
   static supportsSystemMaterial(): boolean {
-    return nativeThemeCapability.isAvailable()
+    return nativeThemeCapability.isSystemMaterialAvailable()
   }
 
   static resolveThemeStyle(style: ThemeStyle): ThemeStyle {

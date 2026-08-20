@@ -1,5 +1,8 @@
+import { MediaRef } from '../../../media/MediaRef'
+
 export interface ChasePlannerItem {
   id: string
+  mediaRef?: MediaRef
   name: string
   image: string
   seriesId?: string
@@ -120,6 +123,7 @@ export class ChasePlanner {
     const percent = item.percent || 0
     return {
       id: item.id,
+      mediaRef: item.mediaRef,
       name: item.name.trim().length > 0 ? item.name : '未命名内容',
       image: item.image,
       seriesId: item.seriesId,

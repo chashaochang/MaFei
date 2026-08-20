@@ -16,6 +16,8 @@ import { FavoriteListUIState } from './FavoriteListUIState';
 import { FavoriteListViewModel } from './FavoriteListViewModel';
 import { HomeInsetsPolicy } from '../home/HomeInsetsPolicy';
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { MediaRefKind } from '../../media/MediaRef';
+import { toMediaRouteRefData } from '../../media/navigation/MediaRouteRef';
 
 @HMRouter({
   pageUrl: RouterConsts.FavoriteListPage,
@@ -255,11 +257,14 @@ export struct FavoriteListPage {
     // 自定义item
     VideoCard({ item: item as VideoItem })
       .onClick(() => {
+        const videoItem = item as VideoItem
         HMRouterMgr.to(RouterConsts.VideoDetailPage)
           .withParam({
-            id: (item as VideoItem).id,
-            mediaName: (item as VideoItem).mediaName,
-            isTvShows: (item as VideoItem).type === 'Series',
+            id: videoItem.id,
+            ref: videoItem.mediaRef ? toMediaRouteRefData(videoItem.mediaRef) : undefined,
+            mediaName: videoItem.mediaName,
+            isTvShows: videoItem.kind === MediaRefKind.Series ||
+              videoItem.mediaRef?.kind === MediaRefKind.Series || videoItem.type === 'Series',
           })
           .push()
       })

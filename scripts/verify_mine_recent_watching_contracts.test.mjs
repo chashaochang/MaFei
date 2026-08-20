@@ -71,6 +71,7 @@ function validSources() {
     [mineTabPath, [
       'if (this.ui.isAdministrator) { ManagementDashboardPage }',
       'MineHistorySection({',
+      'playMediaRefs([item.mediaRef], context)',
       'HMRouterMgr.to(RouterConsts.MineHistoryPage).push()'
     ].join('\n')],
     [pagePath, [
@@ -142,6 +143,13 @@ test('rejects the administrator console below recent watching', () => {
   sources.set(mineTabPath, (sources.get(mineTabPath) ?? '')
     .replace('if (this.ui.isAdministrator)', 'MineHistorySection({})\nif (this.ui.isAdministrator)'))
   assert.throws(() => validateMineRecentWatching(sources), /console.*before.*history/)
+})
+
+test('requires Mine history playback to retain the scoped MediaRef', () => {
+  const sources = validSources()
+  sources.set(mineTabPath, (sources.get(mineTabPath) ?? '')
+    .replace('playMediaRefs([item.mediaRef], context)', 'playItems([item.id], context)'))
+  assert.throws(() => validateMineRecentWatching(sources), /provider\/account-scoped|legacy Jellyfin/)
 })
 
 test('rejects update text derived from the current episode', () => {

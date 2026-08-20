@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnife, ImageKnifeComponent } from '@ohos/imageknifepro';
+import { ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
@@ -12,7 +12,6 @@ import { RouterConsts } from '../../common/RouterConsts';
 import { CalculateHeightParam } from '../videodetail/VideoDetailViewModel';
 import { CastView } from '../../component/CastView';
 import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import {
   AppThemeMaterialRole,
   AppThemeSurfaceResolver
@@ -27,10 +26,30 @@ import {
   HomeFeedTabItem,
   HomeLibraryChipSelector
 } from '../home/hometab/HomeLibraryChipSelector';
+import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess';
+import { MediaImageRef } from '../../media/catalog/MediaCatalogModels';
+import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter';
+import { MediaRef, MediaRefKind } from '../../media/MediaRef';
+import {
+  MediaRouteRefData,
+  parseMediaRouteRefData,
+  toMediaRouteRefData
+} from '../../media/navigation/MediaRouteRef';
+
+interface SeasonDetailRouteParams {
+  readonly id?: string
+  readonly parentId?: string
+  readonly mediaName?: string
+  readonly info?: string
+  readonly seasons?: VideoItem[]
+  readonly ref?: MediaRouteRefData
+  readonly seriesRef?: MediaRouteRefData
+}
 
 @ComponentV2
 struct NativeSeasonPlayAction {
   @Require @Param label: string
+  @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
@@ -54,7 +73,8 @@ struct NativeSeasonPlayAction {
     .borderRadius(25)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
     .accessibilityText(this.label)
     .onClick(() => {
       this.onAction()
@@ -67,6 +87,7 @@ struct NativeSeasonIconAction {
   @Require @Param label: string
   @Require @Param accessibilityLabel: string
   @Require @Param selected: boolean
+  @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
@@ -82,7 +103,8 @@ struct NativeSeasonIconAction {
       .width(50)
       .height(50)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
       .accessibilityText(this.accessibilityLabel)
       .onClick(() => {
         this.onAction()
@@ -206,6 +228,64 @@ export struct SeasonDetailPage {
     this.ui.imageHeight = this.ui.imageBaseHeight
   }
 
+  private imageOption(imageRef: MediaImageRef | undefined, fallback: string,
+    objectFit: ImageFit = ImageFit.Cover): ImageKnifeOption {
+    const option = createMediaImageKnifeOption(imageRef, fallback)
+    option.objectFit = objectFit
+    return option
+  }
+
+  private heroImageOption(onComplete?: () => void): ImageKnifeOption {
+    const option = this.imageOption(this.ui.backgroundImageRef, this.ui.backgroundImage)
+    if (onComplete) {
+      option.onComplete = onComplete
+    }
+    return option
+  }
+
+  private posterImageOption(): ImageKnifeOption {
+    const option = this.imageOption(this.ui.imageRef, this.ui.image)
+    option.border = {
+      width: AppThemeSurfaceResolver.outlineWidth(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
+      radius: 12,
+      color: AppThemeSurfaceResolver.mediaOutline(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+    }
+    return option
+  }
+
+  private legacyMediaRef(id: string, kind: MediaRefKind): MediaRef | undefined {
+    const normalizedId = id.trim()
+    if (normalizedId.length === 0) {
+      return undefined
+    }
+    try {
+      const catalog = currentMediaCatalogProvider()
+      return new MediaRef(catalog.session.provider, catalog.session.accountScope, normalizedId, kind)
+    } catch (_error) {
+      return undefined
+    }
+  }
+
+  private loadSeason(ref: MediaRef, seriesRef: MediaRef): void {
+    this.ui.videoScroller.scrollEdge(Edge.Start)
+    this.ui.episodeName = ''
+    this.vm.getSeasonDetail(ref, seriesRef)
+  }
+
+  private selectSeason(id: string): void {
+    const selected = this.ui.seasons.find((season: VideoItem): boolean => season.id === id)
+    const ref = selected?.mediaRef || this.legacyMediaRef(id, MediaRefKind.Season)
+    const seriesRef = selected?.seriesRef || this.ui.seriesRef ||
+      this.legacyMediaRef(this.ui.parentId, MediaRefKind.Series)
+    if (!ref || !seriesRef || !ref.belongsTo(currentMediaCatalogProvider().session) ||
+      !seriesRef.belongsTo(currentMediaCatalogProvider().session)) {
+      return
+    }
+    this.loadSeason(ref, seriesRef)
+  }
+
   private seasonTabs(): HomeFeedTabItem[] {
     return this.ui.seasons.map<HomeFeedTabItem>((season: VideoItem) => {
       return { id: season.id, label: season.name }
@@ -222,7 +302,7 @@ export struct SeasonDetailPage {
     return AppThemeOverlayPolicy.resolve(
       OverlaySurfaceRole.AppFloating,
       this.vm.appUIState.themeStyle,
-      deviceInfo.sdkApiVersion >= 26,
+      this.vm.appUIState.systemMaterialAvailable,
       this.vm.appUIState.nativeThemeAvailable
     )
   }
@@ -238,13 +318,9 @@ export struct SeasonDetailPage {
           .transition(TransitionEffect.OPACITY)
       } else {
         ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: this.ui.backgroundImage,
-            objectFit: ImageFit.Cover,
-            onComplete: () => {
-              this.prepareHeroPixelMap(this.ui.backgroundImage)
-            }
-          }
+          imageKnifeOption: this.heroImageOption(() => {
+            this.prepareHeroPixelMap(this.ui.backgroundImage)
+          })
         })
           .width('100%')
           .height('100%')
@@ -271,10 +347,7 @@ export struct SeasonDetailPage {
   private nativePageBackdrop() {
     Stack() {
       ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: this.ui.backgroundImage,
-          objectFit: ImageFit.Cover
-        }
+        imageKnifeOption: this.heroImageOption()
       })
         .width('100%')
         .height('100%')
@@ -303,15 +376,7 @@ export struct SeasonDetailPage {
   private nativeHeroMetadata() {
     Row({ space: 16 }) {
       ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: this.ui.image,
-          objectFit: ImageFit.Cover,
-          border: {
-            width: 0,
-            radius: 12,
-            color: Color.Transparent
-          }
-        }
+        imageKnifeOption: this.posterImageOption()
       })
         .width(96)
         .height(144)
@@ -350,6 +415,7 @@ export struct SeasonDetailPage {
     Column({ space: 14 }) {
       NativeSeasonPlayAction({
         label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
         onAction: () => {
           this.vm.playFirst()
         }
@@ -361,6 +427,7 @@ export struct SeasonDetailPage {
           label: this.ui.played ? '已观看' : '标记已看',
           accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
           selected: this.ui.played,
+          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
           onAction: () => {
             this.vm.changePlayedState()
           }
@@ -417,10 +484,7 @@ export struct SeasonDetailPage {
   @Builder
   private feiniuBackdrop() {
     ImageKnifeComponent({
-      imageKnifeOption: {
-        loadSrc: this.ui.backgroundImage,
-        objectFit: ImageFit.Cover,
-      }
+      imageKnifeOption: this.heroImageOption()
     })
       .width('100%')
       .height(this.ui.imageHeight - 100)
@@ -449,16 +513,17 @@ export struct SeasonDetailPage {
 
   @Builder
   private overviewSheetTrigger() {
-    if (deviceInfo.sdkApiVersion < 26) {
+    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
       Row() {
         this.overviewTriggerContent()
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(true), {
         height: 420,
         preferType: SheetType.BOTTOM,
         title: { title: '简介' },
+        backgroundColor: Color.Transparent
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Row() {
@@ -466,12 +531,24 @@ export struct SeasonDetailPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(false), {
         height: 420,
         preferType: SheetType.BOTTOM,
         title: { title: '简介' },
         backgroundColor: Color.Transparent,
         systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      })
+    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      Row() {
+        this.overviewTriggerContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(false), {
+        height: 420,
+        preferType: SheetType.BOTTOM,
+        title: { title: '简介' },
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     } else {
       Row() {
@@ -479,26 +556,30 @@ export struct SeasonDetailPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
-      .bindSheet($$this.isShowSheet, this.SheetBuilder(), {
+      .bindSheet($$this.isShowSheet, this.SheetBuilder(false), {
         height: 420,
         preferType: SheetType.BOTTOM,
-        title: { title: '简介' },
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+        title: { title: '简介' }
       })
     }
   }
 
   aboutToAppear(): void {
     this.configureHeroHeight()
-    let param = HMRouterMgr.getCurrentParam() as object
-    if (param) {
-      this.ui.id = param['id'] as string
-      this.ui.parentId = param['parentId'] as string
-      this.ui.mediaName = param['mediaName'] as string
-      this.ui.preInfo = param['info'] as string
-      let seasons = param['seasons'] as VideoItem[]
-      this.ui.seasons = seasons
-      this.vm.getSeasonDetail()
+    const raw = HMRouterMgr.getCurrentParam()
+    if (!raw || typeof raw === 'string') {
+      return
+    }
+    const param = raw as SeasonDetailRouteParams
+    this.ui.mediaName = param.mediaName || ''
+    this.ui.preInfo = param.info || ''
+    this.ui.seasons = param.seasons || []
+    const ref = parseMediaRouteRefData(param.ref) ||
+      this.legacyMediaRef(param.id || '', MediaRefKind.Season)
+    const seriesRef = parseMediaRouteRefData(param.seriesRef) ||
+      this.legacyMediaRef(param.parentId || '', MediaRefKind.Series)
+    if (ref && seriesRef) {
+      this.loadSeason(ref, seriesRef)
     }
   }
 
@@ -545,17 +626,7 @@ export struct SeasonDetailPage {
                   Blank()
                   Row({ space: 16 }) {
                     ImageKnifeComponent({
-                      imageKnifeOption: {
-                        loadSrc: this.ui.image,
-                        objectFit: ImageFit.Fill,
-                        border: {
-                          width: AppThemeSurfaceResolver.outlineWidth(
-                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
-                          radius: 12,
-                          color: AppThemeSurfaceResolver.mediaOutline(
-                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
-                        }
-                      }
+                      imageKnifeOption: this.imageOption(this.ui.imageRef, this.ui.image, ImageFit.Fill)
                     })
                       .height('100%')
                       .aspectRatio(291 / 436)
@@ -621,10 +692,7 @@ export struct SeasonDetailPage {
                       if (id === this.ui.id) {
                         return
                       }
-                      this.ui.videoScroller.scrollEdge(Edge.Start)
-                      this.ui.id = id
-                      this.ui.episodeName = ''
-                      this.vm.getSeasonDetail()
+                      this.selectSeason(id)
                     }
                   })
                     .padding({ left: 16, right: 16 })
@@ -662,10 +730,7 @@ export struct SeasonDetailPage {
                               $r('app.color.text_1'))
                             .fontSize(14)
                             .onClick(() => {
-                              this.ui.videoScroller.scrollEdge(Edge.Start)
-                              this.ui.id = season.id
-                              this.vm.getSeasonDetail()
-                              this.vm.getEpisodes(season.id)
+                              this.selectSeason(season.id)
                             })
                           if (index !== this.ui.seasons.length - 1) {
                             Text('  /  ').fontSize(12).fontColor('#7f8c94')
@@ -717,13 +782,7 @@ export struct SeasonDetailPage {
                       Column() {
                         RelativeContainer() {
                           ImageKnifeComponent({
-                            imageKnifeOption: {
-                              loadSrc: item.image,
-                              objectFit: ImageFit.Cover,
-                              border: {
-                                radius: 6
-                              }
-                            }
+                            imageKnifeOption: this.imageOption(item.imageRef, item.image)
                           })
                             .aspectRatio(16 / 9)
                             .width('100%')
@@ -822,6 +881,7 @@ export struct SeasonDetailPage {
                       HMRouterMgr.to(RouterConsts.VideoDetailPage)
                         .withParam({
                           id: item.id,
+                          ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
                           mediaName: this.ui.mediaName
                         })
                         .push()
@@ -909,7 +969,7 @@ export struct SeasonDetailPage {
   }
 
   @Builder
-  SheetBuilder() {
+  SheetBuilder(blurFallback: boolean) {
     Scroll() {
       Text(this.ui.overview)
         .width('100%')
@@ -934,5 +994,7 @@ export struct SeasonDetailPage {
       scrollForward: NestedScrollMode.PARENT_FIRST,
       scrollBackward: NestedScrollMode.SELF_FIRST,
     })
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 }

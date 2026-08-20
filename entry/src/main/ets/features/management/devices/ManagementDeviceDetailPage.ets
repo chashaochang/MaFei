@@ -1,10 +1,14 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
 import { AppRouteDestination } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy';
 import { ManagementNativePagePolicy } from '../ManagementNativePagePolicy';
 import { ManagementPermissionState, ManagementSectionStatus } from '../ManagementModels';
 import { ManagementDeviceDetailPanel } from './ManagementDeviceDetailPanel';
@@ -61,6 +65,15 @@ export struct ManagementDeviceDetailPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private dangerousDialogMaterialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      this.vm.appUIState.themeStyle,
+      this.vm.appUIState.systemMaterialAvailable,
+      this.vm.appUIState.nativeThemeAvailable
+    )
+  }
+
   private nativeTopSpacer(): number {
     return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
@@ -97,7 +110,7 @@ export struct ManagementDeviceDetailPage {
     }
     const message = `${selected.displayName}\n${selected.appName} ${selected.appVersion}\n${
       selected.lastUserName}\n${this.getString('management_device_login_will_expire')}`
-    if (deviceInfo.sdkApiVersion >= 26) {
+    if (this.dangerousDialogMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       this.getUIContext().getPromptAction().showDialog({
         title: $r('app.string.management_device_revoke_title'),
         message: message,
@@ -146,9 +159,8 @@ export struct ManagementDeviceDetailPage {
         .borderRadius(this.useNativeMaterial() ? 20 : 10)
         .fontColor($r('app.color.on_primary'))
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .systemMaterial(this.useNativeMaterial() ?
-          AppThemeSurfaceResolver.material(AppThemeMaterialRole.PrimaryInteractive) :
-          AppThemeSurfaceResolver.disabledSystemMaterial())
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
         .onClick(() => this.vm.init())
     }
     .layoutWeight(1)

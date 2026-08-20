@@ -1,5 +1,9 @@
-import { BaseItemKind, CollectionType } from "sdk/src/main/ets/generated-client/models"
 import { BaseUIState } from "../../../common/base/BaseUIState"
+import {
+  MediaImageRef,
+  MediaLibraryKind
+} from "../../../media/catalog/MediaCatalogModels"
+import { MediaRef, MediaRefKind } from "../../../media/MediaRef"
 
 export const HOME_RECENT_MEDIA_ID: string = '__home_recent__'
 
@@ -37,20 +41,29 @@ export class HomeUIState extends BaseUIState{
 export interface MediaItem {
   name: string,
   image: ResourceStr,
+  mediaRef?: MediaRef,
+  imageRef?: MediaImageRef,
   id: string,
   childCount: number,
-  type?: BaseItemKind,
-  collectionType?: CollectionType,
+  kind?: MediaRefKind,
+  libraryKind?: MediaLibraryKind,
+  /** Temporary compatibility for legacy callers that have not moved to MediaRefKind yet. */
+  type?: string,
 }
 
 export interface VideoItem {
   id: string,
   name: string,
   image: string,
+  mediaRef?: MediaRef,
+  imageRef?: MediaImageRef,
+  kind?: MediaRefKind,
+  seriesRef?: MediaRef,
   canDelete?: boolean,
   path?: string,
   seriesId?: string,
   mediaName?: string,
+  /** Temporary compatibility for legacy callers that have not moved to MediaRefKind yet. */
   type?: string,
   percent?: number,
   subtitle?: string,

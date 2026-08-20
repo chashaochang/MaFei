@@ -1,10 +1,12 @@
 import { BaseUIState } from "../../common/base/BaseUIState";
 import { PlayerStatus, PlayStatus } from "../player/PlayStatus";
+import { MediaPlaybackRequestHeader } from '../../media/playback/MediaPlaybackModels'
 
 @ObservedV2
 export class LiveTvUIState extends BaseUIState {
 
   @Trace url?: string
+  @Trace videoHeaders: MediaPlaybackRequestHeader[] = []
   @Trace isLoading: boolean = true
   @Trace playerStatus: number = PlayerStatus.IDLE
   @Trace CONTROL_PlayStatus: number = PlayStatus.INIT;

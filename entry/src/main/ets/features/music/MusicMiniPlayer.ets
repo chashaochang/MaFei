@@ -134,7 +134,9 @@ export struct MusicMiniPlayer {
           .onClick(() => this.closePlayer())
       }
       .backgroundBlurStyle(BlurStyle.NONE)
-      .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.InteractiveFloating))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.InteractiveFloating, nativeSurface,
+        this.appUIState.systemMaterialAvailable))
     } else {
       Menu() {
         MenuItem({
@@ -261,7 +263,9 @@ export struct MusicMiniPlayer {
     .height(MusicHostVisibilityPolicy.NATIVE_MINI_PLAYER_HEIGHT)
     .borderRadius(MusicHostVisibilityPolicy.NATIVE_MINI_PLAYER_HEIGHT / 2)
     .clip(true)
-    .systemMaterial(AppThemeSurfaceResolver.material(AppThemeMaterialRole.MusicMiniPlayer))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.MusicMiniPlayer, true,
+      this.appUIState.systemMaterialAvailable))
   }
 
   @Builder

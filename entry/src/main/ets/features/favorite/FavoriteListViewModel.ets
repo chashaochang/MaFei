@@ -1,13 +1,17 @@
 import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
-import { AxiosResponse } from "@ohos/axios";
-import { getItemsApi } from "sdk";
-import { BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
-import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
-import { ApiClient } from "../../network/ApiClient";
+import { currentMediaCatalogProvider } from "../../media/MediaCatalogAccess";
+import { MediaPage, MediaSummary } from "../../media/catalog/MediaCatalogModels";
+import {
+  MediaCatalogProvider,
+  MediaCatalogSortDirection,
+  MediaCatalogSortField
+} from "../../media/catalog/MediaCatalogProvider";
+import { mediaCatalogSortField } from "../../media/catalog/MediaCatalogSortFieldMapper";
+import { MediaRefKind } from "../../media/MediaRef";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { VideoItem } from "../home/hometab/HomeUIState";
 import { FavoriteListUIState } from "./FavoriteListUIState";
@@ -17,77 +21,81 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
   dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
   startIndex: number = 0
   limit: number = 100
-  sortBy: ItemSortBy[] = [sortOptions[this.ui.selectedSortIndex].value]
+  private catalog?: MediaCatalogProvider
+  private requestGeneration: number = 0
+  sortBy: MediaCatalogSortField[] = [mediaCatalogSortField(sortOptions[this.ui.selectedSortIndex].value)]
   sortDialog = new ListDialog("排序", sortOptions.map((e) => e.label), this.ui.selectedSortIndex, (index) => {
     this.ui.selectedSortIndex = index
-    this.sortBy = [sortOptions[this.ui.selectedSortIndex].value]
+    this.sortBy = [mediaCatalogSortField(sortOptions[this.ui.selectedSortIndex].value)]
     this.startIndex = 0
     this.getFavoriteList()
     this.sortDialog.dismiss()
   }, () => AppThemeSurfaceResolver.useNativeSurface(
     this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
-  queryTypes: BaseItemKind[] = [
-    BaseItemKind.Movie,
-    BaseItemKind.Series,
-    // BaseItemKind.Season, //api不支持season类型数量查询
-    BaseItemKind.Episode,
-    BaseItemKind.Video,
-    // BaseItemKind.MusicVideo,
-    // BaseItemKind.BoxSet,
-    // BaseItemKind.Playlist,
-    // BaseItemKind.MusicAlbum,
-    // BaseItemKind.Audio,
-    // BaseItemKind.Book,
-    // BaseItemKind.LiveTvChannel,
-    // BaseItemKind.PhotoAlbum,
-    // BaseItemKind.Photo,
+  queryTypes: MediaRefKind[] = [
+    MediaRefKind.Movie,
+    MediaRefKind.Series,
+    MediaRefKind.Episode,
+    MediaRefKind.Video,
   ];
 
-  getFavoriteList() {
-    getItemsApi(ApiClient.Instance())
-      .getItems({
-        sortBy: this.sortBy,
-        sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
-        filters: ['IsFavorite'],
-        recursive: true,
-        fields: ['PrimaryImageAspectRatio'],
-        collapseBoxSetItems: false,
-        excludeLocationTypes: ['Virtual'],
-        enableTotalRecordCount: false,
-        limit: this.limit,
+  getFavoriteList(): void {
+    let catalog: MediaCatalogProvider
+    try {
+      catalog = currentMediaCatalogProvider()
+    } catch (_error) {
+      this.finishFailure()
+      return
+    }
+    this.catalog = catalog
+    const generation = ++this.requestGeneration
+    if (!catalog.session.capabilities.favorites) {
+      this.finishEmpty(catalog, generation)
+      return
+    }
+    catalog.getItems({
+        kinds: this.queryTypes,
         startIndex: this.startIndex,
-        includeItemTypes: this.queryTypes
+        limit: this.limit,
+        sortFields: this.sortBy,
+        sortDirections: [this.ui.isDesc ? MediaCatalogSortDirection.Descending :
+          MediaCatalogSortDirection.Ascending],
+        recursive: true,
+        collapseBoxSetItems: false,
+        favoriteOnly: true
       })
-      .then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        let noMore = false
-        if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
-          noMore = true
+      .then((page: MediaPage<MediaSummary>) => {
+        if (!this.isCurrent(catalog, generation)) {
+          return
         }
-        if (res.data && res.data.Items && res.data.Items.length > 0) {
-          let videoList = res.data.Items.map<VideoItem>(e => {
+        const noMore = !page.hasMore
+        if (page.items.length > 0) {
+          const videoList = page.items.map<VideoItem>((item: MediaSummary): VideoItem => {
             return {
-              id: e.Id || '',
-              name: e.Name || '',
-              image: getItemImageUrl(e),
-              subtitle: e.ProductionYear ? e.ProductionYear.toString() : '',
-              score: e.CommunityRating ? e.CommunityRating : 0,
-              tags: getResolutions(e.MediaStreams),
+              id: item.ref.id,
+              name: item.title,
+              image: item.primaryImage?.url || '',
+              imageRef: item.primaryImage,
+              mediaRef: item.ref,
+              kind: item.ref.kind,
+              subtitle: item.year !== undefined ? item.year.toString() : item.subtitle,
+              score: item.communityRating || 0,
+              tags: item.tags.slice(),
               mediaName: this.ui.title,
-              type: e.Type,
+              type: this.legacyType(item.ref.kind),
             }
           })
-          if (res.data.StartIndex == 0) {
+          if (page.startIndex === 0) {
             this.ui.pageState = PageState.Content
             this.dataSource.initData(videoList)
-            //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
-            this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
+            this.controller.finishRefresh()
           } else {
             this.dataSource.pushDataArray(videoList)
           }
           this.controller.finishLoadMore(noMore)
-          this.startIndex = this.dataSource.totalCount()
+          this.startIndex = page.nextStartIndex
         } else {
-          if(res.data.Items?.length === 0){
+          if (page.startIndex === 0) {
             this.dataSource.deleteAll()
           }
           this.ui.pageState = PageState.Content
@@ -97,12 +105,43 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
         this.ui.totalCount = this.dataSource.totalCount() + ''
       })
       .catch(() => {
+        if (!this.isCurrent(catalog, generation)) {
+          return
+        }
         this.controller.finishRefresh()
         this.controller.finishLoadMore(false)
         if (this.startIndex === 0) {
           this.ui.pageState = PageState.Error
         }
       })
+  }
+
+  private legacyType(kind: MediaRefKind): string {
+    if (kind === MediaRefKind.Series) return 'Series'
+    if (kind === MediaRefKind.Episode) return 'Episode'
+    if (kind === MediaRefKind.Movie) return 'Movie'
+    if (kind === MediaRefKind.Video) return 'Video'
+    return ''
+  }
+
+  private isCurrent(catalog: MediaCatalogProvider, generation: number): boolean {
+    return this.catalog === catalog && generation === this.requestGeneration &&
+      catalog.session.accountScope.length > 0
+  }
+
+  private finishEmpty(catalog: MediaCatalogProvider, generation: number): void {
+    if (!this.isCurrent(catalog, generation)) return
+    this.dataSource.deleteAll()
+    this.ui.totalCount = '0'
+    this.ui.pageState = PageState.Content
+    this.controller.finishRefresh()
+    this.controller.finishLoadMore(true)
+  }
+
+  private finishFailure(): void {
+    this.controller.finishRefresh()
+    this.controller.finishLoadMore(false)
+    if (this.startIndex === 0) this.ui.pageState = PageState.Error
   }
 
   refresh() {

@@ -29,7 +29,7 @@ const ROUTES = [
   {
     path: ACCOUNT,
     pageUrl: /pageUrl\s*:\s*RouterConsts\.AccountPage\b/,
-    title: /title\s*:\s*this\.fromLogin\s*\?\s*['"]历史登录['"]\s*:\s*['"]切换账号['"]/,
+    title: /title\s*:\s*this\.fromLogin\s*\?\s*\$r\(\s*['"]app\.string\.account_history_title['"]\s*\)\s*:\s*\$r\(\s*['"]app\.string\.account_switch_title['"]\s*\)/,
     legacyBackground: /\$r\(\s*['"]app\.color\.bg_main['"]\s*\)/,
     legacyNavigation: 'actionBar'
   },
@@ -148,7 +148,7 @@ function validateAccountEntry(source, pageContent) {
   if (!/if\s*\(\s*this\.fromLogin\s*\)\s*\{\s*return\s*\[\s*\]\s*\}/.test(menus)) {
     throw new Error('Native account destination must guard the add-account menu')
   }
-  if (!/value\s*:\s*['"]新增账号['"]/.test(menus) ||
+  if (!/value\s*:\s*\$r\(\s*['"]app\.string\.account_add_title['"]\s*\)/.test(menus) ||
     !/icon\s*:\s*\$r\(\s*['"]sys\.symbol\.plus['"]\s*\)/.test(menus) ||
     !/action\s*:[\s\S]*this\.openAddAccount\s*\(\s*\)/.test(menus)) {
     throw new Error('Native account add menu must keep its label, plus icon, and action')
@@ -164,7 +164,8 @@ function validateAccountEntry(source, pageContent) {
     throw new Error('account add action must preserve the existing AddAccountPage route')
   }
   const legacy = legacyBranch(pageContent, ACCOUNT)
-  if (!/rightBtnIcon\s*:\s*this\.fromLogin\s*\?\s*undefined\s*:\s*\$r\(\s*['"]app\.media\.add['"]\s*\)/.test(legacy) ||
+  if (!/title\s*:\s*this\.fromLogin\s*\?\s*\$r\(\s*['"]app\.string\.account_history_title['"]\s*\)\s*:\s*\$r\(\s*['"]app\.string\.account_switch_title['"]\s*\)/.test(legacy) ||
+    !/rightBtnIcon\s*:\s*this\.fromLogin\s*\?\s*undefined\s*:\s*\$r\(\s*['"]app\.media\.add['"]\s*\)/.test(legacy) ||
     !/this\.openAddAccount\s*\(\s*\)/.test(legacy)) {
     throw new Error('Feiniu account ActionBar must retain the add-account action')
   }

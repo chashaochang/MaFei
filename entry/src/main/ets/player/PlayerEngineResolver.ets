@@ -1,5 +1,5 @@
 import { PlayerEngineType } from '../entity/PlayerEngineType'
-import { JellyfinMediaSource } from './source/JellyfinMediaSource'
+import { MediaPlaybackSource } from '../media/playback/MediaPlaybackModels'
 
 export class PlayerEngineDecision {
   engineType: PlayerEngineType
@@ -28,7 +28,7 @@ export class PlayerEngineResolver {
     return engineType
   }
 
-  static resolvePlaybackEngine(engineType: PlayerEngineType, source?: JellyfinMediaSource): PlayerEngineDecision {
+  static resolvePlaybackEngine(engineType: PlayerEngineType, source?: MediaPlaybackSource): PlayerEngineDecision {
     if (engineType === PlayerEngineType.AV) {
       return new PlayerEngineDecision(PlayerEngineType.AV, '已手动指定使用系统播放器。')
     }

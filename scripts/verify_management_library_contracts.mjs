@@ -20,6 +20,9 @@ export const batchDeletePaths = Object.freeze({
   listState: 'entry/src/main/ets/features/videolist/VideoListUIState.ets',
   listViewModel: 'entry/src/main/ets/features/videolist/VideoListViewModel.ets',
   listPage: 'entry/src/main/ets/features/videolist/VideoListPage.ets',
+  catalogModels: 'entry/src/main/ets/media/catalog/MediaCatalogModels.ets',
+  jellyfinCatalogProvider: 'entry/src/main/ets/media/jellyfin/JellyfinCatalogProvider.ets',
+  jellyfinCatalogMapper: 'entry/src/main/ets/media/jellyfin/JellyfinCatalogMapper.ets',
   deleteDialog: 'entry/src/main/ets/features/management/library/ManagementMediaDeleteDialog.ets',
   deletePolicy: 'entry/src/main/ets/features/management/library/ManagementMediaDeletePolicy.ets',
   deleteRepository: 'entry/src/main/ets/features/management/library/ManagementMediaDeleteRepository.ets',
@@ -89,6 +92,33 @@ function requireMarker(source, marker, message) {
   }
 }
 
+function bracedBlock(source, openingBrace) {
+  let depth = 0
+  for (let index = openingBrace; index < source.length; index += 1) {
+    if (source[index] === '{') {
+      depth += 1
+    } else if (source[index] === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return source.slice(openingBrace + 1, index)
+      }
+    }
+  }
+  throw new Error('unterminated contract block')
+}
+
+function blockAfterMarker(source, marker, message) {
+  const markerIndex = source.indexOf(marker)
+  if (markerIndex < 0) {
+    throw new Error(message + ': ' + marker)
+  }
+  const openingBrace = source.indexOf('{', markerIndex)
+  if (openingBrace < 0) {
+    throw new Error(message + ': ' + marker)
+  }
+  return bracedBlock(source, openingBrace)
+}
+
 export function verifyMediaEntryScopeText(source) {
   requireMarker(source, 'rootNavigationMediaAdminActionsVisible', 'missing explicit Media menu state')
   requireMarker(source, 'selectedDestination === HomeDestination.Media', 'Media menu is not destination scoped')
@@ -121,6 +151,28 @@ export function verifyMediaEntryPointsText(sources) {
 export function verifyBatchDeleteText(sources) {
   requireMarker(sources.homeState, 'canDelete?: boolean', 'video items must retain CanDelete')
   requireMarker(sources.homeState, 'path?: string', 'video items must retain Path')
+
+  const summaryModel = blockAfterMarker(sources.catalogModels, 'export interface MediaSummary',
+    'provider-neutral media summary is missing')
+  requireMarker(summaryModel, 'readonly canDelete?: boolean',
+    'provider-neutral media summary must retain delete capability')
+  requireMarker(summaryModel, 'readonly path?: string',
+    'provider-neutral media summary must retain source path')
+
+  const jellyfinListQuery = blockAfterMarker(sources.jellyfinCatalogProvider,
+    'getItems(request: MediaListRequest)', 'Jellyfin catalog list query is missing')
+  requireMarker(jellyfinListQuery, 'ItemFields.CanDelete',
+    'Jellyfin catalog list query must request CanDelete')
+  requireMarker(jellyfinListQuery, 'ItemFields.Path',
+    'Jellyfin catalog list query must request Path')
+
+  const jellyfinSummaryMapper = blockAfterMarker(sources.jellyfinCatalogMapper,
+    'private createSummary(', 'Jellyfin summary mapper is missing')
+  requireMarker(jellyfinSummaryMapper, 'canDelete: item.CanDelete ?? undefined',
+    'Jellyfin summary mapper must retain CanDelete')
+  requireMarker(jellyfinSummaryMapper, 'path: item.Path || undefined',
+    'Jellyfin summary mapper must retain Path')
+
   for (const marker of [
     '@Trace selectionMode: boolean = false',
     '@Trace selectedIds: string[] = []',
@@ -133,15 +185,9 @@ export function verifyBatchDeleteText(sources) {
     requireMarker(sources.listState, marker, 'video list selection state is incomplete')
   }
 
-  const queryBlocks = sources.listViewModel.split(/getItems\s*\(\s*\{/).slice(1)
-    .map((segment) => segment.slice(0, segment.indexOf('}).then')))
-  if (queryBlocks.length < 2 || queryBlocks.some((block) =>
-    !block.includes("'CanDelete'") || !block.includes("'Path'"))) {
-    throw new Error('every video list query must request CanDelete and Path')
-  }
   for (const marker of [
-    'item.CanDelete === true',
-    "item.Path || ''",
+    'item.canDelete === true',
+    "item.path || ''",
     'this.dataSource.getDataAll()',
     'prepareDeleteSelection()',
     'this.deleteRepository.prepareTargets(targets)',

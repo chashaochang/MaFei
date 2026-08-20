@@ -1,5 +1,4 @@
-import { MediaStream } from "sdk/src/main/ets/generated-client/models";
-import { JellyfinMediaSource } from "../source/JellyfinMediaSource";
+import { MediaPlaybackSource, MediaPlaybackStream } from "../../media/playback/MediaPlaybackModels";
 
 const SUBTITLES_MENU_GROUP = 0
 const AUDIO_MENU_GROUP = 1
@@ -37,7 +36,7 @@ export class PlayerMenus {
   private subtitleCount = 0
   private subtitlesEnabled = false
 
-  onQueueItemChanged(mediaSource: JellyfinMediaSource, hasNext: boolean) {
+  onQueueItemChanged(mediaSource: MediaPlaybackSource, hasNext: boolean) {
     // previousButton is always enabled and will rewind if at the start of the queue
     //this.hasPrevious = true
     this.hasNext = hasNext
@@ -117,7 +116,7 @@ export class PlayerMenus {
     return `${formatted} fps`
   }
 
-  private formatResolution(stream?: MediaStream): string {
+  private formatResolution(stream?: MediaPlaybackStream): string {
     const width = stream?.Width
     const height = stream?.Height
     if (!width || !height) {
@@ -134,7 +133,7 @@ export class PlayerMenus {
     return text.length > 0 ? text : '--'
   }
 
-  private buildDisplayTitle(mediaSource: JellyfinMediaSource): string {
+  private buildDisplayTitle(mediaSource: MediaPlaybackSource): string {
     const seriesName = mediaSource.item.SeriesName?.trim()
     const title = mediaSource.name.trim()
     if (seriesName && seriesName.length > 0 && seriesName !== title) {
@@ -143,7 +142,8 @@ export class PlayerMenus {
     return title
   }
 
-  private buildPlaybackInfoEntries(mediaSource: JellyfinMediaSource, videoStream?: MediaStream): PlaybackInfoEntry[] {
+  private buildPlaybackInfoEntries(mediaSource: MediaPlaybackSource,
+    videoStream?: MediaPlaybackStream): PlaybackInfoEntry[] {
     const frameRate = videoStream?.ReferenceFrameRate ?? videoStream?.AverageFrameRate ?? videoStream?.RealFrameRate
     const colorSpace = videoStream?.ColorPrimaries ?? videoStream?.ColorSpace
     const entries: PlaybackInfoEntry[] = [
@@ -165,10 +165,10 @@ export class PlayerMenus {
 
   // 主要函数实现
   buildMediaStreamsInfo(
-    mediaStreams: MediaStream[],
+    mediaStreams: MediaPlaybackStream[],
     prefix: Resource,
     maxStreams: number,
-    streamSuffix: (stream: MediaStream) => string
+    streamSuffix: (stream: MediaPlaybackStream) => string
   ): string {
     const prefixText = getContext().resourceManager.getStringSync(prefix);
     const streamTexts: string[] = [];

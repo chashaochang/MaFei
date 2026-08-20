@@ -1,14 +1,19 @@
 import { RefreshController, RefreshDataSource } from "@abner/refresh_v2";
-import { AxiosResponse } from "@ohos/axios";
-import { getItemsApi } from "sdk";
-import { BaseItemDto, BaseItemDtoQueryResult, BaseItemKind, ItemSortBy } from "sdk/src/main/ets/generated-client/models";
 import { PageState } from "../../common/base/BaseUIState";
 import { BaseViewModel } from "../../common/base/BaseViewModel";
-import { getItemImageUrl, getResolutions } from "../../common/CommonFunc";
 import { ListDialog } from "../../component/ListDialog";
 import { sortOptions } from "../../entity/SortOption";
 import { MediaLibraryRefreshEvent } from "../../events/Events";
-import { ApiClient } from "../../network/ApiClient";
+import { currentMediaCatalogProvider } from "../../media/MediaCatalogAccess";
+import { MediaLibraryKind, MediaSummary } from "../../media/catalog/MediaCatalogModels";
+import {
+  MediaCatalogProvider,
+  MediaCatalogSortDirection,
+  MediaCatalogSortField
+} from "../../media/catalog/MediaCatalogProvider";
+import { mediaCatalogSortField } from "../../media/catalog/MediaCatalogSortFieldMapper";
+import { MediaRef, MediaRefKind } from "../../media/MediaRef";
+import { MediaProviderRegistry } from "../../media/MediaProviderRegistry";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { MediaItem, VideoItem } from "../home/hometab/HomeUIState";
 import {
@@ -24,15 +29,17 @@ import { VideoListUIState } from "./VideoListUIState";
 export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
   private deleteRepository: ManagementMediaDeleteRepository
   private mediaLibraryRefreshPublisher?: () => void
+  private catalog?: MediaCatalogProvider
+  private requestGeneration: number = 0
   controller: RefreshController = new RefreshController() //刷新控制器，声明全局变量
   dataSource: RefreshDataSource = new RefreshDataSource() //数据懒加载操作对象，执行数据增删改查
   mediaItem?: MediaItem
   startIndex: number = 0
   limit: number = 100
-  sortBy: ItemSortBy[] = [sortOptions[this.ui.selectedSortIndex].value]
+  sortBy: MediaCatalogSortField[] = [mediaCatalogSortField(sortOptions[this.ui.selectedSortIndex].value)]
   sortDialog = new ListDialog("排序", sortOptions.map((e) => e.label), this.ui.selectedSortIndex, (index) => {
     this.ui.selectedSortIndex = index
-    this.sortBy = [sortOptions[this.ui.selectedSortIndex].value]
+    this.sortBy = [mediaCatalogSortField(sortOptions[this.ui.selectedSortIndex].value)]
     this.startIndex = 0
     this.clearSelectionAndReload()
     this.getVideoList()
@@ -51,12 +58,29 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
   init(mediaItem: MediaItem) {
     this.ui.title = mediaItem.name
     this.mediaItem = mediaItem
+    try {
+      this.catalog = currentMediaCatalogProvider()
+    } catch (_error) {
+      this.catalog = undefined
+      this.ui.pageState = PageState.Error
+      return
+    }
     this.loadDeleteAccess()
     this.refresh()
   }
 
   private async loadDeleteAccess(): Promise<void> {
+    const catalog = this.catalog
+    if (!catalog?.session.capabilities.management) {
+      this.ui.isAdministrator = false
+      this.ui.clearSelection()
+      this.dataSource.reloadData()
+      return
+    }
     const result = await this.deleteRepository.requireAdministrator()
+    if (!this.isCurrentCatalog(catalog)) {
+      return
+    }
     this.ui.isAdministrator = result.ok
     if (!result.ok) {
       this.ui.clearSelection()
@@ -69,18 +93,21 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     this.dataSource.reloadData()
   }
 
-  private toVideoItem(item: BaseItemDto): VideoItem {
+  private toVideoItem(item: MediaSummary): VideoItem {
     return {
-      id: item.Id || '',
-      name: item.Name || '',
-      image: getItemImageUrl(item),
-      subtitle: item.ProductionYear ? item.ProductionYear.toString() : '',
-      score: item.CommunityRating ? item.CommunityRating : 0,
-      tags: getResolutions(item.MediaStreams),
+      id: item.ref.id,
+      name: item.title,
+      image: item.primaryImage?.url || '',
+      mediaRef: item.ref,
+      imageRef: item.primaryImage,
+      kind: item.ref.kind,
+      subtitle: item.year !== undefined ? item.year.toString() : item.subtitle,
+      score: item.communityRating || 0,
+      tags: item.tags.slice(),
       mediaName: this.ui.title,
-      type: item.Type,
-      canDelete: item.CanDelete === true,
-      path: item.Path || ''
+      type: this.legacyType(item.ref.kind),
+      canDelete: this.catalog?.session.capabilities.management === true && item.canDelete === true,
+      path: item.path || ''
     }
   }
 
@@ -199,112 +226,127 @@ export class VideoListViewModel extends BaseViewModel<VideoListUIState> {
     }
   }
 
-  getVideoList() {
-    if (this.mediaItem!.type === undefined) { //混合影片
-      getItemsApi(ApiClient.Instance()).getItems({
-        startIndex: this.startIndex,
-        limit: this.limit,
-        fields: ['PrimaryImageAspectRatio', 'SortName', 'CanDelete', 'Path', 'ChildCount',
-          'MediaSourceCount'],
-        imageTypeLimit: 1,
-        parentId: this.mediaItem!.id,
-        sortBy: this.sortBy,
-        sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        let noMore = false
-        if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
-          noMore = true
-        }
-        if (res.data && res.data.Items && res.data.Items.length > 0) {
-          let videoList = res.data.Items.map<VideoItem>((item: BaseItemDto) => this.toVideoItem(item))
-          if (res.data.StartIndex == 0) {
-            this.ui.pageState = PageState.Content
-            this.dataSource.initData(videoList)
-            //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
-            this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
-          } else {
-            this.dataSource.pushDataArray(videoList)
-          }
-          this.controller.finishLoadMore(noMore)
-          this.startIndex = this.dataSource.totalCount()
-        } else {
-          if (this.startIndex === 0) {
-            this.ui.pageState = PageState.Content
-          }
-          if (res.data.Items?.length === 0) {
-            this.dataSource.deleteAll()
-          }
-          this.controller.finishRefresh()
-          this.controller.finishLoadMore(noMore)
-        }
-        this.ui.totalCount = this.dataSource.totalCount() + ''
-      }).catch(() => {
-        if (this.startIndex === 0) {
-          this.ui.pageState = PageState.Error
-        }
-        this.controller.finishRefresh()
-        this.controller.finishLoadMore(false)
-      })
-    } else {
-      let isAll = this.mediaItem?.id === 'all'
-      let includeItemTypes = [this.mediaItem!.type]
-      let parentId: string | undefined = undefined
-      if (isAll) {
-        includeItemTypes = [BaseItemKind.Video, BaseItemKind.Movie, BaseItemKind.Series]
-      } else if (this.mediaItem?.id === 'movies') {
-        includeItemTypes = [BaseItemKind.Movie]
-      } else if (this.mediaItem?.id === 'tvs') {
-        includeItemTypes = [BaseItemKind.Series]
-      } else {
-        parentId = this.mediaItem!.id
-      }
-      getItemsApi(ApiClient.Instance()).getItems({
-        parentId: parentId,
-        recursive: true,
-        fields: ['PrimaryImageAspectRatio', 'CanDelete', 'Path', 'MediaSourceCount', 'MediaStreams'],
-        imageTypeLimit: 1,
-        enableImageTypes: ['Primary', 'Backdrop', 'Banner', 'Thumb'],
-        sortBy: this.sortBy,
-        sortOrder: this.ui.isDesc ? ['Descending'] : ['Ascending'],
-        includeItemTypes: includeItemTypes,
-        startIndex: this.startIndex,
-        limit: this.limit,
-      }).then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        let noMore = false
-        if (res.data && res.data.Items && res.data.Items?.length < this.limit) {
-          noMore = true
-        }
-        if (res.data && res.data.Items && res.data.Items.length > 0) {
-          let videoList = res.data.Items.map<VideoItem>((item: BaseItemDto) => this.toVideoItem(item))
-          if (res.data.StartIndex == 0) {
-            this.ui.pageState = PageState.Content
-            this.dataSource.initData(videoList)
-            //数据懒加载使用：1、数组数据添加，this.dataSource.pushDataArray()，2、单个数据添加，this.dataSource.pushData()
-            this.controller.finishRefresh() //关闭下拉刷新，在数据请求回后进行关闭
-          } else {
-            this.dataSource.pushDataArray(videoList)
-          }
-          this.controller.finishLoadMore(noMore)
-          this.startIndex = this.dataSource.totalCount()
-        } else {
-          if (this.startIndex === 0) {
-            this.ui.pageState = PageState.Content
-          }
-          if (res.data.Items?.length === 0) {
-            this.dataSource.deleteAll()
-          }
-          this.controller.finishRefresh()
-          this.controller.finishLoadMore(noMore)
-        }
-        this.ui.totalCount = this.dataSource.totalCount() + ''
-      }).catch(() => {
-        if (this.startIndex === 0) {
-          this.ui.pageState = PageState.Error
-        }
-        this.controller.finishRefresh()
-        this.controller.finishLoadMore(false)
-      })
+  getVideoList(): void {
+    const catalog = this.catalog
+    const mediaItem = this.mediaItem
+    if (!catalog || !mediaItem) {
+      this.finishRequestFailure()
+      return
     }
+    const generation = ++this.requestGeneration
+    const requestStartIndex = this.startIndex
+    const kinds = this.queryKinds(mediaItem)
+    const libraryRef = this.libraryRef(catalog, mediaItem)
+    const recursive = mediaItem.kind !== undefined || mediaItem.libraryKind !== undefined || mediaItem.id === 'all' ||
+      mediaItem.id === 'movies' || mediaItem.id === 'tvs'
+    catalog.getItems({
+      libraryRef: libraryRef,
+      kinds: kinds,
+      startIndex: requestStartIndex,
+      limit: this.limit,
+      sortFields: this.sortBy,
+      sortDirections: [this.ui.isDesc ? MediaCatalogSortDirection.Descending :
+        MediaCatalogSortDirection.Ascending],
+      recursive: recursive,
+      collapseBoxSetItems: false,
+      favoriteOnly: false
+    }).then((page) => {
+      if (!this.isCurrentRequest(catalog, generation)) {
+        return
+      }
+      const videoList = page.items.map((item: MediaSummary): VideoItem => this.toVideoItem(item))
+      if (page.startIndex === 0) {
+        this.ui.pageState = PageState.Content
+        this.dataSource.initData(videoList)
+        this.controller.finishRefresh()
+      } else {
+        this.dataSource.pushDataArray(videoList)
+      }
+      if (videoList.length === 0 && page.startIndex === 0) {
+        this.dataSource.deleteAll()
+      }
+      this.controller.finishLoadMore(!page.hasMore)
+      this.startIndex = page.nextStartIndex
+      this.ui.totalCount = this.dataSource.totalCount() + ''
+    }).catch(() => {
+      if (this.isCurrentRequest(catalog, generation)) {
+        this.finishRequestFailure()
+      }
+    })
+  }
+
+  private isCurrentCatalog(catalog: MediaCatalogProvider): boolean {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    return this.catalog === catalog &&
+      (!activeSession || activeSession.accountScope === catalog.session.accountScope)
+  }
+
+  private isCurrentRequest(catalog: MediaCatalogProvider, generation: number): boolean {
+    return generation === this.requestGeneration && this.isCurrentCatalog(catalog)
+  }
+
+  private finishRequestFailure(): void {
+    if (this.startIndex === 0) {
+      this.ui.pageState = PageState.Error
+    }
+    this.controller.finishRefresh()
+    this.controller.finishLoadMore(false)
+  }
+
+  private libraryRef(catalog: MediaCatalogProvider, mediaItem: MediaItem): MediaRef | undefined {
+    if (mediaItem.id === 'all' || mediaItem.id === 'movies' || mediaItem.id === 'tvs') {
+      return undefined
+    }
+    if (mediaItem.mediaRef && mediaItem.mediaRef.provider === catalog.session.provider &&
+      mediaItem.mediaRef.accountScope === catalog.session.accountScope) {
+      return mediaItem.mediaRef
+    }
+    return new MediaRef(
+      catalog.session.provider,
+      catalog.session.accountScope,
+      mediaItem.id,
+      MediaRefKind.Library
+    )
+  }
+
+  private queryKinds(mediaItem: MediaItem): MediaRefKind[] {
+    if (mediaItem.id === 'all') {
+      return [MediaRefKind.Video, MediaRefKind.Movie, MediaRefKind.Series]
+    }
+    if (mediaItem.id === 'movies' || mediaItem.kind === MediaRefKind.Movie ||
+      mediaItem.libraryKind === MediaLibraryKind.Movies || mediaItem.type === 'Movie') {
+      return [MediaRefKind.Movie]
+    }
+    if (mediaItem.id === 'tvs' || mediaItem.kind === MediaRefKind.Series ||
+      mediaItem.libraryKind === MediaLibraryKind.Series || mediaItem.type === 'Series') {
+      return [MediaRefKind.Series]
+    }
+    if (mediaItem.kind === MediaRefKind.Episode || mediaItem.type === 'Episode') {
+      return [MediaRefKind.Episode]
+    }
+    if (mediaItem.kind === MediaRefKind.Video || mediaItem.type === 'Video') {
+      return [MediaRefKind.Video]
+    }
+    return []
+  }
+
+  private legacyType(kind: MediaRefKind): string {
+    if (kind === MediaRefKind.Series) {
+      return 'Series'
+    }
+    if (kind === MediaRefKind.Season) {
+      return 'Season'
+    }
+    if (kind === MediaRefKind.Episode) {
+      return 'Episode'
+    }
+    if (kind === MediaRefKind.Movie) {
+      return 'Movie'
+    }
+    if (kind === MediaRefKind.Video) {
+      return 'Video'
+    }
+    return ''
   }
 
   refresh() {

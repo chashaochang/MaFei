@@ -11,9 +11,8 @@ export interface FeiniuPointLightOptions {
 }
 
 export class FeiniuPointLightModifier {
-  // The legacy shell is the complete fallback for API 20–25.  Although the
-  // HDS effect API is present on some of those builds, constructing it there
-  // makes the wide/tablet shell diverge from the verified fallback path.
+  // API 24–25 uses the verified blur fallback. Point light remains reserved
+  // for API 26 system material so the wide/tablet shell stays deterministic.
   static readonly MIN_API_VERSION: number = 26
 
   static build(options: FeiniuPointLightOptions): VisualEffect {

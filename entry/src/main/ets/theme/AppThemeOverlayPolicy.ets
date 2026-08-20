@@ -8,6 +8,7 @@ export enum OverlaySurfaceRole {
 
 export enum OverlayMaterialDecision {
   LegacyStyle = 'legacy_style',
+  UseBlurFallback = 'use_blur_fallback',
   UsePlatformDefault = 'use_platform_default',
   UseFloatingMaterial = 'use_floating_material',
   DisableSystemMaterial = 'disable_system_material'
@@ -15,13 +16,14 @@ export enum OverlayMaterialDecision {
 
 export class AppThemeOverlayPolicy {
   static resolve(role: OverlaySurfaceRole, style: ThemeStyle,
-    api26OrLater: boolean, nativeThemeAvailable: boolean): OverlayMaterialDecision {
-    if (!api26OrLater) {
-      return OverlayMaterialDecision.LegacyStyle
-    }
+    systemMaterialAvailable: boolean, nativeThemeAvailable: boolean): OverlayMaterialDecision {
     if (role === OverlaySurfaceRole.Dangerous || style === ThemeStyle.Feiniu ||
       !nativeThemeAvailable) {
-      return OverlayMaterialDecision.DisableSystemMaterial
+      return systemMaterialAvailable ? OverlayMaterialDecision.DisableSystemMaterial :
+        OverlayMaterialDecision.LegacyStyle
+    }
+    if (!systemMaterialAvailable) {
+      return OverlayMaterialDecision.UseBlurFallback
     }
     if (role === OverlaySurfaceRole.AppFloating) {
       return OverlayMaterialDecision.UseFloatingMaterial

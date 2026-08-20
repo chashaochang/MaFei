@@ -1,15 +1,20 @@
-import { BaseItemPerson } from "sdk/src/main/ets/generated-client/models"
 import { BaseUIState } from "../../common/base/BaseUIState"
+import { MediaImageRef, MediaPersonCredit } from "../../media/catalog/MediaCatalogModels"
+import { MediaRef } from "../../media/MediaRef"
 import { VideoItem } from "../home/hometab/HomeUIState"
 
 @ObservedV2
 export class SeasonDetailUIState extends BaseUIState {
   @Trace id = ''
   @Trace parentId = ''
+  mediaRef?: MediaRef
+  seriesRef?: MediaRef
   @Trace title: string = '视频详情'
   @Trace mediaName: string = ''
   @Trace backgroundImage: string = ''
+  @Trace backgroundImageRef?: MediaImageRef
   @Trace image: string = ''
+  @Trace imageRef?: MediaImageRef
   @Trace episodeName : string = ''
   //剧名
   @Trace seriesName = ''
@@ -20,7 +25,7 @@ export class SeasonDetailUIState extends BaseUIState {
   preInfo: string = ''
   @Trace info: string = ''
   @Trace overview: string = ''
-  @Trace people: BaseItemPerson[] = []
+  @Trace people: MediaPersonCredit[] = []
   @Trace isFavorite: boolean = false
   @Trace played: boolean = false
 

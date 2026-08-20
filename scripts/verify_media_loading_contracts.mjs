@@ -59,23 +59,26 @@ export function validateMediaLoadingContracts(sources) {
   const getMediaListMethod = methodBlock(viewModel, 'getMediaList')
 
   rejectPattern(viewModel, /return\s+new\s+Promise\s*\(/,
-    'media loading must not wrap SDK calls in a manual Promise')
+    'media loading must not wrap Catalog calls in a manual Promise')
   rejectPattern(viewModel, /\bresolve\s*\(\s*\)/,
     'media loading must not settle before child requests finish')
   requirePattern(viewModel,
-    /private\s+async\s+getMediaList\s*\(\s*\)\s*:\s*Promise<MediaItem\[\]>/,
-    'getMediaList must return Promise<MediaItem[]>')
+    /private\s+async\s+getMediaList\s*\(\s*catalog\s*:\s*MediaCatalogProvider\s*\)\s*:\s*Promise<MediaItem\[\]>/,
+    'getMediaList must accept the resolved Catalog and return Promise<MediaItem[]>')
   requirePattern(getMediaListMethod,
-    /const\s+views\s*:\s*BaseItemDto\[\]\s*=\s*\(response\.data\?\.Items\s*\|\|\s*\[\]\)/,
-    'getMediaList must normalize an empty response')
-  requirePattern(getMediaListMethod, /return\s+Promise\.all\s*\(views\.map\s*\(/,
-    'getMediaList must return the child request Promise.all')
+    /await\s+catalog\.getLibraries\s*\(\s*\)/,
+    'getMediaList must load libraries through the neutral Catalog')
+  requirePattern(getMediaListMethod, /return\s+libraries\.map\s*\(/,
+    'getMediaList must synchronously map the normalized Catalog library array')
 
   requirePattern(initMethod, /this\.ui\.pageState\s*=\s*PageState\.Loading/,
     'init must enter Loading')
   requirePattern(initMethod,
-    /this\.ui\.mediaList\s*=\s*await\s+this\.getMediaList\s*\(\s*\)/,
+    /const\s+mediaList\s*=\s*await\s+this\.getMediaList\s*\(\s*catalog\s*\)[\s\S]*?if\s*\(\s*!this\.isCurrent\s*\(\s*catalog\s*,\s*generation\s*\)\s*\)\s*\{[\s\S]*?return[\s\S]*?\}[\s\S]*?this\.ui\.mediaList\s*=\s*mediaList/,
     'init must await the complete media list')
+  requirePattern(initMethod,
+    /catalog\.session\.capabilities\.management[\s\S]*libraryRepository\.requireAdministrator/,
+    'management access must be gated by the active provider capability')
   requirePattern(initMethod, /this\.ui\.pageState\s*=\s*PageState\.Content/,
     'init must expose Content')
   requirePattern(initMethod,

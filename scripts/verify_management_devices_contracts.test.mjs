@@ -63,3 +63,20 @@ test('requires device detail permission, confirmation, and terminal states', () 
     assert.throws(() => validateManagementDevices(sources))
   }
 })
+
+test('requires dangerous device confirmations to use OverlayPolicy', () => {
+  for (const path of [managementDevicePaths.listPage, managementDevicePaths.detailPage]) {
+    const sources = validSources()
+    sources.set(path,
+      sources.get(path).replace('OverlaySurfaceRole.Dangerous',
+        'OverlaySurfaceRole.PlatformDefault'))
+    assert.throws(() => validateManagementDevices(sources), /dangerous-overlay policy/)
+  }
+})
+
+test('rejects direct SDK version guards in device confirmations', () => {
+  const sources = validSources()
+  sources.set(managementDevicePaths.detailPage,
+    sources.get(managementDevicePaths.detailPage) + '\nif (deviceInfo.sdkApiVersion >= 26) {}')
+  assert.throws(() => validateManagementDevices(sources), /must not hard-code/)
+})

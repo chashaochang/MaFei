@@ -236,9 +236,10 @@ struct AuthTextField {
     .borderRadius(this.nativeSurface ? 14 : 8)
     .clip(true)
     .alignContent(Alignment.Start)
-    .systemMaterial(this.nativeSurface ?
-      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.AdaptiveInteractive,
+      this.nativeSurface
+    ))
   }
 }
 
@@ -278,9 +279,10 @@ export struct StyledTextButton {
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })
-      .systemMaterial(this.nativeSurface ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-        AppThemeSurfaceResolver.disabledSystemMaterial())
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveInteractive,
+        this.nativeSurface
+      ))
   }
 }
 
@@ -388,8 +390,9 @@ struct ServerUrlField {
     .borderRadius(this.nativeSurface ? 14 : 8)
     .clip(true)
     .alignContent(Alignment.End)
-    .systemMaterial(this.nativeSurface ?
-      AppThemeSurfaceResolver.material(AppThemeMaterialRole.AdaptiveInteractive) :
-      AppThemeSurfaceResolver.disabledSystemMaterial())
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.AdaptiveInteractive,
+      this.nativeSurface
+    ))
   }
 }

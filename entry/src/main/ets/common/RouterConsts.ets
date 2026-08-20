@@ -14,6 +14,8 @@ export class RouterConsts {
   static readonly SettingPage = '/Setting';
   static readonly AccountPage = 'AccountPage';
   static readonly AddAccountPage = 'AddAccountPage';
+  static readonly JellyfinConnectPage = 'JellyfinConnectPage';
+  static readonly FeiniuVideoConnectPage = 'FeiniuVideoConnectPage';
   static readonly WebITongPage = 'WebITongPage';
   static readonly SearchPage = 'SearchPage';
   static readonly CastDetailPage = 'CastDetailPage';

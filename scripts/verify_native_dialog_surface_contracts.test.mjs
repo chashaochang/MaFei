@@ -10,17 +10,65 @@ function source(path) {
   return readFileSync(resolve(root, path), 'utf8')
 }
 
-test('management sheets use one theme-scoped outer surface', () => {
-  for (const path of [
-    'features/management/ManagementUsersPage.ets',
-    'features/management/devices/ManagementDevicesPage.ets',
-    'features/management/activity/ManagementActivityPage.ets'
+function bracedBlock(value, openingBrace, label) {
+  assert.ok(openingBrace >= 0, `missing conditional block: ${label}`)
+  let depth = 0
+  for (let index = openingBrace; index < value.length; index += 1) {
+    if (value[index] === '{') {
+      depth += 1
+    } else if (value[index] === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return { body: value.slice(openingBrace + 1, index), end: index }
+      }
+    }
+  }
+  assert.fail(`unterminated conditional block: ${label}`)
+}
+
+function conditionalBlock(value, marker) {
+  const markerIndex = value.indexOf(marker)
+  assert.ok(markerIndex >= 0, `missing conditional marker: ${marker}`)
+  return bracedBlock(value, value.indexOf('{', markerIndex), marker)
+}
+
+function methodBody(value, name) {
+  const signature = new RegExp(`\\b(?:private\\s+)?${name}\\s*\\([^)]*\\)[^{]*\\{`)
+  const match = signature.exec(value)
+  assert.ok(match, `missing method: ${name}`)
+  return bracedBlock(value, value.indexOf('{', match.index), name).body
+}
+
+function followingElseBlock(value, blockEnd) {
+  const tail = value.slice(blockEnd + 1)
+  const match = /^\s*else\s*\{/.exec(tail)
+  assert.ok(match, 'missing capability fallback branch')
+  const openingBrace = blockEnd + 1 + match[0].lastIndexOf('{')
+  return bracedBlock(value, openingBrace, 'capability fallback')
+}
+
+test('management sheets keep system material out of the blur fallback branch', () => {
+  for (const [path, ownerMethod] of [
+    ['features/management/ManagementUsersPage.ets', 'filterSheetOptions'],
+    ['features/management/devices/ManagementDevicesPage.ets', 'pageContent'],
+    ['features/management/activity/ManagementActivityPage.ets', 'pageContent']
   ]) {
     const value = source(path)
-    assert.match(value,
-      /backgroundColor:\s*this\.useNativeMaterial\(\)\s*\?\s*Color\.Transparent\s*:\s*\$r\('app\.color\.bg_1'\)/)
-    assert.match(value,
-      /systemMaterial:\s*this\.useNativeMaterial\(\)\s*\?[\s\S]*AppThemeMaterialRole\.Floating[\s\S]*disabledSystemMaterial\(\)/)
+    const owner = methodBody(value, ownerMethod)
+    const blurBranch = conditionalBlock(owner, 'OverlayMaterialDecision.UseBlurFallback')
+    assert.match(blurBranch.body, /backgroundColor:\s*Color\.Transparent/)
+    assert.doesNotMatch(blurBranch.body, /systemMaterial\s*:/)
+
+    const materialBranch = conditionalBlock(owner, 'OverlayMaterialDecision.UseFloatingMaterial')
+    assert.match(materialBranch.body, /backgroundColor:\s*Color\.Transparent/)
+    assert.match(materialBranch.body,
+      /systemMaterial:\s*AppThemeSurfaceResolver\.material\(AppThemeMaterialRole\.Floating\)/)
+
+    const disabledBranch = conditionalBlock(owner, 'OverlayMaterialDecision.DisableSystemMaterial')
+    assert.match(disabledBranch.body, /backgroundColor:\s*\$r\('app\.color\.bg_1'\)/)
+    assert.match(disabledBranch.body,
+      /systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\(\)/)
+    assert.match(value, /\.bindSheet\(/)
   }
 })
 
@@ -49,13 +97,18 @@ test('existing native sheet contents keep their inner surfaces transparent', () 
     /backgroundColor\(this\.native\s*\?\s*Color\.Transparent\s*:\s*\$r\('app\.color\.bg_2'\)\)/)
 })
 
-test('AlertDialogV2 custom-dialog hosts disable the duplicate platform surface on API 26', () => {
-  for (const path of [
-    'features/search/SearchPage.ets',
-    'features/setting/account/AccountPage.ets'
+test('AlertDialogV2 custom-dialog hosts gate the API 26-only option by material capability', () => {
+  for (const [path, gate] of [
+    ['features/search/SearchPage.ets', 'if (this.vm.appUIState.systemMaterialAvailable)'],
+    ['features/setting/account/AccountPage.ets', 'if (this.appUIState.systemMaterialAvailable)']
   ]) {
     const value = source(path)
-    assert.match(value, /deviceInfo\.sdkApiVersion\s*>=\s*26/)
-    assert.match(value, /openCustomDialog\(\{[\s\S]*systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\(\)/)
+    const materialBranch = conditionalBlock(value, gate)
+    assert.match(materialBranch.body, /openCustomDialog\(\{/)
+    assert.match(materialBranch.body,
+      /systemMaterial:\s*AppThemeSurfaceResolver\.disabledSystemMaterial\(\)/)
+    const fallbackBranch = followingElseBlock(value, materialBranch.end)
+    assert.match(fallbackBranch.body, /openCustomDialog\(\{/)
+    assert.doesNotMatch(fallbackBranch.body, /systemMaterial\s*:/)
   }
 })

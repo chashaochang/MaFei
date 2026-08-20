@@ -1,26 +1,26 @@
-import { getHlsSegmentApi, getLibraryApi, getPlaystateApi, getSubtitleApi, ImageUrlsApi } from "sdk";
-import { ApiClient } from "../../network/ApiClient";
 import { danDanPlayConfig } from "../../config/api-config";
 import { BusinessError, emitter } from "@kit.BasicServicesKit";
-import { JellyfinMediaSource } from "../../player/source/JellyfinMediaSource";
 import {
-  BaseItemDtoQueryResult,
-  BaseItemKind,
-  ItemFields,
-  MediaStream,
-  PlayMethod,
-  RepeatMode
-} from "sdk/src/main/ets/generated-client/models";
+  MediaPlaybackItemKind,
+  MediaPlaybackPreparedStreams,
+  MediaPlaybackRequestHeader,
+  MediaPlaybackSource,
+  MediaPlaybackStream
+} from "../../media/playback/MediaPlaybackModels";
+import { MediaPlaybackProvider } from "../../media/playback/MediaPlaybackProvider";
+import { currentMediaPlaybackProvider } from "../../media/MediaPlaybackAccess";
+import {
+  MediaProviderRegistry,
+  MediaProviderScopedPlayback
+} from "../../media/MediaProviderRegistry";
 import { Constants } from "../../utils/Constants";
-import axios, { AxiosError, AxiosResponse } from "@ohos/axios";
-import { buffer, uri } from "@kit.ArkTS";
+import axios, { AxiosError, AxiosHeaders, AxiosResponse } from "@ohos/axios";
 import { SubtitleManager } from "../../utils/SubtitleManager";
 import { QueueItem } from "../../entity/QueueItem";
 import avSessionManager from "../../utils/AVSessionManager";
 import { avSession } from "@kit.AVSessionKit";
 import qualityOptionsProvider from "../../player/qualityoptions/QualityOptionsProvider";
 import { BackgroundTaskManager } from "../../utils/BackgroundTaskManager";
-import { SimilarItem } from "../../entity/SimilarItem";
 import {
   BaseDanmaku,
   BaseDanmakuParser,
@@ -43,26 +43,43 @@ import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { AppPreference } from "../../data/AppPreference";
 import { PlayerEngineType } from "../../entity/PlayerEngineType";
 import { PlayerEngineDecision, PlayerEngineResolver } from "../../player/PlayerEngineResolver";
-import { getItemImageUrl, openUrlByBrowser } from "../../common/CommonFunc";
+import { openUrlByBrowser } from "../../common/CommonFunc";
 import { ToastUtil } from "../../utils/ToastUtil";
 import { ReportPayload, ReportService } from "../../network/ReportService";
 
+interface DanmakuUrlResponse {
+  readonly url?: string
+}
+
 @ObservedV2
-export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
+export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implements MediaProviderScopedPlayback {
   // 弹幕功能暂不上线，后续恢复时改回 true 并取消相关注释即可。
   private static readonly DANMAKU_ENABLED: boolean = true
   private static readonly CONTENT_REPORT_EMAIL: string = '1139396584@qq.com'
   private static readonly REPORT_DESCRIPTION_MAX_LENGTH: number = 100
-  queueManager: QueueManager = new QueueManager(this)
+  private static readonly PLAYBACK_PROGRESS_REPORT_INTERVAL_MS: number = 10000
+  queueManager: QueueManager
+  private readonly playbackProvider: MediaPlaybackProvider
   subtitleManager: SubtitleManager = new SubtitleManager()
   ui: PlayerPageUIState
   danmuContext: DanmakuContext
   private playbackStopInFlight: boolean = false
+  private playbackStopTask?: Promise<void>
   private playbackStopReportedSessionId?: string
+  private lastPlaybackProgressPositionMs: number = -1
+  private scopedPlaybackRegistered: boolean = false
 
-  constructor(ui: PlayerPageUIState) {
+  constructor(ui: PlayerPageUIState,
+    playbackProvider: MediaPlaybackProvider = currentMediaPlaybackProvider()) {
     super(ui)
     this.ui = ui
+    this.playbackProvider = playbackProvider
+    this.queueManager = new QueueManager(this, playbackProvider)
+    MediaProviderRegistry.instance().registerScopedPlayback(
+      this.playbackProvider.session.accountScope,
+      this
+    )
+    this.scopedPlaybackRegistered = true
     this.danmuContext = DanmakuContext.create();
     this.ui.enableDanmu = false
     this.ui.danmuOpen = false
@@ -79,13 +96,13 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     return {
       title: mediaSource?.name || this.ui.title || '未知视频',
       itemId: mediaSource?.itemId || this.ui.currentPlayId || '',
-      serverUrl: String(ApiClient.Instance().basePath || 'unknown'),
+      serverUrl: mediaSource?.serverUrl || 'unknown',
       source: 'player',
       description,
       playSessionId: mediaSource?.playSessionId || '',
       client: 'mafei-ohos',
-      reporterId: AppPreference.getInstance().getCurrentUserId(),
-      reporterName: AppPreference.getInstance().getUserName()
+      reporterId: this.playbackProvider.session.userId,
+      reporterName: this.playbackProvider.session.displayName
     }
   }
 
@@ -179,15 +196,15 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     return AppPreference.getInstance().getPlayerEngineType()
   }
 
-  getResolvedPlayerEngineDecision(source?: JellyfinMediaSource): PlayerEngineDecision {
+  getResolvedPlayerEngineDecision(source?: MediaPlaybackSource): PlayerEngineDecision {
     return PlayerEngineResolver.resolvePlaybackEngine(this.getConfiguredEngineType(), source ?? this.mediaSourceOrNull)
   }
 
-  getResolvedPlayerEngineType(source?: JellyfinMediaSource): PlayerEngineType {
+  getResolvedPlayerEngineType(source?: MediaPlaybackSource): PlayerEngineType {
     return this.getResolvedPlayerEngineDecision(source).engineType
   }
 
-  private isMpvEngine(source?: JellyfinMediaSource): boolean {
+  private isMpvEngine(source?: MediaPlaybackSource): boolean {
     return this.getResolvedPlayerEngineType(source) === PlayerEngineType.MPV
   }
 
@@ -434,82 +451,89 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     }
   }
 
-  get mediaSourceOrNull(): JellyfinMediaSource | undefined {
+  get mediaSourceOrNull(): MediaPlaybackSource | undefined {
     return this.queueManager.currentMediaSourceOrNull
   }
 
   trackSelectionHelper: TrackSelectionHelper = new TrackSelectionHelper(this)
   initialTracksSelected: boolean = false
   //由于这个player要设置完url才能得到,暂时保存初始化信息
-  initSource?: JellyfinMediaSource
+  initSource?: MediaPlaybackSource
 
-  load(source: JellyfinMediaSource, url: string[], playWhenReady: boolean) {
+  load(source: MediaPlaybackSource, streams: MediaPlaybackPreparedStreams, playWhenReady: boolean) {
     this.initSource = source
     this.playbackStopInFlight = false
     this.playbackStopReportedSessionId = undefined
+    this.lastPlaybackProgressPositionMs = -1
     this.ui.selectedBitrate = source.maxStreamingBitrate
-    this.ui.mediaType = source.item.Type!
-    this.ui.currentPlayId = this.queueManager.currentQueue[this.queueManager.currentQueueIndex]
-    for (let index = 0; index < url.length; index++) {
-      let element = url[index];
-      //适配小雅
-      if (element.includes('xiaoya.host')) {
-        let URI = new uri.URI(ApiClient.Instance().basePath)
-        element = element.replace('http://xiaoya.host', `${URI.scheme}:${URI.host}`)
-      }
-      if (index === 0) {
-        this.ui.url = element
-        //设置播放器url,开始播放
-        this.ui.playWhenReady = playWhenReady
-        this.initialTracksSelected = false
-        let startTime = this.initSource.startTimeMs
-        if (startTime > 0) {
-          this.ui.initSeek = startTime
-        }
-        if (source.item.Type == BaseItemKind.Episode) { //电视剧
-          this.queueManager.expandEpisodeQueueIfNeeded().then(() => {
-            this.getItems()
-            this.ui.playerMenus?.onQueueItemChanged(source, this.queueManager.hasNext())
-          })
-          avSessionManager.getSession()?.setAVQueueTitle(source.item.SeriesName ?? source.item.Name ?? "TITLE",)
-        }
-        avSessionManager?.getSession()?.setAVMetadata(source.toMediaMetadata())
-        this.reportPlaybackStart(source)
-      } else {
-        console.log('外挂字幕:' + element);
-      }
+    this.ui.mediaType = source.item.Type ?? MediaPlaybackItemKind.Unknown
+    this.ui.currentPlayId = source.ref.id
+    this.ui.videoHeaders = streams.videoHeaders.slice()
+    this.ui.url = streams.videoUrl
+    this.ui.playWhenReady = playWhenReady
+    this.initialTracksSelected = false
+    const startTime = source.startTimeMs
+    if (startTime > 0) {
+      this.ui.initSeek = startTime
     }
-  }
-
-  stopTranscoding(mediaSource: JellyfinMediaSource) {
-    if (mediaSource.usesServerTranscoding()) {
-      getHlsSegmentApi(ApiClient.Instance()).stopEncodingProcess({
-        deviceId: ApiClient.Instance().deviceInfo.id,
-        playSessionId: mediaSource.playSessionId,
+    if (source.item.Type == MediaPlaybackItemKind.Episode) {
+      void this.queueManager.expandEpisodeQueueIfNeeded().then((): void => {
+        void this.getItems()
+        this.ui.playerMenus?.onQueueItemChanged(source, this.queueManager.hasNext())
       })
+      avSessionManager.getSession()?.setAVQueueTitle(source.item.SeriesName ?? source.item.Name ?? 'TITLE')
+    }
+    avSessionManager.getSession()?.setAVMetadata(source.toMediaMetadata())
+    this.reportPlaybackStart(source)
+    for (const subtitle of streams.externalSubtitles) {
+      console.log(`外挂字幕:${subtitle.deliveryUrl}`)
     }
   }
 
-  reportPlaybackStart(mediaSource: JellyfinMediaSource) {
-    getPlaystateApi(ApiClient.Instance()).reportPlaybackStart({
-      playbackStartInfo: {
-        ItemId: mediaSource.itemId,
-        PlayMethod: mediaSource.getEffectivePlayMethod(),
-        PlaySessionId: mediaSource.playSessionId,
-        AudioStreamIndex: mediaSource.selectedAudioStream?.Index,
-        SubtitleStreamIndex: mediaSource.selectedSubtitleStream?.Index,
-        // IsPaused:true,
-        IsMuted: false,
-        CanSeek: true,
-        PositionTicks: mediaSource.startTimeMs * Constants.TICKS_PER_MILLISECOND,
-        // VolumeLevel:audio.getAudioManager().getVolume(audio.AudioVolumeType.MEDIA),
-        RepeatMode: RepeatMode.RepeatNone
-      }
+  reportPlaybackStart(mediaSource: MediaPlaybackSource): void {
+    void this.playbackProvider.lifecycle.reportStart(mediaSource).catch((error: Error): void => {
+      console.error(`[PlayerVM] reportPlaybackStart failed: ${JSON.stringify(error)}`)
     })
   }
 
-  async reportPlaybackStop() {
-    let mediaSource = this.mediaSourceOrNull
+  reportPlaybackProgress(positionMs: number, paused: boolean = false, force: boolean = false): void {
+    const mediaSource = this.mediaSourceOrNull
+    if (!mediaSource || !Number.isFinite(positionMs) || positionMs < 0) {
+      return
+    }
+    if (!force && this.lastPlaybackProgressPositionMs >= 0 &&
+      Math.abs(positionMs - this.lastPlaybackProgressPositionMs) <
+        PlayerPageViewModel.PLAYBACK_PROGRESS_REPORT_INTERVAL_MS) {
+      return
+    }
+    this.lastPlaybackProgressPositionMs = positionMs
+    void this.playbackProvider.lifecycle.reportProgress(mediaSource, {
+      positionTicks: Math.floor(positionMs * Constants.TICKS_PER_MILLISECOND),
+      paused: paused,
+      muted: false
+    }).catch((error: Error): void => {
+      console.error(`[PlayerVM] reportPlaybackProgress failed: ${JSON.stringify(error)}`)
+    })
+  }
+
+  async reportPlaybackStop(): Promise<void> {
+    if (this.playbackStopTask) {
+      await this.playbackStopTask
+      return
+    }
+    const task = this.performPlaybackStop()
+    this.playbackStopTask = task
+    try {
+      await task
+    } finally {
+      if (this.playbackStopTask === task) {
+        this.playbackStopTask = undefined
+      }
+    }
+  }
+
+  private async performPlaybackStop(): Promise<void> {
+    const mediaSource = this.mediaSourceOrNull
     const currentPositionMs = this.getCurrentPlaybackPositionMs()
     const totalDurationTicks = mediaSource?.runTimeTicks ?? 0
     const totalDurationMs = totalDurationTicks > 0 ? Math.floor(totalDurationTicks / Constants.TICKS_PER_MILLISECOND) : 0
@@ -529,28 +553,23 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     }
     if (playSessionId.length > 0 && this.playbackStopReportedSessionId === playSessionId) {
       console.warn(`[PlayerVM] reportPlaybackStop skipped: session already reported, itemId=${mediaSource.itemId}, playSessionId=${playSessionId}`)
+      await this.closePlaybackTranscode(mediaSource)
       return
     }
-    let hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
-    let lastPositionTicks =
+    const hasFinished = this.ui.CONTROL_PlayStatus == PlayStatus.DONE
+    const lastPositionTicks =
       hasFinished ? mediaSource.runTimeTicks :
         currentPositionMs * Constants.TICKS_PER_MILLISECOND
     const reportedPositionMs = Math.floor(lastPositionTicks / Constants.TICKS_PER_MILLISECOND)
     const reportedPositionText = this.formatDuration(lastPositionTicks)
-    let playStateApi = getPlaystateApi(ApiClient.Instance())
     this.playbackStopInFlight = true
     console.info(
       `[PlayerVM] reportPlaybackStop request: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}, hasFinished=${hasFinished}, positionTicks=${lastPositionTicks}, positionMs=${reportedPositionMs}, position=${reportedPositionText}, totalDurationMs=${totalDurationMs}, totalDuration=${totalDurationText}, liveStreamId=${mediaSource.liveStreamId ?? 'none'}`
     )
     try {
-      await playStateApi.reportPlaybackStopped({
-        playbackStopInfo: {
-          ItemId: mediaSource.itemId,
-          PositionTicks: lastPositionTicks,
-          PlaySessionId: mediaSource.playSessionId,
-          LiveStreamId: mediaSource.liveStreamId,
-          Failed: false
-        }
+      await this.playbackProvider.lifecycle.reportStop(mediaSource, {
+        positionTicks: lastPositionTicks,
+        failed: false
       })
       console.info(
         `[PlayerVM] reportPlaybackStop success: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}, hasFinished=${hasFinished}, positionTicks=${lastPositionTicks}, positionMs=${reportedPositionMs}, position=${reportedPositionText}, totalDurationMs=${totalDurationMs}, totalDuration=${totalDurationText}`
@@ -558,11 +577,8 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
       if (playSessionId.length > 0) {
         this.playbackStopReportedSessionId = playSessionId
       }
-      // Mark video as watched if playback finished
       if (hasFinished) {
-        await playStateApi.markPlayedItem({
-          itemId: mediaSource.itemId
-        })
+        await this.playbackProvider.lifecycle.reportCompleted(mediaSource)
         console.info(`[PlayerVM] markPlayedItem success: itemId=${mediaSource.itemId}, playSessionId=${playSessionId}`)
       }
     } catch (error) {
@@ -570,102 +586,136 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     } finally {
       this.playbackStopInFlight = false
     }
-    // Stop active encoding if transcoding
-    this.stopTranscoding(mediaSource)
+    await this.closePlaybackTranscode(mediaSource)
   }
 
-  selectSubtitle(selectedSubtitleStream: MediaStream) {
-    getSubtitleApi(ApiClient.Instance()).getSubtitle({
-      routeItemId: this.initSource!.itemId,
-      routeMediaSourceId: this.initSource?.id,
-      routeIndex: selectedSubtitleStream.Index,
-      routeFormat: selectedSubtitleStream?.Codec
-    }).then((res: AxiosResponse<string, ArrayBuffer>) => {
-      let resText = buffer.from(res.data).toString()
-      this.ui.subtitles = this.subtitleManager.parse(resText, selectedSubtitleStream!.Codec!)
-    }).catch((e: BusinessError) => {
-      console.error(e.message)
-    })
+  private async closePlaybackTranscode(mediaSource: MediaPlaybackSource): Promise<void> {
+    try {
+      await this.playbackProvider.lifecycle.closeTranscode(mediaSource)
+    } catch (error) {
+      console.error(`[PlayerVM] closeTranscode failed: ${JSON.stringify(error)}`)
+    }
   }
 
-  getSubtitle(source: JellyfinMediaSource) {
+  async selectSubtitle(selectedSubtitleStream: MediaPlaybackStream): Promise<void> {
+    const source = this.initSource
+    const codec = selectedSubtitleStream.Codec
+    if (!source || !codec) {
+      return
+    }
+    try {
+      const text = await this.playbackProvider.loadSubtitle(source, selectedSubtitleStream)
+      this.ui.subtitles = this.subtitleManager.parse(text, codec)
+    } catch (error) {
+      console.error(`[PlayerVM] load subtitle failed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  async getSubtitle(source: MediaPlaybackSource): Promise<void> {
+    this.ui.currentSubtitle = ''
+    this.ui.subtitles = []
     if (this.isMpvEngine(source)) {
-      this.ui.currentSubtitle = ''
-      this.ui.subtitles = []
       return
     }
     if (source.usesServerTranscoding()) {
-      this.ui.currentSubtitle = ''
-      this.ui.subtitles = []
       return
     }
-    if (source.selectedSubtitleStream) {
-      getSubtitleApi(ApiClient.Instance()).getSubtitle({
-        routeItemId: source.itemId,
-        routeMediaSourceId: source.id,
-        routeIndex: source.selectedSubtitleStreamIndex,
-        routeFormat: source.selectedSubtitleStream.Codec
-      }).then((res: AxiosResponse<string, ArrayBuffer>) => {
-        let resText = buffer.from(res.data).toString()
-        this.ui.subtitles = this.subtitleManager.parse(resText, source.selectedSubtitleStream!.Codec!)
-      }).catch((e: BusinessError) => {
-        console.error(e.message)
-      })
+    const selectedSubtitle = source.selectedSubtitleStream
+    const codec = selectedSubtitle?.Codec
+    if (!selectedSubtitle || !codec) {
+      return
+    }
+    try {
+      const text = await this.playbackProvider.loadSubtitle(source, selectedSubtitle)
+      this.ui.subtitles = this.subtitleManager.parse(text, codec)
+    } catch (error) {
+      console.error(`[PlayerVM] load initial subtitle failed: ${JSON.stringify(error)}`)
     }
   }
 
   //获取播放列表信息
-  getItems() {
-      this.queueManager.getItems().then((res: AxiosResponse<BaseItemDtoQueryResult>) => {
-        let items = res.data.Items
-        if (this.queueManager.currentQueue.length > 0) {
-          let list: QueueItem[] = []
-          let sessionQueue: avSession.AVQueueItem[] = []
-          this.queueManager.currentQueue.forEach(e => {
-            let item = items?.find(i => i.Id == e)
-            if (!item) {
-              return
-            }
-            let queueItem: QueueItem = {
-              id: e,
-              playIndex: item?.IndexNumber ?? NaN,
-              name: item?.Name ?? '',
-              image: getItemImageUrl(item),
-              durationText: this.formatDuration(item?.RunTimeTicks),
-              played: item?.UserData?.Played ?? false
-            }
-            list.push(queueItem)
-            let image =
-              ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(item.SeriesId ?? item.Id)
-            let queueItemDescription: avSession.AVMediaDescription = {
-              assetId: item.Id!,
-              title: item.SeriesName ?? item.Name ?? "TITLE",
-              subtitle: item.SeriesName ? (item.Name ?? '') : '',
-              mediaImage: image,
-            };
-            let avQueueItem: avSession.AVQueueItem = {
-              itemId: item.IndexNumber!,
-              description: queueItemDescription
-            };
-            sessionQueue.push(avQueueItem)
-          })
-          this.ui.playList = list
-          avSessionManager.getSession()?.setAVQueueItems(sessionQueue)
-          this.ui.sessionQueue = sessionQueue
+  async getItems(): Promise<void> {
+    try {
+      const items = await this.queueManager.getItems()
+      if (this.queueManager.currentQueue.length === 0) {
+        return
+      }
+      const list: QueueItem[] = []
+      const sessionQueue: avSession.AVQueueItem[] = []
+      for (const item of items) {
+        const queueItem: QueueItem = {
+          id: item.ref.id,
+          playIndex: item.playIndex,
+          name: item.name,
+          image: item.image?.url || '',
+          imageRef: item.image,
+          durationText: this.formatDuration(item.durationTicks),
+          played: item.played
         }
-        this.ui.scroller.scrollToIndex(this.ui.playList.findIndex(e => e.id == this.ui.currentPlayId))
-      }).catch((e: BusinessError) => {
-
-      })
-
+        list.push(queueItem)
+        const description: avSession.AVMediaDescription = {
+          assetId: item.ref.identity,
+          title: item.seriesName || item.name || 'TITLE',
+          subtitle: item.seriesName ? item.name : ''
+        }
+        if (item.image && item.image.headers.length === 0) {
+          description.mediaImage = item.image.url
+        }
+        const avQueueItem: avSession.AVQueueItem = {
+          itemId: item.playIndex,
+          description: description
+        }
+        sessionQueue.push(avQueueItem)
+      }
+      this.ui.playList = list
+      avSessionManager.getSession()?.setAVQueueItems(sessionQueue)
+      this.ui.sessionQueue = sessionQueue
+      const currentIndex = this.ui.playList.findIndex((item: QueueItem): boolean =>
+        item.id === this.ui.currentPlayId)
+      if (currentIndex >= 0) {
+        this.ui.scroller.scrollToIndex(currentIndex)
+      }
+    } catch (error) {
+      console.error(`[PlayerVM] load queue items failed: ${JSON.stringify(error)}`)
+    }
   }
 
   cancelPendingPlayback(): void {
     this.queueManager.cancelPendingPlayback()
   }
 
-  release() {
+  async stopForScope(accountScope: string): Promise<void> {
+    if (accountScope !== this.playbackProvider.session.accountScope) {
+      return
+    }
     this.cancelPendingPlayback()
+    const stopTask = this.reportPlaybackStop()
+    emitter.emit(Constants.PLAYER_EVENT, {
+      data: {
+        'eventName': 'Stop'
+      }
+    })
+    await stopTask
+    this.clearPlaybackSnapshot()
+  }
+
+  private clearPlaybackSnapshot(): void {
+    this.cancelPendingPlayback()
+    this.ui.videoHeaders = []
+    this.ui.url = undefined
+    this.initSource = undefined
+    this.lastPlaybackProgressPositionMs = -1
+  }
+
+  release(): void {
+    if (this.scopedPlaybackRegistered) {
+      MediaProviderRegistry.instance().unregisterScopedPlayback(
+        this.playbackProvider.session.accountScope,
+        this
+      )
+      this.scopedPlaybackRegistered = false
+    }
+    this.clearPlaybackSnapshot()
     avSessionManager.unregisterSessionListener()
     //BackgroundTaskManager.stopContinuousTask(this.context);
   }
@@ -706,12 +756,12 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     return this.handlePlaybackRequestResult(result, '清晰度切换失败，已继续播放当前视频')
   }
 
-  async selectAudioTrack(stream: MediaStream): Promise<boolean> {
+  async selectAudioTrack(stream: MediaPlaybackStream): Promise<boolean> {
     const result = await this.trackSelectionHelper.selectAudioTrack(stream)
     return this.handlePlaybackRequestResult(result, '音轨切换失败，已继续播放当前视频')
   }
 
-  async selectSubtitleTrack(stream: MediaStream): Promise<boolean> {
+  async selectSubtitleTrack(stream: MediaPlaybackStream): Promise<boolean> {
     const result = await this.trackSelectionHelper.selectSubtitleTrack(stream)
     return this.handlePlaybackRequestResult(result, '字幕切换失败，已继续播放当前视频')
   }
@@ -798,24 +848,26 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     }
   };
   private reloadCasting = async () => {
-    let queueItem = this.ui.playList.find(e => e.id == this.ui.currentPlayId)
-    let image =
-      ApiClient.Instance().basePath + new ImageUrlsApi().getItemImageUrlById(queueItem?.id)
-    let avQueueItem: avSession.AVQueueItem = {
+    const queueItem = this.ui.playList.find((item: QueueItem): boolean => item.id == this.ui.currentPlayId)
+    if (!queueItem) {
+      return
+    }
+    const description: avSession.AVMediaDescription = {
+      assetId: queueItem.id,
+      title: (this.ui.mediaType == MediaPlaybackItemKind.Episode ? this.ui.seriesName : this.ui.title) ?? '',
+      subtitle: (this.ui.mediaType == MediaPlaybackItemKind.Episode ? this.ui.title : '') ?? '',
+      mediaUri: this.ui.url,
+      mediaType: 'VIDEO',
+      appName: Constants.APP_INFO_NAME,
+      startPosition: 0,
+      duration: this.getCurrentPlaybackDurationMs()
+    }
+    if (queueItem.imageRef && queueItem.imageRef.headers.length === 0) {
+      description.mediaImage = queueItem.imageRef.url
+    }
+    const avQueueItem: avSession.AVQueueItem = {
       itemId: queueItem!.playIndex,
-      description: {
-        assetId: queueItem!.id,
-        title: (this.ui.mediaType == BaseItemKind.Episode ? this.ui.seriesName : this.ui.title) ?? '',
-        subtitle: (this.ui.mediaType == BaseItemKind.Episode ? this.ui.title : '') ?? '',
-        mediaImage: image,
-        mediaUri: this.ui.url,
-        mediaType: 'VIDEO',
-        appName: Constants.APP_INFO_NAME,
-        //startPosition为投播当前进度，设置该字段可将本机播放进度同步到远端
-        startPosition: 0,
-        // 投播资源播放时长，设置该字段可将本机播放时长同步到远端显示
-        duration: this.getCurrentPlaybackDurationMs(),
-      }
+      description: description
     }
 
     try {
@@ -849,39 +901,54 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState>{
     return this.handlePlaybackRequestResult(result, '选集失败，已继续播放当前视频')
   }
 
+  private createAxiosHeaders(headers: MediaPlaybackRequestHeader[]): AxiosHeaders {
+    const result = new AxiosHeaders()
+    for (const header of headers) {
+      if (header.name.trim().length > 0) {
+        result.set(header.name, header.value)
+      }
+    }
+    return result
+  }
+
   async searchDanmuku() {
-    if (!PlayerPageViewModel.DANMAKU_ENABLED) {
+    const source = this.mediaSourceOrNull
+    if (!PlayerPageViewModel.DANMAKU_ENABLED || !source?.capabilities.danmakuAvailable) {
       this.ui.enableDanmu = false
       this.ui.danmuOpen = false
       return
     }
     let that = this
     //先从弹幕插件api获取
-    let id = this.mediaSourceOrNull!.itemId
-    try {
-      let urlRes: AxiosResponse<object> = await axios.get<object>(ApiClient.Instance().basePath + '/api/danmu/' + id)
-      let url = urlRes.data['url'] as string
-      if (url && url.length > 0) {
-        let xmlRes: AxiosResponse<string> = await axios.get<string>(url)
-        if (xmlRes.data.length > 0) {
-          let comments: CommentData[] = parseXmlToCommentData(xmlRes.data)
-          if (this.ui.danmuModel != null) {
-            let parser: BaseDanmakuParser = new DanDanPlayParser()
-            let jsonSource = new JSONSource(JSON.stringify(comments));
-            parser.load(jsonSource);
-            this.ui.danmuModel.prepare(parser, this.danmuContext);
-            this.ui.danmuModel.setCallback(new Call(that));
-            this.onPlayStateChanged()
-            return
+    const resource = source.danmakuResource
+    if (resource) {
+      try {
+        const urlRes: AxiosResponse<DanmakuUrlResponse> = await axios.get<DanmakuUrlResponse>(resource.url, {
+          headers: this.createAxiosHeaders(resource.headers)
+        })
+        const url = urlRes.data.url || ''
+        if (url.length > 0) {
+          const xmlRes: AxiosResponse<string> = await axios.get<string>(url)
+          if (xmlRes.data.length > 0) {
+            const comments: CommentData[] = parseXmlToCommentData(xmlRes.data)
+            if (this.ui.danmuModel != null) {
+              const parser: BaseDanmakuParser = new DanDanPlayParser()
+              const jsonSource = new JSONSource(JSON.stringify(comments));
+              parser.load(jsonSource);
+              this.ui.danmuModel.prepare(parser, this.danmuContext);
+              this.ui.danmuModel.setCallback(new Call(that));
+              this.onPlayStateChanged()
+              return
+            }
           }
         }
+      } catch (error) {
+        console.log(error)
       }
-    } catch (e) {
-      console.log(e)
     }
     //插件api没有的从弹弹PlayApi获取
-    let anime = encodeURIComponent(this.mediaSourceOrNull!.item.SeriesName!)
-    let episode = this.mediaSourceOrNull!.item.IndexNumber
+    const anime = encodeURIComponent(source.item.SeriesName || '')
+    const episode = source.item.IndexNumber
     axios.get<SearchBangumiResponse>(`${danDanPlayConfig.baseUrl}/search/episodes?anime=${anime}&episode=${episode}`,
       {
         headers: {

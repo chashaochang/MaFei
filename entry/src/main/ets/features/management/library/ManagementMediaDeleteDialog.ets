@@ -1,22 +1,50 @@
-import { deviceInfo } from '@kit.BasicServicesKit'
 import promptAction from '@ohos.promptAction'
-import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import { ThemeStyle } from '../../../entity/ThemeStyle'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy'
+import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import { HdsUiCapability } from '../../../theme/HdsUiCapability'
 import { ManagementMediaDeleteSummary } from './ManagementLibraryModels'
 
+interface ManagementMediaDeleteDialogOptions extends promptAction.ShowDialogOptions {
+  systemMaterial?: Object
+}
+
 export class ManagementMediaDeleteDialog {
+  private static materialDecision(): OverlayMaterialDecision {
+    return AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.Dangerous,
+      ThemeStyle.Feiniu,
+      HdsUiCapability.supportsSystemMaterial(),
+      false
+    )
+  }
+
   static show(context: UIContext, summary: ManagementMediaDeleteSummary,
     onConfirm: () => void, onCancel: () => void = () => {}): void {
-    const options: promptAction.ShowDialogOptions = {
-      title: $r('app.string.management_media_delete_title'),
-      message: ManagementMediaDeleteDialog.message(context, summary),
-      buttons: [
-        { text: $r('app.string.management_cancel'), color: $r('app.color.text_1') },
-        { text: $r('app.string.management_media_delete'), color: $r('app.color.main_red_color') }
-      ],
-      backgroundColor: deviceInfo.sdkApiVersion >= 26 ? Color.Transparent : undefined,
-      backgroundBlurStyle: deviceInfo.sdkApiVersion >= 26 ? BlurStyle.NONE : undefined,
-      systemMaterial: deviceInfo.sdkApiVersion >= 26 ?
-        AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating) : undefined
+    let options: ManagementMediaDeleteDialogOptions
+    if (ManagementMediaDeleteDialog.materialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+      options = {
+        title: $r('app.string.management_media_delete_title'),
+        message: ManagementMediaDeleteDialog.message(context, summary),
+        buttons: [
+          { text: $r('app.string.management_cancel'), color: $r('app.color.text_1') },
+          { text: $r('app.string.management_media_delete'), color: $r('app.color.main_red_color') }
+        ],
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    } else {
+      options = {
+        title: $r('app.string.management_media_delete_title'),
+        message: ManagementMediaDeleteDialog.message(context, summary),
+        buttons: [
+          { text: $r('app.string.management_cancel'), color: $r('app.color.text_1') },
+          { text: $r('app.string.management_media_delete'), color: $r('app.color.main_red_color') }
+        ]
+      }
     }
     context.getPromptAction().showDialog(options).then((response) => {
       if (response.index === 1) {

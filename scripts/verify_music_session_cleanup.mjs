@@ -63,6 +63,14 @@ function requireBefore(source, first, second, message) {
   }
 }
 
+function requireLastBefore(source, first, second, message) {
+  const firstIndex = source.lastIndexOf(first)
+  const secondIndex = source.lastIndexOf(second)
+  if (firstIndex < 0 || secondIndex < 0 || firstIndex >= secondIndex) {
+    throw new Error(message)
+  }
+}
+
 function countMatches(source, pattern) {
   return Array.from(source.matchAll(pattern)).length
 }
@@ -144,7 +152,13 @@ export function validateMusicSessionCleanup(sources) {
     'ConnectionViewModel must await setupUser')
 
   const mineLogout = methodBlock(mine, 'logout')
-  requireBefore(mineLogout, 'await this.apiClientController.logout()', 'this.appUIState.isLogin = false',
+  if (/logoutFeiniu/.test(mineLogout)) {
+    if (!/const\s+loggedOut\s*=\s*await\s+composition\.coordinator\s*\(\s*\)\.logoutFeiniu/.test(mineLogout) ||
+      !/if\s*\(\s*loggedOut\s*\)\s*\{[\s\S]*?this\.appUIState\.isLogin\s*=\s*false/.test(mineLogout)) {
+      throw new Error('MineViewModel must await Feiniu logout before changing login state')
+    }
+  }
+  requireLastBefore(mineLogout, 'await this.apiClientController.logout()', 'this.appUIState.isLogin = false',
     'MineViewModel must await logout before changing login state')
 
   requireAllAwaited(account, 'this.apiClientController.logout',
@@ -154,11 +168,23 @@ export function validateMusicSessionCleanup(sources) {
   requireAllAwaited(account, 'this.apiClientController.setupUser',
     'AccountViewModel must await setupUser')
   const changeAccount = methodBlock(account, 'changeAccount')
-  requireBefore(changeAccount, 'await this.apiClientController.logout()', 'HMRouterMgr.to',
-    'AccountViewModel must stop music before replacing account credentials')
-  const accountPasswordLogin = methodBlock(account, 'loginByPwd')
-  requireBefore(accountPasswordLogin, 'await this.apiClientController.setupUser', 'HMRouterMgr.to',
-    'AccountViewModel must finish account setup before replacing IndexPage')
+  if (/changeJellyfinAccount/.test(account)) {
+    requireBefore(changeAccount, 'await this.changeJellyfinAccount', 'this.navigateHome()',
+      'AccountViewModel must finish provider switching before replacing IndexPage')
+    const changeJellyfinAccount = methodBlock(account, 'changeJellyfinAccount')
+    requireBefore(changeJellyfinAccount, 'await this.apiClientController.logout()',
+      'await this.apiClientController.setupServer',
+      'AccountViewModel must stop music before replacing account credentials')
+    const accountPasswordLogin = methodBlock(account, 'loginByStoredPassword')
+    requireBefore(accountPasswordLogin, 'await this.apiClientController.setupUser', 'return true',
+      'AccountViewModel must finish account setup before accepting stored credentials')
+  } else {
+    requireBefore(changeAccount, 'await this.apiClientController.logout()', 'HMRouterMgr.to',
+      'AccountViewModel must stop music before replacing account credentials')
+    const accountPasswordLogin = methodBlock(account, 'loginByPwd')
+    requireBefore(accountPasswordLogin, 'await this.apiClientController.setupUser', 'HMRouterMgr.to',
+      'AccountViewModel must finish account setup before replacing IndexPage')
+  }
 
   requireAllAwaited(indexPage, 'this.apiClientController.logout',
     'IndexPage must await logout')
