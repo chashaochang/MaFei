@@ -671,8 +671,10 @@ export class FeiniuVideoApiClient {
 
   async getUserInfo(): Promise<FnMediaUserInfoResp> {
     if (this.upstreamAuthEnabled) {
-      return await UpstreamFnMediaApi.getUserInfo(
+      const response = await UpstreamFnMediaApi.getUserInfo(
         this.resolution.preferredBaseUrl) as FnMediaUserInfoResp
+      this.syncUpstreamSnapshot()
+      return response
     }
     return await this.request<FnMediaUserInfoResp>(new FeiniuVideoApiRequest(
       '/v/api/v1/user/info',

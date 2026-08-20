@@ -421,6 +421,7 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
       originalAddress
     )
     UpstreamSessionStore.saveConnectionRoute(this.upstreamRoute(resolution.preferredRoute))
+    UpstreamFnMediaAuthStore.clearSession()
     if (credentials.token.length > 0) {
       UpstreamFnMediaAuthStore.saveToken(credentials.token)
     }

@@ -232,3 +232,16 @@ test('rejects removal of queue-index rollback on load failure', () => {
   )
   assert.throws(() => validatePlayerApiCompatContracts(fixture), /must restore the queue index/)
 })
+
+test('rejects invalid nested player state monitors', () => {
+  const fixture = workspaceFixture()
+  fixture.playerPageSource = requireMutation(
+    fixture.playerPageSource,
+    fixture.playerPageSource.replace(
+      '  private handleMediaSourceApplied(mediaSource: MediaPlaybackSource): void {',
+      "  @Monitor('vm.queueManager.currentMediaSourceOrNull')\n" +
+        '  private handleMediaSourceApplied(mediaSource: MediaPlaybackSource): void {'
+    )
+  )
+  assert.throws(() => validatePlayerApiCompatContracts(fixture), /must not use invalid nested monitor/)
+})

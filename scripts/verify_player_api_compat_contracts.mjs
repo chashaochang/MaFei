@@ -439,6 +439,33 @@ function validateViewModelPlaybackActions(playerViewModelSource) {
   }
 }
 
+function validatePlayerStateSynchronization(playerPageSource, playerViewModelSource) {
+  const invalidMonitors = [
+    "@Monitor('vm.queueManager.currentMediaSourceOrNull')",
+    "@Monitor('mediaSourceOrNull')",
+    "@Monitor('mediaSourceOrNull._selectedAudioStream')",
+    "@Monitor('mediaSourceOrNull._selectedSubtitleStream')",
+    "@Monitor('uiState.CONTROL_PlayStatus')"
+  ]
+  for (const monitor of invalidMonitors) {
+    requireValue(
+      !playerPageSource.includes(monitor) && !playerViewModelSource.includes(monitor),
+      `player state synchronization must not use invalid nested monitor ${monitor}`
+    )
+  }
+
+  requireValue(playerViewModelSource.includes('this.syncMediaSourceState(source)'),
+    'PlayerPageViewModel.load must synchronize the resolved media source explicitly')
+  requireValue(playerViewModelSource.includes('this.mediaSourceAppliedCallback?.(source)'),
+    'PlayerPageViewModel.load must notify the page after applying the media source')
+
+  const aboutToAppearSource = extractMethod(playerPageSource, 'aboutToAppear')
+  const callbackIndex = aboutToAppearSource.indexOf('this.vm.setMediaSourceAppliedCallback(')
+  const initializeIndex = aboutToAppearSource.indexOf('this.initializePlayback()')
+  requireValue(callbackIndex >= 0 && initializeIndex > callbackIndex,
+    'PlayerPage must register media-source callbacks before playback initialization')
+}
+
 export function validatePlayerApiCompatContracts(sources) {
   validatePlayerDestination(sources.playerPageSource)
   validateMaterialBuilders(sources.avPlayerSource, 'AVPlayerView')
@@ -463,6 +490,7 @@ export function validatePlayerApiCompatContracts(sources) {
   )
   validateQueueIndexTransaction(sources.queueManagerSource)
   validateViewModelPlaybackActions(sources.playerViewModelSource)
+  validatePlayerStateSynchronization(sources.playerPageSource, sources.playerViewModelSource)
 }
 
 export function defaultWorkspaceRoot() {

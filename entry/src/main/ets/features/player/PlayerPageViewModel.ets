@@ -68,6 +68,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   private playbackStopReportedSessionId?: string
   private lastPlaybackProgressPositionMs: number = -1
   private scopedPlaybackRegistered: boolean = false
+  private mediaSourceAppliedCallback?: (source: MediaPlaybackSource) => void
 
   constructor(ui: PlayerPageUIState,
     playbackProvider: MediaPlaybackProvider = currentMediaPlaybackProvider()) {
@@ -279,52 +280,42 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
     }
   }
 
-  @Monitor('mediaSourceOrNull')
-  onMediaSourceChanged() {
-    let source = this.mediaSourceOrNull
-    if (source) {
-      const engineDecision = this.getResolvedPlayerEngineDecision(source)
-      this.ui.effectivePlayerEngine = engineDecision.engineType
-      this.ui.effectivePlayerEngineReason = engineDecision.reason
-      this.ui.forceMpvHardwareDecode = engineDecision.forceMpvHardwareDecode
-      this.ui.forceMpvSoftwareDecode = engineDecision.forceMpvSoftwareDecode
-      console.warn(`[PlayerVM] source changed configuredEngine=${this.getConfiguredEngineType()}, resolvedEngine=${engineDecision.engineType}, reason=${engineDecision.reason}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, videoRange=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}, hdrStrategy=${source.getVideoHdrStrategyLabel()}`)
-      this.ui.audioTrackIndex = source.audioStreamIndex
-      this.ui.title = source.name
-      this.ui.seriesName = source.item.SeriesName
-      this.ui.audioStreams = source.audioStreams
-      this.ui.subtitleStreams = source.subtitleStreams
-      this.ui.selectedAudioStream = source.selectedAudioStream
-      this.ui.selectedSubtitleStream = source.selectedSubtitleStream
-      let videoStream = source.selectedVideoStream
-      let height = videoStream?.Height
-      let width = videoStream?.Width
-      if (height != null && width != null) {
-        this.ui.qualityOptions = qualityOptionsProvider.getApplicableQualityOptions(width, height)
-      } else {
-        //qualityButton.isVisible = false
-      }
-      this.ui.enableDanmu = false
-      this.ui.danmuOpen = false
-      // 弹幕功能暂不上线，先注释自动搜索。
-      // if (!this.isMpvEngine(source)) {
-      //   this.searchDanmuku()
-      // }
-      if (PlayerPageViewModel.DANMAKU_ENABLED && !this.isMpvEngine(source)) {
-        this.searchDanmuku()
-      }
+  syncMediaSourceState(source: MediaPlaybackSource): void {
+    const engineDecision = this.getResolvedPlayerEngineDecision(source)
+    this.ui.effectivePlayerEngine = engineDecision.engineType
+    this.ui.effectivePlayerEngineReason = engineDecision.reason
+    this.ui.forceMpvHardwareDecode = engineDecision.forceMpvHardwareDecode
+    this.ui.forceMpvSoftwareDecode = engineDecision.forceMpvSoftwareDecode
+    console.warn(`[PlayerVM] source changed configuredEngine=${this.getConfiguredEngineType()}, resolvedEngine=${engineDecision.engineType}, reason=${engineDecision.reason}, subtitleCount=${source.subtitleStreams.length}, selectedSubtitle=${source.selectedSubtitleStream?.Index ?? 'none'}, defaultSubtitle=${source.sourceInfo.DefaultSubtitleStreamIndex ?? 'null'}, videoRange=${source.selectedVideoRangeType}, dvProfile=${source.selectedVideoDvProfile ?? 'none'}, hdrStrategy=${source.getVideoHdrStrategyLabel()}`)
+    this.ui.audioTrackIndex = source.audioStreamIndex
+    this.ui.title = source.name
+    this.ui.seriesName = source.item.SeriesName
+    this.ui.audioStreams = source.audioStreams
+    this.ui.subtitleStreams = source.subtitleStreams
+    this.ui.selectedAudioStream = source.selectedAudioStream
+    this.ui.selectedSubtitleStream = source.selectedSubtitleStream
+    let videoStream = source.selectedVideoStream
+    let height = videoStream?.Height
+    let width = videoStream?.Width
+    if (height != null && width != null) {
+      this.ui.qualityOptions = qualityOptionsProvider.getApplicableQualityOptions(width, height)
+    } else {
+      //qualityButton.isVisible = false
+    }
+    this.ui.enableDanmu = false
+    this.ui.danmuOpen = false
+    // 弹幕功能暂不上线，先注释自动搜索。
+    // if (!this.isMpvEngine(source)) {
+    //   this.searchDanmuku()
+    // }
+    if (PlayerPageViewModel.DANMAKU_ENABLED && !this.isMpvEngine(source)) {
+      this.searchDanmuku()
     }
     this.syncContentReportState()
   }
 
-  @Monitor('mediaSourceOrNull._selectedAudioStream')
-  onSelectedAudioStreamChanged() {
-    this.ui.selectedAudioStream = this.mediaSourceOrNull?._selectedAudioStream
-  }
-
-  @Monitor('mediaSourceOrNull._selectedSubtitleStream')
-  onSelectedSubtitleStreamChanged() {
-    this.ui.selectedSubtitleStream = this.mediaSourceOrNull?._selectedSubtitleStream
+  setMediaSourceAppliedCallback(callback?: (source: MediaPlaybackSource) => void): void {
+    this.mediaSourceAppliedCallback = callback
   }
 
   async initAVSession() {
@@ -444,7 +435,6 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
     }
   };
 
-  @Monitor('uiState.CONTROL_PlayStatus')
   async onPlayStateChanged() {
     if (this.ui.CONTROL_PlayStatus == PlayStatus.INIT) {
 
@@ -461,6 +451,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   initSource?: MediaPlaybackSource
 
   load(source: MediaPlaybackSource, streams: MediaPlaybackPreparedStreams, playWhenReady: boolean) {
+    this.syncMediaSourceState(source)
     this.initSource = source
     this.playbackStopInFlight = false
     this.playbackStopReportedSessionId = undefined
@@ -488,6 +479,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
     for (const subtitle of streams.externalSubtitles) {
       console.log(`外挂字幕:${subtitle.deliveryUrl}`)
     }
+    this.mediaSourceAppliedCallback?.(source)
   }
 
   reportPlaybackStart(mediaSource: MediaPlaybackSource): void {

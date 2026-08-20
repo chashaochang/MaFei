@@ -6,7 +6,7 @@ import { AppStorageV2, display, window } from "@kit.ArkUI"
 import { Constants } from "../../utils/Constants"
 import { common } from "@kit.AbilityKit"
 import { emitter } from "@kit.BasicServicesKit"
-import { MediaPlaybackStream } from "../../media/playback/MediaPlaybackModels"
+import { MediaPlaybackSource, MediaPlaybackStream } from "../../media/playback/MediaPlaybackModels"
 import { QualityOption } from "../../player/qualityoptions/QualityOption"
 import { avSession } from "@kit.AVSessionKit"
 import { MediaStreamUtil } from "../../utils/MediaStreamUtil"
@@ -66,12 +66,7 @@ export struct PlayerPage {
   //   this.aboutToAppear()
   // }
 
-  @Monitor('vm.queueManager.currentMediaSourceOrNull')
-  onMediaSourceChanged() {
-    if (!this.vm.queueManager.currentMediaSourceOrNull) {
-      return
-    }
-    let mediaSource = this.vm.queueManager.currentMediaSourceOrNull!
+  private handleMediaSourceApplied(mediaSource: MediaPlaybackSource): void {
     if (MediaStreamUtil.isLandscape(mediaSource.selectedVideoStream)) {
       // For portrait videos, immediately enable fullscreen
       this.playerFullscreenHelper.enableFullscreen()
@@ -143,10 +138,14 @@ export struct PlayerPage {
     })
     // Create playback menus
     this.vm.ui.playerMenus = new PlayerMenus() //(this, playerBinding, playerControlsBinding)
+    this.vm.setMediaSourceAppliedCallback((source: MediaPlaybackSource): void => {
+      this.handleMediaSourceApplied(source)
+    })
     this.initializePlayback()
   }
 
   aboutToDisappear() {
+    this.vm.setMediaSourceAppliedCallback(undefined)
     this.restorePlayerWindowState()
     this.vm.reportPlaybackStop()
     emitter.off(Constants.PLAYER_PAGE_EVENT.eventId)
