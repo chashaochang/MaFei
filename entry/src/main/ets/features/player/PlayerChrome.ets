@@ -40,6 +40,14 @@ const PLAYER_MENU_TEXT_COLOR: string = '#E6FFFFFF'
 const PLAYER_MENU_SECONDARY_TEXT_COLOR: string = '#99FFFFFF'
 const PLAYER_MENU_DIVIDER_COLOR: string = '#24FFFFFF'
 const PLAYER_MENU_CELL_COLOR: string = '#26000000'
+
+@Builder
+function PlayerCastPickerIcon() {
+  Image($r('app.media.ic_cast_player'))
+    .width(22)
+    .height(22)
+    .objectFit(ImageFit.Contain)
+}
 const PLAYER_MENU_SELECTED_CELL_COLOR: string = '#3DFFFFFF'
 const PLAYER_MENU_GRADIENT_MIDDLE_COLOR: string = '#8A000000'
 const PLAYER_MENU_GRADIENT_END_COLOR: string = '#DC000000'
@@ -1457,13 +1465,11 @@ export struct PlayerChrome {
                   this.onPictureInPicture()
                 }
               })
-              // AVCastPicker 是系统自绘控件。不要在它本身叠加材质、内边距或按投屏状态显隐，
-              // 否则它在系统状态更新时会重建图标，短暂显示为空按钮。
+              // 使用固定的自定义图标承载系统投屏选择器，避免系统图标在设备状态更新时短暂闪空。
               Stack({ alignContent: Alignment.Center }) {
                 AVCastPicker({
-                  normalColor: Color.White,
-                  activeColor: Color.White,
-                  sessionType: 'video'
+                  sessionType: 'video',
+                  customPicker: PlayerCastPickerIcon
                 })
                   .width(24)
                   .height(24)
