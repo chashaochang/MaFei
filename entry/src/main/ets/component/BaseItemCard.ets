@@ -33,6 +33,18 @@ export struct BaseItemCard {
     return this.item.subtitle
   }
 
+  private titleColor(): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+      $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private subtitleColor(): ResourceColor {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) ?
+      $r('sys.color.font_secondary') : Color.Gray
+  }
+
   build() {
     Column() {
       RelativeContainer() {
@@ -119,7 +131,7 @@ export struct BaseItemCard {
       .clip(true)
 
       Text(this.item.title)
-        .fontColor($r('app.color.text_primary'))
+        .fontColor(this.titleColor())
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .width('100%')
@@ -133,7 +145,7 @@ export struct BaseItemCard {
         })
         .textAlign(this.textAlign)
       Text(this.subtitle())
-        .fontColor(Color.Gray)
+        .fontColor(this.subtitleColor())
         .fontSize(12)
         .width('100%')
         .maxLines(1)

@@ -66,6 +66,17 @@ export struct FavoriteListPage {
     .width('100%')
   }
 
+  @Builder
+  private loadingGridContent() {
+    Column() {
+      Blank().height(this.ownedContentTopInset())
+      SkeletonGridView()
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .layoutWeight(1)
+  }
+
   aboutToAppear(): void {
     this.vm.refresh()
   }
@@ -143,55 +154,56 @@ export struct FavoriteListPage {
         this.sortRow(false)
       }
 
-      GridView({
-        lazyDataSource: this.vm.dataSource,
-        onLazyDataSource: (dataSource) => {
-          this.vm.dataSource = dataSource
-        },
-        showEmptyLayout: this.ui.totalCount === '0',
-        emptyLayout: () => this.emptyLayout(),
-        itemLayout: (item, index) => this.itemLayout(item, index),
-        itemHeaderLayout: nativeSurface ? () => this.nativeGridHeader() : undefined,
-        controller: this.vm.controller,
-        scroller: this.contentScroller,
-        onRefresh: () => {
-          this.vm.refresh()
-        },
-        onLoadMore: () => {
-          this.vm.loadMore()
-        },
-        gridAttribute: (attr) => {
-          attr.scrollBar = BarState.Off
-          switch (this.vm.appUIState.currentBreakpoint) {
-            case BreakpointTypeEnum.XS:
-              attr.columnsTemplate = '1fr '.repeat(2)
-              break
-            case BreakpointTypeEnum.SM:
-              attr.columnsTemplate = '1fr '.repeat(3)
-              break
-            case BreakpointTypeEnum.MD:
-              attr.columnsTemplate = '1fr '.repeat(4)
-              break
-            case BreakpointTypeEnum.LG:
-              attr.columnsTemplate = '1fr '.repeat(6)
-              break
-            case BreakpointTypeEnum.XL:
-              attr.columnsTemplate = '1fr '.repeat(8)
-              break
-            case BreakpointTypeEnum.XXL:
-              attr.columnsTemplate = '1fr '.repeat(12)
-              break
-            default:
-              attr.columnsTemplate = '1fr '.repeat(3)
-              break
-          }
-          attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
-        },
-        lazyCachedCount: 10
-      }).width('100%')
-        .layoutWeight(1)
       if (this.ui.pageState == PageState.Loading) {
-        SkeletonGridView()
+        this.loadingGridContent()
+      } else {
+        GridView({
+          lazyDataSource: this.vm.dataSource,
+          onLazyDataSource: (dataSource) => {
+            this.vm.dataSource = dataSource
+          },
+          showEmptyLayout: this.ui.totalCount === '0',
+          emptyLayout: () => this.emptyLayout(),
+          itemLayout: (item, index) => this.itemLayout(item, index),
+          itemHeaderLayout: nativeSurface ? () => this.nativeGridHeader() : undefined,
+          controller: this.vm.controller,
+          scroller: this.contentScroller,
+          onRefresh: () => {
+            this.vm.refresh()
+          },
+          onLoadMore: () => {
+            this.vm.loadMore()
+          },
+          gridAttribute: (attr) => {
+            attr.scrollBar = BarState.Off
+            switch (this.vm.appUIState.currentBreakpoint) {
+              case BreakpointTypeEnum.XS:
+                attr.columnsTemplate = '1fr '.repeat(2)
+                break
+              case BreakpointTypeEnum.SM:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+              case BreakpointTypeEnum.MD:
+                attr.columnsTemplate = '1fr '.repeat(4)
+                break
+              case BreakpointTypeEnum.LG:
+                attr.columnsTemplate = '1fr '.repeat(6)
+                break
+              case BreakpointTypeEnum.XL:
+                attr.columnsTemplate = '1fr '.repeat(8)
+                break
+              case BreakpointTypeEnum.XXL:
+                attr.columnsTemplate = '1fr '.repeat(12)
+                break
+              default:
+                attr.columnsTemplate = '1fr '.repeat(3)
+                break
+            }
+            attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
+          },
+          lazyCachedCount: 10
+        }).width('100%')
+          .layoutWeight(1)
       }
       if (this.ui.pageState == PageState.Error) {
         FailedView().onClick(() => {

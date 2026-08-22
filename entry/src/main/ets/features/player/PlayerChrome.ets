@@ -24,7 +24,6 @@ import { PlayerMenus } from '../../player/ui/PlayerMenus'
 
 const PLAYER_AUTO_HIDE_DELAY_MS: number = 4000
 const PLAYER_CLOCK_INTERVAL_MS: number = 30000
-const PLAYER_SEEK_STEP_MS: number = 10000
 const PLAYER_LONG_PRESS_SPEED: number = 3
 const PLAYER_MIN_BRIGHTNESS: number = 0.05
 const PLAYER_CONTROL_MASK_COLOR: string = '#3D000000'
@@ -43,11 +42,10 @@ const PLAYER_MENU_CELL_COLOR: string = '#26000000'
 
 @Builder
 function PlayerCastPickerIcon() {
-  Image($r('sys.media.ohos_ic_public_cast_stream'))
-    .width(22)
-    .height(22)
-    .objectFit(ImageFit.Contain)
-    .fillColor(Color.White)
+  SymbolGlyph($r('sys.symbol.wireless_projection'))
+    .fontSize(22)
+    .fontColor([Color.White])
+    .renderingStrategy(SymbolRenderingStrategy.SINGLE)
 }
 const PLAYER_MENU_SELECTED_CELL_COLOR: string = '#3DFFFFFF'
 const PLAYER_MENU_GRADIENT_MIDDLE_COLOR: string = '#8A000000'
@@ -640,21 +638,6 @@ export struct PlayerChrome {
     this.sliderPositionMs = target
   }
 
-  private seekBy(deltaMs: number): void {
-    if (this.durationMs <= 0) {
-      return
-    }
-    this.seekTo(this.positionMs + deltaMs)
-    this.feedback = PlayerGestureFeedback.Seek
-    this.feedbackProgress = this.sliderPositionMs / this.durationMs
-    this.feedbackValue = `${this.formatTime(this.sliderPositionMs)} / ${this.formatTime(this.durationMs)}`
-    setTimeout((): void => {
-      if (this.feedback === PlayerGestureFeedback.Seek) {
-        this.feedback = PlayerGestureFeedback.None
-      }
-    }, 650)
-  }
-
   private onSliderChanged(value: number, mode: SliderChangeMode): void {
     this.sliderPositionMs = value
     if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
@@ -671,18 +654,11 @@ export struct PlayerChrome {
     this.showControlsTemporarily()
   }
 
-  private onDoubleTap(event: GestureEvent | undefined): void {
-    if (this.locked || !event?.fingerList?.[0]) {
+  private onDoubleTap(): void {
+    if (this.locked) {
       return
     }
-    const x = event.fingerList[0].localX
-    if (x < this.widthVp * 0.38) {
-      this.seekBy(-PLAYER_SEEK_STEP_MS)
-    } else if (x > this.widthVp * 0.62) {
-      this.seekBy(PLAYER_SEEK_STEP_MS)
-    } else {
-      this.togglePlayback()
-    }
+    this.togglePlayback()
   }
 
   private onHorizontalStart(event: GestureEvent | undefined): void {
@@ -1341,7 +1317,7 @@ export struct PlayerChrome {
         .width('100%')
         .height('100%')
         .gesture(GestureGroup(GestureMode.Exclusive,
-          TapGesture({ count: 2 }).onAction((event: GestureEvent | undefined): void => this.onDoubleTap(event)),
+          TapGesture({ count: 2 }).onAction((): void => this.onDoubleTap()),
           TapGesture({ count: 1 }).onAction((): void => this.toggleControls()),
           PanGesture(this.verticalGesture)
             .onActionStart((event: GestureEvent | undefined): void => this.onVerticalStart(event))

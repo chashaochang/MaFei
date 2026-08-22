@@ -59,7 +59,7 @@ export struct CastDetailPage {
 
   private personImageOption(): ImageKnifeOption {
     const option = createMediaImageKnifeOption(this.ui.imageRef, this.ui.image)
-    option.objectFit = ImageFit.Fill
+    option.objectFit = ImageFit.Cover
     option.border = {
       width: AppThemeSurfaceResolver.outlineWidth(
         this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
@@ -68,6 +68,11 @@ export struct CastDetailPage {
         this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
     }
     return option
+  }
+
+  private shouldShowSortName(): boolean {
+    return this.ui.sortName.length > 0 &&
+      (!this.useNativeSurface() || this.ui.sortName !== this.ui.name)
   }
 
   private openMedia(item: MediaSummary): void {
@@ -192,7 +197,9 @@ export struct CastDetailPage {
               Blank().layoutWeight(1)
               Text(this.ui.name).fontColor(this.primaryTextColor()).fontWeight(FontWeight.Medium).fontSize(28)
               Blank()
-              Text(this.ui.sortName).fontColor(this.primaryTextColor()).fontSize(14)
+              if (this.shouldShowSortName()) {
+                Text(this.ui.sortName).fontColor(this.primaryTextColor()).fontSize(14)
+              }
               if (this.ui.overview.length > 0) {
                 Blank().height(10)
                 this.overviewSheetTrigger()
@@ -253,13 +260,13 @@ export struct CastDetailPage {
           .height(200)
           .alignContent(Alignment.Top)
         }
-        if(this.ui.movieCount > 0){
+        if(this.ui.movies.length > 0){
           ListItem(){
             Column() {
               Text('电影')
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
+                .fontColor(this.primaryTextColor())
                 .margin({ left: 16 })
               List({ space: 8 }) {
                 ListItem().width(8)
@@ -285,13 +292,13 @@ export struct CastDetailPage {
             .alignItems(HorizontalAlign.Start)
           }
         }
-        if (this.ui.seriesCount > 0) {
+        if (this.ui.series.length > 0) {
           ListItem(){
             Column() {
               Text('电视剧')
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
+                .fontColor(this.primaryTextColor())
                 .margin({ left: 16 })
               List({ space: 8 }) {
                 ListItem().width(8)
@@ -317,13 +324,13 @@ export struct CastDetailPage {
             .alignItems(HorizontalAlign.Start)
           }
         }
-        if(this.ui.episodeCount > 0){
+        if(this.ui.episodes.length > 0){
           ListItem() {
             Column() {
               Text('剧集')
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
+                .fontColor(this.primaryTextColor())
                 .margin({ left: 16 })
               List({ space: 8 }) {
                 ListItem().width(8)

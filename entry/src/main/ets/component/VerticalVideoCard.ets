@@ -20,6 +20,9 @@ export struct VerticalVideoCard {
   @Param name: string = ''
   //副标题
   @Param subtitle: string = ''
+  //评分与清晰度标签
+  @Param score?: number = undefined
+  @Param tags: string[] = []
   //第几个卡片
   @Param index?: number = 0
   @Local pointLightColor: string = '#FFFFFF'
@@ -72,24 +75,72 @@ export struct VerticalVideoCard {
 
   build() {
     Column({ space: 8 }) {
-      ImageKnifeComponent({
-          imageKnifeOption: this.imageOption()
-      })
+      RelativeContainer() {
+        ImageKnifeComponent({
+            imageKnifeOption: this.imageOption()
+        })
+          .width('100%')
+          .height('100%')
+          .borderColor(AppThemeSurfaceResolver.mediaOutline(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+          .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 0.5))
+          .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
+          .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
+            this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+          .visualEffect(FeiniuPointLightModifier.build({
+            enabled: this.appUIState.feiniuPointLightEnabled && this.index === 0,
+            color: this.pointLightColor,
+            intensity: 2,
+            height: VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint)
+          }))
+        if (this.score) {
+          Text(this.score.toFixed(1))
+            .fontSize(11)
+            .fontColor(Color.Yellow)
+            .fontWeight(FontWeight.Medium)
+            .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+            .alignRules({
+              top: { anchor: '__container__', align: VerticalAlign.Top },
+              left: { anchor: '__container__', align: HorizontalAlign.Start }
+            })
+            .margin(4)
+            .backgroundColor(0x60000000)
+            .borderRadius(4)
+        }
+        if (this.tags.length > 0) {
+          Row({ space: 4 }) {
+            ForEach(this.tags, (tag: string) => {
+              if (tag === '4K') {
+                Image($r('app.media.4K'))
+                  .height(20)
+                  .width(28)
+                  .opacity(0.7)
+                  .objectFit(ImageFit.Fill)
+              } else {
+                Text(tag)
+                  .fontSize(9)
+                  .fontColor(Color.White)
+                  .fontWeight(FontWeight.Medium)
+                  .padding({ top: 1, bottom: 1, left: 2, right: 2 })
+                  .borderWidth(1)
+                  .borderColor(Color.White)
+                  .borderRadius(3)
+                  .margin(3)
+              }
+            })
+          }
+          .alignRules({
+            bottom: { anchor: '__container__', align: VerticalAlign.Bottom },
+            right: { anchor: '__container__', align: HorizontalAlign.End }
+          })
+          .margin(4)
+        }
+      }
         .width(VERTICAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
         .height(VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
-        .borderColor(AppThemeSurfaceResolver.mediaOutline(
-          this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
-        .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-          this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 0.5))
         .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
-        .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
-          this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
-        .visualEffect(FeiniuPointLightModifier.build({
-          enabled: this.appUIState.feiniuPointLightEnabled && this.index === 0,
-          color: this.pointLightColor,
-          intensity: 2,
-          height: VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint)
-        }))
+        .clip(true)
       Text(this.name)
         .fontColor($r('app.color.text_primary'))
         .fontSize(14)

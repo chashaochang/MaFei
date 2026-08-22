@@ -66,6 +66,8 @@ export struct HomeLatestMediaSection {
               imageRef: item.imageRef,
               name: item.name,
               subtitle: item.subtitle,
+              score: item.score,
+              tags: item.tags || [],
               index: index
             })
           }

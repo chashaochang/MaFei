@@ -220,6 +220,24 @@ export struct MediaTab {
     }
   }
 
+  @Builder
+  private loadingContent() {
+    Column() {
+      Blank().height(this.contentTopSpacer())
+      Column() {
+        LoadingProgress()
+          .width(42)
+          .height(42)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
   build() {
     Stack() {
       if (this.ui.pageState === PageState.Content) {
@@ -271,10 +289,7 @@ export struct MediaTab {
         })
       }
       if (this.ui.pageState === PageState.Loading) {
-        LoadingProgress()
-          .width(42)
-          .height(42)
-          .align(Alignment.Center)
+        this.loadingContent()
       }
       if (this.ui.pageState === PageState.Error) {
         FailedView()
