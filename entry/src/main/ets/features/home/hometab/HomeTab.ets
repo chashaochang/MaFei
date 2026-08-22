@@ -34,10 +34,12 @@ const HOME_HERO_SPRING_DURATION: number = 250
 const HOME_HERO_REFRESH_THRESHOLD: number = 64
 const HOME_LIBRARY_HEADER_EXTRA_MENU_GAP: number = 12
 const HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET: number = 3
+const HOME_LIBRARY_INLINE_CHIP_ALIGNMENT_OFFSET: number = 4
 const HOME_LIBRARY_SEARCH_MENU_WIDTH: number = 56
 const HOME_LIBRARY_LIVE_MENU_WIDTH: number = 104
 const HOME_LIBRARY_SEARCH_BUTTON_SIZE: number = 40
 const HOME_LIBRARY_SEARCH_ICON_SIZE: number = 24
+const HOME_LIBRARY_INLINE_HEADER_HEIGHT: number = 64
 
 @ComponentV2
 export struct HomeTab {
@@ -89,6 +91,9 @@ export struct HomeTab {
   }
 
   private heroSegmentProgress(index: number): number {
+    if (index < this.heroIndex) {
+      return 100
+    }
     return index === this.heroIndex ? this.heroProgress : 0
   }
 
@@ -193,7 +198,15 @@ export struct HomeTab {
     if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
       return 0
     }
-    return Math.max(0, this.vm.appUIState.safeTop)
+    return this.latestChipStripPinned ? Math.max(0, this.vm.appUIState.safeTop) : 0
+  }
+
+  private latestMediaHeaderHeight(): number {
+    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+      return UIConstants.ACTION_BAR_HEIGHT
+    }
+    return this.latestChipStripPinned ?
+      UIConstants.ACTION_BAR_HEIGHT + this.latestMediaHeaderTopInset() : HOME_LIBRARY_INLINE_HEADER_HEIGHT
   }
 
   private latestMediaHeaderMenuInset(): number {
@@ -210,8 +223,11 @@ export struct HomeTab {
   }
 
   private latestMediaChipAlignmentOffset(): number {
-    return this.latestChipStripPinned && this.useNativeSurface() ?
-      HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : 0
+    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+      return 0
+    }
+    return this.latestChipStripPinned ?
+      HOME_LIBRARY_HEADER_ALIGNMENT_OFFSET : HOME_LIBRARY_INLINE_CHIP_ALIGNMENT_OFFSET
   }
 
   private updateLatestChipStripPinned(pinned: boolean): void {
@@ -382,7 +398,7 @@ export struct HomeTab {
       }
     }
     .width('100%')
-    .height(UIConstants.ACTION_BAR_HEIGHT + this.latestMediaHeaderTopInset())
+    .height(this.latestMediaHeaderHeight())
     .padding({
       left: this.latestMediaHeaderSidePadding(),
       right: this.latestMediaHeaderMenuInset(),
@@ -713,34 +729,6 @@ export struct HomeTab {
   }
 
   @Builder
-  private nativeHeroDetailsButton(item: VideoItem) {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 4 }) {
-        Text('详情')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(15)
-          .fontColor([Color.White])
-      }
-      .justifyContent(FlexAlign.Center)
-    }
-    .width(92)
-    .height(44)
-    .borderRadius(22)
-    .buttonStyle(ButtonStyleMode.TEXTUAL)
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.InteractiveFloating,
-      this.useNativeSurface(),
-      this.vm.appUIState.systemMaterialAvailable
-    ))
-    .onClick(() => {
-      this.openHeroDetails(item)
-    })
-  }
-
-  @Builder
   private nativeHomeHeroReadabilityScrim() {
     Column()
       .width('100%')
@@ -805,42 +793,21 @@ export struct HomeTab {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
 
-        Row({ space: 10 }) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            Row({ space: 7 }) {
-              SymbolGlyph($r('sys.symbol.play_fill'))
-                .fontSize(18)
-                .fontColor([Color.Black])
-              Text('播放')
-                .fontSize(15)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(Color.Black)
-            }
-            .justifyContent(FlexAlign.Center)
-          }
-          .width(148)
-          .height(44)
-          .borderRadius(22)
-          .backgroundColor(Color.White)
-          .onClick(() => {
-            this.playItem(item)
-          })
-
-          this.nativeHeroDetailsButton(item)
-        }
-        .width('100%')
       }
       .width('100%')
       .padding({
         left: 16,
         right: 16,
-        bottom: 64
+        bottom: 44
       })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
+    .onClick((): void => {
+      this.openHeroDetails(item)
+    })
   }
 
   @Builder
