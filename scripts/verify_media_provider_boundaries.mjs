@@ -51,8 +51,6 @@ const playerPaths = Object.freeze([
   'entry/src/main/ets/features/player/PlayerPage.ets',
   'entry/src/main/ets/features/player/PlayerPageUIState.ets',
   'entry/src/main/ets/features/player/PlayerPageViewModel.ets',
-  'entry/src/main/ets/features/player/AVPlayerView.ets',
-  'entry/src/main/ets/features/player/MPVPlayerView.ets',
   'entry/src/main/ets/features/player/VideoFramePreviewHelper.ets'
 ])
 
@@ -355,19 +353,6 @@ export const knownJellyfinBaseline = deepFreeze({
         'PlayMethod',
         'RepeatMode'
       ]
-    },
-    'entry/src/main/ets/features/player/AVPlayerView.ets': {
-      'sdk/src/main/ets/generated-client/models': ['BaseItemKind', 'MediaStream']
-    },
-    'entry/src/main/ets/features/player/MPVPlayerView.ets': {
-      'sdk/src/main/ets/generated-client/models': [
-        'BaseItemKind',
-        'MediaStream',
-        'MediaStreamType',
-        'PlayMethod',
-        'SubtitleDeliveryMethod'
-      ],
-      '../../player/source/JellyfinMediaSource': ['JellyfinMediaSource']
     },
     'entry/src/main/ets/features/player/VideoFramePreviewHelper.ets': {
       '../../network/ApiClient': ['ApiClient']
