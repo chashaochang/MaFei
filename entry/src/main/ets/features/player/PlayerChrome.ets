@@ -54,6 +54,13 @@ const PLAYER_MENU_TRACK_WIDTH: number = 220
 const PLAYER_MENU_MORE_WIDTH: number = 270
 const PLAYER_MENU_EPISODE_WIDTH: number = 330
 const PLAYER_EPISODE_LIST_MAX_COUNT: number = 12
+const PLAYER_EPISODE_GRID_COLUMN_COUNT: number = 5
+const PLAYER_EPISODE_ENTRANCE_DURATION_MS: number = 180
+const PLAYER_EPISODE_ROW_ENTRANCE_STAGGER_MS: number = 50
+const PLAYER_EPISODE_ENTRANCE_FRAME_DELAY_MS: number = 16
+const PLAYER_EPISODE_GRID_CELL_HEIGHT_VP: number = 42
+const PLAYER_EPISODE_GRID_ROW_GAP_VP: number = 8
+const PLAYER_EPISODE_GRID_BOTTOM_PADDING_VP: number = 16
 
 class PlayerContentModeOption {
   readonly label: string
@@ -201,6 +208,7 @@ struct PlayerChromeSegmentOption {
 struct PlayerChromeEpisodeGridCell {
   @Require @Param text: string
   @Param selected: boolean = false
+  @Param entranceVisible: boolean = true
   @Require @Param action: () => void
 
   build() {
@@ -219,7 +227,12 @@ struct PlayerChromeEpisodeGridCell {
       color: this.selected ? $r('app.color.color_main') : Color.Transparent
     })
     .borderRadius(6)
-    .animation({ duration: PLAYER_CONTROL_TRANSITION_DURATION_MS, curve: Curve.EaseOut })
+    .opacity(this.entranceVisible ? 1 : 0)
+    .translate({ y: this.entranceVisible ? 0 : 14 })
+    .animation({
+      duration: PLAYER_EPISODE_ENTRANCE_DURATION_MS,
+      curve: Curve.EaseOut
+    })
     .onClick((): void => this.action())
   }
 }
@@ -229,6 +242,7 @@ struct PlayerChromeEpisodeRow {
   @Require @Param item: QueueItem
   @Require @Param episodeIndex: number
   @Param selected: boolean = false
+  @Param entranceVisible: boolean = true
   @Require @Param action: () => void
 
   private episodeTitle(): string {
@@ -274,7 +288,12 @@ struct PlayerChromeEpisodeRow {
     .padding(8)
     .backgroundColor('rgba(255,255,255,0.08)')
     .borderRadius(12)
-    .animation({ duration: PLAYER_CONTROL_TRANSITION_DURATION_MS, curve: Curve.EaseOut })
+    .opacity(this.entranceVisible ? 1 : 0)
+    .translate({ y: this.entranceVisible ? 0 : 14 })
+    .animation({
+      duration: PLAYER_EPISODE_ENTRANCE_DURATION_MS,
+      curve: Curve.EaseOut
+    })
     .onClick((): void => this.action())
   }
 }
@@ -336,6 +355,8 @@ export struct PlayerChrome {
   @Local panel: PlayerChromePanel = PlayerChromePanel.None
   @Local panelEntering: boolean = false
   @Local compactOptionsEntering: boolean = false
+  @Local episodeVisibleRow: number = -1
+  @Local episodeViewportRowCount: number = 0
   @Local panelClosing: boolean = false
   @Local panelEnterStep: number = -1
   @Local panelExitStep: number = -1
@@ -368,6 +389,7 @@ export struct PlayerChrome {
   private autoHideTimer: number = -1
   private panelEnterTimer: number = -1
   private panelCloseTimer: number = -1
+  private episodeRowTimer: number = -1
   private openPlaybackInfoAfterPanelClose: boolean = false
   private clockTimer: number = -1
   private audioManager?: audio.AudioManager
@@ -403,6 +425,7 @@ export struct PlayerChrome {
     this.clearAutoHideTimer()
     this.clearPanelEnterTimer()
     this.clearPanelCloseTimer()
+    this.clearEpisodeRowTimer()
     this.openPlaybackInfoAfterPanelClose = false
     this.playbackInfoVisible = false
     if (this.playerMenus) {
@@ -546,6 +569,13 @@ export struct PlayerChrome {
     if (this.panelEnterTimer >= 0) {
       clearTimeout(this.panelEnterTimer)
       this.panelEnterTimer = -1
+    }
+  }
+
+  private clearEpisodeRowTimer(): void {
+    if (this.episodeRowTimer >= 0) {
+      clearTimeout(this.episodeRowTimer)
+      this.episodeRowTimer = -1
     }
   }
 
@@ -748,9 +778,12 @@ export struct PlayerChrome {
     this.locked = !this.locked
     this.clearPanelEnterTimer()
     this.clearPanelCloseTimer()
+    this.clearEpisodeRowTimer()
     this.panel = PlayerChromePanel.None
     this.panelEntering = false
     this.compactOptionsEntering = false
+    this.episodeVisibleRow = -1
+    this.episodeViewportRowCount = 0
     this.panelClosing = false
     this.panelEnterStep = -1
     this.panelExitStep = -1
@@ -764,8 +797,11 @@ export struct PlayerChrome {
   private openPanel(panel: PlayerChromePanel): void {
     this.clearPanelEnterTimer()
     this.clearPanelCloseTimer()
+    this.clearEpisodeRowTimer()
     this.panelEntering = false
     this.compactOptionsEntering = false
+    this.episodeVisibleRow = -1
+    this.episodeViewportRowCount = 0
     this.panelClosing = false
     this.panelEnterStep = -1
     this.panelExitStep = -1
@@ -804,6 +840,10 @@ export struct PlayerChrome {
       this.advanceCompactPanelExit()
       return
     }
+    if (this.panel === PlayerChromePanel.Episode) {
+      this.startEpisodeItemsExit()
+      return
+    }
     this.panelCloseTimer = setTimeout((): void => this.finishPanelClose(), PLAYER_MENU_CLOSE_DURATION_MS)
   }
 
@@ -811,9 +851,12 @@ export struct PlayerChrome {
     const shouldOpenPlaybackInfo = this.openPlaybackInfoAfterPanelClose
     this.openPlaybackInfoAfterPanelClose = false
     this.clearPanelEnterTimer()
+    this.clearEpisodeRowTimer()
     this.panel = PlayerChromePanel.None
     this.panelEntering = false
     this.compactOptionsEntering = false
+    this.episodeVisibleRow = -1
+    this.episodeViewportRowCount = 0
     this.panelClosing = false
     this.panelEnterStep = -1
     this.panelExitStep = -1
@@ -1099,6 +1142,112 @@ export struct PlayerChrome {
     return this.playList.length > PLAYER_EPISODE_LIST_MAX_COUNT
   }
 
+  private currentEpisodeIndex(): number {
+    return Math.max(0, this.playList.findIndex((item: QueueItem): boolean => item.id === this.currentPlayId))
+  }
+
+  private shouldAnimateEpisodeItem(index: number): boolean {
+    const animatedRowCount = this.episodeAnimatedRowCount()
+    return animatedRowCount > 0 && this.episodeAnimationRow(index) < animatedRowCount
+  }
+
+  private episodeAnimationRow(index: number): number {
+    if (this.shouldUseEpisodeGrid()) {
+      return Math.floor(index / PLAYER_EPISODE_GRID_COLUMN_COUNT)
+    }
+    return Math.max(0, index - this.currentEpisodeIndex())
+  }
+
+  private episodeTotalRowCount(): number {
+    if (this.shouldUseEpisodeGrid()) {
+      return Math.ceil(this.playList.length / PLAYER_EPISODE_GRID_COLUMN_COUNT)
+    }
+    return Math.max(0, this.playList.length - this.currentEpisodeIndex())
+  }
+
+  private episodeAnimatedRowCount(): number {
+    const totalRowCount = this.episodeTotalRowCount()
+    if (!this.shouldUseEpisodeGrid()) {
+      return totalRowCount
+    }
+    return Math.min(totalRowCount, this.episodeViewportRowCount)
+  }
+
+  private episodeRowStaggerMs(): number {
+    return PLAYER_EPISODE_ROW_ENTRANCE_STAGGER_MS
+  }
+
+  private isEpisodeItemEntranceVisible(index: number): boolean {
+    if (this.shouldUseEpisodeGrid() && this.episodeViewportRowCount <= 0) {
+      return false
+    }
+    return !this.shouldAnimateEpisodeItem(index) || this.episodeVisibleRow >= this.episodeAnimationRow(index)
+  }
+
+  private updateEpisodeViewport(area: Area): void {
+    const height = Number(area.height)
+    if (height <= 0) {
+      return
+    }
+    const contentHeight = Math.max(0, height - PLAYER_EPISODE_GRID_BOTTOM_PADDING_VP)
+    this.episodeViewportRowCount = Math.max(1,
+      Math.ceil((contentHeight + PLAYER_EPISODE_GRID_ROW_GAP_VP) /
+        (PLAYER_EPISODE_GRID_CELL_HEIGHT_VP + PLAYER_EPISODE_GRID_ROW_GAP_VP)))
+    this.startEpisodeItemsEntrance()
+  }
+
+  private startEpisodeItemsEntrance(): void {
+    if (this.panel !== PlayerChromePanel.Episode || this.panelClosing || this.episodeVisibleRow >= 0 ||
+      this.episodeRowTimer >= 0) {
+      return
+    }
+    if (this.episodeAnimatedRowCount() <= 0) {
+      return
+    }
+    this.episodeRowTimer = setTimeout((): void => {
+      this.episodeRowTimer = -1
+      if (this.panel === PlayerChromePanel.Episode && !this.panelClosing) {
+        this.episodeVisibleRow = 0
+        this.advanceEpisodeItemsEntrance()
+      }
+    }, PLAYER_EPISODE_ENTRANCE_FRAME_DELAY_MS)
+  }
+
+  private advanceEpisodeItemsEntrance(): void {
+    if (this.panel !== PlayerChromePanel.Episode || this.panelClosing ||
+      this.episodeVisibleRow >= this.episodeAnimatedRowCount() - 1) {
+      this.episodeRowTimer = -1
+      return
+    }
+    this.episodeRowTimer = setTimeout((): void => {
+      this.episodeRowTimer = -1
+      if (this.panel === PlayerChromePanel.Episode && !this.panelClosing) {
+        this.episodeVisibleRow += 1
+        this.advanceEpisodeItemsEntrance()
+      }
+    }, this.episodeRowStaggerMs())
+  }
+
+  private startEpisodeItemsExit(): void {
+    this.clearEpisodeRowTimer()
+    this.advanceEpisodeItemsExit()
+  }
+
+  private advanceEpisodeItemsExit(): void {
+    if (this.panel !== PlayerChromePanel.Episode) {
+      return
+    }
+    this.episodeVisibleRow -= 1
+    if (this.episodeVisibleRow < 0) {
+      this.panelCloseTimer = setTimeout((): void => this.finishPanelClose(), PLAYER_EPISODE_ENTRANCE_DURATION_MS)
+      return
+    }
+    this.episodeRowTimer = setTimeout((): void => {
+      this.episodeRowTimer = -1
+      this.advanceEpisodeItemsExit()
+    }, this.episodeRowStaggerMs())
+  }
+
   private isCompactOptionPanel(): boolean {
     return this.panel === PlayerChromePanel.More || this.panel === PlayerChromePanel.AspectRatio ||
       this.panel === PlayerChromePanel.Speed || this.panel === PlayerChromePanel.Quality ||
@@ -1137,7 +1286,7 @@ export struct PlayerChrome {
   }
 
   private shouldDismissPanelContentAsWhole(): boolean {
-    return this.panelClosing && !this.isCompactOptionPanel()
+    return this.panelClosing && !this.isCompactOptionPanel() && this.panel !== PlayerChromePanel.Episode
   }
 
   private panelWidth(): number | string {
@@ -1769,9 +1918,9 @@ export struct PlayerChrome {
                 .fontSize(18)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(PLAYER_MENU_TEXT_COLOR)
-                .opacity(this.shouldDismissPanelContentAsWhole() ? 0 : 1)
-                .translate({ y: this.shouldDismissPanelContentAsWhole() ? 12 : 0 })
-                .animation({ duration: PLAYER_MENU_CLOSE_DURATION_MS, curve: Curve.EaseInOut })
+                .opacity(this.panelClosing && this.episodeVisibleRow < 0 ? 0 : 1)
+                .translate({ y: this.panelClosing && this.episodeVisibleRow < 0 ? 12 : 0 })
+                .animation({ duration: PLAYER_EPISODE_ENTRANCE_DURATION_MS, curve: Curve.EaseInOut })
             }
 
             if (this.panel === PlayerChromePanel.Episode) {
@@ -1782,6 +1931,7 @@ export struct PlayerChrome {
                       PlayerChromeEpisodeGridCell({
                         text: item.playIndex > 0 ? `${item.playIndex}` : `${index + 1}`,
                         selected: item.id === this.currentPlayId,
+                        entranceVisible: this.isEpisodeItemEntranceVisible(index),
                         action: (): void => {
                           this.onEpisodeSelected(index)
                           this.closePanel()
@@ -1798,9 +1948,11 @@ export struct PlayerChrome {
                 .padding({ left: 16, right: 16, bottom: 16 })
                 // 选集面板保留滚动手势，但不显示右侧滚动指示器。
                 .scrollBar(BarState.Off)
+                .onAppear((): void => this.startEpisodeItemsEntrance())
+                .onAreaChange((_oldValue: Area, newValue: Area): void => this.updateEpisodeViewport(newValue))
                 .opacity(this.shouldDismissPanelContentAsWhole() ? 0 : 1)
                 .translate({ y: this.shouldDismissPanelContentAsWhole() ? PLAYER_MENU_CLOSE_OFFSET_VP : 0 })
-                .animation({ duration: PLAYER_MENU_CLOSE_DURATION_MS, curve: Curve.EaseInOut })
+                .animation({ duration: PLAYER_EPISODE_ENTRANCE_DURATION_MS, curve: Curve.EaseInOut })
               } else {
                 List({
                   space: 8,
@@ -1812,6 +1964,7 @@ export struct PlayerChrome {
                         item: item,
                         episodeIndex: index,
                         selected: item.id === this.currentPlayId,
+                        entranceVisible: this.isEpisodeItemEntranceVisible(index),
                         action: (): void => {
                           this.onEpisodeSelected(index)
                           this.closePanel()
@@ -1825,9 +1978,10 @@ export struct PlayerChrome {
                 .padding({ left: 16, right: 16, bottom: 16 })
                 // 选集面板保留滚动手势，但不显示右侧滚动指示器。
                 .scrollBar(BarState.Off)
+                .onAppear((): void => this.startEpisodeItemsEntrance())
                 .opacity(this.shouldDismissPanelContentAsWhole() ? 0 : 1)
                 .translate({ y: this.shouldDismissPanelContentAsWhole() ? PLAYER_MENU_CLOSE_OFFSET_VP : 0 })
-                .animation({ duration: PLAYER_MENU_CLOSE_DURATION_MS, curve: Curve.EaseInOut })
+                .animation({ duration: PLAYER_EPISODE_ENTRANCE_DURATION_MS, curve: Curve.EaseInOut })
               }
             } else {
               Scroll() {
