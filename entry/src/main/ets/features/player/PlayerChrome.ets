@@ -43,10 +43,11 @@ const PLAYER_MENU_CELL_COLOR: string = '#26000000'
 
 @Builder
 function PlayerCastPickerIcon() {
-  Image($r('app.media.ic_cast_player'))
+  Image($r('sys.media.ohos_ic_public_cast_stream'))
     .width(22)
     .height(22)
     .objectFit(ImageFit.Contain)
+    .fillColor(Color.White)
 }
 const PLAYER_MENU_SELECTED_CELL_COLOR: string = '#3DFFFFFF'
 const PLAYER_MENU_GRADIENT_MIDDLE_COLOR: string = '#8A000000'
