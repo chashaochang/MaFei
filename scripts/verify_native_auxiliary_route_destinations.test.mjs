@@ -59,10 +59,32 @@ test('rejects an opaque Native route root', () => {
 
 test('keeps the Native account add action in the destination menu', () => {
   const sources = workspaceSources()
-  sources.set(accountPath, sources.get(accountPath).replace('      menus: this.navigationMenus(),\n', ''))
+  sources.set(accountPath, sources.get(accountPath).replace('      hasTitleBarStackBuilder: !this.fromLogin,\n', ''))
   assert.throws(
     () => validateNativeAuxiliaryRouteDestinations(sources),
     /Native account destination must expose one add-account menu action/
+  )
+})
+
+test('opens the provider chooser without the intermediate AddAccount route', () => {
+  const sources = workspaceSources()
+  sources.set(accountPath, sources.get(accountPath)
+    .replace('HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()',
+      'HMRouterMgr.to(RouterConsts.AddAccountPage).push()'))
+  assert.throws(
+    () => validateNativeAuxiliaryRouteDestinations(sources),
+    /offer both media providers|select a provider without an intermediate route/
+  )
+})
+
+test('rejects the non-anchored action panel for account providers', () => {
+  const sources = workspaceSources()
+  sources.set(accountPath, sources.get(accountPath)
+    .replace('.bindMenu(this.providerMenu(), this.providerMenuOptions())',
+      '.onClick(() => this.getUIContext().showActionMenu({}))'))
+  assert.throws(
+    () => validateNativeAuxiliaryRouteDestinations(sources),
+    /anchored provider menu|without an intermediate route/
   )
 })
 

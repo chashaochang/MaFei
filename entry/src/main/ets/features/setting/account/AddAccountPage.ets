@@ -70,7 +70,7 @@ export struct AddAccountPage {
       this.providerRow(
         $r('app.string.provider_jellyfin_name'),
         $r('app.string.provider_jellyfin_description'),
-        $r('app.media.app_icon'),
+        $r('app.media.jellyfin_logo'),
         true,
         () => this.openJellyfin()
       )
@@ -100,7 +100,7 @@ export struct AddAccountPage {
         this.providerRow(
           $r('app.string.provider_jellyfin_name'),
           $r('app.string.provider_jellyfin_description'),
-          $r('app.media.app_icon'),
+          $r('app.media.jellyfin_logo'),
           false,
           () => this.openJellyfin()
         )

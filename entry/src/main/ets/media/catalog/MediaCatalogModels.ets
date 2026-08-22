@@ -63,6 +63,8 @@ export interface MediaImageRefOptions {
   /** Provider image revision or tag. It must not contain credentials. */
   readonly revision?: string
   readonly headers?: MediaRequestHeader[]
+  /** Reuses a previously generated cache key without persisting request credentials. */
+  readonly cacheKeyOverride?: string
 }
 
 function cacheKeyPart(value: string): string {
@@ -104,7 +106,8 @@ export class MediaImageRef {
         value: header.value
       }
     })
-    this.cacheKey = createMediaImageCacheKey(
+    const cacheKeyOverride = `${options.cacheKeyOverride || ''}`.trim()
+    this.cacheKey = cacheKeyOverride.length > 0 ? cacheKeyOverride : createMediaImageCacheKey(
       options.owner,
       options.kind,
       options.variant,

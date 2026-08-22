@@ -13,6 +13,7 @@ import {
   FnMediaItem,
   FnMediaItemDetailResp,
   FnMediaPersonListItem,
+  FnMediaPlayItem,
   FnMediaSeasonItem
 } from '../main/ets/features/feiniuvideo/catalog/FeiniuVideoDtos'
 
@@ -149,6 +150,8 @@ export default function feiniuVideoCatalogMapperTest() {
         type: 'Season',
         season_number: 1,
         number_of_episodes: 10,
+        first_air_date: '2026-03-18',
+        vote_average: '8.4',
         poster: '/season.jpg'
       }
       const season = catalogMapper.season(seasonItem, seriesRef)
@@ -190,9 +193,27 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(mappedDetail.personCredits[0].kind).assertEqual(MediaPersonKind.Actor)
       expect(mappedDetail.personCredits[0].role).assertEqual('Hero')
       expect(mappedDetail.seasons[0].episodeCount).assertEqual(10)
+      expect(mappedDetail.seasons[0].productionYear).assertEqual(2026)
+      expect(mappedDetail.seasons[0].communityRating).assertEqual(8.4)
       expect(mappedDetail.externalLinks[0].url.indexOf('tt1234567') >= 0).assertTrue()
       expect(episode.durationMs).assertEqual(2700000)
       expect(episode.seriesRef.id).assertEqual('series-1')
+    })
+
+    it('recognizesEpisodePlayRecordsByEpisodeNumber', 0, () => {
+      const playItem: FnMediaPlayItem = {
+        guid: 'episode-8',
+        title: 'Episode 8',
+        type: 'Video',
+        ancestor_guid: 'series-1',
+        parent_guid: 'season-1',
+        episode_number: 8
+      }
+      const summary = mapper().resume(playItem)
+
+      expect(summary.ref.kind).assertEqual(MediaRefKind.Episode)
+      expect(summary.seriesRef?.id).assertEqual('series-1')
+      expect(summary.seasonRef?.id).assertEqual('season-1')
     })
 
     it('mapsPersonAndAdvancesPagesByRawServerItemCount', 0, () => {

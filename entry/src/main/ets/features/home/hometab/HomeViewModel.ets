@@ -15,6 +15,7 @@ import {
   MediaItem,
   VideoItem
 } from "./HomeUIState"
+import { HomeSnapshot, HomeSnapshotContent, HomeSnapshotStore } from './HomeSnapshotStore'
 
 const HOME_FEED_PAGE_SIZE: number = 30
 
@@ -27,6 +28,8 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
   private latestLoadedIds: Set<string> = new Set<string>()
   private latestLoadingIds: Set<string> = new Set<string>()
   private latestRequestVersion: number = 0
+  private snapshotStore?: HomeSnapshotStore
+  private snapshotAccountScope: string = ''
 
   init(): void {
     this.initVersion += 1
@@ -44,14 +47,14 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       return
     }
     this.catalog = catalog
-    this.getMediaList(catalog, requestVersion).then(() => {
-      return Promise.all([
-        this.getRecommendationList(catalog, requestVersion),
-        this.getResumeList(catalog, requestVersion),
-        this.getNextUpList(catalog, requestVersion),
-        this.getLatestList(catalog, requestVersion)
-      ])
-    }).then(() => {
+    this.restoreSnapshot(catalog)
+    const mediaListRequest = this.getMediaList(catalog, requestVersion)
+    Promise.all([
+      this.getRecommendationList(catalog, requestVersion),
+      this.getResumeList(catalog, requestVersion),
+      this.getNextUpList(catalog, requestVersion),
+      mediaListRequest.then(() => this.getLatestList(catalog, requestVersion))
+    ]).then(() => {
       this.finishInit(requestVersion)
     }).catch(() => {
       this.finishInit(requestVersion)
@@ -82,6 +85,67 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.initialLoadCompleted = true
     this.ui.initialLoading = false
     this.ui.isRefreshing = false
+    this.persistSnapshot(requestVersion)
+  }
+
+  private restoreSnapshot(catalog: MediaCatalogProvider): void {
+    const accountScope = catalog.session.accountScope
+    if (this.snapshotAccountScope === accountScope) return
+    const context = this.ui.context.getHostContext()
+    if (!context) return
+    this.snapshotStore = HomeSnapshotStore.create(context)
+    this.snapshotAccountScope = accountScope
+    const snapshot = this.snapshotStore.load(accountScope)
+    if (!snapshot) return
+    this.applySnapshot(snapshot)
+    this.initialLoadCompleted = true
+    this.ui.initialLoading = false
+  }
+
+  private applySnapshot(snapshot: HomeSnapshot): void {
+    this.ui.mediaList = snapshot.mediaList
+    this.ui.resumeList = snapshot.resumeList
+    this.ui.recommendationList = snapshot.recommendationList
+    this.ui.nextUpList = snapshot.nextUpList
+    this.ui.latestMediaList = snapshot.latestMediaList
+    this.ui.latestMap = snapshot.latestMap
+    this.ui.selectedLatestMediaId = resolveLatestMediaSelection(
+      snapshot.selectedLatestMediaId, snapshot.latestMediaList)
+    this.ui.hasLiveTv = snapshot.hasLiveTv
+    this.ui.latestMediaLoading = false
+    this.latestLoadedIds = new Set<string>()
+    this.latestStartIndexes = new Map<string, number>()
+    snapshot.latestMap.forEach((items: VideoItem[], id: string): void => {
+      this.latestLoadedIds.add(id)
+      this.latestStartIndexes.set(id, items.length)
+    })
+    const heroVisible = snapshot.recommendationList.length > 0
+    if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {
+      this.appUIState.rootNavigationHomeHeroVisible = heroVisible
+    }
+  }
+
+  private persistSnapshot(requestVersion: number): void {
+    const store = this.snapshotStore
+    const accountScope = this.snapshotAccountScope
+    if (!store || accountScope.length === 0) return
+    setTimeout((): void => {
+      if (requestVersion === this.initVersion && this.catalog?.session.accountScope === accountScope) {
+        try {
+          store.save(accountScope, new HomeSnapshotContent(
+            this.ui.mediaList,
+            this.ui.resumeList,
+            this.ui.recommendationList,
+            this.ui.nextUpList,
+            this.ui.latestMediaList,
+            this.ui.latestMap,
+            this.ui.selectedLatestMediaId,
+            this.ui.hasLiveTv
+          ))
+        } catch (_error) {
+        }
+      }
+    }, 0)
   }
 
   private getRecommendationList(catalog: MediaCatalogProvider, requestVersion: number): Promise<void> {
@@ -161,7 +225,6 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.latestHasMoreById = new Map<string, boolean>()
     this.latestLoadedIds = new Set<string>()
     this.latestLoadingIds = new Set<string>()
-    this.ui.latestMap = new Map<string, VideoItem[]>()
     this.ui.latestMediaList = this.ui.mediaList.filter((item: MediaItem): boolean => {
       return isSupportedHomeVideoLibrary(item)
     })

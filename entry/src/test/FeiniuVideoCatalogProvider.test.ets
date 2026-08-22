@@ -3,6 +3,7 @@ import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
 import { MediaProviderSession } from '../main/ets/media/MediaProviderSession'
 import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
 import { MediaCatalogError, MediaCatalogErrorCode } from '../main/ets/media/catalog/MediaCatalogError'
+import { MediaSummary } from '../main/ets/media/catalog/MediaCatalogModels'
 import {
   MediaCatalogSortDirection,
   MediaCatalogSortField,
@@ -72,6 +73,8 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
     msg: '',
     data: { guid: 'movie-1', title: 'Movie', type: 'Movie' }
   }
+  detailResponses: Map<string, FnMediaListResp<FnMediaItemDetailResp>> =
+    new Map<string, FnMediaListResp<FnMediaItemDetailResp>>()
   personListResponse: FnMediaPersonListResp = { code: 0, msg: '', data: { list: [], total: 0 } }
   seasonResponses: Map<string, FnMediaListResp<FnMediaSeasonItem[]>> =
     new Map<string, FnMediaListResp<FnMediaSeasonItem[]>>()
@@ -106,7 +109,9 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
     }
     if (request.path === '/v/api/v1/search/list') return this.searchResponse as T
     if (request.path === '/v/api/v1/tag/genres') return this.genreResponse as T
-    if (request.path.startsWith('/v/api/v1/item/')) return this.detailResponse as T
+    if (request.path.startsWith('/v/api/v1/item/')) {
+      return (this.detailResponses.get(this.pathId(request.path)) || this.detailResponse) as T
+    }
     if (request.path.startsWith('/v/api/v1/person/list/')) return this.personListResponse as T
     if (request.path.startsWith('/v/api/v1/season/list/')) {
       return (this.seasonResponses.get(this.pathId(request.path)) || this.emptySeasonResponse()) as T
@@ -183,12 +188,69 @@ function requestsFor(service: FakeFeiniuVideoCatalogService, path: string): Fein
 
 export default function feiniuVideoCatalogProviderTest() {
   describe('FeiniuVideoCatalogProvider', () => {
-    it('doesNotInventRecommendationsOrGlobalNextUp', 0, async () => {
+    it('buildsLocalRecommendationsFromCatalogSignalsAndCachesResults', 0, async () => {
       const owner = session()
       const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponse = { code: 0, msg: '', data: {} as FnMediaItemDetailResp }
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [
+          {
+            guid: 'movie-watched', title: 'movie-watched', type: 'Movie', poster: '/watched.jpg',
+            watched: 1, media_stream: { progress: 100 }
+          },
+          {
+            guid: 'unfinished', title: 'unfinished', type: 'Movie', poster: '/unfinished.jpg',
+            watched: 0, media_stream: { progress: 35 }
+          }
+        ]
+      }
+      service.itemListResponses = [
+        { code: 0, msg: '', data: { list: [
+          {
+            guid: 'movie-rated', title: 'movie-rated', type: 'Movie', poster: '/rated.jpg',
+            vote_average: '9.2', genres: [20]
+          },
+          {
+            guid: 'series-match', title: 'series-match', type: 'TV', poster: '/series.jpg',
+            vote_average: '8.4', genres: [10]
+          }
+        ], total: 2 } },
+        { code: 0, msg: '', data: { list: [
+          {
+            guid: 'movie-latest', title: 'movie-latest', type: 'Movie', poster: '/latest.jpg',
+            vote_average: '8.6', genres: [30]
+          },
+          {
+            guid: 'series-match', title: 'series-match', type: 'TV', poster: '/series.jpg',
+            vote_average: '8.4', genres: [10]
+          }
+        ], total: 2 } },
+        { code: 0, msg: '', data: { list: [
+          {
+            guid: 'favorite', title: 'favorite', type: 'Movie', poster: '/favorite.jpg',
+            is_favorite: 1, genres: [10]
+          }
+        ], total: 1 } }
+      ]
+      service.detailResponses.set('series-match', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'series-match',
+          title: 'series-match',
+          type: 'TV',
+          poster: '/series.jpg',
+          backdrops: '/series-backdrop.jpg',
+          logos: '/series-logo.png'
+        }
+      })
       const provider = new FeiniuVideoCatalogProvider(owner, service)
 
-      const recommendations = await provider.recommendations({ categoryLimit: 4, itemLimit: 4, resultLimit: 8 })
+      const recommendations = await provider.recommendations({ categoryLimit: 4, itemLimit: 4, resultLimit: 3 })
+      const requestCount = service.requests.length
+      const cached = await provider.recommendations({ categoryLimit: 4, itemLimit: 4, resultLimit: 3 })
       const nextUp = await provider.nextUp({
         seriesRef: ref(owner, 'series-1', MediaRefKind.Series),
         limit: 12,
@@ -197,9 +259,22 @@ export default function feiniuVideoCatalogProviderTest() {
         enableRewatching: false
       })
 
-      expect(recommendations.length).assertEqual(0)
+      const itemRequests = requestsFor(service, '/v/api/v1/item/list')
+      const favoriteRequests = requestsFor(service, '/v/api/v1/favorite/list')
+      const playRequests = requestsFor(service, '/v/api/v1/play/list')
+      expect(recommendations.length).assertEqual(3)
+      expect(cached.map((entry: MediaSummary): string => entry.ref.id).join(','))
+        .assertEqual(recommendations.map((entry: MediaSummary): string => entry.ref.id).join(','))
+      expect(service.requests.length).assertEqual(requestCount)
+      expect(itemRequests.length).assertEqual(2)
+      expect(favoriteRequests.length).assertEqual(1)
+      expect(playRequests.length).assertEqual(1)
+      expect(itemRequests[0].bodyText.indexOf('"sort_column":"vote_average"') >= 0).assertTrue()
+      expect(itemRequests[1].bodyText.indexOf('"sort_column":"create_time"') >= 0).assertTrue()
+      const series = recommendations.find((entry: MediaSummary): boolean => entry.ref.id === 'series-match')
+      expect(series?.backdropImage?.url.indexOf('/series-backdrop.jpg') >= 0).assertTrue()
+      expect(series?.logoImage?.url.indexOf('/series-logo.png') >= 0).assertTrue()
       expect(nextUp.items.length).assertEqual(0)
-      expect(service.requests.length).assertEqual(0)
     })
 
     it('loadsRealLibrariesAndCountsWhileHidingLiveCapability', 0, async () => {
@@ -421,6 +496,34 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(episodes.items.length).assertEqual(1)
       expect(episodes.items[0].ref.id).assertEqual('episode-1')
       expect(requestsFor(service, '/v/api/v1/episode/list/series-1').length).assertEqual(1)
+    })
+
+    it('fallsBackToEpisodeListWhenSeasonLookupRejectsHistoryGuid', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.errorPath = '/v/api/v1/season/list/season-1'
+      service.errorValue = new FeiniuVideoRequestError(
+        FeiniuVideoRequestFailureKind.Business, 'not a series guid')
+      service.episodeResponses.set('season-1', {
+        code: 0,
+        msg: '',
+        data: [
+          { guid: 'episode-1', title: 'Episode 1', type: 'Episode', episode_number: 1 },
+          { guid: 'episode-2', title: 'Episode 2', type: 'Episode', episode_number: 2 }
+        ]
+      })
+      const provider = new FeiniuVideoCatalogProvider(owner, service)
+
+      const episodes = await provider.getEpisodes({
+        seriesRef: ref(owner, 'season-1', MediaRefKind.Series),
+        startIndex: 0,
+        limit: 20,
+        profile: MediaEpisodeQueryProfile.Display
+      })
+
+      expect(episodes.items.length).assertEqual(2)
+      expect(episodes.items[1].episodeNumber).assertEqual(2)
+      expect(requestsFor(service, '/v/api/v1/episode/list/season-1').length).assertEqual(1)
     })
 
     it('queriesActorDirectorAndScreenplayWorksThroughPersonEndpoint', 0, async () => {

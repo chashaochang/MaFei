@@ -255,8 +255,9 @@ export struct FavoriteListPage {
   @Builder
   itemLayout(item: Object, _index: number): void {
     // 自定义item
-    VideoCard({ item: item as VideoItem })
-      .onClick(() => {
+    VideoCard({
+      item: item as VideoItem,
+      onOpen: () => {
         const videoItem = item as VideoItem
         HMRouterMgr.to(RouterConsts.VideoDetailPage)
           .withParam({
@@ -267,7 +268,8 @@ export struct FavoriteListPage {
               videoItem.mediaRef?.kind === MediaRefKind.Series || videoItem.type === 'Series',
           })
           .push()
-      })
+      }
+    })
   }
 
   @Builder

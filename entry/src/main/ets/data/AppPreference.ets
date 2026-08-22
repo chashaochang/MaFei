@@ -298,7 +298,7 @@ export class AppPreference {
     if (enabled !== null) {
       return enabled
     }
-    return false
+    return true
   }
 
   setMpvCacheSizeMb(sizeMb: number) {

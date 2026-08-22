@@ -5,6 +5,7 @@ import {
   HdsNavDestinationTitleMode,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
+  TitleBarContentOptions,
   ScrollEffectType as HdsScrollEffectType,
   TitleSize,
   hdsMaterial
@@ -30,8 +31,10 @@ export struct AppRouteDestination {
   @Prop ownsRootNavigationChrome: boolean = false
   @Prop menus: Array<NavigationMenuItem> = []
   @Prop scrollControllers: Array<Scroller> = []
+  @Prop hasTitleBarStackBuilder: boolean = false
   @BuilderParam contentBuilder: () => void = EmptyRouteContent
   @BuilderParam legacyContentBuilder: () => void = EmptyRouteContent
+  @BuilderParam titleBarStackBuilder: () => void = EmptyRouteContent
   beforeBack: () => boolean = () => false
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
   private helper: NavDestinationHelper = new NavDestinationHelper(this)
@@ -82,19 +85,23 @@ export struct AppRouteDestination {
   }
 
   private nativeTitleBarOptions(): HdsNavigationTitleBarOptions {
+    const content: TitleBarContentOptions = {
+      title: {
+        mainTitle: this.nativeMainTitle(),
+        mainTitleSize: TitleSize.TITLE_S
+      },
+      menu: {
+        value: this.nativeMenus(),
+        maxCount: 3
+      }
+    }
+    if (this.hasTitleBarStackBuilder) {
+      content.stackBuilder = this.titleBarStackBuilder
+    }
     return {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false,
-      content: {
-        title: {
-          mainTitle: this.nativeMainTitle(),
-          mainTitleSize: TitleSize.TITLE_S
-        },
-        menu: {
-          value: this.nativeMenus(),
-          maxCount: 3
-        }
-      },
+      content: content,
       style: {
         scrollEffectOpts: {
           enableScrollEffect: !this.rootHomeLibraryPinned(),

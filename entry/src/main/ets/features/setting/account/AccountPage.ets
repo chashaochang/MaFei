@@ -2,11 +2,18 @@ import { AlertDialogV2, AdvancedDialogV2Button, AppStorageV2 } from '@kit.ArkUI'
 import { ListView } from '@abner/refresh_v2'
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { RouterConsts } from '../../../common/RouterConsts'
+import { UIConstants } from '../../../common/UIConstants'
 import { ActionBar } from '../../../component/ActionBar'
 import { AppRouteDestination } from '../../../component/AppRouteDestination'
 import { AppUIState } from '../../../entity/AppUIState'
+import {
+  AppThemeOverlayPolicy,
+  OverlayMaterialDecision,
+  OverlaySurfaceRole
+} from '../../../theme/AppThemeOverlayPolicy'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../../theme/AppThemeTokens'
+import { HdsUiCapability } from '../../../theme/HdsUiCapability'
 import {
   AccountItemGroup,
   AccountRowViewModel,
@@ -48,27 +55,88 @@ export struct AccountPage {
     })
   }
 
-  private openAddAccount(): void {
-    if (this.fromLogin) {
-      return
-    }
-    HMRouterMgr.to(RouterConsts.AddAccountPage).push()
+  private openJellyfin(): void {
+    HMRouterMgr.to(RouterConsts.JellyfinConnectPage).push()
   }
 
-  private navigationMenus(): Array<NavigationMenuItem> {
-    if (this.fromLogin) {
-      return []
-    }
-    return [{
-      value: $r('app.string.account_add_title'),
-      icon: $r('sys.symbol.plus'),
-      action: () => {
-        this.openAddAccount()
+  private openFeiniuVideo(): void {
+    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()
+  }
+
+  private providerMenuOptions(): MenuOptions {
+    const decision = AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.appUIState.themeStyle,
+      HdsUiCapability.supportsSystemMaterial(),
+      this.appUIState.nativeThemeAvailable
+    )
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
       }
-    }]
+    }
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.Thin
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    return { placement: Placement.BottomRight }
   }
 
-  private primaryTextColor(): ResourceColor {
+  @Builder
+  private providerMenu() {
+    Menu() {
+      MenuItem({
+        startIcon: $r('app.media.jellyfin_logo'),
+        content: $r('app.string.provider_jellyfin_name')
+      }).onClick(() => this.openJellyfin())
+      MenuItem({
+        startIcon: $r('app.media.feiniu_video_logo'),
+        content: $r('app.string.feiniu_video_service_name')
+      }).onClick(() => this.openFeiniuVideo())
+    }
+  }
+
+  @Builder
+  private providerMenuButton() {
+    Button() {
+      SymbolGlyph($r('sys.symbol.plus'))
+        .fontSize(22)
+        .fontColor([this.iconColor()])
+    }
+    .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+    .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+    .borderRadius(AppThemeTokens.actionSize(this.appUIState.themeStyle) / 2)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText($r('app.string.account_add_title'))
+    .bindMenu(this.providerMenu(), this.providerMenuOptions())
+  }
+
+  @Builder
+  private nativeTitleBarMenu() {
+    Row() {
+      Blank()
+      this.providerMenuButton()
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ right: AppThemeTokens.pageHorizontalPadding(
+      this.appUIState.themeStyle, this.appUIState.isBigScreen) })
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  private primaryTextColor(): Resource {
     return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
       $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
@@ -149,7 +217,7 @@ export struct AccountPage {
   @Builder
   private providerLogo(item: AccountRowViewModel) {
     Image(item.isFeiniuVideo ?
-      $r('app.media.feiniu_video_logo') : $r('app.media.app_icon'))
+      $r('app.media.feiniu_video_logo') : $r('app.media.jellyfin_logo'))
       .width(48)
       .height(48)
       .objectFit(ImageFit.Contain)
@@ -307,9 +375,7 @@ export struct AccountPage {
           AppThemeMaterialRole.PrimaryInteractive,
           AppThemeTokens.isNative(this.appUIState.themeStyle)
         ))
-        .onClick((): void => {
-          this.openAddAccount()
-        })
+        .bindMenu(this.providerMenu(), this.providerMenuOptions())
     }
     .width('100%')
     .height('100%')
@@ -366,14 +432,25 @@ export struct AccountPage {
   private pageContent(showLegacyActionBar: boolean) {
     Column() {
       if (showLegacyActionBar) {
-        ActionBar({
-          title: this.fromLogin ?
-            $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
-          rightBtnIcon: this.fromLogin ? undefined : $r('app.media.add'),
-          onRightBtnClick: () => {
-            this.openAddAccount()
+        Stack() {
+          ActionBar({
+            title: this.fromLogin ?
+              $r('app.string.account_history_title') : $r('app.string.account_switch_title')
+          })
+          if (!this.fromLogin) {
+            Row() {
+              this.providerMenuButton()
+            }
+              .align(Alignment.TopEnd)
+              .margin({
+                top: this.appUIState.safeTop + 4,
+                right: AppThemeTokens.pageHorizontalPadding(
+                  this.appUIState.themeStyle, this.appUIState.isBigScreen)
+              })
           }
-        })
+        }
+        .width('100%')
+        .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
       }
       if (showLegacyActionBar) {
         this.feiniuAccountList()
@@ -390,7 +467,10 @@ export struct AccountPage {
     AppRouteDestination({
       title: this.fromLogin ?
         $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
-      menus: this.navigationMenus(),
+      hasTitleBarStackBuilder: !this.fromLogin,
+      titleBarStackBuilder: () => {
+        this.nativeTitleBarMenu()
+      },
       contentBuilder: () => {
         this.pageContent(false)
       },

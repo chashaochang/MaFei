@@ -169,7 +169,7 @@ export struct HomeLatestMediaSection {
   @Builder
   private feedContent() {
     Column() {
-      if (this.loading) {
+      if (this.loading && this.selectedItems().length === 0) {
         this.loadingGridState()
       } else if (this.selectedItems().length > 0) {
         this.posterGrid()

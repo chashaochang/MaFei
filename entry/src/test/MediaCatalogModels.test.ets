@@ -106,6 +106,30 @@ export default function mediaCatalogModelsTest() {
       expect(jellyfinImage.belongsTo(feiniu)).assertFalse()
     })
 
+    it('restoresImageCacheKeysWithoutPersistedRequestHeaders', 0, () => {
+      const owner = session(MediaProviderKind.FeiniuVideo, 'feiniu-account-1')
+      const itemRef = ref(owner, 'movie-1', MediaRefKind.Movie)
+      const original = new MediaImageRef({
+        owner: itemRef,
+        kind: MediaImageKind.Backdrop,
+        url: 'https://media.example/movie-1/backdrop',
+        variant: 'backdrop-1280',
+        revision: 'backdrop-1',
+        headers: [{ name: 'Authorization', value: 'secret-token' }]
+      })
+      const restored = new MediaImageRef({
+        owner: itemRef,
+        kind: MediaImageKind.Backdrop,
+        url: original.url,
+        variant: 'home-snapshot',
+        cacheKeyOverride: original.cacheKey,
+        headers: []
+      })
+
+      expect(restored.cacheKey).assertEqual(original.cacheKey)
+      expect(restored.headers.length).assertEqual(0)
+    })
+
     it('keepsLibraryHomeAndPageEntriesAsScopedMediaRefs', 0, () => {
       const owner = session(MediaProviderKind.Jellyfin, 'jellyfin-account-1')
       const item = summary(owner, 'movie-1')

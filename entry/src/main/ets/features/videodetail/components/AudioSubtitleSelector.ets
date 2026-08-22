@@ -18,7 +18,7 @@ import {
 
 @ComponentV2
 export struct AudioSubtitleSelector {
-  @Param @Require source: MediaFileInfo
+  @Param source?: MediaFileInfo = undefined
   @Param triggerTextColor: ResourceColor = $r('app.color.text_primary')
   @Local subtitle: string = '无字幕'
   @Local audio: string = '未知音频'
@@ -67,12 +67,13 @@ export struct AudioSubtitleSelector {
     this.getDataFromSource()
   }
 
-  getDataFromSource() {
+  getDataFromSource(): void {
     this.subtitles = []
     this.audios = []
     let subtitlesNew: Array<MediaStreamInfo> = []
     let audiosNew: Array<MediaStreamInfo> = []
-    this.source.streams.forEach((stream: MediaStreamInfo) => {
+    const streams = this.source?.streams || []
+    streams.forEach((stream: MediaStreamInfo) => {
       if (stream.kind === MediaStreamKind.Audio) {
         audiosNew.push(stream)
       } else if (stream.kind === MediaStreamKind.Subtitle) {

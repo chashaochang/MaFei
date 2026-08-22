@@ -144,30 +144,30 @@ function validateLegacyNavigation(pageContent, route) {
 }
 
 function validateAccountEntry(source, pageContent) {
-  const menus = methodBlock(source, 'navigationMenus')
-  if (!/if\s*\(\s*this\.fromLogin\s*\)\s*\{\s*return\s*\[\s*\]\s*\}/.test(menus)) {
-    throw new Error('Native account destination must guard the add-account menu')
+  const providerMenu = methodBlock(source, 'providerMenu')
+  if (!/Menu\s*\(\s*\)\s*\{/.test(providerMenu) ||
+    !/RouterConsts\.JellyfinConnectPage/.test(source) ||
+    !/RouterConsts\.FeiniuVideoConnectPage/.test(source)) {
+    throw new Error('account add menu must offer both media providers')
   }
-  if (!/value\s*:\s*\$r\(\s*['"]app\.string\.account_add_title['"]\s*\)/.test(menus) ||
-    !/icon\s*:\s*\$r\(\s*['"]sys\.symbol\.plus['"]\s*\)/.test(menus) ||
-    !/action\s*:[\s\S]*this\.openAddAccount\s*\(\s*\)/.test(menus)) {
-    throw new Error('Native account add menu must keep its label, plus icon, and action')
+  const menuButton = methodBlock(source, 'providerMenuButton')
+  if (!/sys\.symbol\.plus/.test(menuButton) ||
+    !/bindMenu\s*\(\s*this\.providerMenu\s*\(\s*\)/.test(menuButton)) {
+    throw new Error('account add action must use an anchored provider menu')
   }
   const build = methodBlock(source, 'build')
-  if (!/menus\s*:\s*this\.navigationMenus\s*\(\s*\)/.test(build) ||
+  if (!/hasTitleBarStackBuilder\s*:\s*!this\.fromLogin/.test(build) ||
+    !/this\.nativeTitleBarMenu\s*\(\s*\)/.test(build) ||
     /nativeAddAccountEntry/.test(source)) {
     throw new Error('Native account destination must expose one add-account menu action')
   }
-  const opener = methodBlock(source, 'openAddAccount')
-  if (!/this\.fromLogin/.test(opener) ||
-    !/HMRouterMgr\.to\s*\(\s*RouterConsts\.AddAccountPage\s*\)\.push\s*\(\s*\)/.test(opener)) {
-    throw new Error('account add action must preserve the existing AddAccountPage route')
+  if (/showActionMenu\s*\(/.test(source) || /RouterConsts\.AddAccountPage/.test(source)) {
+    throw new Error('account add action must select a provider without an intermediate route')
   }
   const legacy = legacyBranch(pageContent, ACCOUNT)
   if (!/title\s*:\s*this\.fromLogin\s*\?\s*\$r\(\s*['"]app\.string\.account_history_title['"]\s*\)\s*:\s*\$r\(\s*['"]app\.string\.account_switch_title['"]\s*\)/.test(legacy) ||
-    !/rightBtnIcon\s*:\s*this\.fromLogin\s*\?\s*undefined\s*:\s*\$r\(\s*['"]app\.media\.add['"]\s*\)/.test(legacy) ||
-    !/this\.openAddAccount\s*\(\s*\)/.test(legacy)) {
-    throw new Error('Feiniu account ActionBar must retain the add-account action')
+    !/this\.providerMenuButton\s*\(\s*\)/.test(legacy)) {
+    throw new Error('Feiniu account ActionBar must retain the anchored add-account menu')
   }
 }
 
@@ -198,7 +198,9 @@ function validateRoute(source, route) {
   const pageContent = methodBlock(source, 'pageContent')
   validateLegacyNavigation(pageContent, route)
   validateRootBackground(pageContent, route)
-  if (/\bSafeAreaEdge\.TOP\b|\bappUIState\.safeTop\b|\.safeAreaPadding\s*\(/.test(pageContent)) {
+  const legacy = legacyBranch(pageContent, route.path)
+  const nativeContent = pageContent.replace(legacy, '')
+  if (/\bSafeAreaEdge\.TOP\b|\bappUIState\.safeTop\b|\.safeAreaPadding\s*\(/.test(nativeContent)) {
     throw new Error('Native route content must not own the top safe area: ' + route.path)
   }
 

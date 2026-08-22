@@ -2,30 +2,24 @@ import { HMRouter, HMRouterMgr } from "@hadss/hmrouter"
 
 import { PlayOptions } from "../../player/interaction/PlayOptions"
 import { PlayerException } from "../../player/PlayerException"
-import { AppStorageV2, display, window } from "@kit.ArkUI"
+import { display, window } from "@kit.ArkUI"
 import { Constants } from "../../utils/Constants"
 import { common } from "@kit.AbilityKit"
 import { emitter } from "@kit.BasicServicesKit"
-import { MediaPlaybackSource, MediaPlaybackStream } from "../../media/playback/MediaPlaybackModels"
-import { QualityOption } from "../../player/qualityoptions/QualityOption"
+import { MediaPlaybackSource } from "../../media/playback/MediaPlaybackModels"
 import { avSession } from "@kit.AVSessionKit"
 import { MediaStreamUtil } from "../../utils/MediaStreamUtil"
 import { PlayerMenus } from "../../player/ui/PlayerMenus"
 import { OneMoreUtil } from "../../utils/OneMoreUtil"
-import { AppUIState } from "../../entity/AppUIState"
 import { PlayerLifecycle } from "../../router/lifecycles/PlayerLifecycle"
 import { ToastUtil } from "../../utils/ToastUtil"
 import { PlayerPageUIState } from "./PlayerPageUIState"
 import { PlayerPageViewModel } from "./PlayerPageViewModel"
-import { AVPlayerView } from "./AVPlayerView"
-import { MPVPlayerView } from "./MPVPlayerView"
-import { PlayerEngineType } from "../../entity/PlayerEngineType"
+import { MFPlayerView } from "./MFPlayerView"
 import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
 import { WindowUtil } from "../../utils/WindowUtil"
 import { AppRouteDestination } from "../../component/AppRouteDestination"
-import { ThemeStyle } from "../../entity/ThemeStyle"
-import { HdsUiCapability } from "../../theme/HdsUiCapability"
 
 @HMRouter({
   pageUrl: RouterConsts.PlayerPage,
@@ -58,6 +52,24 @@ export struct PlayerPage {
     }
   }
 
+  private enterFullscreen(): void {
+    this.vm.appUIState.isFullScreen = true
+    this.vm.appUIState.windowClass?.setWindowSystemBarEnable([])
+    this.playerFullscreenHelper.enableFullscreen()
+  }
+
+  private toggleFullscreen(): void {
+    if (this.vm.appUIState.isFullScreen) {
+      this.vm.appUIState.isFullScreen = false
+      this.restoreSystemBars()
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
+        WindowUtil.setMainWindowPortrait(getContext(this))
+      }
+      return
+    }
+    this.enterFullscreen()
+  }
+
   // @Monitor('lifecycle.options')
   // onNewInstance() {
   //   this.options = this.lifecycle.options
@@ -68,8 +80,8 @@ export struct PlayerPage {
 
   private handleMediaSourceApplied(mediaSource: MediaPlaybackSource): void {
     if (MediaStreamUtil.isLandscape(mediaSource.selectedVideoStream)) {
-      // For portrait videos, immediately enable fullscreen
-      this.playerFullscreenHelper.enableFullscreen()
+      // 横向视频自动全屏必须同步切换窗口态，否则系统栏会残留。
+      this.enterFullscreen()
     }
     // else if (appPreferences.exoPlayerStartLandscapeVideoInLandscape) {
     //   // Auto-switch to landscape for landscape videos if enabled
@@ -162,18 +174,17 @@ export struct PlayerPage {
   }
 
   onBackPress(): boolean | void {
+    if (this.ui.playerMenuVisible) {
+      this.ui.playerMenuDismissRequest += 1
+      return true
+    }
+    if (this.vm.appUIState.isFullScreen) {
+      this.toggleFullscreen()
+      return true
+    }
     this.restorePlayerWindowState()
     this.vm.reportPlaybackStop()
     HMRouterMgr.pop()
-  }
-
-  private usesNativeTopNavigation(): boolean {
-    return this.vm.appUIState.themeStyle === ThemeStyle.Native &&
-      HdsUiCapability.supportsNativeTheme()
-  }
-
-  private shouldShowNativeTopNavigation(): boolean {
-    return this.ui.controlsVisible && !this.vm.appUIState.isFullScreen
   }
 
   private handleNativeNavigationBack(): boolean {
@@ -194,55 +205,17 @@ export struct PlayerPage {
         .width('100%')
         .height('100%')
       } else {
-        if (this.vm.getResolvedPlayerEngineType() === PlayerEngineType.AV) {
-          AVPlayerView({
-            videoUrl: this.ui.url,
-            nativeTopNavigationEnabled: this.usesNativeTopNavigation(),
-            onNext: () => {
-              this.vm.playNext()
-            },
-            onAudioTrackSelected: (stream: MediaPlaybackStream) => {
-              this.vm.selectAudioTrack(stream)
-            },
-            onSubtitleSelected: (stream: MediaPlaybackStream) => {
-              this.vm.selectSubtitleTrack(stream)
-            },
-            onQualitySelected: (option: QualityOption) => {
-              this.vm.changeBitrate(option.bitrate)
-            },
-            stopCast: () => {
-              this.vm.stopCast()
-            },
-            onEpisodeChange: (index: number) => {
-              this.vm.changeEpisode(index)
-            }
-          }).width('100%')
-            .height('100%')
-        } else {
-          MPVPlayerView({
-            videoUrl: this.ui.url,
-            nativeTopNavigationEnabled: this.usesNativeTopNavigation(),
-            onNext: () => {
-              this.vm.playNext()
-            },
-            onAudioTrackSelected: (stream: MediaPlaybackStream) => {
-              this.vm.selectAudioTrack(stream)
-            },
-            onSubtitleSelected: (stream: MediaPlaybackStream) => {
-              this.vm.selectSubtitleTrack(stream)
-            },
-            onQualitySelected: (option: QualityOption) => {
-              this.vm.changeBitrate(option.bitrate)
-            },
-            stopCast: () => {
-              this.vm.stopCast()
-            },
-            onEpisodeChange: (index: number) => {
-              this.vm.changeEpisode(index)
-            }
-          }).width('100%')
-            .height('100%')
-        }
+        MFPlayerView({
+          videoUrl: this.ui.url,
+          onBack: (): void => {
+            this.onBackPress()
+          },
+          onFullscreenToggle: (): void => {
+            this.toggleFullscreen()
+          }
+        })
+          .width('100%')
+          .height('100%')
       }
     }
     .alignContent(Alignment.Top)
@@ -253,10 +226,10 @@ export struct PlayerPage {
 
   build() {
     AppRouteDestination({
-      title: this.usesNativeTopNavigation() ? '' : this.ui.title,
-      titleBarVisible: this.usesNativeTopNavigation() && this.shouldShowNativeTopNavigation(),
+      title: '',
+      titleBarVisible: false,
       contentExtendsUnderTitleBar: true,
-      heroTitleChrome: true,
+      heroTitleChrome: false,
       titleMaterialFollowsSystem: false,
       beforeBack: () => this.handleNativeNavigationBack(),
       contentBuilder: () => {

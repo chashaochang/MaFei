@@ -189,12 +189,12 @@ export struct LogoHeader {
 
   build() {
     Column() {
-      Image($r('app.media.app_icon')).height(70)
-      Text($r('app.string.app_name'))
+      Image($r('app.media.jellyfin_logo')).height(70)
+      Text($r('app.string.provider_jellyfin_name'))
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
-    }.padding({ bottom: 2 })
+    }.padding({ top: 24, bottom: 2 })
   }
 }
 

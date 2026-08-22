@@ -4,10 +4,8 @@ import { UIConstants } from '../../common/UIConstants'
 import { RouterConsts } from '../../common/RouterConsts'
 import { ActionBar } from '../../component/ActionBar'
 import { AppRouteDestination } from '../../component/AppRouteDestination'
-import { AppPreference } from '../../data/AppPreference'
 import { AppUIState } from '../../entity/AppUIState'
 import { CustomColorMode } from '../../entity/CustomColorMode'
-import { PlayerEngineType } from '../../entity/PlayerEngineType'
 import { ThemeStyle } from '../../entity/ThemeStyle'
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../theme/AppThemeTokens'
@@ -21,7 +19,6 @@ export struct SettingPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private readonly contentScroller: Scroller = new Scroller()
   @Local appearanceName: string = ''
-  @Local playerEngineName: ResourceStr = $r('app.string.player_engine_auto')
 
   aboutToAppear(): void {
     this.refreshSummaries()
@@ -47,14 +44,6 @@ export struct SettingPage {
       } catch (_) {
         this.appearanceName = ''
       }
-    }
-    const engineType = AppPreference.getInstance().getPlayerEngineType()
-    if (engineType === PlayerEngineType.AV) {
-      this.playerEngineName = $r('app.string.player_engine_av')
-    } else if (engineType === PlayerEngineType.MPV) {
-      this.playerEngineName = $r('app.string.player_engine_mpv')
-    } else {
-      this.playerEngineName = $r('app.string.player_engine_auto')
     }
   }
 
@@ -122,12 +111,6 @@ export struct SettingPage {
             this.appearanceName,
             !showLegacyActionBar,
             () => HMRouterMgr.to(RouterConsts.ColorModePage).push()
-          )
-          this.settingGroup(
-            $r('app.string.playback_settings_title'),
-            this.playerEngineName,
-            !showLegacyActionBar,
-            () => HMRouterMgr.to(RouterConsts.PlayerEnginePage).push()
           )
           Blank().height(Math.max(24, this.appUIState.safeBottom))
         }

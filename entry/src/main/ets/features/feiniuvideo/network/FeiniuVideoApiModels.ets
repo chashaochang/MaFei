@@ -350,6 +350,7 @@ export interface FnMediaUserInfoData {
   nickname?: string
   username?: string
   user_id?: string
+  is_admin?: number
   sources?: FnMediaUserSource[]
 }
 

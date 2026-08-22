@@ -186,7 +186,7 @@ struct FeiniuVideoLogoHeader {
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
-    }.padding({ bottom: 2 })
+    }.padding({ top: 24, bottom: 2 })
   }
 }
 

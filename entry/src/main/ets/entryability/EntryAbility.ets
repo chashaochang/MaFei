@@ -36,6 +36,8 @@ export default class EntryAbility extends UIAbility {
     if (options.type === window.AvoidAreaType.TYPE_SYSTEM ||
       options.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
       this.refreshWindowMetrics(this.mainWindow)
+    } else if (options.type === window.AvoidAreaType.TYPE_CUTOUT) {
+      this.refreshCutoutMetrics(this.mainWindow, options.area)
     }
   }
   private systemDensityChangeCallback = (_density: number): void => {
@@ -157,6 +159,7 @@ export default class EntryAbility extends UIAbility {
     const navigationArea = windowClass.getWindowAvoidArea(
       window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
     )
+    const cutoutArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT)
     const density = this.resolveWindowDensity(windowClass)
     const deviceWidth = properties.windowRect.width / density
 
@@ -169,8 +172,18 @@ export default class EntryAbility extends UIAbility {
       systemArea.bottomRect.height,
       navigationArea.bottomRect.height
     ) / density
+    this.refreshCutoutMetrics(windowClass, cutoutArea)
     this.appUIState.orientation = properties.windowRect.width > properties.windowRect.height ?
       display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
+  }
+
+  private refreshCutoutMetrics(windowClass: window.Window, cutoutArea: window.AvoidArea): void {
+    const windowRect = windowClass.getWindowProperties().windowRect
+    const density = this.resolveWindowDensity(windowClass)
+    this.appUIState.safeLeft = cutoutArea.leftRect.width > 0 ?
+      Math.max(0, cutoutArea.leftRect.left + cutoutArea.leftRect.width) / density : 0
+    this.appUIState.safeRight = cutoutArea.rightRect.width > 0 ?
+      Math.max(0, windowRect.width - cutoutArea.rightRect.left) / density : 0
   }
 
   private resetWindowState(): void {
@@ -179,6 +192,8 @@ export default class EntryAbility extends UIAbility {
     this.appUIState.deviceHeight = 0
     this.appUIState.safeTop = 0
     this.appUIState.safeBottom = 0
+    this.appUIState.safeLeft = 0
+    this.appUIState.safeRight = 0
     this.appUIState.currentBreakpoint = BreakpointTypeEnum.MD
     this.appUIState.orientation = display.Orientation.PORTRAIT
   }

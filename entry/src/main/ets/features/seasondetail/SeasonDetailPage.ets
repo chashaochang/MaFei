@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
+import { CacheStrategy, ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { SeasonDetailUIState } from './SeasonDetailUIState';
@@ -130,90 +130,125 @@ export struct SeasonDetailPage {
   @Local ui: SeasonDetailUIState = new SeasonDetailUIState(this.getUIContext())
   vm: SeasonDetailViewModel = new SeasonDetailViewModel(this.ui)
   @Local isShowSheet: boolean = false;
-  @Local heroPixelMap?: image.PixelMap
-  private heroPixelMapSource: string = ''
-  private heroPixelMapLoadingSource: string = ''
+  @Local heroBackdropPixelMap?: image.PixelMap
+  @Local heroFeatheredPixelMap?: image.PixelMap
+  private heroBackdropKey: string = ''
+  private heroBackdropLoadingKey: string = ''
+  private heroBackdropGeneration: number = 0
+  private heroBackdropActive: boolean = false
 
-  private async prepareHeroPixelMap(sourceUrl: string): Promise<void> {
-    if (!sourceUrl || this.heroPixelMapSource === sourceUrl || this.heroPixelMapLoadingSource === sourceUrl) {
-      return
+  private currentHeroBackdropKey(): string {
+    return this.ui.backgroundImageRef?.cacheKey || this.ui.backgroundImage
+  }
+
+  private async createFeatheredHeroPixelMap(sourcePixelMap: image.PixelMap): Promise<image.PixelMap | undefined> {
+    const imageInfo = await sourcePixelMap.getImageInfo()
+    const pixelFormat = imageInfo.pixelFormat
+    const sourceAlphaType = imageInfo.alphaType
+    if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
+      pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
+      pixelFormat !== image.PixelMapFormat.ARGB_8888) {
+      return undefined
     }
-    this.heroPixelMapLoadingSource = sourceUrl
-    try {
-      const imageData = await ImageKnife.getInstance().getCacheImage(sourceUrl)
-      const sourcePixelMap = imageData?.pixelmapList?.[0]
-      if (!sourcePixelMap) {
-        return
-      }
-      const imageInfo = await sourcePixelMap.getImageInfo()
-      const pixelFormat = imageInfo.pixelFormat
-      const sourceAlphaType = imageInfo.alphaType
-      if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
-        pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
-        pixelFormat !== image.PixelMapFormat.ARGB_8888) {
-        return
-      }
 
-      const width = imageInfo.size.width
-      const height = imageInfo.size.height
-      const rowBytes = sourcePixelMap.getBytesNumberPerRow()
-      const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
-      await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
-      const sourcePixels = new Uint8Array(sourceBuffer)
-      const compactBuffer = new ArrayBuffer(width * height * 4)
-      const compactPixels = new Uint8Array(compactBuffer)
+    const width = imageInfo.size.width
+    const height = imageInfo.size.height
+    const rowBytes = sourcePixelMap.getBytesNumberPerRow()
+    const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
+    await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
+    const sourcePixels = new Uint8Array(sourceBuffer)
+    const compactBuffer = new ArrayBuffer(width * height * 4)
+    const compactPixels = new Uint8Array(compactBuffer)
 
-      for (let y = 0; y < height; y++) {
-        const sourceRowStart = y * rowBytes
-        const targetRowStart = y * width * 4
-        compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
-      }
+    for (let y = 0; y < height; y++) {
+      const sourceRowStart = y * rowBytes
+      const targetRowStart = y * width * 4
+      compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
+    }
 
-      const fadeStart = Math.floor(height * 0.64)
-      const fadeHeight = Math.max(1, height - fadeStart)
-      const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
-      for (let y = fadeStart; y < height; y++) {
-        const progress = (y - fadeStart) / fadeHeight
-        const smoothProgress = progress * progress * (3 - 2 * progress)
-        const alphaScale = 1 - smoothProgress
-        for (let x = 0; x < width; x++) {
-          const pixelIndex = (y * width + x) * 4
-          const alphaIndex = pixelIndex + alphaOffset
-          const sourceAlpha = compactPixels[alphaIndex]
-          const targetAlpha = Math.round(sourceAlpha * alphaScale)
-          const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
-          for (let channel = 0; channel < 4; channel++) {
-            if (channel !== alphaOffset) {
-              compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
-            }
+    const fadeStart = Math.floor(height * 0.64)
+    const fadeHeight = Math.max(1, height - fadeStart)
+    const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
+    for (let y = fadeStart; y < height; y++) {
+      const progress = (y - fadeStart) / fadeHeight
+      const smoothProgress = progress * progress * (3 - 2 * progress)
+      const alphaScale = 1 - smoothProgress
+      for (let x = 0; x < width; x++) {
+        const pixelIndex = (y * width + x) * 4
+        const alphaIndex = pixelIndex + alphaOffset
+        const sourceAlpha = compactPixels[alphaIndex]
+        const targetAlpha = Math.round(sourceAlpha * alphaScale)
+        const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
+        for (let channel = 0; channel < 4; channel++) {
+          if (channel !== alphaOffset) {
+            compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
           }
-          compactPixels[alphaIndex] = targetAlpha
         }
+        compactPixels[alphaIndex] = targetAlpha
       }
+    }
 
-      const nextPixelMap = await image.createPixelMap(compactBuffer, {
-        size: { width: width, height: height },
-        srcPixelFormat: pixelFormat,
-        pixelFormat: pixelFormat,
-        alphaType: image.AlphaType.PREMUL,
-        editable: false
+    return image.createPixelMap(compactBuffer, {
+      size: { width: width, height: height },
+      srcPixelFormat: pixelFormat,
+      pixelFormat: pixelFormat,
+      alphaType: image.AlphaType.PREMUL,
+      editable: false
+    })
+  }
+
+  private async prepareHeroBackdrop(): Promise<void> {
+    const key = this.currentHeroBackdropKey()
+    if (key.length === 0 || key === this.heroBackdropKey || key === this.heroBackdropLoadingKey) return
+    const generation = ++this.heroBackdropGeneration
+    this.heroBackdropLoadingKey = key
+    let nextPixelMap: image.PixelMap | undefined = undefined
+    let nextFeatheredPixelMap: image.PixelMap | undefined = undefined
+    try {
+      await new Promise<void>((resolve: () => void) => {
+        setTimeout(resolve, 80)
       })
-      if (this.ui.backgroundImage !== sourceUrl) {
-        nextPixelMap.release()
+      if (!this.heroBackdropActive || generation !== this.heroBackdropGeneration ||
+        key !== this.currentHeroBackdropKey()) {
         return
       }
-      const previousPixelMap = this.heroPixelMap
-      this.heroPixelMapSource = sourceUrl
-      this.getUIContext().animateTo({ duration: 220, curve: Curve.FastOutSlowIn }, () => {
-        this.heroPixelMap = nextPixelMap
+      let imageData = await ImageKnife.getInstance().getCacheImage(this.heroImageOption(), CacheStrategy.DEFAULT)
+      nextPixelMap = imageData?.pixelmapList?.[0]
+      if (!nextPixelMap) {
+        imageData = await ImageKnife.getInstance().getCacheImage(this.heroImageOption(), CacheStrategy.NONE)
+        nextPixelMap = imageData?.pixelmapList?.[0]
+        if (!nextPixelMap) return
+      }
+      nextFeatheredPixelMap = await this.createFeatheredHeroPixelMap(nextPixelMap)
+      if (!nextFeatheredPixelMap) {
+        nextPixelMap.release()
+        nextPixelMap = undefined
+        return
+      }
+      if (!this.heroBackdropActive || generation !== this.heroBackdropGeneration ||
+        key !== this.currentHeroBackdropKey()) {
+        nextPixelMap.release()
+        nextFeatheredPixelMap.release()
+        nextPixelMap = undefined
+        nextFeatheredPixelMap = undefined
+        return
+      }
+      const previousPixelMap = this.heroBackdropPixelMap
+      const previousFeatheredPixelMap = this.heroFeatheredPixelMap
+      this.heroBackdropKey = key
+      this.heroBackdropPixelMap = nextPixelMap
+      this.getUIContext().animateTo({ duration: 180, curve: Curve.FastOutSlowIn }, () => {
+        this.heroFeatheredPixelMap = nextFeatheredPixelMap
       })
-      if (previousPixelMap && previousPixelMap !== nextPixelMap) {
-        previousPixelMap.release()
-      }
+      nextPixelMap = undefined
+      nextFeatheredPixelMap = undefined
+      if (previousPixelMap) previousPixelMap.release()
+      if (previousFeatheredPixelMap) previousFeatheredPixelMap.release()
+    } catch (_error) {
+      if (nextPixelMap) nextPixelMap.release()
+      if (nextFeatheredPixelMap) nextFeatheredPixelMap.release()
     } finally {
-      if (this.heroPixelMapLoadingSource === sourceUrl) {
-        this.heroPixelMapLoadingSource = ''
-      }
+      if (this.heroBackdropLoadingKey === key) this.heroBackdropLoadingKey = ''
     }
   }
 
@@ -237,9 +272,7 @@ export struct SeasonDetailPage {
 
   private heroImageOption(onComplete?: () => void): ImageKnifeOption {
     const option = this.imageOption(this.ui.backgroundImageRef, this.ui.backgroundImage)
-    if (onComplete) {
-      option.onComplete = onComplete
-    }
+    if (onComplete) option.onComplete = () => onComplete()
     return option
   }
 
@@ -310,20 +343,21 @@ export struct SeasonDetailPage {
   @Builder
   private nativeHeroBackdrop() {
     Stack() {
-      if (this.heroPixelMap && this.heroPixelMapSource === this.ui.backgroundImage) {
-        Image(this.heroPixelMap)
+      if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+        Image(this.heroFeatheredPixelMap)
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
           .transition(TransitionEffect.OPACITY)
+          .hitTestBehavior(HitTestMode.None)
       } else {
         ImageKnifeComponent({
-          imageKnifeOption: this.heroImageOption(() => {
-            this.prepareHeroPixelMap(this.ui.backgroundImage)
-          })
+          imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
         })
           .width('100%')
           .height('100%')
+          .opacity(0)
+          .hitTestBehavior(HitTestMode.None)
       }
 
       Stack()
@@ -334,7 +368,7 @@ export struct SeasonDetailPage {
           colors: [
             ['rgba(0, 0, 0, 0)', 0],
             ['rgba(0, 0, 0, 0.08)', 0.24],
-            ['rgba(0, 0, 0, 0.28)', 0.66],
+            ['rgba(0, 0, 0, 0.26)', 0.64],
             ['rgba(0, 0, 0, 0)', 1]
           ]
         })
@@ -346,14 +380,24 @@ export struct SeasonDetailPage {
   @Builder
   private nativePageBackdrop() {
     Stack() {
-      ImageKnifeComponent({
-        imageKnifeOption: this.heroImageOption()
-      })
-        .width('100%')
-        .height('100%')
-        .scale({ x: 1.18, y: 1.18 })
-        .blur(128)
-        .opacity(0.95)
+      if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+        Image(this.heroBackdropPixelMap)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .scale({ x: 1.18, y: 1.18 })
+          .blur(128)
+          .opacity(0.95)
+      } else {
+        ImageKnifeComponent({
+          imageKnifeOption: this.heroImageOption()
+        })
+          .width('100%')
+          .height('100%')
+          .scale({ x: 1.18, y: 1.18 })
+          .blur(128)
+          .opacity(0.95)
+      }
 
       Stack()
         .width('100%')
@@ -565,6 +609,7 @@ export struct SeasonDetailPage {
   }
 
   aboutToAppear(): void {
+    this.heroBackdropActive = true
     this.configureHeroHeight()
     const raw = HMRouterMgr.getCurrentParam()
     if (!raw || typeof raw === 'string') {
@@ -584,11 +629,18 @@ export struct SeasonDetailPage {
   }
 
   aboutToDisappear(): void {
-    if (this.heroPixelMap) {
-      this.heroPixelMap.release()
-      this.heroPixelMap = undefined
-      this.heroPixelMapSource = ''
+    this.heroBackdropActive = false
+    this.heroBackdropGeneration += 1
+    if (this.heroBackdropPixelMap) {
+      this.heroBackdropPixelMap.release()
+      this.heroBackdropPixelMap = undefined
     }
+    if (this.heroFeatheredPixelMap) {
+      this.heroFeatheredPixelMap.release()
+      this.heroFeatheredPixelMap = undefined
+    }
+    this.heroBackdropKey = ''
+    this.heroBackdropLoadingKey = ''
   }
 
   @Builder

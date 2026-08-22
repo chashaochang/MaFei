@@ -61,6 +61,30 @@
       "value": "#55FFFFFF"
     },
     {
+      "name": "player_control_surface",
+      "value": "#52000000"
+    },
+    {
+      "name": "player_control_mask",
+      "value": "#66000000"
+    },
+    {
+      "name": "player_panel_surface",
+      "value": "#E61A1A1C"
+    },
+    {
+      "name": "player_progress_track",
+      "value": "#4DFFFFFF"
+    },
+    {
+      "name": "player_progress_buffered",
+      "value": "#8AFFFFFF"
+    },
+    {
+      "name": "player_feedback_surface",
+      "value": "#C9000000"
+    },
+    {
       "name": "safe_cancel_button_bg",
       "value": "#0D666666"
     },

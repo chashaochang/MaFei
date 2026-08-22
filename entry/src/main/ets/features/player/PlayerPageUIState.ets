@@ -71,6 +71,9 @@ export class PlayerPageUIState extends BaseUIState{
   @Trace reportContentDraft: string = ''
   // Native-theme title bar and player controls must appear and disappear together.
   @Trace controlsVisible: boolean = true
+  // 由共享播放器菜单回传，系统返回优先关闭菜单，不能直接触发横竖屏切换。
+  @Trace playerMenuVisible: boolean = false
+  @Trace playerMenuDismissRequest: number = 0
 
   playerMenus?: PlayerMenus
 

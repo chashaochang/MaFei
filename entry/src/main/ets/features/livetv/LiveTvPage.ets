@@ -6,6 +6,8 @@ import { LivePlayerView } from "../player/LivePlayerView";
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper";
 import { emitter } from "@kit.BasicServicesKit";
 import { Constants } from "../../utils/Constants";
+import { WindowUtil } from '../../utils/WindowUtil'
+import { OneMoreUtil } from '../../utils/OneMoreUtil'
 
 @HMRouter({
   pageUrl: RouterConsts.LiveTvPage,
@@ -53,16 +55,36 @@ export struct LiveTvPage {
     HMRouterMgr.pop()
   }
 
+  private toggleFullscreen(): void {
+    if (this.vm.appUIState.isFullScreen) {
+      this.vm.appUIState.isFullScreen = false
+      this.vm.appUIState.windowClass?.setWindowSystemBarEnable(['status', 'navigation'])
+      if (OneMoreUtil.shouldRequestPlayerManualRotation(this.vm.appUIState.windowClass)) {
+        WindowUtil.setMainWindowPortrait(getContext(this))
+      }
+      return
+    }
+    this.vm.appUIState.isFullScreen = true
+    this.vm.appUIState.windowClass?.setWindowSystemBarEnable([])
+    this.playerFullscreenHelper.enableFullscreen()
+  }
+
   build() {
     Stack() {
       if (this.ui.url) {
         LivePlayerView({
           videoUrl: this.ui.url!,
+          onBack: (): void => {
+            this.onBackPress()
+          },
           onNext:()=>{
             this.vm.playNext()
           },
           onEpisodeChange:(index)=>{
 
+          },
+          onFullscreenToggle: (): void => {
+            this.toggleFullscreen()
           }
         })
       }

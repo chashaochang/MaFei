@@ -20,6 +20,8 @@ import { MediaProviderKind } from "../../../media/MediaProviderKind";
 import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry";
 import { MediaProviderSession } from "../../../media/MediaProviderSession";
 import { MediaProviderComposition } from "../../setting/account/MediaProviderComposition";
+import { FeiniuVideoSessionContextRegistry } from
+  "../../feiniuvideo/account/FeiniuVideoSessionContextRegistry";
 
 export class MineViewModel extends BaseViewModel<MineUIState> {
   apiClientController: ApiClientController = new ApiClientController()
@@ -50,6 +52,23 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
     this.ui.managementAvailable = session.capabilities.management
     this.ui.webITongAvailable = false
     this.ui.userPolicy = '普通用户'
+    const context = FeiniuVideoSessionContextRegistry.instance().get(session)
+    if (!context) {
+      return
+    }
+    context.apiClient.getUserInfo().then((response) => {
+      const userData = response.data
+      if (!userData) {
+        return
+      }
+      this.ui.isAdministrator = userData.is_admin === 1
+      this.ui.userPolicy = this.ui.isAdministrator ? '管理员' : '普通用户'
+      this.ui.userName = userData.nickname?.trim() || userData.username?.trim() || this.ui.userName
+      this.ui.userAvatar = userData.avatar?.trim() || this.ui.userAvatar
+    }).catch(() => {
+      this.ui.isAdministrator = false
+      this.ui.userPolicy = '普通用户'
+    })
   }
 
   private initJellyfinProfile(session?: MediaProviderSession): void {

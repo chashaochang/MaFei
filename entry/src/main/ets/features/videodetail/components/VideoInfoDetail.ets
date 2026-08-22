@@ -10,7 +10,7 @@ import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 
 @ComponentV2
 export struct VideoInfoDetail {
-  @Require @Param source: MediaFileInfo
+  @Param source?: MediaFileInfo = undefined
   @Local videos: MediaStreamInfo[] = []
   @Local audios: MediaStreamInfo[] = []
   @Local subtitles: MediaStreamInfo[] = []
@@ -49,11 +49,12 @@ export struct VideoInfoDetail {
     this.getDataFromSource()
   }
 
-  getDataFromSource() {
+  getDataFromSource(): void {
     this.videos = []
     this.subtitles = []
     this.audios = []
-    this.source.streams.forEach((stream: MediaStreamInfo) => {
+    const streams = this.source?.streams || []
+    streams.forEach((stream: MediaStreamInfo) => {
       if (stream.kind === MediaStreamKind.Video) {
         this.videos.push(stream)
       } else if (stream.kind === MediaStreamKind.Audio) {

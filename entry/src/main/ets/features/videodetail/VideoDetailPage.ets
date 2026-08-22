@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
+import { CacheStrategy, ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
 import { AppRouteDestination } from '../../component/AppRouteDestination';
 import { VideoDetailUIState } from './VideoDetailUIState';
@@ -28,6 +28,7 @@ import {
 } from '../../theme/AppThemeOverlayPolicy';
 import { AppThemeTokens } from '../../theme/AppThemeTokens';
 import { image } from '@kit.ImageKit';
+import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ManagementMediaDeleteDialog } from '../management/library/ManagementMediaDeleteDialog'
 import {
   ManagementLibraryOperationCode,
@@ -46,6 +47,9 @@ import {
   parseMediaRouteRefData,
   toMediaRouteRefData
 } from '../../media/navigation/MediaRouteRef'
+
+const VIDEO_HERO_LOG_DOMAIN: number = 0xFF00
+const VIDEO_HERO_LOG_TAG: string = 'mafei-video-hero'
 
 @ComponentV2
 struct NativeDetailPlayAction {
@@ -140,93 +144,194 @@ struct NativeDetailIconAction {
 export struct VideoDetailPage {
   @Local ui: VideoDetailUIState = new VideoDetailUIState(this.getUIContext())
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
-  @Local heroPixelMap?: image.PixelMap
+  @Local heroBackdropPixelMap?: image.PixelMap
+  @Local heroFeatheredPixelMap?: image.PixelMap
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
   private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
-  private heroPixelMapSource: string = ''
-  private heroPixelMapLoadingSource: string = ''
+  private heroBackdropKey: string = ''
+  private heroBackdropLoadingKey: string = ''
+  private heroBackdropGeneration: number = 0
+  private heroBackdropActive: boolean = false
 
-  private async prepareHeroPixelMap(sourceUrl: string): Promise<void> {
-    if (!sourceUrl || this.heroPixelMapSource === sourceUrl || this.heroPixelMapLoadingSource === sourceUrl) {
+  private heroRequestSummary(): string {
+    const imageRef = this.ui.imageRef
+    return `provider=${imageRef?.provider || 'none'} ref=${imageRef ? 1 : 0} ` +
+      `url=${imageRef?.url.length || this.ui.image.length} headers=${imageRef?.headers.length || 0} ` +
+      `cacheKey=${imageRef?.cacheKey.length || 0} active=${this.heroBackdropActive ? 1 : 0}`
+  }
+
+  private safeHeroError(error: string): string {
+    return error.replace(/https?:\/\/[^\s]+/g, '<redacted-url>').substring(0, 320)
+  }
+
+  private logHeroInfo(stage: string, detail: string = ''): void {
+    hilog.info(VIDEO_HERO_LOG_DOMAIN, VIDEO_HERO_LOG_TAG,
+      '%{public}s', `${stage} ${this.heroRequestSummary()} ${detail}`.trim())
+  }
+
+  private logHeroWarn(stage: string, detail: string = ''): void {
+    hilog.warn(VIDEO_HERO_LOG_DOMAIN, VIDEO_HERO_LOG_TAG,
+      '%{public}s', `${stage} ${this.heroRequestSummary()} ${detail}`.trim())
+  }
+
+  private logHeroError(stage: string, detail: string = ''): void {
+    hilog.error(VIDEO_HERO_LOG_DOMAIN, VIDEO_HERO_LOG_TAG,
+      '%{public}s', `${stage} ${this.heroRequestSummary()} ${detail}`.trim())
+  }
+
+  private currentHeroBackdropKey(): string {
+    return this.ui.imageRef?.cacheKey || this.ui.image
+  }
+
+  private async createFeatheredHeroPixelMap(sourcePixelMap: image.PixelMap): Promise<image.PixelMap | undefined> {
+    const imageInfo = await sourcePixelMap.getImageInfo()
+    const pixelFormat = imageInfo.pixelFormat
+    const sourceAlphaType = imageInfo.alphaType
+    if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
+      pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
+      pixelFormat !== image.PixelMapFormat.ARGB_8888) {
+      this.logHeroWarn('backdrop.feather.unsupported', `format=${pixelFormat}`)
+      return undefined
+    }
+
+    const width = imageInfo.size.width
+    const height = imageInfo.size.height
+    const rowBytes = sourcePixelMap.getBytesNumberPerRow()
+    const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
+    await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
+    const sourcePixels = new Uint8Array(sourceBuffer)
+    const compactBuffer = new ArrayBuffer(width * height * 4)
+    const compactPixels = new Uint8Array(compactBuffer)
+
+    for (let y = 0; y < height; y++) {
+      const sourceRowStart = y * rowBytes
+      const targetRowStart = y * width * 4
+      compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
+    }
+
+    const fadeStart = Math.floor(height * 0.64)
+    const fadeHeight = Math.max(1, height - fadeStart)
+    const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
+    for (let y = fadeStart; y < height; y++) {
+      const progress = (y - fadeStart) / fadeHeight
+      const smoothProgress = progress * progress * (3 - 2 * progress)
+      const alphaScale = 1 - smoothProgress
+      for (let x = 0; x < width; x++) {
+        const pixelIndex = (y * width + x) * 4
+        const alphaIndex = pixelIndex + alphaOffset
+        const sourceAlpha = compactPixels[alphaIndex]
+        const targetAlpha = Math.round(sourceAlpha * alphaScale)
+        const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
+        for (let channel = 0; channel < 4; channel++) {
+          if (channel !== alphaOffset) {
+            compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
+          }
+        }
+        compactPixels[alphaIndex] = targetAlpha
+      }
+    }
+
+    this.logHeroInfo('backdrop.feather.complete', `size=${width}x${height} fadeStart=${fadeStart}`)
+    return image.createPixelMap(compactBuffer, {
+      size: { width: width, height: height },
+      srcPixelFormat: pixelFormat,
+      pixelFormat: pixelFormat,
+      alphaType: image.AlphaType.PREMUL,
+      editable: false
+    })
+  }
+
+  private async prepareHeroBackdrop(): Promise<void> {
+    const key = this.currentHeroBackdropKey()
+    this.logHeroInfo('backdrop.prepare.enter',
+      `key=${key.length} ready=${key === this.heroBackdropKey ? 1 : 0} ` +
+      `loading=${key === this.heroBackdropLoadingKey ? 1 : 0}`)
+    if (key.length === 0) {
+      this.logHeroWarn('backdrop.prepare.skip', 'reason=empty-key')
       return
     }
-    this.heroPixelMapLoadingSource = sourceUrl
+    if (key === this.heroBackdropKey) {
+      this.logHeroInfo('backdrop.prepare.skip', 'reason=already-ready')
+      return
+    }
+    if (key === this.heroBackdropLoadingKey) {
+      this.logHeroInfo('backdrop.prepare.skip', 'reason=already-loading')
+      return
+    }
+    const generation = ++this.heroBackdropGeneration
+    this.heroBackdropLoadingKey = key
+    this.logHeroInfo('backdrop.cache.start', `generation=${generation}`)
+    let nextPixelMap: image.PixelMap | undefined = undefined
+    let nextFeatheredPixelMap: image.PixelMap | undefined = undefined
     try {
-      const imageData = await ImageKnife.getInstance().getCacheImage(sourceUrl)
-      const sourcePixelMap = imageData?.pixelmapList?.[0]
-      if (!sourcePixelMap) {
+      // ImageKnife's system Image completion callback can run just before its file-cache write is visible.
+      // Wait for the current load callback stack to settle before reading the same signed request from cache.
+      await new Promise<void>((resolve: () => void) => {
+        setTimeout(resolve, 80)
+      })
+      if (!this.heroBackdropActive || generation !== this.heroBackdropGeneration ||
+        key !== this.currentHeroBackdropKey()) {
+        this.logHeroWarn('backdrop.cache.cancel-before-read',
+          `generation=${generation} currentGeneration=${this.heroBackdropGeneration} ` +
+          `keyMatch=${key === this.currentHeroBackdropKey() ? 1 : 0}`)
         return
       }
-      const imageInfo = await sourcePixelMap.getImageInfo()
-      const pixelFormat = imageInfo.pixelFormat
-      const sourceAlphaType = imageInfo.alphaType
-      if (pixelFormat !== image.PixelMapFormat.RGBA_8888 &&
-        pixelFormat !== image.PixelMapFormat.BGRA_8888 &&
-        pixelFormat !== image.PixelMapFormat.ARGB_8888) {
-        return
-      }
-
-      const width = imageInfo.size.width
-      const height = imageInfo.size.height
-      const rowBytes = sourcePixelMap.getBytesNumberPerRow()
-      const sourceBuffer = new ArrayBuffer(sourcePixelMap.getPixelBytesNumber())
-      await sourcePixelMap.readPixelsToBuffer(sourceBuffer)
-      const sourcePixels = new Uint8Array(sourceBuffer)
-      const compactBuffer = new ArrayBuffer(width * height * 4)
-      const compactPixels = new Uint8Array(compactBuffer)
-
-      for (let y = 0; y < height; y++) {
-        const sourceRowStart = y * rowBytes
-        const targetRowStart = y * width * 4
-        compactPixels.set(sourcePixels.subarray(sourceRowStart, sourceRowStart + width * 4), targetRowStart)
-      }
-
-      const fadeStart = Math.floor(height * 0.64)
-      const fadeHeight = Math.max(1, height - fadeStart)
-      const alphaOffset = pixelFormat === image.PixelMapFormat.ARGB_8888 ? 0 : 3
-      for (let y = fadeStart; y < height; y++) {
-        const progress = (y - fadeStart) / fadeHeight
-        const smoothProgress = progress * progress * (3 - 2 * progress)
-        const alphaScale = 1 - smoothProgress
-        for (let x = 0; x < width; x++) {
-          const pixelIndex = (y * width + x) * 4
-          const alphaIndex = pixelIndex + alphaOffset
-          const sourceAlpha = compactPixels[alphaIndex]
-          const targetAlpha = Math.round(sourceAlpha * alphaScale)
-          const colorScale = sourceAlphaType === image.AlphaType.PREMUL ? alphaScale : targetAlpha / 255
-          for (let channel = 0; channel < 4; channel++) {
-            if (channel !== alphaOffset) {
-              compactPixels[pixelIndex + channel] = Math.round(compactPixels[pixelIndex + channel] * colorScale)
-            }
-          }
-          compactPixels[alphaIndex] = targetAlpha
+      let imageData = await ImageKnife.getInstance().getCacheImage(this.heroImageOption(), CacheStrategy.DEFAULT)
+      this.logHeroInfo('backdrop.cache.complete',
+        `generation=${generation} data=${imageData ? 1 : 0} ` +
+        `pixelmaps=${imageData?.pixelmapList?.length || 0}`)
+      nextPixelMap = imageData?.pixelmapList?.[0]
+      if (!nextPixelMap) {
+        this.logHeroWarn('backdrop.cache.empty', `generation=${generation} fallback=direct-load`)
+        imageData = await ImageKnife.getInstance().getCacheImage(this.heroImageOption(), CacheStrategy.NONE)
+        this.logHeroInfo('backdrop.direct.complete',
+          `generation=${generation} data=${imageData ? 1 : 0} ` +
+          `pixelmaps=${imageData?.pixelmapList?.length || 0}`)
+        nextPixelMap = imageData?.pixelmapList?.[0]
+        if (!nextPixelMap) {
+          this.logHeroError('backdrop.direct.empty', `generation=${generation}`)
+          return
         }
       }
-
-      const nextPixelMap = await image.createPixelMap(compactBuffer, {
-        size: { width: width, height: height },
-        srcPixelFormat: pixelFormat,
-        pixelFormat: pixelFormat,
-        alphaType: image.AlphaType.PREMUL,
-        editable: false
-      })
-      if (this.ui.image !== sourceUrl) {
+      nextFeatheredPixelMap = await this.createFeatheredHeroPixelMap(nextPixelMap)
+      if (!nextFeatheredPixelMap) {
+        this.logHeroError('backdrop.feather.empty', `generation=${generation}`)
         nextPixelMap.release()
+        nextPixelMap = undefined
         return
       }
-      const previousPixelMap = this.heroPixelMap
-      this.heroPixelMapSource = sourceUrl
-      this.getUIContext().animateTo({ duration: 220, curve: Curve.FastOutSlowIn }, () => {
-        this.heroPixelMap = nextPixelMap
+      if (!this.heroBackdropActive || generation !== this.heroBackdropGeneration ||
+        key !== this.currentHeroBackdropKey()) {
+        this.logHeroWarn('backdrop.cache.discard',
+          `generation=${generation} currentGeneration=${this.heroBackdropGeneration} ` +
+          `keyMatch=${key === this.currentHeroBackdropKey() ? 1 : 0}`)
+        nextPixelMap.release()
+        nextFeatheredPixelMap.release()
+        nextPixelMap = undefined
+        nextFeatheredPixelMap = undefined
+        return
+      }
+      const previousPixelMap = this.heroBackdropPixelMap
+      const previousFeatheredPixelMap = this.heroFeatheredPixelMap
+      this.heroBackdropKey = key
+      this.heroBackdropPixelMap = nextPixelMap
+      this.getUIContext().animateTo({ duration: 180, curve: Curve.FastOutSlowIn }, () => {
+        this.heroFeatheredPixelMap = nextFeatheredPixelMap
       })
-      if (previousPixelMap && previousPixelMap !== nextPixelMap) {
-        previousPixelMap.release()
-      }
+      nextPixelMap = undefined
+      nextFeatheredPixelMap = undefined
+      if (previousPixelMap) previousPixelMap.release()
+      if (previousFeatheredPixelMap) previousFeatheredPixelMap.release()
+      this.logHeroInfo('backdrop.render.ready', `generation=${generation}`)
+    } catch (error) {
+      this.logHeroError('backdrop.cache.error',
+        `generation=${generation} type=${typeof error}`)
+      if (nextPixelMap) nextPixelMap.release()
+      if (nextFeatheredPixelMap) nextFeatheredPixelMap.release()
     } finally {
-      if (this.heroPixelMapLoadingSource === sourceUrl) {
-        this.heroPixelMapLoadingSource = ''
-      }
+      if (this.heroBackdropLoadingKey === key) this.heroBackdropLoadingKey = ''
+      this.logHeroInfo('backdrop.cache.finish', `generation=${generation}`)
     }
   }
 
@@ -243,6 +348,23 @@ export struct VideoDetailPage {
   private detailInformationBackground(): ResourceColor {
     return this.useNativeSurface() ?
       $r('app.color.native_detail_information_background') : this.secondarySurfaceBackground()
+  }
+
+  private hasFileInformation(): boolean {
+    return this.ui.path.trim().length > 0 || this.ui.size.trim().length > 0
+  }
+
+  private hasSelectedMediaStreams(): boolean {
+    return this.ui.selectedMediaSourceIndex >= 0 &&
+      this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length &&
+      this.ui.mediaSources[this.ui.selectedMediaSourceIndex].streams.length > 0
+  }
+
+  private hasVideoInformation(): boolean {
+    return this.ui.videoInfo.trim().length > 0 ||
+      this.ui.audioInfo.trim().length > 0 ||
+      this.ui.subtitleInfo.trim().length > 0 ||
+      this.hasSelectedMediaStreams()
   }
 
   private getString(name: string): string {
@@ -341,7 +463,40 @@ export struct VideoDetailPage {
 
   private heroImageOption(onComplete?: () => void): ImageKnifeOption {
     const option = this.imageOption(this.ui.imageRef, this.ui.image)
-    if (onComplete) option.onComplete = onComplete
+    if (onComplete) {
+      option.onLoadListener = {
+        onLoadStart: () => {
+          this.logHeroInfo('hero.load.start')
+        },
+        onLoadSuccess: (imageInfo) => {
+          this.logHeroInfo('hero.load.success',
+            `source=${imageInfo.imageSourceFrom} http=${imageInfo.httpCode || 0} ` +
+            `size=${imageInfo.imageWidth}x${imageInfo.imageHeight}`)
+        },
+        onLoadFailed: (error: string, imageInfo) => {
+          this.logHeroError('hero.load.failed',
+            `http=${imageInfo.httpCode || 0} error=${this.safeHeroError(error)}`)
+        },
+        onLoadCancel: (reason: string) => {
+          this.logHeroWarn('hero.load.cancel', `reason=${this.safeHeroError(reason)}`)
+        },
+        onMemorySuccess: () => {
+          this.logHeroInfo('hero.load.memory-hit')
+        },
+        onDownloadSuccess: () => {
+          this.logHeroInfo('hero.load.download-success')
+        },
+        onDecodeSuccess: () => {
+          this.logHeroInfo('hero.load.decode-success')
+        }
+      }
+      option.onComplete = (event) => {
+        this.logHeroInfo('hero.image.complete', event ?
+          `status=${event.loadingStatus} image=${event.width}x${event.height} ` +
+          `component=${event.componentWidth}x${event.componentHeight}` : 'event=none')
+        onComplete()
+      }
+    }
     return option
   }
 
@@ -373,20 +528,20 @@ export struct VideoDetailPage {
   @Builder
   private nativeHeroBackdrop() {
     Stack() {
-      if (this.heroPixelMap && this.heroPixelMapSource === this.ui.image) {
-        Image(this.heroPixelMap)
+      if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+        Image(this.heroFeatheredPixelMap)
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
           .transition(TransitionEffect.OPACITY)
+          .hitTestBehavior(HitTestMode.None)
       } else {
         ImageKnifeComponent({
-          imageKnifeOption: this.heroImageOption(() => {
-            this.prepareHeroPixelMap(this.ui.image)
-          })
+          imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
         })
           .width('100%')
           .height('100%')
+          .opacity(0)
           .hitTestBehavior(HitTestMode.None)
       }
 
@@ -410,14 +565,24 @@ export struct VideoDetailPage {
   @Builder
   private nativePageBackdrop() {
     Stack() {
-      ImageKnifeComponent({
-        imageKnifeOption: this.heroImageOption()
-      })
-        .width('100%')
-        .height('100%')
-        .scale({ x: 1.18, y: 1.18 })
-        .blur(128)
-        .opacity(0.95)
+      if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+        Image(this.heroBackdropPixelMap)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Cover)
+          .scale({ x: 1.18, y: 1.18 })
+          .blur(128)
+          .opacity(0.95)
+      } else {
+        ImageKnifeComponent({
+          imageKnifeOption: this.heroImageOption()
+        })
+          .width('100%')
+          .height('100%')
+          .scale({ x: 1.18, y: 1.18 })
+          .blur(128)
+          .opacity(0.95)
+      }
 
       Stack()
         .width('100%')
@@ -666,6 +831,8 @@ export struct VideoDetailPage {
   }
 
   aboutToAppear(): void {
+    this.heroBackdropActive = true
+    this.logHeroInfo('page.appear')
     this.configureHeroHeight()
     const raw = HMRouterMgr.getCurrentParam()
     if (raw && typeof raw !== 'string') {
@@ -678,6 +845,7 @@ export struct VideoDetailPage {
         this.ui.mediaRef = ref
         this.ui.id = ref.id
         this.ui.isTvShows = ref.kind === MediaRefKind.Series || isTvShows
+        this.logHeroInfo('page.route.resolved', `kind=${ref.kind} tv=${this.ui.isTvShows ? 1 : 0}`)
         this.refreshDetail()
       }
     } else if (typeof raw === 'string') {
@@ -685,6 +853,7 @@ export struct VideoDetailPage {
       if (ref) {
         this.ui.mediaRef = ref
         this.ui.id = ref.id
+        this.logHeroInfo('page.route.legacy', `kind=${ref.kind}`)
         this.refreshDetail()
       }
     }
@@ -697,12 +866,21 @@ export struct VideoDetailPage {
   }
 
   aboutToDisappear(): void {
+    this.heroBackdropActive = false
+    this.heroBackdropGeneration += 1
+    this.logHeroInfo('page.disappear',
+      `generation=${this.heroBackdropGeneration} release=${this.heroBackdropPixelMap ? 1 : 0}`)
     this.getUIContext().getHostContext()?.eventHub.off(VideoDetailRefreshEvent)
-    if (this.heroPixelMap) {
-      this.heroPixelMap.release()
-      this.heroPixelMap = undefined
-      this.heroPixelMapSource = ''
+    if (this.heroBackdropPixelMap) {
+      this.heroBackdropPixelMap.release()
+      this.heroBackdropPixelMap = undefined
     }
+    if (this.heroFeatheredPixelMap) {
+      this.heroFeatheredPixelMap.release()
+      this.heroFeatheredPixelMap = undefined
+    }
+    this.heroBackdropKey = ''
+    this.heroBackdropLoadingKey = ''
   }
 
   @Builder
@@ -935,7 +1113,8 @@ export struct VideoDetailPage {
                 .padding({ left: 16, right: 16 })
               }
 
-              if (!this.ui.isTvShows) {
+              if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+                this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
                 if (!this.useNativeSurface()) {
                   Blank().height(10)
                   Row({ space: 16 }) {
@@ -1042,19 +1221,20 @@ export struct VideoDetailPage {
                     GridItem() {
                       VideoCard({
                         item: item,
-                        textAlign: TextAlign.Center
-                      }).onClick(() => {
-                        HMRouterMgr.to(RouterConsts.SeasonDetailPage)
-                          .withParam({
-                            id: item.id,
-                            ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
-                            mediaName: this.ui.mediaName,
-                            seasons: this.ui.seasons,
-                            info: this.ui.info,
-                            parentId: this.ui.id,
-                            seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
-                          })
-                          .push()
+                        textAlign: TextAlign.Center,
+                        onOpen: () => {
+                          HMRouterMgr.to(RouterConsts.SeasonDetailPage)
+                            .withParam({
+                              id: item.id,
+                              ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
+                              mediaName: this.ui.mediaName,
+                              seasons: this.ui.seasons,
+                              info: this.ui.info,
+                              parentId: this.ui.id,
+                              seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
+                            })
+                            .push()
+                        }
                       })
                     }
                   })
@@ -1071,79 +1251,87 @@ export struct VideoDetailPage {
                   peopleList: this.ui.people
                 })
               }
-              if (!this.ui.isTvShows) {
+              if (!this.ui.isTvShows && (this.hasFileInformation() || this.hasVideoInformation())) {
                 Column() {
                   Blank().height(16)
 
-                  Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+                  if (this.hasFileInformation()) {
+                    Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
 
-                  Column() {
-                    Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
-                    Blank().height(10)
-                    Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
-                    Blank().height(16)
-                    Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
-                    Blank().height(10)
-                    Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
-                    //这个不是每个文件的,不准
-                    // Blank().height(16)
-                    // Text('创建日期').fontSize(12).fontColor($r('app.color.text_2'))
-                    // Blank().height(10)
-                    // Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                    Column() {
+                      if (this.ui.path.trim().length > 0) {
+                        Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
+                        Blank().height(10)
+                        Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
+                      }
+                      if (this.ui.path.trim().length > 0 && this.ui.size.trim().length > 0) {
+                        Blank().height(16)
+                      }
+                      if (this.ui.size.trim().length > 0) {
+                        Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
+                        Blank().height(10)
+                        Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                      }
+                    }
+                    .width('100%')
+                    .backgroundColor(this.detailInformationBackground())
+                    .borderRadius(12)
+                    .padding(12)
+                    .alignItems(HorizontalAlign.Start)
+                    .margin({ top: 12 })
                   }
-                  .width('100%')
-                  .backgroundColor(this.detailInformationBackground())
-                  .borderRadius(12)
-                  .padding(12)
-                  .alignItems(HorizontalAlign.Start)
-                  .margin({ top: 12 })
 
-                  Blank().height(16)
-
-                  Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-
-                  Column({ space: 16 }) {
-                    if (this.ui.videoInfo.length > 0) {
-                      Column({ space: 10 }) {
-                        Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
-                        Text(this.ui.videoInfo)
-                          .fontSize(12)
-                          .fontColor($r('app.color.text_1'))
-                          .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                      }.width('100%')
-                      .alignItems(HorizontalAlign.Start)
-                    }
-                    if (this.ui.audioInfo.length > 0) {
-                      Column({ space: 10 }) {
-                        Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
-                        Text(this.ui.audioInfo)
-                          .fontSize(12)
-                          .fontColor($r('app.color.text_1'))
-                          .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                      }.width('100%')
-                      .alignItems(HorizontalAlign.Start)
-                    }
-                    if (this.ui.subtitleInfo.length > 0) {
-                      Column({ space: 10 }) {
-                        Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
-                        Text(this.ui.subtitleInfo)
-                          .fontSize(12)
-                          .fontColor($r('app.color.text_1'))
-                          .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                      }.width('100%')
-                      .alignItems(HorizontalAlign.Start)
+                  if (this.hasVideoInformation()) {
+                    if (this.hasFileInformation()) {
+                      Blank().height(16)
                     }
 
-                    Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
-                      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                    Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
 
-                    this.videoInfoSheetTrigger()
+                    Column({ space: 16 }) {
+                      if (this.ui.videoInfo.trim().length > 0) {
+                        Column({ space: 10 }) {
+                          Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.videoInfo)
+                            .fontSize(12)
+                            .fontColor($r('app.color.text_1'))
+                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                        }.width('100%')
+                        .alignItems(HorizontalAlign.Start)
+                      }
+                      if (this.ui.audioInfo.trim().length > 0) {
+                        Column({ space: 10 }) {
+                          Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.audioInfo)
+                            .fontSize(12)
+                            .fontColor($r('app.color.text_1'))
+                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                        }.width('100%')
+                        .alignItems(HorizontalAlign.Start)
+                      }
+                      if (this.ui.subtitleInfo.trim().length > 0) {
+                        Column({ space: 10 }) {
+                          Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.subtitleInfo)
+                            .fontSize(12)
+                            .fontColor($r('app.color.text_1'))
+                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                        }.width('100%')
+                        .alignItems(HorizontalAlign.Start)
+                      }
+
+                      if (this.hasSelectedMediaStreams()) {
+                        Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
+                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                        this.videoInfoSheetTrigger()
+                      }
+                    }
+                    .width('100%')
+                    .backgroundColor(this.detailInformationBackground())
+                    .borderRadius(12)
+                    .padding(12)
+                    .margin({ top: 12 })
                   }
-                  .width('100%')
-                  .backgroundColor(this.detailInformationBackground())
-                  .borderRadius(12)
-                  .padding(12)
-                  .margin({ top: 12 })
                 }.padding({ left: 16, right: 16 })
                 .alignItems(HorizontalAlign.Start)
               }

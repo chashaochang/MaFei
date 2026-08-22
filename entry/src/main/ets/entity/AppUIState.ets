@@ -18,6 +18,8 @@ export class AppUIState {
   @Trace themeStyle: ThemeStyle = ThemeStyle.Feiniu
   @Trace safeTop: number = 0
   @Trace safeBottom: number = 0
+  @Trace safeLeft: number = 0
+  @Trace safeRight: number = 0
   @Trace isLogin: boolean = false
   @Trace isConnecting: boolean = false
   @Trace deviceWidth: number = 0

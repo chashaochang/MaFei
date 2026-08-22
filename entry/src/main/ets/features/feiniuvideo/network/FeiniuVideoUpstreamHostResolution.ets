@@ -27,8 +27,7 @@ export class FeiniuVideoUpstreamAddressResolver implements FeiniuVideoAddressRes
     if (FnosHostResolver.isFnConnectLike(originalAddress)) {
       return this.resolveFnConnect(originalAddress)
     }
-    const preferHttps = originalAddress.startsWith('https://') || originalAddress.startsWith('wss://')
-    const directBaseUrl = FnosHostResolver.normalizeHttpBaseUrl(originalAddress, preferHttps)
+    const directBaseUrl = this.normalizeDirectBaseUrl(originalAddress)
     if (directBaseUrl.length === 0) {
       throw new FeiniuVideoRequestError(
         FeiniuVideoRequestFailureKind.InvalidRequest,
@@ -44,6 +43,43 @@ export class FeiniuVideoUpstreamAddressResolver implements FeiniuVideoAddressRes
     return new FeiniuVideoAddressResolution(input, [
       new FeiniuVideoHostCandidate(directBaseUrl, MediaConnectionRoute.Direct)
     ])
+  }
+
+  private normalizeDirectBaseUrl(address: string): string {
+    const normalizedAddress = address.trim().replace(/\/+$/, '')
+    const lowerAddress = normalizedAddress.toLowerCase()
+    const hasExplicitScheme = lowerAddress.startsWith('http://') || lowerAddress.startsWith('https://') ||
+      lowerAddress.startsWith('ws://') || lowerAddress.startsWith('wss://')
+    if (!hasExplicitScheme) {
+      return FnosHostResolver.normalizeHttpBaseUrl(normalizedAddress, false)
+    }
+
+    const secure = lowerAddress.startsWith('https://') || lowerAddress.startsWith('wss://')
+    const scheme = secure ? 'https://' : 'http://'
+    const withoutScheme = normalizedAddress.replace(/^(?:https?|wss?):\/\//i, '')
+    const pathStart = withoutScheme.indexOf('/')
+    const authority = pathStart >= 0 ? withoutScheme.substring(0, pathStart) : withoutScheme
+    const path = pathStart >= 0 ? withoutScheme.substring(pathStart) : ''
+    if (authority.length === 0) {
+      return ''
+    }
+    if (this.hasExplicitPort(authority)) {
+      return `${scheme}${authority}${path}`
+    }
+    return `${scheme}${authority}:${secure ? '443' : '80'}${path}`
+  }
+
+  private hasExplicitPort(authority: string): boolean {
+    if (authority.startsWith('[')) {
+      const bracketEnd = authority.indexOf(']')
+      return bracketEnd >= 0 && authority.substring(bracketEnd + 1).startsWith(':')
+    }
+    const separator = authority.lastIndexOf(':')
+    if (separator < 0) {
+      return false
+    }
+    const port = authority.substring(separator + 1)
+    return port.length > 0 && /^\d+$/.test(port)
   }
 
   private async resolveFnConnect(originalAddress: string): Promise<FeiniuVideoAddressResolution> {

@@ -173,7 +173,7 @@ export class FeiniuVideoCatalogMapper {
   }
 
   resume(item: FnMediaPlayItem): MediaSummary {
-    const owner = this.ref(item.guid, this.refKind(item.type))
+    const owner = this.ref(item.guid, this.playItemKind(item))
     const seriesId = `${item.ancestor_guid || item.parent_guid || ''}`.trim()
     const seasonId = `${item.parent_guid || ''}`.trim()
     const seriesTitle = `${item.parent_title || item.tv_title || item.ancestor_name || ''}`.trim()
@@ -256,8 +256,8 @@ export class FeiniuVideoCatalogMapper {
       title: item.title || this.seasonTitle(item.season_number),
       overview: item.overview || '',
       seasonNumber: this.positiveNumber(item.season_number),
-      productionYear: undefined,
-      communityRating: undefined,
+      productionYear: this.year(item),
+      communityRating: this.rating(item.vote_average),
       episodeCount: Math.max(0, item.local_number_of_episodes || item.number_of_episodes || 0),
       primaryImage: this.image(owner, item.poster || '', MediaImageKind.Primary,
         'season-primary-640', 640),
@@ -374,7 +374,15 @@ export class FeiniuVideoCatalogMapper {
     return MediaRefKind.Unknown
   }
 
+  playItemKind(item: FnMediaPlayItem): MediaRefKind {
+    if ((item.episode_number || 0) > 0) {
+      return MediaRefKind.Episode
+    }
+    return this.refKind(item.type)
+  }
+
   private createSummary(item: FnMediaItem, owner: MediaRef, title: string, subtitle: string): MediaSummary {
+    const detail = item as FnMediaItemDetailResp
     return {
       ref: owner,
       seriesRef: this.optionalRef(this.seriesId(item), MediaRefKind.Series),
@@ -394,10 +402,14 @@ export class FeiniuVideoCatalogMapper {
       childCount: this.childCount(item),
       genres: this.genres(item),
       tags: this.mediaTags(item),
-      primaryImage: this.image(owner, item.poster || '', MediaImageKind.Primary,
+      primaryImage: this.image(owner, item.poster || detail.posters || '', MediaImageKind.Primary,
         'item-primary-640', 640),
       thumbnailImage: this.image(owner, item.poster || '', MediaImageKind.Thumbnail,
         'item-thumbnail-640', 640),
+      backdropImage: this.image(owner, detail.backdrops || '', MediaImageKind.Backdrop,
+        'item-backdrop-1280', 1280),
+      logoImage: this.image(owner, detail.logos || '', MediaImageKind.Logo,
+        'item-logo-720', 720),
       userState: this.userState(item)
     }
   }

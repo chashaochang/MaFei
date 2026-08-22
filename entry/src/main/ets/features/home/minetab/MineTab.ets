@@ -100,10 +100,10 @@ export struct MineTab {
     }
     .width('100%')
     .padding({
-      left: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 0 : 8,
-      right: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 0 : 8,
-      top: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 8 : 0,
-      bottom: 8
+      left: 16,
+      right: 16,
+      top: 14,
+      bottom: 14
     })
   }
 
@@ -113,6 +113,8 @@ export struct MineTab {
       this.profileHeaderContent()
     }
     .width('100%')
+    .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
+    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
   }
 
   @Builder
@@ -122,6 +124,7 @@ export struct MineTab {
     }
     .width('100%')
     .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
+    .backgroundColor($r('app.color.bg_1'))
   }
 
   @Builder
