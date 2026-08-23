@@ -25,6 +25,26 @@
       "value": "Appearance & Display"
     },
     {
+      "name": "feiniu_connection_strategy_title",
+      "value": "Feiniu connection preference"
+    },
+    {
+      "name": "feiniu_connection_strategy_speed",
+      "value": "Speed first"
+    },
+    {
+      "name": "feiniu_connection_strategy_public",
+      "value": "Public network first"
+    },
+    {
+      "name": "feiniu_connection_strategy_relay",
+      "value": "Relay first"
+    },
+    {
+      "name": "feiniu_connection_strategy_save_failed",
+      "value": "Couldn't save connection preference. Try again."
+    },
+    {
       "name": "mine_recent_watching",
       "value": "Recently Watching"
     },

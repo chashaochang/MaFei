@@ -218,10 +218,10 @@ export struct AccountPage {
   private providerLogo(item: AccountRowViewModel) {
     Image(item.isFeiniuVideo ?
       $r('app.media.feiniu_video_logo') : $r('app.media.jellyfin_logo'))
-      .width(48)
-      .height(48)
+      .width(40)
+      .height(40)
       .objectFit(ImageFit.Contain)
-      .borderRadius(12)
+      .borderRadius(10)
   }
 
   @Builder
@@ -247,22 +247,14 @@ export struct AccountPage {
             .borderRadius(4)
         }
       }
-      Row({ space: 6 }) {
-        Text(item.isFeiniuVideo ?
-          $r('app.string.feiniu_video_service_name') : $r('app.string.provider_jellyfin_name'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.color_main'))
-          .maxLines(1)
-        Text(item.address)
-          .fontSize(11)
-          .fontColor(this.secondaryTextColor())
-          .textAlign(TextAlign.Start)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .ellipsisMode(EllipsisMode.END)
-          .layoutWeight(1)
-      }
+      Text(item.address)
+        .fontSize(11)
+        .fontColor(this.secondaryTextColor())
+        .textAlign(TextAlign.Start)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .ellipsisMode(EllipsisMode.END)
+        .width('100%')
     }
     .height('100%')
     .layoutWeight(1)

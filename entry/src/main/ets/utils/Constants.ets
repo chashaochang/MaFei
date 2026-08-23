@@ -44,6 +44,7 @@ export class Constants {
   static readonly PREF_PLAYER_ENGINE = "pref_player_engine"
   static readonly PREF_MPV_HARDWARE_DECODE = "pref_mpv_hardware_decode"
   static readonly PREF_MPV_CACHE_SIZE_MB = "pref_mpv_cache_size_mb"
+  static readonly PREF_FEINIU_CONNECTION_PREFERENCE = "pref_feiniu_connection_preference"
   static readonly PREF_SEARCH_HISTORY = "pref_search_history"
   static readonly PREF_REPORTED_CONTENT_IDS = "pref_reported_content_ids"
   static readonly PREF_CHASING_SERIES_IDS = "pref_chasing_series_ids"

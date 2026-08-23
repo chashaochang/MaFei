@@ -95,6 +95,17 @@ export struct MineTab {
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
         }
+        if (this.ui.connectionDescription.length > 0) {
+          Text(this.ui.connectionDescription)
+            .fontColor(this.useNativeSurface() ?
+              $r('sys.color.font_secondary') : $r('app.color.text_1'))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+            .backgroundColor(this.useNativeSurface() ?
+              $r('sys.color.comp_background_tertiary') : $r('app.color.bg_hover'))
+            .borderRadius(8)
+        }
       }
       .alignItems(HorizontalAlign.Start)
     }

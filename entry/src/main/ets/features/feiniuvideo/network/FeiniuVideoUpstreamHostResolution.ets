@@ -14,6 +14,7 @@ import {
 } from './FeiniuVideoResolutionSource'
 import { FnConnectApi, FnConnectResolveResult } from '../upstream/common/FnConnectApi'
 import { FnosHostResolver } from '../upstream/common/FnosHostResolver'
+import { FeiniuVideoConnectionPreferenceStore } from './FeiniuVideoConnectionPreferenceStore'
 
 export class FeiniuVideoUpstreamAddressResolver implements FeiniuVideoAddressResolutionSource {
   async resolve(rawValue: string): Promise<FeiniuVideoAddressResolution> {
@@ -83,7 +84,11 @@ export class FeiniuVideoUpstreamAddressResolver implements FeiniuVideoAddressRes
   }
 
   private async resolveFnConnect(originalAddress: string): Promise<FeiniuVideoAddressResolution> {
-    const resolved = await FnConnectApi.resolveFnTargets(originalAddress)
+    const resolved = await FnConnectApi.resolveFnTargets(
+      originalAddress,
+      FeiniuVideoConnectionPreferenceStore.routePreference(),
+      true
+    )
     const input = new FeiniuVideoAddressInput(
       originalAddress,
       FeiniuVideoAddressKind.FnId,

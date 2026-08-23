@@ -657,7 +657,7 @@ export class JellyfinCatalogProvider implements MediaCatalogProvider {
         sortBy: [ItemSortBy.DateCreated],
         sortOrder: [SortOrder.Descending],
         fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated,
-          ItemFields.Path, ItemFields.MediaSourceCount],
+          ItemFields.Path, ItemFields.MediaSourceCount, ItemFields.MediaStreams],
         imageTypeLimit: 1,
         enableImages: true,
         enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
@@ -686,7 +686,7 @@ export class JellyfinCatalogProvider implements MediaCatalogProvider {
                 userId: this.requestSession.userId,
                 parentId: view.Id,
                 limit: HOME_RECENT_LIBRARY_LIMIT,
-                fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path],
+                fields: [ItemFields.PrimaryImageAspectRatio, ItemFields.Path, ItemFields.MediaStreams],
                 imageTypeLimit: 1,
                 enableImageTypes: [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb]
               })

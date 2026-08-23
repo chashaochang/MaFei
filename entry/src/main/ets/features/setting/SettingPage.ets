@@ -9,6 +9,10 @@ import { CustomColorMode } from '../../entity/CustomColorMode'
 import { ThemeStyle } from '../../entity/ThemeStyle'
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../theme/AppThemeTokens'
+import { MediaProviderKind } from '../../media/MediaProviderKind'
+import { MediaProviderRegistry } from '../../media/MediaProviderRegistry'
+import { FeiniuVideoConnectionPreferenceStore } from '../feiniuvideo/network/FeiniuVideoConnectionPreferenceStore'
+import { FeiniuVideoRoutePreference } from '../feiniuvideo/network/FeiniuVideoApiModels'
 
 @HMRouter({
   pageUrl: '/Setting',
@@ -19,6 +23,8 @@ export struct SettingPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private readonly contentScroller: Scroller = new Scroller()
   @Local appearanceName: string = ''
+  @Local showFeiniuConnectionPreference: boolean = false
+  @Local feiniuRoutePreference: FeiniuVideoRoutePreference = FeiniuVideoRoutePreference.Speed
 
   aboutToAppear(): void {
     this.refreshSummaries()
@@ -28,6 +34,9 @@ export struct SettingPage {
   }
 
   private refreshSummaries(): void {
+    const activeSession = MediaProviderRegistry.instance().getActiveSession()
+    this.showFeiniuConnectionPreference = activeSession?.provider === MediaProviderKind.FeiniuVideo
+    this.feiniuRoutePreference = FeiniuVideoConnectionPreferenceStore.routePreference()
     const resourceManager = this.getUIContext().getHostContext()?.resourceManager
     if (resourceManager) {
       try {
@@ -45,6 +54,16 @@ export struct SettingPage {
         this.appearanceName = ''
       }
     }
+  }
+
+  private feiniuRoutePreferenceTitle(): ResourceStr {
+    if (this.feiniuRoutePreference === FeiniuVideoRoutePreference.Public) {
+      return $r('app.string.feiniu_connection_strategy_public')
+    }
+    if (this.feiniuRoutePreference === FeiniuVideoRoutePreference.Relay) {
+      return $r('app.string.feiniu_connection_strategy_relay')
+    }
+    return $r('app.string.feiniu_connection_strategy_speed')
   }
 
   private primaryTextColor(native: boolean): ResourceColor {
@@ -112,6 +131,14 @@ export struct SettingPage {
             !showLegacyActionBar,
             () => HMRouterMgr.to(RouterConsts.ColorModePage).push()
           )
+          if (this.showFeiniuConnectionPreference) {
+            this.settingGroup(
+              $r('app.string.feiniu_connection_strategy_title'),
+              this.feiniuRoutePreferenceTitle(),
+              !showLegacyActionBar,
+              () => HMRouterMgr.to(RouterConsts.FeiniuConnectionPreferencePage).push()
+            )
+          }
           Blank().height(Math.max(24, this.appUIState.safeBottom))
         }
         .width('100%')

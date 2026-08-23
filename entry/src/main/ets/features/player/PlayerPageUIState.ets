@@ -41,9 +41,9 @@ export class PlayerPageUIState extends BaseUIState{
   //字幕列表
   @Trace subtitleStreams: MediaPlaybackStream[] = []
   //选中音频
-  selectedAudioStream?: MediaPlaybackStream
+  @Trace selectedAudioStream?: MediaPlaybackStream
   //选中字幕
-  selectedSubtitleStream?: MediaPlaybackStream
+  @Trace selectedSubtitleStream?: MediaPlaybackStream
   //质量列表
   qualityOptions: QualityOption[] = []
   //选中码率

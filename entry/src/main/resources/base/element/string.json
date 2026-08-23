@@ -213,6 +213,26 @@
       "value": "外观与显示"
     },
     {
+      "name": "feiniu_connection_strategy_title",
+      "value": "飞牛连接策略"
+    },
+    {
+      "name": "feiniu_connection_strategy_speed",
+      "value": "速度优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_public",
+      "value": "公网优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_relay",
+      "value": "中转优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_save_failed",
+      "value": "连接策略保存失败，请重试"
+    },
+    {
       "name": "mine_recent_watching",
       "value": "最近在看"
     },

@@ -71,9 +71,12 @@ class FakeJellyfinPlaybackService implements JellyfinPlaybackService {
       DeliveryUrl: '/Videos/episode-1/Subtitles/2/0/Stream.srt'
     }]
   }
+  playbackSources?: MediaSourceInfo[]
+  playbackInfoResponder?: (request: JellyfinPlaybackInfoRequest) => PlaybackInfoResponse
   itemsResult: BaseItemDtoQueryResult = { Items: [] }
   episodesResult: BaseItemDtoQueryResult = { Items: [] }
   lastPlaybackInfoRequest?: JellyfinPlaybackInfoRequest
+  playbackInfoRequests: JellyfinPlaybackInfoRequest[] = []
   lastStart?: PlaybackStartInfo
   lastProgress?: PlaybackProgressInfo
   lastStop?: PlaybackStopInfo
@@ -94,9 +97,13 @@ class FakeJellyfinPlaybackService implements JellyfinPlaybackService {
   getPlaybackInfo(_session: JellyfinPlaybackRequestSession,
     request: JellyfinPlaybackInfoRequest): Promise<PlaybackInfoResponse> {
     this.lastPlaybackInfoRequest = request
+    this.playbackInfoRequests.push(request)
+    if (this.playbackInfoResponder) {
+      return Promise.resolve(this.playbackInfoResponder(request))
+    }
     const response: PlaybackInfoResponse = {
       PlaySessionId: 'play-1',
-      MediaSources: [this.sourceResult]
+      MediaSources: this.playbackSources ?? [this.sourceResult]
     }
     return Promise.resolve(response)
   }
@@ -185,6 +192,27 @@ export default function jellyfinPlaybackProviderTest() {
       expect(service.lastPlaybackInfoRequest?.startTimeTicks).assertEqual(0)
     })
 
+    it('usesExplicitlySelectedMediaSource', 0, async () => {
+      const owner = session()
+      const service = new FakeJellyfinPlaybackService()
+      service.playbackSources = [
+        service.sourceResult,
+        {
+          ...service.sourceResult,
+          Id: 'episode-1-source-2',
+          Name: 'Alternative'
+        }
+      ]
+      const provider = new JellyfinPlaybackProvider(owner, service)
+      const resolved = await provider.resolveSource({
+        ...request(owner, 0),
+        mediaSourceId: 'episode-1-source-2'
+      })
+
+      expect(service.lastPlaybackInfoRequest?.mediaSourceId).assertEqual('episode-1-source-2')
+      expect(resolved.id).assertEqual('episode-1-source-2')
+    })
+
     it('preparesAuthenticatedStreamsAndDelegatesLifecycle', 0, async () => {
       const owner = session()
       const service = new FakeJellyfinPlaybackService()
@@ -232,6 +260,55 @@ export default function jellyfinPlaybackProviderTest() {
       expect(source.usesServerTranscoding()).assertTrue()
       await provider.closeTranscode(source)
       expect(service.closedPlaySessionId).assertEqual('play-1')
+    })
+
+    it('usesCompatibleAudioBeforeAcceptingAnAudioOnlyTranscode', 0, async () => {
+      const owner = session()
+      const service = new FakeJellyfinPlaybackService()
+      const transcodedSource: MediaSourceInfo = {
+        ...service.sourceResult,
+        SupportsDirectPlay: false,
+        SupportsDirectStream: false,
+        SupportsTranscoding: true,
+        TranscodingUrl: '/Videos/episode-1/master.m3u8',
+        DefaultAudioStreamIndex: 1,
+        MediaStreams: [{
+          Index: 0,
+          Type: MediaStreamType.Video,
+          Codec: 'hevc'
+        }, {
+          Index: 1,
+          Type: MediaStreamType.Audio,
+          Codec: 'unknown',
+          CodecTag: 'av3a',
+          IsDefault: true,
+          Language: 'zho'
+        }, {
+          Index: 2,
+          Type: MediaStreamType.Audio,
+          Codec: 'aac',
+          Language: 'zho'
+        }]
+      }
+      const directSource: MediaSourceInfo = {
+        ...transcodedSource,
+        SupportsDirectPlay: true,
+        SupportsTranscoding: false,
+        TranscodingUrl: undefined,
+        DefaultAudioStreamIndex: 2
+      }
+      service.playbackInfoResponder = (playbackRequest: JellyfinPlaybackInfoRequest): PlaybackInfoResponse => ({
+        PlaySessionId: playbackRequest.audioStreamIndex === 2 ? 'play-direct' : 'play-transcode',
+        MediaSources: [playbackRequest.audioStreamIndex === 2 ? directSource : transcodedSource]
+      })
+      const provider = new JellyfinPlaybackProvider(owner, service)
+
+      const source = await provider.resolveSource(request(owner, 0))
+
+      expect(service.playbackInfoRequests.length).assertEqual(2)
+      expect(service.playbackInfoRequests[1].audioStreamIndex).assertEqual(2)
+      expect(source.usesServerTranscoding()).assertFalse()
+      expect(source.selectedAudioStream?.Index).assertEqual(2)
     })
 
     it('rejectsReferencesFromAnotherAccount', 0, async () => {

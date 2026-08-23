@@ -214,6 +214,9 @@ export struct IndexPage {
         serverEntity.version,
         successState.serverId
       )
+      // 保留用户输入的服务器身份；当前会话请求改走探测实际验证通过的地址。
+      // 这样 Axios 无法解析纯 IPv6 域名时，仍可使用 NetworkKit 已解析出的地址。
+      ApiClient.update(successState.address)
       await this.apiClientController.setupUser(serverEntity.id, userId, token)
       if (serverEntity.servername === '' || serverEntity.version === '') {
         try {

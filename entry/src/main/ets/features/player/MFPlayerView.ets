@@ -9,12 +9,16 @@ import {
   PlayerExternalSubtitle,
   PlayerOptions,
   PlayerSource,
-  PlayerState
+  PlayerState,
+  PlayerTrack
 } from 'mfplayer'
 import {
   MediaPlaybackExternalSubtitle,
   MediaPlaybackRequestHeader,
-  MediaPlaybackSource
+  MediaPlaybackPlayMethod,
+  MediaPlaybackSource,
+  MediaPlaybackStream,
+  MediaPlaybackSubtitleDeliveryMethod
 } from '../../media/playback/MediaPlaybackModels'
 import { PlayerPageUIState } from './PlayerPageUIState'
 import { PlayerPageViewModel } from './PlayerPageViewModel'
@@ -220,6 +224,96 @@ export struct MFPlayerView {
     }
   }
 
+  private normalizeTrackText(value?: string): string {
+    return value?.trim().toLowerCase() ?? ''
+  }
+
+  private resolveNativeTrack(stream: MediaPlaybackStream | undefined, tracks: PlayerTrack[]): PlayerTrack | undefined {
+    if (!stream) {
+      return undefined
+    }
+    const isExternal = stream.IsExternal === true ||
+      stream.DeliveryMethod === MediaPlaybackSubtitleDeliveryMethod.External
+    const candidates = tracks.filter((track: PlayerTrack): boolean => track.isExternal === isExternal)
+    if (candidates.length === 0) {
+      return undefined
+    }
+    if (stream.Index !== undefined) {
+      const indexedTrack = candidates.find((track: PlayerTrack): boolean => track.id === stream.Index)
+      if (indexedTrack) {
+        return indexedTrack
+      }
+    }
+    const title = this.normalizeTrackText(stream.DisplayTitle ?? stream.Title)
+    const language = this.normalizeTrackText(stream.Language)
+    const codec = this.normalizeTrackText(stream.Codec)
+    const hasTitle = (track: PlayerTrack): boolean =>
+      title.length > 0 && this.normalizeTrackText(track.title) === title
+    const hasLanguage = (track: PlayerTrack): boolean =>
+      language.length > 0 && this.normalizeTrackText(track.language) === language
+    const hasCodec = (track: PlayerTrack): boolean =>
+      codec.length > 0 && this.normalizeTrackText(track.codec) === codec
+    const exactTrack = candidates.find((track: PlayerTrack): boolean =>
+      hasTitle(track) && (language.length === 0 || hasLanguage(track)) &&
+      (codec.length === 0 || hasCodec(track)))
+    if (exactTrack) {
+      return exactTrack
+    }
+    const titledTrack = candidates.find((track: PlayerTrack): boolean => hasTitle(track))
+    if (titledTrack) {
+      return titledTrack
+    }
+    const languageAndCodecTrack = candidates.find((track: PlayerTrack): boolean =>
+      hasLanguage(track) && hasCodec(track))
+    if (languageAndCodecTrack) {
+      return languageAndCodecTrack
+    }
+    const languageTrack = candidates.find((track: PlayerTrack): boolean => hasLanguage(track))
+    if (languageTrack) {
+      return languageTrack
+    }
+    return candidates.length === 1 ? candidates[0] : undefined
+  }
+
+  private syncNativeAudioTrack(tracks: PlayerTrack[] = this.controller.getAudioTracks()): void {
+    const selectedTrack = this.resolveNativeTrack(this.vm.mediaSourceOrNull?.selectedAudioStream, tracks)
+    if (!selectedTrack || this.controller.getSelectedAudioTrackId() === selectedTrack.id) {
+      return
+    }
+    if (!this.controller.selectAudioTrack(selectedTrack.id)) {
+      console.warn(`[MFPlayer] select audio track failed: ${selectedTrack.id}`)
+    }
+  }
+
+  private syncNativeSubtitleTrack(tracks: PlayerTrack[] = this.controller.getSubtitleTracks()): void {
+    const selectedTrack = this.resolveNativeTrack(this.vm.mediaSourceOrNull?.selectedSubtitleStream, tracks)
+    if (!selectedTrack || this.controller.getSelectedSubtitleTrackId() === selectedTrack.id) {
+      return
+    }
+    if (!this.controller.selectSubtitleTrack(selectedTrack.id)) {
+      console.warn(`[MFPlayer] select subtitle track failed: ${selectedTrack.id}`)
+    }
+  }
+
+  private syncNativeTrackSelections(audioTracks?: PlayerTrack[], subtitleTracks?: PlayerTrack[]): void {
+    this.syncNativeAudioTrack(audioTracks)
+    this.syncNativeSubtitleTrack(subtitleTracks)
+  }
+
+  private async selectAudioTrack(stream: MediaPlaybackStream): Promise<void> {
+    const selected = await this.vm.selectAudioTrack(stream)
+    if (selected) {
+      this.syncNativeTrackSelections()
+    }
+  }
+
+  private async selectSubtitleTrack(stream: MediaPlaybackStream): Promise<void> {
+    const selected = await this.vm.selectSubtitleTrack(stream)
+    if (selected) {
+      this.syncNativeTrackSelections()
+    }
+  }
+
   private isHdrSource(source?: MediaPlaybackSource): boolean {
     const transfer = source?.selectedVideoStream?.ColorTransfer?.trim().toLowerCase() ?? ''
     return transfer.includes('smpte2084') || transfer.includes('arib-std-b67') ||
@@ -229,6 +323,8 @@ export struct MFPlayerView {
 
   private createPlayerOptions(): PlayerOptions {
     const preference = AppPreference.getInstance()
+    const directPlay: boolean = this.vm.mediaSourceOrNull?.getEffectivePlayMethod() ===
+      MediaPlaybackPlayMethod.DirectPlay
     return {
       autoPlay: this.ui.playWhenReady,
       useHardwareDecode: preference.getMpvUseHardwareDecode(),
@@ -237,7 +333,16 @@ export struct MFPlayerView {
       startPositionMs: this.ui.initSeek,
       playbackSpeed: 1,
       progressIntervalMs: 500,
-      exactSeek: false
+      exactSeek: false,
+      /* 并行 Range 仅针对原始 Direct Play 文件；HLS/DirectStream/转码仍由播放器原路径处理。 */
+      multiConnectionEnabled: directPlay,
+      multiConnectionOptions: {
+        connections: 12,
+        // 代理按块返回数据；首块过大会让首帧等待整块下载完成。
+        // 12 条长连接提高公网限速源的聚合吞吐，同时优先缩短首帧等待。
+        blockSizeMb: 2,
+        forwardWindowMb: 128
+      }
     }
   }
 
@@ -262,6 +367,9 @@ export struct MFPlayerView {
 
   private handlePlayerEvent(event: PlayerEvent): void {
     this.ui.playbackPositionMs = event.positionMs
+    if (event.type === PlayerEventType.TRACKS_CHANGED) {
+      this.syncNativeTrackSelections(event.audioTracks, event.subtitleTracks)
+    }
     if (event.type === PlayerEventType.PROGRESS_CHANGED) {
       this.vm.reportPlaybackProgress(event.positionMs, !event.playWhenReady)
     }
@@ -393,10 +501,10 @@ export struct MFPlayerView {
         void this.vm.changeBitrate(option.bitrate)
       },
       onAudioSelected: (stream): void => {
-        void this.vm.selectAudioTrack(stream)
+        void this.selectAudioTrack(stream)
       },
       onSubtitleSelected: (stream): void => {
-        void this.vm.selectSubtitleTrack(stream)
+        void this.selectSubtitleTrack(stream)
       },
       onEpisodeSelected: (index: number): void => {
         void this.vm.changeEpisode(index)

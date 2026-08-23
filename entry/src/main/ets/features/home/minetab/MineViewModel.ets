@@ -18,7 +18,7 @@ import {
 import { MineHistoryState } from "./MineUIState";
 import { MediaProviderKind } from "../../../media/MediaProviderKind";
 import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry";
-import { MediaProviderSession } from "../../../media/MediaProviderSession";
+import { MediaConnectionRoute, MediaProviderSession } from "../../../media/MediaProviderSession";
 import { MediaProviderComposition } from "../../setting/account/MediaProviderComposition";
 import { FeiniuVideoSessionContextRegistry } from
   "../../feiniuvideo/account/FeiniuVideoSessionContextRegistry";
@@ -43,19 +43,27 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
   }
 
   private initFeiniuProfile(session: MediaProviderSession): void {
-    const address = session.originalAddress || session.baseUrl
     this.ui.userName = session.displayName || session.userId
     this.ui.userAvatar = ''
-    this.ui.serverName = session.serverName || address
-    this.ui.serverVersion = address
+    this.ui.serverName = this.visibleFeiniuServerName(session)
+    this.ui.serverVersion = ''
     this.ui.isAdministrator = false
     this.ui.managementAvailable = session.capabilities.management
     this.ui.webITongAvailable = false
     this.ui.userPolicy = '普通用户'
     const context = FeiniuVideoSessionContextRegistry.instance().get(session)
     if (!context) {
+      this.ui.connectionDescription = this.feiniuConnectionDescription(
+        session.connectionRoute,
+        session.baseUrl
+      )
       return
     }
+    const activeResolution = context.apiClient.getResolution()
+    this.ui.connectionDescription = this.feiniuConnectionDescription(
+      activeResolution.preferredRoute,
+      activeResolution.preferredBaseUrl
+    )
     context.apiClient.getUserInfo().then((response) => {
       const userData = response.data
       if (!userData) {
@@ -75,6 +83,7 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
     this.ui.userAvatar = ''
     this.ui.serverName = ''
     this.ui.serverVersion = ''
+    this.ui.connectionDescription = ''
     this.ui.userName = AppPreference.getInstance().getUserName()
     this.ui.managementAvailable = session?.capabilities.management !== false
     this.ui.webITongAvailable = true
@@ -104,6 +113,84 @@ export class MineViewModel extends BaseViewModel<MineUIState> {
     }).catch(() => {
       this.ui.isAdministrator = false
     })
+  }
+
+  private feiniuConnectionDescription(connectionRoute: string, baseUrl: string): string {
+    const addressType = this.addressType(baseUrl)
+    switch (connectionRoute) {
+      case MediaConnectionRoute.Relay:
+        return '飞牛中转'
+      case MediaConnectionRoute.Local:
+        return addressType.length > 0 ? `内网 ${addressType}` : '内网连接'
+      case MediaConnectionRoute.Public:
+        return addressType.length > 0 ? `公网 ${addressType}` : '公网连接'
+      case MediaConnectionRoute.Direct:
+      default:
+        return this.directConnectionDescription(baseUrl, addressType)
+    }
+  }
+
+  private visibleFeiniuServerName(session: MediaProviderSession): string {
+    const serverName = session.serverName.trim()
+    const originalAddress = session.originalAddress.trim()
+    if (serverName.length === 0 || serverName === originalAddress ||
+      this.isFeiniuConnectionAddress(serverName)) {
+      return '飞牛影视'
+    }
+    return serverName
+  }
+
+  private isFeiniuConnectionAddress(value: string): boolean {
+    const normalized = value.trim().toLowerCase()
+    return normalized.startsWith('http://') || normalized.startsWith('https://') ||
+      normalized.indexOf('.5ddd.com') >= 0 || normalized.indexOf('.fnos.net') >= 0
+  }
+
+  private directConnectionDescription(baseUrl: string, addressType: string): string {
+    const host = this.urlHost(baseUrl)
+    if (host === 'localhost') {
+      return '内网连接'
+    }
+    if (this.isPrivateIpv4(host)) {
+      return '内网 IPv4'
+    }
+    if (this.isPrivateIpv6(host)) {
+      return '内网 IPv6'
+    }
+    return addressType.length > 0 ? `公网 ${addressType}` : '公网直连'
+  }
+
+  private addressType(baseUrl: string): string {
+    const host = this.urlHost(baseUrl)
+    if (host.indexOf(':') >= 0) {
+      return 'IPv6'
+    }
+    return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) ? 'IPv4' : ''
+  }
+
+  private urlHost(baseUrl: string): string {
+    const authority = baseUrl.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0]
+    if (authority.startsWith('[')) {
+      const end = authority.indexOf(']')
+      return end > 0 ? authority.substring(1, end) : authority
+    }
+    return authority.split(':')[0]
+  }
+
+  private isPrivateIpv4(host: string): boolean {
+    const parts = host.split('.').map((part: string): number => Number(part))
+    if (parts.length !== 4 || parts.some((part: number): boolean => Number.isNaN(part))) {
+      return false
+    }
+    return parts[0] === 10 || parts[0] === 127 ||
+      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+      (parts[0] === 192 && parts[1] === 168)
+  }
+
+  private isPrivateIpv6(host: string): boolean {
+    const normalized = host.toLowerCase()
+    return normalized === '::1' || normalized.startsWith('fe80:') ||
+      normalized.startsWith('fc') || normalized.startsWith('fd')
   }
 
   getServerInfo() {

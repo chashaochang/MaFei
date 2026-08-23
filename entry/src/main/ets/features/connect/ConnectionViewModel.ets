@@ -44,7 +44,7 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
     this.ui.username = username
   }
 
-  onLogin(isFromAddAccount: boolean) {
+  async onLogin(isFromAddAccount: boolean): Promise<void> {
     if (this.ui.username.trim().length === 0 || this.ui.password.length === 0) {
       this.ui.errorText = '请输入用户名和密码'
       return
@@ -53,31 +53,41 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
     this.ui.loading = true
     this.ui.externalError = false
     this.ui.checkUrlState = new Pending()
-    connectionHelper.checkServerUrl(this.ui.hostname).then(async (state) => {
+    let stage: string = 'server_probe'
+    console.info(`[JellyfinLogin] start host=${this.ui.hostname.trim()} fromAddAccount=${isFromAddAccount}`)
+    try {
+      const state = await connectionHelper.checkServerUrl(this.ui.hostname)
       this.ui.checkUrlState = state
       if (state.type === CheckUrlStateType.Success) {
-        let successData = state as Success
-        let successServerAddr = successData.address
+        const successData = state as Success
+        const successServerAddr = successData.address
+        console.info(`[JellyfinLogin] server probe success address=${successServerAddr}`)
+        stage = 'persist_server'
         await this.apiClientController.setupServer(successData.address, successData.name, successData.version,
           successData.serverId)
         this.ui.hostname = successServerAddr
-        let serverEntity = this.apiClientController.loadSavedServer()
+        const serverEntity = this.apiClientController.loadSavedServer()
         if (serverEntity !== null) {
           this.appUIState.isConnecting = true
           this.appUIState.server = serverEntity
+          console.info(`[JellyfinLogin] credential request start address=${serverEntity.hostname}`)
           this.loginByPwd(isFromAddAccount, serverEntity)
+          return
         }
       } else {
+        const errorState = state as CheckUrlError
+        console.error(`[JellyfinLogin] server probe rejected message=${errorState.message || 'none'}`)
         this.ui.loading = false
         this.ui.externalError = true
         this.appUIState.isConnecting = false
       }
-    }).catch(() => {
+    } catch (error) {
+      console.error(`[JellyfinLogin] failed stage=${stage} error=${String(error)}`)
       this.ui.checkUrlState = new CheckUrlError(CONNECTION_ERROR_TEXT)
       this.ui.loading = false
       this.ui.externalError = true
       this.appUIState.isConnecting = false
-    })
+    }
   }
 
   async loginByAccessToken(isFromAddAccount: boolean, serverEntity: ServerEntity, token: string): Promise<void> {
@@ -129,11 +139,13 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
       } else {
         this.ui.errorText = LOGIN_FAILED_TEXT
       }
+      console.info('[JellyfinLogin] credential request succeeded')
       this.ui.loading = false
       this.appUIState.isConnecting = false
     }).catch((error: Error) => {
       const axiosError = error as AxiosError<Object, Object>
       const status = axiosError.response?.status
+      console.error(`[JellyfinLogin] credential request failed status=${status ?? 0} message=${axiosError.message}`)
       if (status === 400 || status === 401) {
         this.ui.errorText = INVALID_CREDENTIALS_TEXT
       } else if (axiosError.isAxiosError === true && !axiosError.response) {

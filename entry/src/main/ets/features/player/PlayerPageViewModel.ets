@@ -9,6 +9,7 @@ import {
 } from "../../media/playback/MediaPlaybackModels";
 import { MediaPlaybackProvider } from "../../media/playback/MediaPlaybackProvider";
 import { currentMediaPlaybackProvider } from "../../media/MediaPlaybackAccess";
+import { createMediaImageKnifeOption } from "../../media/catalog/MediaImageKnifeAdapter";
 import {
   MediaProviderRegistry,
   MediaProviderScopedPlayback
@@ -46,6 +47,8 @@ import { PlayerEngineDecision, PlayerEngineResolver } from "../../player/PlayerE
 import { openUrlByBrowser } from "../../common/CommonFunc";
 import { ToastUtil } from "../../utils/ToastUtil";
 import { ReportPayload, ReportService } from "../../network/ReportService";
+import { CacheStrategy, ImageKnife } from "@ohos/imageknifepro";
+import { image } from "@kit.ImageKit";
 
 interface DanmakuUrlResponse {
   readonly url?: string
@@ -69,6 +72,8 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   private lastPlaybackProgressPositionMs: number = -1
   private scopedPlaybackRegistered: boolean = false
   private mediaSourceAppliedCallback?: (source: MediaPlaybackSource) => void
+  private avSessionArtwork?: image.PixelMap
+  private avSessionArtworkGeneration: number = 0
 
   constructor(ui: PlayerPageUIState,
     playbackProvider: MediaPlaybackProvider = currentMediaPlaybackProvider()) {
@@ -474,12 +479,83 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
       })
       avSessionManager.getSession()?.setAVQueueTitle(source.item.SeriesName ?? source.item.Name ?? 'TITLE')
     }
-    avSessionManager.getSession()?.setAVMetadata(source.toMediaMetadata())
+    void this.updateAVSessionMetadata(source)
     this.reportPlaybackStart(source)
     for (const subtitle of streams.externalSubtitles) {
       console.log(`外挂字幕:${subtitle.deliveryUrl}`)
     }
     this.mediaSourceAppliedCallback?.(source)
+  }
+
+  /**
+   * AVSession 的媒体中心无法携带 Jellyfin/飞牛图片请求所需的鉴权头。
+   * 复用 ImageKnife 的带鉴权缓存，将已解码的 PixelMap 直接交给系统播控。
+   */
+  private async updateAVSessionMetadata(source: MediaPlaybackSource): Promise<void> {
+    const session = avSessionManager.getSession()
+    if (!session) {
+      return
+    }
+    const generation = ++this.avSessionArtworkGeneration
+    try {
+      await session.setAVMetadata(source.toMediaMetadata())
+    } catch (_error) {
+      console.error('[PlayerVM] update AVSession metadata failed')
+      return
+    }
+
+    const imageRef = source.metadata.image
+    if (!imageRef) {
+      this.releaseAVSessionArtwork()
+      return
+    }
+
+    let artwork: image.PixelMap | undefined
+    try {
+      const option = createMediaImageKnifeOption(imageRef)
+      let imageData = await ImageKnife.getInstance().getCacheImage(option, CacheStrategy.DEFAULT)
+      artwork = imageData?.pixelmapList?.[0]
+      if (!artwork) {
+        imageData = await ImageKnife.getInstance().getCacheImage(option, CacheStrategy.NONE)
+        artwork = imageData?.pixelmapList?.[0]
+      }
+      if (!artwork) {
+        console.warn('[PlayerVM] AVSession artwork unavailable')
+        return
+      }
+      if (generation !== this.avSessionArtworkGeneration || this.mediaSourceOrNull !== source) {
+        artwork.release()
+        return
+      }
+
+      const artworkMetadata = source.toMediaMetadata()
+      artworkMetadata.mediaImage = artwork
+      await session.setAVMetadata(artworkMetadata)
+      if (generation !== this.avSessionArtworkGeneration || this.mediaSourceOrNull !== source) {
+        artwork.release()
+        return
+      }
+
+      const previousArtwork = this.avSessionArtwork
+      this.avSessionArtwork = artwork
+      artwork = undefined
+      if (previousArtwork) {
+        previousArtwork.release()
+      }
+    } catch (_error) {
+      console.error('[PlayerVM] load AVSession artwork failed')
+      if (artwork) {
+        artwork.release()
+      }
+    }
+  }
+
+  private releaseAVSessionArtwork(): void {
+    const artwork = this.avSessionArtwork
+    this.avSessionArtwork = undefined
+    if (artwork) {
+      artwork.release()
+    }
   }
 
   reportPlaybackStart(mediaSource: MediaPlaybackSource): void {
@@ -708,6 +784,8 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
       this.scopedPlaybackRegistered = false
     }
     this.clearPlaybackSnapshot()
+    this.avSessionArtworkGeneration += 1
+    this.releaseAVSessionArtwork()
     avSessionManager.unregisterSessionListener()
     //BackgroundTaskManager.stopContinuousTask(this.context);
   }

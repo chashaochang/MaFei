@@ -91,6 +91,7 @@ export class TrackSelectionHelper {
     } else if (!mediaSource.selectSubtitleStream(subtitleStream)) { // Apply selection in media source, abort on failure
       return false
     }
+    this.viewModel.ui.selectedSubtitleStream = mediaSource.selectedSubtitleStream
 
     // Apply selection in player
     if (subtitleStream == null) {
@@ -121,7 +122,7 @@ export class TrackSelectionHelper {
         //     return trackSelector.selectTrackByTypeAndGroup(C.TRACK_TYPE_TEXT, group.mediaTrackGroup)
         //   }
         // }
-        return false
+        return true
       default:
         return false
     }

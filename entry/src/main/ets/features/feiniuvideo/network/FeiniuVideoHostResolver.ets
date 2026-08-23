@@ -12,6 +12,7 @@ import {
   MediaConnectionRoute
 } from './FeiniuVideoApiModels'
 import { FeiniuVideoHostResolutionSource } from './FeiniuVideoResolutionSource'
+import { FeiniuVideoConnectionPreferenceStore } from './FeiniuVideoConnectionPreferenceStore'
 
 class FnConnectProbeResult {
   baseUrl: string = ''
@@ -57,11 +58,11 @@ export class FeiniuVideoHttpHostProbe implements FeiniuVideoHostProbe {
 
 export class FeiniuVideoHostResolver implements FeiniuVideoHostResolutionSource {
   private readonly probe: FeiniuVideoHostProbe
-  private readonly routePreference: FeiniuVideoRoutePreference
+  private readonly routePreference?: FeiniuVideoRoutePreference
   private readonly p2pEnabled: boolean
 
   constructor(probe: FeiniuVideoHostProbe = new FeiniuVideoHttpHostProbe(),
-    routePreference: FeiniuVideoRoutePreference = FeiniuVideoRoutePreference.Speed,
+    routePreference?: FeiniuVideoRoutePreference,
     p2pEnabled: boolean = true) {
     this.probe = probe
     this.routePreference = routePreference
@@ -69,7 +70,9 @@ export class FeiniuVideoHostResolver implements FeiniuVideoHostResolutionSource 
   }
 
   async resolve(candidates: FeiniuVideoHostCandidate[],
-    preference: FeiniuVideoRoutePreference = this.routePreference): Promise<FeiniuVideoHostResolution> {
+    preference?: FeiniuVideoRoutePreference): Promise<FeiniuVideoHostResolution> {
+    const effectivePreference = preference || this.routePreference ||
+      FeiniuVideoConnectionPreferenceStore.routePreference()
     const uniqueCandidates = this.uniqueCandidates(candidates)
     if (uniqueCandidates.length === 0) {
       throw new FeiniuVideoRequestError(
@@ -80,7 +83,7 @@ export class FeiniuVideoHostResolver implements FeiniuVideoHostResolutionSource 
 
     const preferredCandidates = this.applyP2pPreference(uniqueCandidates)
     const probes = await this.probeCandidates(preferredCandidates)
-    const preferred = this.pickPreferredProbe(probes, preferredCandidates, preference)
+    const preferred = this.pickPreferredProbe(probes, preferredCandidates, effectivePreference)
     if (preferred.baseUrl.length === 0) {
       throw new FeiniuVideoRequestError(
         FeiniuVideoRequestFailureKind.Connection,

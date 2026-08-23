@@ -10,6 +10,7 @@ export class RouterConsts {
   static readonly VideoListPage = 'VideoListPage';
   static readonly FavoriteListPage = 'FavoriteListPage';
   static readonly ColorModePage = 'ColorModePage';
+  static readonly FeiniuConnectionPreferencePage = 'FeiniuConnectionPreferencePage';
   static readonly PlayerEnginePage = 'PlayerEnginePage';
   static readonly SettingPage = '/Setting';
   static readonly AccountPage = 'AccountPage';

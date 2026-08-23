@@ -1024,9 +1024,11 @@ export struct PlayerChrome {
     const sourceRange: string = `${this.videoStream?.VideoRangeType ?? ''} ${this.videoStream?.ColorTransfer ?? ''} ` +
       `${this.videoStream?.VideoDoViTitle ?? ''}`
     const range: string = `${sourceRange} ${actualTransfer}`.trim().toUpperCase()
-    if (actualDolbyVisionProfile > 0 || (this.videoStream?.DvProfile ?? 0) > 0 ||
+    const dolbyVisionProfile: number = actualDolbyVisionProfile > 0 ? actualDolbyVisionProfile :
+      (this.videoStream?.DvProfile ?? 0)
+    if (dolbyVisionProfile > 0 ||
       range.indexOf('DOVI') >= 0 || range.indexOf('DOLBY VISION') >= 0) {
-      return 'Dolby Vision'
+      return dolbyVisionProfile > 0 ? `Dolby Vision P${dolbyVisionProfile}` : 'Dolby Vision'
     }
     if (range.indexOf('VIVID') >= 0) {
       return 'HDR Vivid'
@@ -1051,7 +1053,14 @@ export struct PlayerChrome {
       if (!this.controller.isNetworkSource()) {
         return ''
       }
-      return this.controller.getDownloadSpeedText().trim()
+      const bytesPerSecond: number = this.controller.getDownloadSpeedBps()
+      if (bytesPerSecond <= 0) {
+        return ''
+      }
+      if (bytesPerSecond >= 1024 * 1024) {
+        return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`
+      }
+      return `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`
     } catch (_error) {
       return ''
     }
@@ -1792,7 +1801,7 @@ export struct PlayerChrome {
             top: { anchor: '__container__', align: VerticalAlign.Top },
             middle: { anchor: '__container__', align: HorizontalAlign.Center }
           })
-          .margin({ top: (this.isFullscreen ? 84 : 56) + this.safeTop })
+          .margin({ top: (this.isFullscreen ? 60 : 32) + this.safeTop })
           .id('player_chrome_gesture_level_feedback')
         }
         .width('100%')
@@ -1824,7 +1833,7 @@ export struct PlayerChrome {
             top: { anchor: '__container__', align: VerticalAlign.Top },
             middle: { anchor: '__container__', align: HorizontalAlign.Center }
           })
-          .margin({ top: (this.isFullscreen ? 84 : 56) + this.safeTop })
+          .margin({ top: (this.isFullscreen ? 60 : 32) + this.safeTop })
           .id('player_chrome_gesture_speed_feedback')
         }
         .width('100%')

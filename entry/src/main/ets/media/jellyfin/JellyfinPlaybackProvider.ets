@@ -19,6 +19,8 @@ import {
   DeviceProfile,
   ItemFields,
   MediaSourceInfo,
+  MediaStream,
+  MediaStreamType,
   PlaybackProgressInfo,
   PlaybackStartInfo,
   PlaybackStopInfo,
@@ -270,30 +272,57 @@ export class JellyfinPlaybackProvider implements MediaPlaybackProvider, MediaPla
     const item = await this.service.getItem(this.requestSession, itemId)
     const effectiveStartTicks = request.startTimeTicks ?? item.UserData?.PlaybackPositionTicks ?? 0
     const liveChannel = item.Type === BaseItemKind.TvChannel || item.Type === BaseItemKind.LiveTvChannel
-    const playbackInfo = await this.service.getPlaybackInfo(this.requestSession, {
+    const deviceProfile = this.deviceProfileBuilder.getDeviceProfile(this.profileEngine(request.engineHint))
+    let selectedAudioStreamIndex = request.audioStreamIndex
+    let playbackInfo = await this.service.getPlaybackInfo(this.requestSession, {
       itemId: itemId,
       mediaSourceId: request.mediaSourceId,
-      deviceProfile: this.deviceProfileBuilder.getDeviceProfile(this.profileEngine(request.engineHint)),
+      deviceProfile: deviceProfile,
       maxStreamingBitrate: request.maxStreamingBitrate,
       startTimeTicks: effectiveStartTicks,
-      audioStreamIndex: request.audioStreamIndex,
+      audioStreamIndex: selectedAudioStreamIndex,
       subtitleStreamIndex: request.subtitleStreamIndex,
       autoOpenLiveStream: request.autoOpenLiveStream,
       liveChannel: liveChannel
     })
+    let sourceInfo = this.findResolvedMediaSource(playbackInfo, request.mediaSourceId, itemId, liveChannel)
+    const fallbackAudioStreamIndex = this.findDirectPlayAudioFallback(sourceInfo, selectedAudioStreamIndex)
+    if (fallbackAudioStreamIndex !== undefined) {
+      const fallbackPlaybackInfo = await this.service.getPlaybackInfo(this.requestSession, {
+        itemId: itemId,
+        mediaSourceId: request.mediaSourceId,
+        deviceProfile: deviceProfile,
+        maxStreamingBitrate: request.maxStreamingBitrate,
+        startTimeTicks: effectiveStartTicks,
+        audioStreamIndex: fallbackAudioStreamIndex,
+        subtitleStreamIndex: request.subtitleStreamIndex,
+        autoOpenLiveStream: request.autoOpenLiveStream,
+        liveChannel: liveChannel
+      })
+      const fallbackSourceInfo = this.findResolvedMediaSource(fallbackPlaybackInfo, request.mediaSourceId,
+        itemId, liveChannel)
+      if (fallbackSourceInfo && this.isDirectPlayback(fallbackSourceInfo)) {
+        console.info(`[JellyfinPlayback] Falling back from unsupported default audio to direct-play ` +
+          `audio stream ${fallbackAudioStreamIndex}`)
+        playbackInfo = fallbackPlaybackInfo
+        sourceInfo = fallbackSourceInfo
+        selectedAudioStreamIndex = fallbackAudioStreamIndex
+      }
+    }
     const playSessionId = playbackInfo.PlaySessionId || ''
     if (playSessionId.length === 0) {
       throw new Error('UnsupportedContent')
     }
-    const sourceInfo = liveChannel ? playbackInfo.MediaSources?.[0] :
-      playbackInfo.MediaSources?.find((source: MediaSourceInfo): boolean => source.Id === itemId)
     if (!sourceInfo) {
+      const requestedMediaSourceId = request.mediaSourceId || itemId
+      console.error(`[JellyfinPlayback] Requested media source not found: itemId=${itemId}, ` +
+        `mediaSourceId=${requestedMediaSourceId}`)
       throw new Error('NetworkFailure')
     }
     this.logResolvedMediaSource(itemId, sourceInfo, playSessionId)
     return this.mapper.source(request.ref, item, sourceInfo, playSessionId,
       sourceInfo.LiveStreamId, request.maxStreamingBitrate, effectiveStartTicks,
-      request.audioStreamIndex, request.subtitleStreamIndex, request.engineHint)
+      selectedAudioStreamIndex, request.subtitleStreamIndex, request.engineHint)
   }
 
   async prepareStreams(source: MediaPlaybackSource): Promise<MediaPlaybackPreparedStreams> {
@@ -448,6 +477,76 @@ export class JellyfinPlaybackProvider implements MediaPlaybackProvider, MediaPla
 
   private profileEngine(hint: MediaPlaybackEngineHint): PlayerEngineType {
     return hint === MediaPlaybackEngineHint.PreferAvPlayer ? PlayerEngineType.AV : PlayerEngineType.MPV
+  }
+
+  private findResolvedMediaSource(playbackInfo: PlaybackInfoResponse, requestedMediaSourceId: string | undefined,
+    itemId: string, liveChannel: boolean): MediaSourceInfo | undefined {
+    if (liveChannel) {
+      return playbackInfo.MediaSources?.[0]
+    }
+    const selectedSourceId = requestedMediaSourceId || itemId
+    return playbackInfo.MediaSources?.find((source: MediaSourceInfo): boolean => source.Id === selectedSourceId) ??
+      // Jellyfin's default response can omit the item-id-shaped source id. Only use
+      // the server's first-source fallback when the caller did not explicitly select
+      // a source; otherwise selecting source B must never silently play source A.
+      (!requestedMediaSourceId ? playbackInfo.MediaSources?.[0] : undefined)
+  }
+
+  private findDirectPlayAudioFallback(source: MediaSourceInfo | undefined,
+    requestedAudioStreamIndex: number | undefined): number | undefined {
+    // An explicit user selection always wins. This fallback only prevents Jellyfin from
+    // needlessly transcoding when its implicit default audio codec is not in our profile.
+    if (!source || requestedAudioStreamIndex !== undefined || this.isDirectPlayback(source) ||
+      source.SupportsTranscoding !== true) {
+      return undefined
+    }
+    const audioStreams = (source.MediaStreams || []).filter((stream: MediaStream): boolean =>
+      stream.Type === MediaStreamType.Audio && stream.Index !== undefined)
+    const defaultAudio = audioStreams.find((stream: MediaStream): boolean =>
+      stream.Index === source.DefaultAudioStreamIndex) ??
+      audioStreams.find((stream: MediaStream): boolean => stream.IsDefault === true)
+    if (!defaultAudio || this.isMpvDirectPlayAudioCodec(defaultAudio.Codec)) {
+      return undefined
+    }
+    const compatibleAudio = audioStreams.filter((stream: MediaStream): boolean =>
+      this.isMpvDirectPlayAudioCodec(stream.Codec))
+    if (compatibleAudio.length === 0) {
+      return undefined
+    }
+    const defaultLanguage = defaultAudio.Language?.toLowerCase()
+    const sameLanguage = defaultLanguage ? compatibleAudio.find((stream: MediaStream): boolean =>
+      stream.Language?.toLowerCase() === defaultLanguage) : undefined
+    return (sameLanguage ?? compatibleAudio[0]).Index
+  }
+
+  private isDirectPlayback(source: MediaSourceInfo): boolean {
+    return source.SupportsDirectPlay === true || source.SupportsDirectStream === true
+  }
+
+  private isMpvDirectPlayAudioCodec(codec: string | null | undefined): boolean {
+    switch (codec?.toLowerCase()) {
+      case 'pcm_s16le':
+      case 'pcm_s24le':
+      case 'pcm_s32le':
+      case 'pcm_f32le':
+      case 'pcm_f64le':
+      case 'mp1':
+      case 'mp2':
+      case 'mp3':
+      case 'aac':
+      case 'vorbis':
+      case 'opus':
+      case 'flac':
+      case 'alac':
+      case 'ac3':
+      case 'eac3':
+      case 'dts':
+      case 'mlp':
+      case 'truehd':
+        return true
+      default:
+        return false
+    }
   }
 
   private absoluteUrl(value: string): string {

@@ -17,6 +17,8 @@ export class MineUIState extends BaseUIState {
   @Trace
   serverVersion: string = ''
   @Trace
+  connectionDescription: string = ''
+  @Trace
   userAvatar: string = ''
   @Trace
   userPolicy: string = ''

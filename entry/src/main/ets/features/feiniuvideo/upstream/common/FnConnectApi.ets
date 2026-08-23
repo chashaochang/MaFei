@@ -66,27 +66,31 @@ export class FnConnectApi {
     return result.preferredBaseUrl;
   }
 
-  static async resolveFnTargets(fnId: string): Promise<FnConnectResolveResult> {
+  static async resolveFnTargets(fnId: string, routePreference?: string,
+    p2pEnabled?: boolean): Promise<FnConnectResolveResult> {
     const normalizedFnId = FnConnectApi.extractFnId(fnId);
     if (normalizedFnId.length === 0) {
       throw new Error("FNID 不能为空");
     }
-    const cached = FnConnectApi.resolveCache.get(normalizedFnId);
+    const preference = FnConnectApi.normalizeRoutePreference(routePreference);
+    const allowP2p = p2pEnabled === undefined ? FnConnectPreferenceStore.p2pEnabled() : p2pEnabled;
+    const cacheKey = FnConnectApi.resolveCacheKey(normalizedFnId, preference, allowP2p);
+    const cached = FnConnectApi.resolveCache.get(cacheKey);
     if (cached !== undefined && cached.expiresAt > Date.now()) {
       return FnConnectApi.cloneResolveResult(cached.result);
     }
-    const pending = FnConnectApi.pendingResolve.get(normalizedFnId);
+    const pending = FnConnectApi.pendingResolve.get(cacheKey);
     if (pending !== undefined) {
       return FnConnectApi.cloneResolveResult(await pending);
     }
-    const request = FnConnectApi.resolveFnTargetsRemote(normalizedFnId);
-    FnConnectApi.pendingResolve.set(normalizedFnId, request);
+    const request = FnConnectApi.resolveFnTargetsRemote(normalizedFnId, preference, allowP2p);
+    FnConnectApi.pendingResolve.set(cacheKey, request);
     try {
       const result = await request;
-      FnConnectApi.saveResolveCache(normalizedFnId, result);
+      FnConnectApi.saveResolveCache(cacheKey, result);
       return FnConnectApi.cloneResolveResult(result);
     } finally {
-      FnConnectApi.pendingResolve.delete(normalizedFnId);
+      FnConnectApi.pendingResolve.delete(cacheKey);
     }
   }
 
@@ -95,7 +99,8 @@ export class FnConnectApi {
     FnConnectApi.pendingResolve.clear();
   }
 
-  private static async resolveFnTargetsRemote(normalizedFnId: string): Promise<FnConnectResolveResult> {
+  private static async resolveFnTargetsRemote(normalizedFnId: string,
+    preference: FnConnectRoutePreference, p2pEnabled: boolean): Promise<FnConnectResolveResult> {
     const payload: FnConnectResolveRequest = {
       fnId: normalizedFnId
     };
@@ -125,7 +130,7 @@ export class FnConnectApi {
       if (envelope.code !== 0 || !envelope.data) {
         throw new Error((envelope.msg || "").trim().length > 0 ? `${envelope.msg}` : "FNID 解析失败");
       }
-      return await FnConnectApi.pickBestTargets(normalizedFnId, envelope.data);
+      return await FnConnectApi.pickBestTargets(normalizedFnId, envelope.data, preference, p2pEnabled);
     } catch (error) {
       const message = (error as Error).message || "网络连接异常";
       hilog.warn(0x0000, "fnos-fnconnect", "resolve failed fnid=%{public}s err=%{public}s", normalizedFnId, message);
@@ -139,11 +144,11 @@ export class FnConnectApi {
     }
   }
 
-  private static saveResolveCache(fnId: string, result: FnConnectResolveResult): void {
+  private static saveResolveCache(cacheKey: string, result: FnConnectResolveResult): void {
     const cacheItem = new FnConnectResolveCacheItem();
     cacheItem.result = FnConnectApi.cloneResolveResult(result);
     cacheItem.expiresAt = Date.now() + FnConnectApi.RESOLVE_CACHE_MS;
-    FnConnectApi.resolveCache.set(fnId, cacheItem);
+    FnConnectApi.resolveCache.set(cacheKey, cacheItem);
   }
 
   private static cloneResolveResult(source: FnConnectResolveResult): FnConnectResolveResult {
@@ -166,15 +171,19 @@ export class FnConnectApi {
     return result;
   }
 
-  private static async pickBestTargets(fnId: string, data: FnConnectResolveData): Promise<FnConnectResolveResult> {
+  private static async pickBestTargets(fnId: string, data: FnConnectResolveData,
+    preference: FnConnectRoutePreference, p2pEnabled: boolean): Promise<FnConnectResolveResult> {
     const httpPort = data.port?.httpPort || 5666;
     const httpsPort = data.port?.httpsPort || 5667;
     const result = new FnConnectResolveResult();
     result.fnId = fnId;
 
-    const candidates = FnConnectApi.applyP2pPreference(FnConnectApi.buildTargetCandidates(data, httpPort, httpsPort));
+    const candidates = FnConnectApi.applyP2pPreference(
+      FnConnectApi.buildTargetCandidates(data, httpPort, httpsPort),
+      p2pEnabled
+    );
     const probes = await FnConnectApi.probeCandidates(candidates);
-    const preferred = FnConnectApi.pickPreferredProbe(probes, candidates);
+    const preferred = FnConnectApi.pickPreferredProbe(probes, candidates, preference);
     if (preferred.baseUrl.length > 0) {
       result.preferredBaseUrl = preferred.baseUrl;
       result.preferredRoute = preferred.route;
@@ -241,14 +250,15 @@ export class FnConnectApi {
     return Promise.all(requests);
   }
 
-  private static pickPreferredProbe(probes: FnConnectProbeResult[], candidates: FnConnectTargetCandidate[]): FnConnectProbeResult {
+  private static pickPreferredProbe(probes: FnConnectProbeResult[], candidates: FnConnectTargetCandidate[],
+    preference: FnConnectRoutePreference): FnConnectProbeResult {
     const reachable = probes.filter((probe: FnConnectProbeResult) => probe.reachable);
-    FnConnectApi.sortProbesByPreference(reachable);
+    FnConnectApi.sortProbesByPreference(reachable, preference);
     if (reachable.length > 0) {
       return reachable[0];
     }
     const fallback = new FnConnectProbeResult();
-    const first = FnConnectApi.firstCandidateByPreference(candidates);
+    const first = FnConnectApi.firstCandidateByPreference(candidates, preference);
     if (first !== undefined) {
       fallback.baseUrl = first.baseUrl;
       fallback.route = first.route;
@@ -256,16 +266,17 @@ export class FnConnectApi {
     return fallback;
   }
 
-  private static applyP2pPreference(candidates: FnConnectTargetCandidate[]): FnConnectTargetCandidate[] {
-    if (FnConnectPreferenceStore.p2pEnabled()) {
+  private static applyP2pPreference(candidates: FnConnectTargetCandidate[],
+    p2pEnabled: boolean): FnConnectTargetCandidate[] {
+    if (p2pEnabled) {
       return candidates;
     }
     const filtered = candidates.filter((item: FnConnectTargetCandidate) => item.route !== "public");
     return filtered.length > 0 ? filtered : candidates;
   }
 
-  private static sortProbesByPreference(probes: FnConnectProbeResult[]): void {
-    const preference = FnConnectPreferenceStore.routePreference();
+  private static sortProbesByPreference(probes: FnConnectProbeResult[],
+    preference: FnConnectRoutePreference): void {
     probes.sort((left: FnConnectProbeResult, right: FnConnectProbeResult) => {
       if (preference === FnConnectRoutePreference.SPEED) {
         return left.elapsedMs - right.elapsedMs;
@@ -278,12 +289,12 @@ export class FnConnectApi {
     });
   }
 
-  private static firstCandidateByPreference(candidates: FnConnectTargetCandidate[]): FnConnectTargetCandidate | undefined {
+  private static firstCandidateByPreference(candidates: FnConnectTargetCandidate[],
+    preference: FnConnectRoutePreference): FnConnectTargetCandidate | undefined {
     if (candidates.length === 0) {
       return undefined;
     }
     const sorted = candidates.slice();
-    const preference = FnConnectPreferenceStore.routePreference();
     sorted.sort((left: FnConnectTargetCandidate, right: FnConnectTargetCandidate) => {
       return FnConnectApi.unreachableRoutePriority(left.route, preference) -
       FnConnectApi.unreachableRoutePriority(right.route, preference);
@@ -335,6 +346,24 @@ export class FnConnectApi {
 
   private static remoteRoutePriority(route: string): number {
     return route === "relay" ? 0 : (route === "public" ? 1 : 2);
+  }
+
+  private static normalizeRoutePreference(value?: string): FnConnectRoutePreference {
+    if (value === FnConnectRoutePreference.PUBLIC) {
+      return FnConnectRoutePreference.PUBLIC;
+    }
+    if (value === FnConnectRoutePreference.RELAY) {
+      return FnConnectRoutePreference.RELAY;
+    }
+    if (value === FnConnectRoutePreference.SPEED) {
+      return FnConnectRoutePreference.SPEED;
+    }
+    return FnConnectPreferenceStore.routePreference();
+  }
+
+  private static resolveCacheKey(fnId: string, preference: FnConnectRoutePreference,
+    p2pEnabled: boolean): string {
+    return `${fnId}|${preference}|${p2pEnabled ? 'p2p' : 'no-p2p'}`;
   }
 
   private static async probeCandidate(candidate: FnConnectTargetCandidate): Promise<FnConnectProbeResult> {
