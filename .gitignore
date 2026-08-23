@@ -22,6 +22,7 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 .codex/visualizations/
 .local/
+.private/
 
 # Local HarmonyOS signing material. Keep the tracked build profile generic.
 ohosApp/build-profile.private.json5
