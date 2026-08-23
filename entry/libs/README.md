@@ -5,7 +5,7 @@
 拥有合法 SDK 的内部开发环境可将其放置为：
 
 ```text
-ohosApp/entry/libs/mfplayer.har
+entry/libs/mfplayer.har
 ```
 
 随后重新执行 ohpm 同步。`libs/*.har` 已被 Git 忽略，禁止将 SDK、构建产物或其他私有二进制提交到公开仓库。

@@ -1,22 +1,22 @@
-# MaFei HarmonyOS 工程
+# MaFei
 
-`ohosApp` 是 MaFei 的 HarmonyOS 应用工程，负责服务器连接、媒体浏览、详情展示、播放界面和系统集成。
+MaFei 是一款 HarmonyOS 媒体客户端，提供服务器连接、媒体浏览、详情展示、播放界面和系统集成能力。
+
+本分支的仓库根目录就是 HarmonyOS 工程，可直接用 DevEco Studio 打开；不再保留额外的 `ohosApp/` 外层目录或内部文档目录。
 
 ## 开发环境
 
 - DevEco Studio（HarmonyOS API 26）
 - API 24 及以上设备
-- 通过 DevEco Studio/ohpm 管理公开依赖
+- 通过 DevEco Studio / ohpm 管理公开依赖
 
-签名配置只应在本机维护。仓库中的 `build-profile.json5` 不包含任何证书、Profile、口令或本机路径。
+签名配置仅在本机维护。仓库中的 `build-profile.json5` 不包含证书、Profile、口令或本机路径。
 
-## 播放器
+## 播放器依赖
 
-应用目前通过 `MFPlayer` 完成正式播放。公开源码只包含与播放器交互的 ArkTS 接入层；闭源 SDK 二进制不在仓库中。拥有合法 SDK 的内部开发环境请阅读 [`entry/libs/README.md`](entry/libs/README.md)。
+项目的正式播放能力依赖本地 `MFPlayer` SDK。公开源码仅包含 ArkTS 接入层，不包含 SDK 二进制；具备该依赖的开发环境可按 [`entry/libs/README.md`](entry/libs/README.md) 放置本地文件后再同步依赖。
 
-## 开源边界
+## 公开边界
 
-- 可公开：应用页面、主题、数据层、服务接口适配和测试代码。
-- 不公开：签名材料、私有播放器 SDK、内部工作文档与用户/服务器数据。
-
-详细的公开构建与提交规则见根目录的 [`docs/README.md`](../docs/README.md)。
+- 包含：应用页面、主题、数据层、服务接口适配和测试代码。
+- 不包含：签名材料、播放器 SDK、内部工作文档与用户或服务器数据。

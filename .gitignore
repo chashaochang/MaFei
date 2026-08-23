@@ -20,3 +20,29 @@
 
 # API配置文件 - 包含敏感信息，不应上传到版本控制
 **/api-config.ets
+
+# 仅在本地维护的私有内容和旧工程外层目录
+/docs/
+/ohosApp/
+/.private/
+/.local/
+/.tmp/
+/.agents/
+/.codex/
+/.claude/
+/.cursor/
+/.superpowers/
+build-profile.private.json5
+
+# 签名、云服务配置及私有播放器二进制
+*.p12
+*.pfx
+*.pem
+*.key
+*.jks
+*.cer
+*.p7b
+*.csr
+agconnect-services.json
+/entry/libs/*.har
+!/entry/libs/README.md
