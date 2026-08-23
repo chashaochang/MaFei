@@ -1,0 +1,75 @@
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "compatibleSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        },
+        "targetSdkVersion": "26.0.0"
+      },
+      {
+        "name": "release",
+        "compatibleSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "bundleName": "cn.xiaobai.mafei",
+        "icon": "$media:app_icon",
+        "label": "$string:app_name",
+        "bundleType": "app",
+        "versionCode": 2000000,
+        "versionName": "2.0.0.0",
+        "output": {
+          "artifactName": "Mafei_Release"
+        },
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        },
+        "targetSdkVersion": "26.0.0"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        },
+        {
+          "name": "release",
+          "applyToProducts": [
+            "release"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sdk",
+      "srcPath": "./sdk"
+    },
+    {
+      "name": "iso_language_codes",
+      "srcPath": "./iso_language_codes"
+    }
+  ]
+}
