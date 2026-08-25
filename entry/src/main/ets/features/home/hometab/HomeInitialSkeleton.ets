@@ -8,11 +8,16 @@ import {
 
 const HORIZONTAL_PLACEHOLDERS: number[] = [0, 1, 2]
 const GRID_PLACEHOLDERS: number[] = [0, 1, 2, 3, 4, 5]
+const TABLET_HERO_PLACEHOLDERS: number[] = [0, 1]
+const TABLET_HERO_VERTICAL_INSET: number = 12
+const TABLET_HERO_TITLE_HEIGHT: number = 28
+const TABLET_HERO_TITLE_GAP: number = 12
 
 @ComponentV2
 export struct HomeInitialSkeleton {
   @Require @Param showHero: boolean
   @Require @Param currentBreakpoint: string
+  @Require @Param heroHeight: number
   @Local animate: AnimateType = AnimateType.GRADIENT
 
   private sidePadding(): number {
@@ -29,18 +34,71 @@ export struct HomeInitialSkeleton {
     return '1fr 1fr 1fr 1fr 1fr'
   }
 
+  private tabletHeroPlaceholderCount(): number {
+    return this.currentBreakpoint === 'md' ? 1 : 2
+  }
+
   @Builder
   private heroSkeleton() {
-    UISkeleton({
-      animate: this.animate,
-      options: [{
-        type: SkeletonType.RECT,
-        width: '100%',
-        height: '100%'
-      }]
-    })
+    if (this.currentBreakpoint.includes('s')) {
+      UISkeleton({
+        animate: this.animate,
+        options: [{
+          type: SkeletonType.RECT,
+          width: '100%',
+          height: '100%'
+        }]
+      })
+        .width('100%')
+        .height(this.heroHeight)
+    } else {
+      Row() {
+        Blank().width(this.sidePadding())
+
+        Column({ space: TABLET_HERO_TITLE_GAP }) {
+          UISkeleton({
+            animate: this.animate,
+            options: [{
+              type: SkeletonType.RECT,
+              width: '100%',
+              height: '100%',
+              radius: 7
+            }]
+          })
+            .width(72)
+            .height(TABLET_HERO_TITLE_HEIGHT)
+
+          Row({ space: HORIZONTAL_CARD_SPACE.getValue(this.currentBreakpoint) }) {
+            ForEach(TABLET_HERO_PLACEHOLDERS.slice(0, this.tabletHeroPlaceholderCount()), () => {
+              UISkeleton({
+                animate: this.animate,
+                options: [{
+                  type: SkeletonType.RECT,
+                  width: '100%',
+                  height: '100%',
+                  radius: 8
+                }]
+              })
+                .layoutWeight(1)
+                .height('100%')
+            }, (item: number) => `tablet-hero-skeleton:${item}`)
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .padding({
+          top: TABLET_HERO_VERTICAL_INSET,
+          bottom: TABLET_HERO_VERTICAL_INSET
+        })
+        .alignItems(HorizontalAlign.Start)
+
+        Blank().width(this.sidePadding())
+      }
       .width('100%')
-      .height(430)
+      .height(this.heroHeight)
+    }
   }
 
   @Builder

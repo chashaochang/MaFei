@@ -505,7 +505,9 @@ export struct HomeScreen {
                 .fontColor(this.padSelectedIndex() == index ? $r('app.color.color_main') :
                   $r('app.color.text_primary'))
                 .fontSize(14)
-              Blank().layoutWeight(1)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
               Text(item.badge > 0 ? item.badge > 99 ? '99+' : item.badge.toString() : '')
                 .fontColor(this.padSelectedIndex() == index ? $r('app.color.color_main') :
                   $r('app.color.text_primary'))

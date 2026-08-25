@@ -146,7 +146,7 @@ export struct ManagementLibraryPathBrowserPage {
           .borderRadius(18)
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(() => this.vm.goParent())
         }
         Text(this.ui.currentPath.length > 0 ? this.ui.currentPath :
@@ -211,7 +211,7 @@ export struct ManagementLibraryPathBrowserPage {
           .backgroundColor(Color.Transparent)
           .fontColor($r('app.color.color_main'))
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .enabled(!this.ui.isValidating && this.ui.manualPath.trim().length > 0)
           .onClick(() => this.vm.validateManualPath())
         Button($r('app.string.management_library_path_use'), { type: ButtonType.Normal })

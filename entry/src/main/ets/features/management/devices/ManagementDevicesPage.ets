@@ -368,7 +368,7 @@ export struct ManagementDevicesPage {
         .height(40)
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .onChange((value: string) => {
           this.ui.query = value
           this.vm.applyQuery(true)
@@ -384,7 +384,7 @@ export struct ManagementDevicesPage {
         .borderRadius(20)
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .accessibilityText($r('app.string.management_device_filter_title'))
         .onClick(() => this.ui.filterSheetVisible = true)
         if (this.activeFilterCount() > 0) {
@@ -518,7 +518,7 @@ export struct ManagementDevicesPage {
             .borderRadius(18)
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
             .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
             .enabled(this.ui.pageIndex > 0)
             .onClick(() => this.vm.setPage(this.ui.pageIndex - 1))
           Text(`${this.ui.pageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
@@ -529,7 +529,7 @@ export struct ManagementDevicesPage {
             .borderRadius(18)
             .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
             .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
             .enabled(this.ui.pageIndex + 1 < this.ui.pageCount)
             .onClick(() => this.vm.setPage(this.ui.pageIndex + 1))
         }

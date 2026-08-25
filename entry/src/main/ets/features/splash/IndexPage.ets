@@ -292,7 +292,7 @@ export struct IndexPage {
         .fontColor(this.useNativeSurface() ?
           $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive,
+          AppThemeMaterialRole.AdaptiveControl,
           this.useNativeSurface(),
           this.appUIState.systemMaterialAvailable
         ))

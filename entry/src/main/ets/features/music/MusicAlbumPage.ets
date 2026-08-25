@@ -124,7 +124,7 @@ export struct MusicAlbumPage {
       .height(44)
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive, nativeSurface,
+        AppThemeMaterialRole.AdaptiveControl, nativeSurface,
         this.vm.appUIState.systemMaterialAvailable))
       .enabled(!this.ui.favoritePending)
       .accessibilityText(this.ui.album?.favorite ?

@@ -246,7 +246,7 @@ struct AuthTextField {
     .clip(true)
     .alignContent(Alignment.Start)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive,
+      AppThemeMaterialRole.AdaptiveControl,
       this.nativeSurface
     ))
   }
@@ -405,7 +405,7 @@ struct ServerUrlField {
     .clip(true)
     .alignContent(Alignment.End)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive,
+      AppThemeMaterialRole.AdaptiveControl,
       this.nativeSurface
     ))
   }

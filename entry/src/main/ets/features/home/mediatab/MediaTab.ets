@@ -138,7 +138,7 @@ export struct MediaTab {
     .borderRadius(20)
     .backgroundColor(Color.Transparent)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveInteractive,
+      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveControl,
       this.useNativeSurface(),
       this.appUIState.systemMaterialAvailable
     ))

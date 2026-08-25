@@ -585,7 +585,7 @@ export struct ManagementUserCreatePage {
             .fontColor(this.primaryTextColor())
             .backgroundColor(Color.Transparent)
             .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
             .border({
               width: 1,
               color: AppThemeSurfaceResolver.contentOutline(

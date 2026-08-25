@@ -77,7 +77,7 @@ struct MediaSourceOptionItem {
     .clip(true)
     .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive,
+      AppThemeMaterialRole.AdaptiveControl,
       this.useNativeSurface(),
       this.appUIState.systemMaterialAvailable
     ))
@@ -273,7 +273,7 @@ export struct MediaSourceSelector {
         .clip(true)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive,
+          AppThemeMaterialRole.AdaptiveControl,
           this.useNativeSurface(),
           this.appUIState.systemMaterialAvailable
         ))
@@ -295,7 +295,7 @@ export struct MediaSourceSelector {
         .clip(true)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive,
+          AppThemeMaterialRole.AdaptiveControl,
           this.useNativeSurface(),
           this.appUIState.systemMaterialAvailable
         ))
@@ -317,7 +317,7 @@ export struct MediaSourceSelector {
         .clip(true)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive,
+          AppThemeMaterialRole.AdaptiveControl,
           this.useNativeSurface(),
           this.appUIState.systemMaterialAvailable
         ))
@@ -339,7 +339,7 @@ export struct MediaSourceSelector {
         .clip(true)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive,
+          AppThemeMaterialRole.AdaptiveControl,
           this.useNativeSurface(),
           this.appUIState.systemMaterialAvailable
         ))

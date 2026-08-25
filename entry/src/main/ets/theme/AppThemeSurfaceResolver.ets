@@ -111,7 +111,7 @@ export class AppThemeSurfaceResolver {
       }
       return AppThemeSurfaceResolver.contentGroup
     }
-    if (role === AppThemeMaterialRole.AdaptiveInteractive) {
+    if (role === AppThemeMaterialRole.AdaptiveInteractive || role === AppThemeMaterialRole.AdaptiveControl) {
       if (!AppThemeSurfaceResolver.adaptiveInteractive) {
         AppThemeSurfaceResolver.adaptiveInteractive = new uiMaterial.ImmersiveMaterial({
           interactive: true

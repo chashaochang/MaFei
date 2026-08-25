@@ -23,7 +23,6 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
   private systemDensityChangeListenerRegistered: boolean = false
-  private defaultDensityEnabled: boolean = false
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
       this.refreshWindowMetrics(this.mainWindow)
@@ -116,9 +115,6 @@ export default class EntryAbility extends UIAbility {
   private resolveWindowDensity(windowClass: window.Window): number {
     try {
       const densityInfo = windowClass.getWindowDensityInfo()
-      if (this.defaultDensityEnabled && densityInfo.defaultDensity > 0) {
-        return densityInfo.defaultDensity
-      }
       if (densityInfo.customDensity > 0) {
         return densityInfo.customDensity
       }
@@ -138,18 +134,6 @@ export default class EntryAbility extends UIAbility {
       hilog.warn(0x0000, 'Mafei',
         'Failed to resolve display density; falling back to raw pixels. Cause: %{public}s', String(error))
       return 1
-    }
-  }
-
-  private useDefaultWindowDensity(windowStage: window.WindowStage): void {
-    try {
-      windowStage.setDefaultDensityEnabled(true)
-      this.defaultDensityEnabled = true
-    } catch (error) {
-      this.defaultDensityEnabled = false
-      hilog.warn(0x0000, 'Mafei',
-        'Failed to enable the default window density; continuing with system density. Cause: %{public}s',
-        String(error))
     }
   }
 
@@ -333,7 +317,6 @@ export default class EntryAbility extends UIAbility {
   private loadMainWindowAsync(windowStage: window.WindowStage): void {
     try {
       windowStage.getMainWindow().then(async (windowClass: window.Window) => {
-        this.useDefaultWindowDensity(windowStage)
         if (!await this.initializeMainWindow(windowClass)) {
           return
         }
@@ -359,7 +342,6 @@ export default class EntryAbility extends UIAbility {
       return
     }
 
-    this.useDefaultWindowDensity(windowStage)
     if (!await this.initializeMainWindow(windowClass)) {
       return
     }
@@ -382,7 +364,6 @@ export default class EntryAbility extends UIAbility {
   onWindowStageDestroy(): void {
     this.contentLoadStarted = false
     this.clearMainWindowBindings()
-    this.defaultDensityEnabled = false
   }
 
   onForeground(): void {

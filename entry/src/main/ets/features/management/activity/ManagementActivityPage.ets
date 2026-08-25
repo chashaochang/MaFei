@@ -295,7 +295,7 @@ export struct ManagementActivityPage {
           .height(40)
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onChange((value: string) => {
             this.ui.query = value
             this.vm.applyFilters()
@@ -311,7 +311,7 @@ export struct ManagementActivityPage {
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .accessibilityText($r('app.string.management_activity_filter_title'))
           .onClick(() => this.showFilterSheet())
           if (this.activeFilterCount() > 0) {
@@ -348,7 +348,7 @@ export struct ManagementActivityPage {
       .borderRadius(20)
       .backgroundColor(Color.Transparent)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 10 })
@@ -508,7 +508,7 @@ export struct ManagementActivityPage {
         .borderRadius(this.useNativeMaterial() ? 18 : 8)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(this.ui.displayedPageIndex > 0)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex - 1))
       Text(`${this.ui.displayedPageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
@@ -520,7 +520,7 @@ export struct ManagementActivityPage {
         .borderRadius(this.useNativeMaterial() ? 18 : 8)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(this.ui.displayedPageIndex + 1 < this.ui.pageCount)
         .onClick(() => this.vm.loadPage(this.ui.displayedPageIndex + 1))
     }
@@ -542,7 +542,7 @@ export struct ManagementActivityPage {
         .borderRadius(this.useNativeMaterial() ? 16 : 8)
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(!this.ui.refreshing)
         .onClick(() => this.vm.loadPage(this.ui.retryPageIndex))
     }

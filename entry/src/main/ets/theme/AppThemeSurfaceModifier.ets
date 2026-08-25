@@ -4,6 +4,7 @@ export enum AppThemeMaterialRole {
   InteractiveFloating = 'interactive_floating',
   PrimaryInteractive = 'primary_interactive',
   AdaptiveInteractive = 'adaptive_interactive',
+  AdaptiveControl = 'adaptive_control',
   MusicMiniPlayer = 'music_mini_player',
   HomeLibraryChip = 'home_library_chip',
   HomeLibraryChipSelected = 'home_library_chip_selected'
@@ -39,19 +40,53 @@ export class AppThemeSurfaceModifier implements AttributeModifier<CommonAttribut
 
   private applyBlurFallback(instance: CommonAttribute): void {
     if (this.role === AppThemeMaterialRole.ContentGroup) {
-      instance.backgroundColor($r('sys.color.comp_background_primary'))
+      instance.backgroundColor($r('app.color.native_fallback_content_group'))
       return
     }
     if (this.role === AppThemeMaterialRole.PrimaryInteractive) {
-      instance.backgroundColor($r('app.color.color_main'))
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.color_main'))
+      return
+    }
+    if (this.role === AppThemeMaterialRole.Floating) {
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.native_fallback_floating'))
+      return
+    }
+    if (this.role === AppThemeMaterialRole.InteractiveFloating) {
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.native_fallback_interactive_floating'))
+      return
+    }
+    if (this.role === AppThemeMaterialRole.AdaptiveControl) {
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.native_fallback_adaptive_interactive'))
+      return
+    }
+    if (this.role === AppThemeMaterialRole.MusicMiniPlayer) {
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.native_fallback_music_mini_player'))
+      return
+    }
+    if (this.role === AppThemeMaterialRole.HomeLibraryChip) {
+      instance
+        .backgroundBlurStyle(BlurStyle.Thin)
+        .backgroundColor($r('app.color.native_fallback_home_library_chip'))
       return
     }
     if (this.role === AppThemeMaterialRole.HomeLibraryChipSelected) {
       instance
         .backgroundBlurStyle(BlurStyle.Thin)
-        .backgroundColor($r('app.color.native_detail_information_background'))
+        .backgroundColor($r('app.color.native_fallback_home_library_chip_selected'))
       return
     }
-    instance.backgroundBlurStyle(BlurStyle.Thin)
+    if (this.role === AppThemeMaterialRole.AdaptiveInteractive) {
+      instance.backgroundBlurStyle(BlurStyle.Thin)
+    }
   }
 }

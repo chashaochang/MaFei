@@ -59,7 +59,7 @@ export struct ManagementActivityDashboardSection {
           .fontSize(13).fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(() => this.onOpenAll())
       }
       .width('100%')
@@ -96,7 +96,7 @@ export struct ManagementActivityDashboardSection {
               .borderRadius(17)
               .backgroundColor(Color.Transparent)
               .attributeModifier(AppThemeSurfaceResolver.modifier(
-                AppThemeMaterialRole.AdaptiveInteractive, true))
+                AppThemeMaterialRole.AdaptiveControl, true))
               .enabled(!this.ui.refreshing)
               .onClick(() => this.onRetry())
           } else {
@@ -104,7 +104,7 @@ export struct ManagementActivityDashboardSection {
               .height(34)
               .borderRadius(8)
               .attributeModifier(AppThemeSurfaceResolver.modifier(
-                AppThemeMaterialRole.AdaptiveInteractive, false))
+                AppThemeMaterialRole.AdaptiveControl, false))
               .enabled(!this.ui.refreshing)
               .onClick(() => this.onRetry())
           }

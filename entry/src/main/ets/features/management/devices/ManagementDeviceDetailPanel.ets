@@ -132,7 +132,7 @@ export struct ManagementDeviceDetailPanel {
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(!this.device.current && this.ui.pendingDeviceId.length === 0 && !this.ui.batchPending)
         .onClick(() => this.onRevoke())
       if (this.device.current) {

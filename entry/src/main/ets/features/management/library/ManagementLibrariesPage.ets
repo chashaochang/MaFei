@@ -299,7 +299,7 @@ export struct ManagementLibrariesPage {
       .borderRadius(20)
       .backgroundColor(Color.Transparent)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
       .accessibilityText($r('app.string.management_library_more_actions'))
       .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
       .bindMenu(this.libraryMenuItems(item), this.libraryMenuOptions())
@@ -452,7 +452,7 @@ export struct ManagementLibrariesPage {
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(() => this.vm.load(true))
       }
       .width('calc(100% - 24vp)')

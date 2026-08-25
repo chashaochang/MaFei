@@ -109,7 +109,7 @@ export struct ConnectingScreen {
       .padding({ left: 24, right: 24 })
       .backgroundColor(Color.Transparent)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive,
+        AppThemeMaterialRole.AdaptiveControl,
         this.useNativeSurface(),
         this.appUIState.systemMaterialAvailable
       ))

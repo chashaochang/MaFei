@@ -312,7 +312,7 @@ struct AuthTextField {
     .clip(true)
     .alignContent(Alignment.Start)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive,
+      AppThemeMaterialRole.AdaptiveControl,
       this.nativeSurface
     ))
   }
@@ -355,7 +355,7 @@ export struct StyledTextButton {
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive,
+        AppThemeMaterialRole.AdaptiveControl,
         this.nativeSurface
       ))
   }
@@ -466,7 +466,7 @@ struct ServerUrlField {
     .clip(true)
     .alignContent(Alignment.End)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive,
+      AppThemeMaterialRole.AdaptiveControl,
       this.nativeSurface
     ))
   }

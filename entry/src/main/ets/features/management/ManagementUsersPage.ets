@@ -386,7 +386,7 @@ export struct ManagementUsersPage {
           .height(40)
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, true))
+            AppThemeMaterialRole.AdaptiveControl, true))
           .onChange((value: string) => this.ui.query = value)
         Stack({ alignContent: Alignment.TopEnd }) {
           Button() {
@@ -399,7 +399,7 @@ export struct ManagementUsersPage {
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, true))
+            AppThemeMaterialRole.AdaptiveControl, true))
           .accessibilityText($r('app.string.management_user_filter_title'))
           .onClick(() => this.ui.filterSheetVisible = true)
           if (this.ui.activeAdvancedFilterCount > 0) {
@@ -438,7 +438,7 @@ export struct ManagementUsersPage {
       .padding(2)
       .borderRadius(20)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive, true))
+        AppThemeMaterialRole.AdaptiveControl, true))
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 10 })
@@ -764,7 +764,7 @@ export struct ManagementUsersPage {
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(() => this.vm.refresh())
       }
       .width('100%')

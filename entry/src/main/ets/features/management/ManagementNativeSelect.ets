@@ -131,7 +131,7 @@ export struct ManagementNativeSelect {
     .backgroundColor(this.useNativeMaterial() ?
       Color.Transparent : AppThemeSurfaceResolver.interactionOverlay(this.themeStyle))
     .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+      AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
     .enabled(this.isEnabled && this.options.length > 0)
     .bindMenu(this.menuItems(), this.menuOptions())
   }

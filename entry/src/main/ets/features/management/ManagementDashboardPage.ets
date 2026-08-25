@@ -487,7 +487,7 @@ export struct ManagementDashboardPage {
           .fontColor($r('app.color.color_main'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(onRetry)
       }
     }

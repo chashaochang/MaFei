@@ -474,7 +474,7 @@ export struct ManagementTaskDetailPage {
         (this.task?.busy ? Color.Transparent : $r('app.color.color_main')))
       .borderRadius(this.useNativeMaterial() ? 23 : 10)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        this.task?.busy ? AppThemeMaterialRole.AdaptiveInteractive :
+        this.task?.busy ? AppThemeMaterialRole.AdaptiveControl :
           AppThemeMaterialRole.PrimaryInteractive,
         this.useNativeMaterial()))
       .enabled(!this.actionPending)

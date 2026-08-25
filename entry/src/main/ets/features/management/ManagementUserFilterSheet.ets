@@ -207,7 +207,7 @@ export struct ManagementUserFilterSheet {
           .fontColor($r('sys.color.font_primary'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive,
+            AppThemeMaterialRole.AdaptiveControl,
             this.useNativeMaterial(),
             this.appUIState.systemMaterialAvailable))
           .onClick(() => this.reset())

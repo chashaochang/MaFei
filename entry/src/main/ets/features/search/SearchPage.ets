@@ -126,7 +126,7 @@ export struct SearchPage {
       .borderRadius(24)
       .clip(true)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive,
+        AppThemeMaterialRole.AdaptiveControl,
         true,
         this.vm.appUIState.systemMaterialAvailable
       ))
@@ -159,7 +159,7 @@ export struct SearchPage {
       .buttonStyle(ButtonStyleMode.TEXTUAL)
       .backgroundColor(Color.Transparent)
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive,
+        AppThemeMaterialRole.AdaptiveControl,
         true,
         this.vm.appUIState.systemMaterialAvailable
       ))

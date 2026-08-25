@@ -29,6 +29,12 @@ const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
 const HERO_PROGRESS_START_DELAY: number = 16
 const HOME_HERO_BASE_HEIGHT: number = 430
+const TABLET_HERO_MIN_CARD_HEIGHT: number = 220
+const TABLET_HERO_MD_CARD_HEIGHT: number = 240
+const TABLET_HERO_LARGE_CARD_HEIGHT: number = 260
+const TABLET_HERO_VERTICAL_INSET: number = 12
+const TABLET_HERO_TITLE_HEIGHT: number = 28
+const TABLET_HERO_TITLE_GAP: number = 12
 const HOME_HERO_STRETCH_FACTOR: number = 3
 const HOME_HERO_SPRING_DURATION: number = 250
 const HOME_HERO_REFRESH_THRESHOLD: number = 64
@@ -116,13 +122,35 @@ export struct HomeTab {
   }
 
   private showNativeHero(): boolean {
-    return this.useNativeSurface() &&
-      this.vm.appUIState.currentBreakpoint.includes('s') &&
+    return (this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) &&
       this.ui.recommendationList.length > 0
   }
 
   private showNativeHeroSkeleton(): boolean {
-    return this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')
+    return this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')
+  }
+
+  private tabletHeroCardHeight(): number {
+    const targetHeight = this.vm.appUIState.currentBreakpoint === 'md' ?
+      TABLET_HERO_MD_CARD_HEIGHT : TABLET_HERO_LARGE_CARD_HEIGHT
+    const windowHeight = Math.max(0, this.vm.appUIState.deviceHeight)
+    if (windowHeight === 0) {
+      return targetHeight
+    }
+    return Math.min(targetHeight, Math.max(TABLET_HERO_MIN_CARD_HEIGHT, windowHeight * 0.32))
+  }
+
+  private heroDisplayHeight(): number {
+    if (this.vm.appUIState.currentBreakpoint.includes('s')) {
+      return this.nativeHeroHeight
+    }
+    return this.tabletHeroCardHeight() + TABLET_HERO_VERTICAL_INSET * 2 +
+      TABLET_HERO_TITLE_HEIGHT + TABLET_HERO_TITLE_GAP
+  }
+
+  private tabletHeroDisplayCount(): number {
+    const breakpointCount = this.vm.appUIState.currentBreakpoint === 'md' ? 1 : 2
+    return Math.max(1, Math.min(breakpointCount, this.ui.recommendationList.length))
   }
 
   private springBackNativeHero(): void {
@@ -474,15 +502,20 @@ export struct HomeTab {
           ListItem() {
             HomeInitialSkeleton({
               showHero: this.showNativeHeroSkeleton(),
-              currentBreakpoint: this.vm.appUIState.currentBreakpoint
+              currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+              heroHeight: this.heroDisplayHeight()
             })
           }
         } else {
           if (this.showNativeHero()) {
             ListItem() {
-              this.nativeHomeHeroCarousel()
+              if (this.vm.appUIState.currentBreakpoint.includes('s')) {
+                this.nativeHomeHeroCarousel()
+              } else {
+                this.tabletHomeHeroCarousel()
+              }
             }
-            .height(this.nativeHeroHeight)
+            .height(this.heroDisplayHeight())
           }
           if (this.ui.resumeList.length > 0) {
             ListItem() {
@@ -674,6 +707,104 @@ export struct HomeTab {
   }
 
   @Builder
+  private tabletHomeHeroCarousel() {
+    Row() {
+      Blank().width(this.latestMediaHeaderSidePadding())
+
+      Column({ space: TABLET_HERO_TITLE_GAP }) {
+        Text('推荐')
+          .width('100%')
+          .height(TABLET_HERO_TITLE_HEIGHT)
+          .fontSize(22)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.useNativeSurface() ?
+            $r('sys.color.font_primary') : $r('app.color.text_primary'))
+          .textAlign(TextAlign.Start)
+
+        Swiper() {
+          ForEach(this.ui.recommendationList, (item: VideoItem) => {
+            this.tabletHomeHero(item)
+          }, (item: VideoItem) => `tablet-hero:${item.id}`)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .displayCount(this.tabletHeroDisplayCount())
+        .itemSpace(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
+        .autoPlay(this.ui.recommendationList.length > this.tabletHeroDisplayCount())
+        .interval(HERO_AUTOPLAY_INTERVAL)
+        .duration(HERO_TRANSITION_DURATION)
+        .loop(this.ui.recommendationList.length > this.tabletHeroDisplayCount())
+        .indicator(false)
+        .onChange((index: number) => {
+          this.heroIndex = index
+        })
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .padding({
+        top: TABLET_HERO_VERTICAL_INSET,
+        bottom: TABLET_HERO_VERTICAL_INSET
+      })
+      .alignItems(HorizontalAlign.Start)
+
+      Blank().width(this.latestMediaHeaderSidePadding())
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private tabletHomeHero(item: VideoItem) {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      ImageKnifeComponent({
+        imageKnifeOption: this.heroImageOption(item)
+      })
+        .width('100%')
+        .height('100%')
+
+      Column()
+        .width('100%')
+        .height('72%')
+        .linearGradient({
+          angle: 180,
+          colors: [
+            [Color.Transparent, 0.0],
+            ['rgba(0,0,0,0.30)', 0.42],
+            ['rgba(0,0,0,0.88)', 1.0]
+          ]
+        })
+
+      Column({ space: 5 }) {
+        Text(item.name)
+          .fontSize(this.tabletHeroDisplayCount() === 1 ? 26 : 22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (item.subtitle && item.subtitle.length > 0) {
+          Text(item.subtitle)
+            .fontSize(13)
+            .fontColor('rgba(255,255,255,0.80)')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .height('100%')
+    .borderRadius(8)
+    .clip(true)
+    .backgroundColor(Color.Black)
+    .onClick((): void => {
+      this.openHeroDetails(item)
+    })
+  }
+
+  @Builder
   private nativeHomeHeroRefreshIndicator() {
     Row() {
       Progress({
@@ -752,7 +883,8 @@ export struct HomeTab {
         angle: 180,
         colors: [
           [Color.Transparent, 0.0],
-          [$r('app.color.native_canvas_background'), 1.0]
+          [this.useNativeSurface() ? $r('app.color.native_canvas_background') :
+            $r('app.color.bg_main'), 1.0]
         ]
       })
   }

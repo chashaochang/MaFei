@@ -12,15 +12,6 @@ export default class PlayerAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener
   windowStage?: window.WindowStage
 
-  private useDefaultWindowDensity(windowStage: window.WindowStage): void {
-    try {
-      windowStage.setDefaultDensityEnabled(true)
-    } catch (error) {
-      hilog.warn(0x0000, 'Mafei',
-        'Failed to enable the default player window density. Cause: %{public}s', String(error))
-    }
-  }
-
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     //获取entry传来的播放参数
@@ -37,7 +28,6 @@ export default class PlayerAbility extends UIAbility {
     if (!windowStage) {
       return
     }
-    this.useDefaultWindowDensity(windowStage)
     windowStage.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
         hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
@@ -53,7 +43,6 @@ export default class PlayerAbility extends UIAbility {
     this.windowStage = windowStage
     // Main window is created, set main page for this ability
     AppStorage.setOrCreate('playerWindowStage', windowStage);
-    this.useDefaultWindowDensity(windowStage)
     windowStage.loadContent('pages/PcPlayerPage', (err) => {
       if (err.code) {
         hilog.error(0x0000, 'Mafei', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');

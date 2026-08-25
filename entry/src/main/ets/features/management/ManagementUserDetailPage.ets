@@ -615,7 +615,7 @@ export struct ManagementUserDetailPage {
       .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
         AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
       .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
       .enabled(!this.vm.isSaving())
       .accessibilityText($r('app.string.management_user_change_avatar'))
       .onClick(() => this.updateAvatar())
@@ -630,7 +630,7 @@ export struct ManagementUserDetailPage {
         .borderRadius(this.useNativeMaterial() ? 22 : 10)
         .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
@@ -780,7 +780,7 @@ export struct ManagementUserDetailPage {
         .fontColor($r('app.color.main_red_color'))
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .border({
           width: AppThemeSurfaceResolver.outlineWidth(
             this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
@@ -879,7 +879,7 @@ export struct ManagementUserDetailPage {
         .fontColor(this.secondaryTextColor())
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .onClick(() => this.vm.discardCurrentTab())
       Button(this.currentStatus() === ManagementUserOperationStatus.Saving ?
         $r('app.string.management_user_saving') : $r('app.string.management_user_save'),

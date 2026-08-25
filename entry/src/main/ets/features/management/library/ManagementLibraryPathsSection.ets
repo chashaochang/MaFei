@@ -80,7 +80,7 @@ export struct ManagementLibraryPathsSection {
         .borderRadius(20)
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .accessibilityText($r('app.string.management_library_path_remove'))
         .onClick(() => this.onRemove(path))
       }
@@ -140,7 +140,7 @@ export struct ManagementLibraryPathsSection {
             .fontColor($r('app.color.color_main'))
             .backgroundColor(Color.Transparent)
             .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
             .onClick(() => this.onAdd())
         }
         if (this.paths.length === 0) {

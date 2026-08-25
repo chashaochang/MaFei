@@ -199,7 +199,7 @@ export struct ManagementUserPasswordSection {
         })
         .borderRadius(this.useNativeMaterial() ? 21 : 8)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(!this.actionLocked())
         .onClick(() => this.onResetPassword())
       Button($r('app.string.management_user_clear_password'), { type: ButtonType.Normal })
@@ -213,7 +213,7 @@ export struct ManagementUserPasswordSection {
         })
         .borderRadius(this.useNativeMaterial() ? 21 : 8)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .enabled(!this.actionLocked() && this.ui.user.hasPassword)
         .onClick(() => this.onClearPassword())
     }

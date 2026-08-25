@@ -266,7 +266,7 @@ export struct ManagementSessionDetailPage {
         .fontColor($r('app.color.color_main'))
         .backgroundColor(Color.Transparent)
         .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
         .onClick(() => this.vm.refresh())
     }
     .width('100%')
@@ -540,7 +540,7 @@ export struct ManagementSessionDetailPage {
           .fontColor(this.primaryTextColor())
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, true))
+            AppThemeMaterialRole.AdaptiveControl, true))
           .enabled(this.ui.pendingAction === ManagementSessionAction.None)
           .onClick(() => this.playPause())
       }
@@ -572,7 +572,7 @@ export struct ManagementSessionDetailPage {
           .fontColor($r('app.color.main_red_color'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, true))
+            AppThemeMaterialRole.AdaptiveControl, true))
           .enabled(this.ui.pendingAction === ManagementSessionAction.None)
           .onClick(() => this.confirmStop(item))
       }

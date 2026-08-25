@@ -256,7 +256,7 @@ export struct ManagementActivityFilterSheet {
           .fontColor($r('sys.color.font_primary'))
           .backgroundColor(Color.Transparent)
           .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveInteractive, this.useNativeMaterial()))
+            AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
           .onClick(() => this.reset())
         Button($r('app.string.management_filter_apply'))
           .layoutWeight(1)
