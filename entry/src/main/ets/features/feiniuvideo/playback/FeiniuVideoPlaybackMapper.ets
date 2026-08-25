@@ -146,7 +146,7 @@ export class FeiniuVideoPlaybackMapper {
       Id: value.guid,
       Name: value.title || value.file_name || '',
       SeriesId: this.seriesId(value),
-      SeriesName: value.ancestor_name || value.tv_title || value.parent_title || undefined,
+      SeriesName: FeiniuVideoCatalogMapper.seriesTitle(value) || undefined,
       Type: this.itemKind(value.type),
       IndexNumber: value.episode_number,
       RunTimeTicks: this.durationTicks(value),
@@ -168,7 +168,7 @@ export class FeiniuVideoPlaybackMapper {
       ref: owner,
       playIndex: value.episode_number ?? ordinal,
       name: value.title || value.file_name || '',
-      seriesName: value.ancestor_name || value.tv_title || value.parent_title || '',
+      seriesName: FeiniuVideoCatalogMapper.seriesTitle(value),
       image: summary.thumbnailImage || summary.primaryImage,
       durationTicks: this.durationTicks(value),
       played: (value.watched || 0) > 0,
@@ -321,7 +321,7 @@ export class FeiniuVideoPlaybackMapper {
 
   private metadata(owner: MediaRef, item: FnMediaItem): MediaPlaybackMetadata {
     const summary = this.catalogMapper.summary(item)
-    const seriesTitle = item.ancestor_name || item.tv_title || item.parent_title || ''
+    const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
     return {
       assetId: owner.identity,
       title: seriesTitle.length > 0 ? seriesTitle : (item.title || item.file_name || 'TITLE'),

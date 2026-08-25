@@ -32,6 +32,8 @@ import {
   FnMediaPlayItem,
   FnMediaSeasonItem
 } from '../main/ets/features/feiniuvideo/catalog/FeiniuVideoDtos'
+import { FnMediaStreamListResp } from
+  '../main/ets/features/feiniuvideo/playback/FeiniuVideoPlaybackDtos'
 import {
   FeiniuVideoApiRequest,
   FeiniuVideoAuthenticationError,
@@ -76,6 +78,7 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
   detailResponses: Map<string, FnMediaListResp<FnMediaItemDetailResp>> =
     new Map<string, FnMediaListResp<FnMediaItemDetailResp>>()
   personListResponse: FnMediaPersonListResp = { code: 0, msg: '', data: { list: [], total: 0 } }
+  streamListResponse: FnMediaStreamListResp = { code: 0, msg: '', data: {} }
   seasonResponses: Map<string, FnMediaListResp<FnMediaSeasonItem[]>> =
     new Map<string, FnMediaListResp<FnMediaSeasonItem[]>>()
   episodeResponses: Map<string, FnMediaListResp<FnMediaEpisodeItem[]>> =
@@ -112,6 +115,7 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
     if (request.path.startsWith('/v/api/v1/item/')) {
       return (this.detailResponses.get(this.pathId(request.path)) || this.detailResponse) as T
     }
+    if (request.path.startsWith('/v/api/v1/stream/list/')) return this.streamListResponse as T
     if (request.path.startsWith('/v/api/v1/person/list/')) return this.personListResponse as T
     if (request.path.startsWith('/v/api/v1/season/list/')) {
       return (this.seasonResponses.get(this.pathId(request.path)) || this.emptySeasonResponse()) as T
@@ -496,6 +500,38 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(episodes.items.length).assertEqual(1)
       expect(episodes.items[0].ref.id).assertEqual('episode-1')
       expect(requestsFor(service, '/v/api/v1/episode/list/series-1').length).assertEqual(1)
+    })
+
+    it('loadsOptionalStreamListForPlayableDetailAndMapsEachFile', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponse = {
+        code: 0,
+        msg: '',
+        data: { guid: 'movie-1', title: 'Movie', type: 'Movie', duration: 7200 }
+      }
+      service.streamListResponse = {
+        code: 0,
+        msg: '',
+        data: {
+          files: [
+            { guid: 'media-4k', file_name: 'Movie.4K.mkv', size: 4294967296 },
+            { guid: 'media-1080', file_name: 'Movie.1080p.mp4', size: 2147483648 }
+          ],
+          video_streams: [
+            { media_guid: 'media-4k', resolution_type: '4K', codec_name: 'hevc', wrapper: 'mkv' },
+            { media_guid: 'media-1080', resolution_type: '1080P', codec_name: 'h264', wrapper: 'mp4' }
+          ]
+        }
+      }
+      const provider = new FeiniuVideoCatalogProvider(owner, service)
+
+      const detail = await provider.getDetail(ref(owner, 'movie-1', MediaRefKind.Movie))
+
+      expect(detail.mediaFiles.length).assertEqual(2)
+      expect(detail.mediaFiles[0].id).assertEqual('media-4k')
+      expect(detail.mediaFiles[1].id).assertEqual('media-1080')
+      expect(requestsFor(service, '/v/api/v1/stream/list/movie-1').length).assertEqual(1)
     })
 
     it('fallsBackToEpisodeListWhenSeasonLookupRejectsHistoryGuid', 0, async () => {

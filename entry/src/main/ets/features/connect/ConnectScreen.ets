@@ -3,14 +3,15 @@ import { AppStorageV2 } from "@kit.ArkUI"
 import { ActionBar } from "../../component/ActionBar"
 import { ConnectionUIState } from "./ConnectionUIState"
 import { ConnectionViewModel } from "./ConnectionViewModel"
-import { ServerSelectionMode } from "../../ui/state/ServerSelectionMode"
-import { ServerSuggestion } from "../serverdiscovery/ServerSuggestion"
 import { KeyCode } from "@kit.InputKit"
 import { CheckUrlStateType, Unchecked, Error } from "../../ui/state/CheckUrlState"
 import { inputMethod } from "@kit.IMEKit"
 import { HMRouterMgr } from "@hadss/hmrouter"
 import { RouterConsts } from "../../common/RouterConsts"
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver"
+import { MediaProviderKind } from "../../media/MediaProviderKind"
+import { FeiniuVideoConnectScreen } from "../feiniuvideo/account/FeiniuVideoConnectPage"
+import { ManagementNativeSelect } from "../management/ManagementNativeSelect"
 
 @ComponentV2
 export struct ConnectScreen {
@@ -19,6 +20,7 @@ export struct ConnectScreen {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   @Local ui: ConnectionUIState = new ConnectionUIState(this.getUIContext())
   vm: ConnectionViewModel = new ConnectionViewModel(this.ui)
+  @Local selectedProvider: MediaProviderKind = MediaProviderKind.Jellyfin
   @Consumer() showExternalConnectionError: boolean = false
 
   aboutToAppear(): void {
@@ -31,6 +33,74 @@ export struct ConnectScreen {
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
+  }
+
+  private selectedProviderIndex(): number {
+    return this.selectedProvider === MediaProviderKind.FeiniuVideo ? 1 : 0
+  }
+
+  private selectInitialProvider(index: number): void {
+    const nextProvider = index === 1 ? MediaProviderKind.FeiniuVideo : MediaProviderKind.Jellyfin
+    if (this.selectedProvider === nextProvider) {
+      return
+    }
+    this.selectedProvider = nextProvider
+    inputMethod.getController().hideTextInput()
+  }
+
+  @Builder
+  private initialProviderSelector(): void {
+    ManagementNativeSelect({
+      options: [
+        $r('app.string.provider_jellyfin_name'),
+        $r('app.string.feiniu_video_service_name')
+      ],
+      selectedIndex: this.selectedProviderIndex(),
+      themeStyle: this.appUIState.themeStyle,
+      nativeThemeAvailable: this.appUIState.nativeThemeAvailable,
+      selectorWidth: 136,
+      valueTextAlign: TextAlign.Center,
+      menuPlacement: Placement.BottomRight,
+      onSelect: (index: number): void => {
+        this.selectInitialProvider(index)
+      }
+    })
+  }
+
+  @Builder
+  private selectedProviderLoginContent(): void {
+    LogoHeader({
+      nativeSurface: this.useNativeSurface()
+    })
+    if (this.selectedProvider === MediaProviderKind.Jellyfin) {
+      if (this.useNativeSurface()) {
+        this.nativeConnectionForm()
+      } else {
+        this.feiniuConnectionForm()
+      }
+    } else {
+      FeiniuVideoConnectScreen({
+        showRouteActionBar: false,
+        embedded: true
+      })
+    }
+  }
+
+  @Builder
+  private initialConnectionContent(): void {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        this.selectedProviderLoginContent()
+      }
+      .width('100%')
+      Row() {
+        this.initialProviderSelector()
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .margin({ top: 4, right: 2 })
+    }
+    .width('100%')
   }
 
   @Builder
@@ -160,11 +230,15 @@ export struct ConnectScreen {
             showBackButton: this.isFromAddAccount
           })
         }
-        LogoHeader({ nativeSurface: this.useNativeSurface() })
-        if (this.useNativeSurface()) {
-          this.nativeConnectionForm()
+        if (!this.isFromAddAccount) {
+          this.initialConnectionContent()
         } else {
-          this.feiniuConnectionForm()
+          LogoHeader({ nativeSurface: this.useNativeSurface() })
+          if (this.useNativeSurface()) {
+            this.nativeConnectionForm()
+          } else {
+            this.feiniuConnectionForm()
+          }
         }
       }
       .width('100%')
@@ -189,8 +263,9 @@ export struct LogoHeader {
 
   build() {
     Column() {
-      Image($r('app.media.jellyfin_logo')).height(70)
-      Text($r('app.string.provider_jellyfin_name'))
+      Image($r('app.media.app_icon'))
+        .height(70)
+      Text($r('app.string.app_name'))
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .fontSize(18)
         .fontWeight(FontWeight.Medium)

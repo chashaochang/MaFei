@@ -388,6 +388,19 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     // Ability has brought to foreground
     this.context.eventHub.emit('onForeground')
+    this.refreshFeiniuRouteAfterForeground()
+  }
+
+  private async refreshFeiniuRouteAfterForeground(): Promise<void> {
+    try {
+      const composition = await MediaProviderComposition.initialize(this.context)
+      await composition.refreshSelectedFeiniuConnection()
+    } catch (error) {
+      const normalizedError = error as Error
+      hilog.warn(0x0000, 'Mafei',
+        'Failed to refresh Feiniu route after foregrounding. Cause: %{public}s',
+        normalizedError.name || 'Error')
+    }
   }
 
   onBackground(): void {

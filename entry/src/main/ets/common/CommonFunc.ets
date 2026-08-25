@@ -16,6 +16,7 @@ import { common, Want } from '@kit.AbilityKit'
 import { util } from '@kit.ArkTS'
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppUIState } from '../entity/AppUIState'
+import { AppPreference } from '../data/AppPreference'
 import { MediaRef } from '../media/MediaRef'
 import { toMediaRouteRefData } from '../media/navigation/MediaRouteRef'
 
@@ -424,7 +425,15 @@ export function playMediaRefs(refs: MediaRef[], context: Context,
   const options = new PlayOptions()
   options.refs = refs.map(toMediaRouteRefData)
   options.startIndex = targetIndex
-  options.mediaSourceId = mediaSourceId || null
+  let resolvedMediaSourceId = `${mediaSourceId || ''}`.trim()
+  if (resolvedMediaSourceId.length === 0) {
+    try {
+      resolvedMediaSourceId = AppPreference.getInstance().getPreferredMediaSourceId(refs[targetIndex])
+    } catch (_error) {
+      // Playback remains available before preference initialization or when storage is unavailable.
+    }
+  }
+  options.mediaSourceId = resolvedMediaSourceId.length > 0 ? resolvedMediaSourceId : null
   // Keep "not specified" distinct from an explicit zero so each provider can
   // restore the server-side resume position for the selected item.
   options.startPositionTicks = startPositionTicks ?? null

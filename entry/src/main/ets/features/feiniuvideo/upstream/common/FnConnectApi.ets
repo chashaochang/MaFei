@@ -217,11 +217,15 @@ export class FnConnectApi {
     const publicIpv4List = data.publicIpv4 || [];
     publicIpv4List.forEach((publicIpv4: string) => {
       const normalized = publicIpv4.trim();
+      // 飞牛公网连接不一定开启 HTTPS。公网候选必须同时探测 HTTP/HTTPS，
+      // 不能因固定拼接 HTTPS:5667 而把可用的 HTTP 公网线路误判成中转。
+      FnConnectApi.appendCandidate(candidates, normalized.length > 0 ? `http://${normalized}:${httpPort}` : "", "public");
       FnConnectApi.appendCandidate(candidates, normalized.length > 0 ? `https://${normalized}:${httpsPort}` : "", "public");
     });
     const publicIpv6List = data.publicIpv6 || [];
     publicIpv6List.forEach((publicIpv6: string) => {
       const normalized = publicIpv6.trim();
+      FnConnectApi.appendCandidate(candidates, normalized.length > 0 ? `http://[${normalized}]:${httpPort}` : "", "public");
       FnConnectApi.appendCandidate(candidates, normalized.length > 0 ? `https://[${normalized}]:${httpsPort}` : "", "public");
     });
     FnConnectApi.appendCandidate(candidates, FnConnectApi.pickRelayBaseUrl(data, httpsPort), "relay");

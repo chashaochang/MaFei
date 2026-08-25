@@ -48,6 +48,7 @@ export class Constants {
   static readonly PREF_SEARCH_HISTORY = "pref_search_history"
   static readonly PREF_REPORTED_CONTENT_IDS = "pref_reported_content_ids"
   static readonly PREF_CHASING_SERIES_IDS = "pref_chasing_series_ids"
+  static readonly PREF_MEDIA_SOURCE_SELECTIONS = "pref_media_source_selections"
   static readonly MAIN_BUNDLE_PATH_REGEX =
     /.*\/main\.[^/\s]+\.bundle\.js/ //new Regex(""".*/main\.[^/\s]+\.bundle\.js""")
   static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'

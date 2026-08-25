@@ -2,6 +2,15 @@ import { MediaProviderSession } from './MediaProviderSession'
 
 export interface MediaProviderScopedPlayback {
   stopForScope(accountScope: string): Promise<void>
+  /**
+   * True while this playback owner still holds a prepared media source.  The
+   * scope must not replace its connection/session underneath that source.
+   */
+  hasActivePlaybackSession(): boolean
+}
+
+export interface MediaProviderScopePlaybackIdleListener {
+  onScopePlaybackIdle(accountScope: string): void
 }
 
 export interface MediaProviderScopedRequest {
@@ -16,6 +25,8 @@ export class MediaProviderRegistry {
   private static shared?: MediaProviderRegistry
   private activeSession?: MediaProviderSession
   private playbackByScope: Map<string, MediaProviderScopedPlayback[]> = new Map()
+  private playbackIdleListenersByScope: Map<string,
+    MediaProviderScopePlaybackIdleListener[]> = new Map()
   private requestByScope: Map<string, MediaProviderScopedRequest[]> = new Map()
   private memoryCacheByScope: Map<string, MediaProviderScopedMemoryCache[]> = new Map()
 
@@ -53,6 +64,60 @@ export class MediaProviderRegistry {
     }
     if (items.length === 0) {
       this.playbackByScope.delete(accountScope)
+    }
+  }
+
+  hasActivePlaybackSession(accountScope: string): boolean {
+    const normalizedScope = accountScope.trim()
+    if (normalizedScope.length === 0) {
+      return false
+    }
+    const items = this.playbackByScope.get(normalizedScope) || []
+    for (const playback of items) {
+      if (playback.hasActivePlaybackSession()) {
+        return true
+      }
+    }
+    return false
+  }
+
+  addScopePlaybackIdleListener(accountScope: string,
+    listener: MediaProviderScopePlaybackIdleListener): void {
+    const normalizedScope = accountScope.trim()
+    if (normalizedScope.length === 0) {
+      return
+    }
+    const listeners = this.playbackIdleListenersByScope.get(normalizedScope) || []
+    if (listeners.indexOf(listener) === -1) {
+      listeners.push(listener)
+      this.playbackIdleListenersByScope.set(normalizedScope, listeners)
+    }
+  }
+
+  removeScopePlaybackIdleListener(accountScope: string,
+    listener: MediaProviderScopePlaybackIdleListener): void {
+    const normalizedScope = accountScope.trim()
+    const listeners = this.playbackIdleListenersByScope.get(normalizedScope)
+    if (!listeners) {
+      return
+    }
+    const index = listeners.indexOf(listener)
+    if (index >= 0) {
+      listeners.splice(index, 1)
+    }
+    if (listeners.length === 0) {
+      this.playbackIdleListenersByScope.delete(normalizedScope)
+    }
+  }
+
+  notifyScopePlaybackIdle(accountScope: string): void {
+    const normalizedScope = accountScope.trim()
+    if (normalizedScope.length === 0 || this.hasActivePlaybackSession(normalizedScope)) {
+      return
+    }
+    const listeners = this.playbackIdleListenersByScope.get(normalizedScope) || []
+    for (const listener of listeners.slice()) {
+      listener.onScopePlaybackIdle(normalizedScope)
     }
   }
 

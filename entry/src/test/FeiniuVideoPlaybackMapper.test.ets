@@ -43,7 +43,8 @@ export default function feiniuVideoPlaybackMapperTest() {
           title: 'Episode 1',
           type: 'Episode',
           ancestor_guid: 'series-1',
-          ancestor_name: 'Series One',
+          ancestor_name: '电视剧库',
+          tv_title: 'Series One',
           parent_guid: 'season-1',
           duration: 1800,
           watched: 1
@@ -106,6 +107,8 @@ export default function feiniuVideoPlaybackMapperTest() {
       expect(source.subtitleStreams.length).assertEqual(1)
       expect(source.selectedAudioStream?.Type).assertEqual(MediaPlaybackStreamType.Audio)
       expect(source.selectedSubtitleStream?.Type).assertEqual(MediaPlaybackStreamType.Subtitle)
+      expect(source.item.SeriesName).assertEqual('Series One')
+      expect(source.metadata.title).assertEqual('Series One')
       expect(source.externalSubtitleStreams[0].deliveryUrl).assertEqual(
         'https://relay.example/v/api/v1/subtitle/dl/subtitle-1')
       expect(source.requestHeaders[0].name).assertEqual('Authorization')
@@ -137,7 +140,8 @@ export default function feiniuVideoPlaybackMapperTest() {
         guid: 'episode-2',
         title: 'Episode 2',
         type: 'Episode',
-        ancestor_name: 'Series One',
+        ancestor_name: '电视剧库',
+        tv_title: 'Series One',
         episode_number: 2,
         duration: 2400
       }

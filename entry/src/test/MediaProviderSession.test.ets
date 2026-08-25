@@ -7,7 +7,8 @@ import {
 import {
   MediaProviderRegistry,
   MediaProviderScopedMemoryCache,
-  MediaProviderScopedPlayback
+  MediaProviderScopedPlayback,
+  MediaProviderScopePlaybackIdleListener
 } from '../main/ets/media/MediaProviderRegistry'
 import {
   MediaConnectionRoute,
@@ -16,9 +17,14 @@ import {
 
 class RecordingScopedPlayback implements MediaProviderScopedPlayback {
   stoppedScopes: string[] = []
+  playbackSessionActive: boolean = false
 
   async stopForScope(accountScope: string): Promise<void> {
     this.stoppedScopes.push(accountScope)
+  }
+
+  hasActivePlaybackSession(): boolean {
+    return this.playbackSessionActive
   }
 }
 
@@ -38,6 +44,18 @@ class RetryOnceScopedPlayback implements MediaProviderScopedPlayback {
     if (this.attempts === 1) {
       throw new Error(`playback cleanup failed for ${accountScope}`)
     }
+  }
+
+  hasActivePlaybackSession(): boolean {
+    return false
+  }
+}
+
+class RecordingPlaybackIdleListener implements MediaProviderScopePlaybackIdleListener {
+  idleScopes: string[] = []
+
+  onScopePlaybackIdle(accountScope: string): void {
+    this.idleScopes.push(accountScope)
   }
 }
 
@@ -150,6 +168,28 @@ export default function mediaProviderSessionTest() {
 
       expect(cache.clearedScopes.length).assertEqual(0)
       expect(registry.getActiveSession()?.baseUrl).assertEqual('https://new.example')
+    })
+
+    it('defersScopeIdleNotificationUntilThePreparedPlaybackSourceIsReleased', 0, () => {
+      const registry = new MediaProviderRegistry()
+      const active = session(MediaProviderKind.FeiniuVideo, 'feiniu-account-1', 'user-1')
+      const playback = new RecordingScopedPlayback()
+      const listener = new RecordingPlaybackIdleListener()
+      playback.playbackSessionActive = true
+
+      registry.registerScopedPlayback(active.accountScope, playback)
+      registry.addScopePlaybackIdleListener(active.accountScope, listener)
+      registry.notifyScopePlaybackIdle(active.accountScope)
+
+      expect(registry.hasActivePlaybackSession(active.accountScope)).assertTrue()
+      expect(listener.idleScopes.length).assertEqual(0)
+
+      playback.playbackSessionActive = false
+      registry.notifyScopePlaybackIdle(active.accountScope)
+
+      expect(registry.hasActivePlaybackSession(active.accountScope)).assertFalse()
+      expect(listener.idleScopes.length).assertEqual(1)
+      expect(listener.idleScopes[0]).assertEqual(active.accountScope)
     })
 
     it('retriesOnlyFailedScopeCleanupBeforeActivatingTheNextSession', 0, async () => {

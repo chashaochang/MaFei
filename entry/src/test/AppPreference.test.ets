@@ -5,6 +5,8 @@ import {
   AppPreferenceBackendFactory
 } from '../main/ets/data/AppPreference'
 import { ThemeStyle } from '../main/ets/entity/ThemeStyle'
+import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
+import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
 import { Constants } from '../main/ets/utils/Constants'
 
 class FakePreferenceBackend implements AppPreferenceBackend {
@@ -119,6 +121,23 @@ export default function appPreferenceTest() {
         preference.setAccessToken('new-token')
       }).assertThrowError('Failed to persist preference value')
       expect(preference.getAccessToken()).assertEqual('old-token')
+    })
+
+    it('keepsPreferredMediaSourceScopedToTheExactProviderAccountAndItem', 0, () => {
+      const preference = AppPreference.createForTest(new FakePreferenceBackendFactory())
+      const jellyfinMovie = new MediaRef(MediaProviderKind.Jellyfin, 'server-a:user-a', 'movie-1',
+        MediaRefKind.Movie)
+      const otherAccountMovie = new MediaRef(MediaProviderKind.Jellyfin, 'server-a:user-b', 'movie-1',
+        MediaRefKind.Movie)
+      const feiniuMovie = new MediaRef(MediaProviderKind.FeiniuVideo, 'fnid-a', 'movie-1',
+        MediaRefKind.Movie)
+
+      preference.setPreferredMediaSourceId(jellyfinMovie, 'source-1')
+      preference.setPreferredMediaSourceId(jellyfinMovie, 'source-2')
+
+      expect(preference.getPreferredMediaSourceId(jellyfinMovie)).assertEqual('source-2')
+      expect(preference.getPreferredMediaSourceId(otherAccountMovie)).assertEqual('')
+      expect(preference.getPreferredMediaSourceId(feiniuMovie)).assertEqual('')
     })
   })
 }

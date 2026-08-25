@@ -8,6 +8,7 @@ import {
   MediaEpisode,
   MediaExternalLink,
   MediaFavoriteState,
+  MediaFileInfo,
   MediaImageKind,
   MediaImageRef,
   MediaLibrary,
@@ -18,6 +19,8 @@ import {
   MediaPersonKind,
   MediaRequestHeader,
   MediaSeason,
+  MediaStreamInfo,
+  MediaStreamKind,
   MediaSummary,
   MediaUserState,
   MediaWatchedState
@@ -33,6 +36,13 @@ import {
   FnMediaPlayItem,
   FnMediaSeasonItem
 } from './FeiniuVideoDtos'
+import {
+  FnMediaStreamAudioInfo,
+  FnMediaStreamFileInfo,
+  FnMediaStreamListData,
+  FnMediaStreamSubtitleInfo,
+  FnMediaStreamVideoInfo
+} from '../playback/FeiniuVideoPlaybackDtos'
 
 const FEINIU_SECONDS_TO_MILLISECONDS: number = 1000
 const FEINIU_MINUTES_TO_MILLISECONDS: number = 60 * FEINIU_SECONDS_TO_MILLISECONDS
@@ -65,6 +75,14 @@ export class FeiniuVideoCatalogMapper {
     this.session = session
     this.access = access
     this.genreNames = new Map<number, string>(genreNames)
+  }
+
+  static seriesTitle(item: FnMediaItem | FnMediaPlayItem): string {
+    const tvTitle = `${item.tv_title || ''}`.trim()
+    if (tvTitle.length > 0) {
+      return tvTitle
+    }
+    return `${item.parent_title || ''}`.trim()
   }
 
   counts(data: Record<string, number>): MediaCatalogCounts {
@@ -145,18 +163,19 @@ export class FeiniuVideoCatalogMapper {
     const seriesId = this.seriesId(item)
     if (kind === MediaRefKind.Episode && seriesId.length > 0) {
       const seriesRef = this.ref(seriesId, MediaRefKind.Series)
+      const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
       return {
         ref: seriesRef,
         seriesRef: seriesRef,
         seasonRef: this.optionalRef(item.parent_guid, MediaRefKind.Season),
-        title: item.ancestor_name || item.tv_title || item.parent_title || item.title || '',
+        title: seriesTitle.length > 0 ? seriesTitle : (item.title || ''),
         subtitle: this.episodeSubtitle(item),
         overview: item.overview || '',
         year: this.year(item),
         premiereDate: this.date(item),
         durationMs: this.durationMs(item.duration, item.runtime),
         communityRating: this.rating(item.vote_average),
-        seriesTitle: item.ancestor_name || item.tv_title || item.parent_title || undefined,
+        seriesTitle: seriesTitle || undefined,
         seasonNumber: this.positiveNumber(item.season_number),
         episodeNumber: this.positiveNumber(item.episode_number),
         childCount: this.childCount(item),
@@ -176,7 +195,7 @@ export class FeiniuVideoCatalogMapper {
     const owner = this.ref(item.guid, this.playItemKind(item))
     const seriesId = `${item.ancestor_guid || item.parent_guid || ''}`.trim()
     const seasonId = `${item.parent_guid || ''}`.trim()
-    const seriesTitle = `${item.parent_title || item.tv_title || item.ancestor_name || ''}`.trim()
+    const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
     return {
       ref: owner,
       seriesRef: seriesId.length > 0 ? this.ref(seriesId, MediaRefKind.Series) : undefined,
@@ -201,7 +220,7 @@ export class FeiniuVideoCatalogMapper {
   }
 
   detail(item: FnMediaItemDetailResp, people: FnMediaPersonListItem[] = [],
-    seasons: MediaSeason[] = []): MediaDetail {
+    seasons: MediaSeason[] = [], streamData?: FnMediaStreamListData): MediaDetail {
     const owner = this.itemRef(item)
     const externalLinks: MediaExternalLink[] = []
     const imdbId = `${item.imdb_id || ''}`.trim()
@@ -221,7 +240,7 @@ export class FeiniuVideoCatalogMapper {
       originalTitle: item.original_title || item.title || '',
       tagline: '',
       overview: item.overview || '',
-      seriesTitle: item.ancestor_name || item.tv_title || item.parent_title || undefined,
+      seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item) || undefined,
       seasonTitle: undefined,
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
@@ -236,7 +255,7 @@ export class FeiniuVideoCatalogMapper {
       studios: [],
       personCredits: this.personCredits(people),
       seasons: seasons.slice(),
-      mediaFiles: [],
+      mediaFiles: this.mediaFiles(owner, item, streamData),
       externalLinks: externalLinks,
       primaryImage: this.image(owner, item.poster || item.posters || '',
         MediaImageKind.Primary, 'detail-primary-720', 720),
@@ -246,6 +265,211 @@ export class FeiniuVideoCatalogMapper {
         MediaImageKind.Logo, 'detail-logo-720', 720),
       userState: this.userState(item)
     }
+  }
+
+  private mediaFiles(owner: MediaRef, item: FnMediaItemDetailResp,
+    streamData?: FnMediaStreamListData): MediaFileInfo[] {
+    const files = streamData?.files || []
+    const videos = streamData?.video_streams || []
+    const audios = streamData?.audio_streams || []
+    const subtitles = streamData?.subtitle_streams || []
+    return files.map((file: FnMediaStreamFileInfo, index: number): MediaFileInfo => {
+      const mediaGuid = `${file.guid || ''}`.trim()
+      const singleFileFallback = files.length === 1
+      const sourceVideos = this.videosForMedia(videos, mediaGuid, singleFileFallback)
+      const sourceAudios = this.audiosForMedia(audios, mediaGuid, singleFileFallback)
+      const sourceSubtitles = this.subtitlesForMedia(subtitles, mediaGuid, singleFileFallback)
+      const primaryVideo = sourceVideos.length > 0 ? sourceVideos[0] : undefined
+      const streams: MediaStreamInfo[] = []
+      sourceVideos.forEach((video: FnMediaStreamVideoInfo): void => {
+        streams.push(this.videoStream(video))
+      })
+      sourceAudios.forEach((audio: FnMediaStreamAudioInfo): void => {
+        streams.push(this.audioStream(audio))
+      })
+      sourceSubtitles.forEach((subtitle: FnMediaStreamSubtitleInfo): void => {
+        streams.push(this.subtitleStream(subtitle))
+      })
+      return {
+        ownerRef: owner,
+        id: mediaGuid.length > 0 ? mediaGuid : `${owner.id}:media:${index}`,
+        name: this.fileName(file, index),
+        path: `${file.path || ''}`.trim(),
+        container: this.container(file, primaryVideo),
+        protocol: 'http',
+        sizeBytes: Math.max(0, Math.floor(file.size || 0)),
+        bitrate: this.numberValue(primaryVideo?.bps),
+        durationMs: Math.max(
+          this.durationMs(item.duration, item.runtime),
+          this.durationMs(primaryVideo?.duration)
+        ),
+        streams: streams
+      }
+    })
+  }
+
+  private videosForMedia(values: FnMediaStreamVideoInfo[], mediaGuid: string,
+    singleFileFallback: boolean): FnMediaStreamVideoInfo[] {
+    const normalized = mediaGuid.trim()
+    const scoped = normalized.length > 0 ? values.filter((value: FnMediaStreamVideoInfo): boolean =>
+      `${value.media_guid || ''}`.trim() === normalized) : []
+    return scoped.length > 0 || !singleFileFallback ? scoped : values.slice()
+  }
+
+  private audiosForMedia(values: FnMediaStreamAudioInfo[], mediaGuid: string,
+    singleFileFallback: boolean): FnMediaStreamAudioInfo[] {
+    const normalized = mediaGuid.trim()
+    const scoped = normalized.length > 0 ? values.filter((value: FnMediaStreamAudioInfo): boolean =>
+      `${value.media_guid || ''}`.trim() === normalized) : []
+    return scoped.length > 0 || !singleFileFallback ? scoped : values.slice()
+  }
+
+  private subtitlesForMedia(values: FnMediaStreamSubtitleInfo[], mediaGuid: string,
+    singleFileFallback: boolean): FnMediaStreamSubtitleInfo[] {
+    const normalized = mediaGuid.trim()
+    const scoped = normalized.length > 0 ? values.filter((value: FnMediaStreamSubtitleInfo): boolean =>
+      `${value.media_guid || ''}`.trim() === normalized) : []
+    return scoped.length > 0 || !singleFileFallback ? scoped : values.slice()
+  }
+
+  private fileName(file: FnMediaStreamFileInfo, index: number): string {
+    const name = `${file.file_name || ''}`.trim()
+    if (name.length > 0) {
+      return name
+    }
+    const path = `${file.path || ''}`.trim()
+    if (path.length > 0) {
+      const separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+      return separator >= 0 ? path.substring(separator + 1) : path
+    }
+    return `版本 ${index + 1}`
+  }
+
+  private container(file: FnMediaStreamFileInfo, video?: FnMediaStreamVideoInfo): string {
+    const wrapper = `${video?.wrapper || ''}`.trim().toLowerCase()
+    if (wrapper.length > 0) {
+      return wrapper
+    }
+    const source = `${file.file_name || file.path || ''}`.trim().split('?')[0]
+    const dot = source.lastIndexOf('.')
+    return dot >= 0 ? source.substring(dot + 1).toLowerCase() : ''
+  }
+
+  private videoStream(value: FnMediaStreamVideoInfo): MediaStreamInfo {
+    return {
+      index: value.index ?? 0,
+      kind: MediaStreamKind.Video,
+      title: `${value.title || ''}`.trim(),
+      displayTitle: this.videoTitle(value),
+      codec: `${value.codec_name || value.codec_type || ''}`.trim(),
+      profile: `${value.profile || ''}`.trim() || undefined,
+      level: this.numberValue(value.level),
+      language: '',
+      bitrate: this.numberValue(value.bps),
+      bitDepth: this.numberValue(value.bit_depth || value.bits_per_raw_sample),
+      refFrames: this.numberValue(value.refs || value.reference_frames),
+      width: this.numberValue(value.width),
+      height: this.numberValue(value.height),
+      aspectRatio: `${value.display_aspect_ratio || ''}`.trim() || undefined,
+      frameRate: this.numberValue(value.avg_frame_rate) || this.numberValue(value.frame_rate) ||
+        this.numberValue(value.r_frame_rate) || this.numberValue(value.fps),
+      interlaced: value.progressive === undefined ? undefined : value.progressive <= 0,
+      videoRangeType: `${value.color_range_type || value.color_range || ''}`.trim() || undefined,
+      colorPrimaries: `${value.color_primaries || ''}`.trim() || undefined,
+      colorSpace: `${value.color_space || ''}`.trim() || undefined,
+      colorTransfer: `${value.color_transfer || ''}`.trim() || undefined,
+      pixelFormat: `${value.pix_fmt || ''}`.trim() || undefined,
+      external: false,
+      default: false,
+      forced: false
+    }
+  }
+
+  private audioStream(value: FnMediaStreamAudioInfo): MediaStreamInfo {
+    return {
+      index: value.index ?? 0,
+      kind: MediaStreamKind.Audio,
+      title: `${value.title || ''}`.trim(),
+      displayTitle: this.audioTitle(value),
+      codec: `${value.codec_name || value.codec_type || ''}`.trim(),
+      profile: `${value.profile || ''}`.trim() || undefined,
+      language: `${value.language || ''}`.trim(),
+      bitrate: this.numberValue(value.bps),
+      sampleRate: this.numberValue(value.sample_rate),
+      channels: this.numberValue(value.channels),
+      channelLayout: `${value.channel_layout || ''}`.trim() || undefined,
+      external: false,
+      default: (value.is_default || 0) > 0,
+      forced: false
+    }
+  }
+
+  private subtitleStream(value: FnMediaStreamSubtitleInfo): MediaStreamInfo {
+    return {
+      index: value.index ?? 0,
+      kind: MediaStreamKind.Subtitle,
+      title: `${value.title || ''}`.trim(),
+      displayTitle: this.subtitleTitle(value),
+      codec: `${value.codec_name || value.codec_type || value.format || ''}`.trim(),
+      language: `${value.language || ''}`.trim(),
+      external: this.isExternalSubtitle(value),
+      default: (value.is_default || 0) > 0,
+      forced: (value.forced || 0) > 0
+    }
+  }
+
+  private videoTitle(value: FnMediaStreamVideoInfo): string {
+    const title = `${value.title || ''}`.trim()
+    if (title.length > 0) {
+      return title
+    }
+    const resolution = `${value.resolution_type || ''}`.trim()
+    if (resolution.length > 0) {
+      return resolution
+    }
+    const width = this.numberValue(value.width)
+    const height = this.numberValue(value.height)
+    if (width && height) {
+      return `${width} × ${height}`
+    }
+    return `${value.codec_name || value.codec_type || '视频'}`.trim()
+  }
+
+  private audioTitle(value: FnMediaStreamAudioInfo): string {
+    const title = `${value.title || ''}`.trim()
+    if (title.length > 0) {
+      return title
+    }
+    const parts: string[] = []
+    const language = `${value.language || ''}`.trim()
+    if (language.length > 0) parts.push(language)
+    const codec = `${value.codec_name || value.codec_type || ''}`.trim()
+    if (codec.length > 0) parts.push(codec.toUpperCase())
+    if ((value.channels || 0) > 0) parts.push(`${value.channels}声道`)
+    return parts.length > 0 ? parts.join(' · ') : '音轨'
+  }
+
+  private subtitleTitle(value: FnMediaStreamSubtitleInfo): string {
+    const title = `${value.title || ''}`.trim()
+    if (title.length > 0) {
+      return title
+    }
+    const parts: string[] = []
+    const language = `${value.language || ''}`.trim()
+    if (language.length > 0) parts.push(language)
+    const codec = `${value.codec_name || value.codec_type || value.format || ''}`.trim()
+    if (codec.length > 0) parts.push(codec.toUpperCase())
+    if (this.isExternalSubtitle(value)) parts.push('外挂')
+    return parts.length > 0 ? parts.join(' · ') : '字幕'
+  }
+
+  private isExternalSubtitle(value: FnMediaStreamSubtitleInfo): boolean {
+    return (value.is_external || 0) > 0 || (value.extra_file || 0) > 0
+  }
+
+  private numberValue(value?: number | string): number | undefined {
+    const parsed = Number(`${value ?? ''}`.trim())
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
   }
 
   season(item: FnMediaSeasonItem, seriesRef: MediaRef): MediaSeason {
@@ -274,7 +498,7 @@ export class FeiniuVideoCatalogMapper {
       seriesRef: seriesRef,
       seasonRef: seasonRef || this.optionalRef(item.parent_guid, MediaRefKind.Season),
       title: item.title || this.episodeTitle(item.episode_number),
-      seriesTitle: item.ancestor_name || item.tv_title || item.parent_title || '',
+      seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item),
       overview: item.overview || '',
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
@@ -396,7 +620,7 @@ export class FeiniuVideoCatalogMapper {
       lastPlayedDate: this.playedDate(item.watched_ts),
       durationMs: this.durationMs(item.duration, item.runtime),
       communityRating: this.rating(item.vote_average),
-      seriesTitle: item.ancestor_name || item.tv_title || item.parent_title || undefined,
+      seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item) || undefined,
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
       childCount: this.childCount(item),

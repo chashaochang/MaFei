@@ -258,9 +258,8 @@ export struct SeasonDetailPage {
   }
 
   private configureHeroHeight(): void {
-    this.ui.imageBaseHeight = this.useNativeSurface() ?
-      SeasonDetailUIState.nativeImageInitHeight : SeasonDetailUIState.imageInitHeight
-    this.ui.imageHeight = this.ui.imageBaseHeight
+    this.vm.initializeHeroHeight(this.useNativeSurface() ?
+      SeasonDetailUIState.nativeImageInitHeight : SeasonDetailUIState.imageInitHeight)
   }
 
   private imageOption(imageRef: MediaImageRef | undefined, fallback: string,

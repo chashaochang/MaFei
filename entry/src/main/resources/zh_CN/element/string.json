@@ -2943,6 +2943,14 @@
     {
       "name": "account_choose_other",
       "value": "选择其他账号"
+    },
+    {
+      "name": "video_detail_playback_version",
+      "value": "播放版本"
+    },
+    {
+      "name": "video_detail_choose_playback_version",
+      "value": "选择播放版本"
     }
   ]
 }

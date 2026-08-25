@@ -2943,6 +2943,14 @@
     {
       "name": "account_choose_other",
       "value": "Choose another account"
+    },
+    {
+      "name": "video_detail_playback_version",
+      "value": "Playback version"
+    },
+    {
+      "name": "video_detail_choose_playback_version",
+      "value": "Choose playback version"
     }
   ]
 }

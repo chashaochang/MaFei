@@ -20,6 +20,7 @@ import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
 import { WindowUtil } from "../../utils/WindowUtil"
 import { AppRouteDestination } from "../../component/AppRouteDestination"
+import { AppPreference } from '../../data/AppPreference'
 
 @HMRouter({
   pageUrl: RouterConsts.PlayerPage,
@@ -79,6 +80,14 @@ export struct PlayerPage {
   // }
 
   private handleMediaSourceApplied(mediaSource: MediaPlaybackSource): void {
+    const selectedSourceId = `${mediaSource.sourceInfo.Id || ''}`.trim()
+    if (selectedSourceId.length > 0) {
+      try {
+        AppPreference.getInstance().setPreferredMediaSourceId(mediaSource.ref, selectedSourceId)
+      } catch (_error) {
+        // A storage failure must never interrupt an active playback session.
+      }
+    }
     if (MediaStreamUtil.isLandscape(mediaSource.selectedVideoStream)) {
       // 横向视频自动全屏必须同步切换窗口态，否则系统栏会残留。
       this.enterFullscreen()

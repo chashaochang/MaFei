@@ -70,6 +70,13 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   private playbackStopTask?: Promise<void>
   private playbackStopReportedSessionId?: string
   private lastPlaybackProgressPositionMs: number = -1
+  /**
+   * This follows the real media-source lifetime, rather than page lifetime.
+   * A paused, buffering, backgrounded, or PiP player still owns a source and
+   * must keep its provider session/route stable until it is released.
+   */
+  private playbackSessionActive: boolean = false
+  private nativePlayerAttached: boolean = false
   private scopedPlaybackRegistered: boolean = false
   private mediaSourceAppliedCallback?: (source: MediaPlaybackSource) => void
   private avSessionArtwork?: image.PixelMap
@@ -456,6 +463,7 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   initSource?: MediaPlaybackSource
 
   load(source: MediaPlaybackSource, streams: MediaPlaybackPreparedStreams, playWhenReady: boolean) {
+    this.playbackSessionActive = true
     this.syncMediaSourceState(source)
     this.initSource = source
     this.playbackStopInFlight = false
@@ -763,8 +771,47 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
         'eventName': 'Stop'
       }
     })
-    await stopTask
-    this.clearPlaybackSnapshot()
+    try {
+      await stopTask
+    } finally {
+      this.clearPlaybackSnapshot()
+      this.markPlaybackSessionInactive()
+    }
+  }
+
+  hasActivePlaybackSession(): boolean {
+    return this.playbackSessionActive
+  }
+
+  private markPlaybackSessionInactive(): void {
+    if (!this.playbackSessionActive) {
+      return
+    }
+    this.playbackSessionActive = false
+    MediaProviderRegistry.instance().notifyScopePlaybackIdle(
+      this.playbackProvider.session.accountScope
+    )
+  }
+
+  onNativePlayerReleased(): void {
+    this.nativePlayerAttached = false
+    this.markPlaybackSessionInactive()
+    this.unregisterScopedPlayback()
+  }
+
+  onNativePlayerAttached(): void {
+    this.nativePlayerAttached = true
+  }
+
+  private unregisterScopedPlayback(): void {
+    if (!this.scopedPlaybackRegistered) {
+      return
+    }
+    MediaProviderRegistry.instance().unregisterScopedPlayback(
+      this.playbackProvider.session.accountScope,
+      this
+    )
+    this.scopedPlaybackRegistered = false
   }
 
   private clearPlaybackSnapshot(): void {
@@ -776,12 +823,12 @@ export class PlayerPageViewModel extends BaseViewModel<PlayerPageUIState> implem
   }
 
   release(): void {
-    if (this.scopedPlaybackRegistered) {
-      MediaProviderRegistry.instance().unregisterScopedPlayback(
-        this.playbackProvider.session.accountScope,
-        this
-      )
-      this.scopedPlaybackRegistered = false
+    // Keep the provider route protected until MFPlayer has actually released
+    // its native source.  A page that never attached MFPlayer holds no native
+    // source, so it can be released immediately.
+    if (!this.playbackSessionActive || !this.nativePlayerAttached) {
+      this.markPlaybackSessionInactive()
+      this.unregisterScopedPlayback()
     }
     this.clearPlaybackSnapshot()
     this.avSessionArtworkGeneration += 1

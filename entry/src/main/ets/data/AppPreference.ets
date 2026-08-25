@@ -5,8 +5,20 @@ import { CustomColorMode } from '../entity/CustomColorMode';
 import { PlayerEngineType } from '../entity/PlayerEngineType';
 import { Constants } from '../utils/Constants';
 import { ThemeStyle } from '../entity/ThemeStyle';
+import { MediaRef } from '../media/MediaRef';
 
 const PREFERENCES_NAME: string = 'JellyFin_Preference';
+const PREFERRED_MEDIA_SOURCE_LIMIT: number = 120
+
+class PreferredMediaSourceEntry {
+  readonly mediaRefIdentity: string
+  readonly mediaSourceId: string
+
+  constructor(mediaRefIdentity: string, mediaSourceId: string) {
+    this.mediaRefIdentity = mediaRefIdentity
+    this.mediaSourceId = mediaSourceId
+  }
+}
 
 export interface AppPreferenceBackend {
   has(key: string): boolean
@@ -383,5 +395,52 @@ export class AppPreference {
       return false
     }
     return this.setChasingSeries(normalizedId, !this.isChasingSeries(normalizedId))
+  }
+
+  /**
+   * Returns the last successfully resolved media source for this exact provider account and item.
+   * This is intentionally local: Jellyfin's resume response contains the position but not the
+   * user's selected source.
+   */
+  getPreferredMediaSourceId(ref: MediaRef): string {
+    const identity = ref.identity.trim()
+    if (identity.length === 0) {
+      return ''
+    }
+    const entry = this.preferredMediaSourceEntries().find((value: PreferredMediaSourceEntry): boolean =>
+      value.mediaRefIdentity === identity)
+    return entry?.mediaSourceId || ''
+  }
+
+  /** Stores the latest source explicitly selected or successfully resolved for this item. */
+  setPreferredMediaSourceId(ref: MediaRef, mediaSourceId: string): void {
+    const identity = ref.identity.trim()
+    const sourceId = mediaSourceId.trim()
+    if (identity.length === 0 || sourceId.length === 0) {
+      return
+    }
+    const retained = this.preferredMediaSourceEntries().filter((value: PreferredMediaSourceEntry): boolean =>
+      value.mediaRefIdentity !== identity)
+    const next: PreferredMediaSourceEntry[] = [new PreferredMediaSourceEntry(identity, sourceId)]
+      .concat(retained)
+      .slice(0, PREFERRED_MEDIA_SOURCE_LIMIT)
+    this.setValue<PreferredMediaSourceEntry[]>(Constants.PREF_MEDIA_SOURCE_SELECTIONS, next)
+  }
+
+  private preferredMediaSourceEntries(): PreferredMediaSourceEntry[] {
+    const stored = this.getValue<PreferredMediaSourceEntry[]>(Constants.PREF_MEDIA_SOURCE_SELECTIONS)
+    if (!Array.isArray(stored)) {
+      return []
+    }
+    const result: PreferredMediaSourceEntry[] = []
+    stored.forEach((value: PreferredMediaSourceEntry): void => {
+      const identity = `${value.mediaRefIdentity || ''}`.trim()
+      const sourceId = `${value.mediaSourceId || ''}`.trim()
+      if (identity.length > 0 && sourceId.length > 0 && result.every(
+        (entry: PreferredMediaSourceEntry): boolean => entry.mediaRefIdentity !== identity)) {
+        result.push(new PreferredMediaSourceEntry(identity, sourceId))
+      }
+    })
+    return result
   }
 }

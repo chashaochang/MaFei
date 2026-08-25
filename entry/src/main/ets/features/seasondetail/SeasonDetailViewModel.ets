@@ -182,6 +182,14 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
   }
 
+  initializeHeroHeight(height: number): void {
+    this.ui.imageBaseHeight = height;
+    this.ui.imageHeight = height;
+    this.originImageHeight = height;
+    this.ui.currentScrollState = ScrollState.Idle;
+    this.ui.hasEdgeEffect = false;
+  }
+
   calculateImageHeight(param: CalculateHeightParam): boolean {
     if (param.yOffset === 0) {
       this.ui.hasEdgeEffect = false;

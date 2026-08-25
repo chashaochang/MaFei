@@ -3,6 +3,7 @@ import { RouterConsts } from '../../common/RouterConsts'
 import { ActionBar } from '../../component/ActionBar'
 import { AppRouteDestination } from '../../component/AppRouteDestination'
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
+import { MediaProviderComposition } from './account/MediaProviderComposition'
 import { FeiniuVideoConnectionPreferenceStore } from '../feiniuvideo/network/FeiniuVideoConnectionPreferenceStore'
 import { FeiniuVideoRoutePreference } from '../feiniuvideo/network/FeiniuVideoApiModels'
 
@@ -43,7 +44,7 @@ export struct FeiniuConnectionPreferencePage {
     this.selectedPreference = FeiniuVideoConnectionPreferenceStore.routePreference()
   }
 
-  private selectPreference(value: FeiniuVideoRoutePreference): void {
+  private async selectPreference(value: FeiniuVideoRoutePreference): Promise<void> {
     if (value === this.selectedPreference) {
       return
     }
@@ -54,6 +55,16 @@ export struct FeiniuConnectionPreferencePage {
       return
     }
     this.selectedPreference = value
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      return
+    }
+    try {
+      const composition = await MediaProviderComposition.initialize(hostContext)
+      await composition.refreshSelectedFeiniuConnection()
+    } catch (error) {
+      console.warn(`[FeiniuConnectionPreference] route refresh failed: ${String(error)}`)
+    }
   }
 
   private primaryTextColor(native: boolean): ResourceColor {

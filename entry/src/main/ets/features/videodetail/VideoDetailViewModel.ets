@@ -122,7 +122,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.playButtonText = '播放'
     this.ui.subtitle = ''
     this.ui.episodeName = ''
-    this.ui.selectedMediaSourceIndex = 0
+    this.ui.selectedMediaSourceIndex = this.preferredMediaSourceIndex(detail.ref, this.ui.mediaSources)
     this.ui.selectedAudio = undefined
     this.ui.selectedSubtitle = undefined
     this.applyDeleteCapability(detail, catalog)
@@ -397,6 +397,31 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
   }
 
+  /**
+   * Applies a playback-version choice at the detail boundary.  Keeping this in the view model
+   * makes the selected source available to all later playback entries, including Home's
+   * "continue watching" card.
+   */
+  selectMediaSource(index: number): void {
+    if (index < 0 || index >= this.ui.mediaSources.length || index === this.ui.selectedMediaSourceIndex) {
+      return
+    }
+    this.ui.selectedMediaSourceIndex = index
+    this.ui.selectedAudio = undefined
+    this.ui.selectedSubtitle = undefined
+    const ref = this.ui.mediaRef
+    const sourceId = this.currentMediaFile()?.id.trim() || ''
+    if (ref && sourceId.length > 0) {
+      try {
+        AppPreference.getInstance().setPreferredMediaSourceId(ref, sourceId)
+      } catch (_error) {
+        // A preference write must not prevent the user from changing versions.
+      }
+    }
+    this.getFileInfo()
+    this.getVideoInfo()
+  }
+
   openExternalUrl(url: string): void {
     if (url.length === 0) return
     try {
@@ -410,6 +435,14 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       })
     } catch (_error) {
     }
+  }
+
+  initializeHeroHeight(height: number): void {
+    this.ui.imageBaseHeight = height
+    this.ui.imageHeight = height
+    this.originImageHeight = height
+    this.ui.currentScrollState = ScrollState.Idle
+    this.ui.hasEdgeEffect = false
   }
 
   calculateImageHeight(param: CalculateHeightParam): boolean {
@@ -475,6 +508,20 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     if (this.ui.mediaSources.length === 0) return undefined
     const index = Math.min(Math.max(this.ui.selectedMediaSourceIndex, 0), this.ui.mediaSources.length - 1)
     return this.ui.mediaSources[index]
+  }
+
+  private preferredMediaSourceIndex(ref: MediaRef, sources: MediaFileInfo[]): number {
+    if (sources.length < 2) {
+      return 0
+    }
+    try {
+      const preferredId = AppPreference.getInstance().getPreferredMediaSourceId(ref)
+      const index = sources.findIndex((source: MediaFileInfo): boolean => source.id === preferredId)
+      return index >= 0 ? index : 0
+    } catch (_error) {
+      // Detail loading must not depend on preference initialization or storage availability.
+      return 0
+    }
   }
 
   private videoTagsByStreams(streams: MediaStreamInfo[]): VideoTag[] {

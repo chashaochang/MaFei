@@ -84,13 +84,15 @@ export default function fnIdResolverTest() {
 
       const result = await new FnIdResolver(source).resolve('fn-1')
 
-      expect(result.candidates.length).assertEqual(4)
+      expect(result.candidates.length).assertEqual(6)
       expect(result.candidates[0].baseUrl).assertEqual('http://192.168.1.9:6000')
       expect(result.candidates[0].route).assertEqual(MediaConnectionRoute.Local)
-      expect(result.candidates[1].baseUrl).assertEqual('https://203.0.113.9:7000')
-      expect(result.candidates[2].baseUrl).assertEqual('https://[2001:db8::9]:7000')
-      expect(result.candidates[3].baseUrl).assertEqual('https://relay.example')
-      expect(result.candidates[3].requiresRelayCookie).assertTrue()
+      expect(result.candidates[1].baseUrl).assertEqual('http://203.0.113.9:6000')
+      expect(result.candidates[2].baseUrl).assertEqual('https://203.0.113.9:7000')
+      expect(result.candidates[3].baseUrl).assertEqual('http://[2001:db8::9]:6000')
+      expect(result.candidates[4].baseUrl).assertEqual('https://[2001:db8::9]:7000')
+      expect(result.candidates[5].baseUrl).assertEqual('https://relay.example')
+      expect(result.candidates[5].requiresRelayCookie).assertTrue()
     })
 
     it('usesDefaultPortsWhenResolvePortsAreMissingOrZero', 0, () => {
@@ -103,8 +105,9 @@ export default function fnIdResolverTest() {
       })
 
       expect(candidates[0].baseUrl).assertEqual('http://10.0.0.2:5666')
-      expect(candidates[1].baseUrl).assertEqual('https://198.51.100.2:5667')
-      expect(candidates[2].baseUrl).assertEqual('https://relay.example:5667')
+      expect(candidates[1].baseUrl).assertEqual('http://198.51.100.2:5666')
+      expect(candidates[2].baseUrl).assertEqual('https://198.51.100.2:5667')
+      expect(candidates[3].baseUrl).assertEqual('https://relay.example:5667')
     })
 
     it('bypassesFnIdLookupForDirectAddresses', 0, async () => {

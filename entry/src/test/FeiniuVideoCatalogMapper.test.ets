@@ -16,6 +16,8 @@ import {
   FnMediaPlayItem,
   FnMediaSeasonItem
 } from '../main/ets/features/feiniuvideo/catalog/FeiniuVideoDtos'
+import { FnMediaStreamListData } from
+  '../main/ets/features/feiniuvideo/playback/FeiniuVideoPlaybackDtos'
 
 interface CountFixture extends Record<string, number> {
   total: number
@@ -110,6 +112,7 @@ export default function feiniuVideoCatalogMapperTest() {
         type: 'Episode',
         ancestor_guid: 'series-1',
         ancestor_name: 'Series One',
+        tv_title: 'Series One',
         parent_guid: 'season-1',
         season_number: 1,
         episode_number: 3,
@@ -138,6 +141,49 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(latest.ref.kind).assertEqual(MediaRefKind.Series)
       expect(latest.ref.id).assertEqual('series-1')
       expect(latest.title).assertEqual('Series One')
+    })
+
+    it('usesTvTitleInsteadOfMediaLibraryNameForEpisodes', 0, () => {
+      const owner = session()
+      const catalogMapper = mapper(owner)
+      const seriesRef = new MediaRef(owner.provider, owner.accountScope, 'series-1', MediaRefKind.Series)
+      const seasonRef = new MediaRef(owner.provider, owner.accountScope, 'season-1', MediaRefKind.Season)
+      const item: FnMediaEpisodeItem = {
+        guid: 'episode-3',
+        title: 'Episode Three',
+        type: 'Episode',
+        ancestor_guid: 'series-1',
+        ancestor_name: '电视剧库',
+        parent_guid: 'season-1',
+        parent_title: '第一季',
+        tv_title: '真实剧名',
+        season_number: 1,
+        episode_number: 3
+      }
+      const summary = catalogMapper.summary(item)
+      const latest = catalogMapper.latest(item)
+      const detail = catalogMapper.detail(item)
+      const episode = catalogMapper.episode(item, seriesRef, seasonRef)
+      const resume = catalogMapper.resume({
+        guid: item.guid,
+        title: item.title,
+        type: item.type || '',
+        ancestor_guid: item.ancestor_guid,
+        ancestor_name: item.ancestor_name,
+        parent_guid: item.parent_guid,
+        parent_title: item.parent_title,
+        tv_title: item.tv_title,
+        season_number: item.season_number,
+        episode_number: item.episode_number
+      })
+
+      expect(summary.seriesTitle).assertEqual('真实剧名')
+      expect(latest.title).assertEqual('真实剧名')
+      expect(latest.seriesTitle).assertEqual('真实剧名')
+      expect(detail.seriesTitle).assertEqual('真实剧名')
+      expect(episode.seriesTitle).assertEqual('真实剧名')
+      expect(resume.title).assertEqual('真实剧名')
+      expect(resume.seriesTitle).assertEqual('真实剧名')
     })
 
     it('mapsDetailSeasonEpisodeAndPersonCreditsWithoutLeakingGenreIds', 0, () => {
@@ -198,6 +244,64 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(mappedDetail.externalLinks[0].url.indexOf('tt1234567') >= 0).assertTrue()
       expect(episode.durationMs).assertEqual(2700000)
       expect(episode.seriesRef.id).assertEqual('series-1')
+    })
+
+    it('mapsEachFeiniuFileAsASelectableMediaSourceWithScopedStreams', 0, () => {
+      const streamData: FnMediaStreamListData = {
+        files: [
+          { guid: 'media-4k', file_name: 'Movie.4K.mkv', path: '/media/Movie.4K.mkv', size: 4294967296 },
+          { guid: 'media-1080', file_name: 'Movie.1080p.mp4', path: '/media/Movie.1080p.mp4', size: 2147483648 }
+        ],
+        video_streams: [
+          {
+            media_guid: 'media-4k',
+            index: 0,
+            resolution_type: '4K',
+            codec_name: 'hevc',
+            width: 3840,
+            height: 2160,
+            color_range_type: 'Dolby Vision',
+            wrapper: 'mkv',
+            duration: 7200,
+            bps: 18000000
+          },
+          {
+            media_guid: 'media-1080',
+            index: 0,
+            resolution_type: '1080P',
+            codec_name: 'h264',
+            width: 1920,
+            height: 1080,
+            wrapper: 'mp4',
+            duration: 7200,
+            bps: 6000000
+          }
+        ],
+        audio_streams: [
+          { media_guid: 'media-4k', index: 1, codec_name: 'eac3', language: 'zh', channels: 6 },
+          { media_guid: 'media-1080', index: 1, codec_name: 'aac', language: 'en', channels: 2 }
+        ],
+        subtitle_streams: [
+          { media_guid: 'media-4k', index: 2, codec_name: 'ass', language: 'zh', is_external: 1 },
+          { media_guid: 'media-1080', index: 2, codec_name: 'srt', language: 'en' }
+        ]
+      }
+      const detail = mapper().detail({
+        guid: 'movie-1',
+        title: 'Movie',
+        type: 'Movie',
+        duration: 7200
+      }, [], [], streamData)
+
+      expect(detail.mediaFiles.length).assertEqual(2)
+      expect(detail.mediaFiles[0].id).assertEqual('media-4k')
+      expect(detail.mediaFiles[0].container).assertEqual('mkv')
+      expect(detail.mediaFiles[0].streams.length).assertEqual(3)
+      expect(detail.mediaFiles[0].streams[0].videoRangeType).assertEqual('Dolby Vision')
+      expect(detail.mediaFiles[1].id).assertEqual('media-1080')
+      expect(detail.mediaFiles[1].container).assertEqual('mp4')
+      expect(detail.mediaFiles[1].streams.length).assertEqual(3)
+      expect(detail.mediaFiles[1].streams[0].width).assertEqual(1920)
     })
 
     it('recognizesEpisodePlayRecordsByEpisodeNumber', 0, () => {

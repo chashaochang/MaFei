@@ -272,6 +272,11 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
       return undefined
     }
 
+    const latestResolution = await this.resolveLatestRoute(record)
+    if (latestResolution !== undefined) {
+      this.applyResolvedRoute(loaded, record, latestResolution)
+    }
+
     let userInfo: FnMediaUserInfoResp
     try {
       userInfo = await loaded.apiClient.getUserInfo()
@@ -280,9 +285,11 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
       if (!isFeiniuVideoConnectionFailure(normalizedError)) {
         throw normalizedError
       }
-      const refreshedAddress = await this.fnIdResolver.resolve(record.originalAddress)
-      const refreshedResolution = await this.hostResolver.resolve(refreshedAddress.candidates)
-      loaded.apiClient.setResolution(refreshedResolution)
+      const refreshedResolution = await this.resolveLatestRoute(record)
+      if (refreshedResolution === undefined) {
+        throw normalizedError
+      }
+      this.applyResolvedRoute(loaded, record, refreshedResolution)
       userInfo = await loaded.apiClient.getUserInfo()
     }
 
@@ -407,6 +414,36 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
   private createContext(record: FeiniuVideoAccountRecord,
     apiClient: FeiniuVideoApiClient): FeiniuVideoSessionContext {
     return new FeiniuVideoSessionContext(record.toProviderAccount().toSession(), apiClient, this)
+  }
+
+  /**
+   * Re-resolve a FNID whenever a stored session is restored.  A saved route is
+   * only a last-known-good fallback: connection preference and reachability may
+   * have changed while the application was not running.
+   */
+  private async resolveLatestRoute(record: FeiniuVideoAccountRecord):
+    Promise<FeiniuVideoHostResolution | undefined> {
+    try {
+      const refreshedAddress = await this.fnIdResolver.resolve(record.originalAddress)
+      return await this.hostResolver.resolve(refreshedAddress.candidates)
+    } catch (error) {
+      const normalizedError = error as Error
+      hilog.warn(0x0000, 'mafei-feiniu-login',
+        'route refresh failed; keeping last known route. type=%{public}s',
+        normalizedError.name || 'Error')
+      return undefined
+    }
+  }
+
+  private applyResolvedRoute(context: FeiniuVideoSessionContext,
+    record: FeiniuVideoAccountRecord, resolution: FeiniuVideoHostResolution): void {
+    context.apiClient.setResolution(resolution)
+    this.prepareUpstreamSession(
+      resolution,
+      record.originalAddress,
+      record.displayName,
+      context.apiClient.getCredentials()
+    )
   }
 
   private prepareUpstreamSession(resolution: FeiniuVideoHostResolution, originalAddress: string,

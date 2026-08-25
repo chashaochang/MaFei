@@ -15,11 +15,16 @@ import {
   FeiniuVideoRequestFailureKind
 } from '../../feiniuvideo/network/FeiniuVideoApiModels'
 import { MediaProviderKind } from '../../../media/MediaProviderKind'
-import { MediaProviderRegistry } from '../../../media/MediaProviderRegistry'
+import {
+  MediaProviderRegistry,
+  MediaProviderScopePlaybackIdleListener
+} from '../../../media/MediaProviderRegistry'
 import {
   FeiniuVideoSessionPort,
   MediaAccountSessionCoordinator
 } from './MediaAccountSessionCoordinator'
+
+const FEINIU_ROUTE_REFRESH_INTERVAL_MS: number = 5 * 60 * 1000
 
 class UnavailableFeiniuVideoSessionPort implements FeiniuVideoSessionPort {
   private readonly failure: Error
@@ -44,6 +49,7 @@ class UnavailableFeiniuVideoSessionPort implements FeiniuVideoSessionPort {
 export enum MediaProviderRestoreStatus {
   NotSelected = 'not_selected',
   Restored = 'restored',
+  DeferredForPlayback = 'deferred_for_playback',
   MissingLocalSession = 'missing_local_session',
   AuthenticationExpired = 'authentication_expired',
   RetryableFailure = 'retryable_failure'
@@ -66,12 +72,17 @@ export function classifyFeiniuRestoreStatus(restored: boolean,
  * Application integration boundary for provider-owned factories and services.
  * Neutral media modules stay unaware of concrete Feiniu implementations.
  */
-export class MediaProviderComposition {
+export class MediaProviderComposition implements MediaProviderScopePlaybackIdleListener {
   private static shared?: MediaProviderComposition
   private static initialization?: Promise<MediaProviderComposition>
   private readonly sessionService?: FeiniuVideoSessionService
   private readonly sessionCoordinator: MediaAccountSessionCoordinator
   private readonly initializationFailure?: Error
+  private feiniuRouteRefreshTimer: number = -1
+  private feiniuRouteRefreshPromise?: Promise<MediaProviderRestoreStatus>
+  private feiniuRouteRefreshDeferred: boolean = false
+  private deferredFeiniuRouteRefreshScope: string = ''
+  private deferredFeiniuRouteRefreshTask: number = -1
 
   private constructor(sessionService: FeiniuVideoSessionService | undefined,
     sessionCoordinator: MediaAccountSessionCoordinator,
@@ -95,6 +106,7 @@ export class MediaProviderComposition {
       const composition = await MediaProviderComposition.initialization
       if (composition.isFeiniuAvailable()) {
         MediaProviderComposition.shared = composition
+        composition.startFeiniuRouteRefreshTimer()
       }
       return composition
     } finally {
@@ -131,10 +143,44 @@ export class MediaProviderComposition {
   }
 
   async restoreSelectedFeiniu(): Promise<MediaProviderRestoreStatus> {
+    return await this.refreshSelectedFeiniuConnection()
+  }
+
+  /**
+   * Re-resolves the active FNID using the current strategy and publishes the
+   * actual selected route to the active provider session.
+   */
+  async refreshSelectedFeiniuConnection(): Promise<MediaProviderRestoreStatus> {
+    const pending = this.feiniuRouteRefreshPromise
+    if (pending !== undefined) {
+      return await pending
+    }
+    const refresh = this.refreshSelectedFeiniuConnectionInternal()
+    this.feiniuRouteRefreshPromise = refresh
+    try {
+      return await refresh
+    } finally {
+      if (this.feiniuRouteRefreshPromise === refresh) {
+        this.feiniuRouteRefreshPromise = undefined
+      }
+    }
+  }
+
+  private async refreshSelectedFeiniuConnectionInternal(): Promise<MediaProviderRestoreStatus> {
     const selected = this.sessionCoordinator.currentSelection()
     if (!selected || selected.provider !== MediaProviderKind.FeiniuVideo) {
+      this.clearDeferredFeiniuRouteRefresh()
       return MediaProviderRestoreStatus.NotSelected
     }
+    const providerRegistry = MediaProviderRegistry.instance()
+    const activeSession = providerRegistry.getActiveSession()
+    if (activeSession?.provider === MediaProviderKind.FeiniuVideo &&
+      activeSession.providerAccountId === selected.providerAccountId &&
+      providerRegistry.hasActivePlaybackSession(activeSession.accountScope)) {
+      this.deferFeiniuRouteRefresh(activeSession.accountScope)
+      return MediaProviderRestoreStatus.DeferredForPlayback
+    }
+    this.clearDeferredFeiniuRouteRefresh()
     try {
       const restored = await this.sessionCoordinator.restoreSelectedFeiniu()
       const status = classifyFeiniuRestoreStatus(restored !== undefined)
@@ -151,7 +197,74 @@ export class MediaProviderComposition {
     }
   }
 
+  private startFeiniuRouteRefreshTimer(): void {
+    if (this.feiniuRouteRefreshTimer >= 0) {
+      return
+    }
+    this.feiniuRouteRefreshTimer = setInterval((): void => {
+      this.refreshSelectedFeiniuConnection().catch((error: Error): void => {
+        hilog.warn(0x0000, 'mafei-feiniu-login',
+          'periodic route refresh failed. type=%{public}s', error.name || 'Error')
+      })
+    }, FEINIU_ROUTE_REFRESH_INTERVAL_MS)
+  }
+
+  onScopePlaybackIdle(accountScope: string): void {
+    if (!this.feiniuRouteRefreshDeferred ||
+      accountScope !== this.deferredFeiniuRouteRefreshScope) {
+      return
+    }
+    const deferredScope = this.deferredFeiniuRouteRefreshScope
+    this.feiniuRouteRefreshDeferred = false
+    this.deferredFeiniuRouteRefreshScope = ''
+    MediaProviderRegistry.instance().removeScopePlaybackIdleListener(deferredScope, this)
+    if (this.deferredFeiniuRouteRefreshTask >= 0) {
+      return
+    }
+    // Let the page/account transition finish before resolving again.  A player
+    // may become idle because the user exited playback or because the account
+    // itself is being switched; the next turn sees the final selection.
+    this.deferredFeiniuRouteRefreshTask = setTimeout((): void => {
+      this.deferredFeiniuRouteRefreshTask = -1
+      this.refreshSelectedFeiniuConnection().catch((error: Error): void => {
+        hilog.warn(0x0000, 'mafei-feiniu-login',
+          'deferred route refresh failed. type=%{public}s', error.name || 'Error')
+      })
+    }, 0)
+  }
+
+  private deferFeiniuRouteRefresh(accountScope: string): void {
+    const normalizedScope = accountScope.trim()
+    if (normalizedScope.length === 0) {
+      return
+    }
+    if (this.feiniuRouteRefreshDeferred &&
+      this.deferredFeiniuRouteRefreshScope === normalizedScope) {
+      return
+    }
+    this.clearDeferredFeiniuRouteRefresh()
+    this.feiniuRouteRefreshDeferred = true
+    this.deferredFeiniuRouteRefreshScope = normalizedScope
+    MediaProviderRegistry.instance().addScopePlaybackIdleListener(normalizedScope, this)
+    hilog.info(0x0000, 'mafei-feiniu-login',
+      'deferred route refresh while playback owns scope=%{public}s', normalizedScope)
+  }
+
+  private clearDeferredFeiniuRouteRefresh(): void {
+    const deferredScope = this.deferredFeiniuRouteRefreshScope
+    this.feiniuRouteRefreshDeferred = false
+    this.deferredFeiniuRouteRefreshScope = ''
+    if (deferredScope.length > 0) {
+      MediaProviderRegistry.instance().removeScopePlaybackIdleListener(deferredScope, this)
+    }
+    if (this.deferredFeiniuRouteRefreshTask >= 0) {
+      clearTimeout(this.deferredFeiniuRouteRefreshTask)
+      this.deferredFeiniuRouteRefreshTask = -1
+    }
+  }
+
   async clearSelectedFeiniu(): Promise<void> {
+    this.clearDeferredFeiniuRouteRefresh()
     const selected = this.sessionCoordinator.currentSelection()
     if (selected?.provider === MediaProviderKind.FeiniuVideo) {
       await this.sessionCoordinator.clearInvalidFeiniuSelection(selected.providerAccountId)

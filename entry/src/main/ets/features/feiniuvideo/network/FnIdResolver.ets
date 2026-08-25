@@ -83,12 +83,16 @@ export class FnIdResolver implements FeiniuVideoAddressResolutionSource {
     const publicIpv4List = data.publicIpv4 || []
     publicIpv4List.forEach((publicIpv4: string) => {
       const normalized = publicIpv4.trim()
+      this.appendCandidate(candidates, normalized.length > 0 ? `http://${normalized}:${httpPort}` : '',
+        MediaConnectionRoute.Public)
       this.appendCandidate(candidates, normalized.length > 0 ? `https://${normalized}:${httpsPort}` : '',
         MediaConnectionRoute.Public)
     })
     const publicIpv6List = data.publicIpv6 || []
     publicIpv6List.forEach((publicIpv6: string) => {
       const normalized = publicIpv6.trim()
+      this.appendCandidate(candidates, normalized.length > 0 ? `http://[${normalized}]:${httpPort}` : '',
+        MediaConnectionRoute.Public)
       this.appendCandidate(candidates, normalized.length > 0 ? `https://[${normalized}]:${httpsPort}` : '',
         MediaConnectionRoute.Public)
     })

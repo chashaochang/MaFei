@@ -68,6 +68,7 @@ export struct MFPlayerView {
 
   aboutToAppear(): void {
     const context = getContext(this) as common.UIAbilityContext
+    this.vm.onNativePlayerAttached()
     this.controller.setCacheDir(context.cacheDir)
     this.controller.addListener(this.listener)
     context.eventHub.on('onBackground', this.onHostBackground)
@@ -84,6 +85,7 @@ export struct MFPlayerView {
     this.controller.removeListener(this.listener)
     void this.stopPip()
     this.controller.release()
+    this.vm.onNativePlayerReleased()
   }
 
   @Monitor('videoUrl')
@@ -438,6 +440,7 @@ export struct MFPlayerView {
         break
       case PlayerState.RELEASED:
         this.ui.playerStatus = PlayerStatus.RELEASED
+        this.vm.onNativePlayerReleased()
         break
       case PlayerState.READY:
         this.ui.playerStatus = PlayerStatus.PREPARED

@@ -15,6 +15,7 @@ import { ConfigurationConstant } from '@kit.AbilityKit';
 import { CastView } from '../../component/CastView';
 import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView';
 import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
+import { MediaSourceSelector } from './components/MediaSourceSelector';
 import { VideoInfoDetail } from './components/VideoInfoDetail';
 import { VideoDetailRefreshEvent } from '../../events/Events';
 import {
@@ -37,7 +38,6 @@ import {
 import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess'
 import {
   MediaExternalLink,
-  MediaFileInfo,
   MediaImageRef
 } from '../../media/catalog/MediaCatalogModels'
 import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter'
@@ -449,9 +449,8 @@ export struct VideoDetailPage {
   }
 
   private configureHeroHeight(): void {
-    this.ui.imageBaseHeight = this.useNativeSurface() ?
-      VideoDetailUIState.nativeImageInitHeight : VideoDetailUIState.imageInitHeight
-    this.ui.imageHeight = this.ui.imageBaseHeight
+    this.vm.initializeHeroHeight(this.useNativeSurface() ?
+      VideoDetailUIState.nativeImageInitHeight : VideoDetailUIState.imageInitHeight)
   }
 
   private imageOption(imageRef: MediaImageRef | undefined, fallback: string,
@@ -1113,31 +1112,15 @@ export struct VideoDetailPage {
                 .padding({ left: 16, right: 16 })
               }
 
-              if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+              if (!this.useNativeSurface() && !this.ui.isTvShows &&
+                this.ui.selectedMediaSourceIndex >= 0 &&
                 this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
-                if (!this.useNativeSurface()) {
-                  Blank().height(10)
-                  Row({ space: 16 }) {
-                    ForEach(this.vm.getTags(), (item: string) => {
-                      Image(item)
-                        .height(22)
-                        .colorFilter(this.ui.colorFilter)
-                    })
-                  }.padding({ left: 16, right: 16 })
-                }
-
                 Blank().height(10)
-                //todo 字幕音频切换
                 Row({ space: 16 }) {
-                  AudioSubtitleSelector({
-                    source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
-                    triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
-                    onSelectSubtitle: (subtitle) => {
-                      this.ui.selectedSubtitle = subtitle
-                    },
-                    onSelectAudio: (audio) => {
-                      this.ui.selectedAudio = audio
-                    }
+                  ForEach(this.vm.getTags(), (item: string) => {
+                    Image(item)
+                      .height(22)
+                      .colorFilter(this.ui.colorFilter)
                   })
                 }.padding({ left: 16, right: 16 })
               }
@@ -1171,36 +1154,34 @@ export struct VideoDetailPage {
               //     $r('app.color.text_expand_selected_tab_name'))
               // }).id(`textClick${this.index}`)
               if (this.ui.mediaSources.length > 1) {
-                Blank().height(16)
-                List({ space: 8 }) {
-                  ForEach(this.ui.mediaSources, (item: MediaFileInfo, index: number) => {
-                    ListItem() {
-                      Text(item.name)
-                        .fontSize(14)
-                        .fontColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
-                          $r('app.color.text_1'))
-                        .padding({
-                          left: 12,
-                          right: 12
-                        })
-                        .height(32)
-                        .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-                        .borderColor(index === this.ui.selectedMediaSourceIndex ? $r('app.color.color_main') :
-                          AppThemeSurfaceResolver.contentOutline(
-                            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                        .borderRadius(4)
-                        .onClick(() => {
-                          this.ui.selectedMediaSourceIndex = index
-                          this.vm.getFileInfo()
-                          this.vm.getVideoInfo()
-                        })
+                Blank().height(12)
+                MediaSourceSelector({
+                  sources: this.ui.mediaSources,
+                  selectedIndex: this.ui.selectedMediaSourceIndex,
+                  onSelect: (index: number) => {
+                    this.selectedAudioIndex = 0
+                    this.selectedSubtitleIndex = 0
+                    this.vm.selectMediaSource(index)
+                  }
+                })
+                  .width('100%')
+                  .padding({ left: 16, right: 16 })
+              }
+              if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+                this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
+                Blank().height(10)
+                Row({ space: 16 }) {
+                  AudioSubtitleSelector({
+                    source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
+                    triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
+                    onSelectSubtitle: (subtitle) => {
+                      this.ui.selectedSubtitle = subtitle
+                    },
+                    onSelectAudio: (audio) => {
+                      this.ui.selectedAudio = audio
                     }
                   })
-                }.listDirection(Axis.Horizontal)
-                .width('100%')
-                .height(32)
-                .padding({ left: 16, right: 16 })
+                }.padding({ left: 16, right: 16 })
               }
               if (this.ui.overview.length > 0) {
                 Blank().height(16)

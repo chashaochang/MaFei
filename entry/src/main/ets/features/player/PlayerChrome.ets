@@ -20,10 +20,11 @@ import { PlayerSeekBar } from './PlayerSeekBar'
 import { ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro'
 import { createMediaImageKnifeOption } from '../../media/catalog/MediaImageKnifeAdapter'
 import { PlaybackInfoCard } from '../../player/ui/PlaybackInfoCard'
-import { PlayerMenus } from '../../player/ui/PlayerMenus'
+import { PlaybackInfoRuntime, PlayerMenus } from '../../player/ui/PlayerMenus'
 
 const PLAYER_AUTO_HIDE_DELAY_MS: number = 4000
 const PLAYER_CLOCK_INTERVAL_MS: number = 30000
+const PLAYER_PLAYBACK_INFO_REFRESH_INTERVAL_MS: number = 1000
 const PLAYER_LONG_PRESS_SPEED: number = 3
 const PLAYER_MIN_BRIGHTNESS: number = 0.05
 const PLAYER_CONTROL_MASK_COLOR: string = '#3D000000'
@@ -397,6 +398,7 @@ export struct PlayerChrome {
   private panelEnterTimer: number = -1
   private panelCloseTimer: number = -1
   private episodeRowTimer: number = -1
+  private playbackInfoTimer: number = -1
   private openPlaybackInfoAfterPanelClose: boolean = false
   private clockTimer: number = -1
   private audioManager?: audio.AudioManager
@@ -410,6 +412,9 @@ export struct PlayerChrome {
       }
       this.decoder = event.decoder
       this.syncControllerState(event)
+      if (this.playbackInfoVisible && event.type !== PlayerEventType.PROGRESS_CHANGED) {
+        this.refreshPlaybackInfo()
+      }
     }
   }
 
@@ -433,6 +438,7 @@ export struct PlayerChrome {
     this.clearPanelEnterTimer()
     this.clearPanelCloseTimer()
     this.clearEpisodeRowTimer()
+    this.stopPlaybackInfoRefresh()
     this.openPlaybackInfoAfterPanelClose = false
     this.playbackInfoVisible = false
     if (this.playerMenus) {
@@ -913,6 +919,8 @@ export struct PlayerChrome {
     if (!this.playerMenus) {
       return
     }
+    this.refreshPlaybackInfo()
+    this.startPlaybackInfoRefresh()
     this.playerMenus.isShowPlayBackInfo = true
     this.playbackInfoVisible = true
     this.clearAutoHideTimer()
@@ -922,12 +930,86 @@ export struct PlayerChrome {
 
   private closePlaybackInfo(): void {
     this.openPlaybackInfoAfterPanelClose = false
+    this.stopPlaybackInfoRefresh()
     this.playbackInfoVisible = false
     if (this.playerMenus) {
       this.playerMenus.isShowPlayBackInfo = false
     }
     this.onPanelVisibilityChanged(false)
     this.showControlsTemporarily()
+  }
+
+  private startPlaybackInfoRefresh(): void {
+    this.stopPlaybackInfoRefresh()
+    this.playbackInfoTimer = setInterval((): void => this.refreshPlaybackInfo(),
+      PLAYER_PLAYBACK_INFO_REFRESH_INTERVAL_MS)
+  }
+
+  private stopPlaybackInfoRefresh(): void {
+    if (this.playbackInfoTimer >= 0) {
+      clearInterval(this.playbackInfoTimer)
+      this.playbackInfoTimer = -1
+    }
+  }
+
+  private refreshPlaybackInfo(): void {
+    if (!this.playerMenus) {
+      return
+    }
+    const runtimeInfo: PlaybackInfoRuntime = new PlaybackInfoRuntime()
+    try {
+      runtimeInfo.decodeMode = this.controller.getDecodeMode()
+      runtimeInfo.decoder = this.controller.getHardwareDecoder()
+      runtimeInfo.videoWidth = Math.max(0, this.controller.getVideoWidth())
+      runtimeInfo.videoHeight = Math.max(0, this.controller.getVideoHeight())
+      const videoInfo = this.controller.getVideoInfo()
+      runtimeInfo.videoCodec = videoInfo.codec
+      runtimeInfo.videoCodecProfile = videoInfo.codecProfile
+      runtimeInfo.videoPixelFormat = videoInfo.pixelFormat
+      runtimeInfo.videoPrimaries = videoInfo.primaries
+      runtimeInfo.videoTransfer = videoInfo.transfer
+      runtimeInfo.outputPrimaries = videoInfo.outputPrimaries
+      runtimeInfo.outputTransfer = videoInfo.outputTransfer
+      runtimeInfo.dynamicRange = this.dynamicRangeLabel()
+    } catch (_error) {
+      runtimeInfo.decoder = this.decoder
+      runtimeInfo.dynamicRange = this.dynamicRangeLabel()
+    }
+    try {
+      const stats = this.controller.getPlaybackStats()
+      runtimeInfo.renderer = stats.currentVo ?? ''
+      runtimeInfo.videoBitrate = Math.max(0, stats.videoBitrate)
+      runtimeInfo.audioBitrate = Math.max(0, stats.audioBitrate)
+      runtimeInfo.audioSampleRate = Math.max(0, stats.audioSampleRate)
+      runtimeInfo.audioChannels = Math.max(0, stats.audioChannels)
+      runtimeInfo.videoDropCount = Math.max(0, stats.voDropCount)
+      runtimeInfo.decoderDropCount = Math.max(0, stats.decoderDropCount)
+      runtimeInfo.delayedFrameCount = Math.max(0, stats.delayedCount)
+    } catch (_error) {
+    }
+    try {
+      runtimeInfo.networkSource = this.controller.isNetworkSource()
+      if (runtimeInfo.networkSource) {
+        runtimeInfo.downloadSpeedBps = Math.max(0, this.controller.getDownloadSpeedBps())
+        runtimeInfo.bufferedDurationSec = Math.max(0, this.controller.getBufferedDurationSec())
+      }
+    } catch (_error) {
+    }
+    try {
+      const diagnostics = this.controller.getMultiConnectionDiagnostics()
+      if (diagnostics !== undefined && !diagnostics.downgraded) {
+        runtimeInfo.multiConnectionEnabled = diagnostics.configuredConnections > 1
+        runtimeInfo.multiConnectionConfigured = Math.max(0, diagnostics.configuredConnections)
+        runtimeInfo.multiConnectionActive = Math.max(0, diagnostics.activeRequests)
+        runtimeInfo.multiConnectionAggregateSpeedBps = Math.max(0, diagnostics.aggregateSpeedBps)
+        if (runtimeInfo.multiConnectionAggregateSpeedBps > 0) {
+          runtimeInfo.downloadSpeedBps = runtimeInfo.multiConnectionAggregateSpeedBps
+        }
+      }
+    } catch (_error) {
+    }
+    this.playerMenus.refreshPlaybackInfo(runtimeInfo, this.videoStream, this.selectedAudioStream,
+      this.selectedSubtitleStream)
   }
 
   private selectContentMode(mode: PlayerContentMode): void {

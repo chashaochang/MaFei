@@ -21,6 +21,9 @@ import { FeiniuVideoApiClient } from '../main/ets/features/feiniuvideo/network/F
 import {
   FeiniuVideoApiCredentials,
   FeiniuVideoApiRequest,
+  FeiniuVideoAddressInput,
+  FeiniuVideoAddressKind,
+  FeiniuVideoAddressResolution,
   FeiniuVideoConnectionError,
   FeiniuVideoDigestSource,
   FeiniuVideoHostProbe,
@@ -38,6 +41,10 @@ import {
 } from '../main/ets/features/feiniuvideo/network/FeiniuVideoApiModels'
 import { FeiniuVideoHostResolver } from '../main/ets/features/feiniuvideo/network/FeiniuVideoHostResolver'
 import { FnIdResolver } from '../main/ets/features/feiniuvideo/network/FnIdResolver'
+import {
+  FeiniuVideoAddressResolutionSource,
+  FeiniuVideoHostResolutionSource
+} from '../main/ets/features/feiniuvideo/network/FeiniuVideoResolutionSource'
 
 class FakeSessionAccountBackend implements FeiniuVideoAccountBackend {
   records: Map<string, FeiniuVideoAccountRecord> = new Map()
@@ -84,6 +91,29 @@ class FakeSessionCredentialBackend implements FeiniuVideoCredentialBackend {
 class AlwaysReachableProbe implements FeiniuVideoHostProbe {
   async probe(_baseUrl: string): Promise<FeiniuVideoHostProbeResult> {
     return new FeiniuVideoHostProbeResult(true, 1)
+  }
+}
+
+class FixedAddressResolutionSource implements FeiniuVideoAddressResolutionSource {
+  readonly resolution: FeiniuVideoAddressResolution
+  calls: number = 0
+
+  constructor(resolution: FeiniuVideoAddressResolution) {
+    this.resolution = resolution
+  }
+
+  async resolve(_rawValue: string): Promise<FeiniuVideoAddressResolution> {
+    this.calls += 1
+    return this.resolution
+  }
+}
+
+class FirstCandidateHostResolver implements FeiniuVideoHostResolutionSource {
+  calls: number = 0
+
+  async resolve(candidates: FeiniuVideoHostCandidate[]): Promise<FeiniuVideoHostResolution> {
+    this.calls += 1
+    return new FeiniuVideoHostResolution(candidates[0], candidates.slice(1))
   }
 }
 
@@ -375,6 +405,52 @@ export default function feiniuVideoSessionServiceTest() {
       expect(credentialStore.load(record.providerAccountId)?.cookie.includes('route=public')).assertTrue()
       expect(credentialStore.load(record.providerAccountId)?.cookie.includes('refresh=rotated')).assertTrue()
       expect(restoreTransport.requests.length).assertEqual(2)
+    })
+
+    it('reResolvesTheStoredFnidRouteBeforeRestoringTheSession', 0, async () => {
+      const accountBackend = new FakeSessionAccountBackend()
+      const credentialBackend = new FakeSessionCredentialBackend()
+      const record = accountRecord(
+        'fn-one', 'u1', 'https://fn-one.5ddd.com', MediaConnectionRoute.Relay)
+      accountBackend.upsertRecord(record)
+      new FeiniuVideoCredentialStore(credentialBackend).save(record.providerAccountId, {
+        token: 'stored-token',
+        cookie: 'mode=relay'
+      })
+      const publicBaseUrl = 'https://public.example:5667'
+      const addressResolver = new FixedAddressResolutionSource(
+        new FeiniuVideoAddressResolution(
+          new FeiniuVideoAddressInput('fn-one', FeiniuVideoAddressKind.FnId, 'fn-one'),
+          [
+            new FeiniuVideoHostCandidate(publicBaseUrl, MediaConnectionRoute.Public),
+            new FeiniuVideoHostCandidate('https://fn-one.5ddd.com', MediaConnectionRoute.Relay)
+          ]
+        )
+      )
+      const hostResolver = new FirstCandidateHostResolver()
+      const transport = new ScriptedSessionTransport([
+        new SessionTransportStep(response(200,
+          '{"code":0,"msg":"ok","data":{"user_id":"u1","nickname":"Public User"}}'))
+      ])
+      const sessionService = new FeiniuVideoSessionService(
+        new FeiniuVideoAccountStore(accountBackend),
+        new FeiniuVideoCredentialStore(credentialBackend),
+        addressResolver,
+        hostResolver,
+        new QueueSessionApiClientFactory([transport]),
+        new FixedSessionClock(654)
+      )
+
+      const restored = await sessionService.restore(record.providerAccountId)
+      const refreshed = accountBackend.records.get(record.providerAccountId) as FeiniuVideoAccountRecord
+
+      expect(addressResolver.calls).assertEqual(1)
+      expect(hostResolver.calls).assertEqual(1)
+      expect(restored?.session.baseUrl).assertEqual(publicBaseUrl)
+      expect(restored?.session.connectionRoute).assertEqual(MediaConnectionRoute.Public)
+      expect(refreshed.baseUrl).assertEqual(publicBaseUrl)
+      expect(refreshed.connectionRoute).assertEqual(MediaConnectionRoute.Public)
+      expect(transport.requests[0].url.startsWith(publicBaseUrl)).assertTrue()
     })
 
     it('writesBackPromotedRoutesAndRotatedCredentialsOnlyOncePerSnapshot', 0, async () => {

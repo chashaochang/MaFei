@@ -63,6 +63,10 @@ import {
   FeiniuVideoCatalogImageAccess,
   FeiniuVideoCatalogMapper
 } from './FeiniuVideoCatalogMapper'
+import {
+  FnMediaStreamListData,
+  FnMediaStreamListResp
+} from '../playback/FeiniuVideoPlaybackDtos'
 import { FeiniuVideoRecommendationPlanner } from './FeiniuVideoRecommendationPlanner'
 
 const FEINIU_HOME_LIBRARY_LIMIT: number = 16
@@ -437,19 +441,40 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
           'Feiniu Video detail response is empty'
         )
       }
-      const peopleResponse = await this.request<FnMediaPersonListResp>(
-        `/v/api/v1/person/list/${encodeURIComponent(ref.id)}`, FeiniuVideoHttpMethod.Post)
       const mapperBeforeSeasons = this.mapper()
-      let seasons: MediaSeason[] = []
-      if (mapperBeforeSeasons.refKind(detail.type) === MediaRefKind.Series) {
-        const seasonItems = await this.seasonItems(ref.id)
-        const seriesRef = new MediaRef(this.session.provider, this.session.accountScope, ref.id, MediaRefKind.Series)
-        const mapper = this.mapper()
-        seasons = seasonItems.map((item: FnMediaSeasonItem): MediaSeason => mapper.season(item, seriesRef))
-      }
-      await this.ensureGenres()
-      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons)
+      const peoplePromise = this.request<FnMediaPersonListResp>(
+        `/v/api/v1/person/list/${encodeURIComponent(ref.id)}`, FeiniuVideoHttpMethod.Post)
+      const seasonPromise: Promise<MediaSeason[]> = mapperBeforeSeasons.refKind(detail.type) === MediaRefKind.Series
+        ? this.seasonItems(ref.id).then((items: FnMediaSeasonItem[]): MediaSeason[] => {
+          const seriesRef = new MediaRef(this.session.provider, this.session.accountScope, ref.id, MediaRefKind.Series)
+          const mapper = this.mapper()
+          return items.map((item: FnMediaSeasonItem): MediaSeason => mapper.season(item, seriesRef))
+        }) : Promise.resolve([])
+      const streamPromise: Promise<FnMediaStreamListData | undefined> =
+        this.supportsDetailStreams(mapperBeforeSeasons.refKind(detail.type))
+          ? this.streamList(ref.id).catch((): FnMediaStreamListData | undefined => undefined)
+          : Promise.resolve(undefined)
+      const genrePromise = this.ensureGenres()
+      const results = await Promise.all([peoplePromise, seasonPromise, streamPromise, genrePromise])
+      const peopleResponse = results[0] as FnMediaPersonListResp
+      const seasons = results[1] as MediaSeason[]
+      const streamData = results[2] as FnMediaStreamListData | undefined
+      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons, streamData)
     })
+  }
+
+  private supportsDetailStreams(kind: MediaRefKind): boolean {
+    return kind === MediaRefKind.Movie || kind === MediaRefKind.Episode || kind === MediaRefKind.Video
+  }
+
+  private async streamList(itemId: string): Promise<FnMediaStreamListData> {
+    const response = await this.request<FnMediaStreamListResp>(
+      `/v/api/v1/stream/list/${encodeURIComponent(itemId)}`,
+      FeiniuVideoHttpMethod.Get,
+      '',
+      [new FeiniuVideoQueryParameter('before_play', 1)]
+    )
+    return response.data || {}
   }
 
   getSeasons(seriesRef: MediaRef): Promise<MediaSeason[]> {
@@ -793,7 +818,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     const result = {} as FnMediaItem
     result.guid = guid
     result.title = `${isEpisode ?
-      (item.tv_title || item.ancestor_name || item.parent_title || item.title) : item.title}`.trim()
+      (FeiniuVideoCatalogMapper.seriesTitle(item) || item.title) : item.title}`.trim()
     result.type = isEpisode ? 'TV' : item.type
     result.poster = item.poster
     result.watched = item.watched
