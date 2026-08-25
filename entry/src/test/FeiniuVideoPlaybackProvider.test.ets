@@ -8,7 +8,8 @@ import {
   FeiniuVideoApiRequest,
   FeiniuVideoHttpMethod,
   FeiniuVideoRequestError,
-  FeiniuVideoRequestFailureKind
+  FeiniuVideoRequestFailureKind,
+  FnMediaUserInfoResp
 } from '../main/ets/features/feiniuvideo/network/FeiniuVideoApiModels'
 import {
   FeiniuVideoPlaybackAccess
@@ -19,6 +20,7 @@ import {
 } from '../main/ets/features/feiniuvideo/playback/FeiniuVideoPlaybackProvider'
 import {
   FnMediaMutationResp,
+  FnMediaOfficialStreamResp,
   FnMediaPlayPlayResp,
   FnMediaPlayInfoResp,
   FnMediaResetQualityResp,
@@ -104,6 +106,19 @@ class FakeFeiniuPlaybackService implements FeiniuVideoPlaybackService {
       }]
     }
   }
+  userInfoResponse: FnMediaUserInfoResp = {
+    code: 0,
+    msg: '',
+    data: {
+      username: 'tester',
+      sources: [{ source_name: 'tester' }]
+    }
+  }
+  officialStreamResponse: FnMediaOfficialStreamResp = {
+    code: 0,
+    msg: '',
+    data: {}
+  }
   episodeResponse: FnMediaListResp<FnMediaItemDetailResp[]> = {
     code: 0,
     msg: '',
@@ -132,6 +147,8 @@ class FakeFeiniuPlaybackService implements FeiniuVideoPlaybackService {
     if (request.path.startsWith('/v/api/v1/item/')) return this.itemResponse as T
     if (request.path === '/v/api/v1/play/info') return this.playInfoResponse as T
     if (request.path === '/v/api/v1/play/play') return this.playResponse as T
+    if (request.path === '/v/api/v1/user/info') return this.userInfoResponse as T
+    if (request.path === '/v/api/v1/stream') return this.officialStreamResponse as T
     if (request.path.startsWith('/v/api/v1/stream/list/')) return this.streamResponse as T
     if (request.path.startsWith('/v/api/v1/episode/list/')) return this.episodeResponse as T
     if (request.path === '/v/api/v1/play/record' || request.path === '/v/api/v1/item/watched') {
@@ -292,6 +309,65 @@ export default function feiniuVideoPlaybackProviderTest() {
       expect(quitRequests.length).assertEqual(1)
       expect(quitRequests[0].bodyText.indexOf('"req":"media.quit"') >= 0).assertTrue()
       expect(quitRequests[0].bodyText.indexOf('/v/api/v1/media/hls/play-1/master.m3u8') >= 0).assertTrue()
+    })
+
+    it('usesSingleConnectionForStrmCloudDirectLinksWithoutFeiniuCredentials', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuPlaybackService()
+      service.streamResponse.data.files = [{
+        guid: 'media-1',
+        file_name: 'episode.strm'
+      }]
+      service.officialStreamResponse = {
+        code: 0,
+        msg: '',
+        data: {
+          header: {
+            'User-Agent': ['Mozilla/5.0 (cloud-link)']
+          },
+          direct_link_qualities: [{
+            resolution: '原画',
+            is_m3u8: false,
+            url: 'https://cloud.example/media/episode.mp4?signature=one-time'
+          }]
+        }
+      }
+      const provider = new FeiniuVideoPlaybackProvider(owner, service)
+
+      const source = await provider.resolveSource(request(owner))
+      const streams = await provider.prepareStreams(source)
+
+      expect(streams.videoUrl).assertEqual('https://cloud.example/media/episode.mp4?signature=one-time')
+      expect(streams.videoHeaders.length).assertEqual(1)
+      expect(streams.videoHeaders[0].name).assertEqual('User-Agent')
+      expect(streams.videoHeaders[0].value).assertEqual('Mozilla/5.0 (cloud-link)')
+      expect(source.requestHeaders.some((header): boolean => header.name === 'Authorization')).assertFalse()
+      expect(source.multiConnectionAllowed).assertFalse()
+      expect(source.allowInsecureTls).assertTrue()
+      expect(source.sourceInfo.Container).assertEqual('mp4')
+      expect(requestsFor(service, '/v/api/v1/user/info').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/stream').length).assertEqual(1)
+      const officialRequest = requestsFor(service, '/v/api/v1/stream')[0]
+      expect(officialRequest.bodyText.indexOf('"media_guid":"media-1"') >= 0).assertTrue()
+      expect(officialRequest.bodyText.indexOf('"level":1') >= 0).assertTrue()
+    })
+
+    it('keepsStrmOnAFeiniuSingleConnectionFallbackWhenNoCloudLinkIsReturned', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuPlaybackService()
+      service.streamResponse.data.files = [{
+        guid: 'media-1',
+        file_name: 'episode.strm'
+      }]
+      const provider = new FeiniuVideoPlaybackProvider(owner, service)
+
+      const source = await provider.resolveSource(request(owner))
+      const streams = await provider.prepareStreams(source)
+
+      expect(streams.videoUrl).assertEqual('http://lan:5666/v/api/v1/media/range/media-1')
+      expect(streams.videoHeaders[0].name).assertEqual('Authorization')
+      expect(source.multiConnectionAllowed).assertFalse()
+      expect(source.allowInsecureTls).assertFalse()
     })
   })
 }

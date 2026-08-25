@@ -229,6 +229,10 @@ export interface MediaPlaybackSourceOptions {
   readonly danmakuResource?: MediaPlaybackHttpResource
   readonly capabilities?: MediaPlaybackCapabilities
   readonly engineHint?: MediaPlaybackEngineHint
+  /** Whether this source may use MFPlayer's parallel HTTP Range prefetcher. */
+  readonly multiConnectionAllowed?: boolean
+  /** Allows certificate verification bypass for a narrowly scoped playback source. */
+  readonly allowInsecureTls?: boolean
 }
 
 @ObservedV2
@@ -258,6 +262,10 @@ export class MediaPlaybackSource {
   readonly danmakuResource?: MediaPlaybackHttpResource
   readonly capabilities: MediaPlaybackCapabilities
   readonly engineHint: MediaPlaybackEngineHint
+  /** False for sources such as third-party STRM links that can trigger provider rate limits. */
+  readonly multiConnectionAllowed: boolean
+  /** Never enabled by default; providers must opt in for a specific source. */
+  readonly allowInsecureTls: boolean
   readonly resume: MediaPlaybackResume
   readonly transcodeContext: MediaPlaybackTranscodeContext
   private _selectedVideoStream?: MediaPlaybackStream
@@ -316,6 +324,8 @@ export class MediaPlaybackSource {
       headers: options.danmakuResource.headers.slice()
     } : undefined
     this.engineHint = options.engineHint || MediaPlaybackEngineHint.Auto
+    this.multiConnectionAllowed = options.multiConnectionAllowed !== false
+    this.allowInsecureTls = options.allowInsecureTls === true
     this.resume = { startTimeTicks: this.startTimeTicks }
     this.transcodeContext = {
       playSessionId: this.playSessionId,

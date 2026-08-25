@@ -62,6 +62,11 @@ export interface FeiniuVideoPlaybackSourceMapping {
   readonly mediaGuid: string
   readonly videoUrl: string
   readonly directOriginal: boolean
+  /** Explicit direct-link headers. Empty means do not fall back to Feiniu credentials. */
+  readonly requestHeaders?: MediaPlaybackRequestHeader[]
+  readonly multiConnectionAllowed?: boolean
+  /** Only enabled for the official Feiniu STRM cloud direct-link exception. */
+  readonly allowInsecureTls?: boolean
   readonly startTimeTicks: number
   readonly maxStreamingBitrate?: number
   readonly engineHint: MediaPlaybackEngineHint
@@ -118,6 +123,9 @@ export class FeiniuVideoPlaybackMapper {
     const owner = new MediaRef(mapping.ref.provider, mapping.ref.accountScope, mapping.ref.id,
       this.refKind(mappedItem.Type))
     const externalSubtitles = this.externalSubtitles(mapping.subtitles)
+    const requestHeaders = mapping.requestHeaders === undefined
+      ? this.requestHeaders()
+      : mapping.requestHeaders.slice()
     return new MediaPlaybackSource({
       ref: owner,
       item: mappedItem,
@@ -127,7 +135,7 @@ export class FeiniuVideoPlaybackMapper {
       startTimeTicks: mapping.startTimeTicks,
       audioStreamIndex: mapping.selectedAudio?.index,
       subtitleStreamIndex: mapping.selectedSubtitle?.index,
-      requestHeaders: this.requestHeaders(),
+      requestHeaders: requestHeaders,
       externalSubtitles: externalSubtitles,
       metadata: this.metadata(owner, mapping.item),
       serverUrl: this.access.baseUrl,
@@ -137,7 +145,9 @@ export class FeiniuVideoPlaybackMapper {
         externalSubtitleAvailable: externalSubtitles.length > 0,
         transcodeCleanupAvailable: !mapping.directOriginal
       },
-      engineHint: mapping.engineHint
+      engineHint: mapping.engineHint,
+      multiConnectionAllowed: mapping.multiConnectionAllowed,
+      allowInsecureTls: mapping.allowInsecureTls
     })
   }
 
@@ -428,12 +438,18 @@ export class FeiniuVideoPlaybackMapper {
   private container(file: FnMediaStreamFileInfo | undefined,
     video: FnMediaStreamVideoInfo | undefined, videoUrl: string): string {
     const wrapper = `${video?.wrapper || ''}`.trim().toLowerCase()
-    if (wrapper.length > 0) {
+    const fileSource = `${file?.file_name || file?.path || ''}`.trim()
+    const strmReference = this.isStrmReference(fileSource)
+    if (wrapper.length > 0 && wrapper !== 'strm' && !strmReference) {
       return wrapper
     }
-    const source = `${file?.file_name || file?.path || videoUrl}`.split('?')[0]
+    const source = (strmReference ? videoUrl : (fileSource || videoUrl)).split('?')[0]
     const dot = source.lastIndexOf('.')
     return dot >= 0 ? source.substring(dot + 1).toLowerCase() : 'mp4'
+  }
+
+  private isStrmReference(value: string): boolean {
+    return value.trim().toLowerCase().endsWith('.strm')
   }
 
   private transcodeProtocol(videoUrl: string): string {

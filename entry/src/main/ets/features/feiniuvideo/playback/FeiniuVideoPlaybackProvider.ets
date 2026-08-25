@@ -1,5 +1,6 @@
 import { buffer } from '@kit.ArkTS'
 import { http } from '@kit.NetworkKit'
+import CryptoJS from '@ohos/crypto-js'
 import { Constants } from '../../../utils/Constants'
 import { MediaProviderKind } from '../../../media/MediaProviderKind'
 import {
@@ -37,7 +38,8 @@ import {
   FeiniuVideoHttpMethod,
   FeiniuVideoQueryParameter,
   FeiniuVideoRequestError,
-  FeiniuVideoRequestFailureKind
+  FeiniuVideoRequestFailureKind,
+  FnMediaUserInfoResp
 } from '../network/FeiniuVideoApiModels'
 import {
   FeiniuVideoSessionSnapshotSync
@@ -51,6 +53,10 @@ import {
 import {
   FnMediaGuidReq,
   FnMediaMutationResp,
+  FnMediaOfficialStreamData,
+  FnMediaOfficialStreamDirectLinkQuality,
+  FnMediaOfficialStreamReq,
+  FnMediaOfficialStreamResp,
   FnMediaPlayInfoReq,
   FnMediaPlayInfoResp,
   FnMediaPlayPlayReq,
@@ -69,6 +75,10 @@ import {
   FeiniuVideoPlaybackAccess,
   FeiniuVideoPlaybackMapper
 } from './FeiniuVideoPlaybackMapper'
+
+// Kept identical to fnOS's official stream request so Feiniu can issue a usable STRM link.
+const FEINIU_OFFICIAL_STREAM_USER_AGENT: string =
+  '1.32.2 (com.trim.app; build:1322007; Android 36) okHttp/4.9.0'
 
 interface FeiniuVideoPlaybackNativeHeaders {
   'Authorization'?: string
@@ -261,6 +271,26 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     let playLink = mapper.relativePlayLink(videoUrl)
     let resolution = `${video?.resolution_type || ''}`.trim()
     let bitrate = requestedBitrate ?? video?.bps ?? 0
+    const strmSource = this.isStrmFile(file)
+    // Third-party STRM backends can rate-limit or flag parallel Range traffic.
+    // Keep the fallback media/range path single-connection as well.
+    const multiConnectionAllowed = !strmSource
+    let directLinkHeaders: MediaPlaybackRequestHeader[] | undefined
+    let allowInsecureTls = false
+
+    if (directOriginal && strmSource) {
+      const directLink = await this.resolveStrmDirectLink(mediaGuid)
+      if (directLink !== undefined) {
+        videoUrl = directLink.url
+        // Keep the Feiniu play link for progress reporting; never send a signed
+        // third-party URL back to Feiniu or attach Feiniu credentials to it.
+        directLinkHeaders = directLink.headers
+        // The official STRM endpoint can issue cloud URLs whose certificate
+        // chain is unavailable to some devices. Do not extend this exception
+        // to Feiniu APIs, ordinary media, or any fallback media/range URL.
+        allowInsecureTls = directLink.url.toLowerCase().startsWith('https://')
+      }
+    }
 
     if (!directOriginal) {
       const playResponse = await this.playTranscoded(
@@ -327,6 +357,9 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
       mediaGuid: mediaGuid,
       videoUrl: videoUrl,
       directOriginal: directOriginal,
+      requestHeaders: directLinkHeaders,
+      multiConnectionAllowed: multiConnectionAllowed,
+      allowInsecureTls: allowInsecureTls,
       startTimeTicks: startTimeTicks,
       maxStreamingBitrate: request.maxStreamingBitrate,
       engineHint: request.engineHint
@@ -465,6 +498,94 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     this.contexts.delete(source.playSessionId)
   }
 
+  private async resolveStrmDirectLink(mediaGuid: string): Promise<MediaPlaybackHttpResource | undefined> {
+    try {
+      const streamInfo = await this.getOfficialStreamInfo(mediaGuid)
+      const url = this.pickOfficialDirectLink(streamInfo.direct_link_qualities)
+      if (url.length === 0) {
+        return undefined
+      }
+      return {
+        url: url,
+        // An empty list is intentional: it prevents mapper.source() from
+        // falling back to the Feiniu authorization headers for a cloud URL.
+        headers: this.officialDirectLinkHeaders(streamInfo)
+      }
+    } catch (_) {
+      console.warn(`[FeiniuVideoPlayback] STRM official stream unavailable; using Feiniu fallback media=${mediaGuid}`)
+      return undefined
+    }
+  }
+
+  private async getOfficialStreamInfo(mediaGuid: string): Promise<FnMediaOfficialStreamData> {
+    const userInfo = await this.request<FnMediaUserInfoResp>(
+      '/v/api/v1/user/info',
+      FeiniuVideoHttpMethod.Get
+    )
+    const sources = userInfo.data?.sources || []
+    const sourceName = sources.length > 0 ? `${sources[0].source_name || ''}`.trim() : ''
+    const payload: FnMediaOfficialStreamReq = {
+      media_guid: mediaGuid,
+      ip: CryptoJS.MD5(sourceName).toString(),
+      level: 1,
+      header: {
+        'User-Agent': [FEINIU_OFFICIAL_STREAM_USER_AGENT]
+      }
+    }
+    const response = await this.service.request<FnMediaOfficialStreamResp>(new FeiniuVideoApiRequest(
+      '/v/api/v1/stream',
+      FeiniuVideoHttpMethod.Post,
+      JSON.stringify(payload),
+      [],
+      true,
+      60000
+    ))
+    return response.data || {}
+  }
+
+  private pickOfficialDirectLink(
+    qualities: FnMediaOfficialStreamDirectLinkQuality[] | undefined): string {
+    if (qualities === undefined) {
+      return ''
+    }
+    for (const quality of qualities) {
+      const url = `${quality.url || ''}`.trim()
+      const normalized = url.toLowerCase()
+      if (normalized.startsWith('https://') || normalized.startsWith('http://')) {
+        return url
+      }
+    }
+    return ''
+  }
+
+  private officialDirectLinkHeaders(streamInfo: FnMediaOfficialStreamData): MediaPlaybackRequestHeader[] {
+    if (streamInfo.header === undefined) {
+      return []
+    }
+    // ArkTS does not allow bracket access on a typed field. Follow the copied
+    // fnOS header parser so server-provided keys such as `User-Agent` remain
+    // case-insensitive and are not lost during DTO mapping.
+    const headers = streamInfo.header as Object as Record<string, Object | string | string[]>
+    const keys = Object.keys(headers)
+    for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index]
+      if (key.toLowerCase() !== 'user-agent') {
+        continue
+      }
+      const rawValue = headers[key]
+      const values: string[] = Array.isArray(rawValue)
+        ? rawValue.map((item: string): string => `${item || ''}`)
+        : [`${rawValue || ''}`]
+      for (const candidate of values) {
+        const value = candidate.trim()
+        if (value.length > 0) {
+          return [{ name: 'User-Agent', value: value }]
+        }
+      }
+    }
+    return []
+  }
+
   private async getItem(itemId: string): Promise<FnMediaItemDetailResp> {
     const response = await this.request<FnMediaListResp<FnMediaItemDetailResp>>(
       `/v/api/v1/item/${encodeURIComponent(itemId)}`,
@@ -581,6 +702,11 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
       parameters,
       true
     ))
+  }
+
+  private isStrmFile(file: FnMediaStreamFileInfo | undefined): boolean {
+    const fileName = `${file?.file_name || file?.path || ''}`.trim().toLowerCase()
+    return fileName.endsWith('.strm')
   }
 
   private pickFile(files: FnMediaStreamFileInfo[], mediaGuid: string): FnMediaStreamFileInfo | undefined {

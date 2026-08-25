@@ -68,6 +68,49 @@ export interface FnMediaPlayInfoResp {
   data: FnMediaPlayInfoData
 }
 
+/**
+ * Official stream request/response contracts copied from fnOS's
+ * `/v/api/v1/stream` integration. This endpoint is required for STRM entries:
+ * it resolves the remote provider's signed direct URL and its required headers.
+ */
+export interface FnMediaOfficialStreamRequestHeader {
+  'User-Agent': string[]
+}
+
+export interface FnMediaOfficialStreamReq {
+  media_guid: string
+  ip: string
+  header: FnMediaOfficialStreamRequestHeader
+  level: number
+}
+
+export interface FnMediaOfficialStreamResponseHeader {
+  'User-Agent'?: string[]
+}
+
+export interface FnMediaOfficialStreamDirectLinkQuality {
+  bitrate?: number
+  resolution?: string
+  progressive?: boolean
+  is_m3u8?: boolean
+  url?: string
+}
+
+export interface FnMediaOfficialStreamData {
+  file_stream?: FnMediaStreamFileInfo
+  video_stream?: FnMediaStreamVideoInfo
+  audio_streams?: FnMediaStreamAudioInfo[]
+  subtitle_streams?: FnMediaStreamSubtitleInfo[]
+  header?: FnMediaOfficialStreamResponseHeader
+  direct_link_qualities?: FnMediaOfficialStreamDirectLinkQuality[]
+}
+
+export interface FnMediaOfficialStreamResp {
+  code: number
+  msg: string
+  data?: FnMediaOfficialStreamData
+}
+
 export interface FnMediaPlayPlayReq {
   media_guid: string
   video_guid: string

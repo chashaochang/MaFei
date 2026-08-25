@@ -220,6 +220,7 @@ export struct MFPlayerView {
     return {
       uri: this.videoUrl,
       headers: this.formatHeaders(this.ui.videoHeaders),
+      allowInsecureTls: source?.allowInsecureTls === true,
       externalSubtitles: externalSubtitles,
       dolbyVisionProfileHint: source?.selectedVideoStream?.DvProfile,
       hdrHint: this.isHdrSource(source)
@@ -325,8 +326,10 @@ export struct MFPlayerView {
 
   private createPlayerOptions(): PlayerOptions {
     const preference = AppPreference.getInstance()
-    const directPlay: boolean = this.vm.mediaSourceOrNull?.getEffectivePlayMethod() ===
+    const source = this.vm.mediaSourceOrNull
+    const directPlay: boolean = source?.getEffectivePlayMethod() ===
       MediaPlaybackPlayMethod.DirectPlay
+    const multiConnectionEnabled = directPlay && source?.multiConnectionAllowed !== false
     return {
       autoPlay: this.ui.playWhenReady,
       useHardwareDecode: preference.getMpvUseHardwareDecode(),
@@ -337,7 +340,7 @@ export struct MFPlayerView {
       progressIntervalMs: 500,
       exactSeek: false,
       /* 并行 Range 仅针对原始 Direct Play 文件；HLS/DirectStream/转码仍由播放器原路径处理。 */
-      multiConnectionEnabled: directPlay,
+      multiConnectionEnabled: multiConnectionEnabled,
       multiConnectionOptions: {
         connections: 12,
         // 代理按块返回数据；首块过大会让首帧等待整块下载完成。
