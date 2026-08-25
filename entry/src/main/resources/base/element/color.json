@@ -57,6 +57,10 @@
       "value": "#F2FFFFFF"
     },
     {
+      "name": "native_navigation_accent",
+      "value": "#0A59F7"
+    },
+    {
       "name": "color_main",
       "value": "#2173df"
     },

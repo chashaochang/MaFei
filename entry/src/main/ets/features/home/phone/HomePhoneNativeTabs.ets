@@ -120,14 +120,26 @@ export struct HomePhoneNativeTabs {
   }
 
   @Builder
-  private tabBuilder(title: string, targetIndex: number, selectedImg: Resource,
-    normalImg: Resource, badgeCount: number = 0) {
+  private tabIcon(icon: Resource, targetIndex: number, systemSymbol: boolean) {
+    if (systemSymbol) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.selectedIndex === targetIndex ?
+          $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary')])
+    } else {
+      Image(icon)
+        .size({ width: 22, height: 22 })
+        .fillColor(this.selectedIndex === targetIndex ?
+          $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary'))
+    }
+  }
+
+  @Builder
+  private tabBuilder(title: string, targetIndex: number, icon: Resource,
+    systemSymbol: boolean = false, badgeCount: number = 0) {
     Column({ space: 4 }) {
       Stack({ alignContent: Alignment.TopEnd }) {
-        Image(this.selectedIndex === targetIndex ? selectedImg : normalImg)
-          .size({ width: 20, height: 20 })
-          .fillColor(this.selectedIndex === targetIndex ?
-            $r('app.color.color_main') : $r('sys.color.icon_primary'))
+        this.tabIcon(icon, targetIndex, systemSymbol)
         if (badgeCount > 0) {
           Text(badgeCount > 99 ? '99+' : badgeCount.toString())
             .fontSize(9)
@@ -141,13 +153,13 @@ export struct HomePhoneNativeTabs {
             .translate({ x: 8, y: -5 })
         }
       }
-      .width(32)
-      .height(22)
+      .width(34)
+      .height(24)
       .alignContent(Alignment.Center)
       Text(title)
-        .fontSize(14)
+        .fontSize(11)
         .fontColor(this.selectedIndex === targetIndex ?
-          $r('app.color.color_main') : $r('sys.color.font_primary'))
+          $r('app.color.native_navigation_accent') : $r('sys.color.font_primary'))
     }
     .height('100%')
     .width('100%')
@@ -165,25 +177,25 @@ export struct HomePhoneNativeTabs {
         this.homeContentBuilder()
       }
       .tabBar(this.tabBuilder(
-        '首页', 0, $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')
+        '首页', 0, $r('app.media.ic_home_sel')
       ))
       TabContent() {
         this.favoriteContentBuilder()
       }
       .tabBar(this.tabBuilder(
-        '收藏', 2, $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')
+        '收藏', 2, $r('app.media.ic_favorite_sel')
       ))
       TabContent() {
         this.mediaContentBuilder()
       }
       .tabBar(this.tabBuilder(
-        '媒体库', 3, $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel')
+        '媒体库', 3, $r('app.media.ic_media_sel')
       ))
       TabContent() {
         this.mineContentBuilder()
       }
       .tabBar(this.tabBuilder(
-        '我的', 4, $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel')
+        '我的', 4, $r('sys.symbol.person_fill'), true
       ))
       }
       .barHeight(UIConstants.BOTTOM_BAR_HEIGHT)

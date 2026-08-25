@@ -57,6 +57,10 @@
       "value": "#FFFFFFFF"
     },
     {
+      "name": "native_navigation_accent",
+      "value": "#5291FF"
+    },
+    {
       "name": "on_primary",
       "value": "#FFFFFF"
     },
