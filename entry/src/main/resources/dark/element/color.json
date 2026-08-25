@@ -34,19 +34,19 @@
     },
     {
       "name": "native_fallback_floating",
-      "value": "#D9232326"
+      "value": "#24FFFFFF"
     },
     {
       "name": "native_fallback_interactive_floating",
-      "value": "#40FFFFFF"
+      "value": "#24FFFFFF"
     },
     {
       "name": "native_fallback_adaptive_interactive",
-      "value": "#2EFFFFFF"
+      "value": "#24FFFFFF"
     },
     {
       "name": "native_fallback_music_mini_player",
-      "value": "#E0262629"
+      "value": "#24FFFFFF"
     },
     {
       "name": "native_fallback_home_library_chip",
@@ -54,7 +54,7 @@
     },
     {
       "name": "native_fallback_home_library_chip_selected",
-      "value": "#F2FFFFFF"
+      "value": "#FFFFFFFF"
     },
     {
       "name": "on_primary",
