@@ -52,6 +52,7 @@ struct MediaSourceOptionItem {
       }
       .width(20)
       .height('100%')
+      .margin({ left: 16 })
       .justifyContent(FlexAlign.Center)
 
       Column({ space: 4 }) {
@@ -68,11 +69,11 @@ struct MediaSourceOptionItem {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .layoutWeight(1)
+      .margin({ right: 16 })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .height(68)
-    .padding({ left: 16, right: 16 })
     .borderRadius(12)
     .clip(true)
     .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
@@ -106,10 +107,6 @@ export struct MediaSourceSelector {
     return this.isNativeTheme() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
 
-  private secondaryTextColor(): ResourceColor {
-    return this.isNativeTheme() ? $r('sys.color.font_secondary') : $r('app.color.text_1')
-  }
-
   private sheetMaterialDecision(): OverlayMaterialDecision {
     return AppThemeOverlayPolicy.resolve(
       OverlaySurfaceRole.AppFloating,
@@ -139,6 +136,69 @@ export struct MediaSourceSelector {
     return name.length > 0 ? name : `${this.getString('video_detail_playback_version')} ${index + 1}`
   }
 
+  private compactResolutionLabel(stream: MediaStreamInfo): string {
+    const width = stream.width || 0
+    const height = stream.height || 0
+    if (width >= 3800 || height >= 2000) {
+      return '4K'
+    }
+    if (width >= 2500 || height >= 1400) {
+      return '1440P'
+    }
+    if (width >= 1900 || height >= 1000) {
+      return '1080P'
+    }
+    if (width >= 1200 || height >= 700) {
+      return '720P'
+    }
+
+    const title = stream.displayTitle.trim().toUpperCase()
+    if (title.includes('4K') || title.includes('2160') || title.includes('UHD')) {
+      return '4K'
+    }
+    if (title.includes('1440')) {
+      return '1440P'
+    }
+    if (title.includes('1080') || title.includes('FHD')) {
+      return '1080P'
+    }
+    if (title.includes('720')) {
+      return '720P'
+    }
+    return height > 0 ? `${height}P` : ''
+  }
+
+  private compactRangeLabel(stream: MediaStreamInfo): string {
+    const range = `${stream.videoRangeType || ''} ${stream.displayTitle || ''} ` +
+      `${stream.colorTransfer || ''}`
+    const normalized = range.trim().toUpperCase()
+    if (normalized.includes('DOVI') || normalized.includes('DOLBY VISION') ||
+      normalized === 'DV' || normalized.startsWith('DV ') || normalized.endsWith(' DV')) {
+      return '杜比'
+    }
+    if (normalized.includes('HDR') || normalized.includes('HLG') || normalized.includes('VIVID') ||
+      normalized.includes('PQ') || normalized.includes('2084')) {
+      return 'HDR'
+    }
+    return 'SDR'
+  }
+
+  private selectedSourceLabel(): string {
+    const source = this.selectedSource()
+    if (!source) {
+      return '视频源'
+    }
+    const video = source.streams.find((stream: MediaStreamInfo): boolean =>
+      stream.kind === MediaStreamKind.Video)
+    if (!video) {
+      const name = source.name.trim()
+      return name.length > 0 ? name : '视频源'
+    }
+    const resolution = this.compactResolutionLabel(video)
+    const range = this.compactRangeLabel(video)
+    return resolution.length > 0 ? `${resolution}${range}` : range
+  }
+
   private resolutionLabel(stream?: MediaStreamInfo): string {
     if (!stream) {
       return ''
@@ -155,7 +215,7 @@ export struct MediaSourceSelector {
     return width > 0 && height > 0 ? `${width} × ${height}` : ''
   }
 
-  private sourceSummary(source: MediaFileInfo, includeSize: boolean): string {
+  private sourceSummary(source: MediaFileInfo): string {
     const video = source.streams.find((stream: MediaStreamInfo): boolean =>
       stream.kind === MediaStreamKind.Video)
     const parts: string[] = []
@@ -167,10 +227,8 @@ export struct MediaSourceSelector {
     if (range.length > 0 && parts.indexOf(range) < 0) parts.push(range)
     const container = source.container.trim().toUpperCase()
     if (container.length > 0 && parts.indexOf(container) < 0) parts.push(container)
-    if (includeSize) {
-      const size = this.fileSize(source.sizeBytes)
-      if (size.length > 0) parts.push(size)
-    }
+    const size = this.fileSize(source.sizeBytes)
+    if (size.length > 0) parts.push(size)
     return parts.length > 0 ? parts.join(' · ') : this.getString('video_detail_playback_version')
   }
 
@@ -183,11 +241,6 @@ export struct MediaSourceSelector {
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`
     }
     return bytes > 0 ? `${Math.floor(bytes / 1024)} KB` : ''
-  }
-
-  private selectedSummary(): string {
-    const source = this.selectedSource()
-    return source ? this.sourceSummary(source, false) : ''
   }
 
   private openOptions(): void {
@@ -205,7 +258,7 @@ export struct MediaSourceSelector {
   }
 
   @Builder
-  private optionsContent(nativeSurface: boolean) {
+  private optionsContent(blurFallback: boolean) {
     Scroll() {
       Column({ space: 4 }) {
         ForEach(this.sources, (source: MediaFileInfo, index: number) => {
@@ -213,13 +266,14 @@ export struct MediaSourceSelector {
             index: index,
             selected: index === this.selectedIndex,
             title: this.sourceName(source, index),
-            summary: this.sourceSummary(source, true),
+            summary: this.sourceSummary(source),
             onSelect: (selectedIndex: number) => this.select(selectedIndex)
           })
         }, (source: MediaFileInfo): string => source.id)
       }
-      .width('100%')
-      .padding({ left: 16, right: 16, bottom: 10 + this.appUIState.safeBottom })
+      .width('calc(100% - 32vp)')
+      .padding({ bottom: 10 + this.appUIState.safeBottom })
+      .alignSelf(ItemAlign.Center)
     }
     .width('100%')
     .height('100%')
@@ -232,45 +286,71 @@ export struct MediaSourceSelector {
     })
     .attributeModifier(AppThemeSurfaceResolver.modifier(
       AppThemeMaterialRole.Floating,
-      nativeSurface,
+      blurFallback,
       false
     ))
   }
 
   @Builder
   private triggerContent() {
-    Row({ space: 8 }) {
-      Text($r('app.string.video_detail_playback_version'))
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
+    Row({ space: 2 }) {
+      Text(this.selectedSourceLabel())
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
         .fontColor(this.primaryTextColor())
-      Text(this.selectedSummary())
-        .layoutWeight(1)
-        .fontSize(13)
-        .fontColor(this.secondaryTextColor())
-        .textAlign(TextAlign.End)
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: 'calc(100% - 18vp)' })
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(16)
-        .fontColor([this.secondaryTextColor()])
+      SymbolGlyph(this.isShowingOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor([this.primaryTextColor()])
+        .width(14)
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 16, right: 12 })
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
   private trigger() {
     if (this.selectedSource()) {
       if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-        Row() {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
           this.triggerContent()
         }
-        .width('100%')
-        .height(52)
+        .width('calc(100% - 8vp)')
+        .margin({ left: 4, right: 4 })
+        .height(32)
+        .padding(0)
         .borderRadius(16)
-        .clip(true)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveControl,
+          this.useNativeSurface(),
+          this.appUIState.systemMaterialAvailable
+        ))
+        .onClick(() => this.openOptions())
+        .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
+          height: '70%',
+          preferType: SheetType.BOTTOM,
+          showClose: true,
+          title: { title: $r('app.string.video_detail_choose_playback_version') },
+          backgroundColor: Color.Transparent,
+          systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+        })
+      } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          this.triggerContent()
+        }
+        .width('calc(100% - 8vp)')
+        .margin({ left: 4, right: 4 })
+        .height(32)
+        .padding(0)
+        .borderRadius(16)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
           AppThemeMaterialRole.AdaptiveControl,
@@ -285,36 +365,16 @@ export struct MediaSourceSelector {
           title: { title: $r('app.string.video_detail_choose_playback_version') },
           backgroundColor: Color.Transparent
         })
-      } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-        Row() {
-          this.triggerContent()
-        }
-        .width('100%')
-        .height(52)
-        .borderRadius(16)
-        .clip(true)
-        .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl,
-          this.useNativeSurface(),
-          this.appUIState.systemMaterialAvailable
-        ))
-        .onClick(() => this.openOptions())
-        .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
-          height: '70%',
-          preferType: SheetType.BOTTOM,
-          showClose: true,
-          title: { title: $r('app.string.video_detail_choose_playback_version') },
-          backgroundColor: Color.Transparent
-        })
       } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-        Row() {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
           this.triggerContent()
         }
-        .width('100%')
-        .height(52)
+        .width('calc(100% - 8vp)')
+        .margin({ left: 4, right: 4 })
+        .height(32)
+        .padding(0)
         .borderRadius(16)
-        .clip(true)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
           AppThemeMaterialRole.AdaptiveControl,
@@ -327,16 +387,19 @@ export struct MediaSourceSelector {
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') },
-          backgroundColor: $r('app.color.bg_1')
+          backgroundColor: $r('app.color.bg_1'),
+          systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
         })
       } else {
-        Row() {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
           this.triggerContent()
         }
-        .width('100%')
-        .height(52)
+        .width('calc(100% - 8vp)')
+        .margin({ left: 4, right: 4 })
+        .height(32)
+        .padding(0)
         .borderRadius(16)
-        .clip(true)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
         .backgroundColor(this.isNativeTheme() ? Color.Transparent : $r('app.color.bg_2'))
         .attributeModifier(AppThemeSurfaceResolver.modifier(
           AppThemeMaterialRole.AdaptiveControl,

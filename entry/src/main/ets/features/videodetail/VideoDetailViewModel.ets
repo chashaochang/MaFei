@@ -93,7 +93,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     const duration = this.formatDuration(detail.durationMs)
     if (duration.length > 0) parts.push(duration)
     if (this.ui.mediaName.length > 0) parts.push(this.ui.mediaName)
-    return parts.join('  /  ')
+    return parts.join(' · ')
   }
 
   private applyDetail(detail: MediaDetail, catalog: MediaCatalogProvider): void {

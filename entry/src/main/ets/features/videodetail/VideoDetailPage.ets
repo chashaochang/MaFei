@@ -54,33 +54,107 @@ const VIDEO_HERO_LOG_TAG: string = 'mafei-video-hero'
 @ComponentV2
 struct NativeDetailPlayAction {
   @Require @Param label: string
+  @Require @Param remainingTime: string
+  @Require @Param progress: number
   @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
+  private normalizedProgress(): number {
+    return Math.min(100, Math.max(0, this.progress))
+  }
+
+  private compactRemainingTime(): string {
+    return this.remainingTime
+      .replace('剩余 ', '剩余')
+      .replace(' 小时 ', '小时')
+      .replace(' 分钟', '分')
+  }
+
   build() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.play_fill'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_primary')])
-        Text(this.label)
-          .fontSize(16)
-          .fontColor($r('sys.color.font_primary'))
-          .fontWeight(FontWeight.Medium)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Stack({ alignContent: Alignment.Start }) {
+        if (this.normalizedProgress() > 0) {
+          Stack() {
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('rgba(255, 255, 255, 0.26)')
+
+            Particle({
+              particles: [
+                {
+                  emitter: {
+                    particle: {
+                      type: ParticleType.POINT,
+                      config: { radius: 1.1 },
+                      count: -1,
+                      lifetime: 1600,
+                      lifetimeRange: 400
+                    },
+                    emitRate: 8,
+                    shape: ParticleEmitterShape.RECTANGLE
+                  },
+                  color: {
+                    range: ['rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0.92)']
+                  },
+                  opacity: {
+                    range: [0.3, 0.78]
+                  },
+                  scale: {
+                    range: [0.65, 1.15]
+                  },
+                  velocity: {
+                    speed: [3, 9],
+                    angle: [-10, 10]
+                  }
+                }
+              ]
+            })
+              .width('100%')
+              .height('100%')
+              .hitTestBehavior(HitTestMode.None)
+          }
+          .width(`${this.normalizedProgress()}%`)
+          .height('100%')
+          .clip(true)
+          .hitTestBehavior(HitTestMode.None)
+        }
+
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.play_fill'))
+            .fontSize(20)
+            .fontColor([$r('sys.color.icon_primary')])
+          Column({ space: 1 }) {
+            Text(this.label)
+              .fontSize(16)
+              .fontColor($r('sys.color.font_primary'))
+              .fontWeight(FontWeight.Medium)
+            if (this.remainingTime.length > 0) {
+              Text(this.compactRemainingTime())
+                .fontSize(12)
+                .fontColor($r('sys.color.font_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .padding({ left: 12, right: 12 })
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
       }
-      .padding({ left: 20, right: 20 })
       .width('100%')
-      .justifyContent(FlexAlign.Center)
+      .height('100%')
     }
     .height(50)
+    .padding(0)
     .borderRadius(25)
+    .clip(true)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
       AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
-    .accessibilityText(this.label)
+    .accessibilityText(this.remainingTime.length > 0 ? `${this.label} ${this.remainingTime}` : this.label)
     .onClick(() => {
       this.onAction()
     })
@@ -91,48 +165,45 @@ struct NativeDetailPlayAction {
 struct NativeDetailIconAction {
   @Param icon: ResourceStr | undefined = undefined
   @Param symbol: Resource | undefined = undefined
-  @Require @Param label: string
+  @Param buttonSize: number = 50
+  @Param selectedColor: ResourceColor = $r('app.color.color_main')
+  @Param preserveOriginalColor: boolean = false
   @Require @Param accessibilityLabel: string
   @Require @Param selected: boolean
   @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
-    Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        if (this.symbol) {
-          SymbolGlyph(this.symbol)
-            .fontSize(23)
-            .fontColor([
-              this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary')
-            ])
-        } else if (this.icon) {
-          Image(this.icon)
-            .width(22)
-            .height(22)
-            .renderMode(ImageRenderMode.Template)
-            .interpolation(ImageInterpolation.High)
-            .fillColor(this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
-        }
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      if (this.symbol) {
+        SymbolGlyph(this.symbol)
+          .fontSize(23)
+          .fontColor([
+            this.selected ? this.selectedColor : $r('sys.color.icon_primary')
+          ])
+      } else if (this.icon && this.preserveOriginalColor) {
+        Image(this.icon)
+          .width(22)
+          .height(22)
+          .interpolation(ImageInterpolation.High)
+      } else if (this.icon) {
+        Image(this.icon)
+          .width(22)
+          .height(22)
+          .renderMode(ImageRenderMode.Template)
+          .interpolation(ImageInterpolation.High)
+          .fillColor(this.selected ? this.selectedColor : $r('sys.color.icon_primary'))
       }
-      .width(50)
-      .height(50)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
-      .accessibilityText(this.accessibilityLabel)
-      .onClick(() => {
-        this.onAction()
-      })
-
-      Text(this.label)
-        .fontSize(12)
-        .fontColor($r('sys.color.font_secondary'))
-        .maxLines(1)
-        .textAlign(TextAlign.Center)
     }
-    .width(72)
-    .alignItems(HorizontalAlign.Center)
+    .width(this.buttonSize)
+    .height(this.buttonSize)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
+    .accessibilityText(this.accessibilityLabel)
+    .onClick(() => {
+      this.onAction()
+    })
   }
 }
 
@@ -146,6 +217,7 @@ export struct VideoDetailPage {
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
   @Local heroBackdropPixelMap?: image.PixelMap
   @Local heroFeatheredPixelMap?: image.PixelMap
+  @Local titleCollapseProgress: number = 0
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
   private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
@@ -503,6 +575,53 @@ export struct VideoDetailPage {
     return this.imageOption(this.ui.logoRef, this.ui.logo, ImageFit.Contain)
   }
 
+  private updateTitleCollapseProgress(offset: number): void {
+    const startOffset = 72
+    const endOffset = 290
+    const progress = Math.max(0, Math.min(1, (offset - startOffset) / (endOffset - startOffset)))
+    if (Math.abs(progress - this.titleCollapseProgress) > 0.002) {
+      this.titleCollapseProgress = progress
+    }
+  }
+
+  private heroTitleScale(): number {
+    const collapsedScale = this.ui.isMovie && this.ui.logo.length > 0 ? 0.28 : 0.62
+    return 1 - (1 - collapsedScale) * this.titleCollapseProgress
+  }
+
+  private heroTitleOpacity(): number {
+    const fadeStart = 0.78
+    if (this.titleCollapseProgress <= fadeStart) {
+      return 1
+    }
+    return Math.max(0, 1 - (this.titleCollapseProgress - fadeStart) / (1 - fadeStart))
+  }
+
+  private collapsedTitleOpacity(): number {
+    const fadeStart = 0.74
+    if (this.titleCollapseProgress <= fadeStart) {
+      return 0
+    }
+    return Math.min(1, (this.titleCollapseProgress - fadeStart) / (1 - fadeStart))
+  }
+
+  private collapsedTitleScale(): number {
+    return 0.92 + 0.08 * this.collapsedTitleOpacity()
+  }
+
+  private heroLogoTranslateX(): number {
+    const viewportWidth = this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
+    const targetCenter = 92
+    const moveStart = 0.16
+    const moveProgress = this.titleCollapseProgress <= moveStart ? 0 :
+      (this.titleCollapseProgress - moveStart) / (1 - moveStart)
+    return -Math.max(0, viewportWidth / 2 - targetCenter) * Math.min(1, moveProgress)
+  }
+
+  private heroTitleTranslateY(): number {
+    return -12 * this.titleCollapseProgress
+  }
+
   private legacyMediaRef(id: string, isTvShows: boolean): MediaRef | undefined {
     const normalizedId = id.trim()
     if (normalizedId.length === 0) return undefined
@@ -597,19 +716,27 @@ export struct VideoDetailPage {
     }
     .width('100%')
     .height('100%')
+    .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
     .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder
-  private nativeHeroMetadata() {
-    Column({ space: 10 }) {
-      if (this.ui.isMovie && this.ui.logo.length > 0) {
+  private nativeHeroTitle() {
+    if (this.ui.isMovie && this.ui.logo.length > 0) {
+      Row() {
         ImageKnifeComponent({
           imageKnifeOption: this.logoImageOption()
         })
           .height(76)
           .aspectRatio(80 / 31)
-      } else {
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+      .translate({ x: this.heroLogoTranslateX(), y: this.heroTitleTranslateY() })
+      .opacity(this.heroTitleOpacity())
+    } else {
+      Column({ space: 6 }) {
         if (this.ui.subtitle.length > 0) {
           Text(this.ui.subtitle)
             .fontSize(14)
@@ -624,19 +751,44 @@ export struct VideoDetailPage {
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
+      .alignItems(HorizontalAlign.Start)
+      .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+      .translate({ y: this.heroTitleTranslateY() })
+      .opacity(this.heroTitleOpacity())
+    }
+  }
 
+  @Builder
+  private nativeHeroMetadataLine() {
+    Scroll() {
       Text() {
         if (this.ui.score > 0) {
-          Span(this.ui.score.toFixed(1) + '分  ')
+          Span(this.ui.score.toFixed(1) + '分')
             .fontColor($r('app.color.text_score'))
         }
-        Span(this.ui.info)
+        if (this.ui.score > 0 && this.ui.info.length > 0) {
+          Span(' · ')
+        }
+        if (this.ui.info.length > 0) {
+          Span(this.ui.info)
+        }
       }
       .fontSize(13)
       .fontColor(Color.White)
-      .maxLines(2)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .lineSpacing({ value: 10, unit: LengthUnit.VP })
+      .maxLines(1)
+    }
+    .width('100%')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.None)
+  }
+
+  @Builder
+  private nativeHeroMetadata() {
+    Column({ space: 10 }) {
+      this.nativeHeroTitle()
+
+      this.nativeHeroMetadataLine()
 
       if (!this.ui.isTvShows && this.ui.mediaSources.length > 0) {
         Row({ space: 14 }) {
@@ -646,6 +798,8 @@ export struct VideoDetailPage {
               .colorFilter(this.heroTagColorFilter)
           })
         }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
       }
     }
     .width('100%')
@@ -654,54 +808,74 @@ export struct VideoDetailPage {
   }
 
   @Builder
+  private nativeCollapsedTitle() {
+    Row() {
+      Text(this.ui.title)
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .constraintSize({ maxWidth: '100%' })
+    }
+    .width('calc(100% - 136vp)')
+    .height('100%')
+    .justifyContent(FlexAlign.Start)
+    .align(Alignment.Center)
+    .opacity(this.collapsedTitleOpacity())
+    .scale({ x: this.collapsedTitleScale(), y: this.collapsedTitleScale() })
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
   private nativeDetailActions() {
-    Column({ space: 14 }) {
+    Row({ space: 8 }) {
       NativeDetailPlayAction({
         label: this.ui.playButtonText,
+        remainingTime: this.ui.remainingTime,
+        progress: this.ui.percentageWatched,
         systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
         onAction: () => {
           this.vm.playCurrent()
         }
       })
-        .width('100%')
+        .layoutWeight(1)
 
-      Row({ space: 16 }) {
-        NativeDetailIconAction({
-          icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
-          label: this.ui.isFavorite ? '已收藏' : '收藏',
-          accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
-          selected: this.ui.isFavorite,
-          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-          onAction: () => {
-            this.vm.changeFavorite()
-          }
-        })
-        if (this.ui.isTvShows) {
-          NativeDetailIconAction({
-            symbol: this.ui.isChasing ? $r('sys.symbol.list_bullet_square_fill') :
-              $r('sys.symbol.list_bullet_square'),
-            label: this.ui.isChasing ? '已追剧' : '追剧',
-            accessibilityLabel: this.ui.isChasing ? '取消追剧' : '追剧',
-            selected: this.ui.isChasing,
-            systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-            onAction: () => {
-              this.vm.changeChasingState()
-            }
-          })
+      NativeDetailIconAction({
+        icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
+        buttonSize: 44,
+        selectedColor: $r('app.color.main_red_color'),
+        preserveOriginalColor: this.ui.isFavorite,
+        accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
+        selected: this.ui.isFavorite,
+        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+        onAction: () => {
+          this.vm.changeFavorite()
         }
+      })
+      if (this.ui.isTvShows) {
         NativeDetailIconAction({
-          icon: $r('app.media.ic_check'),
-          label: this.ui.played ? '已观看' : '标记已看',
-          accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
-          selected: this.ui.played,
+          symbol: this.ui.isChasing ? $r('sys.symbol.list_bullet_square_fill') :
+            $r('sys.symbol.list_bullet_square'),
+          buttonSize: 44,
+          accessibilityLabel: this.ui.isChasing ? '取消追剧' : '追剧',
+          selected: this.ui.isChasing,
           systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
           onAction: () => {
-            this.vm.changePlayedState()
+            this.vm.changeChasingState()
           }
         })
       }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
+      NativeDetailIconAction({
+        icon: $r('app.media.ic_check'),
+        buttonSize: 44,
+        accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+        selected: this.ui.played,
+        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+        onAction: () => {
+          this.vm.changePlayedState()
+        }
+      })
     }
     .width('100%')
     .padding({ left: 16, right: 16 })
@@ -1100,7 +1274,10 @@ export struct VideoDetailPage {
               if (!this.useNativeSurface()) {
                 Text() {
                   if (!this.ui.isTvShows && this.ui.score > 0) {
-                    Span(this.ui.score + '分  ').fontColor($r('app.color.text_score'))
+                    Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                  }
+                  if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.info.length > 0) {
+                    Span(' · ')
                   }
                   Span(this.ui.info)
                 }
@@ -1125,20 +1302,6 @@ export struct VideoDetailPage {
                 }.padding({ left: 16, right: 16 })
               }
 
-              if (this.ui.playbackPositionMs > 0) {
-                Blank().height(16)
-                Row({ space: 8 }) {
-                  Progress({
-                    value: this.ui.percentageWatched,
-                    total: 100,
-                    type: ProgressType.Linear,
-                  })
-                    .height(4)
-                    .width(150)
-                    .color('#3B82F6')
-                  Text(this.ui.remainingTime).fontColor($r('app.color.text_1')).fontSize(12)
-                }.width('100%').justifyContent(FlexAlign.Start).padding({ left: 16, right: 16 })
-              }
               Blank().height(16)
               if (this.useNativeSurface()) {
                 this.nativeDetailActions()
@@ -1153,24 +1316,22 @@ export struct VideoDetailPage {
               //     this.handleContent(), 16,
               //     $r('app.color.text_expand_selected_tab_name'))
               // }).id(`textClick${this.index}`)
-              if (this.ui.mediaSources.length > 1) {
-                Blank().height(12)
-                MediaSourceSelector({
-                  sources: this.ui.mediaSources,
-                  selectedIndex: this.ui.selectedMediaSourceIndex,
-                  onSelect: (index: number) => {
-                    this.selectedAudioIndex = 0
-                    this.selectedSubtitleIndex = 0
-                    this.vm.selectMediaSource(index)
-                  }
-                })
-                  .width('100%')
-                  .padding({ left: 16, right: 16 })
-              }
               if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
                 this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
-                Blank().height(10)
-                Row({ space: 16 }) {
+                Blank().height(16)
+                Row() {
+                  if (this.ui.mediaSources.length > 1) {
+                    MediaSourceSelector({
+                      sources: this.ui.mediaSources,
+                      selectedIndex: this.ui.selectedMediaSourceIndex,
+                      onSelect: (index: number) => {
+                        this.selectedAudioIndex = 0
+                        this.selectedSubtitleIndex = 0
+                        this.vm.selectMediaSource(index)
+                      }
+                    })
+                      .layoutWeight(1)
+                  }
                   AudioSubtitleSelector({
                     source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
                     triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
@@ -1181,7 +1342,11 @@ export struct VideoDetailPage {
                       this.ui.selectedAudio = audio
                     }
                   })
-                }.padding({ left: 16, right: 16 })
+                    .layoutWeight(this.ui.mediaSources.length > 1 ? 2 : 1)
+                }
+                .width('calc(100% - 24vp)')
+                .height(32)
+                .alignSelf(ItemAlign.Center)
               }
               if (this.ui.overview.length > 0) {
                 Blank().height(16)
@@ -1372,6 +1537,7 @@ export struct VideoDetailPage {
         .scrollBar(BarState.Off)
         .onDidScroll(() => {
           let y = this.ui.scroller.currentOffset().yOffset
+          this.updateTitleCollapseProgress(y)
           if (y === 0 && this.ui.currentScrollState === 1) {
             this.vm.bannerSpringBack();
           }
@@ -1400,6 +1566,10 @@ export struct VideoDetailPage {
       heroTitleChrome: true,
       menus: this.navigationMenus(),
       scrollControllers: [this.ui.scroller],
+      hasTitleBarStackBuilder: true,
+      titleBarStackBuilder: () => {
+        this.nativeCollapsedTitle()
+      },
       contentBuilder: () => {
         this.pageContent(false)
       },

@@ -17,7 +17,6 @@ export struct CastView {
     const option = createMediaImageKnifeOption(item.primaryImage, item.primaryImage?.url || '')
     option.objectFit = ImageFit.Cover
     option.border = { radius: 33 }
-    option.placeholderSrc = $r('app.media.ic_avatar')
     return option
   }
 
@@ -33,9 +32,18 @@ export struct CastView {
         ForEach(this.peopleList, (item: MediaPersonCredit) => {
           ListItem() {
             Column({ space: 8 }) {
-              ImageKnifeComponent({
-                imageKnifeOption: this.imageOption(item)
-              })
+              Stack() {
+                SymbolGlyph($r('sys.symbol.person_fill'))
+                  .fontSize(30)
+                  .fontColor([$r('sys.color.icon_secondary')])
+
+                ImageKnifeComponent({
+                  imageKnifeOption: this.imageOption(item)
+                })
+                  .width(66)
+                  .height(66)
+                  .borderRadius(33)
+              }
                 .width(66)
                 .height(66)
                 .borderRadius(33)

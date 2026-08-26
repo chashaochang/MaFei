@@ -108,20 +108,43 @@ export struct AudioSubtitleSelector {
 
   @Builder
   private subtitleTriggerContent() {
-    Text(this.getShowName(0)).fontSize(12).fontWeight(FontWeight.Bold).fontColor(this.triggerTextColor)
-    SymbolGlyph(this.isShowingSubtitleOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-      .fontSize(12)
-      .fontWeight(FontWeight.Bold)
-      .fontColor([this.triggerTextColor])
-      .visibility(this.subtitles.length > 1 ? Visibility.Visible : Visibility.Hidden)
+    Row({ space: 2 }) {
+      Text(this.getShowName(0))
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.triggerTextColor)
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: this.subtitles.length > 1 ? 'calc(100% - 18vp)' : '100%' })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.subtitles.length > 1) {
+        SymbolGlyph(this.isShowingSubtitleOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([this.triggerTextColor])
+          .width(14)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
   private subtitleTrigger() {
     if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.subtitleTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showSubtitleOptions())
       .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(true, true), {
         preferType: SheetType.BOTTOM,
@@ -130,9 +153,18 @@ export struct AudioSubtitleSelector {
         backgroundColor: Color.Transparent
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.subtitleTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showSubtitleOptions())
       .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(true, false), {
         preferType: SheetType.BOTTOM,
@@ -142,9 +174,18 @@ export struct AudioSubtitleSelector {
         systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.subtitleTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showSubtitleOptions())
       .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(false, false), {
         preferType: SheetType.BOTTOM,
@@ -153,9 +194,18 @@ export struct AudioSubtitleSelector {
         systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     } else {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.subtitleTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showSubtitleOptions())
       .bindSheet($$this.isShowingSubtitleOptions, this.buildSubtitleOptions(false, false), {
         preferType: SheetType.BOTTOM,
@@ -167,20 +217,43 @@ export struct AudioSubtitleSelector {
 
   @Builder
   private audioTriggerContent() {
-    Text(this.getShowName(1)).fontSize(12).fontWeight(FontWeight.Bold).fontColor(this.triggerTextColor)
-    SymbolGlyph(this.isShowingAudioOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-      .fontSize(12)
-      .fontWeight(FontWeight.Bold)
-      .fontColor([this.triggerTextColor])
-      .visibility(this.audios.length > 1 ? Visibility.Visible : Visibility.Hidden)
+    Row({ space: 2 }) {
+      Text(this.getShowName(1))
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.triggerTextColor)
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: this.audios.length > 1 ? 'calc(100% - 18vp)' : '100%' })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.audios.length > 1) {
+        SymbolGlyph(this.isShowingAudioOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([this.triggerTextColor])
+          .width(14)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
   private audioTrigger() {
     if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.audioTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showAudioOptions())
       .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(true, true), {
         preferType: SheetType.BOTTOM,
@@ -189,9 +262,18 @@ export struct AudioSubtitleSelector {
         backgroundColor: Color.Transparent
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.audioTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showAudioOptions())
       .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(true, false), {
         preferType: SheetType.BOTTOM,
@@ -201,9 +283,18 @@ export struct AudioSubtitleSelector {
         systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
       })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.audioTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showAudioOptions())
       .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(false, false), {
         preferType: SheetType.BOTTOM,
@@ -212,9 +303,18 @@ export struct AudioSubtitleSelector {
         systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
       })
     } else {
-      Row() {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         this.audioTriggerContent()
       }
+      .layoutWeight(1)
+      .margin({ left: 4, right: 4 })
+      .height(32)
+      .padding(0)
+      .borderRadius(16)
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .backgroundColor(this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_2'))
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
       .onClick(() => this.showAudioOptions())
       .bindSheet($$this.isShowingAudioOptions, this.buildAudioOptions(false, false), {
         preferType: SheetType.BOTTOM,
@@ -225,10 +325,12 @@ export struct AudioSubtitleSelector {
   }
 
   build() {
-    Row({ space: 16 }) {
+    Row() {
       this.subtitleTrigger()
       this.audioTrigger()
     }
+    .width('100%')
+    .height(32)
   }
 
   @Builder
