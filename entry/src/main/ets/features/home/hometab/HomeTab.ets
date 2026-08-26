@@ -17,7 +17,7 @@ import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 import { HomeLatestMediaSection } from "./HomeLatestMediaSection"
 import { HomeFeedTabItem, HomeLibraryChipSelector } from "./HomeLibraryChipSelector"
-import { curves } from "@kit.ArkUI"
+import { AnimatorResult, curves } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
 import { HomeInitialSkeleton } from './HomeInitialSkeleton'
 import { MediaLibraryKind } from '../../../media/catalog/MediaCatalogModels'
@@ -62,6 +62,8 @@ export struct HomeTab {
   @Local latestChipStripPinned: boolean = false
   @Local latestChipStripMenuReserved: boolean = false
   private heroProgressTimer: number = -1
+  private heroProgressAnimator?: AnimatorResult
+  private heroProgressGeneration: number = 0
   private nativeHeroSpringCurve: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30)
 
   private playItem(item: VideoItem): void {
@@ -77,22 +79,53 @@ export struct HomeTab {
     }
   }
 
-  private restartHeroProgress(index: number): void {
+  private stopHeroProgress(): void {
+    this.heroProgressGeneration++
     this.cancelHeroProgressStart()
+    if (this.heroProgressAnimator) {
+      this.heroProgressAnimator.cancel()
+      this.heroProgressAnimator = undefined
+    }
+  }
+
+  private restartHeroProgress(index: number): void {
+    this.stopHeroProgress()
     const itemCount = this.ui.recommendationList.length
     this.heroIndex = itemCount > 0 ? Math.max(0, Math.min(index, itemCount - 1)) : 0
     this.heroProgress = 0
     if (itemCount <= 1) {
       return
     }
+    const generation = this.heroProgressGeneration
+    const targetIndex = this.heroIndex
     this.heroProgressTimer = setTimeout(() => {
       this.heroProgressTimer = -1
-      this.getUIContext().animateTo({
+      if (generation !== this.heroProgressGeneration || targetIndex !== this.heroIndex) {
+        return
+      }
+      const progressAnimator = this.getUIContext().createAnimator({
         duration: HERO_AUTOPLAY_INTERVAL,
-        curve: Curve.Linear
-      }, () => {
-        this.heroProgress = 100
+        easing: 'linear',
+        delay: 0,
+        fill: 'forwards',
+        direction: 'normal',
+        iterations: 1,
+        begin: 0,
+        end: 100
       })
+      progressAnimator.onFrame = (progress: number): void => {
+        if (generation === this.heroProgressGeneration && targetIndex === this.heroIndex) {
+          this.heroProgress = progress
+        }
+      }
+      progressAnimator.onFinish = (): void => {
+        if (generation === this.heroProgressGeneration && targetIndex === this.heroIndex) {
+          this.heroProgress = 100
+          this.heroProgressAnimator = undefined
+        }
+      }
+      this.heroProgressAnimator = progressAnimator
+      progressAnimator.play()
     }, HERO_PROGRESS_START_DELAY)
   }
 
@@ -345,7 +378,7 @@ export struct HomeTab {
   }
 
   aboutToDisappear(): void {
-    this.cancelHeroProgressStart()
+    this.stopHeroProgress()
     this.nativeHeroHeight = HOME_HERO_BASE_HEIGHT
     this.nativeHeroScrollState = ScrollState.Idle
     this.nativeHeroRefreshProgress = 0
@@ -702,7 +735,7 @@ export struct HomeTab {
       this.restartHeroProgress(this.heroIndex)
     })
     .onDisAppear(() => {
-      this.cancelHeroProgressStart()
+      this.stopHeroProgress()
     })
   }
 

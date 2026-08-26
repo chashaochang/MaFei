@@ -1,3 +1,4 @@
+import CryptoJS from '@ohos/crypto-js'
 import { MediaProviderKind } from '../../../media/MediaProviderKind'
 import { MediaConnectionRoute, MediaProviderSession } from '../../../media/MediaProviderSession'
 import { MediaRef, MediaRefKind } from '../../../media/MediaRef'
@@ -35,7 +36,8 @@ import {
   FeiniuVideoHttpMethod,
   FeiniuVideoQueryParameter,
   FeiniuVideoRequestError,
-  FeiniuVideoRequestFailureKind
+  FeiniuVideoRequestFailureKind,
+  FnMediaUserInfoResp
 } from '../network/FeiniuVideoApiModels'
 import {
   FnMediaCountResp,
@@ -44,6 +46,7 @@ import {
   FnMediaGuidReq,
   FnMediaItem,
   FnMediaItemDetailResp,
+  FnMediaItemFile,
   FnMediaItemListReq,
   FnMediaItemListResp,
   FnMediaItemListTags,
@@ -53,7 +56,6 @@ import {
   FnMediaPersonItemListItem,
   FnMediaPersonItemListReq,
   FnMediaPersonItemListResp,
-  FnMediaPersonListItem,
   FnMediaPersonListResp,
   FnMediaPersonResp,
   FnMediaPlayItem,
@@ -61,11 +63,21 @@ import {
 } from './FeiniuVideoDtos'
 import {
   FeiniuVideoCatalogImageAccess,
+  FeiniuVideoCatalogItemContext,
   FeiniuVideoCatalogMapper
 } from './FeiniuVideoCatalogMapper'
 import {
+  FnMediaOfficialStreamData,
+  FnMediaOfficialStreamReq,
+  FnMediaOfficialStreamResp,
+  FnMediaPlayInfoReq,
+  FnMediaPlayInfoResp,
+  FnMediaStreamAudioInfo,
+  FnMediaStreamFileInfo,
   FnMediaStreamListData,
-  FnMediaStreamListResp
+  FnMediaStreamListResp,
+  FnMediaStreamSubtitleInfo,
+  FnMediaStreamVideoInfo
 } from '../playback/FeiniuVideoPlaybackDtos'
 import { FeiniuVideoRecommendationPlanner } from './FeiniuVideoRecommendationPlanner'
 
@@ -76,6 +88,18 @@ const FEINIU_RECOMMENDATION_MIN_CANDIDATES: number = 24
 const FEINIU_RECOMMENDATION_MAX_CANDIDATES: number = 60
 const FEINIU_RECOMMENDATION_DETAIL_LIMIT: number = 6
 const FEINIU_RECOMMENDATION_SIGNAL_DETAIL_LIMIT: number = 8
+const FEINIU_OFFICIAL_STREAM_USER_AGENT: string =
+  '1.32.2 (com.trim.app; build:1322007; Android 36) okHttp/4.9.0'
+
+interface FeiniuVideoOfficialStreamEntry {
+  readonly mediaGuid: string
+  readonly data?: FnMediaOfficialStreamData
+}
+
+interface FeiniuVideoEnrichedCatalogItem {
+  readonly item: FnMediaItem
+  readonly context: FeiniuVideoCatalogItemContext
+}
 
 export interface FeiniuVideoCatalogService {
   request<T>(request: FeiniuVideoApiRequest): Promise<T>
@@ -211,6 +235,8 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   private recommendationCacheItems: FnMediaItem[] = []
   private recommendationCacheLimit: number = 0
   private recommendationCacheExpiresAt: number = 0
+  private readonly itemDetailCache: Map<string, Promise<FnMediaItemDetailResp>> =
+    new Map<string, Promise<FnMediaItemDetailResp>>()
 
   constructor(session: MediaProviderSession, service: FeiniuVideoCatalogService) {
     if (session.provider !== MediaProviderKind.FeiniuVideo) {
@@ -342,16 +368,43 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
         return item.guid.trim().length > 0 &&
           (request.kinds.length === 0 || request.kinds.indexOf(kind) >= 0)
       })
-      const selected = source.slice(0, limit)
-      const items = selected.map((item: FnMediaPlayItem): MediaSummary => mapper.resume(item))
-      return mapper.page(items, 0, limit, source.length, selected.length)
+      source.sort((left: FnMediaPlayItem, right: FnMediaPlayItem): number => {
+        return Math.max(0, right.watched_ts || 0, right.ts || 0) -
+          Math.max(0, left.watched_ts || 0, left.ts || 0)
+      })
+      const enriched = await Promise.all(source.map(
+        async (item: FnMediaPlayItem): Promise<MediaSummary> => {
+          const catalogItem = await this.enrichCatalogItem(
+            this.playCatalogItem(item), mapper.playItemKind(item))
+          return mapper.resume(item, catalogItem.context)
+        }))
+      const items = this.uniqueResumeSummaries(enriched).slice(0, limit)
+      return mapper.page(items, 0, limit, source.length, Math.min(source.length, limit))
     })
   }
 
   nextUp(request: MediaNextUpRequest): Promise<MediaPage<MediaSummary>> {
-    this.requireOwnedOptional(request.seriesRef, 'nextUp')
-    // There is no proven global next-up contract in Feiniu Video. Hide the section instead of inventing data.
-    return Promise.resolve(this.mapper().page([], 0, this.limit(request.limit), 0, 0))
+    return this.run('nextUp', async (): Promise<MediaPage<MediaSummary>> => {
+      this.requireOwnedOptional(request.seriesRef, 'nextUp')
+      const limit = this.limit(request.limit)
+      if (!request.seriesRef) {
+        // Feiniu has no global next-up endpoint. Keep the home section empty instead of issuing N+1 series requests.
+        return this.mapper().page([], 0, limit, 0, 0)
+      }
+      const episodePromise = this.episodeItemsForSeries(request.seriesRef.id)
+      const playPromise = this.request<FnMediaListResp<FnMediaPlayItem[]>>(
+        '/v/api/v1/play/list', FeiniuVideoHttpMethod.Get)
+      const episodes = await episodePromise
+      const playResponse = await playPromise
+      const selected = this.selectNextUpEpisode(episodes, playResponse.data || [], request)
+      if (!selected) {
+        return this.mapper().page([], 0, limit, 0, 0)
+      }
+      await this.ensureGenres()
+      const enriched = await this.enrichCatalogItem(selected, MediaRefKind.Episode)
+      const item = this.mapper().summary(selected, enriched.context)
+      return this.mapper().page([item], 0, limit, 1, 1)
+    })
   }
 
   latest(request: MediaLatestRequest): Promise<MediaPage<MediaSummary>> {
@@ -432,35 +485,265 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   getDetail(ref: MediaRef): Promise<MediaDetail> {
     return this.run('getDetail', async (): Promise<MediaDetail> => {
       this.requireOwned(ref, 'getDetail')
-      const detailResponse = await this.request<FnMediaListResp<FnMediaItemDetailResp>>(
-        `/v/api/v1/item/${encodeURIComponent(ref.id)}`, FeiniuVideoHttpMethod.Get)
-      const detail = detailResponse.data
-      if (!detail || `${detail.guid || ''}`.trim().length === 0) {
-        throw new FeiniuVideoRequestError(
-          FeiniuVideoRequestFailureKind.InvalidResponse,
-          'Feiniu Video detail response is empty'
-        )
-      }
+      const detail = await this.itemDetail(ref.id)
       const mapperBeforeSeasons = this.mapper()
-      const peoplePromise = this.request<FnMediaPersonListResp>(
-        `/v/api/v1/person/list/${encodeURIComponent(ref.id)}`, FeiniuVideoHttpMethod.Post)
-      const seasonPromise: Promise<MediaSeason[]> = mapperBeforeSeasons.refKind(detail.type) === MediaRefKind.Series
+      const detailKind = ref.kind !== MediaRefKind.Unknown ? ref.kind : mapperBeforeSeasons.refKind(detail.type)
+      const peoplePromise = this.detailPeople(ref.id)
+      const seasonPromise: Promise<MediaSeason[]> = detailKind === MediaRefKind.Series
         ? this.seasonItems(ref.id).then((items: FnMediaSeasonItem[]): MediaSeason[] => {
           const seriesRef = new MediaRef(this.session.provider, this.session.accountScope, ref.id, MediaRefKind.Series)
           const mapper = this.mapper()
           return items.map((item: FnMediaSeasonItem): MediaSeason => mapper.season(item, seriesRef))
+        }).catch((error: Error): MediaSeason[] => {
+          if (this.isAuthenticationError(error)) throw error
+          console.warn(`[FeiniuVideoCatalog] season list failed item=${ref.id} error=${error.message || 'unknown'}`)
+          return []
         }) : Promise.resolve([])
       const streamPromise: Promise<FnMediaStreamListData | undefined> =
-        this.supportsDetailStreams(mapperBeforeSeasons.refKind(detail.type))
-          ? this.streamList(ref.id).catch((): FnMediaStreamListData | undefined => undefined)
+        this.supportsDetailStreams(detailKind)
+          ? this.detailStreams(detail)
           : Promise.resolve(undefined)
       const genrePromise = this.ensureGenres()
-      const results = await Promise.all([peoplePromise, seasonPromise, streamPromise, genrePromise])
-      const peopleResponse = results[0] as FnMediaPersonListResp
-      const seasons = results[1] as MediaSeason[]
-      const streamData = results[2] as FnMediaStreamListData | undefined
-      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons, streamData)
+      const contextPromise = this.itemContext(detail, detailKind)
+      const peopleResponse = await peoplePromise
+      const seasons = await seasonPromise
+      const streamData = await streamPromise
+      await genrePromise
+      const context = await contextPromise
+      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons, streamData, context)
     })
+  }
+
+  private async itemDetail(itemId: string): Promise<FnMediaItemDetailResp> {
+    const normalizedId = itemId.trim()
+    const cached = this.itemDetailCache.get(normalizedId)
+    if (cached) return await cached
+    const pending = this.request<FnMediaListResp<FnMediaItemDetailResp>>(
+      `/v/api/v1/item/${encodeURIComponent(normalizedId)}`,
+      FeiniuVideoHttpMethod.Get
+    ).then((response: FnMediaListResp<FnMediaItemDetailResp>): FnMediaItemDetailResp => {
+      const detail = response.data
+      if (!detail || `${detail.guid || ''}`.trim() !== normalizedId) {
+        throw new FeiniuVideoRequestError(
+          FeiniuVideoRequestFailureKind.InvalidResponse,
+          'Feiniu Video detail response does not match the requested item'
+        )
+      }
+      return detail
+    })
+    this.itemDetailCache.set(normalizedId, pending)
+    try {
+      return await pending
+    } finally {
+      if (this.itemDetailCache.get(normalizedId) === pending) {
+        this.itemDetailCache.delete(normalizedId)
+      }
+    }
+  }
+
+  private async optionalItemDetail(itemId: string): Promise<FnMediaItemDetailResp | undefined> {
+    const normalizedId = itemId.trim()
+    if (normalizedId.length === 0) return undefined
+    try {
+      return await this.itemDetail(normalizedId)
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      console.warn(`[FeiniuVideoCatalog] item detail failed item=${normalizedId} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return undefined
+    }
+  }
+
+  private async detailPeople(itemId: string): Promise<FnMediaPersonListResp> {
+    try {
+      return await this.request<FnMediaPersonListResp>(
+        `/v/api/v1/person/list/${encodeURIComponent(itemId)}`,
+        FeiniuVideoHttpMethod.Post
+      )
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      console.warn(`[FeiniuVideoCatalog] people failed item=${itemId} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return { code: 0, msg: '', data: { list: [], total: 0 } }
+    }
+  }
+
+  private async enrichCatalogItem(item: FnMediaItem,
+    kindOverride?: MediaRefKind): Promise<FeiniuVideoEnrichedCatalogItem> {
+    const mapper = this.mapper()
+    const resolvedKind = kindOverride !== undefined && kindOverride !== MediaRefKind.Unknown
+      ? kindOverride : mapper.refKind(item.type)
+    let enriched: FnMediaItem = item
+    const hierarchyNeedsDetail = (resolvedKind === MediaRefKind.Episode || resolvedKind === MediaRefKind.Season) &&
+      `${item.parent_guid || ''}`.trim().length === 0
+    const detail = hierarchyNeedsDetail || this.itemPrimaryImagePath(item).length === 0
+      ? await this.optionalItemDetail(item.guid) : undefined
+    if (detail) {
+      this.applyItemFallbacks(detail, item)
+      enriched = detail
+    }
+    return {
+      item: enriched,
+      context: await this.itemContext(enriched, resolvedKind)
+    }
+  }
+
+  private playCatalogItem(item: FnMediaPlayItem): FnMediaItem {
+    const result = {} as FnMediaItem
+    result.guid = item.guid
+    result.title = item.title
+    result.type = item.type
+    result.poster = item.poster
+    result.parent_guid = item.parent_guid
+    result.parent_title = item.parent_title
+    result.ancestor_guid = item.ancestor_guid
+    result.ancestor_name = item.ancestor_name
+    result.ancestor_category = item.ancestor_category
+    result.tv_title = item.tv_title
+    result.watched = item.watched
+    result.watched_ts = item.watched_ts
+    result.is_favorite = item.is_favorite
+    result.status = item.status
+    result.ts = item.ts
+    result.duration = item.duration
+    result.season_number = item.season_number
+    result.episode_number = item.episode_number
+    result.media_guid = item.media_guid
+    result.video_guid = item.video_guid
+    result.audio_guid = item.audio_guid
+    result.subtitle_guid = item.subtitle_guid
+    result.file_name = item.file_name
+    if (item.media_stream) {
+      const stream = {} as FnMediaItemStream
+      stream.progress = item.media_stream.progress
+      stream.current_time = item.media_stream.current_time
+      result.media_stream = stream
+    }
+    return result
+  }
+
+  private applyItemFallbacks(detail: FnMediaItemDetailResp, fallback: FnMediaItem): void {
+    detail.title = detail.title || fallback.title
+    detail.type = detail.type || fallback.type
+    detail.poster = detail.poster || fallback.poster
+    detail.parent_guid = detail.parent_guid || fallback.parent_guid
+    detail.parent_title = detail.parent_title || fallback.parent_title
+    detail.ancestor_guid = detail.ancestor_guid || fallback.ancestor_guid
+    detail.ancestor_name = detail.ancestor_name || fallback.ancestor_name
+    detail.ancestor_category = detail.ancestor_category || fallback.ancestor_category
+    detail.tv_title = detail.tv_title || fallback.tv_title
+    detail.overview = detail.overview || fallback.overview
+    detail.vote_average = detail.vote_average || fallback.vote_average
+    detail.release_date = detail.release_date || fallback.release_date
+    detail.air_date = detail.air_date || fallback.air_date
+    detail.first_air_date = detail.first_air_date || fallback.first_air_date
+    detail.last_air_date = detail.last_air_date || fallback.last_air_date
+    detail.duration = detail.duration || fallback.duration
+    detail.runtime = detail.runtime || fallback.runtime
+    detail.season_number = detail.season_number || fallback.season_number
+    detail.episode_number = detail.episode_number || fallback.episode_number
+    detail.genres = detail.genres || fallback.genres
+    detail.media_stream = detail.media_stream || fallback.media_stream
+    detail.media_guid = detail.media_guid || fallback.media_guid
+    detail.video_guid = detail.video_guid || fallback.video_guid
+    detail.audio_guid = detail.audio_guid || fallback.audio_guid
+    detail.subtitle_guid = detail.subtitle_guid || fallback.subtitle_guid
+    detail.file_name = detail.file_name || fallback.file_name
+    detail.watched = detail.watched === undefined ? fallback.watched : detail.watched
+    detail.watched_ts = detail.watched_ts === undefined ? fallback.watched_ts : detail.watched_ts
+    detail.is_favorite = detail.is_favorite === undefined ? fallback.is_favorite : detail.is_favorite
+    detail.ts = detail.ts === undefined ? fallback.ts : detail.ts
+  }
+
+  private async itemContext(item: FnMediaItem,
+    kindOverride?: MediaRefKind): Promise<FeiniuVideoCatalogItemContext> {
+    const mapper = this.mapper()
+    const kind = kindOverride !== undefined && kindOverride !== MediaRefKind.Unknown
+      ? kindOverride : mapper.refKind(item.type)
+    const detail = item as FnMediaItemDetailResp
+    let seriesId = ''
+    let seasonId = ''
+    let seriesTitle = `${item.tv_title || ''}`.trim()
+    let seasonTitle = ''
+    let primaryImagePath = this.itemPrimaryImagePath(item)
+    let backdropImagePath = `${detail.backdrops || ''}`.trim()
+    let logoImagePath = `${detail.logos || ''}`.trim()
+    let seasonDetail: FnMediaItemDetailResp | undefined
+    let seriesDetail: FnMediaItemDetailResp | undefined
+
+    if (kind === MediaRefKind.Series) {
+      seriesId = item.guid.trim()
+      seriesTitle = seriesTitle || item.title
+    } else if (kind === MediaRefKind.Season) {
+      const parentId = `${item.parent_guid || ''}`.trim()
+      const libraryId = `${item.ancestor_guid || ''}`.trim()
+      seriesId = parentId.length > 0 && parentId !== libraryId ? parentId : ''
+      seasonTitle = item.title || ''
+    } else if (kind === MediaRefKind.Episode) {
+      const parentId = `${item.parent_guid || ''}`.trim()
+      const parentDetail = await this.optionalItemDetail(parentId)
+      const parentKind = parentDetail ? mapper.refKind(parentDetail.type) : MediaRefKind.Unknown
+      if (parentDetail && parentKind === MediaRefKind.Series) {
+        seriesId = parentDetail.guid.trim() || parentId
+        seriesTitle = seriesTitle || parentDetail.title || `${item.parent_title || ''}`.trim()
+        seriesDetail = parentDetail
+      } else {
+        seasonId = parentId
+        seasonDetail = parentDetail
+        if (seasonDetail) {
+          seasonTitle = seasonDetail.title || ''
+          const seriesParentId = `${seasonDetail.parent_guid || ''}`.trim()
+          const libraryId = `${seasonDetail.ancestor_guid || ''}`.trim()
+          seriesId = seriesParentId.length > 0 && seriesParentId !== libraryId ? seriesParentId : ''
+          seriesTitle = seriesTitle || `${seasonDetail.parent_title || ''}`.trim()
+          primaryImagePath = primaryImagePath || this.itemPrimaryImagePath(seasonDetail)
+          backdropImagePath = backdropImagePath || `${seasonDetail.backdrops || ''}`.trim()
+          logoImagePath = logoImagePath || `${seasonDetail.logos || ''}`.trim()
+        }
+      }
+    }
+
+    if (!seriesDetail && seriesId.length > 0 && seriesId !== item.guid) {
+      seriesDetail = await this.optionalItemDetail(seriesId)
+    }
+    if (seriesDetail) {
+      seriesTitle = seriesTitle || seriesDetail.title || ''
+      primaryImagePath = primaryImagePath || this.itemPrimaryImagePath(seriesDetail)
+      backdropImagePath = backdropImagePath || `${seriesDetail.backdrops || ''}`.trim()
+      logoImagePath = logoImagePath || `${seriesDetail.logos || ''}`.trim()
+    }
+
+    primaryImagePath = primaryImagePath || backdropImagePath
+    backdropImagePath = backdropImagePath || primaryImagePath
+    return {
+      kind: kind,
+      seriesId: seriesId,
+      seasonId: seasonId,
+      seriesTitle: seriesTitle,
+      seasonTitle: seasonTitle,
+      primaryImagePath: primaryImagePath,
+      backdropImagePath: backdropImagePath,
+      logoImagePath: logoImagePath
+    }
+  }
+
+  private itemPrimaryImagePath(item: FnMediaItem): string {
+    const detail = item as FnMediaItemDetailResp
+    return `${item.poster || detail.posters || ''}`.trim()
+  }
+
+  private uniqueResumeSummaries(items: MediaSummary[]): MediaSummary[] {
+    const result: MediaSummary[] = []
+    const seen = new Set<string>()
+    items.forEach((item: MediaSummary): void => {
+      const key = item.ref.kind === MediaRefKind.Episode && item.seriesRef
+        ? `series:${item.seriesRef.identity}` : `item:${item.ref.identity}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push(item)
+      }
+    })
+    return result
   }
 
   private supportsDetailStreams(kind: MediaRefKind): boolean {
@@ -477,6 +760,310 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     return response.data || {}
   }
 
+  private async detailStreams(detail: FnMediaItemDetailResp): Promise<FnMediaStreamListData> {
+    const supplemental = await Promise.all([
+      this.optionalStreamList(detail.guid),
+      this.optionalItemFiles(detail.guid),
+      this.optionalPlayInfo(detail.guid)
+    ])
+    const listed = this.mergeItemFiles(
+      supplemental[0] as FnMediaStreamListData,
+      supplemental[1] as FnMediaItemFile[]
+    )
+    const playInfo = supplemental[2] as FnMediaPlayInfoResp | undefined
+
+    const preferredMediaGuid = `${playInfo?.data?.media_guid || detail.media_guid || ''}`.trim()
+    const mediaGuids = this.detailMediaGuids(detail, listed, preferredMediaGuid)
+    if (mediaGuids.length === 0) {
+      return this.preferMediaFile(listed, preferredMediaGuid)
+    }
+
+    let ip = ''
+    try {
+      ip = await this.officialStreamIp()
+    } catch (error) {
+      console.warn(`[FeiniuVideoCatalog] official stream identity failed item=${detail.guid} error=${(error as Error).message || 'unknown'}`)
+      return this.preferMediaFile(listed, preferredMediaGuid)
+    }
+
+    const requests: Promise<FeiniuVideoOfficialStreamEntry>[] = mediaGuids.map(
+      (mediaGuid: string): Promise<FeiniuVideoOfficialStreamEntry> => {
+        return this.officialStreamInfo(mediaGuid, ip)
+          .then((data: FnMediaOfficialStreamData): FeiniuVideoOfficialStreamEntry => {
+            return { mediaGuid: mediaGuid, data: data }
+          })
+          .catch((error: Error): FeiniuVideoOfficialStreamEntry => {
+            console.warn(`[FeiniuVideoCatalog] official stream failed media=${mediaGuid} error=${error.message || 'unknown'}`)
+            return { mediaGuid: mediaGuid }
+          })
+      })
+    const officialEntries = await Promise.all(requests)
+    const merged = this.mergeDetailStreams(detail, listed, officialEntries)
+    console.info(`[FeiniuVideoCatalog] detail streams item=${detail.guid} files=${merged.files?.length || 0} ` +
+      `videos=${merged.video_streams?.length || 0} audios=${merged.audio_streams?.length || 0} ` +
+      `subtitles=${merged.subtitle_streams?.length || 0}`)
+    return this.preferMediaFile(merged, preferredMediaGuid)
+  }
+
+  private async optionalStreamList(itemGuid: string): Promise<FnMediaStreamListData> {
+    try {
+      return await this.streamList(itemGuid)
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      console.warn(`[FeiniuVideoCatalog] stream list failed item=${itemGuid} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return {}
+    }
+  }
+
+  private async optionalItemFiles(itemGuid: string): Promise<FnMediaItemFile[]> {
+    try {
+      const response = await this.request<FnMediaListResp<FnMediaItemFile[]>>(
+        `/v/api/v1/media/itemfile/${encodeURIComponent(itemGuid)}`,
+        FeiniuVideoHttpMethod.Get
+      )
+      return response.data || []
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      console.warn(`[FeiniuVideoCatalog] item files failed item=${itemGuid} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return []
+    }
+  }
+
+  private async optionalPlayInfo(itemGuid: string): Promise<FnMediaPlayInfoResp | undefined> {
+    try {
+      const payload: FnMediaPlayInfoReq = { item_guid: itemGuid }
+      return await this.request<FnMediaPlayInfoResp>(
+        '/v/api/v1/play/info',
+        FeiniuVideoHttpMethod.Post,
+        JSON.stringify(payload)
+      )
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      console.warn(`[FeiniuVideoCatalog] play info failed item=${itemGuid} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return undefined
+    }
+  }
+
+  private mergeItemFiles(listed: FnMediaStreamListData, itemFiles: FnMediaItemFile[]): FnMediaStreamListData {
+    const files = (listed.files || []).slice()
+    itemFiles.forEach((item: FnMediaItemFile): void => {
+      const mediaGuid = `${item.media_guid || ''}`.trim()
+      if (mediaGuid.length === 0) return
+      const existingIndex = files.findIndex((file: FnMediaStreamFileInfo): boolean =>
+        `${file.guid || ''}`.trim() === mediaGuid)
+      if (existingIndex >= 0) {
+        const existing = files[existingIndex]
+        existing.file_name = existing.file_name || item.filename
+        existing.path = existing.path || item.file_path
+        existing.size = existing.size || item.size || item.file_size
+        existing.create_time = existing.create_time || item.create_time
+        existing.update_time = existing.update_time || item.update_time
+        existing.file_birth_time = existing.file_birth_time || item.file_birth_time
+        return
+      }
+      files.push({
+        guid: mediaGuid,
+        file_name: item.filename,
+        path: item.file_path,
+        size: item.size || item.file_size,
+        create_time: item.create_time,
+        update_time: item.update_time,
+        file_birth_time: item.file_birth_time
+      })
+    })
+    return {
+      files: files,
+      video_streams: (listed.video_streams || []).slice(),
+      audio_streams: (listed.audio_streams || []).slice(),
+      subtitle_streams: (listed.subtitle_streams || []).slice()
+    }
+  }
+
+  private preferMediaFile(data: FnMediaStreamListData, preferredMediaGuid: string): FnMediaStreamListData {
+    const preferred = preferredMediaGuid.trim()
+    const files = (data.files || []).slice()
+    if (preferred.length > 0) {
+      const index = files.findIndex((file: FnMediaStreamFileInfo): boolean =>
+        `${file.guid || ''}`.trim() === preferred)
+      if (index > 0) {
+        const selected = files[index]
+        files.splice(index, 1)
+        files.unshift(selected)
+      }
+    }
+    return {
+      files: files,
+      video_streams: (data.video_streams || []).slice(),
+      audio_streams: (data.audio_streams || []).slice(),
+      subtitle_streams: (data.subtitle_streams || []).slice()
+    }
+  }
+
+  private detailMediaGuids(detail: FnMediaItemDetailResp, data: FnMediaStreamListData,
+    preferredMediaGuid: string): string[] {
+    const result: string[] = []
+    const append = (value?: string): void => {
+      const normalized = `${value || ''}`.trim()
+      if (normalized.length > 0 && result.indexOf(normalized) < 0) {
+        result.push(normalized)
+      }
+    }
+    const files = data.files || []
+    const videos = data.video_streams || []
+    const audios = data.audio_streams || []
+    const subtitles = data.subtitle_streams || []
+    files.forEach((file: FnMediaStreamFileInfo): void => append(file.guid))
+    videos.forEach((stream: FnMediaStreamVideoInfo): void => append(stream.media_guid))
+    audios.forEach((stream: FnMediaStreamAudioInfo): void => append(stream.media_guid))
+    subtitles.forEach((stream: FnMediaStreamSubtitleInfo): void => append(stream.media_guid))
+    append(preferredMediaGuid)
+    append(detail.media_guid)
+    return result
+  }
+
+  private async officialStreamIp(): Promise<string> {
+    const userInfo = await this.request<FnMediaUserInfoResp>(
+      '/v/api/v1/user/info', FeiniuVideoHttpMethod.Get)
+    const sources = userInfo.data?.sources || []
+    const sourceName = sources.length > 0 ? `${sources[0].source_name || ''}`.trim() : ''
+    return CryptoJS.MD5(sourceName).toString()
+  }
+
+  private async officialStreamInfo(mediaGuid: string, ip: string): Promise<FnMediaOfficialStreamData> {
+    const payload: FnMediaOfficialStreamReq = {
+      media_guid: mediaGuid,
+      ip: ip,
+      level: 1,
+      header: {
+        'User-Agent': [FEINIU_OFFICIAL_STREAM_USER_AGENT]
+      }
+    }
+    const response = await this.service.request<FnMediaOfficialStreamResp>(new FeiniuVideoApiRequest(
+      '/v/api/v1/stream',
+      FeiniuVideoHttpMethod.Post,
+      JSON.stringify(payload),
+      [],
+      true,
+      60000
+    ))
+    return response.data || {}
+  }
+
+  private mergeDetailStreams(detail: FnMediaItemDetailResp, listed: FnMediaStreamListData,
+    officialEntries: FeiniuVideoOfficialStreamEntry[]): FnMediaStreamListData {
+    const files = (listed.files || []).slice()
+    let videos = (listed.video_streams || []).slice()
+    let audios = (listed.audio_streams || []).slice()
+    let subtitles = (listed.subtitle_streams || []).slice()
+
+    officialEntries.forEach((entry: FeiniuVideoOfficialStreamEntry): void => {
+      const data = entry.data
+      if (!data) {
+        return
+      }
+      const mediaGuid = entry.mediaGuid
+      const file = data.file_stream
+      if (file) {
+        if (`${file.guid || ''}`.trim().length === 0) file.guid = mediaGuid
+        const fileIndex = files.findIndex((value: FnMediaStreamFileInfo): boolean =>
+          `${value.guid || ''}`.trim() === mediaGuid)
+        if (fileIndex >= 0) {
+          const listedFile = files[fileIndex]
+          file.path = file.path || listedFile.path
+          file.file_name = file.file_name || listedFile.file_name
+          file.size = file.size || listedFile.size
+          file.timestamp = file.timestamp || listedFile.timestamp
+          file.type = file.type ?? listedFile.type
+          file.sort_num = file.sort_num ?? listedFile.sort_num
+          file.can_play = file.can_play ?? listedFile.can_play
+          file.play_error = file.play_error || listedFile.play_error
+          file.create_time = file.create_time || listedFile.create_time
+          file.update_time = file.update_time || listedFile.update_time
+          file.file_birth_time = file.file_birth_time || listedFile.file_birth_time
+          file.progress_thumb_hash_dir = file.progress_thumb_hash_dir || listedFile.progress_thumb_hash_dir
+          files[fileIndex] = file
+        } else files.push(file)
+      } else if (!files.some((value: FnMediaStreamFileInfo): boolean =>
+        `${value.guid || ''}`.trim() === mediaGuid)) {
+        files.push({
+          guid: mediaGuid,
+          file_name: detail.file_name,
+          path: '',
+          size: 0
+        })
+      }
+
+      if (data.video_stream) {
+        if (`${data.video_stream.media_guid || ''}`.trim().length === 0) {
+          data.video_stream.media_guid = mediaGuid
+        }
+        videos = this.mergeVideoStream(videos, data.video_stream)
+      }
+      const officialAudios = data.audio_streams || []
+      const officialSubtitles = data.subtitle_streams || []
+      officialAudios.forEach((stream: FnMediaStreamAudioInfo): void => {
+        if (`${stream.media_guid || ''}`.trim().length === 0) stream.media_guid = mediaGuid
+        audios = this.mergeAudioStream(audios, stream)
+      })
+      officialSubtitles.forEach((stream: FnMediaStreamSubtitleInfo): void => {
+        if (`${stream.media_guid || ''}`.trim().length === 0) stream.media_guid = mediaGuid
+        subtitles = this.mergeSubtitleStream(subtitles, stream)
+      })
+    })
+
+    return {
+      files: files,
+      video_streams: videos,
+      audio_streams: audios,
+      subtitle_streams: subtitles
+    }
+  }
+
+  private mergeVideoStream(values: FnMediaStreamVideoInfo[], replacement: FnMediaStreamVideoInfo):
+    FnMediaStreamVideoInfo[] {
+    const result = values.slice()
+    const index = result.findIndex((value: FnMediaStreamVideoInfo): boolean => {
+      const replacementGuid = `${replacement.guid || ''}`.trim()
+      if (replacementGuid.length > 0 && `${value.guid || ''}`.trim() === replacementGuid) return true
+      return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
+        (value.index ?? 0) === (replacement.index ?? 0)
+    })
+    if (index >= 0) result[index] = replacement
+    else result.push(replacement)
+    return result
+  }
+
+  private mergeAudioStream(values: FnMediaStreamAudioInfo[], replacement: FnMediaStreamAudioInfo):
+    FnMediaStreamAudioInfo[] {
+    const result = values.slice()
+    const index = result.findIndex((value: FnMediaStreamAudioInfo): boolean => {
+      const replacementGuid = `${replacement.guid || ''}`.trim()
+      if (replacementGuid.length > 0 && `${value.guid || ''}`.trim() === replacementGuid) return true
+      return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
+        (value.index ?? 0) === (replacement.index ?? 0)
+    })
+    if (index >= 0) result[index] = replacement
+    else result.push(replacement)
+    return result
+  }
+
+  private mergeSubtitleStream(values: FnMediaStreamSubtitleInfo[], replacement: FnMediaStreamSubtitleInfo):
+    FnMediaStreamSubtitleInfo[] {
+    const result = values.slice()
+    const index = result.findIndex((value: FnMediaStreamSubtitleInfo): boolean => {
+      const replacementGuid = `${replacement.guid || ''}`.trim()
+      if (replacementGuid.length > 0 && `${value.guid || ''}`.trim() === replacementGuid) return true
+      return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
+        (value.index ?? 0) === (replacement.index ?? 0)
+    })
+    if (index >= 0) result[index] = replacement
+    else result.push(replacement)
+    return result
+  }
+
   getSeasons(seriesRef: MediaRef): Promise<MediaSeason[]> {
     return this.run('getSeasons', async (): Promise<MediaSeason[]> => {
       this.requireOwned(seriesRef, 'getSeasons')
@@ -491,41 +1078,9 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     return this.run('getEpisodes', async (): Promise<MediaPage<MediaEpisode>> => {
       this.requireOwned(request.seriesRef, 'getEpisodes')
       this.requireOwnedOptional(request.seasonRef, 'getEpisodes')
-      const source: FnMediaEpisodeItem[] = []
-      if (request.seasonRef) {
-        const episodes = await this.episodeItems(request.seasonRef.id)
-        episodes.forEach((item: FnMediaEpisodeItem): void => {
-          source.push(item)
-        })
-      } else {
-        let seasons: FnMediaSeasonItem[] = []
-        let usedSeriesEpisodeFallback = false
-        try {
-          seasons = await this.seasonItems(request.seriesRef.id)
-        } catch (_error) {
-          usedSeriesEpisodeFallback = true
-          const episodes = await this.episodeItems(request.seriesRef.id)
-          episodes.forEach((item: FnMediaEpisodeItem): void => {
-            source.push(item)
-          })
-        }
-        if (!usedSeriesEpisodeFallback && seasons.length === 0) {
-          const episodes = await this.episodeItems(request.seriesRef.id)
-          episodes.forEach((item: FnMediaEpisodeItem): void => {
-            source.push(item)
-          })
-        } else if (seasons.length > 0) {
-          for (let index = 0; index < seasons.length; index += 1) {
-            const seasonId = seasons[index].guid.trim()
-            if (seasonId.length > 0) {
-              const episodes = await this.episodeItems(seasonId)
-              episodes.forEach((item: FnMediaEpisodeItem): void => {
-                source.push(item)
-              })
-            }
-          }
-        }
-      }
+      const source = request.seasonRef
+        ? await this.episodeItems(request.seasonRef.id)
+        : await this.episodeItemsForSeries(request.seriesRef.id)
       await this.ensureGenres()
       const mapper = this.mapper()
       const visible = source.filter((item: FnMediaEpisodeItem): boolean => mapper.isVisibleItem(item))
@@ -600,9 +1155,12 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       const source = page.items
       await this.ensureGenres()
       const mapper = this.mapper()
-      const mapped = source
-        .filter((item: FnMediaItem): boolean => mapper.isVisibleItem(item) && mapper.matchesKinds(item, request.kinds))
-        .map((item: FnMediaItem): MediaSummary => mapper.latest(item))
+      const visible = source.filter((item: FnMediaItem): boolean =>
+        mapper.isVisibleItem(item) && mapper.matchesKinds(item, request.kinds))
+      const enriched = await Promise.all(visible.map((item: FnMediaItem): Promise<FeiniuVideoEnrichedCatalogItem> =>
+        this.enrichCatalogItem(item)))
+      const mapped = enriched.map((entry: FeiniuVideoEnrichedCatalogItem): MediaSummary =>
+        mapper.latest(entry.item, entry.context))
       const items = this.uniqueSummaries(mapped)
       return mapper.page(items, startIndex, limit, page.total, source.length)
     })
@@ -621,36 +1179,40 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       const libraries = (libraryResponse.data || []).filter((item: FnMediaLibraryItem): boolean => {
         return libraryMapper.isVisibleLibrary(item)
       })
-      const pages: FeiniuVideoLatestLibraryPage[] = []
-      let totalCount = 0
-      for (let index = 0; index < libraries.length; index += 1) {
-        const library = libraries[index]
-        try {
-          const payload = this.itemListPayload(
-            library.guid,
-            request.kinds,
-            startIndex,
-            Math.max(limit, FEINIU_HOME_LIBRARY_LIMIT),
-            [MediaCatalogSortField.DateCreated],
-            [MediaCatalogSortDirection.Descending]
-          )
-          const page = await this.itemPage(
-            '/v/api/v1/item/list', payload, startIndex, Math.max(limit, FEINIU_HOME_LIBRARY_LIMIT))
-          pages.push({ items: page.items, total: page.total })
-          totalCount += page.total
-        } catch (error) {
-          if (error instanceof FeiniuVideoAuthenticationError) {
-            throw error
+      const pages = await Promise.all(libraries.map(
+        async (library: FnMediaLibraryItem): Promise<FeiniuVideoLatestLibraryPage> => {
+          try {
+            const payload = this.itemListPayload(
+              library.guid,
+              request.kinds,
+              startIndex,
+              Math.max(limit, FEINIU_HOME_LIBRARY_LIMIT),
+              [MediaCatalogSortField.DateCreated],
+              [MediaCatalogSortDirection.Descending]
+            )
+            const page = await this.itemPage(
+              '/v/api/v1/item/list', payload, startIndex, Math.max(limit, FEINIU_HOME_LIBRARY_LIMIT))
+            return { items: page.items, total: page.total }
+          } catch (error) {
+            if (this.isAuthenticationError(error as Object)) throw error as Error
+            console.warn(`[FeiniuVideoCatalog] latest library failed library=${library.guid} ` +
+              `error=${(error as Error).message || 'unknown'}`)
+            return { items: [], total: 0 }
           }
-          pages.push({ items: [], total: 0 })
-        }
-      }
+        }))
+      let totalCount = 0
+      pages.forEach((page: FeiniuVideoLatestLibraryPage): void => {
+        totalCount += page.total
+      })
       await this.ensureGenres()
       const source = this.interleave(pages, limit)
       const mapper = this.mapper()
-      const mapped = source
-        .filter((item: FnMediaItem): boolean => mapper.isVisibleItem(item) && mapper.matchesKinds(item, request.kinds))
-        .map((item: FnMediaItem): MediaSummary => mapper.latest(item))
+      const visible = source.filter((item: FnMediaItem): boolean =>
+        mapper.isVisibleItem(item) && mapper.matchesKinds(item, request.kinds))
+      const enriched = await Promise.all(visible.map((item: FnMediaItem): Promise<FeiniuVideoEnrichedCatalogItem> =>
+        this.enrichCatalogItem(item)))
+      const mapped = enriched.map((entry: FeiniuVideoEnrichedCatalogItem): MediaSummary =>
+        mapper.latest(entry.item, entry.context))
       const items = this.uniqueSummaries(mapped).slice(0, limit)
       return mapper.page(items, startIndex, limit, totalCount, source.length)
     })
@@ -692,13 +1254,145 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   private async seasonItems(seriesId: string): Promise<FnMediaSeasonItem[]> {
     const response = await this.request<FnMediaListResp<FnMediaSeasonItem[]>>(
       `/v/api/v1/season/list/${encodeURIComponent(seriesId)}`, FeiniuVideoHttpMethod.Get)
-    return response.data || []
+    return (response.data || []).slice().sort((left: FnMediaSeasonItem, right: FnMediaSeasonItem): number =>
+      (left.season_number || 0) - (right.season_number || 0))
   }
 
   private async episodeItems(seasonId: string): Promise<FnMediaEpisodeItem[]> {
     const response = await this.request<FnMediaListResp<FnMediaEpisodeItem[]>>(
       `/v/api/v1/episode/list/${encodeURIComponent(seasonId)}`, FeiniuVideoHttpMethod.Get)
-    return response.data || []
+    return (response.data || []).slice().sort((left: FnMediaEpisodeItem, right: FnMediaEpisodeItem): number =>
+      (left.episode_number || 0) - (right.episode_number || 0))
+  }
+
+  private async episodeItemsForSeries(seriesId: string): Promise<FnMediaEpisodeItem[]> {
+    let seasons: FnMediaSeasonItem[] = []
+    try {
+      seasons = await this.seasonItems(seriesId)
+    } catch (error) {
+      if (this.isAuthenticationError(error as Object)) throw error as Error
+      return await this.episodeItems(seriesId)
+    }
+    if (seasons.length === 0) {
+      return await this.episodeItems(seriesId)
+    }
+    const episodeGroups = await Promise.all(seasons
+      .map((season: FnMediaSeasonItem): string => season.guid.trim())
+      .filter((seasonId: string): boolean => seasonId.length > 0)
+      .map((seasonId: string): Promise<FnMediaEpisodeItem[]> => this.episodeItems(seasonId)))
+    const result: FnMediaEpisodeItem[] = []
+    episodeGroups.forEach((episodes: FnMediaEpisodeItem[]): void => {
+      episodes.forEach((item: FnMediaEpisodeItem): void => {
+        result.push(item)
+      })
+    })
+    return result
+  }
+
+  private selectNextUpEpisode(episodes: FnMediaEpisodeItem[], playItems: FnMediaPlayItem[],
+    request: MediaNextUpRequest): FnMediaEpisodeItem | undefined {
+    if (episodes.length === 0) return undefined
+    const playByGuid = new Map<string, FnMediaPlayItem>()
+    const playOrder = new Map<string, number>()
+    playItems.forEach((item: FnMediaPlayItem, index: number): void => {
+      const guid = item.guid.trim()
+      if (guid.length > 0 && !playByGuid.has(guid)) {
+        playByGuid.set(guid, item)
+        playOrder.set(guid, index)
+      }
+    })
+
+    let resumableIndex = -1
+    let resumableTimestamp = -1
+    let resumableOrder = Number.MAX_VALUE
+    let latestPlayedIndex = -1
+    let latestPlayedTimestamp = -1
+    let latestPlayedOrder = Number.MAX_VALUE
+    let hasMatchedHistory = false
+    let latestLocalEvidenceIndex = -1
+
+    episodes.forEach((episode: FnMediaEpisodeItem, index: number): void => {
+      const history = playByGuid.get(episode.guid.trim())
+      const watched = this.episodeWatched(episode, history)
+      const position = this.episodePosition(episode, history)
+      const timestamp = Math.max(0, history?.watched_ts || 0)
+      const order = playOrder.get(episode.guid.trim()) ?? Number.MAX_VALUE
+      if (history) {
+        hasMatchedHistory = true
+        if (timestamp > latestPlayedTimestamp ||
+          (timestamp === latestPlayedTimestamp && order < latestPlayedOrder)) {
+          latestPlayedIndex = index
+          latestPlayedTimestamp = timestamp
+          latestPlayedOrder = order
+        }
+      } else if (watched || position > 0) {
+        latestLocalEvidenceIndex = index
+      }
+      if (request.enableResumable && !watched && position > 0 &&
+        (timestamp > resumableTimestamp ||
+          (timestamp === resumableTimestamp && order < resumableOrder) ||
+          (timestamp === resumableTimestamp && order === resumableOrder && index > resumableIndex))) {
+        resumableIndex = index
+        resumableTimestamp = timestamp
+        resumableOrder = order
+      }
+    })
+
+    if (resumableIndex >= 0) {
+      return this.applyEpisodePlayState(episodes[resumableIndex], playByGuid.get(episodes[resumableIndex].guid.trim()))
+    }
+    const evidenceIndex = hasMatchedHistory ? latestPlayedIndex : latestLocalEvidenceIndex
+    if (evidenceIndex >= 0) {
+      for (let index = evidenceIndex + 1; index < episodes.length; index += 1) {
+        const history = playByGuid.get(episodes[index].guid.trim())
+        if (!this.episodeWatched(episodes[index], history)) {
+          return this.applyEpisodePlayState(episodes[index], history)
+        }
+      }
+      return request.enableRewatching
+        ? this.applyEpisodePlayState(episodes[0], playByGuid.get(episodes[0].guid.trim())) : undefined
+    }
+
+    const firstUnwatchedIndex = episodes.findIndex((episode: FnMediaEpisodeItem): boolean =>
+      !this.episodeWatched(episode, playByGuid.get(episode.guid.trim())))
+    if (firstUnwatchedIndex < 0) {
+      return request.enableRewatching
+        ? this.applyEpisodePlayState(episodes[0], playByGuid.get(episodes[0].guid.trim())) : undefined
+    }
+    if (firstUnwatchedIndex === 0 && request.disableFirstEpisode) return undefined
+    return this.applyEpisodePlayState(
+      episodes[firstUnwatchedIndex], playByGuid.get(episodes[firstUnwatchedIndex].guid.trim()))
+  }
+
+  private episodeWatched(item: FnMediaEpisodeItem, history?: FnMediaPlayItem): boolean {
+    const watched = history?.watched !== undefined ? history.watched : item.watched
+    const progress = history?.media_stream?.progress !== undefined
+      ? history.media_stream.progress : item.media_stream?.progress
+    return (watched || 0) > 0 || (progress || 0) >= 100
+  }
+
+  private episodePosition(item: FnMediaEpisodeItem, history?: FnMediaPlayItem): number {
+    const historyPosition = Math.max(0, history?.ts || 0, history?.media_stream?.current_time || 0)
+    const itemPosition = Math.max(0, item.ts || 0, item.media_stream?.current_time || 0)
+    const progress = Math.max(0, history?.media_stream?.progress || item.media_stream?.progress || 0)
+    return Math.max(historyPosition, itemPosition, progress)
+  }
+
+  private applyEpisodePlayState(item: FnMediaEpisodeItem, history?: FnMediaPlayItem): FnMediaEpisodeItem {
+    if (!history) return item
+    item.watched = history.watched !== undefined ? history.watched : item.watched
+    item.watched_ts = history.watched_ts !== undefined ? history.watched_ts : item.watched_ts
+    item.ts = history.ts !== undefined ? history.ts : item.ts
+    item.duration = history.duration !== undefined ? history.duration : item.duration
+    if (history.media_stream) {
+      const stream = item.media_stream || {}
+      stream.progress = history.media_stream.progress !== undefined
+        ? history.media_stream.progress : stream.progress
+      stream.current_time = history.media_stream.current_time !== undefined
+        ? history.media_stream.current_time : stream.current_time
+      item.media_stream = stream
+    }
+    return item
   }
 
   private itemListPayload(ancestorGuid: string, kinds: MediaRefKind[], startIndex: number,
@@ -786,8 +1480,10 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     const sortedPlayItems = playItems.slice().sort((left: FnMediaPlayItem, right: FnMediaPlayItem): number => {
       return this.recommendationTimestamp(right) - this.recommendationTimestamp(left)
     })
-    sortedPlayItems.forEach((playItem: FnMediaPlayItem): void => {
-      const item = this.recommendationSignalItem(playItem)
+    const signalItems = await Promise.all(sortedPlayItems.map(
+      (playItem: FnMediaPlayItem): Promise<FnMediaItem> => this.recommendationSignalItem(playItem)))
+    sortedPlayItems.forEach((playItem: FnMediaPlayItem, index: number): void => {
+      const item = signalItems[index]
       if (item.guid.length === 0 || seen.has(item.guid)) return
       const progress = this.recommendationProgress(playItem)
       if ((playItem.watched || 0) > 0 || progress >= 95) {
@@ -811,26 +1507,18 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     return new FeiniuVideoRecommendationSignals(unfinished, completed)
   }
 
-  private recommendationSignalItem(item: FnMediaPlayItem): FnMediaItem {
+  private async recommendationSignalItem(item: FnMediaPlayItem): Promise<FnMediaItem> {
     const type = `${item.type || ''}`.trim().toLowerCase()
     const isEpisode = type === 'episode'
-    const guid = `${isEpisode ? (item.ancestor_guid || item.parent_guid || item.guid) : item.guid}`.trim()
-    const result = {} as FnMediaItem
-    result.guid = guid
-    result.title = `${isEpisode ?
-      (FeiniuVideoCatalogMapper.seriesTitle(item) || item.title) : item.title}`.trim()
-    result.type = isEpisode ? 'TV' : item.type
-    result.poster = item.poster
-    result.watched = item.watched
-    result.watched_ts = item.watched_ts
-    result.is_favorite = item.is_favorite
-    if (item.media_stream) {
-      const stream = {} as FnMediaItemStream
-      stream.progress = item.media_stream.progress
-      stream.current_time = item.media_stream.current_time
-      result.media_stream = stream
+    if (isEpisode) {
+      const enriched = await this.enrichCatalogItem(this.playCatalogItem(item), MediaRefKind.Episode)
+      const seriesId = `${enriched.context.seriesId || ''}`.trim()
+      if (seriesId.length > 0) {
+        const series = await this.optionalItemDetail(seriesId)
+        if (series) return series
+      }
     }
-    return result
+    return this.playCatalogItem(item)
   }
 
   private recommendationProgress(item: FnMediaPlayItem): number {
@@ -844,24 +1532,15 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
 
   private async recommendationDetail(item: FnMediaItem): Promise<FnMediaItem> {
     try {
-      const response = await this.request<FnMediaListResp<FnMediaItemDetailResp>>(
-        `/v/api/v1/item/${encodeURIComponent(item.guid)}`, FeiniuVideoHttpMethod.Get)
-      const detail = response.data
-      if (!detail || `${detail.guid || ''}`.trim().length === 0) {
-        return item
-      }
-      detail.poster = detail.poster || item.poster
-      detail.vote_average = detail.vote_average || item.vote_average
-      detail.release_date = detail.release_date || item.release_date
-      detail.first_air_date = detail.first_air_date || item.first_air_date
-      detail.genres = detail.genres || item.genres
-      detail.watched = detail.watched === undefined ? item.watched : detail.watched
-      detail.is_favorite = detail.is_favorite === undefined ? item.is_favorite : detail.is_favorite
+      const detail = await this.itemDetail(item.guid)
+      this.applyItemFallbacks(detail, item)
       return detail
     } catch (error) {
       if (this.isAuthenticationError(error as Object)) {
         throw error as Error
       }
+      console.warn(`[FeiniuVideoCatalog] recommendation detail failed item=${item.guid} ` +
+        `error=${(error as Error).message || 'unknown'}`)
       return item
     }
   }

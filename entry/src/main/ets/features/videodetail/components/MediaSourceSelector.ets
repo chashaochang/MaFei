@@ -257,6 +257,11 @@ export struct MediaSourceSelector {
     this.isShowingOptions = false
   }
 
+  private optionsMaxHeight(): number {
+    const deviceHeight = this.appUIState.deviceHeight > 0 ? this.appUIState.deviceHeight : 800
+    return Math.max(180, Math.floor(deviceHeight * 0.7) - 72)
+  }
+
   @Builder
   private optionsContent(blurFallback: boolean) {
     Scroll() {
@@ -276,7 +281,7 @@ export struct MediaSourceSelector {
       .alignSelf(ItemAlign.Center)
     }
     .width('100%')
-    .height('100%')
+    .constraintSize({ maxHeight: this.optionsMaxHeight() })
     .scrollable(ScrollDirection.Vertical)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.None)
@@ -334,7 +339,7 @@ export struct MediaSourceSelector {
         ))
         .onClick(() => this.openOptions())
         .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
-          height: '70%',
+          height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') },
@@ -359,7 +364,7 @@ export struct MediaSourceSelector {
         ))
         .onClick(() => this.openOptions())
         .bindSheet($$this.isShowingOptions, this.optionsContent(true), {
-          height: '70%',
+          height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') },
@@ -383,7 +388,7 @@ export struct MediaSourceSelector {
         ))
         .onClick(() => this.openOptions())
         .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
-          height: '70%',
+          height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') },
@@ -408,7 +413,7 @@ export struct MediaSourceSelector {
         ))
         .onClick(() => this.openOptions())
         .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
-          height: '70%',
+          height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') }

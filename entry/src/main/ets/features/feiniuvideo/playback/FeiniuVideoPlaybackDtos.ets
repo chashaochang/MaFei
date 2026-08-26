@@ -86,6 +86,9 @@ export interface FnMediaOfficialStreamReq {
 
 export interface FnMediaOfficialStreamResponseHeader {
   'User-Agent'?: string[]
+  'Cookie'?: string[]
+  'Referer'?: string[]
+  'Authorization'?: string[]
 }
 
 export interface FnMediaOfficialStreamDirectLinkQuality {
@@ -103,6 +106,7 @@ export interface FnMediaOfficialStreamData {
   subtitle_streams?: FnMediaStreamSubtitleInfo[]
   header?: FnMediaOfficialStreamResponseHeader
   direct_link_qualities?: FnMediaOfficialStreamDirectLinkQuality[]
+  qualities?: FnMediaOfficialStreamDirectLinkQuality[]
 }
 
 export interface FnMediaOfficialStreamResp {

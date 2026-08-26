@@ -218,6 +218,9 @@ export struct VideoDetailPage {
   @Local heroBackdropPixelMap?: image.PixelMap
   @Local heroFeatheredPixelMap?: image.PixelMap
   @Local titleCollapseProgress: number = 0
+  @Local heroTitleInitialCenterY: number = 0
+  @Local collapsedTitleGlobalX: number = 0
+  @Local collapsedTitleCenterY: number = 0
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
   private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
@@ -584,13 +587,25 @@ export struct VideoDetailPage {
     }
   }
 
+  private normalizedTitlePhase(start: number): number {
+    if (this.titleCollapseProgress <= start) {
+      return 0
+    }
+    return Math.min(1, (this.titleCollapseProgress - start) / (1 - start))
+  }
+
+  private easedTitlePhase(start: number): number {
+    const progress = this.normalizedTitlePhase(start)
+    return progress * progress * (3 - 2 * progress)
+  }
+
   private heroTitleScale(): number {
     const collapsedScale = this.ui.isMovie && this.ui.logo.length > 0 ? 0.28 : 0.62
-    return 1 - (1 - collapsedScale) * this.titleCollapseProgress
+    return 1 - (1 - collapsedScale) * this.easedTitlePhase(0.42)
   }
 
   private heroTitleOpacity(): number {
-    const fadeStart = 0.78
+    const fadeStart = 0.9
     if (this.titleCollapseProgress <= fadeStart) {
       return 1
     }
@@ -598,7 +613,7 @@ export struct VideoDetailPage {
   }
 
   private collapsedTitleOpacity(): number {
-    const fadeStart = 0.74
+    const fadeStart = 0.88
     if (this.titleCollapseProgress <= fadeStart) {
       return 0
     }
@@ -611,15 +626,41 @@ export struct VideoDetailPage {
 
   private heroLogoTranslateX(): number {
     const viewportWidth = this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
-    const targetCenter = 92
-    const moveStart = 0.16
-    const moveProgress = this.titleCollapseProgress <= moveStart ? 0 :
-      (this.titleCollapseProgress - moveStart) / (1 - moveStart)
-    return -Math.max(0, viewportWidth / 2 - targetCenter) * Math.min(1, moveProgress)
+    const logoWidth = 76 * 80 / 31
+    const targetLeft = this.collapsedTitleGlobalX > 0 ? this.collapsedTitleGlobalX : 68
+    const targetCenter = targetLeft + logoWidth * 0.28 / 2
+    return (targetCenter - viewportWidth / 2) * this.easedTitlePhase(0.24)
   }
 
   private heroTitleTranslateY(): number {
-    return -12 * this.titleCollapseProgress
+    if (this.heroTitleInitialCenterY <= 0 || this.collapsedTitleCenterY <= 0) {
+      return -12 * this.easedTitlePhase(0.24)
+    }
+    const collapseEndOffset = 290
+    const finalOffset = this.collapsedTitleCenterY -
+      (this.heroTitleInitialCenterY - collapseEndOffset)
+    return finalOffset * this.easedTitlePhase(0.24)
+  }
+
+  private updateHeroTitleArea(area: Area): void {
+    if (this.titleCollapseProgress > 0.02) {
+      return
+    }
+    const centerY = Number(area.globalPosition.y) + Number(area.height) / 2
+    if (centerY > 0 && Math.abs(centerY - this.heroTitleInitialCenterY) > 0.5) {
+      this.heroTitleInitialCenterY = centerY
+    }
+  }
+
+  private updateCollapsedTitleArea(area: Area): void {
+    const globalX = Number(area.globalPosition.x)
+    const centerY = Number(area.globalPosition.y) + Number(area.height) / 2
+    if (globalX > 0 && Math.abs(globalX - this.collapsedTitleGlobalX) > 0.5) {
+      this.collapsedTitleGlobalX = globalX
+    }
+    if (centerY > 0 && Math.abs(centerY - this.collapsedTitleCenterY) > 0.5) {
+      this.collapsedTitleCenterY = centerY
+    }
   }
 
   private legacyMediaRef(id: string, isTvShows: boolean): MediaRef | undefined {
@@ -735,6 +776,9 @@ export struct VideoDetailPage {
       .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
       .translate({ x: this.heroLogoTranslateX(), y: this.heroTitleTranslateY() })
       .opacity(this.heroTitleOpacity())
+      .onAreaChange((_oldValue: Area, newValue: Area): void => {
+        this.updateHeroTitleArea(newValue)
+      })
     } else {
       Column({ space: 6 }) {
         if (this.ui.subtitle.length > 0) {
@@ -817,6 +861,9 @@ export struct VideoDetailPage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '100%' })
+        .onAreaChange((_oldValue: Area, newValue: Area): void => {
+          this.updateCollapsedTitleArea(newValue)
+        })
     }
     .width('calc(100% - 136vp)')
     .height('100%')
@@ -853,19 +900,6 @@ export struct VideoDetailPage {
           this.vm.changeFavorite()
         }
       })
-      if (this.ui.isTvShows) {
-        NativeDetailIconAction({
-          symbol: this.ui.isChasing ? $r('sys.symbol.list_bullet_square_fill') :
-            $r('sys.symbol.list_bullet_square'),
-          buttonSize: 44,
-          accessibilityLabel: this.ui.isChasing ? '取消追剧' : '追剧',
-          selected: this.ui.isChasing,
-          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-          onAction: () => {
-            this.vm.changeChasingState()
-          }
-        })
-      }
       NativeDetailIconAction({
         icon: $r('app.media.ic_check'),
         buttonSize: 44,
@@ -923,27 +957,6 @@ export struct VideoDetailPage {
       .onClick(() => {
         this.vm.changeFavorite()
       })
-
-      if (this.ui.isTvShows) {
-        Button() {
-          Image(this.ui.isChasing ? $r('app.media.history') : $r('app.media.add'))
-            .fillColor(this.ui.isChasing ? $r('app.color.color_main') : $r('app.color.text_1'))
-            .width(20)
-            .height(20)
-        }
-        .width(44)
-        .height(44)
-        .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-        .borderColor(this.ui.isChasing ? $r('app.color.color_main') :
-          AppThemeSurfaceResolver.contentOutline(
-            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-        .borderRadius(22)
-        .backgroundColor(this.secondarySurfaceBackground())
-        .onClick(() => {
-          this.vm.changeChasingState()
-        })
-      }
 
       Button() {
         Image($r('app.media.ic_check'))

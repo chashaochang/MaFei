@@ -9,7 +9,6 @@ import {
 } from '../../../media/MediaProviderSession'
 import { MediaRef } from '../../../media/MediaRef'
 import {
-  MediaPlaybackEngineHint,
   MediaPlaybackHttpResource,
   MediaPlaybackItemKind,
   MediaPlaybackPreparedStreams,
@@ -46,7 +45,6 @@ import {
 } from '../account/FeiniuVideoSessionService'
 import {
   FnMediaEpisodeItem,
-  FnMediaItem,
   FnMediaItemDetailResp,
   FnMediaListResp
 } from '../catalog/FeiniuVideoDtos'
@@ -90,6 +88,11 @@ export interface FeiniuVideoPlaybackService {
   request<T>(request: FeiniuVideoApiRequest): Promise<T>
   access(): FeiniuVideoPlaybackAccess
   loadText(resource: MediaPlaybackHttpResource): Promise<string>
+}
+
+interface FeiniuVideoPlaybackHierarchy {
+  readonly seriesId?: string
+  readonly seriesName?: string
 }
 
 export class FeiniuVideoPlaybackApiService implements FeiniuVideoPlaybackService {
@@ -230,9 +233,17 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
   async resolveSource(request: MediaPlaybackResolveRequest): Promise<MediaPlaybackSource> {
     this.requireOwnedRef(request.ref, 'resolveSource')
     const item = await this.getItem(request.ref.id)
-    const preferredMediaGuid = `${request.mediaSourceId || item.media_guid || item.video_guid || ''}`.trim()
-    const playInfo = await this.getPlayInfo(request.ref.id, preferredMediaGuid)
-    const streamData = await this.getStreamList(request.ref.id)
+    const explicitlySelectedMediaGuid = `${request.mediaSourceId || ''}`.trim()
+    const supplemental = await Promise.all([
+      this.getPlayInfo(request.ref.id, explicitlySelectedMediaGuid),
+      this.getStreamList(request.ref.id),
+      this.playbackHierarchy(item)
+    ])
+    const playInfo = supplemental[0] as FnMediaPlayInfoResp
+    const streamData = supplemental[1] as FnMediaStreamListData
+    const hierarchy = supplemental[2] as FeiniuVideoPlaybackHierarchy
+    const preferredMediaGuid = `${explicitlySelectedMediaGuid || playInfo.data?.media_guid ||
+      item.media_guid || ''}`.trim()
 
     const file = this.pickFile(streamData.files || [], preferredMediaGuid || playInfo.data?.media_guid || '')
     const video = this.pickVideo(
@@ -271,7 +282,7 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     let playLink = mapper.relativePlayLink(videoUrl)
     let resolution = `${video?.resolution_type || ''}`.trim()
     let bitrate = requestedBitrate ?? video?.bps ?? 0
-    const strmSource = this.isStrmFile(file)
+    const strmSource = this.isStrmFile(file, item)
     // Third-party STRM backends can rate-limit or flag parallel Range traffic.
     // Keep the fallback media/range path single-connection as well.
     const multiConnectionAllowed = !strmSource
@@ -362,7 +373,9 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
       allowInsecureTls: allowInsecureTls,
       startTimeTicks: startTimeTicks,
       maxStreamingBitrate: request.maxStreamingBitrate,
-      engineHint: request.engineHint
+      engineHint: request.engineHint,
+      seriesId: hierarchy.seriesId,
+      seriesName: hierarchy.seriesName
     })
   }
 
@@ -501,7 +514,8 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
   private async resolveStrmDirectLink(mediaGuid: string): Promise<MediaPlaybackHttpResource | undefined> {
     try {
       const streamInfo = await this.getOfficialStreamInfo(mediaGuid)
-      const url = this.pickOfficialDirectLink(streamInfo.direct_link_qualities)
+      const directUrl = this.pickOfficialDirectLink(streamInfo.direct_link_qualities)
+      const url = directUrl.length > 0 ? directUrl : this.pickOfficialDirectLink(streamInfo.qualities)
       if (url.length === 0) {
         return undefined
       }
@@ -562,36 +576,78 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     if (streamInfo.header === undefined) {
       return []
     }
-    // ArkTS does not allow bracket access on a typed field. Follow the copied
-    // fnOS header parser so server-provided keys such as `User-Agent` remain
-    // case-insensitive and are not lost during DTO mapping.
     const headers = streamInfo.header as Object as Record<string, Object | string | string[]>
+    const result: MediaPlaybackRequestHeader[] = []
     const keys = Object.keys(headers)
     for (let index = 0; index < keys.length; index += 1) {
-      const key = keys[index]
-      if (key.toLowerCase() !== 'user-agent') {
-        continue
-      }
+      const key = keys[index].trim()
+      if (key.length === 0) continue
       const rawValue = headers[key]
       const values: string[] = Array.isArray(rawValue)
         ? rawValue.map((item: string): string => `${item || ''}`)
         : [`${rawValue || ''}`]
-      for (const candidate of values) {
-        const value = candidate.trim()
-        if (value.length > 0) {
-          return [{ name: 'User-Agent', value: value }]
+      const normalizedValues = values.map((candidate: string): string => candidate.trim())
+        .filter((candidate: string): boolean => candidate.length > 0)
+      if (normalizedValues.length === 0) continue
+      result.push({
+        name: key,
+        value: key.toLowerCase() === 'cookie'
+          ? normalizedValues.join('; ') : normalizedValues.join(', ')
+      })
+    }
+    return result
+  }
+
+  private async playbackHierarchy(item: FnMediaItemDetailResp): Promise<FeiniuVideoPlaybackHierarchy> {
+    const type = `${item.type || ''}`.trim().toLowerCase()
+    if (type !== 'episode' && (item.episode_number || 0) <= 0) {
+      return {}
+    }
+    let seriesName = `${item.tv_title || ''}`.trim()
+    const parentId = `${item.parent_guid || ''}`.trim()
+    if (parentId.length === 0) {
+      return { seriesName: seriesName || undefined }
+    }
+    try {
+      const parent = await this.getItem(parentId)
+      const parentType = `${parent.type || ''}`.trim().toLowerCase()
+      if (parentType === 'tv' || parentType === 'series') {
+        seriesName = seriesName || `${parent.title || item.parent_title || ''}`.trim()
+        return {
+          seriesId: parent.guid.trim() || parentId,
+          seriesName: seriesName || undefined
         }
       }
+      if (parentType !== 'season') {
+        return { seriesName: seriesName || undefined }
+      }
+      const season = parent
+      const seriesParentId = `${season.parent_guid || ''}`.trim()
+      const libraryId = `${season.ancestor_guid || ''}`.trim()
+      const seriesId = seriesParentId.length > 0 && seriesParentId !== libraryId ? seriesParentId : ''
+      seriesName = seriesName || `${season.parent_title || ''}`.trim()
+      if (seriesName.length === 0 && seriesId.length > 0) {
+        const series = await this.getItem(seriesId)
+        seriesName = `${series.title || ''}`.trim()
+      }
+      return {
+        seriesId: seriesId || undefined,
+        seriesName: seriesName || undefined
+      }
+    } catch (error) {
+      console.warn(`[FeiniuVideoPlayback] hierarchy failed item=${item.guid} ` +
+        `error=${(error as Error).message || 'unknown'}`)
+      return { seriesName: seriesName || undefined }
     }
-    return []
   }
 
   private async getItem(itemId: string): Promise<FnMediaItemDetailResp> {
+    const normalizedId = itemId.trim()
     const response = await this.request<FnMediaListResp<FnMediaItemDetailResp>>(
-      `/v/api/v1/item/${encodeURIComponent(itemId)}`,
+      `/v/api/v1/item/${encodeURIComponent(normalizedId)}`,
       FeiniuVideoHttpMethod.Get
     )
-    if (!response.data || `${response.data.guid || ''}`.trim().length === 0) {
+    if (!response.data || `${response.data.guid || ''}`.trim() !== normalizedId) {
       throw new Error('NetworkFailure')
     }
     return response.data
@@ -704,8 +760,8 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     ))
   }
 
-  private isStrmFile(file: FnMediaStreamFileInfo | undefined): boolean {
-    const fileName = `${file?.file_name || file?.path || ''}`.trim().toLowerCase()
+  private isStrmFile(file: FnMediaStreamFileInfo | undefined, item?: FnMediaItemDetailResp): boolean {
+    const fileName = `${file?.file_name || file?.path || item?.file_name || ''}`.trim().toLowerCase()
     return fileName.endsWith('.strm')
   }
 

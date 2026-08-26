@@ -22,6 +22,7 @@ import {
   OverlaySurfaceRole
 } from '../../theme/AppThemeOverlayPolicy';
 import { image } from '@kit.ImageKit';
+import { ConfigurationConstant } from '@kit.AbilityKit';
 import {
   HomeFeedTabItem,
   HomeLibraryChipSelector
@@ -70,7 +71,9 @@ struct NativeSeasonPlayAction {
       .justifyContent(FlexAlign.Center)
     }
     .height(50)
+    .padding(0)
     .borderRadius(25)
+    .clip(true)
     .buttonStyle(ButtonStyleMode.TEXTUAL)
     .backgroundColor(Color.Transparent)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
@@ -84,40 +87,29 @@ struct NativeSeasonPlayAction {
 
 @ComponentV2
 struct NativeSeasonIconAction {
-  @Require @Param label: string
   @Require @Param accessibilityLabel: string
   @Require @Param selected: boolean
   @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
   build() {
-    Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        Image($r('app.media.ic_check'))
-          .width(22)
-          .height(22)
-          .renderMode(ImageRenderMode.Template)
-          .interpolation(ImageInterpolation.High)
-          .fillColor(this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
-      }
-      .width(50)
-      .height(50)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
-      .accessibilityText(this.accessibilityLabel)
-      .onClick(() => {
-        this.onAction()
-      })
-
-      Text(this.label)
-        .fontSize(12)
-        .fontColor($r('sys.color.font_secondary'))
-        .maxLines(1)
-        .textAlign(TextAlign.Center)
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      Image($r('app.media.ic_check'))
+        .width(22)
+        .height(22)
+        .renderMode(ImageRenderMode.Template)
+        .interpolation(ImageInterpolation.High)
+        .fillColor(this.selected ? $r('app.color.color_main') : $r('sys.color.icon_primary'))
     }
-    .width(88)
-    .alignItems(HorizontalAlign.Center)
+    .width(44)
+    .height(44)
+    .buttonStyle(ButtonStyleMode.TEXTUAL)
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
+    .accessibilityText(this.accessibilityLabel)
+    .onClick(() => {
+      this.onAction()
+    })
   }
 }
 
@@ -275,18 +267,6 @@ export struct SeasonDetailPage {
     return option
   }
 
-  private posterImageOption(): ImageKnifeOption {
-    const option = this.imageOption(this.ui.imageRef, this.ui.image)
-    option.border = {
-      width: AppThemeSurfaceResolver.outlineWidth(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
-      radius: 12,
-      color: AppThemeSurfaceResolver.mediaOutline(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
-    }
-    return option
-  }
-
   private legacyMediaRef(id: string, kind: MediaRefKind): MediaRef | undefined {
     const normalizedId = id.trim()
     if (normalizedId.length === 0) {
@@ -412,50 +392,46 @@ export struct SeasonDetailPage {
     }
     .width('100%')
     .height('100%')
+    .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
     .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder
   private nativeHeroMetadata() {
-    Row({ space: 16 }) {
-      ImageKnifeComponent({
-        imageKnifeOption: this.posterImageOption()
-      })
-        .width(96)
-        .height(144)
+    Column({ space: 10 }) {
+      Text(this.ui.seasonName)
+        .fontSize(14)
+        .fontColor(Color.White)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Column({ space: 10 }) {
-        Text(this.ui.seasonName)
-          .fontSize(14)
-          .fontColor(Color.White)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.ui.seriesName)
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Text(this.ui.seriesName)
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
+      Scroll() {
         Text(this.ui.info)
           .fontSize(13)
           .fontColor(Color.White)
-          .maxLines(2)
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .lineSpacing({ value: 10, unit: LengthUnit.VP })
       }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
     }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 16 })
-    .alignItems(VerticalAlign.Bottom)
+    .padding({ left: 16, right: 16, bottom: 8 })
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private nativeDetailActions() {
-    Column({ space: 14 }) {
+    Row({ space: 8 }) {
       NativeSeasonPlayAction({
         label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
         systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
@@ -463,21 +439,16 @@ export struct SeasonDetailPage {
           this.vm.playFirst()
         }
       })
-        .width('100%')
+        .layoutWeight(1)
 
-      Row() {
-        NativeSeasonIconAction({
-          label: this.ui.played ? '已观看' : '标记已看',
-          accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
-          selected: this.ui.played,
-          systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-          onAction: () => {
-            this.vm.changePlayedState()
-          }
-        })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
+      NativeSeasonIconAction({
+        accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+        selected: this.ui.played,
+        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+        onAction: () => {
+          this.vm.changePlayedState()
+        }
+      })
     }
     .width('100%')
     .padding({ left: 16, right: 16 })

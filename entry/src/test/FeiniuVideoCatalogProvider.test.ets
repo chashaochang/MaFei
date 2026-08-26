@@ -23,6 +23,7 @@ import {
   FnMediaGenreItem,
   FnMediaItem,
   FnMediaItemDetailResp,
+  FnMediaItemFile,
   FnMediaItemListResp,
   FnMediaLibraryItem,
   FnMediaListResp,
@@ -32,14 +33,20 @@ import {
   FnMediaPlayItem,
   FnMediaSeasonItem
 } from '../main/ets/features/feiniuvideo/catalog/FeiniuVideoDtos'
-import { FnMediaStreamListResp } from
+import {
+  FnMediaOfficialStreamReq,
+  FnMediaOfficialStreamResp,
+  FnMediaPlayInfoResp,
+  FnMediaStreamListResp
+} from
   '../main/ets/features/feiniuvideo/playback/FeiniuVideoPlaybackDtos'
 import {
   FeiniuVideoApiRequest,
   FeiniuVideoAuthenticationError,
   FeiniuVideoHttpMethod,
   FeiniuVideoRequestError,
-  FeiniuVideoRequestFailureKind
+  FeiniuVideoRequestFailureKind,
+  FnMediaUserInfoResp
 } from '../main/ets/features/feiniuvideo/network/FeiniuVideoApiModels'
 
 interface CountFixture extends Record<string, number> {
@@ -79,6 +86,16 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
     new Map<string, FnMediaListResp<FnMediaItemDetailResp>>()
   personListResponse: FnMediaPersonListResp = { code: 0, msg: '', data: { list: [], total: 0 } }
   streamListResponse: FnMediaStreamListResp = { code: 0, msg: '', data: {} }
+  itemFileResponses: Map<string, FnMediaListResp<FnMediaItemFile[]>> =
+    new Map<string, FnMediaListResp<FnMediaItemFile[]>>()
+  playInfoResponse: FnMediaPlayInfoResp = { code: 0, msg: '', data: {} }
+  userInfoResponse: FnMediaUserInfoResp = {
+    code: 0,
+    msg: '',
+    data: { username: 'tester', sources: [{ source_name: 'tester' }] }
+  }
+  officialStreamResponses: Map<string, FnMediaOfficialStreamResp> =
+    new Map<string, FnMediaOfficialStreamResp>()
   seasonResponses: Map<string, FnMediaListResp<FnMediaSeasonItem[]>> =
     new Map<string, FnMediaListResp<FnMediaSeasonItem[]>>()
   episodeResponses: Map<string, FnMediaListResp<FnMediaEpisodeItem[]>> =
@@ -112,6 +129,16 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
     }
     if (request.path === '/v/api/v1/search/list') return this.searchResponse as T
     if (request.path === '/v/api/v1/tag/genres') return this.genreResponse as T
+    if (request.path === '/v/api/v1/play/info') return this.playInfoResponse as T
+    if (request.path === '/v/api/v1/user/info') return this.userInfoResponse as T
+    if (request.path === '/v/api/v1/stream') {
+      const payload = JSON.parse(request.bodyText) as FnMediaOfficialStreamReq
+      return (this.officialStreamResponses.get(payload.media_guid) || this.emptyOfficialStreamResponse()) as T
+    }
+    if (request.path.startsWith('/v/api/v1/media/itemfile/')) {
+      return (this.itemFileResponses.get(this.pathId(request.path)) ||
+        this.emptyItemFileResponse()) as T
+    }
     if (request.path.startsWith('/v/api/v1/item/')) {
       return (this.detailResponses.get(this.pathId(request.path)) || this.detailResponse) as T
     }
@@ -153,6 +180,14 @@ class FakeFeiniuVideoCatalogService implements FeiniuVideoCatalogService {
   }
 
   private emptyEpisodeResponse(): FnMediaListResp<FnMediaEpisodeItem[]> {
+    return { code: 0, msg: '', data: [] }
+  }
+
+  private emptyOfficialStreamResponse(): FnMediaOfficialStreamResp {
+    return { code: 0, msg: '', data: {} }
+  }
+
+  private emptyItemFileResponse(): FnMediaListResp<FnMediaItemFile[]> {
     return { code: 0, msg: '', data: [] }
   }
 
@@ -255,13 +290,6 @@ export default function feiniuVideoCatalogProviderTest() {
       const recommendations = await provider.recommendations({ categoryLimit: 4, itemLimit: 4, resultLimit: 3 })
       const requestCount = service.requests.length
       const cached = await provider.recommendations({ categoryLimit: 4, itemLimit: 4, resultLimit: 3 })
-      const nextUp = await provider.nextUp({
-        seriesRef: ref(owner, 'series-1', MediaRefKind.Series),
-        limit: 12,
-        disableFirstEpisode: false,
-        enableResumable: true,
-        enableRewatching: false
-      })
 
       const itemRequests = requestsFor(service, '/v/api/v1/item/list')
       const favoriteRequests = requestsFor(service, '/v/api/v1/favorite/list')
@@ -276,9 +304,8 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(itemRequests[0].bodyText.indexOf('"sort_column":"vote_average"') >= 0).assertTrue()
       expect(itemRequests[1].bodyText.indexOf('"sort_column":"create_time"') >= 0).assertTrue()
       const series = recommendations.find((entry: MediaSummary): boolean => entry.ref.id === 'series-match')
-      expect(series?.backdropImage?.url.indexOf('/series-backdrop.jpg') >= 0).assertTrue()
-      expect(series?.logoImage?.url.indexOf('/series-logo.png') >= 0).assertTrue()
-      expect(nextUp.items.length).assertEqual(0)
+      expect((series?.backdropImage?.url || '').indexOf('/series-backdrop.jpg') >= 0).assertTrue()
+      expect((series?.logoImage?.url || '').indexOf('/series-logo.png') >= 0).assertTrue()
     })
 
     it('loadsRealLibrariesAndCountsWhileHidingLiveCapability', 0, async () => {
@@ -351,6 +378,170 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(page.items[0].episodeNumber).assertEqual(2)
       expect(page.items[0].userState.watched.playedPercentage).assertEqual(25)
       expect(service.requests[0].path).assertEqual('/v/api/v1/play/list')
+    })
+
+    it('selectsResumableThenNextEpisodeForASeries', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.seasonResponses.set('series-1', {
+        code: 0,
+        msg: '',
+        data: [{
+          guid: 'season-1', title: 'Season 1', type: 'Season', parent_guid: 'series-1',
+          ancestor_guid: 'library-tv', season_number: 1
+        }]
+      })
+      service.episodeResponses.set('season-1', {
+        code: 0,
+        msg: '',
+        data: [
+          { guid: 'episode-1', title: 'Episode 1', type: 'Episode', parent_guid: 'season-1', episode_number: 1 },
+          { guid: 'episode-2', title: 'Episode 2', type: 'Episode', parent_guid: 'season-1', episode_number: 2 },
+          { guid: 'episode-3', title: 'Episode 3', type: 'Episode', parent_guid: 'season-1', episode_number: 3 }
+        ]
+      })
+      service.detailResponses.set('season-1', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'season-1', title: 'Season 1', type: 'Season', parent_guid: 'series-1',
+          ancestor_guid: 'library-tv', parent_title: 'Series One'
+        }
+      })
+      service.detailResponses.set('series-1', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'series-1', title: 'Series One', type: 'TV', poster: '/series.jpg',
+          backdrops: '/series-backdrop.jpg', logos: '/series-logo.png'
+        }
+      })
+      service.detailResponses.set('episode-2', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'episode-2', title: 'Episode 2', type: 'Episode', parent_guid: 'season-1',
+          ancestor_guid: 'library-tv', season_number: 1, episode_number: 2
+        }
+      })
+      service.detailResponses.set('episode-3', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'episode-3', title: 'Episode 3', type: 'Episode', parent_guid: 'season-1',
+          ancestor_guid: 'library-tv', season_number: 1, episode_number: 3
+        }
+      })
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [{
+          guid: 'episode-2', title: 'Episode 2', type: 'Episode', parent_guid: 'season-1',
+          season_number: 1, episode_number: 2, watched_ts: 200, watched: 0, duration: 2400,
+          media_stream: { progress: 25, current_time: 600 }
+        }]
+      }
+
+      const resumable = await new FeiniuVideoCatalogProvider(owner, service).nextUp({
+        seriesRef: ref(owner, 'series-1', MediaRefKind.Series),
+        limit: 1,
+        disableFirstEpisode: false,
+        enableResumable: true,
+        enableRewatching: false
+      })
+
+      expect(resumable.items.length).assertEqual(1)
+      expect(resumable.items[0].ref.id).assertEqual('episode-2')
+      expect(resumable.items[0].seriesRef?.id).assertEqual('series-1')
+      expect(resumable.items[0].seasonRef?.id).assertEqual('season-1')
+      expect(resumable.items[0].userState.watched.playedPercentage).assertEqual(25)
+      expect((resumable.items[0].backdropImage?.url || '').indexOf('/series-backdrop.jpg') >= 0).assertTrue()
+
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [{
+          guid: 'episode-2', title: 'Episode 2', type: 'Episode', parent_guid: 'season-1',
+          season_number: 1, episode_number: 2, watched_ts: 300, watched: 1,
+          media_stream: { progress: 100 }
+        }]
+      }
+      const next = await new FeiniuVideoCatalogProvider(owner, service).nextUp({
+        seriesRef: ref(owner, 'series-1', MediaRefKind.Series),
+        limit: 1,
+        disableFirstEpisode: false,
+        enableResumable: true,
+        enableRewatching: false
+      })
+
+      expect(next.items.length).assertEqual(1)
+      expect(next.items[0].ref.id).assertEqual('episode-3')
+    })
+
+    it('keepsEpisodesMountedDirectlyUnderSeriesOutOfFakeSeasonHierarchy', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.seasonResponses.set('series-direct', { code: 0, msg: '', data: [] })
+      service.episodeResponses.set('series-direct', {
+        code: 0,
+        msg: '',
+        data: [
+          {
+            guid: 'episode-direct-1', title: 'Episode 1', type: 'Episode', parent_guid: 'series-direct',
+            ancestor_guid: 'library-tv', episode_number: 1, watched: 1
+          },
+          {
+            guid: 'episode-direct-2', title: 'Episode 2', type: 'Episode', parent_guid: 'series-direct',
+            ancestor_guid: 'library-tv', episode_number: 2
+          }
+        ]
+      })
+      service.detailResponses.set('series-direct', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'series-direct', title: 'Direct Series', type: 'TV', poster: '/direct.jpg',
+          backdrops: '/direct-backdrop.jpg', logos: '/direct-logo.png'
+        }
+      })
+      service.detailResponses.set('episode-direct-2', {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'episode-direct-2', title: 'Episode 2', type: 'Episode', parent_guid: 'series-direct',
+          ancestor_guid: 'library-tv', episode_number: 2
+        }
+      })
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [{
+          guid: 'episode-direct-1', title: 'Episode 1', type: 'Episode', parent_guid: 'series-direct',
+          episode_number: 1, watched: 1, watched_ts: 100, media_stream: { progress: 100 }
+        }]
+      }
+      const provider = new FeiniuVideoCatalogProvider(owner, service)
+
+      const next = await provider.nextUp({
+        seriesRef: ref(owner, 'series-direct', MediaRefKind.Series),
+        limit: 1,
+        disableFirstEpisode: false,
+        enableResumable: true,
+        enableRewatching: false
+      })
+      const episodes = await provider.getEpisodes({
+        seriesRef: ref(owner, 'series-direct', MediaRefKind.Series),
+        startIndex: 0,
+        limit: 20,
+        profile: MediaEpisodeQueryProfile.Display
+      })
+
+      expect(next.items[0].ref.id).assertEqual('episode-direct-2')
+      expect(next.items[0].seriesRef?.id).assertEqual('series-direct')
+      expect(next.items[0].seasonRef === undefined).assertTrue()
+      expect((next.items[0].backdropImage?.url || '').indexOf('/direct-backdrop.jpg') >= 0).assertTrue()
+      expect(episodes.items[1].seriesRef.id).assertEqual('series-direct')
+      expect(episodes.items[1].seasonRef === undefined).assertTrue()
     })
 
     it('handlesNonAlignedServerPagesAndUsesPromotedRouteForImages', 0, async () => {
@@ -532,6 +723,130 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(detail.mediaFiles[0].id).assertEqual('media-4k')
       expect(detail.mediaFiles[1].id).assertEqual('media-1080')
       expect(requestsFor(service, '/v/api/v1/stream/list/movie-1').length).assertEqual(1)
+    })
+
+    it('refreshesResolvedItemDetailsInsteadOfKeepingStaleCatalogState', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponses.set('movie-1', {
+        code: 0,
+        msg: '',
+        data: { guid: 'movie-1', title: 'Movie Before', type: 'Movie', is_favorite: 0 }
+      })
+      const provider = new FeiniuVideoCatalogProvider(owner, service)
+
+      const before = await provider.getDetail(ref(owner, 'movie-1', MediaRefKind.Movie))
+      service.detailResponses.set('movie-1', {
+        code: 0,
+        msg: '',
+        data: { guid: 'movie-1', title: 'Movie After', type: 'Movie', is_favorite: 1 }
+      })
+      const after = await provider.getDetail(ref(owner, 'movie-1', MediaRefKind.Movie))
+
+      expect(before.title).assertEqual('Movie Before')
+      expect(before.userState.favorite.favorite).assertFalse()
+      expect(after.title).assertEqual('Movie After')
+      expect(after.userState.favorite.favorite).assertTrue()
+      expect(requestsFor(service, '/v/api/v1/item/movie-1').length).assertEqual(2)
+    })
+
+    it('mergesItemFilesOfficialStreamsAndPreferredMediaVersion', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponse = {
+        code: 0,
+        msg: '',
+        data: { guid: 'movie-1', title: 'Movie', type: 'Movie', duration: 7200, media_guid: 'media-4k' }
+      }
+      service.streamListResponse = {
+        code: 0,
+        msg: '',
+        data: {
+          files: [{ guid: 'media-4k', file_name: 'Movie.4K.mkv' }],
+          video_streams: [{ media_guid: 'media-4k', index: 0, codec_name: 'hevc' }]
+        }
+      }
+      service.itemFileResponses.set('movie-1', {
+        code: 0,
+        msg: '',
+        data: [
+          { media_guid: 'media-4k', filename: 'Movie.4K.mkv', file_path: '/media/Movie.4K.mkv', file_size: 4000 },
+          { media_guid: 'media-1080', filename: 'Movie.1080p.mp4', file_path: '/media/Movie.1080p.mp4', size: 2000 }
+        ]
+      })
+      service.playInfoResponse = { code: 0, msg: '', data: { media_guid: 'media-1080' } }
+      service.officialStreamResponses.set('media-4k', {
+        code: 0,
+        msg: '',
+        data: {
+          file_stream: { guid: 'media-4k', file_name: 'Movie.4K.mkv' },
+          video_stream: {
+            media_guid: 'media-4k', index: 0, codec_name: 'hevc', resolution_type: '4K',
+            wrapper: 'mkv', width: 3840, height: 2160, avg_frame_rate: '24000/1001',
+            color_range_type: 'Dolby Vision'
+          },
+          audio_streams: [{ media_guid: 'media-4k', index: 1, codec_name: 'eac3', channels: 6 }],
+          subtitle_streams: [{ media_guid: 'media-4k', index: 2, codec_name: 'ass', language: 'zh' }]
+        }
+      })
+      service.officialStreamResponses.set('media-1080', {
+        code: 0,
+        msg: '',
+        data: {
+          file_stream: { guid: 'media-1080', file_name: 'Movie.1080p.mp4' },
+          video_stream: {
+            media_guid: 'media-1080', index: 0, codec_name: 'h264', resolution_type: '1080P',
+            wrapper: 'mp4', width: 1920, height: 1080, avg_frame_rate: '25/1'
+          },
+          audio_streams: [{ media_guid: 'media-1080', index: 1, codec_name: 'aac', channels: 2 }]
+        }
+      })
+
+      const detail = await new FeiniuVideoCatalogProvider(owner, service)
+        .getDetail(ref(owner, 'movie-1', MediaRefKind.Movie))
+
+      expect(detail.mediaFiles.length).assertEqual(2)
+      expect(detail.mediaFiles[0].id).assertEqual('media-1080')
+      expect(detail.mediaFiles[0].path).assertEqual('/media/Movie.1080p.mp4')
+      expect(detail.mediaFiles[0].sizeBytes).assertEqual(2000)
+      expect(detail.mediaFiles[0].streams[0].width).assertEqual(1920)
+      expect(detail.mediaFiles[1].id).assertEqual('media-4k')
+      expect(detail.mediaFiles[1].path).assertEqual('/media/Movie.4K.mkv')
+      expect(detail.mediaFiles[1].streams[0].frameRate).assertEqual(24000 / 1001)
+      expect(detail.mediaFiles[1].streams.length).assertEqual(3)
+      expect(requestsFor(service, '/v/api/v1/play/info').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/user/info').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/stream').length).assertEqual(2)
+    })
+
+    it('usesPlayInfoMediaGuidWhenOtherDetailEndpointsDoNotExposeTheSource', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponse = {
+        code: 0,
+        msg: '',
+        data: { guid: 'movie-1', title: 'Movie', type: 'Movie', duration: 7200 }
+      }
+      service.playInfoResponse = { code: 0, msg: '', data: { media_guid: 'media-only' } }
+      service.officialStreamResponses.set('media-only', {
+        code: 0,
+        msg: '',
+        data: {
+          file_stream: { guid: 'media-only', file_name: 'Movie.mkv', size: 4000 },
+          video_stream: {
+            media_guid: 'media-only', index: 0, codec_name: 'hevc', resolution_type: '4K',
+            wrapper: 'mkv', width: 3840, height: 2160
+          }
+        }
+      })
+
+      const detail = await new FeiniuVideoCatalogProvider(owner, service)
+        .getDetail(ref(owner, 'movie-1', MediaRefKind.Movie))
+
+      expect(detail.mediaFiles.length).assertEqual(1)
+      expect(detail.mediaFiles[0].id).assertEqual('media-only')
+      expect(detail.mediaFiles[0].streams[0].width).assertEqual(3840)
+      expect(requestsFor(service, '/v/api/v1/stream').length).assertEqual(1)
     })
 
     it('fallsBackToEpisodeListWhenSeasonLookupRejectsHistoryGuid', 0, async () => {

@@ -5,7 +5,6 @@ import { AppStorageV2 } from "@kit.ArkUI"
 import { AppUIState } from "../entity/AppUIState"
 import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter"
 import { MediaPersonCredit, MediaPersonKind } from "../media/catalog/MediaCatalogModels"
-import { toMediaRouteRefData } from "../media/navigation/MediaRouteRef"
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver"
 
 @ComponentV2
@@ -17,6 +16,7 @@ export struct CastView {
     const option = createMediaImageKnifeOption(item.primaryImage, item.primaryImage?.url || '')
     option.objectFit = ImageFit.Cover
     option.border = { radius: 33 }
+    option.placeholderSrc = $r('app.media.ic_avatar')
     return option
   }
 
@@ -32,23 +32,27 @@ export struct CastView {
         ForEach(this.peopleList, (item: MediaPersonCredit) => {
           ListItem() {
             Column({ space: 8 }) {
-              Stack() {
-                SymbolGlyph($r('sys.symbol.person_fill'))
-                  .fontSize(30)
-                  .fontColor([$r('sys.color.icon_secondary')])
-
+              if (item.primaryImage && item.primaryImage.url.length > 0) {
                 ImageKnifeComponent({
                   imageKnifeOption: this.imageOption(item)
                 })
                   .width(66)
                   .height(66)
                   .borderRadius(33)
-              }
+                  .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
+                    this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+              } else {
+                Stack() {
+                  SymbolGlyph($r('sys.symbol.person_fill'))
+                    .fontSize(30)
+                    .fontColor([$r('sys.color.icon_secondary')])
+                }
                 .width(66)
                 .height(66)
                 .borderRadius(33)
                 .backgroundColor(AppThemeSurfaceResolver.mediaPlaceholderBackground(
                   this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
+              }
 
               Text(item.name)
                 .fontColor($r('app.color.text_primary'))
@@ -73,10 +77,7 @@ export struct CastView {
                 })
                 .textAlign(TextAlign.Center)
             }.onClick(() => {
-              HMRouterMgr.to(RouterConsts.CastDetailPage).withParam({
-                id: item.personRef.id,
-                ref: toMediaRouteRefData(item.personRef)
-              }).push()
+              HMRouterMgr.to(RouterConsts.CastDetailPage).withParam(item.personRef.id).push()
             })
           }
         })

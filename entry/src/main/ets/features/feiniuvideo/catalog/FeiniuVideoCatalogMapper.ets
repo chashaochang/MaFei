@@ -61,6 +61,18 @@ export class FeiniuVideoCatalogImageAccess {
   }
 }
 
+/** Provider-derived hierarchy and image fallbacks that are not present in every list response. */
+export interface FeiniuVideoCatalogItemContext {
+  readonly kind?: MediaRefKind
+  readonly seriesId?: string
+  readonly seasonId?: string
+  readonly seriesTitle?: string
+  readonly seasonTitle?: string
+  readonly primaryImagePath?: string
+  readonly backdropImagePath?: string
+  readonly logoImagePath?: string
+}
+
 export class FeiniuVideoCatalogMapper {
   private readonly session: MediaProviderSession
   private readonly access: FeiniuVideoCatalogImageAccess
@@ -153,49 +165,35 @@ export class FeiniuVideoCatalogMapper {
     return kinds.indexOf(kind) >= 0
   }
 
-  summary(item: FnMediaItem): MediaSummary {
-    const owner = this.itemRef(item)
-    return this.createSummary(item, owner, item.title || item.file_name || '', this.subtitle(item))
+  summary(item: FnMediaItem, context?: FeiniuVideoCatalogItemContext): MediaSummary {
+    const owner = this.itemRef(item, context)
+    return this.createSummary(item, owner, item.title || item.file_name || '', this.subtitle(item), context)
   }
 
-  latest(item: FnMediaItem): MediaSummary {
-    const kind = this.refKind(item.type)
-    const seriesId = this.seriesId(item)
-    if (kind === MediaRefKind.Episode && seriesId.length > 0) {
-      const seriesRef = this.ref(seriesId, MediaRefKind.Series)
-      const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
-      return {
-        ref: seriesRef,
-        seriesRef: seriesRef,
-        seasonRef: this.optionalRef(item.parent_guid, MediaRefKind.Season),
-        title: seriesTitle.length > 0 ? seriesTitle : (item.title || ''),
-        subtitle: this.episodeSubtitle(item),
-        overview: item.overview || '',
-        year: this.year(item),
-        premiereDate: this.date(item),
-        durationMs: this.durationMs(item.duration, item.runtime),
-        communityRating: this.rating(item.vote_average),
-        seriesTitle: seriesTitle || undefined,
-        seasonNumber: this.positiveNumber(item.season_number),
-        episodeNumber: this.positiveNumber(item.episode_number),
-        childCount: this.childCount(item),
-        genres: this.genres(item),
-        tags: this.mediaTags(item),
-        primaryImage: this.image(seriesRef, item.poster || '', MediaImageKind.Primary,
-          'series-primary-640', 640),
-        thumbnailImage: this.image(seriesRef, item.poster || '', MediaImageKind.Thumbnail,
-          'series-thumbnail-640', 640),
-        userState: this.userState(item)
-      }
+  latest(item: FnMediaItem, context?: FeiniuVideoCatalogItemContext): MediaSummary {
+    const kind = context?.kind !== undefined && context.kind !== MediaRefKind.Unknown
+      ? context.kind : this.refKind(item.type)
+    if (kind === MediaRefKind.Episode) {
+      const owner = this.itemRef(item, context)
+      const seriesTitle = `${context?.seriesTitle || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim()
+      return this.createSummary(
+        item,
+        owner,
+        seriesTitle.length > 0 ? seriesTitle : (item.title || item.file_name || ''),
+        this.episodeSubtitle(item),
+        context
+      )
     }
-    return this.summary(item)
+    return this.summary(item, context)
   }
 
-  resume(item: FnMediaPlayItem): MediaSummary {
+  resume(item: FnMediaPlayItem, context?: FeiniuVideoCatalogItemContext): MediaSummary {
     const owner = this.ref(item.guid, this.playItemKind(item))
-    const seriesId = `${item.ancestor_guid || item.parent_guid || ''}`.trim()
-    const seasonId = `${item.parent_guid || ''}`.trim()
-    const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
+    const seriesId = `${context?.seriesId || ''}`.trim()
+    const seasonId = this.episodeSeasonId(item.parent_guid, seriesId, context)
+    const seriesTitle = `${context?.seriesTitle || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim()
+    const primaryImagePath = `${item.poster || context?.primaryImagePath || context?.backdropImagePath || ''}`.trim()
+    const backdropImagePath = `${context?.backdropImagePath || item.poster || context?.primaryImagePath || ''}`.trim()
     return {
       ref: owner,
       seriesRef: seriesId.length > 0 ? this.ref(seriesId, MediaRefKind.Series) : undefined,
@@ -211,17 +209,20 @@ export class FeiniuVideoCatalogMapper {
       lastPlayedDate: this.playedDate(item.watched_ts, item.ts),
       genres: [],
       tags: [],
-      primaryImage: this.image(owner, item.poster || '', MediaImageKind.Primary,
+      primaryImage: this.image(owner, primaryImagePath, MediaImageKind.Primary,
         'resume-primary-640', 640),
-      thumbnailImage: this.image(owner, item.poster || '', MediaImageKind.Thumbnail,
+      thumbnailImage: this.image(owner, primaryImagePath, MediaImageKind.Thumbnail,
         'resume-thumbnail-640', 640),
+      backdropImage: this.image(owner, backdropImagePath, MediaImageKind.Backdrop,
+        'resume-backdrop-1280', 1280),
       userState: this.playUserState(item)
     }
   }
 
   detail(item: FnMediaItemDetailResp, people: FnMediaPersonListItem[] = [],
-    seasons: MediaSeason[] = [], streamData?: FnMediaStreamListData): MediaDetail {
-    const owner = this.itemRef(item)
+    seasons: MediaSeason[] = [], streamData?: FnMediaStreamListData,
+    context?: FeiniuVideoCatalogItemContext): MediaDetail {
+    const owner = this.itemRef(item, context)
     const externalLinks: MediaExternalLink[] = []
     const imdbId = `${item.imdb_id || ''}`.trim()
     if (imdbId.length > 0) {
@@ -233,15 +234,16 @@ export class FeiniuVideoCatalogMapper {
     const countries = item.production_countries || []
     return {
       ref: owner,
-      seriesRef: this.optionalRef(this.seriesId(item), MediaRefKind.Series),
-      seasonRef: this.refKind(item.type) === MediaRefKind.Episode
-        ? this.optionalRef(item.parent_guid, MediaRefKind.Season) : undefined,
+      seriesRef: this.optionalRef(this.seriesId(item, context), MediaRefKind.Series),
+      seasonRef: owner.kind === MediaRefKind.Episode
+        ? this.optionalRef(this.episodeSeasonId(item.parent_guid, this.seriesId(item, context), context),
+          MediaRefKind.Season) : undefined,
       title: item.title || item.file_name || '',
       originalTitle: item.original_title || item.title || '',
       tagline: '',
       overview: item.overview || '',
-      seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item) || undefined,
-      seasonTitle: undefined,
+      seriesTitle: `${context?.seriesTitle || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim() || undefined,
+      seasonTitle: `${context?.seasonTitle || ''}`.trim() || undefined,
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
       productionYear: this.year(item),
@@ -257,11 +259,13 @@ export class FeiniuVideoCatalogMapper {
       seasons: seasons.slice(),
       mediaFiles: this.mediaFiles(owner, item, streamData),
       externalLinks: externalLinks,
-      primaryImage: this.image(owner, item.poster || item.posters || '',
+      primaryImage: this.image(owner, item.poster || item.posters || context?.primaryImagePath ||
+        context?.backdropImagePath || '',
         MediaImageKind.Primary, 'detail-primary-720', 720),
-      backdropImage: this.image(owner, item.backdrops || '',
+      backdropImage: this.image(owner, item.backdrops || context?.backdropImagePath ||
+        context?.primaryImagePath || '',
         MediaImageKind.Backdrop, 'detail-backdrop-1280', 1280),
-      logoImage: this.image(owner, item.logos || '',
+      logoImage: this.image(owner, item.logos || context?.logoImagePath || '',
         MediaImageKind.Logo, 'detail-logo-720', 720),
       userState: this.userState(item)
     }
@@ -351,8 +355,9 @@ export class FeiniuVideoCatalogMapper {
       return wrapper
     }
     const source = `${file.file_name || file.path || ''}`.trim().split('?')[0]
+    const separator = Math.max(source.lastIndexOf('/'), source.lastIndexOf('\\'))
     const dot = source.lastIndexOf('.')
-    return dot >= 0 ? source.substring(dot + 1).toLowerCase() : ''
+    return dot > separator ? source.substring(dot + 1).toLowerCase() : ''
   }
 
   private videoStream(value: FnMediaStreamVideoInfo): MediaStreamInfo {
@@ -468,7 +473,15 @@ export class FeiniuVideoCatalogMapper {
   }
 
   private numberValue(value?: number | string): number | undefined {
-    const parsed = Number(`${value ?? ''}`.trim())
+    const normalized = `${value ?? ''}`.trim()
+    const separator = normalized.indexOf('/')
+    if (separator > 0 && separator < normalized.length - 1) {
+      const numerator = Number(normalized.substring(0, separator))
+      const denominator = Number(normalized.substring(separator + 1))
+      const ratio = denominator !== 0 ? numerator / denominator : 0
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : undefined
+    }
+    const parsed = Number(normalized)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
   }
 
@@ -493,10 +506,13 @@ export class FeiniuVideoCatalogMapper {
 
   episode(item: FnMediaEpisodeItem, seriesRef: MediaRef, seasonRef?: MediaRef): MediaEpisode {
     const owner = this.ref(item.guid, MediaRefKind.Episode)
+    const parentId = `${item.parent_guid || ''}`.trim()
+    const resolvedSeasonRef = seasonRef || (parentId.length > 0 && parentId !== seriesRef.id
+      ? this.ref(parentId, MediaRefKind.Season) : undefined)
     return {
       ref: owner,
       seriesRef: seriesRef,
-      seasonRef: seasonRef || this.optionalRef(item.parent_guid, MediaRefKind.Season),
+      seasonRef: resolvedSeasonRef,
       title: item.title || this.episodeTitle(item.episode_number),
       seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item),
       overview: item.overview || '',
@@ -605,13 +621,18 @@ export class FeiniuVideoCatalogMapper {
     return this.refKind(item.type)
   }
 
-  private createSummary(item: FnMediaItem, owner: MediaRef, title: string, subtitle: string): MediaSummary {
+  private createSummary(item: FnMediaItem, owner: MediaRef, title: string, subtitle: string,
+    context?: FeiniuVideoCatalogItemContext): MediaSummary {
     const detail = item as FnMediaItemDetailResp
+    const primaryImagePath = `${item.poster || detail.posters || context?.primaryImagePath ||
+      context?.backdropImagePath || ''}`.trim()
+    const backdropImagePath = `${detail.backdrops || context?.backdropImagePath || primaryImagePath}`.trim()
     return {
       ref: owner,
-      seriesRef: this.optionalRef(this.seriesId(item), MediaRefKind.Series),
-      seasonRef: this.refKind(item.type) === MediaRefKind.Episode
-        ? this.optionalRef(item.parent_guid, MediaRefKind.Season) : undefined,
+      seriesRef: this.optionalRef(this.seriesId(item, context), MediaRefKind.Series),
+      seasonRef: owner.kind === MediaRefKind.Episode
+        ? this.optionalRef(this.episodeSeasonId(item.parent_guid, this.seriesId(item, context), context),
+          MediaRefKind.Season) : undefined,
       title: title,
       subtitle: subtitle,
       overview: item.overview || '',
@@ -620,19 +641,19 @@ export class FeiniuVideoCatalogMapper {
       lastPlayedDate: this.playedDate(item.watched_ts),
       durationMs: this.durationMs(item.duration, item.runtime),
       communityRating: this.rating(item.vote_average),
-      seriesTitle: FeiniuVideoCatalogMapper.seriesTitle(item) || undefined,
+      seriesTitle: `${context?.seriesTitle || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim() || undefined,
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
       childCount: this.childCount(item),
       genres: this.genres(item),
       tags: this.mediaTags(item),
-      primaryImage: this.image(owner, item.poster || detail.posters || '', MediaImageKind.Primary,
+      primaryImage: this.image(owner, primaryImagePath, MediaImageKind.Primary,
         'item-primary-640', 640),
-      thumbnailImage: this.image(owner, item.poster || '', MediaImageKind.Thumbnail,
+      thumbnailImage: this.image(owner, primaryImagePath, MediaImageKind.Thumbnail,
         'item-thumbnail-640', 640),
-      backdropImage: this.image(owner, detail.backdrops || '', MediaImageKind.Backdrop,
+      backdropImage: this.image(owner, backdropImagePath, MediaImageKind.Backdrop,
         'item-backdrop-1280', 1280),
-      logoImage: this.image(owner, detail.logos || '', MediaImageKind.Logo,
+      logoImage: this.image(owner, detail.logos || context?.logoImagePath || '', MediaImageKind.Logo,
         'item-logo-720', 720),
       userState: this.userState(item)
     }
@@ -668,8 +689,11 @@ export class FeiniuVideoCatalogMapper {
     return MediaPersonKind.Other
   }
 
-  private itemRef(item: FnMediaItem): MediaRef {
-    return this.ref(item.guid, this.refKind(item.type))
+  private itemRef(item: FnMediaItem, context?: FeiniuVideoCatalogItemContext): MediaRef {
+    const contextKind = context?.kind
+    const kind = contextKind !== undefined && contextKind !== MediaRefKind.Unknown
+      ? contextKind : this.refKind(item.type)
+    return this.ref(item.guid, kind)
   }
 
   private ref(id: string, kind: MediaRefKind): MediaRef {
@@ -681,18 +705,31 @@ export class FeiniuVideoCatalogMapper {
     return normalized.length > 0 ? this.ref(normalized, kind) : undefined
   }
 
-  private seriesId(item: FnMediaItem): string {
-    const kind = this.refKind(item.type)
+  private seriesId(item: FnMediaItem, context?: FeiniuVideoCatalogItemContext): string {
+    const explicit = `${context?.seriesId || ''}`.trim()
+    if (explicit.length > 0) {
+      return explicit
+    }
+    const kind = context?.kind !== undefined && context.kind !== MediaRefKind.Unknown
+      ? context.kind : this.refKind(item.type)
     if (kind === MediaRefKind.Series) {
       return item.guid.trim()
     }
     if (kind === MediaRefKind.Season) {
-      return `${item.parent_guid || item.ancestor_guid || ''}`.trim()
-    }
-    if (kind === MediaRefKind.Episode) {
-      return `${item.ancestor_guid || ''}`.trim()
+      const parent = `${item.parent_guid || ''}`.trim()
+      const library = `${item.ancestor_guid || ''}`.trim()
+      return parent !== library ? parent : ''
     }
     return ''
+  }
+
+  private episodeSeasonId(parentGuid: string | undefined, seriesId: string,
+    context?: FeiniuVideoCatalogItemContext): string {
+    if (context !== undefined) {
+      return `${context.seasonId || ''}`.trim()
+    }
+    const parentId = `${parentGuid || ''}`.trim()
+    return parentId.length > 0 && parentId !== seriesId ? parentId : ''
   }
 
   private subtitle(item: FnMediaItem): string {

@@ -70,6 +70,8 @@ export interface FeiniuVideoPlaybackSourceMapping {
   readonly startTimeTicks: number
   readonly maxStreamingBitrate?: number
   readonly engineHint: MediaPlaybackEngineHint
+  readonly seriesId?: string
+  readonly seriesName?: string
 }
 
 export class FeiniuVideoPlaybackMapper {
@@ -93,7 +95,7 @@ export class FeiniuVideoPlaybackMapper {
   }
 
   source(mapping: FeiniuVideoPlaybackSourceMapping): MediaPlaybackSource {
-    const mappedItem = this.item(mapping.item)
+    const mappedItem = this.item(mapping.item, mapping.seriesId, mapping.seriesName)
     const streams: MediaPlaybackStream[] = []
     if (mapping.video) {
       streams.push(this.videoStream(mapping.video))
@@ -137,7 +139,7 @@ export class FeiniuVideoPlaybackMapper {
       subtitleStreamIndex: mapping.selectedSubtitle?.index,
       requestHeaders: requestHeaders,
       externalSubtitles: externalSubtitles,
-      metadata: this.metadata(owner, mapping.item),
+      metadata: this.metadata(owner, mapping.item, mapping.seriesName),
       serverUrl: this.access.baseUrl,
       capabilities: {
         framePreviewAvailable: mapping.directOriginal,
@@ -151,12 +153,12 @@ export class FeiniuVideoPlaybackMapper {
     })
   }
 
-  item(value: FnMediaItem): MediaPlaybackItem {
+  item(value: FnMediaItem, seriesId?: string, seriesName?: string): MediaPlaybackItem {
     return {
       Id: value.guid,
       Name: value.title || value.file_name || '',
-      SeriesId: this.seriesId(value),
-      SeriesName: FeiniuVideoCatalogMapper.seriesTitle(value) || undefined,
+      SeriesId: this.seriesId(value, seriesId),
+      SeriesName: `${seriesName || FeiniuVideoCatalogMapper.seriesTitle(value)}`.trim() || undefined,
       Type: this.itemKind(value.type),
       IndexNumber: value.episode_number,
       RunTimeTicks: this.durationTicks(value),
@@ -329,14 +331,14 @@ export class FeiniuVideoPlaybackMapper {
     return normalized
   }
 
-  private metadata(owner: MediaRef, item: FnMediaItem): MediaPlaybackMetadata {
+  private metadata(owner: MediaRef, item: FnMediaItem, resolvedSeriesName?: string): MediaPlaybackMetadata {
     const summary = this.catalogMapper.summary(item)
-    const seriesTitle = FeiniuVideoCatalogMapper.seriesTitle(item)
+    const seriesTitle = `${resolvedSeriesName || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim()
     return {
       assetId: owner.identity,
       title: seriesTitle.length > 0 ? seriesTitle : (item.title || item.file_name || 'TITLE'),
       subtitle: seriesTitle.length > 0 ? (item.title || '') : '',
-      image: summary.thumbnailImage || summary.primaryImage
+      image: summary.backdropImage || summary.thumbnailImage || summary.primaryImage
     }
   }
 
@@ -417,9 +419,17 @@ export class FeiniuVideoPlaybackMapper {
     return MediaPlaybackVideoRange.Unknown
   }
 
-  private seriesId(item: FnMediaItem): string | undefined {
-    const value = `${item.ancestor_guid || ''}`.trim()
-    return value.length > 0 ? value : undefined
+  private seriesId(item: FnMediaItem, resolvedSeriesId?: string): string | undefined {
+    const explicit = `${resolvedSeriesId || ''}`.trim()
+    if (explicit.length > 0) return explicit
+    const type = `${item.type || ''}`.trim().toLowerCase()
+    if (type === 'tv' || type === 'series') return item.guid.trim() || undefined
+    if (type === 'season') {
+      const parent = `${item.parent_guid || ''}`.trim()
+      const library = `${item.ancestor_guid || ''}`.trim()
+      return parent.length > 0 && parent !== library ? parent : undefined
+    }
+    return undefined
   }
 
   private durationTicks(item: FnMediaItem, video?: FnMediaStreamVideoInfo): number {
@@ -444,8 +454,9 @@ export class FeiniuVideoPlaybackMapper {
       return wrapper
     }
     const source = (strmReference ? videoUrl : (fileSource || videoUrl)).split('?')[0]
+    const lastSlash = Math.max(source.lastIndexOf('/'), source.lastIndexOf('\\'))
     const dot = source.lastIndexOf('.')
-    return dot >= 0 ? source.substring(dot + 1).toLowerCase() : 'mp4'
+    return dot > lastSlash ? source.substring(dot + 1).toLowerCase() : 'mp4'
   }
 
   private isStrmReference(value: string): boolean {
@@ -494,7 +505,15 @@ export class FeiniuVideoPlaybackMapper {
   }
 
   private numberValue(value?: number | string): number | undefined {
-    const parsed = Number(`${value ?? ''}`.trim())
+    const normalized = `${value ?? ''}`.trim()
+    const separator = normalized.indexOf('/')
+    if (separator > 0 && separator < normalized.length - 1) {
+      const numerator = Number(normalized.substring(0, separator))
+      const denominator = Number(normalized.substring(separator + 1))
+      const ratio = denominator !== 0 ? numerator / denominator : 0
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : undefined
+    }
+    const parsed = Number(normalized)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
   }
 }

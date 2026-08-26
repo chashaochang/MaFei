@@ -148,6 +148,20 @@ export interface FnMediaItemDetailResp extends FnMediaItem {
   logos?: string
 }
 
+export interface FnMediaItemFile {
+  media_guid?: string
+  item_guid?: string
+  filename?: string
+  file_path?: string
+  size?: number
+  file_size?: number
+  duration?: number
+  create_time?: number
+  update_time?: number
+  file_birth_time?: number
+  media_stream?: FnMediaItemStream
+}
+
 export interface FnMediaGenreItem {
   id?: number
   value?: string

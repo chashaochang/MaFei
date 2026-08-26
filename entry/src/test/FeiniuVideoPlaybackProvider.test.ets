@@ -33,6 +33,8 @@ import {
 
 class FakeFeiniuPlaybackService implements FeiniuVideoPlaybackService {
   readonly requests: FeiniuVideoApiRequest[] = []
+  itemResponses: Map<string, FnMediaListResp<FnMediaItemDetailResp>> =
+    new Map<string, FnMediaListResp<FnMediaItemDetailResp>>()
   itemResponse: FnMediaListResp<FnMediaItemDetailResp> = {
     code: 0,
     msg: '',
@@ -144,7 +146,9 @@ class FakeFeiniuPlaybackService implements FeiniuVideoPlaybackService {
 
   async request<T>(request: FeiniuVideoApiRequest): Promise<T> {
     this.requests.push(request)
-    if (request.path.startsWith('/v/api/v1/item/')) return this.itemResponse as T
+    if (request.path.startsWith('/v/api/v1/item/')) {
+      return (this.itemResponses.get(this.pathId(request.path)) || this.itemResponse) as T
+    }
     if (request.path === '/v/api/v1/play/info') return this.playInfoResponse as T
     if (request.path === '/v/api/v1/play/play') return this.playResponse as T
     if (request.path === '/v/api/v1/user/info') return this.userInfoResponse as T
@@ -162,6 +166,11 @@ class FakeFeiniuPlaybackService implements FeiniuVideoPlaybackService {
       `Unexpected request ${request.path}`
     )
   }
+
+  private pathId(path: string): string {
+    const index = path.lastIndexOf('/')
+    return index >= 0 ? decodeURIComponent(path.substring(index + 1)) : ''
+  }
 }
 
 function session(): MediaProviderSession {
@@ -175,13 +184,14 @@ function session(): MediaProviderSession {
 }
 
 function request(owner: MediaProviderSession, startTimeTicks?: number, maxStreamingBitrate?: number,
-  audioStreamIndex?: number, subtitleStreamIndex?: number): MediaPlaybackResolveRequest {
+  audioStreamIndex?: number, subtitleStreamIndex?: number, mediaSourceId?: string): MediaPlaybackResolveRequest {
   return {
     ref: new MediaRef(owner.provider, owner.accountScope, 'episode-1', MediaRefKind.Episode),
     startTimeTicks: startTimeTicks,
     maxStreamingBitrate: maxStreamingBitrate,
     audioStreamIndex: audioStreamIndex,
     subtitleStreamIndex: subtitleStreamIndex,
+    mediaSourceId: mediaSourceId,
     autoOpenLiveStream: true,
     engineHint: MediaPlaybackEngineHint.Auto
   }
@@ -205,7 +215,36 @@ export default function feiniuVideoPlaybackProviderTest() {
       expect(streams.videoUrl).assertEqual('http://lan:5666/v/api/v1/media/range/media-1')
       expect(streams.videoHeaders[0].name).assertEqual('Authorization')
       expect(requestsFor(service, '/v/api/v1/play/info').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/play/info')[0].bodyText.indexOf('"media_guid"') >= 0).assertFalse()
       expect(requestsFor(service, '/v/api/v1/play/record').length).assertEqual(0)
+    })
+
+    it('passesOnlyAnExplicitlySelectedMediaVersionToPlayInfo', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuPlaybackService()
+      const provider = new FeiniuVideoPlaybackProvider(owner, service)
+
+      await provider.resolveSource(request(owner, undefined, undefined, undefined, undefined, 'media-1'))
+
+      const playInfoRequest = requestsFor(service, '/v/api/v1/play/info')[0]
+      expect(playInfoRequest.bodyText.indexOf('"media_guid":"media-1"') >= 0).assertTrue()
+    })
+
+    it('rejectsItemDetailsThatDoNotMatchTheRequestedPlaybackItem', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuPlaybackService()
+      service.itemResponse.data.guid = 'different-item'
+      const provider = new FeiniuVideoPlaybackProvider(owner, service)
+
+      let rejected = false
+      try {
+        await provider.resolveSource(request(owner))
+      } catch (_) {
+        rejected = true
+      }
+
+      expect(rejected).assertTrue()
+      expect(requestsFor(service, '/v/api/v1/play/info').length).assertEqual(0)
     })
 
     it('preservesExplicitZeroAndReportsLifecycleRecords', 0, async () => {
@@ -323,7 +362,9 @@ export default function feiniuVideoPlaybackProviderTest() {
         msg: '',
         data: {
           header: {
-            'User-Agent': ['Mozilla/5.0 (cloud-link)']
+            'User-Agent': ['Mozilla/5.0 (cloud-link)'],
+            'Cookie': ['cloud_session=one', 'cloud_token=two'],
+            'Referer': ['https://cloud.example/library']
           },
           direct_link_qualities: [{
             resolution: '原画',
@@ -338,9 +379,12 @@ export default function feiniuVideoPlaybackProviderTest() {
       const streams = await provider.prepareStreams(source)
 
       expect(streams.videoUrl).assertEqual('https://cloud.example/media/episode.mp4?signature=one-time')
-      expect(streams.videoHeaders.length).assertEqual(1)
+      expect(streams.videoHeaders.length).assertEqual(3)
       expect(streams.videoHeaders[0].name).assertEqual('User-Agent')
       expect(streams.videoHeaders[0].value).assertEqual('Mozilla/5.0 (cloud-link)')
+      expect(streams.videoHeaders[1].name).assertEqual('Cookie')
+      expect(streams.videoHeaders[1].value).assertEqual('cloud_session=one; cloud_token=two')
+      expect(streams.videoHeaders[2].name).assertEqual('Referer')
       expect(source.requestHeaders.some((header): boolean => header.name === 'Authorization')).assertFalse()
       expect(source.multiConnectionAllowed).assertFalse()
       expect(source.allowInsecureTls).assertTrue()
@@ -368,6 +412,31 @@ export default function feiniuVideoPlaybackProviderTest() {
       expect(streams.videoHeaders[0].name).assertEqual('Authorization')
       expect(source.multiConnectionAllowed).assertFalse()
       expect(source.allowInsecureTls).assertFalse()
+    })
+
+    it('resolvesSeriesMetadataWhenEpisodeIsMountedDirectlyUnderSeries', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuPlaybackService()
+      service.itemResponse = {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'episode-1', title: 'Episode 1', type: 'Episode', parent_guid: 'series-direct',
+          ancestor_guid: 'library-tv', episode_number: 1, duration: 1800
+        }
+      }
+      service.itemResponses.set('series-direct', {
+        code: 0,
+        msg: '',
+        data: { guid: 'series-direct', title: 'Direct Series', type: 'TV' }
+      })
+      const provider = new FeiniuVideoPlaybackProvider(owner, service)
+
+      const source = await provider.resolveSource(request(owner))
+
+      expect(source.item.SeriesId).assertEqual('series-direct')
+      expect(source.item.SeriesName).assertEqual('Direct Series')
+      expect(source.metadata.title).assertEqual('Direct Series')
     })
   })
 }

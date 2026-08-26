@@ -6,6 +6,7 @@ import { MediaImageKind, MediaLibraryKind, MediaPersonKind } from
   '../main/ets/media/catalog/MediaCatalogModels'
 import {
   FeiniuVideoCatalogImageAccess,
+  FeiniuVideoCatalogItemContext,
   FeiniuVideoCatalogMapper
 } from '../main/ets/features/feiniuvideo/catalog/FeiniuVideoCatalogMapper'
 import {
@@ -126,8 +127,14 @@ export default function feiniuVideoCatalogMapperTest() {
           audio_type: 'DTS'
         }
       }
-      const summary = mapper().summary(item)
-      const latest = mapper().latest(item)
+      const context: FeiniuVideoCatalogItemContext = {
+        kind: MediaRefKind.Episode,
+        seriesId: 'series-1',
+        seasonId: 'season-1',
+        seriesTitle: 'Series One'
+      }
+      const summary = mapper().summary(item, context)
+      const latest = mapper().latest(item, context)
 
       expect(summary.ref.kind).assertEqual(MediaRefKind.Episode)
       expect(summary.seriesRef?.id).assertEqual('series-1')
@@ -138,8 +145,9 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(summary.tags.join(',')).assertEqual('2160P,DTS')
       expect(summary.userState.watched.playbackPositionMs).assertEqual(900000)
       expect(summary.userState.watched.playedPercentage).assertEqual(25)
-      expect(latest.ref.kind).assertEqual(MediaRefKind.Series)
-      expect(latest.ref.id).assertEqual('series-1')
+      expect(latest.ref.kind).assertEqual(MediaRefKind.Episode)
+      expect(latest.ref.id).assertEqual('episode-3')
+      expect(latest.seriesRef?.id).assertEqual('series-1')
       expect(latest.title).assertEqual('Series One')
     })
 
@@ -160,9 +168,21 @@ export default function feiniuVideoCatalogMapperTest() {
         season_number: 1,
         episode_number: 3
       }
+      const detailItem: FnMediaItemDetailResp = {
+        guid: item.guid,
+        title: item.title,
+        type: item.type,
+        ancestor_guid: item.ancestor_guid,
+        ancestor_name: item.ancestor_name,
+        parent_guid: item.parent_guid,
+        parent_title: item.parent_title,
+        tv_title: item.tv_title,
+        season_number: item.season_number,
+        episode_number: item.episode_number
+      }
       const summary = catalogMapper.summary(item)
       const latest = catalogMapper.latest(item)
-      const detail = catalogMapper.detail(item)
+      const detail = catalogMapper.detail(detailItem)
       const episode = catalogMapper.episode(item, seriesRef, seasonRef)
       const resume = catalogMapper.resume({
         guid: item.guid,
@@ -184,6 +204,56 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(episode.seriesTitle).assertEqual('真实剧名')
       expect(resume.title).assertEqual('真实剧名')
       expect(resume.seriesTitle).assertEqual('真实剧名')
+    })
+
+    it('doesNotCreateASeasonReferenceWhenEpisodeParentIsTheSeries', 0, () => {
+      const owner = session()
+      const catalogMapper = mapper(owner)
+      const seriesRef = new MediaRef(owner.provider, owner.accountScope, 'series-direct', MediaRefKind.Series)
+      const item: FnMediaEpisodeItem = {
+        guid: 'episode-direct',
+        title: 'Episode Direct',
+        type: 'Episode',
+        parent_guid: 'series-direct',
+        ancestor_guid: 'library-tv',
+        tv_title: 'Direct Series',
+        episode_number: 1
+      }
+      const context: FeiniuVideoCatalogItemContext = {
+        kind: MediaRefKind.Episode,
+        seriesId: 'series-direct',
+        seasonId: '',
+        seriesTitle: 'Direct Series'
+      }
+
+      const summary = catalogMapper.summary(item, context)
+      const detailItem: FnMediaItemDetailResp = {
+        guid: item.guid,
+        title: item.title,
+        type: item.type,
+        parent_guid: item.parent_guid,
+        ancestor_guid: item.ancestor_guid,
+        tv_title: item.tv_title,
+        episode_number: item.episode_number
+      }
+      const detail = catalogMapper.detail(detailItem, [], [], undefined, context)
+      const episode = catalogMapper.episode(item, seriesRef)
+      const resume = catalogMapper.resume({
+        guid: item.guid,
+        title: item.title,
+        type: item.type || '',
+        parent_guid: item.parent_guid,
+        ancestor_guid: item.ancestor_guid,
+        tv_title: item.tv_title,
+        episode_number: item.episode_number
+      }, context)
+
+      expect(summary.seriesRef?.id).assertEqual('series-direct')
+      expect(summary.seasonRef === undefined).assertTrue()
+      expect(detail.seriesRef?.id).assertEqual('series-direct')
+      expect(detail.seasonRef === undefined).assertTrue()
+      expect(episode.seasonRef === undefined).assertTrue()
+      expect(resume.seasonRef === undefined).assertTrue()
     })
 
     it('mapsDetailSeasonEpisodeAndPersonCreditsWithoutLeakingGenreIds', 0, () => {
@@ -313,7 +383,12 @@ export default function feiniuVideoCatalogMapperTest() {
         parent_guid: 'season-1',
         episode_number: 8
       }
-      const summary = mapper().resume(playItem)
+      const summary = mapper().resume(playItem, {
+        kind: MediaRefKind.Episode,
+        seriesId: 'series-1',
+        seasonId: 'season-1',
+        seriesTitle: 'Series One'
+      })
 
       expect(summary.ref.kind).assertEqual(MediaRefKind.Episode)
       expect(summary.seriesRef?.id).assertEqual('series-1')

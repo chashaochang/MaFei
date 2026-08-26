@@ -113,7 +113,6 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.people = detail.personCredits.slice()
     this.ui.isFavorite = detail.userState.favorite.favorite
     this.ui.played = detail.userState.watched.watched
-    this.ui.isChasing = this.ui.isTvShows && AppPreference.getInstance().isChasingSeries(detail.ref.id)
     this.ui.mediaSources = detail.mediaFiles.slice()
     this.ui.externalUrls = detail.externalLinks.slice()
     this.ui.playbackPositionMs = detail.userState.watched.playbackPositionMs
@@ -364,13 +363,6 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     } finally {
       this.ui.deleting = false
     }
-  }
-
-  changeChasingState(): void {
-    const ref = this.ui.mediaRef
-    if (!this.ui.isTvShows || !ref) return
-    this.ui.isChasing = AppPreference.getInstance().toggleChasingSeries(ref.id)
-    ToastUtil.showToast(this.ui.context, this.ui.isChasing ? '已加入追剧' : '已取消追剧')
   }
 
   playCurrent(): void {
