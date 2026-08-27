@@ -16,6 +16,8 @@ import { OneMoreUtil } from '../utils/OneMoreUtil';
 // import { GlobalContext } from '@ohos/danmakuflamemaster';
 import { ImageKnife } from '@ohos/imageknifepro';
 
+const IMAGE_LOAD_MAX_CONCURRENCY: number = 9
+
 export default class EntryAbility extends UIAbility {
   listener?: mediaquery.MediaQueryListener
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
@@ -109,7 +111,9 @@ export default class EntryAbility extends UIAbility {
     // 弹幕功能暂不上线，先注释初始化代码。
     // GlobalContext.getContext().setValue("path", this.context.filesDir);
     // 如果需要用文件缓存，需要提前初始化文件缓存
-    await ImageKnife.getInstance().initFileCache(this.context, 1024, 1024 * 1024 * 1024)
+    const imageKnife = ImageKnife.getInstance()
+    await imageKnife.initFileCache(this.context, 1024, 1024 * 1024 * 1024)
+    imageKnife.setMaxRequests(IMAGE_LOAD_MAX_CONCURRENCY)
   }
 
   private resolveWindowDensity(windowClass: window.Window): number {

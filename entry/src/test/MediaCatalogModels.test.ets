@@ -290,6 +290,7 @@ export default function mediaCatalogModelsTest() {
         overview: '',
         seasonNumber: 1,
         episodeCount: 8,
+        tags: [],
         userState: createMediaUserState()
       }
       const episode: MediaEpisode = {

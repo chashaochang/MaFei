@@ -5,6 +5,7 @@ import {
   MediaDetail,
   MediaEpisode,
   MediaFavoriteState,
+  MediaImageRef,
   MediaLibrary,
   MediaPage,
   MediaPerson,
@@ -111,6 +112,9 @@ export interface MediaEpisodeRequest {
 export interface MediaCatalogProvider {
   /** Immutable account snapshot used for every request from this provider instance. */
   readonly session: MediaProviderSession
+
+  /** Rebuilds a persisted image reference with the active route and current request credentials. */
+  rehydrateImage(image: MediaImageRef): MediaImageRef
 
   getCounts(): Promise<MediaCatalogCounts>
 

@@ -380,6 +380,25 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(service.requests[0].path).assertEqual('/v/api/v1/play/list')
     })
 
+    it('keepsContinueWatchingInServerOrder', 0, async () => {
+      const service = new FakeFeiniuVideoCatalogService()
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [
+          { guid: 'server-first', title: 'First', type: 'Movie', watched_ts: 100 },
+          { guid: 'server-second', title: 'Second', type: 'Movie', watched_ts: 200 }
+        ]
+      }
+      const provider = new FeiniuVideoCatalogProvider(session(), service)
+
+      const page = await provider.resume({ kinds: [MediaRefKind.Movie], limit: 8 })
+
+      expect(page.items.length).assertEqual(2)
+      expect(page.items[0].ref.id).assertEqual('server-first')
+      expect(page.items[1].ref.id).assertEqual('server-second')
+    })
+
     it('selectsResumableThenNextEpisodeForASeries', 0, async () => {
       const owner = session()
       const service = new FakeFeiniuVideoCatalogService()
@@ -476,6 +495,40 @@ export default function feiniuVideoCatalogProviderTest() {
 
       expect(next.items.length).assertEqual(1)
       expect(next.items[0].ref.id).assertEqual('episode-3')
+
+      service.episodeResponses.set('season-1', {
+        code: 0,
+        msg: '',
+        data: [
+          {
+            guid: 'episode-6', title: 'Episode 6', type: 'Episode', parent_guid: 'season-1',
+            episode_number: 6, watched: 1
+          },
+          {
+            guid: 'episode-7', title: 'Episode 7', type: 'Episode', parent_guid: 'season-1',
+            episode_number: 7, watched: 0
+          }
+        ]
+      })
+      service.playResponse = {
+        code: 0,
+        msg: '',
+        data: [{
+          guid: 'episode-6', title: 'Episode 6', type: 'Episode', parent_guid: 'season-1',
+          episode_number: 6, watched_ts: 400, watched: 0, duration: 2400,
+          media_stream: { progress: 25, current_time: 600 }
+        }]
+      }
+      const nextFromCatalogWatchedState = await new FeiniuVideoCatalogProvider(owner, service).nextUp({
+        seriesRef: ref(owner, 'series-1', MediaRefKind.Series),
+        limit: 1,
+        disableFirstEpisode: false,
+        enableResumable: true,
+        enableRewatching: false
+      })
+
+      expect(nextFromCatalogWatchedState.items.length).assertEqual(1)
+      expect(nextFromCatalogWatchedState.items[0].ref.id).assertEqual('episode-7')
     })
 
     it('keepsEpisodesMountedDirectlyUnderSeriesOutOfFakeSeasonHierarchy', 0, async () => {
@@ -691,6 +744,49 @@ export default function feiniuVideoCatalogProviderTest() {
       expect(episodes.items.length).assertEqual(1)
       expect(episodes.items[0].ref.id).assertEqual('episode-1')
       expect(requestsFor(service, '/v/api/v1/episode/list/series-1').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/play/info').length).assertEqual(1)
+    })
+
+    it('mapsSeriesPlaybackTargetFromPlayInfo', 0, async () => {
+      const owner = session()
+      const service = new FakeFeiniuVideoCatalogService()
+      service.detailResponse = {
+        code: 0,
+        msg: '',
+        data: { guid: 'series-1', title: '奔跑吧', type: 'TV' }
+      }
+      service.seasonResponses.set('series-1', {
+        code: 0,
+        msg: '',
+        data: [
+          { guid: 'season-7', title: '奔跑吧 第7季', type: 'Season', season_number: 7 },
+          { guid: 'season-1', title: '奔跑吧 第1季', type: 'Season', season_number: 1 }
+        ]
+      })
+      service.playInfoResponse = {
+        code: 0,
+        msg: '',
+        data: {
+          guid: 'episode-7-1',
+          item: {
+            title: '城市垃圾',
+            type: 'Episode',
+            tv_title: '奔跑吧',
+            parent_title: '奔跑吧 第3季',
+            season_number: 7,
+            episode_number: 1
+          }
+        }
+      }
+      const provider = new FeiniuVideoCatalogProvider(owner, service)
+
+      const detail = await provider.getDetail(ref(owner, 'series-1', MediaRefKind.Series))
+
+      expect(detail.playbackTarget?.ref?.id).assertEqual('episode-7-1')
+      expect(detail.playbackTarget?.seasonNumber).assertEqual(7)
+      expect(detail.playbackTarget?.episodeNumber).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/play/info').length).assertEqual(1)
+      expect(requestsFor(service, '/v/api/v1/play/list').length).assertEqual(0)
     })
 
     it('loadsOptionalStreamListForPlayableDetailAndMapsEachFile', 0, async () => {

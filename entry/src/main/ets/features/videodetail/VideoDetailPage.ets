@@ -50,6 +50,8 @@ import {
 
 const VIDEO_HERO_LOG_DOMAIN: number = 0xFF00
 const VIDEO_HERO_LOG_TAG: string = 'mafei-video-hero'
+const HERO_TITLE_FONT_FAMILY: string = 'MaFei Hero Calligraphy'
+let heroTitleFontRegistered: boolean = false
 
 @ComponentV2
 struct NativeDetailPlayAction {
@@ -63,6 +65,11 @@ struct NativeDetailPlayAction {
     return Math.min(100, Math.max(0, this.progress))
   }
 
+  private hasPlaybackProgress(): boolean {
+    const progress = this.normalizedProgress()
+    return this.remainingTime.length > 0 && progress > 0 && progress < 100
+  }
+
   private compactRemainingTime(): string {
     return this.remainingTime
       .replace('剩余 ', '剩余')
@@ -73,7 +80,7 @@ struct NativeDetailPlayAction {
   build() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Stack({ alignContent: Alignment.Start }) {
-        if (this.normalizedProgress() > 0) {
+        if (this.hasPlaybackProgress()) {
           Stack() {
             Row()
               .width('100%')
@@ -218,9 +225,8 @@ export struct VideoDetailPage {
   @Local heroBackdropPixelMap?: image.PixelMap
   @Local heroFeatheredPixelMap?: image.PixelMap
   @Local titleCollapseProgress: number = 0
-  @Local heroTitleInitialCenterY: number = 0
   @Local collapsedTitleGlobalX: number = 0
-  @Local collapsedTitleCenterY: number = 0
+  @Local collapsedTitleCenterX: number = 0
   @Provider() selectedSubtitleIndex: number = 0
   @Provider() selectedAudioIndex: number = 0
   private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
@@ -599,25 +605,51 @@ export struct VideoDetailPage {
     return progress * progress * (3 - 2 * progress)
   }
 
+  private heroTitleUsesCalligraphy(): boolean {
+    return /[\u3400-\u9fff]/.test(this.ui.title)
+  }
+
   private heroTitleScale(): number {
-    const collapsedScale = this.ui.isMovie && this.ui.logo.length > 0 ? 0.28 : 0.62
+    let collapsedScale = 0.46
+    if (this.ui.logo.length > 0) {
+      collapsedScale = 0.28
+    } else if (this.heroTitleUsesCalligraphy()) {
+      collapsedScale = 0.23
+    }
     return 1 - (1 - collapsedScale) * this.easedTitlePhase(0.42)
   }
 
+  private registerHeroTitleFont(): void {
+    if (heroTitleFontRegistered) {
+      return
+    }
+    try {
+      this.getUIContext().getFont().registerFont({
+        familyName: HERO_TITLE_FONT_FAMILY,
+        familySrc: $rawfile('fonts/MaShanZheng-Regular.ttf')
+      })
+      heroTitleFontRegistered = true
+    } catch (_error) {
+      this.logHeroWarn('title.font.register-failed')
+    }
+  }
+
   private heroTitleOpacity(): number {
-    const fadeStart = 0.9
+    const fadeStart = 0.72
+    const fadeEnd = 0.94
     if (this.titleCollapseProgress <= fadeStart) {
       return 1
     }
-    return Math.max(0, 1 - (this.titleCollapseProgress - fadeStart) / (1 - fadeStart))
+    return Math.max(0, 1 - (this.titleCollapseProgress - fadeStart) / (fadeEnd - fadeStart))
   }
 
   private collapsedTitleOpacity(): number {
-    const fadeStart = 0.88
+    const fadeStart = 0.72
+    const fadeEnd = 0.94
     if (this.titleCollapseProgress <= fadeStart) {
       return 0
     }
-    return Math.min(1, (this.titleCollapseProgress - fadeStart) / (1 - fadeStart))
+    return Math.min(1, (this.titleCollapseProgress - fadeStart) / (fadeEnd - fadeStart))
   }
 
   private collapsedTitleScale(): number {
@@ -632,34 +664,28 @@ export struct VideoDetailPage {
     return (targetCenter - viewportWidth / 2) * this.easedTitlePhase(0.24)
   }
 
-  private heroTitleTranslateY(): number {
-    if (this.heroTitleInitialCenterY <= 0 || this.collapsedTitleCenterY <= 0) {
-      return -12 * this.easedTitlePhase(0.24)
-    }
-    const collapseEndOffset = 290
-    const finalOffset = this.collapsedTitleCenterY -
-      (this.heroTitleInitialCenterY - collapseEndOffset)
-    return finalOffset * this.easedTitlePhase(0.24)
+  private heroTextTranslateX(): number {
+    const viewportWidth = this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
+    const targetCenter = this.collapsedTitleCenterX > 0 ? this.collapsedTitleCenterX : 112
+    return (targetCenter - viewportWidth / 2) * this.easedTitlePhase(0.24)
   }
 
-  private updateHeroTitleArea(area: Area): void {
-    if (this.titleCollapseProgress > 0.02) {
-      return
-    }
-    const centerY = Number(area.globalPosition.y) + Number(area.height) / 2
-    if (centerY > 0 && Math.abs(centerY - this.heroTitleInitialCenterY) > 0.5) {
-      this.heroTitleInitialCenterY = centerY
-    }
+  private heroTitleTranslateY(): number {
+    return -16 * this.easedTitlePhase(0.24)
+  }
+
+  private heroLogoTranslateY(): number {
+    return -8 - 8 * this.easedTitlePhase(0.24)
   }
 
   private updateCollapsedTitleArea(area: Area): void {
     const globalX = Number(area.globalPosition.x)
-    const centerY = Number(area.globalPosition.y) + Number(area.height) / 2
+    const centerX = globalX + Number(area.width) / 2
     if (globalX > 0 && Math.abs(globalX - this.collapsedTitleGlobalX) > 0.5) {
       this.collapsedTitleGlobalX = globalX
     }
-    if (centerY > 0 && Math.abs(centerY - this.collapsedTitleCenterY) > 0.5) {
-      this.collapsedTitleCenterY = centerY
+    if (centerX > 0 && Math.abs(centerX - this.collapsedTitleCenterX) > 0.5) {
+      this.collapsedTitleCenterX = centerX
     }
   }
 
@@ -762,8 +788,40 @@ export struct VideoDetailPage {
   }
 
   @Builder
+  private nativeHeroTextLabel() {
+    if (this.heroTitleUsesCalligraphy()) {
+      Text(this.ui.title)
+        .fontSize(68)
+        .minFontSize(34)
+        .maxFontSize(68)
+        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
+        .fontFamily(HERO_TITLE_FONT_FAMILY)
+        .fontWeight(FontWeight.Normal)
+        .fontColor(Color.White)
+        .textShadow([
+          { radius: 10, color: 'rgba(0, 0, 0, 0.86)', offsetX: 0, offsetY: 3 },
+          { radius: 20, color: 'rgba(0, 90, 255, 0.26)', offsetX: 0, offsetY: 0 }
+        ])
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .width('100%')
+    } else {
+      Text(this.ui.title)
+        .fontSize(38)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .textShadow({ radius: 10, color: 'rgba(0, 0, 0, 0.82)', offsetX: 0, offsetY: 3 })
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .width('100%')
+    }
+  }
+
+  @Builder
   private nativeHeroTitle() {
-    if (this.ui.isMovie && this.ui.logo.length > 0) {
+    if (this.ui.logo.length > 0) {
       Row() {
         ImageKnifeComponent({
           imageKnifeOption: this.logoImageOption()
@@ -774,11 +832,8 @@ export struct VideoDetailPage {
       .width('100%')
       .justifyContent(FlexAlign.Center)
       .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
-      .translate({ x: this.heroLogoTranslateX(), y: this.heroTitleTranslateY() })
+      .translate({ x: this.heroLogoTranslateX(), y: this.heroLogoTranslateY() })
       .opacity(this.heroTitleOpacity())
-      .onAreaChange((_oldValue: Area, newValue: Area): void => {
-        this.updateHeroTitleArea(newValue)
-      })
     } else {
       Column({ space: 6 }) {
         if (this.ui.subtitle.length > 0) {
@@ -788,43 +843,58 @@ export struct VideoDetailPage {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        Text(this.ui.title)
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        this.nativeHeroTextLabel()
       }
-      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
       .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
-      .translate({ y: this.heroTitleTranslateY() })
+      .translate({ x: this.heroTextTranslateX(), y: this.heroTitleTranslateY() })
       .opacity(this.heroTitleOpacity())
     }
   }
 
   @Builder
   private nativeHeroMetadataLine() {
-    Scroll() {
-      Text() {
-        if (this.ui.score > 0) {
-          Span(this.ui.score.toFixed(1) + '分')
-            .fontColor($r('app.color.text_score'))
+    Column({ space: 4 }) {
+      if (this.ui.score > 0 || this.ui.primaryInfo.length > 0) {
+        Scroll() {
+          Text() {
+            if (this.ui.score > 0) {
+              Span(this.ui.score.toFixed(1) + '分')
+                .fontColor($r('app.color.text_score'))
+            }
+            if (this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+              Span(' · ')
+            }
+            if (this.ui.primaryInfo.length > 0) {
+              Span(this.ui.primaryInfo)
+            }
+          }
+          .fontSize(13)
+          .fontColor(Color.White)
+          .maxLines(1)
         }
-        if (this.ui.score > 0 && this.ui.info.length > 0) {
-          Span(' · ')
-        }
-        if (this.ui.info.length > 0) {
-          Span(this.ui.info)
-        }
+        .width('100%')
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.None)
       }
-      .fontSize(13)
-      .fontColor(Color.White)
-      .maxLines(1)
+
+      if (this.ui.secondaryInfo.length > 0) {
+        Scroll() {
+          Text(this.ui.secondaryInfo)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .maxLines(1)
+        }
+        .width('100%')
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.None)
+      }
     }
     .width('100%')
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.None)
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -1018,6 +1088,7 @@ export struct VideoDetailPage {
 
   aboutToAppear(): void {
     this.heroBackdropActive = true
+    this.registerHeroTitleFont()
     this.logHeroInfo('page.appear')
     this.configureHeroHeight()
     const raw = HMRouterMgr.getCurrentParam()
@@ -1246,13 +1317,13 @@ export struct VideoDetailPage {
 
               if (this.useNativeSurface()) {
                 this.nativeHeroMetadata()
-              } else if (this.ui.isMovie) {
+              } else if (this.ui.logo.length > 0) {
                 ImageKnifeComponent({
                   imageKnifeOption: this.logoImageOption()
                 })
                   .height(80)
                   .aspectRatio(80 / 31) // 刮削的logo都是800x310
-                  .margin({ bottom: 10, left: 16 })
+                  .margin({ bottom: 18, left: 16 })
               } else {
                 Column({ space: 12 }) {
                   Text(this.ui.subtitle)
@@ -1285,21 +1356,36 @@ export struct VideoDetailPage {
             Stack() {
               Column() {
               if (!this.useNativeSurface()) {
-                Text() {
-                  if (!this.ui.isTvShows && this.ui.score > 0) {
-                    Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                Column({ space: 4 }) {
+                  if ((!this.ui.isTvShows && this.ui.score > 0) || this.ui.primaryInfo.length > 0) {
+                    Text() {
+                      if (!this.ui.isTvShows && this.ui.score > 0) {
+                        Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                      }
+                      if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                        Span(' · ')
+                      }
+                      if (this.ui.primaryInfo.length > 0) {
+                        Span(this.ui.primaryInfo)
+                      }
+                    }
+                    .fontSize(12)
+                    .fontColor($r('app.color.text_1'))
+                    .width('100%')
+                    .textAlign(TextAlign.Start)
                   }
-                  if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.info.length > 0) {
-                    Span(' · ')
+
+                  if (this.ui.secondaryInfo.length > 0) {
+                    Text(this.ui.secondaryInfo)
+                      .fontSize(12)
+                      .fontColor($r('app.color.text_1'))
+                      .width('100%')
+                      .textAlign(TextAlign.Start)
                   }
-                  Span(this.ui.info)
                 }
-                .fontSize(12)
-                .fontColor($r('app.color.text_1'))
-                .lineSpacing({ value: 6, unit: LengthUnit.VP })
                 .width('100%')
-                .textAlign(TextAlign.Start)
                 .padding({ left: 16, right: 16 })
+                .alignItems(HorizontalAlign.Start)
               }
 
               if (!this.useNativeSurface() && !this.ui.isTvShows &&
@@ -1362,8 +1448,9 @@ export struct VideoDetailPage {
                 .alignSelf(ItemAlign.Center)
               }
               if (this.ui.overview.length > 0) {
-                Blank().height(16)
+                Blank().height(28)
                 this.overviewSheetTrigger()
+                Blank().height(12)
               }
 
               if (this.ui.isTvShows) {

@@ -34,6 +34,7 @@ function homeSnapshotSource(accountScope: string): HomeSnapshotContent {
     owner: movieRef,
     kind: MediaImageKind.Backdrop,
     url: 'https://media.example/movie-1/backdrop',
+    requestPath: '/v/api/v1/sys/img/movie-1/backdrop?w=1280',
     variant: 'backdrop-1280',
     revision: 'backdrop-1',
     headers: [{ name: 'Authorization', value: 'secret-token' }]
@@ -86,6 +87,8 @@ export default function homeSnapshotStoreTest() {
       expect(snapshot?.recommendationList.length).assertEqual(1)
       expect(snapshot?.recommendationList[0].mediaRef?.accountScope).assertEqual(accountScope)
       expect(snapshot?.recommendationList[0].imageRef?.headers.length).assertEqual(0)
+      expect(snapshot?.recommendationList[0].imageRef?.requestPath)
+        .assertEqual('/v/api/v1/sys/img/movie-1/backdrop?w=1280')
       expect(snapshot?.latestMap.get(HOME_RECENT_MEDIA_ID)?.length).assertEqual(1)
     })
 

@@ -267,6 +267,18 @@ export struct SeasonDetailPage {
     return option
   }
 
+  private posterImageOption(): ImageKnifeOption {
+    const option = this.imageOption(this.ui.imageRef, this.ui.image)
+    option.border = {
+      width: AppThemeSurfaceResolver.outlineWidth(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5),
+      radius: 8,
+      color: AppThemeSurfaceResolver.mediaOutline(
+        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
+    }
+    return option
+  }
+
   private legacyMediaRef(id: string, kind: MediaRefKind): MediaRef | undefined {
     const normalizedId = id.trim()
     if (normalizedId.length === 0) {
@@ -308,6 +320,10 @@ export struct SeasonDetailPage {
     return this.ui.videoGroups.map<HomeFeedTabItem>((group: string, index: number) => {
       return { id: index.toString(), label: group }
     })
+  }
+
+  private seasonCountText(): string {
+    return `共${Math.max(1, this.ui.seasons.length)}季`
   }
 
   private sheetMaterialDecision(): OverlayMaterialDecision {
@@ -398,35 +414,40 @@ export struct SeasonDetailPage {
 
   @Builder
   private nativeHeroMetadata() {
-    Column({ space: 10 }) {
-      Text(this.ui.seasonName)
-        .fontSize(14)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    Row({ space: 16 }) {
+      ImageKnifeComponent({
+        imageKnifeOption: this.posterImageOption()
+      })
+        .width(96)
+        .height(144)
 
-      Text(this.ui.seriesName)
-        .fontSize(28)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Scroll() {
-        Text(this.ui.info)
-          .fontSize(13)
+      Column({ space: 10 }) {
+        Text(this.ui.seasonName)
+          .fontSize(14)
           .fontColor(Color.White)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.ui.seriesName)
+          .fontSize(28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.ui.info)
+          .fontSize(13)
+          .fontColor(Color.White)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .lineSpacing({ value: 10, unit: LengthUnit.VP })
       }
-      .width('100%')
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 8 })
-    .alignItems(HorizontalAlign.Start)
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .alignItems(VerticalAlign.Bottom)
   }
 
   @Builder
@@ -698,13 +719,22 @@ export struct SeasonDetailPage {
 
               if (this.useNativeSurface()) {
                 Blank().height(24)
-                if (this.ui.seasons.length > 1) {
-                  Text('选择季')
+                Row() {
+                  Text('选集')
                     .fontSize(18)
                     .fontWeight(FontWeight.Medium)
                     .fontColor($r('sys.color.font_primary'))
-                    .padding({ left: 16, right: 16 })
 
+                  Blank()
+
+                  Text(this.seasonCountText())
+                    .fontSize(13)
+                    .fontColor($r('sys.color.font_secondary'))
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16 })
+
+                if (this.ui.seasons.length > 1) {
                   Blank().height(12)
                   HomeLibraryChipSelector({
                     tabs: this.seasonTabs(),
@@ -719,13 +749,6 @@ export struct SeasonDetailPage {
                   })
                     .padding({ left: 16, right: 16 })
                 }
-
-                Blank().height(this.ui.seasons.length > 1 ? 24 : 0)
-                Text('剧集')
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
-                  .padding({ left: 16, right: 16 })
 
                 if (this.ui.videoGroups.length > 1) {
                   Blank().height(12)
@@ -742,7 +765,23 @@ export struct SeasonDetailPage {
                 }
               } else {
                 Blank().height(20)
+                Row() {
+                  Text('选集')
+                    .fontSize(18)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor($r('app.color.text_primary'))
+
+                  Blank()
+
+                  Text(this.seasonCountText())
+                    .fontSize(13)
+                    .fontColor($r('app.color.text_1'))
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16 })
+
                 if (this.ui.seasons.length > 1) {
+                  Blank().height(12)
                   List() {
                     ForEach(this.ui.seasons, (season: VideoItem, index) => {
                       ListItem() {

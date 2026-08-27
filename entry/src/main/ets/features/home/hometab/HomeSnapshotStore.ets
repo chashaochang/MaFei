@@ -7,7 +7,7 @@ import { MediaItem, VideoItem } from './HomeUIState'
 
 const HOME_SNAPSHOT_STORE_NAME: string = 'HomeContentSnapshot'
 const HOME_SNAPSHOT_KEY: string = 'home_content_snapshot'
-const HOME_SNAPSHOT_VERSION: number = 1
+const HOME_SNAPSHOT_VERSION: number = 2
 const HOME_SNAPSHOT_MAX_AGE_MS: number = 7 * 24 * 60 * 60 * 1000
 const HOME_SNAPSHOT_ITEM_LIMIT: number = 30
 
@@ -22,6 +22,7 @@ interface StoredMediaImageRef {
   owner: StoredMediaRef
   kind: string
   url: string
+  requestPath: string
   cacheKey: string
 }
 
@@ -317,6 +318,7 @@ export class HomeSnapshotStore {
       owner: this.storeRef(image.owner)!,
       kind: image.kind,
       url: image.url,
+      requestPath: image.requestPath,
       cacheKey: image.cacheKey
     }
   }
@@ -328,6 +330,7 @@ export class HomeSnapshotStore {
       owner: owner,
       kind: image.kind as MediaImageKind,
       url: image.url,
+      requestPath: `${image.requestPath || ''}`,
       variant: 'home-snapshot',
       cacheKeyOverride: image.cacheKey,
       headers: []

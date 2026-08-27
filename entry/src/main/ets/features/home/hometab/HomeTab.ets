@@ -1,5 +1,4 @@
 import { HMRouterMgr } from "@hadss/hmrouter"
-import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { HOME_RECENT_MEDIA_ID, HomeUIState, MediaItem, VideoItem } from "./HomeUIState"
 import { HomeViewModel } from "./HomeViewModel"
 import { UIConstants } from "../../../common/UIConstants"
@@ -21,9 +20,9 @@ import { AnimatorResult, curves } from "@kit.ArkUI"
 import { ConfigurationConstant } from '@kit.AbilityKit'
 import { HomeInitialSkeleton } from './HomeInitialSkeleton'
 import { MediaLibraryKind } from '../../../media/catalog/MediaCatalogModels'
-import { createMediaImageKnifeOption } from '../../../media/catalog/MediaImageKnifeAdapter'
 import { MediaRef, MediaRefKind } from '../../../media/MediaRef'
 import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
+import { MediaNetworkImage } from '../../../component/MediaNetworkImage'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
@@ -324,25 +323,6 @@ export struct HomeTab {
         isTvShows: openSeries
       })
       .push()
-  }
-
-  private imageOption(item: MediaItem): ImageKnifeOption {
-    const option = createMediaImageKnifeOption(item.imageRef, item.image)
-    option.objectFit = ImageFit.Contain
-    option.border = {
-      radius: 6
-    }
-    option.placeholderSrc = $r('app.media.placeholder_video')
-    option.placeholderObjectFit = ImageFit.CENTER
-    return option
-  }
-
-  private heroImageOption(item: VideoItem): ImageKnifeOption {
-    const option = createMediaImageKnifeOption(item.imageRef, item.image)
-    option.objectFit = ImageFit.Cover
-    option.placeholderSrc = $r('app.media.placeholder_video')
-    option.placeholderObjectFit = ImageFit.CENTER
-    return option
   }
 
   private syncRootNavigationLiveTvAvailability(): void {
@@ -662,9 +642,14 @@ export struct HomeTab {
         ForEach(this.ui.mediaList, (item: MediaItem) => {
           ListItem() {
             Stack() {
-              ImageKnifeComponent({
-                imageKnifeOption: this.imageOption(item)
-              }).height(80)
+              MediaNetworkImage({
+                imageRef: item.imageRef,
+                fallbackSource: item.image,
+                objectFit: ImageFit.Contain,
+                radius: 6
+              })
+                .width('100%')
+                .height(80)
             }
             .width(150)
             .height(90)
@@ -789,8 +774,9 @@ export struct HomeTab {
   @Builder
   private tabletHomeHero(item: VideoItem) {
     Stack({ alignContent: Alignment.BottomStart }) {
-      ImageKnifeComponent({
-        imageKnifeOption: this.heroImageOption(item)
+      MediaNetworkImage({
+        imageRef: item.imageRef,
+        fallbackSource: item.image
       })
         .width('100%')
         .height('100%')
@@ -925,8 +911,9 @@ export struct HomeTab {
   @Builder
   private nativeHomeHero(item: VideoItem) {
     Stack({ alignContent: Alignment.BottomStart }) {
-      ImageKnifeComponent({
-        imageKnifeOption: this.heroImageOption(item)
+      MediaNetworkImage({
+        imageRef: item.imageRef,
+        fallbackSource: item.image
       })
         .width('100%')
         .height('100%')

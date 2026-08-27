@@ -53,5 +53,20 @@ export default function homeShellPolicyTest() {
         true
       )).assertEqual(HomeShellKind.LargeSidebar)
     })
+
+    it('usesDrawerForPortraitLgTabletWithoutLockingDensity', 0, () => {
+      expect(HomeShellPolicy.resolve(
+        BreakpointTypeEnum.LG,
+        ThemeStyle.Native,
+        true,
+        true
+      )).assertEqual(HomeShellKind.MediumDrawer)
+      expect(HomeShellPolicy.resolve(
+        BreakpointTypeEnum.LG,
+        ThemeStyle.Native,
+        true,
+        false
+      )).assertEqual(HomeShellKind.LargeSidebar)
+    })
   })
 }

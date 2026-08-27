@@ -29,6 +29,8 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace episodeName : string = ''
   @Trace score: number = 0
   @Trace info: string = ''
+  @Trace primaryInfo: string = ''
+  @Trace secondaryInfo: string = ''
   @Trace overview: string = ''
   @Trace people: MediaPersonCredit[] = []
   @Trace isFavorite: boolean = false

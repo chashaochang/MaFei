@@ -48,7 +48,9 @@ struct Index {
     return HomeShellPolicy.resolve(
       this.appUIState.currentBreakpoint as BreakpointTypeEnum,
       this.appUIState.themeStyle,
-      this.appUIState.nativeThemeAvailable
+      this.appUIState.nativeThemeAvailable,
+      this.appUIState.deviceWidth > 0 &&
+        this.appUIState.deviceHeight >= this.appUIState.deviceWidth
     )
   }
 

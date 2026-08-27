@@ -1,9 +1,5 @@
 import { HMRouterMgr } from '@hadss/hmrouter'
-import {
-  HORIZONTAL_CARD_SPACE,
-  VERTICAL_CARD_HEIGHT,
-  VERTICAL_CARD_WIDTH
-} from '../../../common/OneMoreConst'
+import { HORIZONTAL_CARD_SPACE } from '../../../common/OneMoreConst'
 import { RouterConsts } from '../../../common/RouterConsts'
 import { VerticalVideoCard } from '../../../component/VerticalVideoCard'
 import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
@@ -12,6 +8,8 @@ import { HOME_RECENT_MEDIA_ID, VideoItem } from './HomeUIState'
 
 const LATEST_CONTENT_GAP: number = 16
 const LATEST_GRID_ROW_GAP: number = 20
+const LATEST_PHONE_COLUMN_GAP: number = 8
+const LATEST_WIDE_COLUMN_GAP: number = 12
 
 @ComponentV2
 export struct HomeLatestMediaSection {
@@ -34,14 +32,18 @@ export struct HomeLatestMediaSection {
     return this.latestMap.get(this.selectedMediaId) || []
   }
 
+  private columnGap(): number {
+    return this.currentBreakpoint.includes('s') ? LATEST_PHONE_COLUMN_GAP : LATEST_WIDE_COLUMN_GAP
+  }
+
   private gridColumns(): string {
     if (this.currentBreakpoint.includes('s') || this.currentBreakpoint === 'md') {
-      return '1fr 1fr 1fr'
+      return 'repeat(3, 1fr)'
     }
     if (this.currentBreakpoint === 'lg') {
-      return '1fr 1fr 1fr 1fr'
+      return 'repeat(4, 1fr)'
     }
-    return '1fr 1fr 1fr 1fr 1fr'
+    return 'repeat(5, 1fr)'
   }
 
   private openDetails(item: VideoItem): void {
@@ -81,7 +83,7 @@ export struct HomeLatestMediaSection {
     }
     .width('100%')
     .columnsTemplate(this.gridColumns())
-    .columnsGap(HORIZONTAL_CARD_SPACE.getValue(this.currentBreakpoint))
+    .columnsGap(this.columnGap())
     .rowsGap(LATEST_GRID_ROW_GAP)
     .margin({ top: LATEST_CONTENT_GAP })
     .scrollBar(BarState.Off)
@@ -92,24 +94,29 @@ export struct HomeLatestMediaSection {
     Grid() {
       ForEach([0, 1, 2, 3, 4, 5], () => {
         GridItem() {
-          Column({ space: 8 }) {
-            Column()
-              .width(VERTICAL_CARD_WIDTH.getValue(this.currentBreakpoint))
-              .height(VERTICAL_CARD_HEIGHT.getValue(this.currentBreakpoint))
-              .borderRadius(10)
-              .backgroundColor($r('sys.color.comp_background_tertiary'))
-            Column()
-              .width(VERTICAL_CARD_WIDTH.getValue(this.currentBreakpoint))
-              .height(14)
-              .borderRadius(7)
-              .backgroundColor($r('sys.color.comp_background_tertiary'))
+          Row() {
+            Column({ space: 8 }) {
+              Column()
+                .width('100%')
+                .aspectRatio(2 / 3)
+                .borderRadius(10)
+                .backgroundColor($r('sys.color.comp_background_tertiary'))
+              Column()
+                .width('100%')
+                .height(14)
+                .borderRadius(7)
+                .backgroundColor($r('sys.color.comp_background_tertiary'))
+            }
+            .width('100%')
           }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
         }
       })
     }
     .width('100%')
     .columnsTemplate(this.gridColumns())
-    .columnsGap(HORIZONTAL_CARD_SPACE.getValue(this.currentBreakpoint))
+    .columnsGap(this.columnGap())
     .rowsGap(LATEST_GRID_ROW_GAP)
     .margin({ top: LATEST_CONTENT_GAP })
     .scrollBar(BarState.Off)

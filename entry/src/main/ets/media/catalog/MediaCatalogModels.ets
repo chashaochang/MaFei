@@ -58,6 +58,8 @@ export interface MediaImageRefOptions {
   readonly owner: MediaRef
   readonly kind: MediaImageKind
   readonly url: string
+  /** Credential-free provider request path used to rebuild the URL for the active route. */
+  readonly requestPath?: string
   /** Stable variant such as original, poster-600, or backdrop-1280. */
   readonly variant: string
   /** Provider image revision or tag. It must not contain credentials. */
@@ -91,6 +93,7 @@ export class MediaImageRef {
   readonly accountScope: string
   readonly kind: MediaImageKind
   readonly url: string
+  readonly requestPath: string
   readonly headers: MediaRequestHeader[]
   readonly cacheKey: string
 
@@ -100,6 +103,7 @@ export class MediaImageRef {
     this.accountScope = options.owner.accountScope
     this.kind = options.kind
     this.url = options.url.trim()
+    this.requestPath = `${options.requestPath || ''}`.trim()
     this.headers = (options.headers || []).map((header: MediaRequestHeader): MediaRequestHeader => {
       return {
         name: header.name.trim(),
@@ -223,6 +227,12 @@ export interface MediaPersonCredit {
   readonly primaryImage?: MediaImageRef
 }
 
+export interface MediaPlaybackTarget {
+  readonly ref?: MediaRef
+  readonly seasonNumber?: number
+  readonly episodeNumber?: number
+}
+
 export interface MediaStreamInfo {
   readonly index: number
   readonly kind: MediaStreamKind
@@ -289,6 +299,7 @@ export interface MediaSeason {
   readonly productionYear?: number
   readonly communityRating?: number
   readonly episodeCount: number
+  readonly tags: string[]
   readonly primaryImage?: MediaImageRef
   readonly backdropImage?: MediaImageRef
   readonly userState: MediaUserState
@@ -338,6 +349,7 @@ export interface MediaDetail {
   readonly studios: string[]
   readonly personCredits: MediaPersonCredit[]
   readonly seasons: MediaSeason[]
+  readonly playbackTarget?: MediaPlaybackTarget
   readonly mediaFiles: MediaFileInfo[]
   readonly externalLinks: MediaExternalLink[]
   readonly primaryImage?: MediaImageRef

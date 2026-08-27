@@ -17,6 +17,7 @@ import {
   MediaPerson,
   MediaPersonCredit,
   MediaPersonKind,
+  MediaPlaybackTarget,
   MediaRequestHeader,
   MediaSeason,
   MediaStreamInfo,
@@ -37,6 +38,7 @@ import {
   FnMediaSeasonItem
 } from './FeiniuVideoDtos'
 import {
+  FnMediaPlayInfoResp,
   FnMediaStreamAudioInfo,
   FnMediaStreamFileInfo,
   FnMediaStreamListData,
@@ -95,6 +97,24 @@ export class FeiniuVideoCatalogMapper {
       return tvTitle
     }
     return `${item.parent_title || ''}`.trim()
+  }
+
+  rehydrateImage(image: MediaImageRef): MediaImageRef {
+    const requestPath = image.requestPath.trim()
+    const baseUrl = this.normalizedBaseUrl(this.access.baseUrl)
+    if (!image.belongsTo(this.session) || requestPath.length === 0 || baseUrl.length === 0) {
+      return image
+    }
+    const normalizedPath = requestPath.startsWith('/') ? requestPath : `/${requestPath}`
+    return new MediaImageRef({
+      owner: image.owner,
+      kind: image.kind,
+      url: `${baseUrl}${normalizedPath}`,
+      requestPath: normalizedPath,
+      variant: 'rehydrated',
+      cacheKeyOverride: image.cacheKey,
+      headers: this.imageHeaders()
+    })
   }
 
   counts(data: Record<string, number>): MediaCatalogCounts {
@@ -221,7 +241,7 @@ export class FeiniuVideoCatalogMapper {
 
   detail(item: FnMediaItemDetailResp, people: FnMediaPersonListItem[] = [],
     seasons: MediaSeason[] = [], streamData?: FnMediaStreamListData,
-    context?: FeiniuVideoCatalogItemContext): MediaDetail {
+    context?: FeiniuVideoCatalogItemContext, playInfo?: FnMediaPlayInfoResp): MediaDetail {
     const owner = this.itemRef(item, context)
     const externalLinks: MediaExternalLink[] = []
     const imdbId = `${item.imdb_id || ''}`.trim()
@@ -257,6 +277,7 @@ export class FeiniuVideoCatalogMapper {
       studios: [],
       personCredits: this.personCredits(people),
       seasons: seasons.slice(),
+      playbackTarget: this.playbackTarget(playInfo),
       mediaFiles: this.mediaFiles(owner, item, streamData),
       externalLinks: externalLinks,
       primaryImage: this.image(owner, item.poster || item.posters || context?.primaryImagePath ||
@@ -485,17 +506,34 @@ export class FeiniuVideoCatalogMapper {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
   }
 
+  private playbackTarget(playInfo?: FnMediaPlayInfoResp): MediaPlaybackTarget | undefined {
+    const item = playInfo?.data?.item
+    const targetId = `${playInfo?.data?.guid || ''}`.trim()
+    const seasonNumber = this.positiveNumber(item?.season_number)
+    const episodeNumber = this.positiveNumber(item?.episode_number)
+    if (targetId.length === 0 && seasonNumber === undefined && episodeNumber === undefined) {
+      return undefined
+    }
+    return {
+      ref: targetId.length > 0 ? this.ref(targetId, MediaRefKind.Episode) : undefined,
+      seasonNumber: seasonNumber,
+      episodeNumber: episodeNumber
+    }
+  }
+
   season(item: FnMediaSeasonItem, seriesRef: MediaRef): MediaSeason {
     const owner = this.ref(item.guid, MediaRefKind.Season)
+    const seasonNumber = this.positiveNumber(item.season_number)
     return {
       ref: owner,
       seriesRef: seriesRef,
-      title: item.title || this.seasonTitle(item.season_number),
+      title: seasonNumber !== undefined ? this.seasonTitle(seasonNumber) : (item.title || '剧季'),
       overview: item.overview || '',
-      seasonNumber: this.positiveNumber(item.season_number),
+      seasonNumber: seasonNumber,
       productionYear: this.year(item),
       communityRating: this.rating(item.vote_average),
       episodeCount: Math.max(0, item.local_number_of_episodes || item.number_of_episodes || 0),
+      tags: this.resolutionTags(item),
       primaryImage: this.image(owner, item.poster || '', MediaImageKind.Primary,
         'season-primary-640', 640),
       backdropImage: this.image(owner, item.poster || '', MediaImageKind.Backdrop,
@@ -749,7 +787,14 @@ export class FeiniuVideoCatalogMapper {
     if (episode > 0) {
       return `第 ${episode} 集`
     }
-    return item.type || ''
+    const normalizedType = `${item.type || ''}`.trim().toLowerCase()
+    if (normalizedType === 'movie') return '电影'
+    if (normalizedType === 'tv' || normalizedType === 'series') return '剧集'
+    if (normalizedType === 'season') return season > 0 ? `第 ${season} 季` : '剧季'
+    if (normalizedType === 'directory') return '目录'
+    if (normalizedType === 'video') return '视频'
+    if (normalizedType === 'livechannel') return '直播'
+    return '影视'
   }
 
   private episodeSubtitle(item: FnMediaItem): string {
@@ -818,14 +863,7 @@ export class FeiniuVideoCatalogMapper {
   }
 
   private mediaTags(item: FnMediaItem): string[] {
-    const tags: string[] = []
-    const resolutions = item.media_stream?.resolutions || []
-    resolutions.forEach((value: string): void => {
-      const normalized = `${value || ''}`.trim().toUpperCase()
-      if (normalized.length > 0 && tags.indexOf(normalized) < 0) {
-        tags.push(normalized)
-      }
-    })
+    const tags = this.resolutionTags(item)
     const audioType = `${item.media_stream?.audio_type || ''}`.trim()
     if (audioType.length > 0 && tags.indexOf(audioType) < 0) {
       tags.push(audioType)
@@ -834,6 +872,18 @@ export class FeiniuVideoCatalogMapper {
     if (colorRange.length > 0 && tags.indexOf(colorRange) < 0) {
       tags.push(colorRange)
     }
+    return tags
+  }
+
+  private resolutionTags(item: FnMediaItem): string[] {
+    const tags: string[] = []
+    const resolutions = item.media_stream?.resolutions || []
+    resolutions.forEach((value: string): void => {
+      const normalized = `${value || ''}`.trim().toUpperCase()
+      if (normalized.length > 0 && tags.indexOf(normalized) < 0) {
+        tags.push(normalized)
+      }
+    })
     return tags
   }
 
@@ -917,10 +967,12 @@ export class FeiniuVideoCatalogMapper {
       return undefined
     }
     const imagePath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`
+    const requestPath = `/v/api/v1/sys/img${imagePath}?w=${Math.max(1, Math.floor(width))}`
     return new MediaImageRef({
       owner: owner,
       kind: kind,
-      url: `${baseUrl}/v/api/v1/sys/img${imagePath}?w=${Math.max(1, Math.floor(width))}`,
+      url: `${baseUrl}${requestPath}`,
+      requestPath: requestPath,
       variant: variant,
       revision: normalizedPath,
       headers: this.imageHeaders()

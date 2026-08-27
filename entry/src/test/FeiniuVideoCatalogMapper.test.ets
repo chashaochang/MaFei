@@ -2,7 +2,7 @@ import { describe, expect, it } from '@ohos/hypium'
 import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
 import { MediaProviderSession } from '../main/ets/media/MediaProviderSession'
 import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
-import { MediaImageKind, MediaLibraryKind, MediaPersonKind } from
+import { MediaImageKind, MediaImageRef, MediaLibraryKind, MediaPersonKind } from
   '../main/ets/media/catalog/MediaCatalogModels'
 import {
   FeiniuVideoCatalogImageAccess,
@@ -104,6 +104,27 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(image.headers[1].value.indexOf('Trim-MC-token=media-token') >= 0).assertTrue()
       expect(image.headers[1].value.indexOf('mode=relay') >= 0).assertTrue()
       expect(image.cacheKey.indexOf('media-token') >= 0).assertFalse()
+    })
+
+    it('rehydratesPersistedImagesWithTheActiveRouteAndCredentials', 0, () => {
+      const owner = session()
+      const persisted = new MediaImageRef({
+        owner: new MediaRef(owner.provider, owner.accountScope, 'movie-1', MediaRefKind.Movie),
+        kind: MediaImageKind.Primary,
+        url: 'http://old-lan:5666/v/api/v1/sys/img/posters/movie-1.jpg?w=640',
+        requestPath: '/v/api/v1/sys/img/posters/movie-1.jpg?w=640',
+        variant: 'home-snapshot',
+        cacheKeyOverride: 'stable-image-key',
+        headers: []
+      })
+
+      const image = mapper(owner).rehydrateImage(persisted)
+
+      expect(image.url).assertEqual(
+        'https://relay.example/v/api/v1/sys/img/posters/movie-1.jpg?w=640')
+      expect(image.headers[0].value).assertEqual('media-token')
+      expect(image.headers[1].value.indexOf('mode=relay') >= 0).assertTrue()
+      expect(image.cacheKey).assertEqual('stable-image-key')
     })
 
     it('mapsSummaryRatingDurationProgressGenresAndSeriesReferences', 0, () => {
@@ -266,6 +287,11 @@ export default function feiniuVideoCatalogMapperTest() {
         type: 'Season',
         season_number: 1,
         number_of_episodes: 10,
+        media_stream: {
+          resolutions: ['4K', '1080p'],
+          audio_type: 'Others',
+          color_range_type: 'HDR'
+        },
         first_air_date: '2026-03-18',
         vote_average: '8.4',
         poster: '/season.jpg'
@@ -308,6 +334,8 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(mappedDetail.genres.indexOf('999') >= 0).assertFalse()
       expect(mappedDetail.personCredits[0].kind).assertEqual(MediaPersonKind.Actor)
       expect(mappedDetail.personCredits[0].role).assertEqual('Hero')
+      expect(mappedDetail.seasons[0].title).assertEqual('第 1 季')
+      expect(mappedDetail.seasons[0].tags.join(',')).assertEqual('4K,1080P')
       expect(mappedDetail.seasons[0].episodeCount).assertEqual(10)
       expect(mappedDetail.seasons[0].productionYear).assertEqual(2026)
       expect(mappedDetail.seasons[0].communityRating).assertEqual(8.4)
@@ -393,6 +421,22 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(summary.ref.kind).assertEqual(MediaRefKind.Episode)
       expect(summary.seriesRef?.id).assertEqual('series-1')
       expect(summary.seasonRef?.id).assertEqual('season-1')
+    })
+
+    it('localizesContinueWatchingMediaTypes', 0, () => {
+      const movie = mapper().resume({
+        guid: 'movie-1',
+        title: 'Movie One',
+        type: 'Movie'
+      })
+      const video = mapper().resume({
+        guid: 'video-1',
+        title: 'Video One',
+        type: 'Video'
+      })
+
+      expect(movie.subtitle).assertEqual('电影')
+      expect(video.subtitle).assertEqual('视频')
     })
 
     it('mapsPersonAndAdvancesPagesByRawServerItemCount', 0, () => {

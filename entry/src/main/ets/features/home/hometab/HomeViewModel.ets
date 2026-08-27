@@ -97,25 +97,34 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     this.snapshotAccountScope = accountScope
     const snapshot = this.snapshotStore.load(accountScope)
     if (!snapshot) return
-    this.applySnapshot(snapshot)
+    this.applySnapshot(snapshot, catalog)
     this.initialLoadCompleted = true
     this.ui.initialLoading = false
   }
 
-  private applySnapshot(snapshot: HomeSnapshot): void {
-    this.ui.mediaList = snapshot.mediaList
-    this.ui.resumeList = snapshot.resumeList
-    this.ui.recommendationList = snapshot.recommendationList
-    this.ui.nextUpList = snapshot.nextUpList
-    this.ui.latestMediaList = snapshot.latestMediaList
-    this.ui.latestMap = snapshot.latestMap
+  private applySnapshot(snapshot: HomeSnapshot, catalog: MediaCatalogProvider): void {
+    this.ui.mediaList = snapshot.mediaList.map((item: MediaItem): MediaItem =>
+      this.rehydrateMediaItem(item, catalog))
+    this.ui.resumeList = snapshot.resumeList.map((item: VideoItem): VideoItem =>
+      this.rehydrateVideoItem(item, catalog))
+    this.ui.recommendationList = snapshot.recommendationList.map((item: VideoItem): VideoItem =>
+      this.rehydrateVideoItem(item, catalog))
+    this.ui.nextUpList = snapshot.nextUpList.map((item: VideoItem): VideoItem =>
+      this.rehydrateVideoItem(item, catalog))
+    this.ui.latestMediaList = snapshot.latestMediaList.map((item: MediaItem): MediaItem =>
+      this.rehydrateMediaItem(item, catalog))
+    const latestMap = new Map<string, VideoItem[]>()
+    snapshot.latestMap.forEach((items: VideoItem[], id: string): void => {
+      latestMap.set(id, items.map((item: VideoItem): VideoItem => this.rehydrateVideoItem(item, catalog)))
+    })
+    this.ui.latestMap = latestMap
     this.ui.selectedLatestMediaId = resolveLatestMediaSelection(
       snapshot.selectedLatestMediaId, snapshot.latestMediaList)
     this.ui.hasLiveTv = snapshot.hasLiveTv
     this.ui.latestMediaLoading = false
     this.latestLoadedIds = new Set<string>()
     this.latestStartIndexes = new Map<string, number>()
-    snapshot.latestMap.forEach((items: VideoItem[], id: string): void => {
+    latestMap.forEach((items: VideoItem[], id: string): void => {
       this.latestLoadedIds.add(id)
       this.latestStartIndexes.set(id, items.length)
     })
@@ -123,6 +132,22 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
     if (this.appUIState.rootNavigationHomeHeroVisible !== heroVisible) {
       this.appUIState.rootNavigationHomeHeroVisible = heroVisible
     }
+  }
+
+  private rehydrateMediaItem(item: MediaItem, catalog: MediaCatalogProvider): MediaItem {
+    if (item.imageRef) {
+      item.imageRef = catalog.rehydrateImage(item.imageRef)
+      item.image = item.imageRef.url
+    }
+    return item
+  }
+
+  private rehydrateVideoItem(item: VideoItem, catalog: MediaCatalogProvider): VideoItem {
+    if (item.imageRef) {
+      item.imageRef = catalog.rehydrateImage(item.imageRef)
+      item.image = item.imageRef.url
+    }
+    return item
   }
 
   private persistSnapshot(requestVersion: number): void {

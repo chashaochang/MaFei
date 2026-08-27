@@ -65,10 +65,15 @@ export struct HomeScreen {
   onBreakpointChange() {
     this.updateFeiniuPointLightEnabled()
     this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
-    if (this.appUIState.currentBreakpoint.includes('l')) {
-      this.ui.isMenuModalVisible = false
-      this.ui.isLeftSidebarVisible = true
-    }
+    this.syncPadShellVisibility()
+    this.contentTabsController.changeIndex(this.contentSelectedIndex())
+    this.updateRootNavigationTitleBar()
+  }
+
+  @Monitor('appUIState.orientation')
+  onOrientationChange(): void {
+    this.updateFeiniuPointLightEnabled()
+    this.syncPadShellVisibility()
     this.contentTabsController.changeIndex(this.contentSelectedIndex())
     this.updateRootNavigationTitleBar()
   }
@@ -88,8 +93,20 @@ export struct HomeScreen {
     return HomeShellPolicy.resolve(
       this.appUIState.currentBreakpoint as BreakpointTypeEnum,
       this.appUIState.themeStyle,
-      this.appUIState.nativeThemeAvailable
+      this.appUIState.nativeThemeAvailable,
+      this.isPortraitViewport()
     )
+  }
+
+  private isPortraitViewport(): boolean {
+    return this.appUIState.deviceWidth > 0 &&
+      this.appUIState.deviceHeight >= this.appUIState.deviceWidth
+  }
+
+  private syncPadShellVisibility(): void {
+    const shell = this.resolveShell()
+    this.ui.isMenuModalVisible = false
+    this.ui.isLeftSidebarVisible = shell === HomeShellKind.LargeSidebar
   }
 
   private get shell(): HomeShellKind {
@@ -266,6 +283,7 @@ export struct HomeScreen {
 
   aboutToAppear() {
     this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')
+    this.syncPadShellVisibility()
     this.updateFeiniuPointLightEnabled()
     this.updateRootNavigationTitleBar()
     this.vm.init()
@@ -455,7 +473,8 @@ export struct HomeScreen {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Start)
 
-      if (this.appUIState.currentBreakpoint.includes('l') && this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc()) {
+      if (this.resolveShell() === HomeShellKind.LargeSidebar &&
+        this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc()) {
         Button() {
           SymbolGlyph($r('sys.symbol.close_sidebar'))
             .fontSize(20)
@@ -518,7 +537,7 @@ export struct HomeScreen {
             .backgroundColor(nativeSurface ?
               (this.padSelectedIndex() == index ?
                 AppThemeSurfaceResolver.interactionOverlay(this.appUIState.themeStyle) : Color.Transparent) :
-              ((this.padSelectedIndex() == index && this.vm.appUIState.currentBreakpoint.includes('l')) ?
+              ((this.padSelectedIndex() == index && this.resolveShell() === HomeShellKind.LargeSidebar) ?
                 $r('app.color.menu_item_bg') : Color.Transparent))
             .width('100%')
             .padding(10)

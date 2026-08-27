@@ -1,4 +1,3 @@
-import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
 import { HORIZONTAL_CARD_HEIGHT, HORIZONTAL_CARD_WIDTH } from "../common/OneMoreConst";
@@ -7,7 +6,7 @@ import { ColorUtils } from "../utils/ColorUtils";
 import { FeiniuPointLightModifier } from "../theme/FeiniuPointLightModifier";
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 import { MediaImageRef } from "../media/catalog/MediaCatalogModels";
-import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter";
+import { MediaNetworkImage } from "./MediaNetworkImage";
 
 @ComponentV2
 export struct HorizontalVideoCard {
@@ -26,21 +25,6 @@ export struct HorizontalVideoCard {
   private imageLoadCompleted: boolean = false
   private pointLightColorSource: string = ''
   @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-
-  private imageOption(): ImageKnifeOption {
-    const option = createMediaImageKnifeOption(this.imageRef, this.image)
-    option.objectFit = ImageFit.Cover
-    option.border = {
-      radius: 10
-    }
-    option.placeholderSrc = $r('app.media.placeholder_video')
-    option.placeholderObjectFit = ImageFit.CENTER
-    option.onComplete = () => {
-      this.imageLoadCompleted = true
-      this.refreshPointLightColor()
-    }
-    return option
-  }
 
   @Monitor('appUIState.feiniuPointLightEnabled')
   onPointLightEnabledChange(): void {
@@ -73,8 +57,14 @@ export struct HorizontalVideoCard {
   build() {
     Column({ space: 8 }) {
       Stack() {
-        ImageKnifeComponent({
-          imageKnifeOption: this.imageOption()
+        MediaNetworkImage({
+          imageRef: this.imageRef,
+          fallbackSource: this.image,
+          radius: 10,
+          onLoadSuccess: (): void => {
+            this.imageLoadCompleted = true
+            this.refreshPointLightColor()
+          }
         })
           .width(HORIZONTAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
           .height(HORIZONTAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))

@@ -8,6 +8,7 @@ import {
   MediaDetail,
   MediaEpisode,
   MediaFavoriteState,
+  MediaImageRef,
   MediaLibrary,
   MediaPage,
   MediaPerson,
@@ -267,6 +268,10 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     )
   }
 
+  rehydrateImage(image: MediaImageRef): MediaImageRef {
+    return this.mapper().rehydrateImage(image)
+  }
+
   getCounts(): Promise<MediaCatalogCounts> {
     return this.run('getCounts', async (): Promise<MediaCatalogCounts> => {
       const response = await this.request<FnMediaCountResp>(
@@ -367,10 +372,6 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
         }
         return item.guid.trim().length > 0 &&
           (request.kinds.length === 0 || request.kinds.indexOf(kind) >= 0)
-      })
-      source.sort((left: FnMediaPlayItem, right: FnMediaPlayItem): number => {
-        return Math.max(0, right.watched_ts || 0, right.ts || 0) -
-          Math.max(0, left.watched_ts || 0, left.ts || 0)
       })
       const enriched = await Promise.all(source.map(
         async (item: FnMediaPlayItem): Promise<MediaSummary> => {
@@ -503,14 +504,17 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
         this.supportsDetailStreams(detailKind)
           ? this.detailStreams(detail)
           : Promise.resolve(undefined)
+      const playInfoPromise: Promise<FnMediaPlayInfoResp | undefined> = detailKind === MediaRefKind.Series
+        ? this.optionalPlayInfo(ref.id) : Promise.resolve(undefined)
       const genrePromise = this.ensureGenres()
       const contextPromise = this.itemContext(detail, detailKind)
       const peopleResponse = await peoplePromise
       const seasons = await seasonPromise
       const streamData = await streamPromise
+      const playInfo = await playInfoPromise
       await genrePromise
       const context = await contextPromise
-      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons, streamData, context)
+      return this.mapper().detail(detail, peopleResponse.data?.list || [], seasons, streamData, context, playInfo)
     })
   }
 
@@ -1254,8 +1258,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   private async seasonItems(seriesId: string): Promise<FnMediaSeasonItem[]> {
     const response = await this.request<FnMediaListResp<FnMediaSeasonItem[]>>(
       `/v/api/v1/season/list/${encodeURIComponent(seriesId)}`, FeiniuVideoHttpMethod.Get)
-    return (response.data || []).slice().sort((left: FnMediaSeasonItem, right: FnMediaSeasonItem): number =>
-      (left.season_number || 0) - (right.season_number || 0))
+    return (response.data || []).slice()
   }
 
   private async episodeItems(seasonId: string): Promise<FnMediaEpisodeItem[]> {
@@ -1365,7 +1368,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   }
 
   private episodeWatched(item: FnMediaEpisodeItem, history?: FnMediaPlayItem): boolean {
-    const watched = history?.watched !== undefined ? history.watched : item.watched
+    const watched = Math.max(history?.watched || 0, item.watched || 0)
     const progress = history?.media_stream?.progress !== undefined
       ? history.media_stream.progress : item.media_stream?.progress
     return (watched || 0) > 0 || (progress || 0) >= 100

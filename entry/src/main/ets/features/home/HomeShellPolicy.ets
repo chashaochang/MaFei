@@ -10,8 +10,9 @@ export enum HomeShellKind {
 
 export class HomeShellPolicy {
   static resolve(breakpoint: BreakpointTypeEnum, theme: ThemeStyle,
-    nativeAvailable: boolean): HomeShellKind {
-    if (breakpoint === BreakpointTypeEnum.MD) {
+    nativeAvailable: boolean, isPortraitViewport: boolean = false): HomeShellKind {
+    if (breakpoint === BreakpointTypeEnum.MD ||
+      (breakpoint === BreakpointTypeEnum.LG && isPortraitViewport)) {
       return HomeShellKind.MediumDrawer
     }
     if (breakpoint === BreakpointTypeEnum.LG ||

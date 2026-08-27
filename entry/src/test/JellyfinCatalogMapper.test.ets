@@ -7,6 +7,8 @@ import {
   PersonKind
 } from 'sdk/src/main/ets/generated-client/models'
 import {
+  MediaImageKind,
+  MediaImageRef,
   MediaPersonKind,
   MediaStreamKind,
   MediaSummary
@@ -14,7 +16,7 @@ import {
 import { JellyfinCatalogMapper } from '../main/ets/media/jellyfin/JellyfinCatalogMapper'
 import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
 import { MediaProviderSession } from '../main/ets/media/MediaProviderSession'
-import { MediaRefKind } from '../main/ets/media/MediaRef'
+import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
 
 function session(providerAccountId: string = 'jellyfin-account-1'): MediaProviderSession {
   return new MediaProviderSession({
@@ -98,6 +100,27 @@ export default function jellyfinCatalogMapperTest() {
       expect(directImage?.belongsTo(owner)).assertTrue()
       expect(directImage?.cacheKey).assertEqual(relayImage?.cacheKey)
       expect(directImage?.url === relayImage?.url).assertFalse()
+    })
+
+    it('rehydratesPersistedImagesWithTheCurrentServerAndAuthorization', 0, () => {
+      const owner = session()
+      const persisted = new MediaImageRef({
+        owner: new MediaRef(owner.provider, owner.accountScope, 'movie-1', MediaRefKind.Movie),
+        kind: MediaImageKind.Primary,
+        url: 'https://old.example/Items/movie-1/Images/Primary?tag=primary-tag',
+        requestPath: '/Items/movie-1/Images/Primary?tag=primary-tag',
+        variant: 'home-snapshot',
+        cacheKeyOverride: 'stable-jellyfin-image-key',
+        headers: []
+      })
+      const mapper = new JellyfinCatalogMapper(
+        owner, 'https://current.example', 'MediaBrowser Token="current-token"')
+
+      const image = mapper.rehydrateImage(persisted)
+
+      expect(image.url).assertEqual('https://current.example/Items/movie-1/Images/Primary?tag=primary-tag')
+      expect(image.headers[0].value).assertEqual('MediaBrowser Token="current-token"')
+      expect(image.cacheKey).assertEqual('stable-jellyfin-image-key')
     })
 
     it('foldsLatestEpisodeIntoItsSeries', 0, () => {

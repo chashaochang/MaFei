@@ -42,6 +42,7 @@ import {
   MediaDetail,
   MediaEpisode,
   MediaFavoriteState,
+  MediaImageRef,
   MediaLibrary,
   MediaPage,
   MediaPerson,
@@ -370,6 +371,10 @@ export class JellyfinCatalogProvider implements MediaCatalogProvider {
     }
     this.mapper = new JellyfinCatalogMapper(
       session, this.requestSession.basePath, this.requestSession.authorizationHeader)
+  }
+
+  rehydrateImage(image: MediaImageRef): MediaImageRef {
+    return this.mapper.rehydrateImage(image)
   }
 
   getCounts(): Promise<MediaCatalogCounts> {

@@ -5,6 +5,7 @@ import { getTagBase64, playMediaRefs } from '../../common/CommonFunc'
 import { AppPreference } from '../../data/AppPreference'
 import { MediaLibraryRefreshEvent } from '../../events/Events'
 import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess'
+import { MediaProviderKind } from '../../media/MediaProviderKind'
 import {
   MediaDetail,
   MediaEpisode,
@@ -71,6 +72,14 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return parts.join('  ')
   }
 
+  private formatFeiniuEpisodePlayText(seasonNumber?: number, episodeNumber?: number): string {
+    if (seasonNumber !== undefined && episodeNumber !== undefined) {
+      return `季 ${seasonNumber} 集 ${episodeNumber}`
+    }
+    if (episodeNumber !== undefined) return `集 ${episodeNumber}`
+    return '播放'
+  }
+
   private isCurrent(catalog: MediaCatalogProvider, ref: MediaRef, generation: number): boolean {
     return this.catalog === catalog && generation === this.requestGeneration &&
       this.ui.mediaRef?.equals(ref) === true && ref.belongsTo(catalog.session)
@@ -83,13 +92,18 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       this.ui.deletePath.trim().length > 0
   }
 
-  private mediaInfo(detail: MediaDetail): string {
+  private primaryMediaInfo(detail: MediaDetail): string {
     const parts: string[] = []
     if (detail.officialRating.length > 0) parts.push(detail.officialRating)
-    if (detail.productionYear !== undefined) parts.push(detail.productionYear.toString())
     detail.genres.forEach((genre: string): void => {
       if (genre.length > 0) parts.push(genre)
     })
+    return parts.join(' · ')
+  }
+
+  private secondaryMediaInfo(detail: MediaDetail): string {
+    const parts: string[] = []
+    if (detail.productionYear !== undefined) parts.push(detail.productionYear.toString())
     const duration = this.formatDuration(detail.durationMs)
     if (duration.length > 0) parts.push(duration)
     if (this.ui.mediaName.length > 0) parts.push(this.ui.mediaName)
@@ -155,7 +169,11 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       episodeParts.push(`第 ${detail.episodeNumber || 1} 集`)
       this.ui.subtitle = episodeParts.join(' · ')
     }
-    this.ui.info = this.mediaInfo(detail)
+    this.ui.primaryInfo = this.primaryMediaInfo(detail)
+    this.ui.secondaryInfo = this.secondaryMediaInfo(detail)
+    this.ui.info = [this.ui.primaryInfo, this.ui.secondaryInfo]
+      .filter((part: string): boolean => part.length > 0)
+      .join(' · ')
     if (this.ui.playbackPositionMs > 0) {
       const remainingMs = Math.max(0, detail.durationMs - this.ui.playbackPositionMs)
       const remainingMinutes = Math.max(0, Math.floor(remainingMs / 60000))
@@ -178,12 +196,12 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         mediaRef: season.ref,
         seriesRef: season.seriesRef,
         kind: season.ref.kind,
-        name: season.title,
+        name: season.seasonNumber !== undefined ? `第 ${season.seasonNumber} 季` : season.title,
         image: image?.url || '',
         imageRef: image,
         subtitle: subtitleParts.join(' · '),
         score: season.communityRating || 0,
-        tags: [],
+        tags: season.tags.slice(),
         mediaName: this.ui.title,
         type: 'Season'
       }
@@ -197,7 +215,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     if (selection.label.length > 0) this.ui.playButtonText = selection.label
   }
 
-  private async seriesQueue(catalog: MediaCatalogProvider, seriesRef: MediaRef): Promise<EpisodeQueueSelection> {
+  private async jellyfinSeriesQueue(catalog: MediaCatalogProvider,
+    seriesRef: MediaRef): Promise<EpisodeQueueSelection> {
     let preferredId = ''
     let preferredLabel = ''
     try {
@@ -220,16 +239,69 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       limit: 1000,
       profile: MediaEpisodeQueryProfile.PlaybackQueue
     })
-    if (episodePage.items.length === 0) return { refs: [], startIndex: 0, label: '' }
+    const episodes = episodePage.items
+    if (episodes.length === 0) return { refs: [], startIndex: 0, label: '' }
     let startIndex = preferredId.length > 0 ?
-      episodePage.items.findIndex((episode: MediaEpisode): boolean => episode.ref.id === preferredId) : -1
+      episodes.findIndex((episode: MediaEpisode): boolean => episode.ref.id === preferredId) : -1
     if (startIndex < 0) startIndex = 0
-    const target = episodePage.items[startIndex]
+    const target = episodes[startIndex]
     return {
-      refs: episodePage.items.map((episode: MediaEpisode): MediaRef => episode.ref),
+      refs: episodes.map((episode: MediaEpisode): MediaRef => episode.ref),
       startIndex: startIndex,
       label: preferredLabel.length > 0 ? preferredLabel : this.formatEpisodePlayText(target)
     }
+  }
+
+  private async feiniuSeriesQueue(catalog: MediaCatalogProvider,
+    detail: MediaDetail): Promise<EpisodeQueueSelection> {
+    const target = detail.playbackTarget
+    const targetLabel = this.formatFeiniuEpisodePlayText(target?.seasonNumber, target?.episodeNumber)
+    const seasons = detail.seasons.length > 0 ? detail.seasons : await catalog.getSeasons(detail.ref)
+    if (seasons.length === 0) {
+      return target?.ref ? { refs: [target.ref], startIndex: 0, label: targetLabel }
+        : { refs: [], startIndex: 0, label: '' }
+    }
+    const targetSeason = target?.seasonNumber !== undefined
+      ? seasons.find((season: MediaSeason): boolean => season.seasonNumber === target.seasonNumber)
+      : undefined
+    const season = targetSeason || seasons[0]
+    const episodePage = await catalog.getEpisodes({
+      seriesRef: detail.ref,
+      seasonRef: season.ref,
+      startIndex: 0,
+      limit: 1000,
+      profile: MediaEpisodeQueryProfile.PlaybackQueue
+    })
+    const episodes = episodePage.items
+    if (episodes.length === 0) {
+      return target?.ref ? { refs: [target.ref], startIndex: 0, label: targetLabel }
+        : { refs: [], startIndex: 0, label: '' }
+    }
+    let startIndex = target?.ref
+      ? episodes.findIndex((episode: MediaEpisode): boolean => episode.ref.equals(target.ref)) : -1
+    if (startIndex < 0 && target?.episodeNumber !== undefined) {
+      startIndex = episodes.findIndex((episode: MediaEpisode): boolean => {
+        return episode.seasonNumber === target.seasonNumber && episode.episodeNumber === target.episodeNumber
+      })
+    }
+    if (startIndex < 0) {
+      startIndex = episodes.findIndex((episode: MediaEpisode): boolean => !episode.userState.watched.watched)
+    }
+    if (startIndex < 0) startIndex = 0
+    const selected = episodes[startIndex]
+    return {
+      refs: episodes.map((episode: MediaEpisode): MediaRef => episode.ref),
+      startIndex: startIndex,
+      label: targetLabel !== '播放' ? targetLabel :
+        this.formatFeiniuEpisodePlayText(selected.seasonNumber, selected.episodeNumber)
+    }
+  }
+
+  private seriesQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
+    if (catalog.session.provider === MediaProviderKind.FeiniuVideo) {
+      return this.feiniuSeriesQueue(catalog, detail)
+    }
+    return this.jellyfinSeriesQueue(catalog, detail.ref)
   }
 
   private async episodeQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
@@ -277,7 +349,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       if (detail.ref.kind === MediaRefKind.Series) {
         const seasonsPromise: Promise<MediaSeason[]> = detail.seasons.length > 0 ?
           Promise.resolve(detail.seasons.slice()) : catalog.getSeasons(detail.ref)
-        const queuePromise: Promise<EpisodeQueueSelection> = this.seriesQueue(catalog, detail.ref)
+        const queuePromise: Promise<EpisodeQueueSelection> = this.seriesQueue(catalog, detail)
         try {
           const seasons = await seasonsPromise
           if (this.isCurrent(catalog, ref, generation)) this.ui.seasons = this.mapSeasons(seasons)

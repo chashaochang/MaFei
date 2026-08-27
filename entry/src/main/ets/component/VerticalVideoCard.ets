@@ -1,15 +1,12 @@
-import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro"
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppUIState } from "../entity/AppUIState";
-import {
-  VERTICAL_CARD_HEIGHT, VERTICAL_CARD_WIDTH
-} from "../common/OneMoreConst";
+import { VERTICAL_CARD_HEIGHT } from "../common/OneMoreConst";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
 import { ColorUtils } from "../utils/ColorUtils";
 import { FeiniuPointLightModifier } from "../theme/FeiniuPointLightModifier";
 import { AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 import { MediaImageRef } from "../media/catalog/MediaCatalogModels";
-import { createMediaImageKnifeOption } from "../media/catalog/MediaImageKnifeAdapter";
+import { MediaNetworkImage } from "./MediaNetworkImage";
 
 @ComponentV2
 export struct VerticalVideoCard {
@@ -29,21 +26,6 @@ export struct VerticalVideoCard {
   private imageLoadCompleted: boolean = false
   private pointLightColorSource: string = ''
   @Local appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-
-  private imageOption(): ImageKnifeOption {
-    const option = createMediaImageKnifeOption(this.imageRef, this.image)
-    option.objectFit = ImageFit.Cover
-    option.border = {
-      radius: 10
-    }
-    option.placeholderSrc = $r('app.media.placeholder_video')
-    option.placeholderObjectFit = ImageFit.CENTER
-    option.onComplete = () => {
-      this.imageLoadCompleted = true
-      this.refreshPointLightColor()
-    }
-    return option
-  }
 
   @Monitor('appUIState.feiniuPointLightEnabled')
   onPointLightEnabledChange(): void {
@@ -73,11 +55,33 @@ export struct VerticalVideoCard {
     return this.imageRef?.url || this.image
   }
 
+  private displayTags(): string[] {
+    const visibleTags: string[] = []
+    this.tags.forEach((tag: string): void => {
+      const normalized = tag.trim().toUpperCase()
+      if (normalized.length === 0 || normalized.startsWith('OTH') || visibleTags.length >= 2) {
+        return
+      }
+      const duplicated = visibleTags.some((visibleTag: string): boolean =>
+        visibleTag.toUpperCase() === normalized)
+      if (!duplicated) {
+        visibleTags.push(tag.trim())
+      }
+    })
+    return visibleTags
+  }
+
   build() {
     Column({ space: 8 }) {
       RelativeContainer() {
-        ImageKnifeComponent({
-            imageKnifeOption: this.imageOption()
+        MediaNetworkImage({
+          imageRef: this.imageRef,
+          fallbackSource: this.image,
+          radius: 10,
+          onLoadSuccess: (): void => {
+            this.imageLoadCompleted = true
+            this.refreshPointLightColor()
+          }
         })
           .width('100%')
           .height('100%')
@@ -108,9 +112,9 @@ export struct VerticalVideoCard {
             .backgroundColor(0x60000000)
             .borderRadius(4)
         }
-        if (this.tags.length > 0) {
+        if (this.displayTags().length > 0) {
           Row({ space: 4 }) {
-            ForEach(this.tags, (tag: string) => {
+            ForEach(this.displayTags(), (tag: string) => {
               if (tag === '4K') {
                 Image($r('app.media.4K'))
                   .height(20)
@@ -128,7 +132,7 @@ export struct VerticalVideoCard {
                   .borderRadius(3)
                   .margin(3)
               }
-            })
+            }, (tag: string) => tag.toUpperCase())
           }
           .alignRules({
             bottom: { anchor: '__container__', align: VerticalAlign.Bottom },
@@ -137,8 +141,8 @@ export struct VerticalVideoCard {
           .margin(4)
         }
       }
-        .width(VERTICAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint))
-        .height(VERTICAL_CARD_HEIGHT.getValue(this.appUIState.currentBreakpoint))
+        .width('100%')
+        .aspectRatio(2 / 3)
         .borderRadius(AppThemeTokens.mediaRadius(this.appUIState.themeStyle))
         .clip(true)
       Text(this.name)
@@ -160,6 +164,6 @@ export struct VerticalVideoCard {
         .textOverflow({
           overflow: TextOverflow.Ellipsis
         })
-    }.width(VERTICAL_CARD_WIDTH.getValue(this.appUIState.currentBreakpoint)).alignItems(HorizontalAlign.Start)
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 }

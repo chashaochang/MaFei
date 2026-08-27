@@ -53,6 +53,26 @@ export class JellyfinCatalogMapper {
     this.imageApi = imageApi
   }
 
+  rehydrateImage(image: MediaImageRef): MediaImageRef {
+    const requestPath = image.requestPath.trim()
+    if (!image.belongsTo(this.session) || requestPath.length === 0) {
+      return image
+    }
+    const headers: MediaRequestHeader[] = []
+    if (this.authorizationHeader.length > 0) {
+      headers.push({ name: 'Authorization', value: this.authorizationHeader })
+    }
+    return new MediaImageRef({
+      owner: image.owner,
+      kind: image.kind,
+      url: this.absoluteUrl(requestPath),
+      requestPath: requestPath,
+      variant: 'rehydrated',
+      cacheKeyOverride: image.cacheKey,
+      headers: headers
+    })
+  }
+
   isVideoLibrary(item: BaseItemDto): boolean {
     return item.CollectionType === undefined || item.CollectionType === null ||
       item.CollectionType === CollectionType.Unknown ||
@@ -207,6 +227,7 @@ export class JellyfinCatalogMapper {
       productionYear: item.ProductionYear ?? undefined,
       communityRating: item.CommunityRating ?? undefined,
       episodeCount: Math.max(0, item.ChildCount ?? item.EpisodeCount ?? 0),
+      tags: this.resolutionTags(item.MediaStreams),
       primaryImage: this.primaryImage(item, owner),
       backdropImage: this.backdropImage(item, owner),
       userState: this.userState(item.UserData)
@@ -615,6 +636,7 @@ export class JellyfinCatalogMapper {
       owner: owner,
       kind: kind,
       url: this.absoluteUrl(relativeUrl),
+      requestPath: relativeUrl,
       variant: variant,
       revision: revision || '',
       headers: headers
