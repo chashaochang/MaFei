@@ -28,6 +28,51 @@ export struct PadTopTab {
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
+  private selectedTextColor(index: number): ResourceColor {
+    return this.selectIndex === index ? Color.Black : $r('app.color.text_primary')
+  }
+
+  @Builder
+  private nativeTabItem(item: TabItem, index: number) {
+    Column({ space: 4 }) {
+      Text(item.title)
+        .fontSize(16)
+        .fontColor(this.selectedTextColor(index))
+        .fontWeight(FontWeight.Medium)
+    }
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 16, right: 16 })
+    .borderRadius(UIConstants.BOTTOM_BAR_HEIGHT / 2)
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      this.selectIndex === index ? AppThemeMaterialRole.HomeLibraryChipSelected : AppThemeMaterialRole.Floating,
+      this.selectIndex === index,
+      this.appUIState.systemMaterialAvailable
+    ))
+    .onClick(() => {
+      this.onItemClick(index)
+    })
+  }
+
+  @Builder
+  private feiniuTabItem(item: TabItem, index: number) {
+    Column({ space: 4 }) {
+      Text(item.title)
+        .fontSize(16)
+        .fontColor(this.selectedTextColor(index))
+        .fontWeight(FontWeight.Medium)
+    }
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 16, right: 16 })
+    .backgroundColor(this.selectIndex === index ?
+      $r('app.color.native_fallback_home_library_chip_selected') : Color.Transparent)
+    .borderRadius(UIConstants.BOTTOM_BAR_HEIGHT / 2)
+    .onClick(() => {
+      this.onItemClick(index)
+    })
+  }
+
   @Builder
   private tabContent(nativeSurface: boolean) {
     if (this.onMenuButtonClick) {
@@ -47,26 +92,11 @@ export struct PadTopTab {
       })
     }
     ForEach(this.list, (item: TabItem, index: number) => {
-      Column({ space: 4 }) {
-        Text(item.title)
-          .fontSize(16)
-          .fontColor(this.selectIndex === index ? $r('app.color.color_main') : $r('app.color.text_primary'))
-          .fontWeight(FontWeight.Medium)
+      if (nativeSurface) {
+        this.nativeTabItem(item, index)
+      } else {
+        this.feiniuTabItem(item, index)
       }
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .padding({
-        left: 16,
-        right: 16
-      })
-      .backgroundColor(nativeSurface ?
-        (this.selectIndex === index ?
-          AppThemeSurfaceResolver.interactionOverlay(this.appUIState.themeStyle) : Color.Transparent) :
-        (this.selectIndex === index ? $r('app.color.bg_tab') : Color.Transparent))
-      .borderRadius(UIConstants.BOTTOM_BAR_HEIGHT / 2)
-      .onClick(() => {
-        this.onItemClick(index)
-      })
     })
   }
 

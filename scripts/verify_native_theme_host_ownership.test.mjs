@@ -38,7 +38,11 @@ function validHomeScreen() {
     'private syncPadShellVisibility(): void {',
     '  const shell = this.resolveShell()',
     '  this.ui.isMenuModalVisible = false',
-    '  this.ui.isLeftSidebarVisible = shell === HomeShellKind.LargeSidebar',
+    '  if (HomeShellPolicy.usesOverlayDrawer(shell)) {',
+    '    this.ui.isLeftSidebarVisible = false',
+    '  } else if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {',
+    '    this.ui.isLeftSidebarVisible = true',
+    '  }',
     '}',
     'private updateFeiniuPointLightEnabled(): void {',
     '  const shell = this.resolveShell()',
@@ -122,7 +126,7 @@ function validHomeScreen() {
     '}',
     '@Builder',
     'private legacyPadContent(shell: HomeShellKind) {',
-    '  if (shell === HomeShellKind.LargeSidebar) {',
+    '  if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {',
     '    Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)',
     '  }',
     '  Blank().height(88)',
@@ -130,14 +134,14 @@ function validHomeScreen() {
     '}',
     '@Builder',
     'private nonNativeHomeShell(shell: HomeShellKind) {',
-    '  if (shell === HomeShellKind.MediumDrawer || shell === HomeShellKind.LargeSidebar) {',
+    '  if (HomeShellPolicy.usesOverlayDrawer(shell) || HomeShellPolicy.usesEmbeddedSidebar(shell)) {',
     '    this.legacyPadContent(shell)',
     '  } else {',
     '    this.homeContentOwner()',
     '  }',
-    '  if (shell === HomeShellKind.LargeSidebar) {',
+    '  if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {',
     '    this.largeSidebarBuilder()',
-    '  } else if (shell === HomeShellKind.MediumDrawer) {',
+    '  } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {',
     '    this.mediumDrawerBuilder()',
     '  } else {',
     '    HomePhoneStandardTabs()',
@@ -937,8 +941,8 @@ test('keeps business pages in shared builders instead of navigation hosts', () =
 test('only the non-native shell may construct the separate content Tabs', () => {
   const sources = validSources()
   sources.set(homeScreenPath, validHomeScreen()
-    .replace('  } else {\n    this.homeContentOwner()\n  }\n  if (shell === HomeShellKind.LargeSidebar) {',
-      '  } else {\n  }\n  if (shell === HomeShellKind.LargeSidebar) {')
+    .replace('  } else {\n    this.homeContentOwner()\n  }\n  if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {',
+      '  } else {\n  }\n  if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {')
     .replace('  if (this.shell === HomeShellKind.PhoneNativeHds) {', [
       '  this.homeContentOwner()',
       '  if (this.shell === HomeShellKind.PhoneNativeHds) {'

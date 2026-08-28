@@ -5,7 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const tabletShellPaths = Object.freeze({
   entryAbility: 'entry/src/main/ets/entryability/EntryAbility.ets',
   homeShellPolicy: 'entry/src/main/ets/features/home/HomeShellPolicy.ets',
-  homeScreen: 'entry/src/main/ets/features/home/HomeScreen.ets'
+  homeScreen: 'entry/src/main/ets/features/home/HomeScreen.ets',
+  padTopTab: 'entry/src/main/ets/component/tabbar/PadTopTab.ets'
 })
 
 function requiredSource(sources, path) {
@@ -41,6 +42,7 @@ export function validateTabletShellContracts(sources) {
   const entryAbility = requiredSource(sources, tabletShellPaths.entryAbility)
   const shellPolicy = requiredSource(sources, tabletShellPaths.homeShellPolicy)
   const homeScreen = requiredSource(sources, tabletShellPaths.homeScreen)
+  const padTopTab = requiredSource(sources, tabletShellPaths.padTopTab)
 
   const pxToVp = methodBlock(entryAbility, 'pxToVp')
   if (!/this\.contentUIContextReady/.test(pxToVp) ||
@@ -51,11 +53,32 @@ export function validateTabletShellContracts(sources) {
   if (/setDefaultDensityEnabled\s*\(/.test(entryAbility)) {
     throw new Error('tablet breakpoints must not lock the window density')
   }
+  if (!/windowSizeChangeCallback\s*=\s*\(size:\s*window\.Size\)[\s\S]*refreshWindowMetrics\(this\.mainWindow,\s*size\)/
+    .test(entryAbility)) {
+    throw new Error('window-size callbacks must recalculate breakpoints from the latest event size')
+  }
+  const initializeMainWindow = methodBlock(entryAbility, 'initializeMainWindow')
+  if (/\.on\(['"]windowSizeChange['"]/.test(initializeMainWindow)) {
+    throw new Error('window-size listeners must not register before content load completes')
+  }
+  const registerWindowMetricListeners = methodBlock(entryAbility, 'registerWindowMetricListeners')
+  if (!/windowClass\.on\(['"]windowSizeChange['"],\s*this\.windowSizeChangeCallback\)/
+    .test(registerWindowMetricListeners) ||
+    !/windowClass\.on\(['"]avoidAreaChange['"],\s*this\.avoidAreaChangeCallback\)/
+      .test(registerWindowMetricListeners)) {
+    throw new Error('window metric listeners must register together after content load')
+  }
   const loadContent = methodBlock(entryAbility, 'loadContent')
   const readyIndex = loadContent.indexOf('this.contentUIContextReady = true')
   const refreshIndex = loadContent.indexOf('this.refreshWindowMetrics(windowClass)')
-  if (readyIndex < 0 || refreshIndex < 0 || readyIndex > refreshIndex) {
-    throw new Error('content UIContext must become authoritative before refreshing window metrics')
+  const registerIndex = loadContent.indexOf('this.registerWindowMetricListeners(windowClass)')
+  if (readyIndex < 0 || refreshIndex < 0 || registerIndex < 0 ||
+    readyIndex > refreshIndex || refreshIndex > registerIndex) {
+    throw new Error('content UIContext must become authoritative before refreshing and observing window metrics')
+  }
+  if (!/onPortrait\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*this\.refreshWindowMetrics\(mainWindow\)/
+    .test(entryAbility)) {
+    throw new Error('orientation media-query changes must refresh the breakpoint metrics')
   }
 
   if (!/breakpoint\s*===\s*BreakpointTypeEnum\.MD[\s\S]*breakpoint\s*===\s*BreakpointTypeEnum\.LG\s*&&\s*isPortraitViewport[\s\S]*return\s+HomeShellKind\.MediumDrawer/
@@ -66,27 +89,40 @@ export function validateTabletShellContracts(sources) {
     .test(shellPolicy)) {
     throw new Error('landscape LG viewports must keep the embedded sidebar')
   }
+  const overlayDrawer = methodBlock(shellPolicy, 'usesOverlayDrawer')
+  if (!/return\s+shell\s*===\s*HomeShellKind\.MediumDrawer/.test(overlayDrawer)) {
+    throw new Error('only the MD shell may use the overlay drawer')
+  }
+  const embeddedSidebar = methodBlock(shellPolicy, 'usesEmbeddedSidebar')
+  if (!/return\s+shell\s*===\s*HomeShellKind\.LargeSidebar/.test(embeddedSidebar)) {
+    throw new Error('only the LG shell may use the embedded sidebar')
+  }
 
   const shellVisibility = methodBlock(homeScreen, 'syncPadShellVisibility')
   if (!/this\.ui\.isMenuModalVisible\s*=\s*false/.test(shellVisibility) ||
-    !/this\.ui\.isLeftSidebarVisible\s*=\s*shell\s*===\s*HomeShellKind\.LargeSidebar/.test(shellVisibility)) {
-    throw new Error('breakpoint changes must close the drawer and expose the sidebar only for LG')
+    !/HomeShellPolicy\.usesOverlayDrawer\(shell\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*false/.test(shellVisibility) ||
+    !/HomeShellPolicy\.usesEmbeddedSidebar\(shell\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*true/.test(shellVisibility)) {
+    throw new Error('breakpoint changes must close the drawer without turning MD into an embedded sidebar')
   }
 
   const legacyPadContent = methodBlock(homeScreen, 'legacyPadContent')
-  if (!/if\s*\(shell\s*===\s*HomeShellKind\.LargeSidebar\)\s*\{[\s\S]*Blank\(\)\.width\(this\.ui\.isLeftSidebarVisible\s*\?\s*252\s*:\s*12\)/
+  if (!/if\s*\(HomeShellPolicy\.usesEmbeddedSidebar\(shell\)\)\s*\{[\s\S]*Blank\(\)\.width\(this\.ui\.isLeftSidebarVisible\s*\?\s*252\s*:\s*12\)/
     .test(legacyPadContent)) {
     throw new Error('only the LG shell may reserve embedded sidebar width')
   }
 
   const padChrome = methodBlock(homeScreen, 'padChromeBuilder')
-  if (!/if\s*\(shell\s*===\s*HomeShellKind\.LargeSidebar\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*true[\s\S]*else[\s\S]*this\.ui\.isMenuModalVisible\s*=\s*true/
+  if (!/if\s*\(HomeShellPolicy\.usesEmbeddedSidebar\(shell\)\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*true[\s\S]*else\s+if\s*\(HomeShellPolicy\.usesOverlayDrawer\(shell\)\)[\s\S]*this\.ui\.isMenuModalVisible\s*=\s*true/
     .test(padChrome)) {
     throw new Error('tablet menu button must open an embedded sidebar only for LG and an overlay drawer otherwise')
   }
-  if (!/this\.ui\.isMenuModalVisible\s*&&\s*shell\s*===\s*HomeShellKind\.MediumDrawer[\s\S]*this\.menuModalBuilder\(\)/
+  if (!/this\.ui\.isMenuModalVisible\s*&&\s*HomeShellPolicy\.usesOverlayDrawer\(shell\)[\s\S]*this\.menuModalBuilder\(\)/
     .test(padChrome)) {
     throw new Error('the overlay drawer must render only in the MD shell')
+  }
+  if (!/AppThemeMaterialRole\.HomeLibraryChipSelected/.test(padTopTab) ||
+    !/native_fallback_home_library_chip_selected/.test(padTopTab)) {
+    throw new Error('the selected tablet top tab must reuse the light translucent chip surface')
   }
 }
 

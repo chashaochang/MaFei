@@ -68,5 +68,12 @@ export default function homeShellPolicyTest() {
         false
       )).assertEqual(HomeShellKind.LargeSidebar)
     })
+
+    it('keepsDrawerAndSidebarLayoutBehaviorMutuallyExclusive', 0, () => {
+      expect(HomeShellPolicy.usesOverlayDrawer(HomeShellKind.MediumDrawer)).assertTrue()
+      expect(HomeShellPolicy.usesEmbeddedSidebar(HomeShellKind.MediumDrawer)).assertFalse()
+      expect(HomeShellPolicy.usesOverlayDrawer(HomeShellKind.LargeSidebar)).assertFalse()
+      expect(HomeShellPolicy.usesEmbeddedSidebar(HomeShellKind.LargeSidebar)).assertTrue()
+    })
   })
 }

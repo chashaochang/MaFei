@@ -25,10 +25,11 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
   private contentUIContextReady: boolean = false
+  private windowMetricListenersRegistered: boolean = false
   private systemDensityChangeListenerRegistered: boolean = false
-  private windowSizeChangeCallback = (_size: window.Size): void => {
+  private windowSizeChangeCallback = (size: window.Size): void => {
     if (this.mainWindow) {
-      this.refreshWindowMetrics(this.mainWindow)
+      this.refreshWindowMetrics(this.mainWindow, size)
     }
   }
   private avoidAreaChangeCallback = (options: window.AvoidAreaOptions): void => {
@@ -155,16 +156,18 @@ export default class EntryAbility extends UIAbility {
     return pixels / this.resolveWindowDensity(windowClass)
   }
 
-  private refreshWindowMetrics(windowClass: window.Window): void {
+  private refreshWindowMetrics(windowClass: window.Window, size?: window.Size): void {
     const properties = windowClass.getWindowProperties()
     const systemArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
     const navigationArea = windowClass.getWindowAvoidArea(
       window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
     )
     const cutoutArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT)
-    const deviceWidth = this.pxToVp(windowClass, properties.windowRect.width)
+    const widthPixels = size?.width ?? properties.windowRect.width
+    const heightPixels = size?.height ?? properties.windowRect.height
+    const deviceWidth = this.pxToVp(windowClass, widthPixels)
 
-    this.appUIState.deviceHeight = this.pxToVp(windowClass, properties.windowRect.height)
+    this.appUIState.deviceHeight = this.pxToVp(windowClass, heightPixels)
     this.appUIState.deviceWidth = deviceWidth
     this.appUIState.currentBreakpoint = BreakpointPolicy.fromWidth(deviceWidth)
     this.appUIState.safeTop = this.pxToVp(windowClass, Math.max(0, systemArea.topRect.height))
@@ -173,8 +176,8 @@ export default class EntryAbility extends UIAbility {
       systemArea.bottomRect.height,
       navigationArea.bottomRect.height
     ))
-    this.refreshCutoutMetrics(windowClass, cutoutArea)
-    this.appUIState.orientation = properties.windowRect.width > properties.windowRect.height ?
+    this.refreshCutoutMetrics(windowClass, cutoutArea, widthPixels)
+    this.appUIState.orientation = widthPixels > heightPixels ?
       display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
 
     hilog.info(0x0000, 'Mafei',
@@ -185,12 +188,13 @@ export default class EntryAbility extends UIAbility {
       this.contentUIContextReady ? 'ready' : 'fallback')
   }
 
-  private refreshCutoutMetrics(windowClass: window.Window, cutoutArea: window.AvoidArea): void {
-    const windowRect = windowClass.getWindowProperties().windowRect
+  private refreshCutoutMetrics(windowClass: window.Window, cutoutArea: window.AvoidArea,
+    windowWidthPixels?: number): void {
+    const windowWidth = windowWidthPixels ?? windowClass.getWindowProperties().windowRect.width
     this.appUIState.safeLeft = cutoutArea.leftRect.width > 0 ?
       this.pxToVp(windowClass, Math.max(0, cutoutArea.leftRect.left + cutoutArea.leftRect.width)) : 0
     this.appUIState.safeRight = cutoutArea.rightRect.width > 0 ?
-      this.pxToVp(windowClass, Math.max(0, windowRect.width - cutoutArea.rightRect.left)) : 0
+      this.pxToVp(windowClass, Math.max(0, windowWidth - cutoutArea.rightRect.left)) : 0
   }
 
   private resetWindowState(): void {
@@ -209,9 +213,11 @@ export default class EntryAbility extends UIAbility {
   private clearMainWindowBindings(): void {
     const listener = this.listener
     const mainWindow = this.mainWindow
+    const windowMetricListenersRegistered = this.windowMetricListenersRegistered
     const systemDensityChangeListenerRegistered = this.systemDensityChangeListenerRegistered
     this.listener = undefined
     this.mainWindow = undefined
+    this.windowMetricListenersRegistered = false
     this.systemDensityChangeListenerRegistered = false
 
     if (listener) {
@@ -222,7 +228,7 @@ export default class EntryAbility extends UIAbility {
           'Failed to remove orientation listener: %{public}s', String(error))
       }
     }
-    if (mainWindow) {
+    if (mainWindow && windowMetricListenersRegistered) {
       try {
         mainWindow.off('windowSizeChange', this.windowSizeChangeCallback)
       } catch (error) {
@@ -235,13 +241,13 @@ export default class EntryAbility extends UIAbility {
         hilog.warn(0x0000, 'Mafei',
           'Failed to remove avoid-area listener: %{public}s', String(error))
       }
-      if (systemDensityChangeListenerRegistered) {
-        try {
-          mainWindow.off('systemDensityChange', this.systemDensityChangeCallback)
-        } catch (error) {
-          hilog.warn(0x0000, 'Mafei',
-            'Failed to remove system-density listener: %{public}s', String(error))
-        }
+    }
+    if (mainWindow && systemDensityChangeListenerRegistered) {
+      try {
+        mainWindow.off('systemDensityChange', this.systemDensityChangeCallback)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to remove system-density listener: %{public}s', String(error))
       }
     }
     this.resetWindowState()
@@ -262,15 +268,6 @@ export default class EntryAbility extends UIAbility {
         return false
       }
       this.refreshWindowMetrics(windowClass)
-      windowClass.on('windowSizeChange', this.windowSizeChangeCallback)
-      windowClass.on('avoidAreaChange', this.avoidAreaChangeCallback)
-      try {
-        windowClass.on('systemDensityChange', this.systemDensityChangeCallback)
-        this.systemDensityChangeListenerRegistered = true
-      } catch (error) {
-        hilog.warn(0x0000, 'Mafei',
-          'System-density listener is unavailable; continuing without it. Cause: %{public}s', String(error))
-      }
 
       if (OneMoreUtil.isNormalPhone()) {
         windowClass.setPreferredOrientation(window.Orientation.PORTRAIT)
@@ -283,6 +280,22 @@ export default class EntryAbility extends UIAbility {
       hilog.error(0x0000, 'Mafei',
         'Failed to initialize the main window: %{public}s', String(error))
       return false
+    }
+  }
+
+  private registerWindowMetricListeners(windowClass: window.Window): void {
+    if (this.mainWindow !== windowClass || this.windowMetricListenersRegistered) {
+      return
+    }
+    windowClass.on('windowSizeChange', this.windowSizeChangeCallback)
+    windowClass.on('avoidAreaChange', this.avoidAreaChangeCallback)
+    this.windowMetricListenersRegistered = true
+    try {
+      windowClass.on('systemDensityChange', this.systemDensityChangeCallback)
+      this.systemDensityChangeListenerRegistered = true
+    } catch (error) {
+      hilog.warn(0x0000, 'Mafei',
+        'System-density listener is unavailable; continuing without it. Cause: %{public}s', String(error))
     }
   }
 
@@ -330,6 +343,7 @@ export default class EntryAbility extends UIAbility {
         }
         this.contentUIContextReady = true
         this.refreshWindowMetrics(windowClass)
+        this.registerWindowMetricListeners(windowClass)
         windowClass.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
         this.initializeContentBindings(windowClass)
       })
@@ -384,6 +398,14 @@ export default class EntryAbility extends UIAbility {
     } else {
       this.appUIState.orientation = display.Orientation.PORTRAIT;
     }
+    const mainWindow = this.mainWindow
+    if (mainWindow) {
+      setTimeout((): void => {
+        if (this.mainWindow === mainWindow) {
+          this.refreshWindowMetrics(mainWindow)
+        }
+      }, 0)
+    }
   }
 
   onWindowStageDestroy(): void {
@@ -418,6 +440,9 @@ export default class EntryAbility extends UIAbility {
   onConfigurationUpdate(newConfig: Configuration): void {
     if (newConfig.colorMode !== undefined && this.appUIState.colorMode !== newConfig.colorMode) {
       this.appUIState.colorMode = newConfig.colorMode
+    }
+    if (this.mainWindow) {
+      this.refreshWindowMetrics(this.mainWindow)
     }
   }
 }

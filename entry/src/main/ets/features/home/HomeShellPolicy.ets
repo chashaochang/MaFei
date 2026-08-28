@@ -25,4 +25,12 @@ export class HomeShellPolicy {
     }
     return HomeShellKind.PhoneStandard
   }
+
+  static usesOverlayDrawer(shell: HomeShellKind): boolean {
+    return shell === HomeShellKind.MediumDrawer
+  }
+
+  static usesEmbeddedSidebar(shell: HomeShellKind): boolean {
+    return shell === HomeShellKind.LargeSidebar
+  }
 }

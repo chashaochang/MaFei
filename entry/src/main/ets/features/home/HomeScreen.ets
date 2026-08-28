@@ -60,6 +60,7 @@ export struct HomeScreen {
   private themePromptCompleted: boolean = false
   private themePromptTimer: number = -1
   private themeDialogId: number = -1
+  private lastSynchronizedShell?: HomeShellKind
 
   @Monitor('appUIState.currentBreakpoint')
   onBreakpointChange() {
@@ -106,7 +107,15 @@ export struct HomeScreen {
   private syncPadShellVisibility(): void {
     const shell = this.resolveShell()
     this.ui.isMenuModalVisible = false
-    this.ui.isLeftSidebarVisible = shell === HomeShellKind.LargeSidebar
+    if (HomeShellPolicy.usesOverlayDrawer(shell)) {
+      this.ui.isLeftSidebarVisible = false
+    } else if (HomeShellPolicy.usesEmbeddedSidebar(shell) &&
+      this.lastSynchronizedShell !== HomeShellKind.LargeSidebar) {
+      this.ui.isLeftSidebarVisible = true
+    } else if (!HomeShellPolicy.usesEmbeddedSidebar(shell)) {
+      this.ui.isLeftSidebarVisible = false
+    }
+    this.lastSynchronizedShell = shell
   }
 
   private get shell(): HomeShellKind {
@@ -473,7 +482,7 @@ export struct HomeScreen {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Start)
 
-      if (this.resolveShell() === HomeShellKind.LargeSidebar &&
+      if (HomeShellPolicy.usesEmbeddedSidebar(this.resolveShell()) &&
         this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc()) {
         Button() {
           SymbolGlyph($r('sys.symbol.close_sidebar'))
@@ -789,7 +798,7 @@ export struct HomeScreen {
           top: this.appUIState.safeTop + 12,
           bottom: this.appUIState.safeBottom + 12
         })
-        .visibility((shell === HomeShellKind.LargeSidebar && this.ui.isLeftSidebarVisible) ?
+        .visibility((HomeShellPolicy.usesEmbeddedSidebar(shell) && this.ui.isLeftSidebarVisible) ?
           Visibility.Visible : Visibility.None)
         .transition(TransitionEffect.asymmetric(
           TransitionEffect.scale({ x: 0, y: 0 })
@@ -868,11 +877,11 @@ export struct HomeScreen {
               this.selectPadMenu(targetIndex, this.vm.datasource.getData(targetIndex))
             },
             onMenuButtonClick: () => {
-              if (shell === HomeShellKind.LargeSidebar) {
+              if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
                 this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
                   this.ui.isLeftSidebarVisible = true
                 })
-              } else {
+              } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {
                 this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
                   this.ui.isMenuModalVisible = true
                 })
@@ -882,7 +891,7 @@ export struct HomeScreen {
             .margin({
               top: this.appUIState.safeTop
             })
-            .visibility((shell === HomeShellKind.LargeSidebar && this.ui.isLeftSidebarVisible) ?
+            .visibility((HomeShellPolicy.usesEmbeddedSidebar(shell) && this.ui.isLeftSidebarVisible) ?
               Visibility.None : Visibility.Visible)
         }
         .layoutWeight(1)
@@ -898,7 +907,7 @@ export struct HomeScreen {
         LoadingView()
       }
 
-      if (this.ui.isMenuModalVisible && shell === HomeShellKind.MediumDrawer) {
+      if (this.ui.isMenuModalVisible && HomeShellPolicy.usesOverlayDrawer(shell)) {
         this.menuModalBuilder()
       }
     }
@@ -906,7 +915,7 @@ export struct HomeScreen {
     .height('100%')
     .alignContent(Alignment.TopStart)
     .padding({
-      left: shell === HomeShellKind.LargeSidebar ? 12 : 0
+      left: HomeShellPolicy.usesEmbeddedSidebar(shell) ? 12 : 0
     })
     .hitTestBehavior(HitTestMode.Transparent)
   }
@@ -943,7 +952,7 @@ export struct HomeScreen {
   @Builder
   private legacyPadContent(shell: HomeShellKind) {
     Row() {
-      if (shell === HomeShellKind.LargeSidebar) {
+      if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
         // Keep the content in the same column as the legacy large-screen
         // chrome: 12vp outer gutter plus the visible 240vp sidebar.
         Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)
@@ -970,15 +979,15 @@ export struct HomeScreen {
   @Builder
   private nonNativeHomeShell(shell: HomeShellKind) {
     Stack({ alignContent: Alignment.Bottom }) {
-      if (shell === HomeShellKind.MediumDrawer || shell === HomeShellKind.LargeSidebar) {
+      if (HomeShellPolicy.usesOverlayDrawer(shell) || HomeShellPolicy.usesEmbeddedSidebar(shell)) {
         this.legacyPadContent(shell)
       } else {
         this.homeContentOwner()
       }
 
-      if (shell === HomeShellKind.LargeSidebar) {
+      if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
         this.largeSidebarBuilder()
-      } else if (shell === HomeShellKind.MediumDrawer) {
+      } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {
         this.mediumDrawerBuilder()
       } else {
         HomePhoneStandardTabs({

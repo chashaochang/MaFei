@@ -572,7 +572,8 @@ export function validateNativeThemeHostOwnership(sources) {
   }
   const shellVisibility = methodBlock(homeScreen, 'syncPadShellVisibility')
   if (!/this\.ui\.isMenuModalVisible\s*=\s*false/.test(shellVisibility) ||
-    !/this\.ui\.isLeftSidebarVisible\s*=\s*shell\s*===\s*HomeShellKind\.LargeSidebar/.test(shellVisibility)) {
+    !/HomeShellPolicy\.usesOverlayDrawer\(shell\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*false/.test(shellVisibility) ||
+    !/HomeShellPolicy\.usesEmbeddedSidebar\(shell\)[\s\S]*this\.ui\.isLeftSidebarVisible\s*=\s*true/.test(shellVisibility)) {
     throw new Error('tablet shell visibility must reserve the embedded sidebar for LG only')
   }
   if (!/this\.contentTabsController\.changeIndex\s*\(\s*this\.contentSelectedIndex\s*\(\s*\)\s*\)/
@@ -602,7 +603,7 @@ export function validateNativeThemeHostOwnership(sources) {
     count(legacyPadContent, /this\.homeContentOwner\s*\(/g) !== 1) {
     throw new Error('legacy tablet content must reserve the title strip and sidebar gutter')
   }
-  if (!/shell\s*===\s*HomeShellKind\.MediumDrawer\s*\|\|\s*shell\s*===\s*HomeShellKind\.LargeSidebar[\s\S]*?this\.legacyPadContent\s*\(\s*shell\s*\)/
+  if (!/HomeShellPolicy\.usesOverlayDrawer\(shell\)\s*\|\|\s*HomeShellPolicy\.usesEmbeddedSidebar\(shell\)[\s\S]*?this\.legacyPadContent\s*\(\s*shell\s*\)/
     .test(nonNativeShell) || count(nonNativeShell, /this\.legacyPadContent\s*\(/g) !== 1) {
     throw new Error('wide legacy shells must route through legacyPadContent')
   }
@@ -708,13 +709,13 @@ export function validateNativeThemeHostOwnership(sources) {
   const ownerCallIndex = nonNativeShell.search(/this\.homeContentOwner\s*\(/)
   const largeBlock = firstConditionalBlock(
     nonNativeShell,
-    /\bif\s*\(\s*(?:this\.)?shell\s*===\s*HomeShellKind\.LargeSidebar\s*\)\s*\{/,
+    /\bif\s*\(\s*HomeShellPolicy\.usesEmbeddedSidebar\(shell\)\s*\)\s*\{/,
     'large sidebar'
   )
   const mediumBlock = nextConditionalBlock(
     nonNativeShell,
     largeBlock.end,
-    /^\s*else\s+if\s*\(\s*(?:this\.)?shell\s*===\s*HomeShellKind\.MediumDrawer\s*\)\s*\{/,
+    /^\s*else\s+if\s*\(\s*HomeShellPolicy\.usesOverlayDrawer\(shell\)\s*\)\s*\{/,
     'medium drawer'
   )
   const standardBlock = nextConditionalBlock(
