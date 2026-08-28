@@ -147,7 +147,16 @@ export class HomeViewModel extends BaseViewModel<HomeUIState> {
       item.imageRef = catalog.rehydrateImage(item.imageRef)
       item.image = item.imageRef.url
     }
+    item.subtitle = this.sanitizeEpisodeSubtitle(item.subtitle)
     return item
+  }
+
+  private sanitizeEpisodeSubtitle(value?: string): string {
+    const subtitle = `${value || ''}`.trim()
+    if ((subtitle.startsWith('S') || subtitle.startsWith('第 ')) && subtitle.endsWith(' -')) {
+      return subtitle.substring(0, subtitle.length - 2).trim()
+    }
+    return subtitle
   }
 
   private persistSnapshot(requestVersion: number): void {

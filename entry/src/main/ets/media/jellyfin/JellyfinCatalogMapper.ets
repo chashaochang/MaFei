@@ -135,14 +135,14 @@ export class JellyfinCatalogMapper {
 
   nextUp(item: BaseItemDto): MediaSummary {
     const title = item.SeriesName || item.Name || ''
-    const subtitle = `S${item.ParentIndexNumber ?? 0}:E${item.IndexNumber ?? 0} - ${item.Name || ''}`
+    const subtitle = this.episodeSubtitle(item)
     return this.createSummary(item, this.itemRef(item), title, subtitle)
   }
 
   latest(item: BaseItemDto): MediaSummary {
     if (item.Type === BaseItemKind.Episode && (item.SeriesId || '').length > 0) {
       const seriesRef = this.ref(item.SeriesId || '', MediaRefKind.Series)
-      const subtitle = `S${item.ParentIndexNumber ?? 0}:E${item.IndexNumber ?? 0} - ${item.Name || ''}`
+      const subtitle = this.episodeSubtitle(item)
       return {
         ref: seriesRef,
         seriesRef: seriesRef,
@@ -171,6 +171,12 @@ export class JellyfinCatalogMapper {
       }
     }
     return this.summary(item)
+  }
+
+  private episodeSubtitle(item: BaseItemDto): string {
+    const episodeNumber = `S${item.ParentIndexNumber ?? 0}:E${item.IndexNumber ?? 0}`
+    const title = `${item.Name || ''}`.trim()
+    return title.length > 0 ? `${episodeNumber} - ${title}` : episodeNumber
   }
 
   detail(item: BaseItemDto, seasons: MediaSeason[] = []): MediaDetail {

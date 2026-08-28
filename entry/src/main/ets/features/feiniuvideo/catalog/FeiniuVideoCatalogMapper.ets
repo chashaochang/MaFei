@@ -805,13 +805,16 @@ export class FeiniuVideoCatalogMapper {
   private episodeSubtitle(item: FnMediaItem): string {
     const season = item.season_number || 0
     const episode = item.episode_number || 0
+    const title = `${item.title || ''}`.trim()
     if (season > 0 && episode > 0) {
-      return `S${season}:E${episode} - ${item.title || ''}`
+      const episodeNumber = `S${season}:E${episode}`
+      return title.length > 0 ? `${episodeNumber} - ${title}` : episodeNumber
     }
     if (episode > 0) {
-      return `第 ${episode} 集 - ${item.title || ''}`
+      const episodeNumber = `第 ${episode} 集`
+      return title.length > 0 ? `${episodeNumber} - ${title}` : episodeNumber
     }
-    return item.title || ''
+    return title
   }
 
   private seasonTitle(value?: number): string {

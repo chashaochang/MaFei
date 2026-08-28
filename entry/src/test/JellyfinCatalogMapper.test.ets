@@ -151,6 +151,24 @@ export default function jellyfinCatalogMapperTest() {
       expect(latest.primaryImage?.url.includes('/Items/series-1/Images/Primary')).assertTrue()
     })
 
+    it('omitsEpisodeTitleSeparatorWhenLatestEpisodeHasNoName', 0, () => {
+      const mapper = new JellyfinCatalogMapper(session())
+      const item: BaseItemDto = {
+        Id: 'episode-without-name',
+        Type: BaseItemKind.Episode,
+        Name: '   ',
+        SeriesId: 'series-1',
+        SeriesName: 'Series',
+        ParentIndexNumber: 2,
+        IndexNumber: 4,
+        UserData: { Played: false }
+      }
+
+      const latest = mapper.latest(item)
+
+      expect(latest.subtitle).assertEqual('S2:E4')
+    })
+
     it('mapsDetailPeopleMediaStreamsAndExternalLinks', 0, () => {
       const owner = session()
       const mapper = new JellyfinCatalogMapper(

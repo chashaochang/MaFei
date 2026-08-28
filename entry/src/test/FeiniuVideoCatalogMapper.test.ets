@@ -172,6 +172,22 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(latest.title).assertEqual('Series One')
     })
 
+    it('omitsEpisodeTitleSeparatorWhenLatestEpisodeHasNoName', 0, () => {
+      const item: FnMediaItem = {
+        guid: 'episode-without-name',
+        title: '   ',
+        type: 'Episode',
+        tv_title: 'Series One',
+        parent_guid: 'season-1',
+        season_number: 2,
+        episode_number: 4
+      }
+
+      const latest = mapper().latest(item)
+
+      expect(latest.subtitle).assertEqual('S2:E4')
+    })
+
     it('usesTvTitleInsteadOfMediaLibraryNameForEpisodes', 0, () => {
       const owner = session()
       const catalogMapper = mapper(owner)
