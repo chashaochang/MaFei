@@ -227,8 +227,6 @@ export struct VideoDetailPage {
   @Local titleCollapseProgress: number = 0
   @Local collapsedTitleGlobalX: number = 0
   @Local collapsedTitleCenterX: number = 0
-  @Provider() selectedSubtitleIndex: number = 0
-  @Provider() selectedAudioIndex: number = 0
   private heroTagColorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ffffffff')
   private heroBackdropKey: string = ''
   private heroBackdropLoadingKey: string = ''
@@ -432,13 +430,12 @@ export struct VideoDetailPage {
   }
 
   private hasFileInformation(): boolean {
-    return this.ui.path.trim().length > 0 || this.ui.size.trim().length > 0
+    return this.ui.path.trim().length > 0 || this.ui.size.trim().length > 0 ||
+      this.ui.createDate.trim().length > 0 || this.ui.addedDate.trim().length > 0
   }
 
   private hasSelectedMediaStreams(): boolean {
-    return this.ui.selectedMediaSourceIndex >= 0 &&
-      this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length &&
-      this.ui.mediaSources[this.ui.selectedMediaSourceIndex].streams.length > 0
+    return this.ui.mediaInfoSections.length > 0
   }
 
   private hasVideoInformation(): boolean {
@@ -904,7 +901,7 @@ export struct VideoDetailPage {
 
       this.nativeHeroMetadataLine()
 
-      if (!this.ui.isTvShows && this.ui.mediaSources.length > 0) {
+      if (!this.ui.isTvShows && this.ui.playbackSources.length > 0) {
         Row({ space: 14 }) {
           ForEach(this.vm.getTags(), (item: string) => {
             Image(item)
@@ -1390,7 +1387,7 @@ export struct VideoDetailPage {
 
               if (!this.useNativeSurface() && !this.ui.isTvShows &&
                 this.ui.selectedMediaSourceIndex >= 0 &&
-                this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
+                this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
                 Blank().height(10)
                 Row({ space: 16 }) {
                   ForEach(this.vm.getTags(), (item: string) => {
@@ -1416,32 +1413,33 @@ export struct VideoDetailPage {
               //     $r('app.color.text_expand_selected_tab_name'))
               // }).id(`textClick${this.index}`)
               if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
-                this.ui.selectedMediaSourceIndex < this.ui.mediaSources.length) {
+                this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
                 Blank().height(16)
                 Row() {
-                  if (this.ui.mediaSources.length > 1) {
+                  if (this.ui.playbackSources.length > 1) {
                     MediaSourceSelector({
-                      sources: this.ui.mediaSources,
+                      sources: this.ui.playbackSources,
                       selectedIndex: this.ui.selectedMediaSourceIndex,
                       onSelect: (index: number) => {
-                        this.selectedAudioIndex = 0
-                        this.selectedSubtitleIndex = 0
                         this.vm.selectMediaSource(index)
                       }
                     })
                       .layoutWeight(1)
                   }
                   AudioSubtitleSelector({
-                    source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex],
+                    subtitleOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].subtitleOptions,
+                    audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
+                    selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
+                    selectedAudioIndex: this.ui.selectedAudioOptionIndex,
                     triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
-                    onSelectSubtitle: (subtitle) => {
-                      this.ui.selectedSubtitle = subtitle
+                    onSelectSubtitle: (index: number) => {
+                      this.vm.selectSubtitleOption(index)
                     },
-                    onSelectAudio: (audio) => {
-                      this.ui.selectedAudio = audio
+                    onSelectAudio: (index: number) => {
+                      this.vm.selectAudioOption(index)
                     }
                   })
-                    .layoutWeight(this.ui.mediaSources.length > 1 ? 2 : 1)
+                    .layoutWeight(this.ui.playbackSources.length > 1 ? 2 : 1)
                 }
                 .width('calc(100% - 24vp)')
                 .height(32)
@@ -1504,19 +1502,30 @@ export struct VideoDetailPage {
                   if (this.hasFileInformation()) {
                     Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
 
-                    Column() {
+                    Column({ space: 16 }) {
                       if (this.ui.path.trim().length > 0) {
-                        Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
-                        Blank().height(10)
-                        Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
-                      }
-                      if (this.ui.path.trim().length > 0 && this.ui.size.trim().length > 0) {
-                        Blank().height(16)
+                        Column({ space: 10 }) {
+                          Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
+                        }.width('100%').alignItems(HorizontalAlign.Start)
                       }
                       if (this.ui.size.trim().length > 0) {
-                        Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
-                        Blank().height(10)
-                        Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                        Column({ space: 10 }) {
+                          Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                        }.width('100%').alignItems(HorizontalAlign.Start)
+                      }
+                      if (this.ui.createDate.trim().length > 0) {
+                        Column({ space: 10 }) {
+                          Text('文件创建日期').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                        }.width('100%').alignItems(HorizontalAlign.Start)
+                      }
+                      if (this.ui.addedDate.trim().length > 0) {
+                        Column({ space: 10 }) {
+                          Text('添加日期').fontSize(12).fontColor($r('app.color.text_2'))
+                          Text(this.ui.addedDate).fontSize(12).fontColor($r('app.color.text_1'))
+                        }.width('100%').alignItems(HorizontalAlign.Start)
                       }
                     }
                     .width('100%')
@@ -1713,7 +1722,7 @@ export struct VideoDetailPage {
   videoInfoSheetBuilder(blurFallback: boolean) {
     Scroll() {
       VideoInfoDetail({
-        source: this.ui.mediaSources[this.ui.selectedMediaSourceIndex]
+        sections: this.ui.mediaInfoSections
       })
     }
     .scrollBar(BarState.Off)

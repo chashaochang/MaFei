@@ -5,21 +5,23 @@ import { getTagBase64, playMediaRefs } from '../../common/CommonFunc'
 import { AppPreference } from '../../data/AppPreference'
 import { MediaLibraryRefreshEvent } from '../../events/Events'
 import { currentMediaCatalogProvider } from '../../media/MediaCatalogAccess'
-import { MediaProviderKind } from '../../media/MediaProviderKind'
 import {
   MediaDetail,
   MediaEpisode,
   MediaFileInfo,
-  MediaSeason,
-  MediaStreamInfo,
-  MediaStreamKind,
-  MediaSummary
+  MediaPlaybackTarget,
+  MediaSeason
 } from '../../media/catalog/MediaCatalogModels'
 import {
   MediaCatalogProvider,
   MediaEpisodeQueryProfile
 } from '../../media/catalog/MediaCatalogProvider'
 import { MediaRef, MediaRefKind } from '../../media/MediaRef'
+import {
+  PlaybackSourceViewData,
+  VideoDetailPresentationAdapter,
+  VideoTag
+} from '../../media/presentation/VideoDetailPresentationModels'
 import { ToastUtil } from '../../utils/ToastUtil'
 import { VideoItem } from '../home/hometab/HomeUIState'
 import {
@@ -30,7 +32,9 @@ import {
 } from '../management/library/ManagementLibraryModels'
 import { ManagementMediaDeletePolicy } from '../management/library/ManagementMediaDeletePolicy'
 import { ManagementMediaDeleteRepository } from '../management/library/ManagementMediaDeleteRepository'
-import { VideoDetailUIState, VideoTag } from './VideoDetailUIState'
+import { VideoDetailUIState } from './VideoDetailUIState'
+import { VideoDetailPresentationAdapterRegistry } from
+  './presentation/VideoDetailPresentationAdapterRegistry'
 
 interface EpisodeQueueSelection {
   readonly refs: MediaRef[]
@@ -43,6 +47,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private originImageHeight: number = 0
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30)
   private catalog?: MediaCatalogProvider
+  private mediaSources: MediaFileInfo[] = []
   private requestGeneration: number = 0
   episodeList: MediaRef[] = []
   episodeStartIndex: number = 0
@@ -63,21 +68,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return `${minutes}分钟`
   }
 
-  private formatEpisodePlayText(episode: MediaEpisode | MediaSummary): string {
-    const parts: string[] = []
-    if (episode.seasonNumber !== undefined) {
-      parts.push(`第 ${episode.seasonNumber} 季`)
-    }
-    parts.push(`第 ${episode.episodeNumber || 1} 集`)
-    return parts.join('  ')
-  }
-
-  private formatFeiniuEpisodePlayText(seasonNumber?: number, episodeNumber?: number): string {
-    if (seasonNumber !== undefined && episodeNumber !== undefined) {
-      return `季 ${seasonNumber} 集 ${episodeNumber}`
-    }
-    if (episodeNumber !== undefined) return `集 ${episodeNumber}`
-    return '播放'
+  private presentationAdapter(catalog: MediaCatalogProvider): VideoDetailPresentationAdapter {
+    return VideoDetailPresentationAdapterRegistry.instance().resolve(catalog.session.provider)
   }
 
   private isCurrent(catalog: MediaCatalogProvider, ref: MediaRef, generation: number): boolean {
@@ -127,7 +119,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.people = detail.personCredits.slice()
     this.ui.isFavorite = detail.userState.favorite.favorite
     this.ui.played = detail.userState.watched.watched
-    this.ui.mediaSources = detail.mediaFiles.slice()
+    this.mediaSources = detail.mediaFiles.slice()
+    const presentationAdapter = this.presentationAdapter(catalog)
+    this.ui.playbackSources = presentationAdapter.present(this.mediaSources)
     this.ui.externalUrls = detail.externalLinks.slice()
     this.ui.playbackPositionMs = detail.userState.watched.playbackPositionMs
     this.ui.percentageWatched = detail.userState.watched.playedPercentage
@@ -135,9 +129,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.playButtonText = '播放'
     this.ui.subtitle = ''
     this.ui.episodeName = ''
-    this.ui.selectedMediaSourceIndex = this.preferredMediaSourceIndex(detail.ref, this.ui.mediaSources)
-    this.ui.selectedAudio = undefined
-    this.ui.selectedSubtitle = undefined
+    this.ui.selectedMediaSourceIndex = this.preferredMediaSourceIndex(detail.ref, this.mediaSources)
+    this.applySelectedSourcePresentation()
     this.applyDeleteCapability(detail, catalog)
 
     if (detail.ref.kind === MediaRefKind.Episode) {
@@ -158,7 +151,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         backdropImage: detail.backdropImage,
         userState: detail.userState
       }
-      this.ui.episodeName = this.formatEpisodePlayText(episode)
+      this.ui.episodeName = presentationAdapter.episodeLabel(episode.seasonNumber, episode.episodeNumber)
       const episodeParts: string[] = []
       if ((detail.seriesTitle || '').length > 0) episodeParts.push(detail.seriesTitle || '')
       if ((detail.seasonTitle || '').length > 0) {
@@ -182,8 +175,6 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       this.ui.remainingTime = hours > 0 ? `剩余 ${hours} 小时 ${minutes} 分钟` : `剩余 ${minutes} 分钟`
       this.ui.playButtonText = '继续播放'
     }
-    this.getFileInfo()
-    this.getVideoInfo()
   }
 
   private mapSeasons(seasons: MediaSeason[]): VideoItem[] {
@@ -215,48 +206,38 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     if (selection.label.length > 0) this.ui.playButtonText = selection.label
   }
 
-  private async jellyfinSeriesQueue(catalog: MediaCatalogProvider,
-    seriesRef: MediaRef): Promise<EpisodeQueueSelection> {
-    let preferredId = ''
-    let preferredLabel = ''
+  private async preferredSeriesTarget(catalog: MediaCatalogProvider,
+    detail: MediaDetail): Promise<MediaPlaybackTarget | undefined> {
+    if (detail.playbackTarget) return detail.playbackTarget
     try {
       const nextPage = await catalog.nextUp({
-        seriesRef: seriesRef,
+        seriesRef: detail.ref,
         limit: 1,
         disableFirstEpisode: false,
         enableResumable: true,
         enableRewatching: true
       })
       if (nextPage.items.length > 0) {
-        preferredId = nextPage.items[0].ref.id
-        preferredLabel = this.formatEpisodePlayText(nextPage.items[0])
+        const next = nextPage.items[0]
+        return {
+          ref: next.ref,
+          seasonNumber: next.seasonNumber,
+          episodeNumber: next.episodeNumber
+        }
       }
     } catch (_error) {
     }
-    const episodePage = await catalog.getEpisodes({
-      seriesRef: seriesRef,
-      startIndex: 0,
-      limit: 1000,
-      profile: MediaEpisodeQueryProfile.PlaybackQueue
-    })
-    const episodes = episodePage.items
-    if (episodes.length === 0) return { refs: [], startIndex: 0, label: '' }
-    let startIndex = preferredId.length > 0 ?
-      episodes.findIndex((episode: MediaEpisode): boolean => episode.ref.id === preferredId) : -1
-    if (startIndex < 0) startIndex = 0
-    const target = episodes[startIndex]
-    return {
-      refs: episodes.map((episode: MediaEpisode): MediaRef => episode.ref),
-      startIndex: startIndex,
-      label: preferredLabel.length > 0 ? preferredLabel : this.formatEpisodePlayText(target)
-    }
+    return undefined
   }
 
-  private async feiniuSeriesQueue(catalog: MediaCatalogProvider,
-    detail: MediaDetail): Promise<EpisodeQueueSelection> {
-    const target = detail.playbackTarget
-    const targetLabel = this.formatFeiniuEpisodePlayText(target?.seasonNumber, target?.episodeNumber)
-    const seasons = detail.seasons.length > 0 ? detail.seasons : await catalog.getSeasons(detail.ref)
+  private async seriesQueue(catalog: MediaCatalogProvider, detail: MediaDetail,
+    seasonsPromise: Promise<MediaSeason[]>): Promise<EpisodeQueueSelection> {
+    const adapter = this.presentationAdapter(catalog)
+    const targetPromise = this.preferredSeriesTarget(catalog, detail)
+    const seasons = await seasonsPromise
+    const target = await targetPromise
+    const targetLabel = adapter.episodeLabel(target?.seasonNumber, target?.episodeNumber)
+    const hasTargetNumber = target?.seasonNumber !== undefined || target?.episodeNumber !== undefined
     if (seasons.length === 0) {
       return target?.ref ? { refs: [target.ref], startIndex: 0, label: targetLabel }
         : { refs: [], startIndex: 0, label: '' }
@@ -292,16 +273,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return {
       refs: episodes.map((episode: MediaEpisode): MediaRef => episode.ref),
       startIndex: startIndex,
-      label: targetLabel !== '播放' ? targetLabel :
-        this.formatFeiniuEpisodePlayText(selected.seasonNumber, selected.episodeNumber)
+      label: hasTargetNumber ? targetLabel :
+        adapter.episodeLabel(selected.seasonNumber, selected.episodeNumber)
     }
-  }
-
-  private seriesQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
-    if (catalog.session.provider === MediaProviderKind.FeiniuVideo) {
-      return this.feiniuSeriesQueue(catalog, detail)
-    }
-    return this.jellyfinSeriesQueue(catalog, detail.ref)
   }
 
   private async episodeQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
@@ -321,7 +295,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return {
       refs: episodePage.items.map((episode: MediaEpisode): MediaRef => episode.ref),
       startIndex: startIndex,
-      label: this.formatEpisodePlayText(episodePage.items[startIndex])
+      label: this.presentationAdapter(catalog).episodeLabel(
+        episodePage.items[startIndex].seasonNumber, episodePage.items[startIndex].episodeNumber)
     }
   }
 
@@ -349,7 +324,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       if (detail.ref.kind === MediaRefKind.Series) {
         const seasonsPromise: Promise<MediaSeason[]> = detail.seasons.length > 0 ?
           Promise.resolve(detail.seasons.slice()) : catalog.getSeasons(detail.ref)
-        const queuePromise: Promise<EpisodeQueueSelection> = this.seriesQueue(catalog, detail)
+        const queuePromise: Promise<EpisodeQueueSelection> = this.seriesQueue(catalog, detail, seasonsPromise)
         try {
           const seasons = await seasonsPromise
           if (this.isCurrent(catalog, ref, generation)) this.ui.seasons = this.mapSeasons(seasons)
@@ -451,7 +426,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       startIndex = this.episodeStartIndex
     }
     const source = this.currentMediaFile()
-    playMediaRefs(refs, getContext(), this.ui.selectedAudio?.index, this.ui.selectedSubtitle?.index,
+    playMediaRefs(refs, getContext(), this.ui.selectedAudioStreamIndex, this.ui.selectedSubtitleStreamIndex,
       startIndex, this.ui.playbackPositionMs > 0 ? this.ui.playbackPositionMs * 10000 : undefined,
       source?.id)
   }
@@ -467,12 +442,11 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
    * "continue watching" card.
    */
   selectMediaSource(index: number): void {
-    if (index < 0 || index >= this.ui.mediaSources.length || index === this.ui.selectedMediaSourceIndex) {
+    if (index < 0 || index >= this.mediaSources.length || index === this.ui.selectedMediaSourceIndex) {
       return
     }
     this.ui.selectedMediaSourceIndex = index
-    this.ui.selectedAudio = undefined
-    this.ui.selectedSubtitle = undefined
+    this.applySelectedSourcePresentation()
     const ref = this.ui.mediaRef
     const sourceId = this.currentMediaFile()?.id.trim() || ''
     if (ref && sourceId.length > 0) {
@@ -482,8 +456,20 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         // A preference write must not prevent the user from changing versions.
       }
     }
-    this.getFileInfo()
-    this.getVideoInfo()
+  }
+
+  selectAudioOption(index: number): void {
+    const source = this.currentPlaybackSource()
+    if (!source || index < 0 || index >= source.audioOptions.length) return
+    this.ui.selectedAudioOptionIndex = index
+    this.ui.selectedAudioStreamIndex = source.audioOptions[index].streamIndex
+  }
+
+  selectSubtitleOption(index: number): void {
+    const source = this.currentPlaybackSource()
+    if (!source || index < 0 || index >= source.subtitleOptions.length) return
+    this.ui.selectedSubtitleOptionIndex = index
+    this.ui.selectedSubtitleStreamIndex = source.subtitleOptions[index].streamIndex
   }
 
   openExternalUrl(url: string): void {
@@ -569,9 +555,15 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   }
 
   private currentMediaFile(): MediaFileInfo | undefined {
-    if (this.ui.mediaSources.length === 0) return undefined
-    const index = Math.min(Math.max(this.ui.selectedMediaSourceIndex, 0), this.ui.mediaSources.length - 1)
-    return this.ui.mediaSources[index]
+    if (this.mediaSources.length === 0) return undefined
+    const index = Math.min(Math.max(this.ui.selectedMediaSourceIndex, 0), this.mediaSources.length - 1)
+    return this.mediaSources[index]
+  }
+
+  private currentPlaybackSource(): PlaybackSourceViewData | undefined {
+    if (this.ui.playbackSources.length === 0) return undefined
+    const index = Math.min(Math.max(this.ui.selectedMediaSourceIndex, 0), this.ui.playbackSources.length - 1)
+    return this.ui.playbackSources[index]
   }
 
   private preferredMediaSourceIndex(ref: MediaRef, sources: MediaFileInfo[]): number {
@@ -588,80 +580,40 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     }
   }
 
-  private videoTagsByStreams(streams: MediaStreamInfo[]): VideoTag[] {
-    const tags: VideoTag[] = []
-    streams.forEach((stream: MediaStreamInfo): void => {
-      if (stream.kind === MediaStreamKind.Video) {
-        if ((stream.width || 0) >= 3800 || (stream.height || 0) >= 2000) {
-          if (!tags.includes('4K')) tags.push('4K')
-        } else if ((stream.width || 0) >= 1900 || (stream.height || 0) >= 1000) {
-          if (!tags.includes('1080')) tags.push('1080')
-        }
-        const range = (stream.videoRangeType || '').toUpperCase()
-        if ((range.includes('DOVI') || range.includes('DOLBY')) && !tags.includes('DOLBY_VISION')) {
-          tags.push('DOLBY_VISION')
-        } else if (range.includes('HDR') && !tags.includes('HDR')) {
-          tags.push('HDR')
-        } else if (range.includes('SDR') && !tags.includes('SDR')) {
-          tags.push('SDR')
-        }
-      } else if (stream.kind === MediaStreamKind.Audio) {
-        const layout = (stream.channelLayout || '').toLowerCase()
-        const codec = stream.codec.toLowerCase()
-        if (layout.includes('stereo') && !tags.includes('STEREO')) tags.push('STEREO')
-        if (codec.includes('dts') && !tags.includes('DTS')) {
-          tags.push('DTS')
-        } else if (codec.includes('dolby') || codec.includes('ac3') || codec.includes('eac3')) {
-          if (layout.includes('7.1') && !tags.includes('DOLBY_SURROUND')) tags.push('DOLBY_SURROUND')
-          else if (layout.includes('5.1') && !tags.includes('DOLBY_ATOMS')) tags.push('DOLBY_ATOMS')
-        }
-      }
-    })
-    return tags
-  }
-
   getTags(): string[] {
-    const source = this.currentMediaFile()
-    this.ui.tags = source ? this.videoTagsByStreams(source.streams).map((tag: VideoTag): string => {
-      return getTagBase64(tag)
-    }).filter((value: string): boolean => value.length > 0) : []
     return this.ui.tags
   }
 
-  getFileInfo(): void {
-    const source = this.currentMediaFile()
+  private applySelectedSourcePresentation(): void {
+    const source = this.currentPlaybackSource()
+    this.ui.selectedAudioStreamIndex = undefined
+    this.ui.selectedSubtitleStreamIndex = undefined
     if (!source) {
       this.ui.path = ''
       this.ui.size = ''
-      return
-    }
-    this.ui.path = source.path
-    this.ui.size = source.sizeBytes > 0 ? (source.sizeBytes / 1024 / 1024 / 1024).toFixed(2) + ' GB' : ''
-  }
-
-  getVideoInfo(): void {
-    const source = this.currentMediaFile()
-    if (!source) {
+      this.ui.createDate = ''
+      this.ui.addedDate = ''
       this.ui.videoInfo = ''
       this.ui.audioInfo = ''
       this.ui.subtitleInfo = ''
+      this.ui.tags = []
+      this.ui.mediaInfoSections = []
+      this.ui.selectedAudioOptionIndex = 0
+      this.ui.selectedSubtitleOptionIndex = 0
       return
     }
-    this.ui.videoInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
-      return stream.kind === MediaStreamKind.Video
-    }).map((stream: MediaStreamInfo): string => {
-      const bitrate = stream.bitrate ? `${Math.floor(stream.bitrate / 1000000)} mbps` : ''
-      const bitDepth = stream.bitDepth ? `${stream.bitDepth} bit` : ''
-      return [stream.displayTitle, bitrate, bitDepth].filter((value: string): boolean => value.length > 0).join(' · ')
-    }).join('\n')
-    this.ui.audioInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
-      return stream.kind === MediaStreamKind.Audio
-    }).map((stream: MediaStreamInfo): string => {
-      return `${stream.displayTitle}${stream.sampleRate ? ` · ${stream.sampleRate} Hz` : ''}`
-    }).join('\n')
-    this.ui.subtitleInfo = source.streams.filter((stream: MediaStreamInfo): boolean => {
-      return stream.kind === MediaStreamKind.Subtitle
-    }).map((stream: MediaStreamInfo): string => `${stream.language} ${stream.codec}`.trim()).join('\n')
+    this.ui.path = source.filePath
+    this.ui.size = source.fileSize
+    this.ui.createDate = source.fileCreatedDate
+    this.ui.addedDate = source.addedDate
+    this.ui.videoInfo = source.videoSummary
+    this.ui.audioInfo = source.audioSummary
+    this.ui.subtitleInfo = source.subtitleSummary
+    this.ui.tags = source.tagKeys.map((tag: VideoTag): string => getTagBase64(tag))
+      .filter((value: string): boolean => value.length > 0)
+    this.ui.mediaInfoSections = source.infoSections.slice()
+    this.ui.selectedAudioOptionIndex = source.defaultAudioOptionIndex
+    this.ui.selectedSubtitleOptionIndex = source.defaultSubtitleOptionIndex
   }
 }
 

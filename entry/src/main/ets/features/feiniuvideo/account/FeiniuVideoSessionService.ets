@@ -46,6 +46,11 @@ export interface FeiniuVideoSessionClock {
   now(): number
 }
 
+export interface FeiniuVideoUpstreamSessionBridge {
+  sync(baseUrl: string, originalAddress: string, username: string,
+    connectionRoute: string, token: string, cookie: string): void
+}
+
 export interface FeiniuVideoSessionSnapshotWriter {
   write(session: MediaProviderSession, apiClient: FeiniuVideoApiClient): void
 }
@@ -64,6 +69,28 @@ class DefaultFeiniuVideoApiClientFactory implements FeiniuVideoApiClientFactory 
 class SystemFeiniuVideoSessionClock implements FeiniuVideoSessionClock {
   now(): number {
     return Date.now()
+  }
+}
+
+class DefaultFeiniuVideoUpstreamSessionBridge implements FeiniuVideoUpstreamSessionBridge {
+  sync(baseUrl: string, originalAddress: string, username: string,
+    connectionRoute: string, token: string, cookie: string): void {
+    UpstreamSessionStore.saveLoginForm(
+      baseUrl,
+      username,
+      '',
+      false,
+      baseUrl.startsWith('https://'),
+      originalAddress
+    )
+    UpstreamSessionStore.saveConnectionRoute(connectionRoute)
+    UpstreamFnMediaAuthStore.clearSession()
+    if (token.length > 0) {
+      UpstreamFnMediaAuthStore.saveToken(token)
+    }
+    if (cookie.length > 0) {
+      UpstreamFnMediaAuthStore.saveCookie(cookie)
+    }
   }
 }
 
@@ -133,19 +160,22 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
   private readonly hostResolver: FeiniuVideoHostResolutionSource
   private readonly apiClientFactory: FeiniuVideoApiClientFactory
   private readonly clock: FeiniuVideoSessionClock
+  private readonly upstreamSessionBridge: FeiniuVideoUpstreamSessionBridge
 
   constructor(accountStore: FeiniuVideoAccountStore,
     credentialStore: FeiniuVideoCredentialStore,
     fnIdResolver: FeiniuVideoAddressResolutionSource = new FnIdResolver(new FeiniuVideoFnIdResolveSource()),
     hostResolver: FeiniuVideoHostResolutionSource = new FeiniuVideoHostResolver(),
     apiClientFactory: FeiniuVideoApiClientFactory = new DefaultFeiniuVideoApiClientFactory(),
-    clock: FeiniuVideoSessionClock = new SystemFeiniuVideoSessionClock()) {
+    clock: FeiniuVideoSessionClock = new SystemFeiniuVideoSessionClock(),
+    upstreamSessionBridge: FeiniuVideoUpstreamSessionBridge = new DefaultFeiniuVideoUpstreamSessionBridge()) {
     this.accountStore = accountStore
     this.credentialStore = credentialStore
     this.fnIdResolver = fnIdResolver
     this.hostResolver = hostResolver
     this.apiClientFactory = apiClientFactory
     this.clock = clock
+    this.upstreamSessionBridge = upstreamSessionBridge
   }
 
   static async create(context: common.Context): Promise<FeiniuVideoSessionService> {
@@ -449,22 +479,14 @@ export class FeiniuVideoSessionService implements FeiniuVideoSessionSnapshotWrit
   private prepareUpstreamSession(resolution: FeiniuVideoHostResolution, originalAddress: string,
     username: string, credentials: FeiniuVideoApiCredentials): void {
     const baseUrl = resolution.preferredBaseUrl
-    UpstreamSessionStore.saveLoginForm(
+    this.upstreamSessionBridge.sync(
       baseUrl,
+      originalAddress,
       username,
-      '',
-      false,
-      baseUrl.startsWith('https://'),
-      originalAddress
+      this.upstreamRoute(resolution.preferredRoute),
+      credentials.token,
+      credentials.cookie
     )
-    UpstreamSessionStore.saveConnectionRoute(this.upstreamRoute(resolution.preferredRoute))
-    UpstreamFnMediaAuthStore.clearSession()
-    if (credentials.token.length > 0) {
-      UpstreamFnMediaAuthStore.saveToken(credentials.token)
-    }
-    if (credentials.cookie.length > 0) {
-      UpstreamFnMediaAuthStore.saveCookie(credentials.cookie)
-    }
   }
 
   private upstreamRoute(route: MediaConnectionRoute): string {

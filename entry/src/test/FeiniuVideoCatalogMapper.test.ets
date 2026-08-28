@@ -347,7 +347,10 @@ export default function feiniuVideoCatalogMapperTest() {
     it('mapsEachFeiniuFileAsASelectableMediaSourceWithScopedStreams', 0, () => {
       const streamData: FnMediaStreamListData = {
         files: [
-          { guid: 'media-4k', file_name: 'Movie.4K.mkv', path: '/media/Movie.4K.mkv', size: 4294967296 },
+          {
+            guid: 'media-4k', file_name: 'Movie.4K.mkv', path: '/media/Movie.4K.mkv', size: 4294967296,
+            file_birth_time: 1785889046949, create_time: 1785889069766
+          },
           { guid: 'media-1080', file_name: 'Movie.1080p.mp4', path: '/media/Movie.1080p.mp4', size: 2147483648 }
         ],
         video_streams: [
@@ -358,7 +361,8 @@ export default function feiniuVideoCatalogMapperTest() {
             codec_name: 'hevc',
             width: 3840,
             height: 2160,
-            color_range_type: 'Dolby Vision',
+            color_range_type: 'SDR',
+            dv_profile: 8,
             wrapper: 'mkv',
             duration: 7200,
             bps: 18000000
@@ -376,7 +380,10 @@ export default function feiniuVideoCatalogMapperTest() {
           }
         ],
         audio_streams: [
-          { media_guid: 'media-4k', index: 1, codec_name: 'eac3', language: 'zh', channels: 6 },
+          {
+            media_guid: 'media-4k', index: 1, codec_name: 'eac3', language: 'zh', channels: 6,
+            audio_type: 'Dolby Atmos'
+          },
           { media_guid: 'media-1080', index: 1, codec_name: 'aac', language: 'en', channels: 2 }
         ],
         subtitle_streams: [
@@ -395,7 +402,12 @@ export default function feiniuVideoCatalogMapperTest() {
       expect(detail.mediaFiles[0].id).assertEqual('media-4k')
       expect(detail.mediaFiles[0].container).assertEqual('mkv')
       expect(detail.mediaFiles[0].streams.length).assertEqual(3)
-      expect(detail.mediaFiles[0].streams[0].videoRangeType).assertEqual('Dolby Vision')
+      expect(detail.mediaFiles[0].streams[0].resolutionType).assertEqual('4K')
+      expect(detail.mediaFiles[0].streams[0].videoRangeType).assertEqual('SDR')
+      expect(detail.mediaFiles[0].streams[0].dvProfile).assertEqual(8)
+      expect(detail.mediaFiles[0].streams[1].audioType).assertEqual('Dolby Atmos')
+      expect(detail.mediaFiles[0].fileCreatedAtMs).assertEqual(1785889046949)
+      expect(detail.mediaFiles[0].addedAtMs).assertEqual(1785889069766)
       expect(detail.mediaFiles[1].id).assertEqual('media-1080')
       expect(detail.mediaFiles[1].container).assertEqual('mp4')
       expect(detail.mediaFiles[1].streams.length).assertEqual(3)

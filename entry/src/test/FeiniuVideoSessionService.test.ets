@@ -15,7 +15,8 @@ import {
 import {
   FeiniuVideoApiClientFactory,
   FeiniuVideoSessionClock,
-  FeiniuVideoSessionService
+  FeiniuVideoSessionService,
+  FeiniuVideoUpstreamSessionBridge
 } from '../main/ets/features/feiniuvideo/account/FeiniuVideoSessionService'
 import { FeiniuVideoApiClient } from '../main/ets/features/feiniuvideo/network/FeiniuVideoApiClient'
 import {
@@ -28,6 +29,7 @@ import {
   FeiniuVideoDigestSource,
   FeiniuVideoHostProbe,
   FeiniuVideoHostProbeResult,
+  FeiniuVideoHostCandidate,
   FeiniuVideoHostResolution,
   FeiniuVideoHttpMethod,
   FeiniuVideoHttpRequest,
@@ -149,6 +151,12 @@ class FixedSessionClock implements FeiniuVideoSessionClock {
   }
 }
 
+class NoopFeiniuVideoUpstreamSessionBridge implements FeiniuVideoUpstreamSessionBridge {
+  sync(_baseUrl: string, _originalAddress: string, _username: string,
+    _connectionRoute: string, _token: string, _cookie: string): void {
+  }
+}
+
 class SessionTransportStep {
   readonly response?: FeiniuVideoHttpResponse
   readonly error?: FeiniuVideoRequestError
@@ -258,7 +266,8 @@ function service(accountBackend: FakeSessionAccountBackend,
     new FnIdResolver(),
     new FeiniuVideoHostResolver(new AlwaysReachableProbe()),
     factory,
-    new FixedSessionClock(timestamp)
+    new FixedSessionClock(timestamp),
+    new NoopFeiniuVideoUpstreamSessionBridge()
   )
 }
 
@@ -438,7 +447,8 @@ export default function feiniuVideoSessionServiceTest() {
         addressResolver,
         hostResolver,
         new QueueSessionApiClientFactory([transport]),
-        new FixedSessionClock(654)
+        new FixedSessionClock(654),
+        new NoopFeiniuVideoUpstreamSessionBridge()
       )
 
       const restored = await sessionService.restore(record.providerAccountId)

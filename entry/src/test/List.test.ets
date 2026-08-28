@@ -64,6 +64,7 @@ import mediaPlaybackModelsTest from './MediaPlaybackModels.test';
 import jellyfinPlaybackProviderTest from './JellyfinPlaybackProvider.test';
 import mediaAccountSessionCoordinatorTest from './MediaAccountSessionCoordinator.test';
 import mediaImageKnifeAdapterTest from './MediaImageKnifeAdapter.test';
+import videoDetailPresentationAdapterTest from './VideoDetailPresentationAdapter.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -132,4 +133,5 @@ export default function testsuite() {
   jellyfinPlaybackProviderTest();
   mediaAccountSessionCoordinatorTest();
   mediaImageKnifeAdapterTest();
+  videoDetailPresentationAdapterTest();
 }

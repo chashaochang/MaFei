@@ -36,6 +36,7 @@ import {
   parseMediaRouteRefData,
   toMediaRouteRefData
 } from '../../media/navigation/MediaRouteRef';
+import { AnimateType, SkeletonType, UISkeleton } from '@hw-agconnect/ui-skeleton';
 
 interface SeasonDetailRouteParams {
   readonly id?: string
@@ -279,6 +280,16 @@ export struct SeasonDetailPage {
     return option
   }
 
+  private episodeImageOption(imageRef: MediaImageRef | undefined, fallback: string): ImageKnifeOption {
+    const option = this.imageOption(imageRef, fallback)
+    option.placeholderSrc = $r('app.media.placeholder_video')
+    option.errorSrc = $r('app.media.placeholder_video')
+    option.placeholderObjectFit = ImageFit.CENTER
+    option.errorObjectFit = ImageFit.CENTER
+    option.border = { radius: 6 }
+    return option
+  }
+
   private legacyMediaRef(id: string, kind: MediaRefKind): MediaRef | undefined {
     const normalizedId = id.trim()
     if (normalizedId.length === 0) {
@@ -292,10 +303,9 @@ export struct SeasonDetailPage {
     }
   }
 
-  private loadSeason(ref: MediaRef, seriesRef: MediaRef): void {
+  private loadSeason(ref: MediaRef, seriesRef: MediaRef, partialRefresh: boolean = false): void {
     this.ui.videoScroller.scrollEdge(Edge.Start)
-    this.ui.episodeName = ''
-    this.vm.getSeasonDetail(ref, seriesRef)
+    this.vm.getSeasonDetail(ref, seriesRef, partialRefresh)
   }
 
   private selectSeason(id: string): void {
@@ -307,7 +317,62 @@ export struct SeasonDetailPage {
       !seriesRef.belongsTo(currentMediaCatalogProvider().session)) {
       return
     }
-    this.loadSeason(ref, seriesRef)
+    this.loadSeason(ref, seriesRef, true)
+  }
+
+  @Builder
+  private episodeListSkeleton() {
+    List({ space: 12 }) {
+      ForEach([0, 1, 2], (item: number) => {
+        ListItem() {
+          Column({ space: 8 }) {
+            UISkeleton({
+              animate: AnimateType.GRADIENT,
+              options: [{
+                type: SkeletonType.RECT,
+                width: '100%',
+                height: '100%',
+                radius: 6
+              }]
+            })
+              .width('100%')
+              .aspectRatio(16 / 9)
+
+            UISkeleton({
+              animate: AnimateType.GRADIENT,
+              options: [{
+                type: SkeletonType.RECT,
+                width: '100%',
+                height: '100%',
+                radius: 4
+              }]
+            })
+              .width('82%')
+              .height(14)
+
+            UISkeleton({
+              animate: AnimateType.GRADIENT,
+              options: [{
+                type: SkeletonType.RECT,
+                width: '100%',
+                height: '100%',
+                radius: 4
+              }]
+            })
+              .width('58%')
+              .height(12)
+          }
+          .width(this.useNativeSurface() ? 180 : 160)
+          .alignItems(HorizontalAlign.Start)
+        }
+      }, (item: number) => `season-episode-skeleton-${item}`)
+    }
+    .width('100%')
+    .height(this.useNativeSurface() ? 184 : 165)
+    .listDirection(Axis.Horizontal)
+    .scrollBar(BarState.Off)
+    .padding({ left: 16, right: 16 })
+    .enabled(false)
   }
 
   private seasonTabs(): HomeFeedTabItem[] {
@@ -750,7 +815,7 @@ export struct SeasonDetailPage {
                     .padding({ left: 16, right: 16 })
                 }
 
-                if (this.ui.videoGroups.length > 1) {
+                if (!this.ui.episodeLoading && this.ui.videoGroups.length > 1) {
                   Blank().height(12)
                   HomeLibraryChipSelector({
                     tabs: this.episodeGroupTabs(),
@@ -807,7 +872,7 @@ export struct SeasonDetailPage {
                   .padding({ left: 16, right: 16 })
                 }
 
-                if (this.ui.videoGroups.length > 1) {
+                if (!this.ui.episodeLoading && this.ui.videoGroups.length > 1) {
                   List() {
                     ForEach(this.ui.videoGroups, (group: string, index) => {
                       ListItem() {
@@ -836,14 +901,16 @@ export struct SeasonDetailPage {
               }
 
               Blank(16)
-              if (this.ui.videos.length > this.ui.selectGroupIndex) {
+              if (this.ui.episodeLoading) {
+                this.episodeListSkeleton()
+              } else if (this.ui.videos.length > this.ui.selectGroupIndex) {
                 List({ space: 12, scroller: this.ui.videoScroller }) {
                   ForEach(this.ui.videos[this.ui.selectGroupIndex], (item: VideoItem) => {
                     ListItem() {
                       Column() {
                         RelativeContainer() {
                           ImageKnifeComponent({
-                            imageKnifeOption: this.imageOption(item.imageRef, item.image)
+                            imageKnifeOption: this.episodeImageOption(item.imageRef, item.image)
                           })
                             .aspectRatio(16 / 9)
                             .width('100%')
@@ -852,6 +919,7 @@ export struct SeasonDetailPage {
                             .borderWidth(AppThemeSurfaceResolver.outlineWidth(
                               this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
                             .borderRadius(6)
+                            .clip(true)
                           if (item.tags && item.tags.length > 0) {
                             Row({ space: 4 }) {
                               ForEach(item.tags, (tag: string) => {

@@ -252,11 +252,14 @@ export interface MediaStreamInfo {
   readonly aspectRatio?: string
   readonly frameRate?: number
   readonly interlaced?: boolean
+  readonly resolutionType?: string
   readonly videoRangeType?: string
+  readonly dvProfile?: number
   readonly colorPrimaries?: string
   readonly colorSpace?: string
   readonly colorTransfer?: string
   readonly pixelFormat?: string
+  readonly audioType?: string
   readonly channelLayout?: string
   readonly external: boolean
   readonly default: boolean
@@ -273,6 +276,8 @@ export interface MediaFileInfo {
   readonly sizeBytes: number
   readonly bitrate?: number
   readonly durationMs: number
+  readonly fileCreatedAtMs?: number
+  readonly addedAtMs?: number
   readonly streams: MediaStreamInfo[]
 }
 

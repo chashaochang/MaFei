@@ -85,18 +85,31 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     this.ui.selectGroupIndex = 0
   }
 
-  async getSeasonDetail(ref: MediaRef, seriesRef: MediaRef): Promise<void> {
+  async getSeasonDetail(ref: MediaRef, seriesRef: MediaRef, partialRefresh: boolean = false): Promise<void> {
     const generation = ++this.requestGeneration
-    this.ui.firstLoading = true
+    if (partialRefresh) {
+      this.ui.episodeLoading = true
+    } else {
+      this.ui.firstLoading = true
+      this.ui.episodeLoading = false
+    }
     let catalog: MediaCatalogProvider
     try {
       catalog = currentMediaCatalogProvider()
     } catch (_error) {
-      this.ui.firstLoading = false
+      if (partialRefresh) {
+        this.ui.episodeLoading = false
+      } else {
+        this.ui.firstLoading = false
+      }
       return
     }
     if (!ref.belongsTo(catalog.session) || !seriesRef.belongsTo(catalog.session)) {
-      this.ui.firstLoading = false
+      if (partialRefresh) {
+        this.ui.episodeLoading = false
+      } else {
+        this.ui.firstLoading = false
+      }
       return
     }
     this.catalog = catalog
@@ -141,6 +154,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     } finally {
       if (this.isCurrent(catalog, ref, generation)) {
         this.ui.firstLoading = false
+        this.ui.episodeLoading = false
       }
     }
   }

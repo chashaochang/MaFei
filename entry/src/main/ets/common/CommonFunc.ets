@@ -8,7 +8,7 @@ import {
   MediaStream
 } from 'sdk/src/main/ets/generated-client/models'
 import { ActivityEventType } from '../events/ActivityEvent'
-import { VideoTag } from '../features/videodetail/VideoDetailUIState'
+import { VideoTag } from '../media/presentation/VideoDetailPresentationModels'
 import { ApiClient } from '../network/ApiClient'
 import { PlayOptions } from '../player/interaction/PlayOptions'
 import { UIConstants } from './UIConstants'

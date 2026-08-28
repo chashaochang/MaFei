@@ -198,14 +198,25 @@ export default function jellyfinPlaybackProviderTest() {
       service.playbackSources = [
         service.sourceResult,
         {
-          ...service.sourceResult,
           Id: 'episode-1-source-2',
-          Name: 'Alternative'
+          Name: 'Alternative',
+          Container: service.sourceResult.Container,
+          Protocol: service.sourceResult.Protocol,
+          SupportsDirectPlay: service.sourceResult.SupportsDirectPlay,
+          SupportsDirectStream: service.sourceResult.SupportsDirectStream,
+          SupportsTranscoding: service.sourceResult.SupportsTranscoding,
+          RunTimeTicks: service.sourceResult.RunTimeTicks,
+          DefaultAudioStreamIndex: service.sourceResult.DefaultAudioStreamIndex,
+          DefaultSubtitleStreamIndex: service.sourceResult.DefaultSubtitleStreamIndex,
+          MediaStreams: service.sourceResult.MediaStreams
         }
       ]
       const provider = new JellyfinPlaybackProvider(owner, service)
       const resolved = await provider.resolveSource({
-        ...request(owner, 0),
+        ref: new MediaRef(owner.provider, owner.accountScope, 'episode-1', MediaRefKind.Episode),
+        startTimeTicks: 0,
+        autoOpenLiveStream: true,
+        engineHint: MediaPlaybackEngineHint.Auto,
         mediaSourceId: 'episode-1-source-2'
       })
 
@@ -266,11 +277,15 @@ export default function jellyfinPlaybackProviderTest() {
       const owner = session()
       const service = new FakeJellyfinPlaybackService()
       const transcodedSource: MediaSourceInfo = {
-        ...service.sourceResult,
+        Id: service.sourceResult.Id,
+        Name: service.sourceResult.Name,
+        Container: service.sourceResult.Container,
+        Protocol: service.sourceResult.Protocol,
         SupportsDirectPlay: false,
         SupportsDirectStream: false,
         SupportsTranscoding: true,
         TranscodingUrl: '/Videos/episode-1/master.m3u8',
+        RunTimeTicks: service.sourceResult.RunTimeTicks,
         DefaultAudioStreamIndex: 1,
         MediaStreams: [{
           Index: 0,
@@ -291,11 +306,17 @@ export default function jellyfinPlaybackProviderTest() {
         }]
       }
       const directSource: MediaSourceInfo = {
-        ...transcodedSource,
+        Id: transcodedSource.Id,
+        Name: transcodedSource.Name,
+        Container: transcodedSource.Container,
+        Protocol: transcodedSource.Protocol,
         SupportsDirectPlay: true,
+        SupportsDirectStream: transcodedSource.SupportsDirectStream,
         SupportsTranscoding: false,
         TranscodingUrl: undefined,
-        DefaultAudioStreamIndex: 2
+        RunTimeTicks: transcodedSource.RunTimeTicks,
+        DefaultAudioStreamIndex: 2,
+        MediaStreams: transcodedSource.MediaStreams
       }
       service.playbackInfoResponder = (playbackRequest: JellyfinPlaybackInfoRequest): PlaybackInfoResponse => ({
         PlaySessionId: playbackRequest.audioStreamIndex === 2 ? 'play-direct' : 'play-transcode',

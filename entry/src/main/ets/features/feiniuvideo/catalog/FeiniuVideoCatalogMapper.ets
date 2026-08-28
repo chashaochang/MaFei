@@ -328,6 +328,8 @@ export class FeiniuVideoCatalogMapper {
           this.durationMs(item.duration, item.runtime),
           this.durationMs(primaryVideo?.duration)
         ),
+        fileCreatedAtMs: this.timestampMs(file.file_birth_time),
+        addedAtMs: this.timestampMs(file.create_time),
         streams: streams
       }
     })
@@ -400,7 +402,9 @@ export class FeiniuVideoCatalogMapper {
       frameRate: this.numberValue(value.avg_frame_rate) || this.numberValue(value.frame_rate) ||
         this.numberValue(value.r_frame_rate) || this.numberValue(value.fps),
       interlaced: value.progressive === undefined ? undefined : value.progressive <= 0,
+      resolutionType: `${value.resolution_type || ''}`.trim() || undefined,
       videoRangeType: `${value.color_range_type || value.color_range || ''}`.trim() || undefined,
+      dvProfile: this.numberValue(value.dv_profile),
       colorPrimaries: `${value.color_primaries || ''}`.trim() || undefined,
       colorSpace: `${value.color_space || ''}`.trim() || undefined,
       colorTransfer: `${value.color_transfer || ''}`.trim() || undefined,
@@ -423,6 +427,7 @@ export class FeiniuVideoCatalogMapper {
       bitrate: this.numberValue(value.bps),
       sampleRate: this.numberValue(value.sample_rate),
       channels: this.numberValue(value.channels),
+      audioType: `${value.audio_type || ''}`.trim() || undefined,
       channelLayout: `${value.channel_layout || ''}`.trim() || undefined,
       external: false,
       default: (value.is_default || 0) > 0,
@@ -953,6 +958,11 @@ export class FeiniuVideoCatalogMapper {
 
   private positiveNumber(value?: number): number | undefined {
     return value && value > 0 ? Math.floor(value) : undefined
+  }
+
+  private timestampMs(value?: number): number | undefined {
+    if (!value || value <= 0) return undefined
+    return Math.floor(value < 100000000000 ? value * FEINIU_SECONDS_TO_MILLISECONDS : value)
   }
 
   private normalizePercentage(value?: number): number {

@@ -2,12 +2,14 @@ import { BaseUIState } from "../../common/base/BaseUIState"
 import { LastSpanAttribute, TextSectionAttribute } from "../../component/textexpand/Model"
 import {
   MediaExternalLink,
-  MediaFileInfo,
   MediaImageRef,
-  MediaPersonCredit,
-  MediaStreamInfo
+  MediaPersonCredit
 } from "../../media/catalog/MediaCatalogModels"
 import { MediaRef } from "../../media/MediaRef"
+import {
+  MediaInfoSectionViewData,
+  PlaybackSourceViewData
+} from '../../media/presentation/VideoDetailPresentationModels'
 import { ColorUtils } from "../../utils/ColorUtils"
 import { VideoItem } from "../home/hometab/HomeUIState"
 
@@ -41,6 +43,7 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace path: string = ''
   @Trace size: string = ''
   @Trace createDate: string = ''
+  @Trace addedDate: string = ''
   @Trace videoInfo: string = ''
   @Trace audioInfo: string = ''
   @Trace subtitleInfo: string = ''
@@ -75,14 +78,12 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace colorFilter: ColorFilter = ColorUtils.hexToColorMatrix('#ff000000')
 
   @Trace firstLoading: boolean = true;
-  @Trace mediaSources: MediaFileInfo[] = []
+  @Trace playbackSources: PlaybackSourceViewData[] = []
   //选中的媒体源索引
   @Trace selectedMediaSourceIndex: number = 0
-  //选中的字幕
-  @Trace selectedSubtitle?: MediaStreamInfo
-  //选中的音频
-  @Trace selectedAudio?: MediaStreamInfo
+  @Trace selectedSubtitleOptionIndex: number = 0
+  @Trace selectedAudioOptionIndex: number = 0
+  selectedSubtitleStreamIndex?: number
+  selectedAudioStreamIndex?: number
+  @Trace mediaInfoSections: MediaInfoSectionViewData[] = []
 }
-
-export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY_VISION' | 'DOLBY_ATOMS'
-  | 'DOLBY_SURROUND'
