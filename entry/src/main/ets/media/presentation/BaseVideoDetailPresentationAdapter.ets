@@ -57,6 +57,10 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
   protected abstract sourceSummary(source: MediaFileInfo, video: MediaStreamInfo | undefined,
     audio: MediaStreamInfo | undefined): string
 
+  protected abstract audioOption(stream: MediaStreamInfo, index: number): MediaOptionViewData
+
+  protected abstract subtitleOption(stream: MediaStreamInfo, index: number): MediaOptionViewData
+
   protected sourceTitle(source: MediaFileInfo, index: number): string {
     const name = source.name.trim()
     return name.length > 0 ? name : `版本 ${index + 1}`
@@ -138,37 +142,15 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
     return index >= 0 ? index : 0
   }
 
-  private audioOption(stream: MediaStreamInfo, index: number): MediaOptionViewData {
-    const language = LanguageUtil.getLanguageDisplayNameBy6392T(stream.language || '')
-    const title = language.length > 0 ? `${language}音频` : `音轨 ${index + 1}`
-    const summaryParts: string[] = []
-    this.appendUnique(summaryParts, stream.codec.trim().toUpperCase())
-    this.appendUnique(summaryParts, this.audioChannelText(stream))
-    if ((stream.sampleRate || 0) > 0) this.appendUnique(summaryParts, `${stream.sampleRate} Hz`)
-    if (stream.default) this.appendUnique(summaryParts, '默认')
-    return {
-      id: `audio:${stream.index}:${index}`,
-      streamIndex: stream.index,
-      title: title,
-      summary: summaryParts.join(' · ')
-    }
-  }
-
-  private subtitleOption(stream: MediaStreamInfo, index: number): MediaOptionViewData {
-    const language = LanguageUtil.getLanguageDisplayNameBy6392T(stream.language || '')
-    const title = stream.title.trim().length > 0 ? stream.title.trim() :
-      (language.length > 0 ? `${language}字幕` : `字幕 ${index + 1}`)
-    const summaryParts: string[] = []
-    this.appendUnique(summaryParts, stream.codec.trim().toUpperCase())
-    if (stream.external) this.appendUnique(summaryParts, '外挂')
-    if (stream.forced) this.appendUnique(summaryParts, '强制')
-    if (stream.default) this.appendUnique(summaryParts, '默认')
-    return {
-      id: `subtitle:${stream.index}:${index}`,
-      streamIndex: stream.index,
-      title: title,
-      summary: summaryParts.join(' · ')
-    }
+  protected compactOptionLabel(title: string, details: string[]): string {
+    const parts: string[] = [title]
+    details.forEach((detail: string): void => {
+      const normalized = detail.trim()
+      if (normalized.length === 0) return
+      const current = parts.join(' ').toLowerCase()
+      if (current.indexOf(normalized.toLowerCase()) < 0) parts.push(normalized)
+    })
+    return parts.join(' ')
   }
 
   protected videoStreamSummary(streams: MediaStreamInfo[]): string {
@@ -356,7 +338,7 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
     return value > 0 ? `${value} bps` : ''
   }
 
-  private audioChannelText(audio: MediaStreamInfo): string {
+  protected audioChannelText(audio: MediaStreamInfo): string {
     const layout = `${audio.channelLayout || ''}`.trim().toLowerCase()
     if (layout.length > 0) {
       if (layout.includes('stereo')) return 'stereo'

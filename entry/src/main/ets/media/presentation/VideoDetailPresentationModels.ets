@@ -7,8 +7,21 @@ export type VideoTag = '1080' | '4K' | 'STEREO' | 'HDR' | 'SDR' | 'DTS' | 'DOLBY
 export interface MediaOptionViewData {
   readonly id: string
   readonly streamIndex: number
+  readonly compactLabel: string
   readonly title: string
   readonly summary: string
+}
+
+export function selectedMediaOptionStreamIndex(options: MediaOptionViewData[], selectedIndex: number):
+  number | undefined {
+  if (selectedIndex < 0 || selectedIndex >= options.length) return undefined
+  return options[selectedIndex].streamIndex
+}
+
+export function selectedMediaOptionLabel(options: MediaOptionViewData[], selectedIndex: number,
+  fallback: string): string {
+  if (selectedIndex < 0 || selectedIndex >= options.length) return fallback
+  return options[selectedIndex].compactLabel || options[selectedIndex].title || fallback
 }
 
 export interface MediaInfoRowViewData {

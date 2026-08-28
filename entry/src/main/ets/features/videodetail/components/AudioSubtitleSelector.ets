@@ -17,12 +17,53 @@ export struct AudioSubtitleSelector {
   @Require @Param audioOptions: MediaOptionViewData[]
   @Require @Param selectedSubtitleIndex: number
   @Require @Param selectedAudioIndex: number
+  @Require @Param selectedSubtitleLabel: string
+  @Require @Param selectedAudioLabel: string
   @Param triggerTextColor: ResourceColor = $r('app.color.text_primary')
   @Local isShowingSubtitleOptions: boolean = false
   @Local isShowingAudioOptions: boolean = false
-  @Event onSelectSubtitle: (index: number) => void = (index: number) => {}
-  @Event onSelectAudio: (index: number) => void = (index: number) => {}
+  @Local displayedSubtitleIndex: number = 0
+  @Local displayedAudioIndex: number = 0
+  @Local displayedSubtitleLabel: string = '无字幕'
+  @Local displayedAudioLabel: string = '无音频'
+  @Require @Param onSelectSubtitle: (index: number) => void
+  @Require @Param onSelectAudio: (index: number) => void
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
+
+  aboutToAppear(): void {
+    this.syncSubtitleSelection()
+    this.syncAudioSelection()
+  }
+
+  @Monitor('selectedSubtitleIndex')
+  onSelectedSubtitleIndexChanged(): void {
+    this.syncSubtitleSelection()
+  }
+
+  @Monitor('selectedAudioIndex')
+  onSelectedAudioIndexChanged(): void {
+    this.syncAudioSelection()
+  }
+
+  @Monitor('selectedSubtitleLabel')
+  onSelectedSubtitleLabelChanged(): void {
+    this.displayedSubtitleLabel = this.selectedSubtitleLabel
+  }
+
+  @Monitor('selectedAudioLabel')
+  onSelectedAudioLabelChanged(): void {
+    this.displayedAudioLabel = this.selectedAudioLabel
+  }
+
+  private syncSubtitleSelection(): void {
+    this.displayedSubtitleIndex = this.selectedSubtitleIndex
+    this.displayedSubtitleLabel = this.selectedSubtitleLabel
+  }
+
+  private syncAudioSelection(): void {
+    this.displayedAudioIndex = this.selectedAudioIndex
+    this.displayedAudioLabel = this.selectedAudioLabel
+  }
 
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
@@ -38,18 +79,6 @@ export struct AudioSubtitleSelector {
     )
   }
 
-  private subtitleLabel(): string {
-    if (this.subtitleOptions.length === 0) return '无字幕'
-    const index = Math.min(Math.max(this.selectedSubtitleIndex, 0), this.subtitleOptions.length - 1)
-    return this.subtitleOptions[index].title
-  }
-
-  private audioLabel(): string {
-    if (this.audioOptions.length === 0) return '无音频'
-    const index = Math.min(Math.max(this.selectedAudioIndex, 0), this.audioOptions.length - 1)
-    return this.audioOptions[index].title
-  }
-
   private showSubtitleOptions(): void {
     if (this.subtitleOptions.length > 1) this.isShowingSubtitleOptions = true
   }
@@ -60,29 +89,59 @@ export struct AudioSubtitleSelector {
 
   private selectSubtitle(index: number): void {
     if (index < 0 || index >= this.subtitleOptions.length) return
+    this.displayedSubtitleIndex = index
+    this.displayedSubtitleLabel = this.subtitleOptions[index].compactLabel || this.subtitleOptions[index].title
     this.onSelectSubtitle(index)
     this.isShowingSubtitleOptions = false
   }
 
   private selectAudio(index: number): void {
     if (index < 0 || index >= this.audioOptions.length) return
+    this.displayedAudioIndex = index
+    this.displayedAudioLabel = this.audioOptions[index].compactLabel || this.audioOptions[index].title
     this.onSelectAudio(index)
     this.isShowingAudioOptions = false
   }
 
   @Builder
-  private triggerContent(label: string, hasOptions: boolean, expanded: boolean) {
+  private subtitleTriggerContent() {
     Row({ space: 2 }) {
-      Text(label)
+      Text(this.displayedSubtitleLabel)
         .fontSize(12)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.triggerTextColor)
         .textAlign(TextAlign.Center)
-        .constraintSize({ maxWidth: hasOptions ? 'calc(100% - 18vp)' : '100%' })
+        .constraintSize({ maxWidth: this.subtitleOptions.length > 1 ? 'calc(100% - 18vp)' : '100%' })
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-      if (hasOptions) {
-        SymbolGlyph(expanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+      if (this.subtitleOptions.length > 1) {
+        SymbolGlyph(this.isShowingSubtitleOptions ?
+          $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([this.triggerTextColor])
+          .width(14)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private audioTriggerContent() {
+    Row({ space: 2 }) {
+      Text(this.displayedAudioLabel)
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.triggerTextColor)
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: this.audioOptions.length > 1 ? 'calc(100% - 18vp)' : '100%' })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.audioOptions.length > 1) {
+        SymbolGlyph(this.isShowingAudioOptions ?
+          $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
           .fontColor([this.triggerTextColor])
@@ -98,7 +157,7 @@ export struct AudioSubtitleSelector {
   private subtitleTrigger() {
     if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.subtitleLabel(), this.subtitleOptions.length > 1, this.isShowingSubtitleOptions)
+        this.subtitleTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -107,7 +166,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showSubtitleOptions())
         .bindSheet($$this.isShowingSubtitleOptions, this.buildOptions(this.subtitleOptions,
-          this.selectedSubtitleIndex, true, true, 'subtitle'), {
+          this.displayedSubtitleIndex, true, true, 'subtitle'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '字幕' },
@@ -115,7 +174,7 @@ export struct AudioSubtitleSelector {
         })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.subtitleLabel(), this.subtitleOptions.length > 1, this.isShowingSubtitleOptions)
+        this.subtitleTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -124,7 +183,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showSubtitleOptions())
         .bindSheet($$this.isShowingSubtitleOptions, this.buildOptions(this.subtitleOptions,
-          this.selectedSubtitleIndex, true, false, 'subtitle'), {
+          this.displayedSubtitleIndex, true, false, 'subtitle'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '字幕' },
@@ -133,7 +192,7 @@ export struct AudioSubtitleSelector {
         })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.subtitleLabel(), this.subtitleOptions.length > 1, this.isShowingSubtitleOptions)
+        this.subtitleTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -142,7 +201,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showSubtitleOptions())
         .bindSheet($$this.isShowingSubtitleOptions, this.buildOptions(this.subtitleOptions,
-          this.selectedSubtitleIndex, false, false, 'subtitle'), {
+          this.displayedSubtitleIndex, false, false, 'subtitle'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '字幕' },
@@ -150,7 +209,7 @@ export struct AudioSubtitleSelector {
         })
     } else {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.subtitleLabel(), this.subtitleOptions.length > 1, this.isShowingSubtitleOptions)
+        this.subtitleTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -159,7 +218,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showSubtitleOptions())
         .bindSheet($$this.isShowingSubtitleOptions, this.buildOptions(this.subtitleOptions,
-          this.selectedSubtitleIndex, false, false, 'subtitle'), {
+          this.displayedSubtitleIndex, false, false, 'subtitle'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '字幕' }
@@ -171,7 +230,7 @@ export struct AudioSubtitleSelector {
   private audioTrigger() {
     if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.audioLabel(), this.audioOptions.length > 1, this.isShowingAudioOptions)
+        this.audioTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -180,7 +239,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showAudioOptions())
         .bindSheet($$this.isShowingAudioOptions, this.buildOptions(this.audioOptions,
-          this.selectedAudioIndex, true, true, 'audio'), {
+          this.displayedAudioIndex, true, true, 'audio'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '音频' },
@@ -188,7 +247,7 @@ export struct AudioSubtitleSelector {
         })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.audioLabel(), this.audioOptions.length > 1, this.isShowingAudioOptions)
+        this.audioTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -197,7 +256,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showAudioOptions())
         .bindSheet($$this.isShowingAudioOptions, this.buildOptions(this.audioOptions,
-          this.selectedAudioIndex, true, false, 'audio'), {
+          this.displayedAudioIndex, true, false, 'audio'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '音频' },
@@ -206,7 +265,7 @@ export struct AudioSubtitleSelector {
         })
     } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.audioLabel(), this.audioOptions.length > 1, this.isShowingAudioOptions)
+        this.audioTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -215,7 +274,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showAudioOptions())
         .bindSheet($$this.isShowingAudioOptions, this.buildOptions(this.audioOptions,
-          this.selectedAudioIndex, false, false, 'audio'), {
+          this.displayedAudioIndex, false, false, 'audio'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '音频' },
@@ -223,7 +282,7 @@ export struct AudioSubtitleSelector {
         })
     } else {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.triggerContent(this.audioLabel(), this.audioOptions.length > 1, this.isShowingAudioOptions)
+        this.audioTriggerContent()
       }
         .layoutWeight(1).margin({ left: 4, right: 4 }).height(32).padding(0).borderRadius(16)
         .buttonStyle(ButtonStyleMode.TEXTUAL)
@@ -232,7 +291,7 @@ export struct AudioSubtitleSelector {
           AppThemeMaterialRole.AdaptiveControl, this.useNativeSurface(), this.appUIState.systemMaterialAvailable))
         .onClick(() => this.showAudioOptions())
         .bindSheet($$this.isShowingAudioOptions, this.buildOptions(this.audioOptions,
-          this.selectedAudioIndex, false, false, 'audio'), {
+          this.displayedAudioIndex, false, false, 'audio'), {
           preferType: SheetType.BOTTOM,
           height: SheetSize.FIT_CONTENT,
           title: { title: '音频' }
@@ -256,16 +315,16 @@ export struct AudioSubtitleSelector {
       Column({ space: 12 }) {
         ForEach(options, (option: MediaOptionViewData, index: number) => {
           SheetListItem({
+            index: index,
             item: option,
             group: group,
             isSelected: selectedIndex === index,
-            native: native
+            native: native,
+            onSelect: (selectedIndex: number) => {
+              if (group === 'subtitle') this.selectSubtitle(selectedIndex)
+              else this.selectAudio(selectedIndex)
+            }
           })
-            .hitTestBehavior(HitTestMode.Block)
-            .onClick(() => {
-              if (group === 'subtitle') this.selectSubtitle(index)
-              else this.selectAudio(index)
-            })
         }, (option: MediaOptionViewData): string => option.id)
       }
     }
@@ -282,8 +341,10 @@ export struct AudioSubtitleSelector {
 
 @ComponentV2
 struct SheetListItem {
+  @Require @Param index: number
   @Require @Param item: MediaOptionViewData
   @Require @Param group: string
+  @Require @Param onSelect: (index: number) => void
   @Param isSelected: boolean = false
   @Param native: boolean = false
 
@@ -312,5 +373,7 @@ struct SheetListItem {
     .backgroundColor(this.native ? Color.Transparent : $r('app.color.bg_2'))
     .borderRadius(8)
     .padding({ left: 16, right: 16 })
+    .hitTestBehavior(HitTestMode.Block)
+    .onClick(() => this.onSelect(this.index))
   }
 }

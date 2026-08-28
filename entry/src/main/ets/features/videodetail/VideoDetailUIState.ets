@@ -83,7 +83,7 @@ export class VideoDetailUIState extends BaseUIState {
   @Trace selectedMediaSourceIndex: number = 0
   @Trace selectedSubtitleOptionIndex: number = 0
   @Trace selectedAudioOptionIndex: number = 0
-  selectedSubtitleStreamIndex?: number
-  selectedAudioStreamIndex?: number
+  @Trace selectedSubtitleOptionLabel: string = '无字幕'
+  @Trace selectedAudioOptionLabel: string = '无音频'
   @Trace mediaInfoSections: MediaInfoSectionViewData[] = []
 }

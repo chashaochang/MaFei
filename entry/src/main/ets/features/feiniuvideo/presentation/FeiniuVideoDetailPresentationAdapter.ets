@@ -1,6 +1,8 @@
 import { MediaFileInfo, MediaStreamInfo } from '../../../media/catalog/MediaCatalogModels'
 import { MediaProviderKind } from '../../../media/MediaProviderKind'
 import { BaseVideoDetailPresentationAdapter } from '../../../media/presentation/BaseVideoDetailPresentationAdapter'
+import { MediaOptionViewData } from '../../../media/presentation/VideoDetailPresentationModels'
+import { LanguageUtil } from '../../../utils/LanguageUtil'
 
 export class FeiniuVideoDetailPresentationAdapter extends BaseVideoDetailPresentationAdapter {
   readonly provider: MediaProviderKind = MediaProviderKind.FeiniuVideo
@@ -85,18 +87,58 @@ export class FeiniuVideoDetailPresentationAdapter extends BaseVideoDetailPresent
     return `${mainParts.join(' ')} · ${sampleRate}`
   }
 
+  protected audioOption(stream: MediaStreamInfo, index: number): MediaOptionViewData {
+    const language = this.audioLanguageText(stream)
+    const title = language !== '未知' ? `${language}音频` : `音轨 ${index + 1}`
+    const codec = stream.codec.trim().toUpperCase()
+    const channels = this.audioChannelText(stream)
+    const summaryParts: string[] = []
+    this.appendUnique(summaryParts, this.supplementalTrackTitle(stream.title, title))
+    this.appendUnique(summaryParts, codec)
+    this.appendUnique(summaryParts, channels)
+    if ((stream.sampleRate || 0) > 0) this.appendUnique(summaryParts, `${stream.sampleRate} Hz`)
+    if (stream.default) this.appendUnique(summaryParts, '默认')
+    return {
+      id: `audio:${stream.index}:${index}`,
+      streamIndex: stream.index,
+      compactLabel: title,
+      title: title,
+      summary: summaryParts.join(' · ')
+    }
+  }
+
+  protected subtitleOption(stream: MediaStreamInfo, index: number): MediaOptionViewData {
+    const language = this.feiniuLanguageText(stream.language)
+    const title = language !== '未知' ? `${language}字幕` : `字幕 ${index + 1}`
+    const codec = stream.codec.trim().toUpperCase()
+    const summaryParts: string[] = []
+    this.appendUnique(summaryParts, this.supplementalTrackTitle(stream.title, title))
+    this.appendUnique(summaryParts, codec)
+    if (stream.external) this.appendUnique(summaryParts, '外挂')
+    if (stream.forced) this.appendUnique(summaryParts, '强制')
+    if (stream.default) this.appendUnique(summaryParts, '默认')
+    return {
+      id: `subtitle:${stream.index}:${index}`,
+      streamIndex: stream.index,
+      compactLabel: title,
+      title: title,
+      summary: summaryParts.join(' · ')
+    }
+  }
+
   private audioLanguageText(audio: MediaStreamInfo): string {
-    const title = audio.title.trim()
-    if (title.length > 0 && title.toLowerCase() !== 'und') return title
-    const language = audio.language.trim()
-    const normalized = language.toLowerCase()
-    if (normalized === 'chi' || normalized === 'zho' || normalized === 'zh' || normalized === 'chs' ||
-      normalized === 'cht') return '中文'
-    if (normalized === 'jpn' || normalized === 'ja' || normalized === 'jp') return '日语'
-    if (normalized === 'eng' || normalized === 'en') return '英语'
-    if (normalized === 'kor' || normalized === 'ko') return '韩语'
-    if (normalized.length === 0 || normalized === 'und' || normalized === 'unknown' || normalized === 'zxx' ||
-      normalized === 'qaa-qtz' || normalized === 'zz-unknow' || language === '_no_display_') return '未知'
-    return language
+    return this.feiniuLanguageText(audio.language)
+  }
+
+  private feiniuLanguageText(value: string): string {
+    return LanguageUtil.getLanguageDisplayNameBy6392T(value)
+  }
+
+  private supplementalTrackTitle(value: string, primaryTitle: string): string {
+    const title = value.trim()
+    if (title.length === 0 || title.toLowerCase() === 'und' || title.toLowerCase() === primaryTitle.toLowerCase()) {
+      return ''
+    }
+    return LanguageUtil.getLanguageDisplayNameBy6392T(title) === '未知' ? title : ''
   }
 }

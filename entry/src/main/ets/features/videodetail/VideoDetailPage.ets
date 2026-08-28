@@ -1431,6 +1431,8 @@ export struct VideoDetailPage {
                     audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
                     selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
                     selectedAudioIndex: this.ui.selectedAudioOptionIndex,
+                    selectedSubtitleLabel: this.ui.selectedSubtitleOptionLabel,
+                    selectedAudioLabel: this.ui.selectedAudioOptionLabel,
                     triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
                     onSelectSubtitle: (index: number) => {
                       this.vm.selectSubtitleOption(index)

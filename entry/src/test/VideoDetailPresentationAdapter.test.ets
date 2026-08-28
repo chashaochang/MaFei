@@ -9,6 +9,8 @@ import { JellyfinVideoDetailPresentationAdapter } from
   '../main/ets/media/jellyfin/JellyfinVideoDetailPresentationAdapter'
 import { MediaProviderKind } from '../main/ets/media/MediaProviderKind'
 import { MediaRef, MediaRefKind } from '../main/ets/media/MediaRef'
+import { selectedMediaOptionLabel, selectedMediaOptionStreamIndex } from
+  '../main/ets/media/presentation/VideoDetailPresentationModels'
 
 function owner(provider: MediaProviderKind, id: string): MediaRef {
   return new MediaRef(provider, `${provider}:account`, id, MediaRefKind.Movie)
@@ -56,14 +58,15 @@ function audio(index: number, displayTitle: string = '国语 EAC3 5.1', codec: s
   }
 }
 
-function subtitle(index: number): MediaStreamInfo {
+function subtitle(index: number, codec: string = 'ass', language: string = 'chi', title: string = '简体中文'):
+  MediaStreamInfo {
   return {
     index: index,
     kind: MediaStreamKind.Subtitle,
-    title: '简体中文',
-    displayTitle: '简体中文 ASS',
-    codec: 'ass',
-    language: 'chi',
+    title: title,
+    displayTitle: `${title} ${codec.toUpperCase()}`,
+    codec: codec,
+    language: language,
     external: true,
     default: true,
     forced: false
@@ -116,6 +119,8 @@ export default function videoDetailPresentationAdapterTest() {
       expect(result[1].summary.includes('杜比')).assertTrue()
       expect(result[1].audioOptions[0].streamIndex).assertEqual(1)
       expect(result[1].subtitleOptions[0].streamIndex).assertEqual(2)
+      expect(result[1].audioOptions[0].compactLabel).assertEqual('中文音频')
+      expect(result[1].subtitleOptions[0].compactLabel).assertEqual('中文字幕')
       expect(result[1].infoSections[0].cards[0].rows[8].value).assertEqual('Dolby Vision P8')
       expect(result[1].fileSize).assertEqual('4.00 GB')
       expect(result[1].fileCreatedDate).assertEqual('2026-08-05')
@@ -126,10 +131,10 @@ export default function videoDetailPresentationAdapterTest() {
     it('keepsOnlyTheFirstStreamInTheOuterSummaryAndAllStreamsInDetails', 0, () => {
       const adapter = new FeiniuVideoDetailPresentationAdapter()
       const firstAudio = audio(1, 'chi NONE 6声道', 'none', 'chi', true, '')
-      const secondAudio = audio(3, '英语 AAC 2.0', 'aac', 'eng', false)
+      const secondAudio = audio(3, '国语 AAC 2.0', 'aac', 'chi', false)
       const result = adapter.present([
         source(MediaProviderKind.FeiniuVideo, 'multi-stream', [video(0, '4K', 'SDR'), firstAudio, secondAudio,
-          subtitle(2), subtitle(4)])
+          subtitle(2), subtitle(4, 'pgs')])
       ])
 
       expect(result[0].videoSummary).assertEqual('4k HEVC 25.54 mbps · 10 bit')
@@ -138,20 +143,67 @@ export default function videoDetailPresentationAdapterTest() {
       expect(result[0].subtitleSummary.split('\n').length).assertEqual(1)
       expect(result[0].infoSections[1].cards.length).assertEqual(2)
       expect(result[0].infoSections[2].cards.length).assertEqual(2)
+      expect(result[0].audioOptions[0].summary === result[0].audioOptions[1].summary).assertFalse()
+      expect(result[0].subtitleOptions[0].summary === result[0].subtitleOptions[1].summary).assertFalse()
+      expect(selectedMediaOptionStreamIndex(result[0].audioOptions, 1)).assertEqual(3)
+      expect(selectedMediaOptionStreamIndex(result[0].subtitleOptions, 1)).assertEqual(4)
+      expect(selectedMediaOptionStreamIndex(result[0].audioOptions, 2)).assertUndefined()
+      expect(selectedMediaOptionLabel(result[0].audioOptions, 1, '无音频'))
+        .assertEqual(result[0].audioOptions[1].compactLabel)
+      expect(selectedMediaOptionLabel(result[0].subtitleOptions, 1, '无字幕'))
+        .assertEqual(result[0].subtitleOptions[1].compactLabel)
+      expect(selectedMediaOptionLabel(result[0].subtitleOptions, 2, '无字幕')).assertEqual('无字幕')
     })
 
     it('keepsJellyfinPresentationBehindItsOwnAdapter', 0, () => {
       const adapter = new JellyfinVideoDetailPresentationAdapter()
       const result = adapter.present([
-        source(MediaProviderKind.Jellyfin, 'hdr', [video(0, '1080P', 'HDR10')])
+        source(MediaProviderKind.Jellyfin, 'hdr', [video(0, '1080P', 'HDR10'),
+          audio(1, 'Original Mix', 'eac3', 'eng'), subtitle(2, 'pgs')])
       ])
 
       expect(result[0].compactLabel).assertEqual('1080PHDR')
+      expect(result[0].audioOptions[0].title).assertEqual('英语音频')
+      expect(result[0].audioOptions[0].compactLabel).assertEqual('英语音频 EAC3 5.1')
+      expect(result[0].subtitleOptions[0].title).assertEqual('中文字幕')
       expect(adapter.episodeLabel(7, 1)).assertEqual('第 7 季  第 1 集')
       expect(VideoDetailPresentationAdapterRegistry.instance()
         .resolve(MediaProviderKind.Jellyfin).provider).assertEqual(MediaProviderKind.Jellyfin)
       expect(VideoDetailPresentationAdapterRegistry.instance()
         .resolve(MediaProviderKind.FeiniuVideo).provider).assertEqual(MediaProviderKind.FeiniuVideo)
+    })
+
+    it('usesLocalizedLanguageAsThePrimaryFeiniuTrackTitle', 0, () => {
+      const adapter = new FeiniuVideoDetailPresentationAdapter()
+      const result = adapter.present([
+        source(MediaProviderKind.FeiniuVideo, 'tracks', [video(0, '4K', 'SDR'),
+          audio(1, '国语', 'eac3', 'chi'), subtitle(2, 'pgs')])
+      ])
+
+      expect(result[0].audioOptions[0].title).assertEqual('中文音频')
+      expect(result[0].audioOptions[0].compactLabel).assertEqual('中文音频')
+      expect(result[0].audioOptions[0].summary.includes('国语')).assertTrue()
+      expect(result[0].subtitleOptions[0].title).assertEqual('中文字幕')
+      expect(result[0].subtitleOptions[0].compactLabel).assertEqual('中文字幕')
+      expect(result[0].subtitleOptions[0].summary.includes('简体中文')).assertTrue()
+    })
+
+    it('localizesFeiniuChsAndChtLanguageCodesInsteadOfShowingRawTitles', 0, () => {
+      const adapter = new FeiniuVideoDetailPresentationAdapter()
+      const result = adapter.present([
+        source(MediaProviderKind.FeiniuVideo, 'localized-subtitles', [video(0, '4K', 'SDR'),
+          audio(1, 'JPN AAC 2.0', 'aac', 'jpn', true, 'JPN'),
+          subtitle(2, 'ass', 'chs', 'CHS'), subtitle(3, 'ass', 'CHT', 'CHT')])
+      ])
+
+      expect(result[0].audioOptions[0].title).assertEqual('日语音频')
+      expect(result[0].audioOptions[0].compactLabel).assertEqual('日语音频')
+      expect(result[0].subtitleOptions[0].title).assertEqual('简体中文字幕')
+      expect(result[0].subtitleOptions[0].compactLabel).assertEqual('简体中文字幕')
+      expect(result[0].subtitleOptions[0].summary.includes('CHS')).assertFalse()
+      expect(result[0].subtitleOptions[1].title).assertEqual('繁体中文字幕')
+      expect(result[0].subtitleOptions[1].compactLabel).assertEqual('繁体中文字幕')
+      expect(result[0].subtitleOptions[1].summary.includes('CHT')).assertFalse()
     })
 
     it('hidesMediaInfoSectionsWhenTheProviderReturnsOnlyEmptyStreamShells', 0, () => {

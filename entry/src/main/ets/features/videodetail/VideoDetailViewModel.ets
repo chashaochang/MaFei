@@ -19,6 +19,8 @@ import {
 import { MediaRef, MediaRefKind } from '../../media/MediaRef'
 import {
   PlaybackSourceViewData,
+  selectedMediaOptionLabel,
+  selectedMediaOptionStreamIndex,
   VideoDetailPresentationAdapter,
   VideoTag
 } from '../../media/presentation/VideoDetailPresentationModels'
@@ -426,7 +428,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       startIndex = this.episodeStartIndex
     }
     const source = this.currentMediaFile()
-    playMediaRefs(refs, getContext(), this.ui.selectedAudioStreamIndex, this.ui.selectedSubtitleStreamIndex,
+    playMediaRefs(refs, getContext(), this.selectedAudioStreamIndex(), this.selectedSubtitleStreamIndex(),
       startIndex, this.ui.playbackPositionMs > 0 ? this.ui.playbackPositionMs * 10000 : undefined,
       source?.id)
   }
@@ -462,14 +464,14 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     const source = this.currentPlaybackSource()
     if (!source || index < 0 || index >= source.audioOptions.length) return
     this.ui.selectedAudioOptionIndex = index
-    this.ui.selectedAudioStreamIndex = source.audioOptions[index].streamIndex
+    this.ui.selectedAudioOptionLabel = selectedMediaOptionLabel(source.audioOptions, index, '无音频')
   }
 
   selectSubtitleOption(index: number): void {
     const source = this.currentPlaybackSource()
     if (!source || index < 0 || index >= source.subtitleOptions.length) return
     this.ui.selectedSubtitleOptionIndex = index
-    this.ui.selectedSubtitleStreamIndex = source.subtitleOptions[index].streamIndex
+    this.ui.selectedSubtitleOptionLabel = selectedMediaOptionLabel(source.subtitleOptions, index, '无字幕')
   }
 
   openExternalUrl(url: string): void {
@@ -566,6 +568,18 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return this.ui.playbackSources[index]
   }
 
+  private selectedAudioStreamIndex(): number | undefined {
+    const source = this.currentPlaybackSource()
+    if (!source) return undefined
+    return selectedMediaOptionStreamIndex(source.audioOptions, this.ui.selectedAudioOptionIndex)
+  }
+
+  private selectedSubtitleStreamIndex(): number | undefined {
+    const source = this.currentPlaybackSource()
+    if (!source) return undefined
+    return selectedMediaOptionStreamIndex(source.subtitleOptions, this.ui.selectedSubtitleOptionIndex)
+  }
+
   private preferredMediaSourceIndex(ref: MediaRef, sources: MediaFileInfo[]): number {
     if (sources.length < 2) {
       return 0
@@ -586,8 +600,6 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
 
   private applySelectedSourcePresentation(): void {
     const source = this.currentPlaybackSource()
-    this.ui.selectedAudioStreamIndex = undefined
-    this.ui.selectedSubtitleStreamIndex = undefined
     if (!source) {
       this.ui.path = ''
       this.ui.size = ''
@@ -600,6 +612,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       this.ui.mediaInfoSections = []
       this.ui.selectedAudioOptionIndex = 0
       this.ui.selectedSubtitleOptionIndex = 0
+      this.ui.selectedAudioOptionLabel = '无音频'
+      this.ui.selectedSubtitleOptionLabel = '无字幕'
       return
     }
     this.ui.path = source.filePath
@@ -614,6 +628,10 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.mediaInfoSections = source.infoSections.slice()
     this.ui.selectedAudioOptionIndex = source.defaultAudioOptionIndex
     this.ui.selectedSubtitleOptionIndex = source.defaultSubtitleOptionIndex
+    this.ui.selectedAudioOptionLabel = selectedMediaOptionLabel(
+      source.audioOptions, source.defaultAudioOptionIndex, '无音频')
+    this.ui.selectedSubtitleOptionLabel = selectedMediaOptionLabel(
+      source.subtitleOptions, source.defaultSubtitleOptionIndex, '无字幕')
   }
 }
 
