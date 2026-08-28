@@ -567,19 +567,13 @@ export function validateNativeThemeHostOwnership(sources) {
     throw new Error('breakpoint monitor must update isBigScreen')
   }
 
-  const largeBreakpointMatch =
-    /\bif\s*\(\s*this\.appUIState\.currentBreakpoint\.includes\s*\(\s*['"]l['"]\s*\)\s*\)\s*\{/
-      .exec(breakpointHandler)
-  if (!largeBreakpointMatch) {
-    throw new Error('breakpoint monitor must reset large-screen menu state')
+  if (!/this\.syncPadShellVisibility\s*\(\s*\)/.test(breakpointHandler)) {
+    throw new Error('breakpoint monitor must synchronize tablet shell visibility')
   }
-  const largeBreakpointBlock = bracedBlock(
-    breakpointHandler,
-    breakpointHandler.indexOf('{', largeBreakpointMatch.index)
-  ).body
-  if (!/this\.ui\.isMenuModalVisible\s*=\s*false/.test(largeBreakpointBlock) ||
-    !/this\.ui\.isLeftSidebarVisible\s*=\s*true/.test(largeBreakpointBlock)) {
-    throw new Error('breakpoint monitor must reset large-screen menu state')
+  const shellVisibility = methodBlock(homeScreen, 'syncPadShellVisibility')
+  if (!/this\.ui\.isMenuModalVisible\s*=\s*false/.test(shellVisibility) ||
+    !/this\.ui\.isLeftSidebarVisible\s*=\s*shell\s*===\s*HomeShellKind\.LargeSidebar/.test(shellVisibility)) {
+    throw new Error('tablet shell visibility must reserve the embedded sidebar for LG only')
   }
   if (!/this\.contentTabsController\.changeIndex\s*\(\s*this\.contentSelectedIndex\s*\(\s*\)\s*\)/
     .test(breakpointHandler)) {

@@ -32,11 +32,13 @@ function validHomeScreen() {
     'onBreakpointChange(): void {',
     '  this.updateFeiniuPointLightEnabled()',
     "  this.appUIState.isBigScreen = !this.appUIState.currentBreakpoint.includes('s')",
-    "  if (this.appUIState.currentBreakpoint.includes('l')) {",
-    '    this.ui.isMenuModalVisible = false',
-    '    this.ui.isLeftSidebarVisible = true',
-    '  }',
+    '  this.syncPadShellVisibility()',
     '  this.contentTabsController.changeIndex(this.contentSelectedIndex())',
+    '}',
+    'private syncPadShellVisibility(): void {',
+    '  const shell = this.resolveShell()',
+    '  this.ui.isMenuModalVisible = false',
+    '  this.ui.isLeftSidebarVisible = shell === HomeShellKind.LargeSidebar',
     '}',
     'private updateFeiniuPointLightEnabled(): void {',
     '  const shell = this.resolveShell()',
@@ -989,6 +991,14 @@ test('rejects duplicate breakpoint monitors and missing synchronization duties',
   assert.throws(
     () => validateNativeThemeHostOwnership(syncSources),
     /breakpoint monitor must synchronize semantic content index/
+  )
+
+  const tabletShellSources = validSources()
+  tabletShellSources.set(homeScreenPath, validHomeScreen()
+    .replace('  this.syncPadShellVisibility()\n', ''))
+  assert.throws(
+    () => validateNativeThemeHostOwnership(tabletShellSources),
+    /breakpoint monitor must synchronize tablet shell visibility/
   )
 })
 

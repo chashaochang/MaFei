@@ -24,6 +24,7 @@ export default class EntryAbility extends UIAbility {
   private initializationPromise?: Promise<void>
   private mainWindow?: window.Window
   private contentLoadStarted: boolean = false
+  private contentUIContextReady: boolean = false
   private systemDensityChangeListenerRegistered: boolean = false
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
@@ -141,6 +142,19 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
+  private pxToVp(windowClass: window.Window, pixels: number): number {
+    if (this.contentUIContextReady) {
+      try {
+        return windowClass.getUIContext().px2vp(pixels)
+      } catch (error) {
+        hilog.warn(0x0000, 'Mafei',
+          'Failed to convert window pixels through UIContext; using density fallback. Cause: %{public}s',
+          String(error))
+      }
+    }
+    return pixels / this.resolveWindowDensity(windowClass)
+  }
+
   private refreshWindowMetrics(windowClass: window.Window): void {
     const properties = windowClass.getWindowProperties()
     const systemArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
@@ -148,30 +162,35 @@ export default class EntryAbility extends UIAbility {
       window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
     )
     const cutoutArea = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT)
-    const density = this.resolveWindowDensity(windowClass)
-    const deviceWidth = properties.windowRect.width / density
+    const deviceWidth = this.pxToVp(windowClass, properties.windowRect.width)
 
-    this.appUIState.deviceHeight = properties.windowRect.height / density
+    this.appUIState.deviceHeight = this.pxToVp(windowClass, properties.windowRect.height)
     this.appUIState.deviceWidth = deviceWidth
     this.appUIState.currentBreakpoint = BreakpointPolicy.fromWidth(deviceWidth)
-    this.appUIState.safeTop = Math.max(0, systemArea.topRect.height) / density
-    this.appUIState.safeBottom = Math.max(
+    this.appUIState.safeTop = this.pxToVp(windowClass, Math.max(0, systemArea.topRect.height))
+    this.appUIState.safeBottom = this.pxToVp(windowClass, Math.max(
       0,
       systemArea.bottomRect.height,
       navigationArea.bottomRect.height
-    ) / density
+    ))
     this.refreshCutoutMetrics(windowClass, cutoutArea)
     this.appUIState.orientation = properties.windowRect.width > properties.windowRect.height ?
       display.Orientation.LANDSCAPE : display.Orientation.PORTRAIT
+
+    hilog.info(0x0000, 'Mafei',
+      'Window metrics widthVp=%{public}f heightVp=%{public}f breakpoint=%{public}s uiContext=%{public}s',
+      this.appUIState.deviceWidth,
+      this.appUIState.deviceHeight,
+      this.appUIState.currentBreakpoint,
+      this.contentUIContextReady ? 'ready' : 'fallback')
   }
 
   private refreshCutoutMetrics(windowClass: window.Window, cutoutArea: window.AvoidArea): void {
     const windowRect = windowClass.getWindowProperties().windowRect
-    const density = this.resolveWindowDensity(windowClass)
     this.appUIState.safeLeft = cutoutArea.leftRect.width > 0 ?
-      Math.max(0, cutoutArea.leftRect.left + cutoutArea.leftRect.width) / density : 0
+      this.pxToVp(windowClass, Math.max(0, cutoutArea.leftRect.left + cutoutArea.leftRect.width)) : 0
     this.appUIState.safeRight = cutoutArea.rightRect.width > 0 ?
-      Math.max(0, windowRect.width - cutoutArea.rightRect.left) / density : 0
+      this.pxToVp(windowClass, Math.max(0, windowRect.width - cutoutArea.rightRect.left)) : 0
   }
 
   private resetWindowState(): void {
@@ -182,6 +201,7 @@ export default class EntryAbility extends UIAbility {
     this.appUIState.safeBottom = 0
     this.appUIState.safeLeft = 0
     this.appUIState.safeRight = 0
+    this.contentUIContextReady = false
     this.appUIState.currentBreakpoint = BreakpointTypeEnum.MD
     this.appUIState.orientation = display.Orientation.PORTRAIT
   }
@@ -308,6 +328,7 @@ export default class EntryAbility extends UIAbility {
             JSON.stringify(error) ?? '')
           return
         }
+        this.contentUIContextReady = true
         this.refreshWindowMetrics(windowClass)
         windowClass.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
         this.initializeContentBindings(windowClass)
@@ -367,6 +388,7 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     this.contentLoadStarted = false
+    this.contentUIContextReady = false
     this.clearMainWindowBindings()
   }
 
