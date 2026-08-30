@@ -2,26 +2,22 @@ import { HMRouter } from "@hadss/hmrouter";
 import { webview } from '@kit.ArkWeb';
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
-import { AppRouteDestination } from "../../component/AppRouteDestination";
+import { AppRouteDestination, AppRouteDestinationOptions } from "../../component/AppRouteDestination";
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
-@HMRouter({
-  pageUrl: RouterConsts.PrivacyPage,
-  useNavDst: true
-})
 @ComponentV2
-export struct PrivacyPage {
-  webviewController: webview.WebviewController = new webview.WebviewController();
+struct PrivacyPageContent {
+  @Require @Param webviewController: webview.WebviewController
+  @Require @Param showLegacyActionBar: boolean
 
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
+  build() {
     Column() {
-      if (showLegacyActionBar) {
+      if (this.showLegacyActionBar) {
         ActionBar({
           title: '隐私协议'
         })
       }
 
-      // Web内容区域
       Web({
         src: 'https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1915508141466875008',
         controller: this.webviewController
@@ -38,22 +34,90 @@ export struct PrivacyPage {
         .onErrorReceive((event) => {
           console.error('Privacy page loading error: ' + event?.error.getErrorInfo());
         })
-
-    }.width('100%')
+    }
+    .width('100%')
     .height('100%')
-    .backgroundColor(showLegacyActionBar ? $r('app.color.start_window_background') : Color.Transparent)
+    .backgroundColor(this.showLegacyActionBar ? $r('app.color.start_window_background') : Color.Transparent)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+}
+
+@HMRouter({
+  pageUrl: RouterConsts.PrivacyPage,
+  useNavDst: true
+})
+@ComponentV2
+export struct PrivacyPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  webviewController: webview.WebviewController = new webview.WebviewController();
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: '隐私协议'
+      }
   }
 
   build() {
-    AppRouteDestination({
-      title: '隐私协议',
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              PrivacyPageContent({
+                webviewController: this.webviewController,
+                showLegacyActionBar: false
+              })
+            } else {
+              PrivacyPageContent({
+                webviewController: this.webviewController,
+                showLegacyActionBar: true
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        PrivacyPageContent({
+          webviewController: this.webviewController,
+          showLegacyActionBar: true
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

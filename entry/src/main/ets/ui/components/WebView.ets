@@ -103,9 +103,11 @@ export struct WebView {
 
           if (this.webStatus === WebpageStatus.ERROR) {
             Column() {
-              LoadingFailedView(() => {
-                this.webViewController.refresh();
-                this.webStatus = WebpageStatus.INIT;
+              LoadingFailedView({
+                handleReload: () => {
+                  this.webViewController.refresh();
+                  this.webStatus = WebpageStatus.INIT;
+                }
               })
             }
             .justifyContent(FlexAlign.Center)

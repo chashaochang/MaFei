@@ -8,7 +8,7 @@ import {
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
-import { AppRouteDestination } from '../../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import {
   AppThemeOverlayPolicy,
@@ -28,16 +28,47 @@ import {
 } from './ManagementDeviceModels';
 import { ManagementDevicesUIState } from './ManagementDevicesUIState';
 import { ManagementDevicesViewModel } from './ManagementDevicesViewModel';
+import { HdsNavDestination, HdsNavDestinationAttribute, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
-@HMRouter({
-  pageUrl: RouterConsts.ManagementDevicesPage,
-  useNavDst: true
-})
 @ComponentV2
-export struct ManagementDevicesPage {
+struct ManagementDeviceFilterSheetSurface {
+  @Param initialRecentDays: number = 0
+  @Param initialUsers: string[] = []
+  @Param availableUsers: string[] = []
+  @Require @Param initialSortField: ManagementDeviceSortField
+  @Param initialAscending: boolean = false
+  @Param blurFallback: boolean = false
+  @Event onApply: (recentDays: number, users: string[],
+    sortField: ManagementDeviceSortField, ascending: boolean) => void =
+    (_recentDays: number, _users: string[], _sortField: ManagementDeviceSortField,
+      _ascending: boolean) => {}
+
+  build() {
+    Column() {
+      ManagementDeviceFilterSheet({
+        initialRecentDays: this.initialRecentDays,
+        initialUsers: this.initialUsers,
+        availableUsers: this.availableUsers,
+        initialSortField: this.initialSortField,
+        initialAscending: this.initialAscending,
+        onApply: this.onApply
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Transparent)
+    .backgroundBlurStyle(this.blurFallback ? BlurStyle.Thin : BlurStyle.NONE)
+  }
+}
+
+@ComponentV2
+struct ManagementDevicesContent {
+  @Param showLegacyActionBar: boolean = false
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: ManagementDevicesUIState = new ManagementDevicesUIState(this.getUIContext())
   @Local vm: ManagementDevicesViewModel = new ManagementDevicesViewModel(this.ui)
-  private readonly contentScroller: Scroller = new Scroller()
+  @Event onRegisterRevokeOthers: (action: () => void) => void = (_action: () => void) => {}
+  @Event onRevokeOthersEnabledChange: (enabled: boolean) => void = (_enabled: boolean) => {}
   private lifecycleOwner: IHMLifecycleOwner | null = null
   private pageShownCallback = (_context: HMLifecycleContext): void => {
     this.vm.init()
@@ -47,6 +78,8 @@ export struct ManagementDevicesPage {
   }
 
   aboutToAppear(): void {
+    this.onRegisterRevokeOthers(() => this.confirmRevokeOthers())
+    this.onRevokeOthersEnabledChange(this.canRevokeOthers())
     this.lifecycleOwner = HMRouterMgr.getCurrentLifecycleOwner()
     if (this.lifecycleOwner) {
       this.lifecycleOwner.addObserver(HMLifecycleState.onShown, this.pageShownCallback)
@@ -54,6 +87,11 @@ export struct ManagementDevicesPage {
     } else {
       this.vm.init()
     }
+  }
+
+  @Monitor('ui.devices', 'ui.batchPending', 'ui.pendingDeviceId')
+  onRevokeOthersStateChange(): void {
+    this.onRevokeOthersEnabledChange(this.canRevokeOthers())
   }
 
   aboutToDisappear(): void {
@@ -116,6 +154,58 @@ export struct ManagementDevicesPage {
 
   private nativeTopSpacer(): number {
     return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+  }
+
+  private filterSheetOptions(): SheetOptions {
+    const decision = this.floatingOverlayMaterialDecision()
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: $r('app.color.bg_1'),
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        height: '70%',
+        preferType: SheetType.BOTTOM,
+        showClose: true,
+        backgroundColor: Color.Transparent
+      }
+    }
+    return {
+      height: '70%',
+      preferType: SheetType.BOTTOM,
+      showClose: true
+    }
+  }
+
+  // CustomBuilderAdapter: management-devices-filter-sheet
+  @Builder
+  private filterSheetBuilder() {
+    ManagementDeviceFilterSheetSurface({
+      initialRecentDays: this.ui.recentDays,
+      initialUsers: this.ui.selectedUsers,
+      availableUsers: this.userNames(),
+      initialSortField: this.ui.sortField,
+      initialAscending: this.ui.ascending,
+      blurFallback: this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback,
+      onApply: (recentDays: number, users: string[],
+        sortField: ManagementDeviceSortField, ascending: boolean) => {
+        this.applyNativeFilters(recentDays, users, sortField, ascending)
+      }
+    })
   }
 
   private activeFilterCount(): number {
@@ -311,387 +401,358 @@ export struct ManagementDevicesPage {
     .backgroundColor(Color.Transparent)
   }
 
-  @Builder
-  private legacyFilters() {
-    Column({ space: 8 }) {
-      Row({ space: 8 }) {
-        Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
-          .layoutWeight(1).height(40)
-          .onChange((value: string) => {
-            this.ui.query = value
-            this.vm.applyQuery(true)
-          })
-        Button($r('app.string.management_device_revoke_others'), { type: ButtonType.Normal })
-          .height(40).fontColor($r('app.color.main_red_color'))
-          .enabled(!this.ui.batchPending && this.ui.pendingDeviceId.length === 0)
-          .onClick(() => this.confirmRevokeOthers())
-      }
-      List({ space: 6 }) {
-        ForEach([0, 7, 30], (days: number) => {
-          ListItem() {
-            Button(days === 0 ? $r('app.string.management_device_all_time') :
-              `${days} ${this.getString('management_device_days')}`, { type: ButtonType.Normal })
-              .height(32).fontSize(12).onClick(() => this.setRecentDays(days))
-          }
-        }, (days: number) => days.toString())
-        ForEach(this.userNames(), (user: string) => {
-          ListItem() {
-            Button(user, { type: ButtonType.Normal })
-              .height(32).fontSize(12)
-              .fontColor(this.ui.selectedUsers.includes(user) ? $r('app.color.color_main') :
-                this.secondaryTextColor())
-              .onClick(() => this.toggleUser(user))
-          }
-        }, (user: string) => user)
-      }
-      .width('100%').height(34).listDirection(Axis.Horizontal).scrollBar(BarState.Off)
-      Row({ space: 6 }) {
-        Button($r('app.string.management_device_sort_recent')).height(30).fontSize(11)
-          .onClick(() => this.vm.setSort(ManagementDeviceSortField.LastActivity))
-        Button($r('app.string.management_device_sort_name')).height(30).fontSize(11)
-          .onClick(() => this.vm.setSort(ManagementDeviceSortField.Name))
-        Button($r('app.string.management_device_sort_app')).height(30).fontSize(11)
-          .onClick(() => this.vm.setSort(ManagementDeviceSortField.App))
-        Button($r('app.string.management_device_sort_user')).height(30).fontSize(11)
-          .onClick(() => this.vm.setSort(ManagementDeviceSortField.User))
-      }
-      .width('100%')
-    }
-    .width('100%').padding(12)
-  }
 
-  @Builder
-  private nativeFilters() {
-    Row({ space: 8 }) {
-      Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
-        .layoutWeight(1)
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .onChange((value: string) => {
-          this.ui.query = value
-          this.vm.applyQuery(true)
-        })
-      Stack({ alignContent: Alignment.TopEnd }) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.more'))
-            .fontSize(18)
-            .fontColor([this.primaryTextColor()])
-        }
-        .width(40)
-        .height(40)
-        .borderRadius(20)
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .accessibilityText($r('app.string.management_device_filter_title'))
-        .onClick(() => this.ui.filterSheetVisible = true)
-        if (this.activeFilterCount() > 0) {
-          Text(this.activeFilterCount().toString())
-            .fontSize(10)
-            .fontColor($r('app.color.on_primary'))
-            .textAlign(TextAlign.Center)
-            .width(18)
-            .height(18)
-            .borderRadius(9)
-            .backgroundColor($r('app.color.color_main'))
-        }
+
+
+
+
+
+
+
+
+
+
+  build() {
+    Column() {
+      if (((this.showLegacyActionBar))) {
+        ActionBar({ title: $r('app.string.management_devices_title') })
+      } else {
+        Blank().height(this.nativeTopSpacer())
       }
-      .width(40)
-      .height(40)
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 12, bottom: 10 })
-  }
-
-  @Builder
-  private filters() {
-    if (this.useNativeMaterial()) {
-      this.nativeFilters()
-    } else {
-      this.legacyFilters()
-    }
-  }
-
-  @Builder
-  private legacyDeviceRow(device: ManagementDeviceItem) {
-    Row({ space: 10 }) {
-      SymbolGlyph($r('sys.symbol.externaldrive'))
-        .fontSize(19).fontColor([$r('app.color.color_main')])
-        .width(38).height(38)
-      Column({ space: 3 }) {
-        Row({ space: 6 }) {
-          Text(device.displayName).fontSize(14).fontWeight(FontWeight.Medium)
-            .fontColor(this.primaryTextColor()).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (device.current) {
-            Text($r('app.string.management_device_current')).fontSize(10)
-              .fontColor($r('app.color.status_success'))
+      Row({ space: this.isLarge() ? 12 : 0 }) {
+        Column() {
+          Column() {
+            if (this.useNativeMaterial()) {
+              Row({ space: 8 }) {
+                Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
+                  .layoutWeight(1)
+                  .height(40)
+                  .backgroundColor(Color.Transparent)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                  .onChange((value: string) => {
+                    this.ui.query = value
+                    this.vm.applyQuery(true)
+                  })
+                Stack({ alignContent: Alignment.TopEnd }) {
+                  Button() {
+                    SymbolGlyph($r('sys.symbol.more'))
+                      .fontSize(18)
+                      .fontColor([this.primaryTextColor()])
+                  }
+                  .width(40)
+                  .height(40)
+                  .borderRadius(20)
+                  .backgroundColor(Color.Transparent)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                  .accessibilityText($r('app.string.management_device_filter_title'))
+                  .onClick(() => this.ui.filterSheetVisible = true)
+                  if (this.activeFilterCount() > 0) {
+                    Text(this.activeFilterCount().toString())
+                      .fontSize(10)
+                      .fontColor($r('app.color.on_primary'))
+                      .textAlign(TextAlign.Center)
+                      .width(18)
+                      .height(18)
+                      .borderRadius(9)
+                      .backgroundColor($r('app.color.color_main'))
+                  }
+                }
+                .width(40)
+                .height(40)
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 12, bottom: 10 })
+            } else {
+              Column({ space: 8 }) {
+                Row({ space: 8 }) {
+                  Search({ value: this.ui.query, placeholder: $r('app.string.management_device_search') })
+                    .layoutWeight(1).height(40)
+                    .onChange((value: string) => {
+                      this.ui.query = value
+                      this.vm.applyQuery(true)
+                    })
+                  Button($r('app.string.management_device_revoke_others'), { type: ButtonType.Normal })
+                    .height(40).fontColor($r('app.color.main_red_color'))
+                    .enabled(!this.ui.batchPending && this.ui.pendingDeviceId.length === 0)
+                    .onClick(() => this.confirmRevokeOthers())
+                }
+                List({ space: 6 }) {
+                  ForEach([0, 7, 30], (days: number) => {
+                    ListItem() {
+                      Button(days === 0 ? $r('app.string.management_device_all_time') :
+                        `${days} ${this.getString('management_device_days')}`, { type: ButtonType.Normal })
+                        .height(32).fontSize(12).onClick(() => this.setRecentDays(days))
+                    }
+                  }, (days: number) => days.toString())
+                  ForEach(this.userNames(), (user: string) => {
+                    ListItem() {
+                      Button(user, { type: ButtonType.Normal })
+                        .height(32).fontSize(12)
+                        .fontColor(this.ui.selectedUsers.includes(user) ? $r('app.color.color_main') :
+                          this.secondaryTextColor())
+                        .onClick(() => this.toggleUser(user))
+                    }
+                  }, (user: string) => user)
+                }
+                .width('100%').height(34).listDirection(Axis.Horizontal).scrollBar(BarState.Off)
+                Row({ space: 6 }) {
+                  Button($r('app.string.management_device_sort_recent')).height(30).fontSize(11)
+                    .onClick(() => this.vm.setSort(ManagementDeviceSortField.LastActivity))
+                  Button($r('app.string.management_device_sort_name')).height(30).fontSize(11)
+                    .onClick(() => this.vm.setSort(ManagementDeviceSortField.Name))
+                  Button($r('app.string.management_device_sort_app')).height(30).fontSize(11)
+                    .onClick(() => this.vm.setSort(ManagementDeviceSortField.App))
+                  Button($r('app.string.management_device_sort_user')).height(30).fontSize(11)
+                    .onClick(() => this.vm.setSort(ManagementDeviceSortField.User))
+                }
+                .width('100%')
+              }
+              .width('100%').padding(12)
+            }
+            if ((this.ui.status === ManagementSectionStatus.Content ||
+              this.ui.status === ManagementSectionStatus.Error) && this.ui.devices.length > 0) {
+              List({ scroller: this.contentScroller }) {
+                ForEach(this.ui.devices, (item: ManagementDeviceItem) => {
+                  ListItem() { if (this.useNativeMaterial()) {
+                    Row({ space: 12 }) {
+                      SymbolGlyph($r('sys.symbol.externaldrive'))
+                        .fontSize(20)
+                        .fontColor([$r('app.color.color_main')])
+                        .width(36)
+                        .height(36)
+                      Column({ space: 4 }) {
+                        Row({ space: 8 }) {
+                          Text(((item)).displayName)
+                            .fontSize(16)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(this.primaryTextColor())
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                          if (((item)).current) {
+                            Text($r('app.string.management_device_current'))
+                              .fontSize(11)
+                              .fontColor($r('app.color.status_success'))
+                          }
+                        }
+                        Text(`${item.appName} ${item.appVersion} · ${item.lastUserName}`)
+                          .fontSize(13)
+                          .fontColor(this.secondaryTextColor())
+                          .maxLines(1)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      }
+                      .layoutWeight(1)
+                      .alignItems(HorizontalAlign.Start)
+                      Column({ space: 4 }) {
+                        Text(this.formatDate(((item)).lastActivityDate))
+                          .fontSize(11)
+                          .fontColor(this.secondaryTextColor())
+                          .maxLines(1)
+                        SymbolGlyph($r('sys.symbol.chevron_right'))
+                          .fontSize(20)
+                          .fontColor([this.secondaryTextColor()])
+                      }
+                      .alignItems(HorizontalAlign.End)
+                    }
+                    .width('100%')
+                    .constraintSize({ minHeight: 68 })
+                    .padding({ left: 12, right: 10, top: 8, bottom: 8 })
+                    .borderRadius(8)
+                    .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
+                    .onClick(() => this.openDevice(((item))))
+                  } else {
+                    Row({ space: 10 }) {
+                      SymbolGlyph($r('sys.symbol.externaldrive'))
+                        .fontSize(19).fontColor([$r('app.color.color_main')])
+                        .width(38).height(38)
+                      Column({ space: 3 }) {
+                        Row({ space: 6 }) {
+                          Text(((item)).displayName).fontSize(14).fontWeight(FontWeight.Medium)
+                            .fontColor(this.primaryTextColor()).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                          if (((item)).current) {
+                            Text($r('app.string.management_device_current')).fontSize(10)
+                              .fontColor($r('app.color.status_success'))
+                          }
+                        }
+                        Text(`${item.appName} ${item.appVersion} · ${item.lastUserName}`)
+                          .fontSize(12).fontColor(this.secondaryTextColor()).maxLines(1)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        Text(((item)).lastActivityDate).fontSize(11).fontColor(this.secondaryTextColor())
+                      }
+                      .layoutWeight(1).alignItems(HorizontalAlign.Start)
+                      SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([this.secondaryTextColor()])
+                    }
+                    .width('100%').constraintSize({ minHeight: 66 }).padding({ left: 12, right: 12 })
+                    .onClick(() => this.openDevice(((item))))
+                  } }
+                }, (item: ManagementDeviceItem) => item.id)
+              }
+              .layoutWeight(1).width('100%').scrollBar(BarState.Auto)
+              Row({ space: 10 }) {
+                Button($r('app.string.management_device_previous'), { type: ButtonType.Normal })
+                  .height(36)
+                  .padding({ left: 16, right: 16 })
+                  .borderRadius(18)
+                  .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                  .enabled(this.ui.pageIndex > 0)
+                  .onClick(() => this.vm.setPage(this.ui.pageIndex - 1))
+                Text(`${this.ui.pageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
+                  .fontSize(12).fontColor(this.secondaryTextColor())
+                Button($r('app.string.management_device_next'), { type: ButtonType.Normal })
+                  .height(36)
+                  .padding({ left: 16, right: 16 })
+                  .borderRadius(18)
+                  .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                  .enabled(this.ui.pageIndex + 1 < this.ui.pageCount)
+                  .onClick(() => this.vm.setPage(this.ui.pageIndex + 1))
+              }
+              .height(48).width('100%').justifyContent(FlexAlign.Center)
+            } else if (this.ui.status === ManagementSectionStatus.Loading) {
+              LoadingProgress().layoutWeight(1).width(28).height(28).color($r('app.color.color_main'))
+            } else {
+              Text(this.ui.status === ManagementSectionStatus.Unsupported ?
+                $r('app.string.management_device_unsupported') : $r('app.string.management_device_empty'))
+                .layoutWeight(1).fontSize(14).fontColor(this.secondaryTextColor())
+            }
+          }
+          .width('100%')
+          .height('100%')
+          .borderRadius(this.useNativeMaterial() ? 8 : 0)
+          .clip(this.useNativeMaterial())
+          .backgroundColor(this.useNativeMaterial() ?
+            AppThemeSurfaceResolver.contentGroupBackground() : Color.Transparent)
+        }
+        .width(this.isLarge() ? 320 : '100%')
+        .height('100%')
+        if (this.isLarge()) {
+          if (this.selectedDevice()) {
+            Scroll() {
+              ManagementDeviceDetailPanel({
+                ui: this.ui,
+                device: this.selectedDevice()!,
+                themeStyle: this.vm.appUIState.themeStyle,
+                nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                onRename: () => this.renameSelected(),
+                onRevoke: () => this.confirmRevoke(this.selectedDevice()!)
+              })
+            }
+            .layoutWeight(1)
+            .height('100%')
+            .padding(16)
+          } else {
+            Blank().layoutWeight(1)
           }
         }
-        Text(`${device.appName} ${device.appVersion} · ${device.lastUserName}`)
-          .fontSize(12).fontColor(this.secondaryTextColor()).maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(device.lastActivityDate).fontSize(11).fontColor(this.secondaryTextColor())
-      }
-      .layoutWeight(1).alignItems(HorizontalAlign.Start)
-      SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([this.secondaryTextColor()])
-    }
-    .width('100%').constraintSize({ minHeight: 66 }).padding({ left: 12, right: 12 })
-    .onClick(() => this.openDevice(device))
-  }
-
-  @Builder
-  private nativeDeviceRow(device: ManagementDeviceItem) {
-    Row({ space: 12 }) {
-      SymbolGlyph($r('sys.symbol.externaldrive'))
-        .fontSize(20)
-        .fontColor([$r('app.color.color_main')])
-        .width(36)
-        .height(36)
-      Column({ space: 4 }) {
-        Row({ space: 8 }) {
-          Text(device.displayName)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.primaryTextColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (device.current) {
-            Text($r('app.string.management_device_current'))
-              .fontSize(11)
-              .fontColor($r('app.color.status_success'))
-          }
-        }
-        Text(`${device.appName} ${device.appVersion} · ${device.lastUserName}`)
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Column({ space: 4 }) {
-        Text(this.formatDate(device.lastActivityDate))
-          .fontSize(11)
-          .fontColor(this.secondaryTextColor())
-          .maxLines(1)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(20)
-          .fontColor([this.secondaryTextColor()])
-      }
-      .alignItems(HorizontalAlign.End)
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 68 })
-    .padding({ left: 12, right: 10, top: 8, bottom: 8 })
-    .borderRadius(8)
-    .stateStyles({ pressed: this.pressedRowStyle, normal: this.normalRowStyle })
-    .onClick(() => this.openDevice(device))
-  }
-
-  @Builder
-  private deviceRow(device: ManagementDeviceItem) {
-    if (this.useNativeMaterial()) {
-      this.nativeDeviceRow(device)
-    } else {
-      this.legacyDeviceRow(device)
-    }
-  }
-
-  @Builder
-  private listContent() {
-    Column() {
-      this.filters()
-      if ((this.ui.status === ManagementSectionStatus.Content ||
-        this.ui.status === ManagementSectionStatus.Error) && this.ui.devices.length > 0) {
-        List({ scroller: this.contentScroller }) {
-          ForEach(this.ui.devices, (item: ManagementDeviceItem) => {
-            ListItem() { this.deviceRow(item) }
-          }, (item: ManagementDeviceItem) => item.id)
-        }
-        .layoutWeight(1).width('100%').scrollBar(BarState.Auto)
-        Row({ space: 10 }) {
-          Button($r('app.string.management_device_previous'), { type: ButtonType.Normal })
-            .height(36)
-            .padding({ left: 16, right: 16 })
-            .borderRadius(18)
-            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-            .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-            .enabled(this.ui.pageIndex > 0)
-            .onClick(() => this.vm.setPage(this.ui.pageIndex - 1))
-          Text(`${this.ui.pageIndex + 1} / ${Math.max(1, this.ui.pageCount)}`)
-            .fontSize(12).fontColor(this.secondaryTextColor())
-          Button($r('app.string.management_device_next'), { type: ButtonType.Normal })
-            .height(36)
-            .padding({ left: 16, right: 16 })
-            .borderRadius(18)
-            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-            .attributeModifier(AppThemeSurfaceResolver.modifier(
-              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-            .enabled(this.ui.pageIndex + 1 < this.ui.pageCount)
-            .onClick(() => this.vm.setPage(this.ui.pageIndex + 1))
-        }
-        .height(48).width('100%').justifyContent(FlexAlign.Center)
-      } else if (this.ui.status === ManagementSectionStatus.Loading) {
-        LoadingProgress().layoutWeight(1).width(28).height(28).color($r('app.color.color_main'))
-      } else {
-        Text(this.ui.status === ManagementSectionStatus.Unsupported ?
-          $r('app.string.management_device_unsupported') : $r('app.string.management_device_empty'))
-          .layoutWeight(1).fontSize(14).fontColor(this.secondaryTextColor())
-      }
+      .width('100%')
+      .padding({ left: this.isLarge() ? 12 : 0, right: this.isLarge() ? 12 : 0 })
     }
     .width('100%')
     .height('100%')
-    .borderRadius(this.useNativeMaterial() ? 8 : 0)
-    .clip(this.useNativeMaterial())
-    .backgroundColor(this.useNativeMaterial() ?
-      AppThemeSurfaceResolver.contentGroupBackground() : Color.Transparent)
+    .backgroundColor((this.showLegacyActionBar) ? AppThemeSurfaceResolver.routeBackground(
+      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+    .bindSheet($$this.ui.filterSheetVisible, this.filterSheetBuilder(), this.filterSheetOptions())
   }
+}
 
-  @Builder
-  private deviceFilterSheetBody() {
-    ManagementDeviceFilterSheet({
-      initialRecentDays: this.ui.recentDays,
-      initialUsers: this.ui.selectedUsers,
-      availableUsers: this.userNames(),
-      initialSortField: this.ui.sortField,
-      initialAscending: this.ui.ascending,
-      onApply: (recentDays: number, users: string[],
-        sortField: ManagementDeviceSortField, ascending: boolean) => {
-        this.applyNativeFilters(recentDays, users, sortField, ascending)
-      }
-    })
-  }
+@HMRouter({
+  pageUrl: RouterConsts.ManagementDevicesPage,
+  useNavDst: true
+})
+@ComponentV2
+export struct ManagementDevicesPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  private readonly contentScroller: Scroller = new Scroller()
+  @Local revokeOthersEnabled: boolean = false
+  private revokeOthersAction: () => void = () => {}
 
-  @Builder
-  private deviceFilterSheet() {
-    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Column() {
-        this.deviceFilterSheetBody()
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: $r('app.string.management_devices_title'),
+        contentExtendsUnderTitleBar: true,
+        menus: [{
+                value: $r('app.string.management_device_revoke_others'),
+                icon: $r('sys.symbol.trash'),
+                isEnabled: this.revokeOthersEnabled,
+                action: () => this.revokeOthersAction()
+              }],
+        scrollControllers: [this.contentScroller]
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(Color.Transparent)
-      .backgroundBlurStyle(BlurStyle.Thin)
-    } else {
-      Column() {
-        this.deviceFilterSheetBody()
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(Color.Transparent)
-    }
-  }
-
-  @Builder
-  private pageContentBody(showLegacyActionBar: boolean) {
-    if (showLegacyActionBar) {
-      ActionBar({ title: $r('app.string.management_devices_title') })
-    } else {
-      Blank().height(this.nativeTopSpacer())
-    }
-    if (this.isLarge()) {
-      Row({ space: 12 }) {
-        Column() { this.listContent() }.width(320).height('100%')
-        if (this.selectedDevice()) {
-          Scroll() {
-            ManagementDeviceDetailPanel({
-              ui: this.ui,
-              device: this.selectedDevice()!,
-              themeStyle: this.vm.appUIState.themeStyle,
-              nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-              onRename: () => this.renameSelected(),
-              onRevoke: () => this.confirmRevoke(this.selectedDevice()!)
-            })
-          }
-          .layoutWeight(1).height('100%').padding(16)
-        } else {
-          Blank().layoutWeight(1)
-        }
-      }
-      .layoutWeight(1).width('100%').padding({ left: 12, right: 12 })
-    } else {
-      this.listContent()
-    }
-  }
-
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Column() {
-        this.pageContentBody(showLegacyActionBar)
-      }
-      .width('100%').height('100%')
-      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        showClose: true,
-        backgroundColor: Color.Transparent
-      })
-    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-      Column() {
-        this.pageContentBody(showLegacyActionBar)
-      }
-      .width('100%').height('100%')
-      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        showClose: true,
-        backgroundColor: Color.Transparent,
-        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
-      })
-    } else if (this.floatingOverlayMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-      Column() {
-        this.pageContentBody(showLegacyActionBar)
-      }
-      .width('100%').height('100%')
-      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        showClose: true,
-        backgroundColor: $r('app.color.bg_1'),
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      })
-    } else {
-      Column() {
-        this.pageContentBody(showLegacyActionBar)
-      }
-      .width('100%').height('100%')
-      .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
-      .bindSheet($$this.ui.filterSheetVisible, this.deviceFilterSheet(), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        showClose: true
-      })
-    }
   }
 
   build() {
-    AppRouteDestination({
-      title: $r('app.string.management_devices_title'),
-      contentExtendsUnderTitleBar: true,
-      menus: [{
-        value: $r('app.string.management_device_revoke_others'),
-        icon: $r('sys.symbol.trash'),
-        isEnabled: this.canRevokeOthers(),
-        action: () => this.confirmRevokeOthers()
-      }],
-      scrollControllers: [this.contentScroller],
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              ManagementDevicesContent({
+                showLegacyActionBar: false,
+                contentScroller: this.contentScroller,
+                onRegisterRevokeOthers: (action: () => void) => this.revokeOthersAction = action,
+                onRevokeOthersEnabledChange: (enabled: boolean) => this.revokeOthersEnabled = enabled
+              })
+            } else {
+              ManagementDevicesContent({
+                showLegacyActionBar: true,
+                contentScroller: this.contentScroller,
+                onRegisterRevokeOthers: (action: () => void) => this.revokeOthersAction = action,
+                onRevokeOthersEnabledChange: (enabled: boolean) => this.revokeOthersEnabled = enabled
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        ManagementDevicesContent({
+          showLegacyActionBar: true,
+          contentScroller: this.contentScroller,
+          onRegisterRevokeOthers: (action: () => void) => this.revokeOthersAction = action,
+          onRevokeOthersEnabledChange: (enabled: boolean) => this.revokeOthersEnabled = enabled
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

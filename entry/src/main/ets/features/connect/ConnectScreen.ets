@@ -12,6 +12,7 @@ import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppTh
 import { MediaProviderKind } from "../../media/MediaProviderKind"
 import { FeiniuVideoConnectScreen } from "../feiniuvideo/account/FeiniuVideoConnectPage"
 import { ManagementNativeSelect } from "../management/ManagementNativeSelect"
+import { ThemeStyle } from "../../entity/ThemeStyle"
 
 @ComponentV2
 export struct ConnectScreen {
@@ -35,10 +36,6 @@ export struct ConnectScreen {
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
-  private selectedProviderIndex(): number {
-    return this.selectedProvider === MediaProviderKind.FeiniuVideo ? 1 : 0
-  }
-
   private selectInitialProvider(index: number): void {
     const nextProvider = index === 1 ? MediaProviderKind.FeiniuVideo : MediaProviderKind.Jellyfin
     if (this.selectedProvider === nextProvider) {
@@ -46,179 +43,6 @@ export struct ConnectScreen {
     }
     this.selectedProvider = nextProvider
     inputMethod.getController().hideTextInput()
-  }
-
-  @Builder
-  private initialProviderSelector(): void {
-    ManagementNativeSelect({
-      options: [
-        $r('app.string.provider_jellyfin_name'),
-        $r('app.string.feiniu_video_service_name')
-      ],
-      selectedIndex: this.selectedProviderIndex(),
-      themeStyle: this.appUIState.themeStyle,
-      nativeThemeAvailable: this.appUIState.nativeThemeAvailable,
-      selectorWidth: 136,
-      valueTextAlign: TextAlign.Center,
-      menuPlacement: Placement.BottomRight,
-      onSelect: (index: number): void => {
-        this.selectInitialProvider(index)
-      }
-    })
-  }
-
-  @Builder
-  private selectedProviderLoginContent(): void {
-    LogoHeader({
-      nativeSurface: this.useNativeSurface()
-    })
-    if (this.selectedProvider === MediaProviderKind.Jellyfin) {
-      if (this.useNativeSurface()) {
-        this.nativeConnectionForm()
-      } else {
-        this.feiniuConnectionForm()
-      }
-    } else {
-      FeiniuVideoConnectScreen({
-        showRouteActionBar: false,
-        embedded: true
-      })
-    }
-  }
-
-  @Builder
-  private initialConnectionContent(): void {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column() {
-        this.selectedProviderLoginContent()
-      }
-      .width('100%')
-      Row() {
-        this.initialProviderSelector()
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.End)
-      .margin({ top: 4, right: 2 })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  private connectionFormContent(nativeSurface: boolean) {
-    AddressSelection({
-      text: this.ui.hostname,
-      errorText: this.showExternalConnectionError ? '无法建立连接。 请检查主机名和你的网络连接。' :
-        (this.ui.checkUrlState.type === CheckUrlStateType.Error ? (this.ui.checkUrlState as Error).message :
-          undefined),
-      loading: this.ui.checkUrlState.type === CheckUrlStateType.Pending,
-      nativeSurface: nativeSurface,
-      onTextChange: (value: string) => {
-        this.ui.externalError = false
-        this.ui.checkUrlState = new Unchecked()
-        this.ui.hostname = value
-      },
-      onDiscoveryClick: () => {
-        this.ui.externalError = false
-        inputMethod.getController().hideTextInput()
-      },
-      onSubmit: () => {
-
-      }
-    })
-
-    Blank().height(16)
-    AuthTextField({
-      text: this.ui.username,
-      placeholder: '请输入用户名',
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.ui.username = v
-      }
-    })
-    Blank().height(16)
-    AuthTextField({
-      text: this.ui.password,
-      placeholder: '请输入密码',
-      password: true,
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.ui.password = v
-      }
-    })
-    AnimatedErrorText({
-      errorText: this.ui.errorText,
-      nativeSurface: nativeSurface
-    }).padding({ top: 4 })
-    Row({ space: 4 }) {
-      Toggle({ type: ToggleType.Checkbox, isOn: this.ui.rememberPwd })
-        .width(16)
-        .onChange((isOn) => {
-          this.ui.rememberPwd = isOn
-        })
-      Text("记住密码")
-        .fontSize(12)
-        .fontColor(nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
-    }.onClick(() => {
-      this.ui.rememberPwd = !this.ui.rememberPwd;
-    }).margin({
-      top: 4
-    })
-
-    if (!this.ui.loading) {
-      Blank().height(20)
-      StyledTextButton({
-        text: '登录',
-        enable: this.ui.username.length > 0 && this.ui.password.length > 0,
-        nativeSurface: nativeSurface,
-        onclick: (): void => {
-          this.vm.onLogin(this.isFromAddAccount)
-        }
-      })
-    } else {
-      Row() {
-        LoadingProgress().width(32).height(32)
-        Text('正在登录...')
-          .fontColor(nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
-          .padding({ left: 12 })
-      }.padding({ top: 24 })
-    }
-    Text("发现局域网内的设备")
-      .fontSize(12)
-      .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
-      .padding({ top: 24, bottom: 8 })
-      .onClick(() => {
-        HMRouterMgr.to(RouterConsts.ServerDiscoveryPage)
-          .onResult((res) => {
-            if (res && res.result) {
-              this.ui.hostname = res.result as string
-              inputMethod.getController().showTextInput()
-            }
-          })
-          .push()
-      })
-  }
-
-  @Builder
-  private nativeConnectionForm() {
-    Column() {
-      this.connectionFormContent(true)
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 375 })
-    .alignItems(HorizontalAlign.Start)
-    .padding({ top: 16, bottom: 16, left: 12, right: 12 })
-    .margin({ top: 20 })
-  }
-
-  @Builder
-  private feiniuConnectionForm() {
-    Column() {
-      this.connectionFormContent(false)
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 375 })
-    .alignItems(HorizontalAlign.Start)
-    .margin({ top: 30 })
   }
 
   build() {
@@ -231,14 +55,29 @@ export struct ConnectScreen {
           })
         }
         if (!this.isFromAddAccount) {
-          this.initialConnectionContent()
+          InitialProviderLoginPanel({
+            selectedProvider: this.selectedProvider,
+            ui: this.ui,
+            themeStyle: this.appUIState.themeStyle,
+            nativeThemeAvailable: this.appUIState.nativeThemeAvailable,
+            showExternalConnectionError: this.showExternalConnectionError,
+            onProviderSelect: (index: number): void => {
+              this.selectInitialProvider(index)
+            },
+            onJellyfinLogin: (): void => {
+              this.vm.onLogin(false)
+            }
+          })
         } else {
           LogoHeader({ nativeSurface: this.useNativeSurface() })
-          if (this.useNativeSurface()) {
-            this.nativeConnectionForm()
-          } else {
-            this.feiniuConnectionForm()
-          }
+          JellyfinConnectionForm({
+            ui: this.ui,
+            nativeSurface: this.useNativeSurface(),
+            showExternalConnectionError: this.showExternalConnectionError,
+            onLogin: (): void => {
+              this.vm.onLogin(true)
+            }
+          })
         }
       }
       .width('100%')
@@ -254,6 +93,213 @@ export struct ConnectScreen {
     .align(Alignment.Top)
     .backgroundColor(this.showRouteActionBar ? AppThemeSurfaceResolver.routeBackground(
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : Color.Transparent)
+  }
+}
+
+@ComponentV2
+struct InitialProviderLoginPanel {
+  @Require @Param selectedProvider: MediaProviderKind
+  @Require @Param ui: ConnectionUIState
+  @Require @Param themeStyle: ThemeStyle
+  @Param nativeThemeAvailable: boolean = false
+  @Param showExternalConnectionError: boolean = false
+  @Event onProviderSelect: (index: number) => void = () => {}
+  @Event onJellyfinLogin: () => void = () => {}
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
+  }
+
+  private selectedProviderIndex(): number {
+    return this.selectedProvider === MediaProviderKind.FeiniuVideo ? 1 : 0
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        LogoHeader({ nativeSurface: this.useNativeSurface() })
+        if (this.selectedProvider === MediaProviderKind.Jellyfin) {
+          JellyfinConnectionForm({
+            ui: this.ui,
+            nativeSurface: this.useNativeSurface(),
+            showExternalConnectionError: this.showExternalConnectionError,
+            onLogin: this.onJellyfinLogin
+          })
+        } else {
+          FeiniuVideoConnectScreen({
+            showRouteActionBar: false,
+            embedded: true
+          })
+        }
+      }
+      .width('100%')
+      Row() {
+        ManagementNativeSelect({
+          options: [
+            $r('app.string.provider_jellyfin_name'),
+            $r('app.string.feiniu_video_service_name')
+          ],
+          selectedIndex: this.selectedProviderIndex(),
+          themeStyle: this.themeStyle,
+          nativeThemeAvailable: this.nativeThemeAvailable,
+          selectorWidth: 136,
+          valueTextAlign: TextAlign.Center,
+          menuPlacement: Placement.BottomRight,
+          onSelect: this.onProviderSelect
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .margin({ top: 4, right: 2 })
+    }
+    .width('100%')
+  }
+}
+
+@ComponentV2
+struct JellyfinConnectionFields {
+  @Require @Param ui: ConnectionUIState
+  @Param nativeSurface: boolean = false
+  @Param showExternalConnectionError: boolean = false
+  @Event onLogin: () => void = () => {}
+
+  private connectionErrorText(): string {
+    if (this.showExternalConnectionError) {
+      return '无法建立连接。 请检查主机名和你的网络连接。'
+    }
+    if (this.ui.checkUrlState.type === CheckUrlStateType.Error) {
+      return (this.ui.checkUrlState as Error).message ?? ''
+    }
+    return ''
+  }
+
+  private openServerDiscovery(): void {
+    HMRouterMgr.to(RouterConsts.ServerDiscoveryPage)
+      .onResult((res) => {
+        if (res && res.result) {
+          this.ui.hostname = res.result as string
+          inputMethod.getController().showTextInput()
+        }
+      })
+      .push()
+  }
+
+  build() {
+    Column() {
+      AddressSelection({
+      text: this.ui.hostname,
+      errorText: this.connectionErrorText(),
+      nativeSurface: this.nativeSurface,
+      onTextChange: (value: string): void => {
+        this.ui.externalError = false
+        this.ui.checkUrlState = new Unchecked()
+        this.ui.hostname = value
+      }
+    })
+
+    Blank().height(16)
+    AuthTextField({
+      text: this.ui.username,
+      placeholder: '请输入用户名',
+      nativeSurface: this.nativeSurface,
+      onTextChanged: (value: string): void => {
+        this.ui.username = value
+      }
+    })
+    Blank().height(16)
+    AuthTextField({
+      text: this.ui.password,
+      placeholder: '请输入密码',
+      password: true,
+      nativeSurface: this.nativeSurface,
+      onTextChanged: (value: string): void => {
+        this.ui.password = value
+      }
+    })
+    AnimatedErrorText({
+      errorText: this.ui.errorText,
+      nativeSurface: this.nativeSurface
+    }).padding({ top: 4 })
+    Row({ space: 4 }) {
+      Toggle({ type: ToggleType.Checkbox, isOn: this.ui.rememberPwd })
+        .width(16)
+        .onChange((isOn: boolean): void => {
+          this.ui.rememberPwd = isOn
+        })
+      Text('记住密码')
+        .fontSize(12)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
+    }
+    .onClick((): void => {
+      this.ui.rememberPwd = !this.ui.rememberPwd
+    })
+    .margin({ top: 4 })
+
+    if (!this.ui.loading) {
+      Blank().height(20)
+      StyledTextButton({
+        text: '登录',
+        enable: this.ui.username.length > 0 && this.ui.password.length > 0,
+        nativeSurface: this.nativeSurface,
+        onPressed: this.onLogin
+      })
+    } else {
+      Row() {
+        LoadingProgress().width(32).height(32)
+        Text('正在登录...')
+          .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
+          .padding({ left: 12 })
+      }.padding({ top: 24 })
+    }
+      Text('发现局域网内的设备')
+        .fontSize(12)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
+        .padding({ top: 24, bottom: 8 })
+        .onClick((): void => {
+          this.openServerDiscovery()
+        })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+
+@ComponentV2
+struct JellyfinConnectionForm {
+  @Require @Param ui: ConnectionUIState
+  @Param nativeSurface: boolean = false
+  @Param showExternalConnectionError: boolean = false
+  @Event onLogin: () => void = () => {}
+
+  build() {
+    if (this.nativeSurface) {
+      Column() {
+        JellyfinConnectionFields({
+          ui: this.ui,
+          nativeSurface: true,
+          showExternalConnectionError: this.showExternalConnectionError,
+          onLogin: this.onLogin
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 375 })
+      .alignItems(HorizontalAlign.Start)
+      .padding({ top: 16, bottom: 16, left: 12, right: 12 })
+      .margin({ top: 20 })
+    } else {
+      Column() {
+        JellyfinConnectionFields({
+          ui: this.ui,
+          nativeSurface: false,
+          showExternalConnectionError: this.showExternalConnectionError,
+          onLogin: this.onLogin
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 375 })
+      .alignItems(HorizontalAlign.Start)
+      .margin({ top: 30 })
+    }
   }
 }
 
@@ -274,17 +320,14 @@ export struct LogoHeader {
 }
 
 // Reusable text field for username / password
-@Component
+@ComponentV2
 struct AuthTextField {
-  @Prop text: string
-  // @Prop icon: ResourceStr
-  @Prop placeholder: string
-  @Prop password: boolean = false
-  @Prop nativeSurface: boolean = false
-  onTextChanged: (val: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Param placeholder: string = ''
+  @Param password: boolean = false
+  @Param nativeSurface: boolean = false
+  @Event onTextChanged: (val: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   build() {
     Stack() {
@@ -305,7 +348,6 @@ struct AuthTextField {
         .placeholderColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
         .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
         .backgroundColor(this.nativeSurface ? Color.Transparent : $r('app.color.component_bg'))
-      // Image(this.icon).height(24).margin({ left: 16 })
     }
     .height(this.nativeSurface ? 52 : 56)
     .borderRadius(this.nativeSurface ? 14 : 8)
@@ -319,10 +361,10 @@ struct AuthTextField {
 }
 
 
-@Component
+@ComponentV2
 export struct AnimatedErrorText {
-  @Prop errorText: string
-  @Prop nativeSurface: boolean = false
+  @Param errorText: string = ''
+  @Param nativeSurface: boolean = false
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
@@ -335,13 +377,12 @@ export struct AnimatedErrorText {
   }
 }
 
-@Component
+@ComponentV2
 export struct StyledTextButton {
-  @Prop text: string
-  @Prop enable: boolean
-  @Prop nativeSurface: boolean = false
-  onclick: () => void = () => {
-  }
+  @Require @Param text: ResourceStr
+  @Param enable: boolean = false
+  @Param nativeSurface: boolean = false
+  @Event onPressed: () => void = () => {}
 
   build() {
     Button(this.text, { type: ButtonType.Normal, stateEffect: true })
@@ -350,7 +391,7 @@ export struct StyledTextButton {
       .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : Color.White)
       .width('100%')
       .height(48)
-      .onClick(() => this.onclick())
+      .onClick(() => this.onPressed())
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })
@@ -361,18 +402,13 @@ export struct StyledTextButton {
   }
 }
 
-@Component
+@ComponentV2
 struct AddressSelection {
-  @Prop text: string
-  @Prop errorText: string
-  @Prop loading: boolean
-  @Prop nativeSurface: boolean = false
-  onTextChange: (x: string) => void = () => {
-  }
-  onDiscoveryClick: () => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Param errorText: string = ''
+  @Param nativeSurface: boolean = false
+  @Event onTextChange: (x: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   build() {
     Column() {
@@ -386,32 +422,16 @@ struct AddressSelection {
         errorText: this.errorText,
         nativeSurface: this.nativeSurface
       })
-      // if (!this.loading) {
-      //   Blank().height(12)
-      //   StyledTextButton({
-      //     text: '连接服务器',
-      //     enable: this.text.length > 0,
-      //     onclick: this.onSubmit,
-      //   })
-      //   // StyledTextButton({
-      //   //   text: '选择服务器',
-      //   //   onclick: this.onDiscoveryClick
-      //   // })
-      // } else {
-      //
-      // }
     }
   }
 }
 
-@Component
+@ComponentV2
 struct ServerUrlField {
-  @Prop text: string
-  @Prop nativeSurface: boolean = false
-  onTextChanged: (val: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Param nativeSurface: boolean = false
+  @Event onTextChanged: (val: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   private openAccountHistory(): void {
     HMRouterMgr.to(RouterConsts.AccountPage).withParam({

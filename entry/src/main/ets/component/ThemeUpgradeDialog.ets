@@ -2,13 +2,8 @@ import { ThemeStyle } from '../entity/ThemeStyle';
 import { ThemeStylePreview } from './ThemeStylePreview';
 
 @ComponentV2
-export struct ThemeUpgradeDialog {
-  @Require @Param onSelectFeiniu: () => void
-  @Require @Param onSelectNative: () => void
-  @Require @Param onDismiss: () => void
-
-  @Builder
-  nativeThemePreview() {
+struct ThemeUpgradePreviewPanel {
+  build() {
     Row({ space: 12 }) {
       Column({ space: 6 }) {
         ThemeStylePreview({ style: ThemeStyle.Native, compact: true })
@@ -33,6 +28,13 @@ export struct ThemeUpgradeDialog {
     .borderRadius(20)
     .backgroundColor($r('sys.color.comp_background_secondary'))
   }
+}
+
+@ComponentV2
+export struct ThemeUpgradeDialog {
+  @Require @Param onSelectFeiniu: () => void
+  @Require @Param onSelectNative: () => void
+  @Require @Param onDismiss: () => void
 
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
@@ -47,7 +49,7 @@ export struct ThemeUpgradeDialog {
           .fontSize(14)
           .fontColor($r('app.color.text_1'))
           .width('100%')
-        this.nativeThemePreview()
+        ThemeUpgradePreviewPanel()
         Button($r('app.string.theme_prompt_native_action'), { type: ButtonType.Normal })
           .width('100%')
           .height(44)

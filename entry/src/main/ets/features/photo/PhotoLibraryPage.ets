@@ -1,6 +1,6 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { RouterConsts } from '../../common/RouterConsts'
-import { AppRouteDestination } from '../../component/AppRouteDestination'
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination'
 import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
 import { MediaItem } from '../home/hometab/HomeUIState'
 import { PhotoAlbumGrid } from './PhotoAlbumGrid'
@@ -16,6 +16,183 @@ import { PhotoGrid } from './PhotoGrid'
 import { photoBrowseErrorText } from './PhotoErrorText'
 import { PhotoSkeletonGrid } from './PhotoSkeletonGrid'
 import { photoViewerSourceStore } from './PhotoViewerSourceStore'
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+
+@ComponentV2
+struct PhotoLibrarySectionContent {
+  @Require @Param ui: PhotoLibraryUIState
+  @Require @Param section: PhotoLibrarySection
+  @Require @Param currentBreakpoint: string
+  @Require @Param nativeSurface: boolean
+  @Require @Param scroller: Scroller
+  @Require @Param errorText: ResourceStr
+  @Event onRefresh: () => void = () => {}
+  @Event onRetry: () => void = () => {}
+  @Event onLoadMore: () => void = () => {}
+  @Event onRetryLoadMore: () => void = () => {}
+  @Event onPhotoPressed: (photo: PhotoItem, index: number) => void =
+    (_photo: PhotoItem, _index: number) => {}
+  @Event onAlbumPressed: (album: PhotoAlbumItem) => void = (_album: PhotoAlbumItem) => {}
+
+  private state(): PhotoContentState {
+    return this.section === PhotoLibrarySection.Photos ? this.ui.photosState : this.ui.albumsState
+  }
+
+  private refreshing(): boolean {
+    return this.section === PhotoLibrarySection.Photos ? this.ui.photosRefreshing : this.ui.albumsRefreshing
+  }
+
+  private stateTextColor(): ResourceColor {
+    return this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  build() {
+    Column() {
+      if (this.state() === PhotoContentState.Loading) {
+        PhotoSkeletonGrid({
+          currentBreakpoint: this.currentBreakpoint,
+          nativeSurface: this.nativeSurface,
+          albumMode: this.section === PhotoLibrarySection.Albums
+        })
+      } else if (this.state() === PhotoContentState.Empty) {
+        Column({ space: 12 }) {
+          Image(this.section === PhotoLibrarySection.Albums ?
+            $r('app.media.placeholder_folder') : $r('app.media.ic_photo'))
+            .width(46)
+            .height(46)
+            .fillColor(this.stateTextColor())
+          Text(this.section === PhotoLibrarySection.Albums ?
+            $r('app.string.photo_empty_albums') : $r('app.string.photo_empty_photos'))
+            .fontSize(14)
+            .fontColor(this.stateTextColor())
+          Button($r('app.string.photo_refresh'), { type: ButtonType.Normal })
+            .height(44)
+            .borderRadius(22)
+            .onClick(() => this.onRefresh())
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+      } else if (this.state() === PhotoContentState.Error) {
+        Column({ space: 12 }) {
+          SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+            .fontSize(42)
+            .fontColor([this.stateTextColor()])
+          Text(this.errorText)
+            .fontSize(14)
+            .fontColor(this.stateTextColor())
+          Button($r('app.string.photo_retry'), { type: ButtonType.Normal })
+            .height(44)
+            .borderRadius(22)
+            .onClick(() => this.onRetry())
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Refresh({ refreshing: this.refreshing() }) {
+          if (this.section === PhotoLibrarySection.Photos) {
+            PhotoGrid({
+              groups: this.ui.photoGroups,
+              currentBreakpoint: this.currentBreakpoint,
+              nativeSurface: this.nativeSurface,
+              scroller: this.scroller,
+              loadingMore: this.ui.photosLoadingMore,
+              loadMoreFailed: this.ui.photosLoadMoreFailed,
+              onPhotoClick: (photo: PhotoItem, index: number) => this.onPhotoPressed(photo, index),
+              onReachEnd: () => this.onLoadMore(),
+              onRetryLoadMore: () => this.onRetryLoadMore()
+            })
+          } else {
+            PhotoAlbumGrid({
+              albums: this.ui.albums,
+              currentBreakpoint: this.currentBreakpoint,
+              nativeSurface: this.nativeSurface,
+              scroller: this.scroller,
+              loadingMore: this.ui.albumsLoadingMore,
+              loadMoreFailed: this.ui.albumsLoadMoreFailed,
+              onAlbumClick: (album: PhotoAlbumItem) => this.onAlbumPressed(album),
+              onReachEnd: () => this.onLoadMore(),
+              onRetryLoadMore: () => this.onRetryLoadMore()
+            })
+          }
+        }
+        .onRefreshing(() => this.onRefresh())
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
+
+@ComponentV2
+struct PhotoLibraryContent {
+  @Require @Param ui: PhotoLibraryUIState
+  @Require @Param currentBreakpoint: string
+  @Require @Param nativeSurface: boolean
+  @Require @Param horizontalPadding: number
+  @Require @Param bottomInset: number
+  @Require @Param tabsController: TabsController
+  @Require @Param photosScroller: Scroller
+  @Require @Param albumsScroller: Scroller
+  @Require @Param photosErrorText: ResourceStr
+  @Require @Param albumsErrorText: ResourceStr
+  @Event onSectionChange: (index: number) => void = (_index: number) => {}
+  @Event onRefresh: () => void = () => {}
+  @Event onRetry: () => void = () => {}
+  @Event onLoadMore: () => void = () => {}
+  @Event onRetryLoadMore: () => void = () => {}
+  @Event onPhotoPressed: (photo: PhotoItem, index: number) => void =
+    (_photo: PhotoItem, _index: number) => {}
+  @Event onAlbumPressed: (album: PhotoAlbumItem) => void = (_album: PhotoAlbumItem) => {}
+
+  build() {
+    Tabs({
+      index: this.ui.selectedSection,
+      controller: this.tabsController
+    }) {
+      TabContent() {
+        PhotoLibrarySectionContent({
+          ui: this.ui,
+          section: PhotoLibrarySection.Photos,
+          currentBreakpoint: this.currentBreakpoint,
+          nativeSurface: this.nativeSurface,
+          scroller: this.photosScroller,
+          errorText: this.photosErrorText,
+          onRefresh: () => this.onRefresh(),
+          onRetry: () => this.onRetry(),
+          onLoadMore: () => this.onLoadMore(),
+          onRetryLoadMore: () => this.onRetryLoadMore(),
+          onPhotoPressed: (photo: PhotoItem, index: number) => this.onPhotoPressed(photo, index)
+        })
+      }
+      .tabBar($r('app.string.photo_tab_photos'))
+      TabContent() {
+        PhotoLibrarySectionContent({
+          ui: this.ui,
+          section: PhotoLibrarySection.Albums,
+          currentBreakpoint: this.currentBreakpoint,
+          nativeSurface: this.nativeSurface,
+          scroller: this.albumsScroller,
+          errorText: this.albumsErrorText,
+          onRefresh: () => this.onRefresh(),
+          onRetry: () => this.onRetry(),
+          onLoadMore: () => this.onLoadMore(),
+          onRetryLoadMore: () => this.onRetryLoadMore(),
+          onAlbumPressed: (album: PhotoAlbumItem) => this.onAlbumPressed(album)
+        })
+      }
+      .tabBar($r('app.string.photo_tab_albums'))
+    }
+    .width(`calc(100% - ${this.horizontalPadding * 2}vp)`)
+    .height('100%')
+    .barMode(BarMode.Fixed)
+    .scrollable(false)
+    .animationDuration(0)
+    .padding({ bottom: this.bottomInset })
+    .onChange((index: number) => this.onSectionChange(index))
+  }
+}
 
 @HMRouter({
   pageUrl: RouterConsts.PhotoLibraryPage,
@@ -23,6 +200,7 @@ import { photoViewerSourceStore } from './PhotoViewerSourceStore'
 })
 @ComponentV2
 export struct PhotoLibraryPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
   @Param fromHome: boolean = false
   @Param mediaItem: MediaItem = {} as MediaItem
   @Param contentBottomInset?: number = undefined
@@ -92,154 +270,142 @@ export struct PhotoLibraryPage {
       Math.max(0, this.contentBottomInset) : Math.max(0, this.vm.appUIState.safeBottom)
   }
 
-  private stateTextColor(nativeSurface: boolean): ResourceColor {
-    return nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
-  }
-
-  private currentErrorText(): ResourceStr {
-    return photoBrowseErrorText(this.ui.selectedSection === PhotoLibrarySection.Albums ?
-      this.ui.albumsErrorCode : this.ui.photosErrorCode)
-  }
-
-  @Builder
-  private emptyState(section: PhotoLibrarySection, nativeSurface: boolean) {
-    Column({ space: 12 }) {
-      Image(section === PhotoLibrarySection.Albums ?
-        $r('app.media.placeholder_folder') : $r('app.media.ic_photo'))
-        .width(46)
-        .height(46)
-        .fillColor(this.stateTextColor(nativeSurface))
-      Text(section === PhotoLibrarySection.Albums ?
-        $r('app.string.photo_empty_albums') : $r('app.string.photo_empty_photos'))
-        .fontSize(14)
-        .fontColor(this.stateTextColor(nativeSurface))
-      Button($r('app.string.photo_refresh'), { type: ButtonType.Normal })
-        .height(44)
-        .borderRadius(22)
-        .onClick(() => this.vm.refreshCurrent())
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  private errorState(nativeSurface: boolean) {
-    Column({ space: 12 }) {
-      SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-        .fontSize(42)
-        .fontColor([this.stateTextColor(nativeSurface)])
-      Text(this.currentErrorText())
-        .fontSize(14)
-        .fontColor(this.stateTextColor(nativeSurface))
-      Button($r('app.string.photo_retry'), { type: ButtonType.Normal })
-        .height(44)
-        .borderRadius(22)
-        .onClick(() => this.vm.retryCurrent())
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  private photosContent(nativeSurface: boolean) {
-    if (this.ui.photosState === PhotoContentState.Loading) {
-      PhotoSkeletonGrid({
-        currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-        nativeSurface: nativeSurface
-      })
-    } else if (this.ui.photosState === PhotoContentState.Empty) {
-      this.emptyState(PhotoLibrarySection.Photos, nativeSurface)
-    } else if (this.ui.photosState === PhotoContentState.Error) {
-      this.errorState(nativeSurface)
-    } else {
-      Refresh({ refreshing: $$this.ui.photosRefreshing }) {
-        PhotoGrid({
-          groups: this.ui.photoGroups,
-          currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-          nativeSurface: nativeSurface,
-          scroller: this.photosScroller,
-          loadingMore: this.ui.photosLoadingMore,
-          loadMoreFailed: this.ui.photosLoadMoreFailed,
-          onPhotoClick: (photo: PhotoItem, index: number) => this.openPhoto(photo, index),
-          onReachEnd: () => this.vm.loadMoreCurrent(),
-          onRetryLoadMore: () => this.vm.retryLoadMoreCurrent()
-        })
-      }
-      .onRefreshing(() => this.vm.refreshCurrent())
-    }
-  }
-
-  @Builder
-  private albumsContent(nativeSurface: boolean) {
-    if (this.ui.albumsState === PhotoContentState.Loading) {
-      PhotoSkeletonGrid({
-        currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-        nativeSurface: nativeSurface,
-        albumMode: true
-      })
-    } else if (this.ui.albumsState === PhotoContentState.Empty) {
-      this.emptyState(PhotoLibrarySection.Albums, nativeSurface)
-    } else if (this.ui.albumsState === PhotoContentState.Error) {
-      this.errorState(nativeSurface)
-    } else {
-      Refresh({ refreshing: $$this.ui.albumsRefreshing }) {
-        PhotoAlbumGrid({
-          albums: this.ui.albums,
-          currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-          nativeSurface: nativeSurface,
-          scroller: this.albumsScroller,
-          loadingMore: this.ui.albumsLoadingMore,
-          loadMoreFailed: this.ui.albumsLoadMoreFailed,
-          onAlbumClick: (album: PhotoAlbumItem) => this.openAlbum(album),
-          onReachEnd: () => this.vm.loadMoreCurrent(),
-          onRetryLoadMore: () => this.vm.retryLoadMoreCurrent()
-        })
-      }
-      .onRefreshing(() => this.vm.refreshCurrent())
-    }
-  }
-
-  @Builder
-  private pageContent(nativeSurface: boolean) {
-    Tabs({
-      index: this.ui.selectedSection,
-      controller: this.tabsController
-    }) {
-      TabContent() {
-        this.photosContent(nativeSurface)
-      }
-      .tabBar($r('app.string.photo_tab_photos'))
-      TabContent() {
-        this.albumsContent(nativeSurface)
-      }
-      .tabBar($r('app.string.photo_tab_albums'))
-    }
-    .width(`calc(100% - ${this.horizontalPadding() * 2}vp)`)
-    .height('100%')
-    .barMode(BarMode.Fixed)
-    .scrollable(false)
-    .animationDuration(0)
-    .padding({ bottom: this.bottomInset() })
-    .onChange((index: number) => this.vm.selectSection(index))
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+          title: this.title(),
+          menus: this.menus(),
+          scrollControllers: [this.photosScroller, this.albumsScroller]
+        }
   }
 
   build() {
     if (this.fromHome) {
-      this.pageContent(this.useNativeSurface())
-    } else {
-      AppRouteDestination({
-        title: this.title(),
-        menus: this.menus(),
-        scrollControllers: [this.photosScroller, this.albumsScroller],
-        contentBuilder: () => {
-          this.pageContent(true)
-        },
-        legacyContentBuilder: () => {
-          this.pageContent(false)
-        }
+      PhotoLibraryContent({
+        ui: this.ui,
+        currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+        nativeSurface: this.useNativeSurface(),
+        horizontalPadding: this.horizontalPadding(),
+        bottomInset: this.bottomInset(),
+        tabsController: this.tabsController,
+        photosScroller: this.photosScroller,
+        albumsScroller: this.albumsScroller,
+        photosErrorText: photoBrowseErrorText(this.ui.photosErrorCode),
+        albumsErrorText: photoBrowseErrorText(this.ui.albumsErrorCode),
+        onSectionChange: (index: number) => this.vm.selectSection(index),
+        onRefresh: () => this.vm.refreshCurrent(),
+        onRetry: () => this.vm.retryCurrent(),
+        onLoadMore: () => this.vm.loadMoreCurrent(),
+        onRetryLoadMore: () => this.vm.retryLoadMoreCurrent(),
+        onPhotoPressed: (photo: PhotoItem, index: number) => this.openPhoto(photo, index),
+        onAlbumPressed: (album: PhotoAlbumItem) => this.openAlbum(album)
       })
+    } else {
+      if (this.routeDestination.usesHdsDestination()) {
+        HdsNavDestination() {
+          Column() {
+            Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+            Stack() {
+              if (this.routeDestination.usesNativeChrome()) {
+                PhotoLibraryContent({
+                  ui: this.ui,
+                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  nativeSurface: true,
+                  horizontalPadding: this.horizontalPadding(),
+                  bottomInset: this.bottomInset(),
+                  tabsController: this.tabsController,
+                  photosScroller: this.photosScroller,
+                  albumsScroller: this.albumsScroller,
+                  photosErrorText: photoBrowseErrorText(this.ui.photosErrorCode),
+                  albumsErrorText: photoBrowseErrorText(this.ui.albumsErrorCode),
+                  onSectionChange: (index: number) => this.vm.selectSection(index),
+                  onRefresh: () => this.vm.refreshCurrent(),
+                  onRetry: () => this.vm.retryCurrent(),
+                  onLoadMore: () => this.vm.loadMoreCurrent(),
+                  onRetryLoadMore: () => this.vm.retryLoadMoreCurrent(),
+                  onPhotoPressed: (photo: PhotoItem, index: number) => this.openPhoto(photo, index),
+                  onAlbumPressed: (album: PhotoAlbumItem) => this.openAlbum(album)
+                })
+              } else {
+                PhotoLibraryContent({
+                  ui: this.ui,
+                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  nativeSurface: false,
+                  horizontalPadding: this.horizontalPadding(),
+                  bottomInset: this.bottomInset(),
+                  tabsController: this.tabsController,
+                  photosScroller: this.photosScroller,
+                  albumsScroller: this.albumsScroller,
+                  photosErrorText: photoBrowseErrorText(this.ui.photosErrorCode),
+                  albumsErrorText: photoBrowseErrorText(this.ui.albumsErrorCode),
+                  onSectionChange: (index: number) => this.vm.selectSection(index),
+                  onRefresh: () => this.vm.refreshCurrent(),
+                  onRetry: () => this.vm.retryCurrent(),
+                  onLoadMore: () => this.vm.loadMoreCurrent(),
+                  onRetryLoadMore: () => this.vm.retryLoadMoreCurrent(),
+                  onPhotoPressed: (photo: PhotoItem, index: number) => this.openPhoto(photo, index),
+                  onAlbumPressed: (album: PhotoAlbumItem) => this.openAlbum(album)
+                })
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .height('100%')
+        }
+        .backgroundColor(this.routeDestination.hdsBackgroundColor())
+        .titleMode(HdsNavDestinationTitleMode.MINI)
+        .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+        .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+        .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+        .hideToolBar(true)
+        .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+        .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+        .onAppear(() => this.routeDestination.helper.onAppear())
+        .onWillShow(() => this.routeDestination.helper.onWillShow())
+        .onShown(() => this.routeDestination.helper.onShown())
+        .onWillHide(() => this.routeDestination.helper.onWillHide())
+        .onHidden(() => this.routeDestination.helper.onHidden())
+        .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+        .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+        .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+        .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+        .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+        .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+        .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+        .ignoreLayoutSafeArea(
+          this.routeDestination.nativeSafeAreaTypes(),
+          this.routeDestination.nativeSafeAreaEdges()
+        )
+        .width('100%')
+        .height('100%')
+      } else {
+        NavDestination() {
+          PhotoLibraryContent({
+            ui: this.ui,
+            currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+            nativeSurface: false,
+            horizontalPadding: this.horizontalPadding(),
+            bottomInset: this.bottomInset(),
+            tabsController: this.tabsController,
+            photosScroller: this.photosScroller,
+            albumsScroller: this.albumsScroller,
+            photosErrorText: photoBrowseErrorText(this.ui.photosErrorCode),
+            albumsErrorText: photoBrowseErrorText(this.ui.albumsErrorCode),
+            onSectionChange: (index: number) => this.vm.selectSection(index),
+            onRefresh: () => this.vm.refreshCurrent(),
+            onRetry: () => this.vm.retryCurrent(),
+            onLoadMore: () => this.vm.loadMoreCurrent(),
+            onRetryLoadMore: () => this.vm.retryLoadMoreCurrent(),
+            onPhotoPressed: (photo: PhotoItem, index: number) => this.openPhoto(photo, index),
+            onAlbumPressed: (album: PhotoAlbumItem) => this.openAlbum(album)
+          })
+        }
+        .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+        .gestureModifier(this.routeDestination.gestureModifier)
+        .width('100%')
+        .height('100%')
+      }
     }
   }
 }

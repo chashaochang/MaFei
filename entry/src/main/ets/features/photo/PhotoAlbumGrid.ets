@@ -1,6 +1,7 @@
 import { ImageKnifeComponent } from '@ohos/imageknifepro'
 import { BreakpointTypeEnum } from '../../utils/BreakpointSystem'
 import { PhotoAlbumItem } from './PhotoModels'
+import { PhotoGridFooter } from './PhotoGridFooter'
 
 @ComponentV2
 export struct PhotoAlbumGrid {
@@ -43,20 +44,6 @@ export struct PhotoAlbumGrid {
     return this.nativeSurface ? $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2')
   }
 
-  @Builder
-  private footer() {
-    if (this.loadingMore) {
-      LoadingProgress().width(22).height(22)
-    } else if (this.loadMoreFailed) {
-      Button($r('app.string.photo_load_more_failed'), { type: ButtonType.Normal })
-        .height(44)
-        .borderRadius(22)
-        .backgroundColor(Color.Transparent)
-        .fontColor(this.textColor(true))
-        .onClick(() => this.onRetryLoadMore())
-    }
-  }
-
   build() {
     Grid(this.scroller) {
       ForEach(this.albums, (album: PhotoAlbumItem) => {
@@ -91,7 +78,12 @@ export struct PhotoAlbumGrid {
 
       if (this.loadingMore || this.loadMoreFailed) {
         GridItem() {
-          this.footer()
+          PhotoGridFooter({
+            loadingMore: this.loadingMore,
+            loadMoreFailed: this.loadMoreFailed,
+            textColor: this.textColor(true),
+            onRetry: () => this.onRetryLoadMore()
+          })
         }
         .columnStart(0)
         .columnEnd(this.columnCount() - 1)

@@ -7,13 +7,82 @@ import { BaseGroupItem, ListGroup } from "../../../component/ListGroup"
 import { RouterConsts } from "../../../common/RouterConsts"
 import { getUIAbilityContext, playMediaRefs } from "../../../common/CommonFunc"
 import { wantConstant } from "@kit.AbilityKit"
-import { AlertDialogV2, AdvancedDialogV2Button } from "@kit.ArkUI"
 import { ActionBar } from "../../../component/ActionBar"
 import { AppThemeSurfaceResolver } from "../../../theme/AppThemeSurfaceResolver"
 import { AppThemeTokens } from "../../../theme/AppThemeTokens"
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy"
 import { MineHistorySection } from "./MineHistorySection"
 import { MineHistoryItem } from "./MineHistoryPlanner"
+import { ThemeStyle } from "../../../entity/ThemeStyle"
+
+@ComponentV2
+struct MineProfileHeader {
+  @Require @Param userAvatar: string
+  @Require @Param userName: string
+  @Require @Param userPolicy: string
+  @Require @Param serverName: string
+  @Require @Param serverVersion: string
+  @Require @Param connectionDescription: string
+  @Require @Param nativeSurface: boolean
+  @Require @Param themeStyle: ThemeStyle
+
+  build() {
+    Row({ space: 12 }) {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.userAvatar,
+          border: { radius: this.nativeSurface ? 24 : 32 },
+          placeholderSrc: $r('app.media.default_avatar')
+        }
+      })
+        .width(this.nativeSurface ? 48 : 64)
+        .height(this.nativeSurface ? 48 : 64)
+      Column({ space: 4 }) {
+        Row({ space: 12 }) {
+          Text(this.userName)
+            .fontColor(AppThemeTokens.isNative(this.themeStyle) ?
+              $r('sys.color.font_primary') : $r('app.color.text_primary'))
+            .fontSize(AppThemeTokens.isNative(this.themeStyle) ? 20 : 24)
+            .fontWeight(FontWeight.Medium)
+          Text(this.userPolicy)
+            .fontColor($r('app.color.color_main'))
+            .fontSize(12)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .backgroundColor(this.nativeSurface ?
+              $r('sys.color.comp_background_tertiary') : $r('app.color.primary_light_hover'))
+            .borderRadius(4)
+        }
+        Text(this.serverName)
+          .fontColor(AppThemeTokens.isNative(this.themeStyle) ?
+            $r('sys.color.font_secondary') : $r('app.color.text_1'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+        if (this.serverVersion.length > 0) {
+          Text(this.serverVersion)
+            .fontColor(this.nativeSurface ? $r('sys.color.font_tertiary') : $r('app.color.text_2'))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+        }
+        if (this.connectionDescription.length > 0) {
+          Text(this.connectionDescription)
+            .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1'))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+            .backgroundColor(this.nativeSurface ?
+              $r('sys.color.comp_background_tertiary') : $r('app.color.bg_hover'))
+            .borderRadius(8)
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+    .borderRadius(AppThemeTokens.profileRadius(this.themeStyle))
+    .backgroundColor(this.nativeSurface ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+  }
+}
 
 @ComponentV2
 export struct MineTab {
@@ -22,6 +91,7 @@ export struct MineTab {
   @Param compactTopInset: boolean = false
   @Param destinationOwnsTitleBar: boolean = false
   @Param contentScroller: Scroller = new Scroller()
+  @Event onAdministratorStateChange: (available: boolean) => void = (_available: boolean) => {}
   @Local ui: MineUIState = new MineUIState(this.getUIContext())
   @Local vm: MineViewModel = new MineViewModel(this.ui)
 
@@ -52,110 +122,9 @@ export struct MineTab {
     this.vm.refreshHistory()
   }
 
-  @Builder
-  private profileHeaderContent() {
-    Row({ space: 12 }) {
-      ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: this.ui.userAvatar,
-          border: { radius: this.useNativeSurface() ? 24 : 32 },
-          placeholderSrc: $r('app.media.default_avatar')
-        }
-      }).width(this.useNativeSurface() ? 48 : 64).height(this.useNativeSurface() ? 48 : 64)
-      Column({ space: 4 }) {
-        Row({ space: 12 }) {
-          Text(this.ui.userName)
-            .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-              $r('sys.color.font_primary') : $r('app.color.text_primary'))
-            .fontSize(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 20 : 24)
-            .fontWeight(FontWeight.Medium)
-          Text(this.ui.userPolicy)
-            .fontColor($r('app.color.color_main'))
-            .fontSize(12)
-            .padding({
-              left: 6,
-              right: 6,
-              top: 2,
-              bottom: 2
-            })
-            .backgroundColor(this.useNativeSurface() ?
-              $r('sys.color.comp_background_tertiary') : $r('app.color.primary_light_hover'))
-            .borderRadius(4)
-        }
-
-        Text(this.ui.serverName)
-          .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-            $r('sys.color.font_secondary') : $r('app.color.text_1'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-        if (this.ui.serverVersion.length > 0) {
-          Text(this.ui.serverVersion)
-            .fontColor(this.useNativeSurface() ?
-              $r('sys.color.font_tertiary') : $r('app.color.text_2'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-        }
-        if (this.ui.connectionDescription.length > 0) {
-          Text(this.ui.connectionDescription)
-            .fontColor(this.useNativeSurface() ?
-              $r('sys.color.font_secondary') : $r('app.color.text_1'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .backgroundColor(this.useNativeSurface() ?
-              $r('sys.color.comp_background_tertiary') : $r('app.color.bg_hover'))
-            .borderRadius(8)
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .padding({
-      left: 16,
-      right: 16,
-      top: 14,
-      bottom: 14
-    })
-  }
-
-  @Builder
-  private nativeProfileHeader() {
-    Column() {
-      this.profileHeaderContent()
-    }
-    .width('100%')
-    .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuProfileHeader() {
-    Column() {
-      this.profileHeaderContent()
-    }
-    .width('100%')
-    .borderRadius(AppThemeTokens.profileRadius(this.vm.appUIState.themeStyle))
-    .backgroundColor($r('app.color.bg_1'))
-  }
-
-  @Builder
-  private profileHeader() {
-    if (this.useNativeSurface()) {
-      this.nativeProfileHeader()
-    } else {
-      this.feiniuProfileHeader()
-    }
-  }
-
-  @Builder
-  private feiniuTopHeaderBackground() {
-    Image($r('app.media.bg_mine'))
-      .width('100%')
-      .aspectRatio(780 / 556)
-      .backgroundColor($r('app.color.bg_main'))
-      .visibility(this.vm.appUIState.currentBreakpoint.includes('sm') &&
-        AppThemeTokens.showMineBackground(this.vm.appUIState.themeStyle) ?
-        Visibility.Visible : Visibility.None)
+  @Monitor('ui.isAdministrator', 'ui.managementAvailable')
+  onManagementAvailabilityChange(): void {
+    this.onAdministratorStateChange(this.ui.isAdministrator && this.ui.managementAvailable)
   }
 
   build() {
@@ -169,7 +138,16 @@ export struct MineTab {
       Scroll(this.contentScroller) {
         Column({ space: AppThemeTokens.groupSpacing(this.vm.appUIState.themeStyle) }) {
           Blank().height(this.topSpacerHeight())
-          this.profileHeader()
+          MineProfileHeader({
+            userAvatar: this.ui.userAvatar,
+            userName: this.ui.userName,
+            userPolicy: this.ui.userPolicy,
+            serverName: this.ui.serverName,
+            serverVersion: this.ui.serverVersion,
+            connectionDescription: this.ui.connectionDescription,
+            nativeSurface: this.useNativeSurface(),
+            themeStyle: this.vm.appUIState.themeStyle
+          })
 
           if (this.ui.managementAvailable && this.ui.isAdministrator) {
             ListGroup({
@@ -294,7 +272,13 @@ export struct MineTab {
       if (!this.compactTopInset && !this.destinationOwnsTitleBar) {
         if (!this.useNativeSurface()) {
           Stack() {
-            this.feiniuTopHeaderBackground()
+            Image($r('app.media.bg_mine'))
+              .width('100%')
+              .aspectRatio(780 / 556)
+              .backgroundColor($r('app.color.bg_main'))
+              .visibility(this.vm.appUIState.currentBreakpoint.includes('sm') &&
+                AppThemeTokens.showMineBackground(this.vm.appUIState.themeStyle) ?
+                Visibility.Visible : Visibility.None)
           }
           .width('100%')
           .align(Alignment.Top)
@@ -336,17 +320,4 @@ export struct MineTab {
     .alignContent(Alignment.Top)
   }
 
-  @Builder
-  dialogBuilder(): void {
-    AlertDialogV2({
-      primaryTitle: '提示',
-      content: 'QQ群:991893385',
-      primaryButton: new AdvancedDialogV2Button({
-        content: '确认',
-        action: () => {
-
-        },
-      })
-    })
-  }
 }

@@ -1,7 +1,8 @@
 import { HMRouter } from "@hadss/hmrouter"
 import { RouterConsts } from "../../../common/RouterConsts"
 import { MineTab } from "./MineTab"
-import { AppRouteDestination } from "../../../component/AppRouteDestination"
+import { AppRouteDestination, AppRouteDestinationOptions } from "../../../component/AppRouteDestination"
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
 @HMRouter({
   pageUrl: RouterConsts.MinePage,
@@ -9,31 +10,74 @@ import { AppRouteDestination } from "../../../component/AppRouteDestination"
 })
 @ComponentV2
 export struct MinePage {
-  @Builder
-  private nativePageContent() {
-    MineTab({
-      fromHome: true,
-      destinationOwnsTitleBar: true
-    })
-  }
-
-  @Builder
-  private legacyPageContent() {
-    MineTab({
-      fromHome: true,
-      destinationOwnsTitleBar: false
-    })
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: '我的'
+      }
   }
 
   build() {
-    AppRouteDestination({
-      title: '我的',
-      contentBuilder: () => {
-        this.nativePageContent()
-      },
-      legacyContentBuilder: () => {
-        this.legacyPageContent()
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              MineTab({
+                fromHome: true,
+                destinationOwnsTitleBar: true
+              })
+            } else {
+              MineTab({
+                fromHome: true,
+                destinationOwnsTitleBar: false
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        MineTab({
+          fromHome: true,
+          destinationOwnsTitleBar: false
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

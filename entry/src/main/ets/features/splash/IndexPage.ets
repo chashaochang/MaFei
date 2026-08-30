@@ -15,7 +15,7 @@ import { getSystemApi } from "sdk/src/main/ets/utils/api/system-api";
 import { ApiClient } from "../../network/ApiClient";
 import { emitter } from "@kit.BasicServicesKit";
 import { MediaLibraryRefreshEvent, TokenExpiredEvent } from "../../events/Events";
-import { AppRouteDestination } from "../../component/AppRouteDestination";
+import { AppRouteDestination, AppRouteDestinationOptions } from "../../component/AppRouteDestination";
 import { ManagementLibraryRepository } from "../management/library/ManagementLibraryRepository";
 import { ManagementLibraryOperationResult } from "../management/library/ManagementLibraryModels";
 import { MusicHomeLifecycle } from "../music/MusicHostLifecycle";
@@ -29,6 +29,7 @@ import {
   AppThemeMaterialRole,
   AppThemeSurfaceResolver
 } from '../../theme/AppThemeSurfaceResolver';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
@@ -38,6 +39,7 @@ import {
 })
 @ComponentV2
 export struct IndexPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   apiClientController: ApiClientController = new ApiClientController()
   private readonly homeScroller: Scroller = new Scroller()
@@ -252,60 +254,6 @@ export struct IndexPage {
     )
   }
 
-  @Builder
-  private feiniuRestoreErrorContent() {
-    Column({ space: 14 }) {
-      Image($r('app.media.feiniu_video_logo'))
-        .width(88)
-        .height(88)
-        .objectFit(ImageFit.Contain)
-      Text($r('app.string.feiniu_video_restore_failed_title'))
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.useNativeSurface() ?
-          $r('sys.color.font_primary') : $r('app.color.text_primary'))
-      Text($r('app.string.feiniu_video_restore_connection_error'))
-        .fontSize(14)
-        .fontColor(this.useNativeSurface() ?
-          $r('sys.color.font_secondary') : $r('app.color.text_2'))
-        .textAlign(TextAlign.Center)
-        .margin({ left: 28, right: 28 })
-      Button($r('app.string.common_retry'))
-        .width(220)
-        .height(48)
-        .fontColor(Color.White)
-        .backgroundColor($r('app.color.color_main'))
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.PrimaryInteractive,
-          this.useNativeSurface(),
-          this.appUIState.systemMaterialAvailable
-        ))
-        .onClick((): void => {
-          this.restoreSelectedAccount().catch((): void => {
-            this.appUIState.isConnecting = false
-          })
-        })
-      Button($r('app.string.account_choose_other'))
-        .width(220)
-        .height(44)
-        .backgroundColor(Color.Transparent)
-        .fontColor(this.useNativeSurface() ?
-          $r('sys.color.font_primary') : $r('app.color.text_primary'))
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl,
-          this.useNativeSurface(),
-          this.appUIState.systemMaterialAvailable
-        ))
-        .onClick((): void => {
-          HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
-        })
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(this.useNativeSurface() ?
-      $r('app.color.native_canvas_background') : $r('app.color.bg_main'))
-  }
 
   private rootNavigationHeroChromeVisible(): boolean {
     return this.appUIState.rootNavigationHomeActionsVisible &&
@@ -417,62 +365,325 @@ export struct IndexPage {
     ]
   }
 
-  @Builder
-  private pageContent() {
-    Stack() {
-      if (this.appUIState.isLogin) {
-        HomeScreen({
-          homeScroller: this.homeScroller,
-          chasingScroller: this.chasingScroller,
-          favoriteScroller: this.favoriteScroller,
-          mediaScroller: this.mediaScroller,
-          mineScroller: this.mineScroller
-        })
-      } else if (this.feiniuRestoreConnectionError) {
-        this.feiniuRestoreErrorContent()
-      } else {
-        ConnectScreen()
-        ConnectingScreen({
-          onLogoutClick: () => {
-            this.cancelConnection().catch((): void => {
-              this.appUIState.isConnecting = false
-            })
-          }
-        })
-          .visibility(this.appUIState.isConnecting ? Visibility.Visible : Visibility.Hidden)
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.animation({ duration: 0 }),
 
-            // 弹性缩小到中心点
-            TransitionEffect.scale({ x: 0, y: 0 })
-              .animation({
-                duration: 600,
-                curve: Curve.Linear
-              })
-              .combine(TransitionEffect.OPACITY
-                .animation({ duration: 400, delay: 100 }))
-          ))
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: this.appUIState.rootNavigationTitle,
+        titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,
+        backButtonVisible: false,
+        contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible,
+        heroTitleChrome: this.rootNavigationHeroChromeVisible(),
+        titleMaterialFollowsSystem: true,
+        ownsRootNavigationChrome: true,
+        menus: this.rootNavigationMenus(),
+        scrollControllers: this.rootNavigationScrollControllers()
       }
-    }.width('100%').height('100%')
   }
 
   build() {
-    AppRouteDestination({
-      title: this.appUIState.rootNavigationTitle,
-      titleBarVisible: this.appUIState.isLogin && this.appUIState.rootNavigationTitleBarVisible,
-      backButtonVisible: false,
-      contentExtendsUnderTitleBar: this.appUIState.rootNavigationTitleBarVisible,
-      heroTitleChrome: this.rootNavigationHeroChromeVisible(),
-      titleMaterialFollowsSystem: true,
-      ownsRootNavigationChrome: true,
-      menus: this.rootNavigationMenus(),
-      scrollControllers: this.rootNavigationScrollControllers(),
-      contentBuilder: () => {
-        this.pageContent()
-      },
-      legacyContentBuilder: () => {
-        this.pageContent()
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              Stack() {
+                if (this.appUIState.isLogin) {
+                  HomeScreen({
+                    homeScroller: this.homeScroller,
+                    chasingScroller: this.chasingScroller,
+                    favoriteScroller: this.favoriteScroller,
+                    mediaScroller: this.mediaScroller,
+                    mineScroller: this.mineScroller
+                  })
+                } else if (this.feiniuRestoreConnectionError) {
+                  Column({ space: 14 }) {
+                    Image($r('app.media.feiniu_video_logo'))
+                      .width(88)
+                      .height(88)
+                      .objectFit(ImageFit.Contain)
+                    Text($r('app.string.feiniu_video_restore_failed_title'))
+                      .fontSize(20)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                    Text($r('app.string.feiniu_video_restore_connection_error'))
+                      .fontSize(14)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_secondary') : $r('app.color.text_2'))
+                      .textAlign(TextAlign.Center)
+                      .margin({ left: 28, right: 28 })
+                    Button($r('app.string.common_retry'))
+                      .width(220)
+                      .height(48)
+                      .fontColor(Color.White)
+                      .backgroundColor($r('app.color.color_main'))
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.PrimaryInteractive,
+                        this.useNativeSurface(),
+                        this.appUIState.systemMaterialAvailable
+                      ))
+                      .onClick((): void => {
+                        this.restoreSelectedAccount().catch((): void => {
+                          this.appUIState.isConnecting = false
+                        })
+                      })
+                    Button($r('app.string.account_choose_other'))
+                      .width(220)
+                      .height(44)
+                      .backgroundColor(Color.Transparent)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.AdaptiveControl,
+                        this.useNativeSurface(),
+                        this.appUIState.systemMaterialAvailable
+                      ))
+                      .onClick((): void => {
+                        HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                      })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .justifyContent(FlexAlign.Center)
+                  .backgroundColor(this.useNativeSurface() ?
+                    $r('app.color.native_canvas_background') : $r('app.color.bg_main'))
+                } else {
+                  ConnectScreen()
+                  ConnectingScreen({
+                    onLogoutClick: () => {
+                      this.cancelConnection().catch((): void => {
+                        this.appUIState.isConnecting = false
+                      })
+                    }
+                  })
+                    .visibility(this.appUIState.isConnecting ? Visibility.Visible : Visibility.Hidden)
+                    .transition(TransitionEffect.asymmetric(
+                      TransitionEffect.OPACITY.animation({ duration: 0 }),
+
+                      // 弹性缩小到中心点
+                      TransitionEffect.scale({ x: 0, y: 0 })
+                        .animation({
+                          duration: 600,
+                          curve: Curve.Linear
+                        })
+                        .combine(TransitionEffect.OPACITY
+                          .animation({ duration: 400, delay: 100 }))
+                    ))
+                }
+              }.width('100%').height('100%')
+            } else {
+              Stack() {
+                if (this.appUIState.isLogin) {
+                  HomeScreen({
+                    homeScroller: this.homeScroller,
+                    chasingScroller: this.chasingScroller,
+                    favoriteScroller: this.favoriteScroller,
+                    mediaScroller: this.mediaScroller,
+                    mineScroller: this.mineScroller
+                  })
+                } else if (this.feiniuRestoreConnectionError) {
+                  Column({ space: 14 }) {
+                    Image($r('app.media.feiniu_video_logo'))
+                      .width(88)
+                      .height(88)
+                      .objectFit(ImageFit.Contain)
+                    Text($r('app.string.feiniu_video_restore_failed_title'))
+                      .fontSize(20)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                    Text($r('app.string.feiniu_video_restore_connection_error'))
+                      .fontSize(14)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_secondary') : $r('app.color.text_2'))
+                      .textAlign(TextAlign.Center)
+                      .margin({ left: 28, right: 28 })
+                    Button($r('app.string.common_retry'))
+                      .width(220)
+                      .height(48)
+                      .fontColor(Color.White)
+                      .backgroundColor($r('app.color.color_main'))
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.PrimaryInteractive,
+                        this.useNativeSurface(),
+                        this.appUIState.systemMaterialAvailable
+                      ))
+                      .onClick((): void => {
+                        this.restoreSelectedAccount().catch((): void => {
+                          this.appUIState.isConnecting = false
+                        })
+                      })
+                    Button($r('app.string.account_choose_other'))
+                      .width(220)
+                      .height(44)
+                      .backgroundColor(Color.Transparent)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.AdaptiveControl,
+                        this.useNativeSurface(),
+                        this.appUIState.systemMaterialAvailable
+                      ))
+                      .onClick((): void => {
+                        HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                      })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .justifyContent(FlexAlign.Center)
+                  .backgroundColor(this.useNativeSurface() ?
+                    $r('app.color.native_canvas_background') : $r('app.color.bg_main'))
+                } else {
+                  ConnectScreen()
+                  ConnectingScreen({
+                    onLogoutClick: () => {
+                      this.cancelConnection().catch((): void => {
+                        this.appUIState.isConnecting = false
+                      })
+                    }
+                  })
+                    .visibility(this.appUIState.isConnecting ? Visibility.Visible : Visibility.Hidden)
+                    .transition(TransitionEffect.asymmetric(
+                      TransitionEffect.OPACITY.animation({ duration: 0 }),
+
+                      // 弹性缩小到中心点
+                      TransitionEffect.scale({ x: 0, y: 0 })
+                        .animation({
+                          duration: 600,
+                          curve: Curve.Linear
+                        })
+                        .combine(TransitionEffect.OPACITY
+                          .animation({ duration: 400, delay: 100 }))
+                    ))
+                }
+              }.width('100%').height('100%')
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        Stack() {
+          if (this.appUIState.isLogin) {
+            HomeScreen({
+              homeScroller: this.homeScroller,
+              chasingScroller: this.chasingScroller,
+              favoriteScroller: this.favoriteScroller,
+              mediaScroller: this.mediaScroller,
+              mineScroller: this.mineScroller
+            })
+          } else if (this.feiniuRestoreConnectionError) {
+            Column({ space: 14 }) {
+              Image($r('app.media.feiniu_video_logo'))
+                .width(88)
+                .height(88)
+                .objectFit(ImageFit.Contain)
+              Text($r('app.string.feiniu_video_restore_failed_title'))
+                .fontSize(20)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.useNativeSurface() ?
+                  $r('sys.color.font_primary') : $r('app.color.text_primary'))
+              Text($r('app.string.feiniu_video_restore_connection_error'))
+                .fontSize(14)
+                .fontColor(this.useNativeSurface() ?
+                  $r('sys.color.font_secondary') : $r('app.color.text_2'))
+                .textAlign(TextAlign.Center)
+                .margin({ left: 28, right: 28 })
+              Button($r('app.string.common_retry'))
+                .width(220)
+                .height(48)
+                .fontColor(Color.White)
+                .backgroundColor($r('app.color.color_main'))
+                .attributeModifier(AppThemeSurfaceResolver.modifier(
+                  AppThemeMaterialRole.PrimaryInteractive,
+                  this.useNativeSurface(),
+                  this.appUIState.systemMaterialAvailable
+                ))
+                .onClick((): void => {
+                  this.restoreSelectedAccount().catch((): void => {
+                    this.appUIState.isConnecting = false
+                  })
+                })
+              Button($r('app.string.account_choose_other'))
+                .width(220)
+                .height(44)
+                .backgroundColor(Color.Transparent)
+                .fontColor(this.useNativeSurface() ?
+                  $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                .attributeModifier(AppThemeSurfaceResolver.modifier(
+                  AppThemeMaterialRole.AdaptiveControl,
+                  this.useNativeSurface(),
+                  this.appUIState.systemMaterialAvailable
+                ))
+                .onClick((): void => {
+                  HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                })
+            }
+            .width('100%')
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor(this.useNativeSurface() ?
+              $r('app.color.native_canvas_background') : $r('app.color.bg_main'))
+          } else {
+            ConnectScreen()
+            ConnectingScreen({
+              onLogoutClick: () => {
+                this.cancelConnection().catch((): void => {
+                  this.appUIState.isConnecting = false
+                })
+              }
+            })
+              .visibility(this.appUIState.isConnecting ? Visibility.Visible : Visibility.Hidden)
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 0 }),
+
+                // 弹性缩小到中心点
+                TransitionEffect.scale({ x: 0, y: 0 })
+                  .animation({
+                    duration: 600,
+                    curve: Curve.Linear
+                  })
+                  .combine(TransitionEffect.OPACITY
+                    .animation({ duration: 400, delay: 100 }))
+              ))
+          }
+        }.width('100%').height('100%')
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

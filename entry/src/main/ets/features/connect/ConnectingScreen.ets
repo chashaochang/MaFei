@@ -38,107 +38,35 @@ export struct ConnectingScreen {
         this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
-  @Builder
-  private connectingContent() {
-    Blank().layoutWeight(1.5)
-    Text('正在连接...')
-      .fontColor(this.primaryTextColor())
-      .fontSize(20)
-    Blank().layoutWeight(1.5)
-    Image($r('app.media.nas'))
-      .height(160)
-    Blank().layoutWeight(0.5)
-    Canvas(this.canvasRenderingContext)
-      .width(160)
-      .height(90)
-      .onReady(() => {
-        if (this.animateItem != null) {
-          this.animateItem?.resize();
-        } else {
-          this.canvasRenderingContext.imageSmoothingEnabled = true;
-          this.canvasRenderingContext.imageSmoothingQuality = 'medium';
-          this.loadAnimation();
-        }
-      })
-    Blank().layoutWeight(1.5)
-    Text('退出登录')
-      .fontColor(this.secondaryTextColor())
-      .fontSize(16)
-      .padding(20)
-      .onClick(() => {
-        this.onLogoutClick()
-      })
-    Blank().layoutWeight(0.5)
-  }
-
-  @Builder
-  private nativeConnectingContent() {
-    Column({ space: 12 }) {
-      Blank().layoutWeight(1)
-      Stack() {
-        SymbolGlyph($r('sys.symbol.externaldrive'))
-          .fontSize(42)
-          .fontColor([$r('sys.color.icon_primary')])
-      }
-      .width(88)
-      .height(88)
-      .borderRadius(44)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.Floating,
-        this.useNativeSurface(),
-        this.appUIState.systemMaterialAvailable
-      ))
-      LoadingProgress()
-        .width(28)
-        .height(28)
-        .margin({ top: 8 })
-      Text('正在连接服务器')
-        .fontColor(this.primaryTextColor())
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-      Text('正在验证服务器状态和账号信息')
-        .fontColor(this.secondaryTextColor())
-        .fontSize(14)
-      Blank().layoutWeight(1)
-      Button({ type: ButtonType.Capsule, stateEffect: true }) {
-        Text('退出登录')
-          .fontColor(this.primaryTextColor())
-          .fontSize(14)
-      }
-      .height(44)
-      .padding({ left: 24, right: 24 })
-      .backgroundColor(Color.Transparent)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveControl,
-        this.useNativeSurface(),
-        this.appUIState.systemMaterialAvailable
-      ))
-      .onClick(() => {
-        this.onLogoutClick()
-      })
-      .margin({ bottom: 32 })
+  private handleCanvasReady(): void {
+    if (this.animateItem != null) {
+      this.animateItem.resize()
+      return
     }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  private feiniuConnectingContent() {
-    Column() {
-      this.connectingContent()
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundImage($r('app.media.bg_zhezhao'))
-    .backgroundImageSize(ImageSize.Cover)
+    this.canvasRenderingContext.imageSmoothingEnabled = true
+    this.canvasRenderingContext.imageSmoothingQuality = 'medium'
+    this.loadAnimation()
   }
 
   build() {
     Stack() {
       if (this.useNativeSurface()) {
-        this.nativeConnectingContent()
+        NativeConnectingContent({
+          systemMaterialAvailable: this.appUIState.systemMaterialAvailable,
+          primaryTextColor: this.primaryTextColor(),
+          secondaryTextColor: this.secondaryTextColor(),
+          onLogout: this.onLogoutClick
+        })
       } else {
-        this.feiniuConnectingContent()
+        LegacyConnectingContent({
+          canvasContext: this.canvasRenderingContext,
+          primaryTextColor: this.primaryTextColor(),
+          secondaryTextColor: this.secondaryTextColor(),
+          onCanvasReady: (): void => {
+            this.handleCanvasReady()
+          },
+          onLogout: this.onLogoutClick
+        })
       }
     }.width('100%')
     .height('100%')
@@ -166,5 +94,104 @@ export struct ConnectingScreen {
     this.animateItem?.removeEventListener('DOMLoaded');
     lottie.destroy(this.animateName);
     this.animateItem = null;
+  }
+}
+
+@ComponentV2
+struct NativeConnectingContent {
+  @Param systemMaterialAvailable: boolean = false
+  @Require @Param primaryTextColor: ResourceColor
+  @Require @Param secondaryTextColor: ResourceColor
+  @Event onLogout: () => void = () => {}
+
+  build() {
+    Column({ space: 12 }) {
+      Blank().layoutWeight(1)
+      Stack() {
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(42)
+          .fontColor([$r('sys.color.icon_primary')])
+      }
+      .width(88)
+      .height(88)
+      .borderRadius(44)
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.Floating,
+        true,
+        this.systemMaterialAvailable
+      ))
+      LoadingProgress()
+        .width(28)
+        .height(28)
+        .margin({ top: 8 })
+      Text('正在连接服务器')
+        .fontColor(this.primaryTextColor)
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+      Text('正在验证服务器状态和账号信息')
+        .fontColor(this.secondaryTextColor)
+        .fontSize(14)
+      Blank().layoutWeight(1)
+      Button({ type: ButtonType.Capsule, stateEffect: true }) {
+        Text('退出登录')
+          .fontColor(this.primaryTextColor)
+          .fontSize(14)
+      }
+      .height(44)
+      .padding({ left: 24, right: 24 })
+      .backgroundColor(Color.Transparent)
+      .attributeModifier(AppThemeSurfaceResolver.modifier(
+        AppThemeMaterialRole.AdaptiveControl,
+        true,
+        this.systemMaterialAvailable
+      ))
+      .onClick((): void => {
+        this.onLogout()
+      })
+      .margin({ bottom: 32 })
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
+
+@ComponentV2
+struct LegacyConnectingContent {
+  @Require @Param canvasContext: CanvasRenderingContext2D
+  @Require @Param primaryTextColor: ResourceColor
+  @Require @Param secondaryTextColor: ResourceColor
+  @Event onCanvasReady: () => void = () => {}
+  @Event onLogout: () => void = () => {}
+
+  build() {
+    Column() {
+      Blank().layoutWeight(1.5)
+      Text('正在连接...')
+        .fontColor(this.primaryTextColor)
+        .fontSize(20)
+      Blank().layoutWeight(1.5)
+      Image($r('app.media.nas'))
+        .height(160)
+      Blank().layoutWeight(0.5)
+      Canvas(this.canvasContext)
+        .width(160)
+        .height(90)
+        .onReady((): void => {
+          this.onCanvasReady()
+        })
+      Blank().layoutWeight(1.5)
+      Text('退出登录')
+        .fontColor(this.secondaryTextColor)
+        .fontSize(16)
+        .padding(20)
+        .onClick((): void => {
+          this.onLogout()
+        })
+      Blank().layoutWeight(0.5)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundImage($r('app.media.bg_zhezhao'))
+    .backgroundImageSize(ImageSize.Cover)
   }
 }

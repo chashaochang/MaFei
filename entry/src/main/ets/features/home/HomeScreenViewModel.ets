@@ -44,10 +44,22 @@ export class HomeScreenViewModel extends BaseViewModel<HomeScreenUIState> {
     } finally {
       if (requestVersion === this.initVersion) {
         this.ui.isLoading = false
-        this.ui.lastSelectedMediaIndex = this.datasource.getFirstMediaItemIndex()
+        const firstMediaIndex = this.datasource.getFirstMediaItemIndex()
+        if (!this.isMediaItemIndex(this.ui.lastSelectedMediaIndex)) {
+          this.ui.lastSelectedMediaIndex = firstMediaIndex
+        }
+        if (!this.isMediaItemIndex(this.ui.selectedMediaDataSourceIndex)) {
+          this.ui.selectedMediaDataSourceIndex = -1
+        }
         this.ui.padMenuDataVersion++
       }
     }
+  }
+
+  private isMediaItemIndex(index: number): boolean {
+    return index >= 0 && index < this.datasource.totalCount() &&
+      this.datasource.getData(index).type === PadMenuType.ITEM &&
+      this.datasource.getData(index).extra !== undefined
   }
 
   private isCurrentRequest(catalog: MediaCatalogProvider, requestVersion: number): boolean {

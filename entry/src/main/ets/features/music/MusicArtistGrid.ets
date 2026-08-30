@@ -2,6 +2,7 @@ import { ImageKnifeComponent } from '@ohos/imageknifepro'
 import { BreakpointTypeEnum } from '../../utils/BreakpointSystem'
 import { musicBrowseErrorText } from './MusicErrorText'
 import { MusicArtist, MusicBrowseErrorCode } from './MusicModels'
+import { MusicGridFooter } from './MusicGridFooter'
 
 @ComponentV2
 export struct MusicArtistGrid {
@@ -42,26 +43,6 @@ export struct MusicArtistGrid {
     return secondary ? $r('app.color.text_1') : $r('app.color.text_primary')
   }
 
-  @Builder
-  private footer() {
-    if (this.loadingMore) {
-      LoadingProgress().width(22).height(22)
-    } else if (this.loadMoreFailed) {
-      Column({ space: 6 }) {
-        Text(musicBrowseErrorText(this.loadMoreErrorCode))
-          .fontSize(12)
-          .fontColor(this.textColor(true))
-        Button($r('app.string.music_retry'), { type: ButtonType.Normal })
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor(Color.Transparent)
-          .fontColor(this.textColor(true))
-          .onClick(() => this.onRetryLoadMore())
-      }
-      .padding({ top: 8, bottom: 8 })
-    }
-  }
-
   build() {
     Grid(this.scroller) {
       ForEach(this.artists, (artist: MusicArtist) => {
@@ -96,7 +77,13 @@ export struct MusicArtistGrid {
       }, (artist: MusicArtist) => artist.id)
       if (this.loadingMore || this.loadMoreFailed) {
         GridItem() {
-          this.footer()
+          MusicGridFooter({
+            loadingMore: this.loadingMore,
+            loadMoreFailed: this.loadMoreFailed,
+            errorText: musicBrowseErrorText(this.loadMoreErrorCode),
+            textColor: this.textColor(true),
+            onRetry: () => this.onRetryLoadMore()
+          })
         }
         .columnStart(0)
         .columnEnd(this.columnCount() - 1)

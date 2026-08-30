@@ -10,6 +10,60 @@ import { UIConstants } from '../../../common/UIConstants'
 import { MusicHostVisibilityPolicy } from '../../music/MusicHostVisibilityPolicy'
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 import { NativeThemeConstructionProbe } from '../../../theme/NativeThemeConstructionProbe'
+import { HomeTab } from '../hometab/HomeTab'
+import { FavoriteListPage } from '../../favorite/FavoriteListPage'
+import { MediaTab } from '../mediatab/MediaTab'
+import { MineTab } from '../minetab/MineTab'
+
+@ComponentV2
+struct HomeNativeTabBarItem {
+  @Require @Param title: string
+  @Require @Param targetIndex: number
+  @Require @Param icon: Resource
+  @Require @Param selectedIndex: number
+  @Param systemSymbol: boolean = false
+  @Param badgeCount: number = 0
+
+  build() {
+    Column({ space: 4 }) {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        if (this.systemSymbol) {
+          SymbolGlyph(this.icon)
+            .fontSize(22)
+            .fontColor([this.selectedIndex === this.targetIndex ?
+              $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary')])
+        } else {
+          Image(this.icon)
+            .size({ width: 22, height: 22 })
+            .fillColor(this.selectedIndex === this.targetIndex ?
+              $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary'))
+        }
+        if (this.badgeCount > 0) {
+          Text(this.badgeCount > 99 ? '99+' : this.badgeCount.toString())
+            .fontSize(9)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .height(14)
+            .width(this.badgeCount > 9 ? 22 : 14)
+            .padding({ left: 4, right: 4 })
+            .backgroundColor('#ff4d4f')
+            .borderRadius(7)
+            .translate({ x: 8, y: -5 })
+        }
+      }
+      .width(34)
+      .height(24)
+      .alignContent(Alignment.Center)
+      Text(this.title)
+        .fontSize(11)
+        .fontColor(this.selectedIndex === this.targetIndex ?
+          $r('app.color.native_navigation_accent') : $r('sys.color.font_primary'))
+    }
+    .height('100%')
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+}
 
 @ComponentV2
 export struct HomePhoneNativeTabs {
@@ -17,11 +71,13 @@ export struct HomePhoneNativeTabs {
   @Require @Param safeBottom: number
   @Require @Param compactPlayerChrome: boolean
   @Require @Param homeContentScroller: Scroller
+  @Require @Param favoriteContentScroller: Scroller
+  @Require @Param mediaContentScroller: Scroller
+  @Require @Param mineContentScroller: Scroller
+  @Require @Param contentTopInset: number
+  @Require @Param contentBottomInset: number
   @Require @Param onSelectedIndexChange: (index: number) => void
-  @BuilderParam homeContentBuilder: () => void
-  @BuilderParam favoriteContentBuilder: () => void
-  @BuilderParam mediaContentBuilder: () => void
-  @BuilderParam mineContentBuilder: () => void
+  @Require @Param onMediaAdministratorStateChange: (isAdministrator: boolean) => void
   private tabsController: HdsTabsController = this.createTabsController()
   private pendingSelectedIndex: number = -1
 
@@ -119,52 +175,19 @@ export struct HomePhoneNativeTabs {
     return modifier
   }
 
+  // CustomBuilderAdapter: home-phone-tab-bar-item
   @Builder
-  private tabIcon(icon: Resource, targetIndex: number, systemSymbol: boolean) {
-    if (systemSymbol) {
-      SymbolGlyph(icon)
-        .fontSize(22)
-        .fontColor([this.selectedIndex === targetIndex ?
-          $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary')])
-    } else {
-      Image(icon)
-        .size({ width: 22, height: 22 })
-        .fillColor(this.selectedIndex === targetIndex ?
-          $r('app.color.native_navigation_accent') : $r('sys.color.icon_primary'))
-    }
+  private tabBarItem(title: string, targetIndex: number, icon: Resource, systemSymbol: boolean = false) {
+    HomeNativeTabBarItem({
+      title,
+      targetIndex,
+      icon,
+      selectedIndex: this.selectedIndex,
+      systemSymbol
+    })
   }
 
-  @Builder
-  private tabBuilder(title: string, targetIndex: number, icon: Resource,
-    systemSymbol: boolean = false, badgeCount: number = 0) {
-    Column({ space: 4 }) {
-      Stack({ alignContent: Alignment.TopEnd }) {
-        this.tabIcon(icon, targetIndex, systemSymbol)
-        if (badgeCount > 0) {
-          Text(badgeCount > 99 ? '99+' : badgeCount.toString())
-            .fontSize(9)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .height(14)
-            .width(badgeCount > 9 ? 22 : 14)
-            .padding({ left: 4, right: 4 })
-            .backgroundColor('#ff4d4f')
-            .borderRadius(7)
-            .translate({ x: 8, y: -5 })
-        }
-      }
-      .width(34)
-      .height(24)
-      .alignContent(Alignment.Center)
-      Text(title)
-        .fontSize(11)
-        .fontColor(this.selectedIndex === targetIndex ?
-          $r('app.color.native_navigation_accent') : $r('sys.color.font_primary'))
-    }
-    .height('100%')
-    .width('100%')
-    .justifyContent(FlexAlign.Center)
-  }
+
 
   build() {
     Stack({ alignContent: Alignment.BottomStart }) {
@@ -174,29 +197,41 @@ export struct HomePhoneNativeTabs {
         controller: this.tabsController
       }) {
       TabContent() {
-        this.homeContentBuilder()
+        HomeTab({
+          active: this.selectedIndex === 0,
+          contentBottomInset: this.contentBottomInset,
+          contentScroller: this.homeContentScroller
+        })
       }
-      .tabBar(this.tabBuilder(
-        '首页', 0, $r('app.media.ic_home_sel')
-      ))
+      .tabBar(this.tabBarItem('首页', 0, $r('app.media.ic_home_sel')))
       TabContent() {
-        this.favoriteContentBuilder()
+        FavoriteListPage({
+          fromHome: true,
+          contentTopInset: this.contentTopInset,
+          contentBottomInset: this.contentBottomInset,
+          contentScroller: this.favoriteContentScroller
+        })
       }
-      .tabBar(this.tabBuilder(
-        '收藏', 2, $r('app.media.ic_favorite_sel')
-      ))
+      .tabBar(this.tabBarItem('收藏', 2, $r('app.media.ic_favorite_sel')))
       TabContent() {
-        this.mediaContentBuilder()
+        MediaTab({
+          contentBottomInset: this.contentBottomInset,
+          rootTitleBarOwned: true,
+          contentScroller: this.mediaContentScroller,
+          onAdministratorStateChange: (isAdministrator: boolean) => {
+            this.onMediaAdministratorStateChange(isAdministrator)
+          }
+        })
       }
-      .tabBar(this.tabBuilder(
-        '媒体库', 3, $r('app.media.ic_media_sel')
-      ))
+      .tabBar(this.tabBarItem('媒体库', 3, $r('app.media.ic_media_sel')))
       TabContent() {
-        this.mineContentBuilder()
+        MineTab({
+          contentBottomInset: this.contentBottomInset,
+          compactTopInset: true,
+          contentScroller: this.mineContentScroller
+        })
       }
-      .tabBar(this.tabBuilder(
-        '我的', 4, $r('sys.symbol.person_fill'), true
-      ))
+      .tabBar(this.tabBarItem('我的', 4, $r('sys.symbol.person_fill'), true))
       }
       .barHeight(UIConstants.BOTTOM_BAR_HEIGHT)
       .barMode(BarMode.Fixed, { nonScrollableLayoutStyle: LayoutStyle.ALWAYS_CENTER })

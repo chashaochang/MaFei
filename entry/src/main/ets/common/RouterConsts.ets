@@ -3,6 +3,7 @@ export class RouterConsts {
   static readonly IndexPage = 'IndexPage'
   static readonly AddGroupPage = 'AddGroupPage';
   static readonly PrivacyPage = 'PrivacyPage';
+  static readonly UserAgreementPage = '/UserAgreement';
   static readonly AboutPage = 'AboutPage';
   static readonly PlayerPage = 'PlayerPage';
   static readonly SeasonDetailPage = 'SeasonDetailPage';

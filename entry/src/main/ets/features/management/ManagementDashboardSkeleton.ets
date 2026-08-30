@@ -1,4 +1,44 @@
-import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
+
+@ComponentV2
+struct ManagementSkeletonLine {
+  @Require @Param lineWidth: Length
+  @Param lineHeight: Length = 12
+  @Require @Param lineColor: ResourceColor
+
+  build() {
+    Row()
+      .width(this.lineWidth)
+      .height(this.lineHeight)
+      .borderRadius(6)
+      .backgroundColor(this.lineColor)
+  }
+}
+
+@ComponentV2
+struct ManagementSkeletonSection {
+  @Require @Param sectionHeight: number
+  @Require @Param cardRadius: number
+  @Require @Param lineColor: ResourceColor
+  @Require @Param sectionColor: ResourceColor
+  @Require @Param shouldClip: boolean
+
+  build() {
+    Column({ space: 12 }) {
+      ManagementSkeletonLine({ lineWidth: '42%', lineHeight: 16, lineColor: this.lineColor })
+      ManagementSkeletonLine({ lineWidth: '100%', lineColor: this.lineColor })
+      ManagementSkeletonLine({ lineWidth: '76%', lineColor: this.lineColor })
+      ManagementSkeletonLine({ lineWidth: '58%', lineColor: this.lineColor })
+    }
+    .width('100%')
+    .height(this.sectionHeight)
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .borderRadius(this.cardRadius)
+    .clip(this.shouldClip)
+    .backgroundColor(this.sectionColor)
+  }
+}
 
 @ComponentV2
 export struct ManagementDashboardSkeleton {
@@ -12,97 +52,102 @@ export struct ManagementDashboardSkeleton {
       $r('sys.color.comp_background_tertiary') : $r('app.color.component_bg')
   }
 
-  @Builder
-  line(width: Length, height: Length = 12) {
-    Row()
-      .width(width)
-      .height(height)
-      .borderRadius(6)
-      .backgroundColor(this.lineColor())
-  }
-
-  @Builder
-  sectionBody() {
-    Column({ space: 12 }) {
-      this.line('42%', 16)
-      this.line('100%')
-      this.line('76%')
-      this.line('58%')
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  section(height: number) {
-    Column() {
-      this.sectionBody()
-    }
-    .width('100%')
-    .height(height)
-    .padding(16)
-    .borderRadius(this.cardRadius)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  feiniuSection(height: number) {
-    Column() {
-      this.sectionBody()
-    }
-    .width('100%')
-    .height(height)
-    .padding(16)
-    .borderRadius(this.cardRadius)
-    .backgroundColor(this.feiniuCardColor)
-  }
-
-  @Builder
-  sectionSurface(height: number) {
-    if (this.useNativeMaterial) {
-      this.section(height)
-    } else {
-      this.feiniuSection(height)
-    }
-  }
-
-  @Builder
-  content() {
-    if (this.isBigScreen) {
-      Row({ space: 12 }) {
-        Column({ space: 12 }) {
-          this.sectionSurface(196)
-          this.sectionSurface(142)
-          this.sectionSurface(174)
-        }
-        .layoutWeight(1.15)
-        Column({ space: 12 }) {
-          this.sectionSurface(174)
-          this.sectionSurface(174)
-        }
-        .layoutWeight(0.85)
-      }
-      .width('100%')
-      .constraintSize({ maxWidth: 1180 })
-      .alignItems(VerticalAlign.Top)
-    } else {
-      Column({ space: 12 }) {
-        this.sectionSurface(196)
-        this.sectionSurface(142)
-        this.sectionSurface(174)
-        this.sectionSurface(174)
-        this.sectionSurface(174)
-      }
-      .width('100%')
-      .constraintSize({ maxWidth: 680 })
-    }
+  private sectionBackground(): ResourceColor {
+    return this.useNativeMaterial ?
+      AppThemeSurfaceResolver.contentGroupBackground() : this.feiniuCardColor
   }
 
   build() {
     Scroll() {
       Row() {
-        this.content()
+        if (this.isBigScreen) {
+          Row({ space: 12 }) {
+            Column({ space: 12 }) {
+              ManagementSkeletonSection({
+                sectionHeight: 196,
+                cardRadius: this.cardRadius,
+                lineColor: this.lineColor(),
+                sectionColor: this.sectionBackground(),
+                shouldClip: this.useNativeMaterial
+              })
+              ManagementSkeletonSection({
+                sectionHeight: 142,
+                cardRadius: this.cardRadius,
+                lineColor: this.lineColor(),
+                sectionColor: this.sectionBackground(),
+                shouldClip: this.useNativeMaterial
+              })
+              ManagementSkeletonSection({
+                sectionHeight: 174,
+                cardRadius: this.cardRadius,
+                lineColor: this.lineColor(),
+                sectionColor: this.sectionBackground(),
+                shouldClip: this.useNativeMaterial
+              })
+            }
+            .layoutWeight(1.15)
+            Column({ space: 12 }) {
+              ManagementSkeletonSection({
+                sectionHeight: 174,
+                cardRadius: this.cardRadius,
+                lineColor: this.lineColor(),
+                sectionColor: this.sectionBackground(),
+                shouldClip: this.useNativeMaterial
+              })
+              ManagementSkeletonSection({
+                sectionHeight: 174,
+                cardRadius: this.cardRadius,
+                lineColor: this.lineColor(),
+                sectionColor: this.sectionBackground(),
+                shouldClip: this.useNativeMaterial
+              })
+            }
+            .layoutWeight(0.85)
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: 1180 })
+          .alignItems(VerticalAlign.Top)
+        } else {
+          Column({ space: 12 }) {
+            ManagementSkeletonSection({
+              sectionHeight: 196,
+              cardRadius: this.cardRadius,
+              lineColor: this.lineColor(),
+              sectionColor: this.sectionBackground(),
+              shouldClip: this.useNativeMaterial
+            })
+            ManagementSkeletonSection({
+              sectionHeight: 142,
+              cardRadius: this.cardRadius,
+              lineColor: this.lineColor(),
+              sectionColor: this.sectionBackground(),
+              shouldClip: this.useNativeMaterial
+            })
+            ManagementSkeletonSection({
+              sectionHeight: 174,
+              cardRadius: this.cardRadius,
+              lineColor: this.lineColor(),
+              sectionColor: this.sectionBackground(),
+              shouldClip: this.useNativeMaterial
+            })
+            ManagementSkeletonSection({
+              sectionHeight: 174,
+              cardRadius: this.cardRadius,
+              lineColor: this.lineColor(),
+              sectionColor: this.sectionBackground(),
+              shouldClip: this.useNativeMaterial
+            })
+            ManagementSkeletonSection({
+              sectionHeight: 174,
+              cardRadius: this.cardRadius,
+              lineColor: this.lineColor(),
+              sectionColor: this.sectionBackground(),
+              shouldClip: this.useNativeMaterial
+            })
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: 680 })
+        }
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)

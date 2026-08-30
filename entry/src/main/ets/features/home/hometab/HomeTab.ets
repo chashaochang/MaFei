@@ -23,17 +23,13 @@ import { MediaLibraryKind } from '../../../media/catalog/MediaCatalogModels'
 import { MediaRef, MediaRefKind } from '../../../media/MediaRef'
 import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
 import { MediaNetworkImage } from '../../../component/MediaNetworkImage'
+import { HomeContentLayoutPolicy } from '../HomeContentLayoutPolicy'
+import { HomeTabletHero } from './HomeTabletHero'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
 const HERO_PROGRESS_START_DELAY: number = 16
 const HOME_HERO_BASE_HEIGHT: number = 430
-const TABLET_HERO_MIN_CARD_HEIGHT: number = 220
-const TABLET_HERO_MD_CARD_HEIGHT: number = 240
-const TABLET_HERO_LARGE_CARD_HEIGHT: number = 260
-const TABLET_HERO_VERTICAL_INSET: number = 12
-const TABLET_HERO_TITLE_HEIGHT: number = 28
-const TABLET_HERO_TITLE_GAP: number = 12
 const HOME_HERO_STRETCH_FACTOR: number = 3
 const HOME_HERO_SPRING_DURATION: number = 250
 const HOME_HERO_REFRESH_THRESHOLD: number = 64
@@ -45,16 +41,118 @@ const HOME_LIBRARY_LIVE_MENU_WIDTH: number = 104
 const HOME_LIBRARY_SEARCH_BUTTON_SIZE: number = 40
 const HOME_LIBRARY_SEARCH_ICON_SIZE: number = 24
 const HOME_LIBRARY_INLINE_HEADER_HEIGHT: number = 64
+const HOME_LIBRARY_SECTION_TOP_GAP: number = 16
+
+@ComponentV2
+struct HomeLatestMediaHeader {
+  @Require @Param tabs: Array<HomeFeedTabItem>
+  @Require @Param selectedId: string
+  @Param nativeSurface: boolean = false
+  @Param fadeRightEdge: boolean = false
+  @Param rightContentPadding: number = 0
+  @Param alignmentOffset: number = 0
+  @Param headerHeight: number = HOME_LIBRARY_INLINE_HEADER_HEIGHT
+  @Param sidePadding: number = 0
+  @Param menuInset: number = 0
+  @Param topPadding: number = 0
+  @Param pinned: boolean = false
+  @Param showPinnedActions: boolean = false
+  @Param hasLiveTv: boolean = false
+  @Param systemMaterialAvailable: boolean = false
+  @Event onSelectedIdChange: (id: string) => void = (_id: string): void => {}
+  @Event onLiveTv: () => void = (): void => {}
+  @Event onSearch: () => void = (): void => {}
+  @Event onAreaChanged: (newValue: Area) => void = (_newValue: Area): void => {}
+
+  build() {
+    Row({ space: 8 }) {
+      HomeLibraryChipSelector({
+        tabs: this.tabs,
+        selectedId: this.selectedId,
+        nativeSurface: this.nativeSurface,
+        fadeRightEdge: this.fadeRightEdge,
+        rightContentPadding: this.rightContentPadding,
+        onSelectedIdChange: this.onSelectedIdChange
+      })
+        .layoutWeight(1)
+        .translate({ y: this.alignmentOffset })
+      if (this.pinned && this.nativeSurface && this.showPinnedActions) {
+        if (this.hasLiveTv) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            Image($r('app.media.iptv'))
+              .width(22)
+              .height(22)
+              .fillColor($r('sys.color.icon_primary'))
+          }
+          .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+          .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+          .buttonStyle(ButtonStyleMode.TEXTUAL)
+          .backgroundColor(Color.Transparent)
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.HomeLibraryChip,
+            this.nativeSurface,
+            this.systemMaterialAvailable))
+          .accessibilityText('直播电视')
+          .onClick(this.onLiveTv)
+        }
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(HOME_LIBRARY_SEARCH_ICON_SIZE)
+            .fontWeight(FontWeight.Regular)
+            .fontColor([$r('sys.color.icon_primary')])
+        }
+        .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+        .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .backgroundColor(Color.Transparent)
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.HomeLibraryChip,
+          this.nativeSurface,
+          this.systemMaterialAvailable))
+        .accessibilityText('搜索')
+        .onClick(this.onSearch)
+      }
+    }
+    .width('100%')
+    .height(this.headerHeight)
+    .padding({
+      left: this.sidePadding,
+      right: this.menuInset,
+      top: this.topPadding
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .zIndex(this.pinned && this.nativeSurface ? 10 : 0)
+    .hitTestBehavior(HitTestMode.Transparent)
+    .onAreaChange((_oldValue: Area, newValue: Area): void => {
+      this.onAreaChanged(newValue)
+    })
+  }
+}
 
 @ComponentV2
 export struct HomeTab {
   @Param active: boolean = true
+  @Param useHomeContentWidth: boolean = false
+  @Param tabletHeroLeadingOverflow: number = 0
+  @Param latestGridColumnCount: number = 0
+  @Param stickyHeaderAnchorY: number = 0
+  @Param stickyHeaderPinnedTopInset: number = -1
   @Param contentBottomInset?: number = undefined
   @Param contentScroller: Scroller = new Scroller()
+  @Event onTabletHeroStateChange: (items: VideoItem[], selectedIndex: number,
+    pagePositions: number[], mainAxisLength: number, verticalOffset: number) => void =
+    (_items: VideoItem[], _selectedIndex: number, _pagePositions: number[], _mainAxisLength: number,
+      _verticalOffset: number): void => {}
   @Local ui: HomeUIState = new HomeUIState(this.getUIContext())
   @Local vm: HomeViewModel = new HomeViewModel(this.ui)
   @Local heroIndex: number = 0
   @Local heroProgress: number = 0
+  @Local tabletHeroSelectedIndex: number = 0
+  @Local tabletHeroPagePositions: number[] = []
+  @Local tabletHeroMainAxisLength: number = 0
+  @Local tabletHeroVisible: boolean = true
+  @Local tabletHeroVerticalOffset: number = 0
   @Local nativeHeroHeight: number = HOME_HERO_BASE_HEIGHT
   @Local nativeHeroScrollState: ScrollState = ScrollState.Idle
   @Local nativeHeroRefreshProgress: number = 0
@@ -149,40 +247,91 @@ export struct HomeTab {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(this.vm.appUIState, this.useHomeContentWidth)
+  }
+
+  private contentWidth(): number {
+    return HomeContentLayoutPolicy.width(this.vm.appUIState, this.useHomeContentWidth)
+  }
+
   private phoneContentTopInset(): number {
     return Math.max(0, this.vm.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
   private showNativeHero(): boolean {
-    return (this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) &&
+    return (this.useNativeSurface() || !this.contentBreakpoint().includes('s')) &&
       this.ui.recommendationList.length > 0
   }
 
   private showNativeHeroSkeleton(): boolean {
-    return this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')
+    return this.useNativeSurface() || !this.contentBreakpoint().includes('s')
   }
 
-  private tabletHeroCardHeight(): number {
-    const targetHeight = this.vm.appUIState.currentBreakpoint === 'md' ?
-      TABLET_HERO_MD_CARD_HEIGHT : TABLET_HERO_LARGE_CARD_HEIGHT
-    const windowHeight = Math.max(0, this.vm.appUIState.deviceHeight)
-    if (windowHeight === 0) {
-      return targetHeight
+  private tabletHeroHeight(): number {
+    return HomeContentLayoutPolicy.tabletHeroHeight(this.vm.appUIState, this.useHomeContentWidth)
+  }
+
+  private updateTabletHeroMotion(selectedIndex: number, index: number, position: number,
+    mainAxisLength: number): void {
+    if (index < 0 || index >= this.ui.recommendationList.length) {
+      return
     }
-    return Math.min(targetHeight, Math.max(TABLET_HERO_MIN_CARD_HEIGHT, windowHeight * 0.32))
+    this.tabletHeroSelectedIndex = selectedIndex
+    this.tabletHeroMainAxisLength = mainAxisLength
+    const nextPositions = this.tabletHeroPagePositions.slice()
+    nextPositions[index] = position
+    this.tabletHeroPagePositions = nextPositions
+    this.publishTabletHeroState()
+  }
+
+  private commitTabletHeroIndex(index: number): void {
+    if (index < 0 || index >= this.ui.recommendationList.length) {
+      return
+    }
+    this.heroIndex = index
+    this.tabletHeroSelectedIndex = index
+    const nextPositions: number[] = []
+    nextPositions[index] = 0
+    if (this.ui.recommendationList.length > 1) {
+      const previousIndex = (index - 1 + this.ui.recommendationList.length) %
+        this.ui.recommendationList.length
+      const nextIndex = (index + 1) % this.ui.recommendationList.length
+      nextPositions[previousIndex] = -1
+      nextPositions[nextIndex] = 1
+    }
+    this.tabletHeroPagePositions = nextPositions
+    this.publishTabletHeroState()
+  }
+
+  private publishTabletHeroState(): void {
+    this.onTabletHeroStateChange(
+      this.ui.recommendationList.slice(),
+      this.tabletHeroSelectedIndex,
+      this.tabletHeroPagePositions.slice(),
+      this.tabletHeroMainAxisLength,
+      this.tabletHeroVerticalOffset
+    )
+  }
+
+  private updateTabletHeroVisibility(): void {
+    if (this.contentBreakpoint().includes('s')) {
+      this.tabletHeroVisible = true
+      this.tabletHeroVerticalOffset = 0
+      this.publishTabletHeroState()
+      return
+    }
+    const yOffset = this.contentScroller.currentOffset().yOffset
+    this.tabletHeroVerticalOffset = Math.max(0, yOffset)
+    this.tabletHeroVisible = yOffset < Math.max(1, this.tabletHeroHeight() - 24)
+    this.publishTabletHeroState()
   }
 
   private heroDisplayHeight(): number {
-    if (this.vm.appUIState.currentBreakpoint.includes('s')) {
+    if (this.contentBreakpoint().includes('s')) {
       return this.nativeHeroHeight
     }
-    return this.tabletHeroCardHeight() + TABLET_HERO_VERTICAL_INSET * 2 +
-      TABLET_HERO_TITLE_HEIGHT + TABLET_HERO_TITLE_GAP
-  }
-
-  private tabletHeroDisplayCount(): number {
-    const breakpointCount = this.vm.appUIState.currentBreakpoint === 'md' ? 1 : 2
-    return Math.max(1, Math.min(breakpointCount, this.ui.recommendationList.length))
+    return this.tabletHeroHeight()
   }
 
   private springBackNativeHero(): void {
@@ -251,22 +400,26 @@ export struct HomeTab {
   }
 
   private latestMediaHeaderSidePadding(): number {
-    return HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
+    return HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2
   }
 
   private latestMediaHeaderTopInset(): number {
-    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+    if (!this.useNativeSurface() || !this.latestChipStripPinned) {
       return 0
     }
-    return this.latestChipStripPinned ? Math.max(0, this.vm.appUIState.safeTop) : 0
+    if (this.stickyHeaderPinnedTopInset >= 0) {
+      return this.stickyHeaderPinnedTopInset
+    }
+    return this.contentBreakpoint().includes('s') ? Math.max(0, this.vm.appUIState.safeTop) : 0
   }
 
   private latestMediaHeaderHeight(): number {
-    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
-      return UIConstants.ACTION_BAR_HEIGHT
+    if (!this.latestChipStripPinned) {
+      const inlineHeight = this.useNativeSurface() && this.contentBreakpoint().includes('s') ?
+        HOME_LIBRARY_INLINE_HEADER_HEIGHT : UIConstants.ACTION_BAR_HEIGHT
+      return inlineHeight + HOME_LIBRARY_SECTION_TOP_GAP
     }
-    return this.latestChipStripPinned ?
-      UIConstants.ACTION_BAR_HEIGHT + this.latestMediaHeaderTopInset() : HOME_LIBRARY_INLINE_HEADER_HEIGHT
+    return UIConstants.ACTION_BAR_HEIGHT + this.latestMediaHeaderTopInset()
   }
 
   private latestMediaHeaderMenuInset(): number {
@@ -279,11 +432,11 @@ export struct HomeTab {
   }
 
   private latestMediaHeaderTopPadding(): number {
-    return this.latestMediaHeaderTopInset()
+    return this.latestChipStripPinned ? this.latestMediaHeaderTopInset() : HOME_LIBRARY_SECTION_TOP_GAP
   }
 
   private latestMediaChipAlignmentOffset(): number {
-    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+    if (!this.useNativeSurface() || !this.contentBreakpoint().includes('s')) {
       return 0
     }
     return this.latestChipStripPinned ?
@@ -346,6 +499,21 @@ export struct HomeTab {
     }
   }
 
+  @Monitor('ui.recommendationList')
+  onRecommendationListChange(): void {
+    if (this.ui.recommendationList.length === 0) {
+      this.heroIndex = 0
+      this.tabletHeroSelectedIndex = 0
+      this.tabletHeroPagePositions = []
+      this.tabletHeroMainAxisLength = 0
+      this.tabletHeroVerticalOffset = 0
+    } else if (this.tabletHeroSelectedIndex >= this.ui.recommendationList.length) {
+      this.commitTabletHeroIndex(0)
+      return
+    }
+    this.publishTabletHeroState()
+  }
+
   aboutToAppear(): void {
     //监听刷新事件
     this.getUIContext().getHostContext()?.eventHub.on(HomeRefreshEvent, () => {
@@ -368,257 +536,752 @@ export struct HomeTab {
   }
 
   private updateLatestMediaHeaderPinned(area: Area): void {
-    if (!this.useNativeSurface() || !this.vm.appUIState.currentBreakpoint.includes('s')) {
+    if (!this.useNativeSurface()) {
       this.latestChipStripMenuReserved = false
       this.updateLatestChipStripPinned(false)
       return
     }
     const globalY = area.globalPosition.y as number
-    this.latestChipStripMenuReserved = globalY <= UIConstants.ACTION_BAR_HEIGHT
-    this.updateLatestChipStripPinned(globalY <= 0)
+    const isPhone = this.contentBreakpoint().includes('s')
+    this.latestChipStripMenuReserved = isPhone &&
+      globalY <= this.stickyHeaderAnchorY + UIConstants.ACTION_BAR_HEIGHT
+    this.updateLatestChipStripPinned(globalY <= this.stickyHeaderAnchorY)
   }
 
+  // CustomBuilderAdapter: home-latest-media-sticky-header
   @Builder
   private latestMediaStickyHeader() {
-    Row({ space: 8 }) {
-      HomeLibraryChipSelector({
-        tabs: this.latestMediaTabs(),
-        selectedId: this.ui.selectedLatestMediaId,
-        nativeSurface: this.useNativeSurface(),
-        fadeRightEdge: this.latestChipStripMenuReserved,
-        rightContentPadding: this.latestChipStripMenuReserved ?
-          HOME_LIBRARY_HEADER_EXTRA_MENU_GAP : 0,
-        onSelectedIdChange: (id: string) => {
-          this.selectLatestMedia(id)
-        }
-      })
-        .layoutWeight(1)
-        .translate({ y: this.latestMediaChipAlignmentOffset() })
-
-      if (this.latestChipStripPinned && this.useNativeSurface()) {
-        if (this.ui.hasLiveTv) {
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            Image($r('app.media.iptv'))
-              .width(22)
-              .height(22)
-              .fillColor($r('sys.color.icon_primary'))
-          }
-          .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
-          .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
-          .buttonStyle(ButtonStyleMode.TEXTUAL)
-          .backgroundColor(Color.Transparent)
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.HomeLibraryChip,
-            this.useNativeSurface(),
-            this.vm.appUIState.systemMaterialAvailable
-          ))
-          .accessibilityText('直播电视')
-          .onClick((): void => {
-            HMRouterMgr.to(RouterConsts.LiveTvPage).push()
-          })
-        }
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(HOME_LIBRARY_SEARCH_ICON_SIZE)
-            .fontWeight(FontWeight.Regular)
-            .fontColor([$r('sys.color.icon_primary')])
-        }
-        .width(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
-        .height(HOME_LIBRARY_SEARCH_BUTTON_SIZE)
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.HomeLibraryChip,
-          this.useNativeSurface(),
-          this.vm.appUIState.systemMaterialAvailable
-        ))
-        .accessibilityText('搜索')
-        .onClick(() => {
-          HMRouterMgr.to(RouterConsts.SearchPage).push()
-        })
-      }
-    }
-    .width('100%')
-    .height(this.latestMediaHeaderHeight())
-    .padding({
-      left: this.latestMediaHeaderSidePadding(),
-      right: this.latestMediaHeaderMenuInset(),
-      top: this.latestMediaHeaderTopPadding()
-    })
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(Color.Transparent)
-    .zIndex(this.latestChipStripPinned && this.useNativeSurface() ? 10 : 0)
-    .hitTestBehavior(HitTestMode.Transparent)
-    .onAreaChange((_oldValue: Area, newValue: Area) => {
-      this.updateLatestMediaHeaderPinned(newValue)
-    })
-  }
-
-  @Builder
-  private homeHeaderContent() {
-    Row({ space: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 8 : 0 }) {
-      Image($r('app.media.app_icon'))
-        .height(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 32 : 40)
-      Text($r('app.string.app_name'))
-        .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-          $r('sys.color.font_primary') : $r('app.color.text_primary'))
-        .fontSize(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 22 : 18)
-        .fontWeight(FontWeight.Bold)
-    }
-
-    Blank()
-    if (this.ui.hasLiveTv) {
-      Image($r('app.media.iptv'))
-        .height(40)
-        .fillColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-          $r('sys.color.icon_primary') : $r('app.color.text_primary'))
-        .padding(9)
-        .onClick(() => {
-          HMRouterMgr.to(RouterConsts.LiveTvPage).push()
-        })
-    }
-    SymbolGlyph($r('sys.symbol.magnifyingglass'))
-      .fontSize(24)
-      .fontWeight(FontWeight.Medium)
-      .align(Alignment.Center)
-      .height(40)
-      .fontColor([AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
-        $r('sys.color.icon_primary') : $r('app.color.text_primary')])
-      .onClick(() => {
+    HomeLatestMediaHeader({
+      tabs: this.latestMediaTabs(),
+      selectedId: this.ui.selectedLatestMediaId,
+      nativeSurface: this.useNativeSurface(),
+      fadeRightEdge: this.latestChipStripMenuReserved,
+      rightContentPadding: this.latestChipStripMenuReserved ?
+        HOME_LIBRARY_HEADER_EXTRA_MENU_GAP : 0,
+      alignmentOffset: this.latestMediaChipAlignmentOffset(),
+      headerHeight: this.latestMediaHeaderHeight(),
+      sidePadding: this.latestMediaHeaderSidePadding(),
+      menuInset: this.latestMediaHeaderMenuInset(),
+      topPadding: this.latestMediaHeaderTopPadding(),
+      pinned: this.latestChipStripPinned,
+      showPinnedActions: this.contentBreakpoint().includes('s'),
+      hasLiveTv: this.ui.hasLiveTv,
+      systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+      onSelectedIdChange: (id: string): void => this.selectLatestMedia(id),
+      onLiveTv: (): void => {
+        HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+      },
+      onSearch: (): void => {
         HMRouterMgr.to(RouterConsts.SearchPage).push()
-      })
-  }
-
-  @Builder
-  private feiniuHomeHeader() {
-    Row({ space: 12 }) {
-      this.homeHeaderContent()
-    }
-    .width('100%')
-    .height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-    .padding({
-      left: 8,
-      right: 16,
-      top: this.vm.appUIState.safeTop
+      },
+      onAreaChanged: (newValue: Area): void => {
+        this.updateLatestMediaHeaderPinned(newValue)
+      }
     })
   }
 
-  @Builder
-  private homeContentList(nativeHeroStretch: boolean) {
-    List({ scroller: this.contentScroller }) {
-        if (this.vm.appUIState.currentBreakpoint.includes('s') &&
-          (!this.useNativeSurface() || (!this.ui.initialLoading && !this.showNativeHero()))) {
-          ListItem().height(this.phoneContentTopInset())
-        }
-        if (this.ui.initialLoading) {
-          ListItem() {
-            HomeInitialSkeleton({
-              showHero: this.showNativeHeroSkeleton(),
-              currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-              heroHeight: this.heroDisplayHeight()
-            })
-          }
-        } else {
-          if (this.showNativeHero()) {
-            ListItem() {
-              if (this.vm.appUIState.currentBreakpoint.includes('s')) {
-                this.nativeHomeHeroCarousel()
-              } else {
-                this.tabletHomeHeroCarousel()
+
+
+
+
+
+
+  build() {
+    Stack() {
+      if (this.useNativeSurface() && this.contentBreakpoint().includes('s')) {
+        List({ scroller: this.contentScroller }) {
+            if (this.contentBreakpoint().includes('s') &&
+              (!this.useNativeSurface() || (!this.ui.initialLoading && !this.showNativeHero()))) {
+              ListItem().height(this.phoneContentTopInset())
+            }
+            if (this.ui.initialLoading) {
+              ListItem() {
+                HomeInitialSkeleton({
+                  showHero: this.showNativeHeroSkeleton(),
+                  currentBreakpoint: this.contentBreakpoint(),
+                  heroHeight: this.heroDisplayHeight(),
+                  gridColumnCount: this.latestGridColumnCount
+                })
+              }
+            } else {
+              if (this.showNativeHero()) {
+                ListItem() {
+                  if (this.contentBreakpoint().includes('s')) {
+                    Stack({ alignContent: Alignment.BottomStart }) {
+                      Swiper() {
+                        ForEach(this.ui.recommendationList, (item: VideoItem) => {
+                          Stack({ alignContent: Alignment.BottomStart }) {
+                            MediaNetworkImage({
+                              imageRef: (item).imageRef,
+                              fallbackSource: (item).image
+                            })
+                              .width('100%')
+                              .height('100%')
+
+                            Column()
+                              .width('100%')
+                              .height('100%')
+                              .linearGradient({
+                                angle: 180,
+                                colors: [
+                                  ['rgba(0,0,0,0.08)', 0.0],
+                                  ['rgba(0,0,0,0.16)', 0.42],
+                                  ['rgba(0,0,0,0.88)', 1.0]
+                                ]
+                              })
+                            Column()
+                              .width('100%')
+                              .height(96)
+                              .linearGradient({
+                                angle: 180,
+                                colors: [
+                                  [Color.Transparent, 0.0],
+                                  [this.useNativeSurface() ? $r('app.color.native_canvas_background') :
+                                    $r('app.color.bg_main'), 1.0]
+                                ]
+                              })
+
+                            Column({ space: 8 }) {
+                              Text((item).name)
+                                .fontSize(28)
+                                .fontWeight(FontWeight.Bold)
+                                .fontColor(Color.White)
+                                .maxLines(2)
+                                .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                              if ((item).subtitle && (item).subtitle.length > 0) {
+                                Text((item).subtitle)
+                                  .fontSize(14)
+                                  .fontColor('rgba(255,255,255,0.82)')
+                                  .maxLines(1)
+                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              }
+
+                              if ((item).description && (item).description.length > 0) {
+                                Text((item).description)
+                                  .fontSize(13)
+                                  .fontColor('rgba(255,255,255,0.74)')
+                                  .maxLines(2)
+                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              }
+
+                            }
+                            .width('100%')
+                            .padding({
+                              left: 16,
+                              right: 16,
+                              bottom: 44
+                            })
+                            .alignItems(HorizontalAlign.Start)
+                          }
+                          .width('100%')
+                          .height('100%')
+                          .backgroundColor(Color.Black)
+                          .onClick((): void => {
+                            this.openHeroDetails((item))
+                          })
+                        }, (item: VideoItem) => item.id)
+                      }
+                      .width('100%')
+                      .height('100%')
+                      .autoPlay(this.ui.recommendationList.length > 1)
+                      .interval(HERO_AUTOPLAY_INTERVAL)
+                      .duration(HERO_TRANSITION_DURATION)
+                      .loop(this.ui.recommendationList.length > 1)
+                      .indicator(false)
+                      .onChange((index: number) => {
+                        this.restartHeroProgress(index)
+                      })
+
+                      if (this.ui.recommendationList.length > 1) {
+                        Row({ space: 4 }) {
+                          ForEach(this.ui.recommendationList, (item: VideoItem, index: number) => {
+                            Progress({
+                              value: this.heroSegmentProgress(index),
+                              total: 100,
+                              type: ProgressType.Linear
+                            })
+                              .layoutWeight(1)
+                              .height(3)
+                              .color($r('sys.color.icon_primary'))
+                              .backgroundColor(this.heroProgressTrackColor())
+                              .style({
+                                strokeWidth: 3,
+                                strokeRadius: 1.5,
+                                enableSmoothEffect: false,
+                                enableScanEffect: false
+                              })
+                          }, (item: VideoItem) => `hero-progress:${item.id}`)
+                        }
+                        .width('100%')
+                        .height(3)
+                        .padding({ left: 16, right: 16 })
+                        .margin({ bottom: 14 })
+                      }
+
+                      if (this.nativeHeroRefreshProgress > 0 || this.ui.isRefreshing) {
+                        Row() {
+                          Progress({
+                            value: this.nativeHeroRefreshProgress,
+                            total: 100,
+                            type: ProgressType.Ring
+                          })
+                            .width(22)
+                            .height(22)
+                            .color(Color.White)
+                            .style({
+                              strokeWidth: 3,
+                              status: this.ui.isRefreshing ? ProgressStatus.LOADING : ProgressStatus.PROGRESSING
+                            })
+                        }
+                        .width(36)
+                        .height(36)
+                        .justifyContent(FlexAlign.Center)
+                        .borderRadius(18)
+                        .backgroundColor('rgba(0,0,0,0.30)')
+                        .opacity(this.ui.isRefreshing ? 1 : Math.min(1, this.nativeHeroRefreshProgress / 35))
+                        .position({
+                          x: (this.contentWidth() - 36) / 2,
+                          y: this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT + 8
+                        })
+                      }
+                    }
+                    .width('100%')
+                    .height('100%')
+                    .onAppear(() => {
+                      this.restartHeroProgress(this.heroIndex)
+                    })
+                    .onDisAppear(() => {
+                      this.stopHeroProgress()
+                    })
+                  } else {
+                    HomeTabletHero({
+                      items: this.ui.recommendationList,
+                      heroHeight: this.tabletHeroHeight(),
+                      active: this.active && this.tabletHeroVisible,
+                      leadingOverflow: this.tabletHeroLeadingOverflow,
+                      autoplayInterval: HERO_AUTOPLAY_INTERVAL,
+                      transitionDuration: HERO_TRANSITION_DURATION,
+                      onOpenDetails: (item: VideoItem): void => {
+                        this.openHeroDetails(item)
+                      },
+                      onIndexChange: (index: number): void => {
+                        this.commitTabletHeroIndex(index)
+                      },
+                      onContentScroll: (selectedIndex: number, index: number, position: number,
+                        mainAxisLength: number): void => {
+                        this.updateTabletHeroMotion(selectedIndex, index, position, mainAxisLength)
+                      }
+                    })
+                  }
+                }
+                .height(this.heroDisplayHeight())
+              }
+              if (this.ui.resumeList.length > 0) {
+                ListItem() {
+                  Column() {
+                    Text('继续观看')
+                      .fontSize(20)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                      .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2 })
+                    List({ space: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) }) {
+                      ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()))
+                      ForEach(this.ui.resumeList, (item: VideoItem, index: number) => {
+                        ListItem() {
+                          HorizontalVideoCard({
+                            image: item.image,
+                            imageRef: item.imageRef,
+                            percent: item.percent,
+                            name: item.name,
+                            subtitle: item.subtitle,
+                            index: index
+                          })
+                        }.onClick(() => {
+                          this.playItem(item)
+                        })
+                      }, (item: VideoItem) => item.id)
+                      ListItem().width(8)
+                    }
+                    .width('100%')
+                    .height(HORIZONTAL_CARD_LIST_HEIGHT)
+                    .margin({ top: 12 })
+                    .listDirection(Axis.Horizontal)
+                    .scrollBar(BarState.Off)
+                  }
+                  .width('100%')
+                  .margin({
+                    top: 20
+                  })
+                  .alignItems(HorizontalAlign.Start)
+                }
+              }
+              if (this.ui.nextUpList.length > 0) {
+                ListItem() {
+                  Column() {
+                    Text('接下来')
+                      .fontSize(20)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.useNativeSurface() ?
+                        $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                      .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2 })
+                    List({ space: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) }) {
+                      ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()))
+
+                      ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
+                        ListItem() {
+                          HorizontalVideoCard({
+                            image: item.image,
+                            imageRef: item.imageRef,
+                            percent: item.percent,
+                            name: item.name,
+                            subtitle: item.subtitle,
+                            index: index
+                          })
+                        }.onClick(() => {
+                          this.playItem(item)
+                        })
+                      })
+                      ListItem().width(8)
+                    }
+                    .width('100%')
+                    .height(HORIZONTAL_CARD_LIST_HEIGHT)
+                    .margin({ top: 12 })
+                    .listDirection(Axis.Horizontal)
+                    .scrollBar(BarState.Off)
+                  }
+                  .width('100%')
+                  .margin({
+                    top: 20
+                  })
+                  .alignItems(HorizontalAlign.Start)
+                }
+              }
+
+              ListItemGroup({ header: this.latestMediaStickyHeader() }) {
+                ListItem() {
+                HomeLatestMediaSection({
+                  latestMap: this.ui.latestMap,
+                  selectedMediaId: this.ui.selectedLatestMediaId,
+                  nativeSurface: this.useNativeSurface(),
+                  currentBreakpoint: this.contentBreakpoint(),
+                  gridColumnCount: this.latestGridColumnCount,
+                  loading: this.ui.latestMediaLoading,
+                  loadingMore: this.ui.latestMediaLoadingMore,
+                  hasMore: this.ui.latestMediaHasMore,
+                  loadFailed: this.ui.latestMediaLoadFailed,
+                  contentMinHeight: this.latestFeedContentMinHeight(),
+                  onRetry: (): void => {
+                    this.vm.retryLatestMedia()
+                  }
+                })
+                }
               }
             }
-            .height(this.heroDisplayHeight())
-          }
-          if (this.ui.resumeList.length > 0) {
-            ListItem() {
-              this.buildResumeList()
-            }
-          }
-          if (this.ui.nextUpList.length > 0) {
-            ListItem() {
-              this.buildNextUpList()
-            }
-          }
 
-          ListItemGroup({ header: this.latestMediaStickyHeader }) {
-            ListItem() {
-              HomeLatestMediaSection({
-                latestMap: this.ui.latestMap,
-                selectedMediaId: this.ui.selectedLatestMediaId,
-                nativeSurface: this.useNativeSurface(),
-                currentBreakpoint: this.vm.appUIState.currentBreakpoint,
-                loading: this.ui.latestMediaLoading,
-                loadingMore: this.ui.latestMediaLoadingMore,
-                hasMore: this.ui.latestMediaHasMore,
-                loadFailed: this.ui.latestMediaLoadFailed,
-                contentMinHeight: this.latestFeedContentMinHeight(),
-                onRetry: () => {
-                  this.vm.retryLatestMedia()
-                }
-              })
-            }
-          }
+            ListItem().height(this.scrollTail())
         }
+        .width('100%')
+        .height('100%')
+        .clip(false)
+        .edgeEffect(EdgeEffect.None)
+        .listDirection(Axis.Vertical)
+        .sticky(this.useNativeSurface() ?
+          StickyStyle.Header : StickyStyle.None)
+        .scrollBar(BarState.Off)
+        .onScrollFrameBegin((offset: number, state: ScrollState) => {
+          if ((true) && this.stretchNativeHero(offset, state)) {
+            return { offsetRemain: 0 }
+          }
+          return { offsetRemain: offset }
+        })
+        .onDidScroll(() => {
+          this.updateTabletHeroVisibility()
+          if ((true) && this.contentScroller.currentOffset().yOffset === 0 &&
+            this.nativeHeroScrollState === ScrollState.Scroll) {
+            this.springBackNativeHero()
+          }
+        })
+        .onReachEnd(() => {
+          this.vm.loadMoreLatestMedia()
+        })
+      } else {
+        Refresh({ refreshing: $$this.ui.isRefreshing }) {
+          List({ scroller: this.contentScroller }) {
+              if (this.contentBreakpoint().includes('s') &&
+                (!this.useNativeSurface() || (!this.ui.initialLoading && !this.showNativeHero()))) {
+                ListItem().height(this.phoneContentTopInset())
+              }
+              if (this.ui.initialLoading) {
+                ListItem() {
+                  HomeInitialSkeleton({
+                    showHero: this.showNativeHeroSkeleton(),
+                    currentBreakpoint: this.contentBreakpoint(),
+                    heroHeight: this.heroDisplayHeight(),
+                    gridColumnCount: this.latestGridColumnCount
+                  })
+                }
+              } else {
+                if (this.showNativeHero()) {
+                  ListItem() {
+                    if (this.contentBreakpoint().includes('s')) {
+                      Stack({ alignContent: Alignment.BottomStart }) {
+                        Swiper() {
+                          ForEach(this.ui.recommendationList, (item: VideoItem) => {
+                            Stack({ alignContent: Alignment.BottomStart }) {
+                              MediaNetworkImage({
+                                imageRef: (item).imageRef,
+                                fallbackSource: (item).image
+                              })
+                                .width('100%')
+                                .height('100%')
 
-        ListItem().height(this.scrollTail())
-    }
-    .width('100%')
-    .height('100%')
-    .clip(false)
-    .edgeEffect(EdgeEffect.None)
-    .listDirection(Axis.Vertical)
-    .sticky(this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s') ?
-      StickyStyle.Header : StickyStyle.None)
-    .scrollBar(BarState.Off)
-    .onScrollFrameBegin((offset: number, state: ScrollState) => {
-      if (nativeHeroStretch && this.stretchNativeHero(offset, state)) {
-        return { offsetRemain: 0 }
+                              Column()
+                                .width('100%')
+                                .height('100%')
+                                .linearGradient({
+                                  angle: 180,
+                                  colors: [
+                                    ['rgba(0,0,0,0.08)', 0.0],
+                                    ['rgba(0,0,0,0.16)', 0.42],
+                                    ['rgba(0,0,0,0.88)', 1.0]
+                                  ]
+                                })
+                              Column()
+                                .width('100%')
+                                .height(96)
+                                .linearGradient({
+                                  angle: 180,
+                                  colors: [
+                                    [Color.Transparent, 0.0],
+                                    [this.useNativeSurface() ? $r('app.color.native_canvas_background') :
+                                      $r('app.color.bg_main'), 1.0]
+                                  ]
+                                })
+
+                              Column({ space: 8 }) {
+                                Text((item).name)
+                                  .fontSize(28)
+                                  .fontWeight(FontWeight.Bold)
+                                  .fontColor(Color.White)
+                                  .maxLines(2)
+                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                                if ((item).subtitle && (item).subtitle.length > 0) {
+                                  Text((item).subtitle)
+                                    .fontSize(14)
+                                    .fontColor('rgba(255,255,255,0.82)')
+                                    .maxLines(1)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                }
+
+                                if ((item).description && (item).description.length > 0) {
+                                  Text((item).description)
+                                    .fontSize(13)
+                                    .fontColor('rgba(255,255,255,0.74)')
+                                    .maxLines(2)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                }
+
+                              }
+                              .width('100%')
+                              .padding({
+                                left: 16,
+                                right: 16,
+                                bottom: 44
+                              })
+                              .alignItems(HorizontalAlign.Start)
+                            }
+                            .width('100%')
+                            .height('100%')
+                            .backgroundColor(Color.Black)
+                            .onClick((): void => {
+                              this.openHeroDetails((item))
+                            })
+                          }, (item: VideoItem) => item.id)
+                        }
+                        .width('100%')
+                        .height('100%')
+                        .autoPlay(this.ui.recommendationList.length > 1)
+                        .interval(HERO_AUTOPLAY_INTERVAL)
+                        .duration(HERO_TRANSITION_DURATION)
+                        .loop(this.ui.recommendationList.length > 1)
+                        .indicator(false)
+                        .onChange((index: number) => {
+                          this.restartHeroProgress(index)
+                        })
+
+                        if (this.ui.recommendationList.length > 1) {
+                          Row({ space: 4 }) {
+                            ForEach(this.ui.recommendationList, (item: VideoItem, index: number) => {
+                              Progress({
+                                value: this.heroSegmentProgress(index),
+                                total: 100,
+                                type: ProgressType.Linear
+                              })
+                                .layoutWeight(1)
+                                .height(3)
+                                .color($r('sys.color.icon_primary'))
+                                .backgroundColor(this.heroProgressTrackColor())
+                                .style({
+                                  strokeWidth: 3,
+                                  strokeRadius: 1.5,
+                                  enableSmoothEffect: false,
+                                  enableScanEffect: false
+                                })
+                            }, (item: VideoItem) => `hero-progress:${item.id}`)
+                          }
+                          .width('100%')
+                          .height(3)
+                          .padding({ left: 16, right: 16 })
+                          .margin({ bottom: 14 })
+                        }
+
+                        if (this.nativeHeroRefreshProgress > 0 || this.ui.isRefreshing) {
+                          Row() {
+                            Progress({
+                              value: this.nativeHeroRefreshProgress,
+                              total: 100,
+                              type: ProgressType.Ring
+                            })
+                              .width(22)
+                              .height(22)
+                              .color(Color.White)
+                              .style({
+                                strokeWidth: 3,
+                                status: this.ui.isRefreshing ? ProgressStatus.LOADING : ProgressStatus.PROGRESSING
+                              })
+                          }
+                          .width(36)
+                          .height(36)
+                          .justifyContent(FlexAlign.Center)
+                          .borderRadius(18)
+                          .backgroundColor('rgba(0,0,0,0.30)')
+                          .opacity(this.ui.isRefreshing ? 1 : Math.min(1, this.nativeHeroRefreshProgress / 35))
+                          .position({
+                            x: (this.contentWidth() - 36) / 2,
+                            y: this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT + 8
+                          })
+                        }
+                      }
+                      .width('100%')
+                      .height('100%')
+                      .onAppear(() => {
+                        this.restartHeroProgress(this.heroIndex)
+                      })
+                      .onDisAppear(() => {
+                        this.stopHeroProgress()
+                      })
+                    } else {
+                      HomeTabletHero({
+                        items: this.ui.recommendationList,
+                        heroHeight: this.tabletHeroHeight(),
+                        active: this.active && this.tabletHeroVisible,
+                        leadingOverflow: this.tabletHeroLeadingOverflow,
+                        autoplayInterval: HERO_AUTOPLAY_INTERVAL,
+                        transitionDuration: HERO_TRANSITION_DURATION,
+                        onOpenDetails: (item: VideoItem): void => {
+                          this.openHeroDetails(item)
+                        },
+                        onIndexChange: (index: number): void => {
+                          this.commitTabletHeroIndex(index)
+                        },
+                        onContentScroll: (selectedIndex: number, index: number, position: number,
+                          mainAxisLength: number): void => {
+                          this.updateTabletHeroMotion(selectedIndex, index, position, mainAxisLength)
+                        }
+                      })
+                    }
+                  }
+                  .height(this.heroDisplayHeight())
+                }
+                if (this.ui.resumeList.length > 0) {
+                  ListItem() {
+                    Column() {
+                      Text('继续观看')
+                        .fontSize(20)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(this.useNativeSurface() ?
+                          $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2 })
+                      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) }) {
+                        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()))
+                        ForEach(this.ui.resumeList, (item: VideoItem, index: number) => {
+                          ListItem() {
+                            HorizontalVideoCard({
+                              image: item.image,
+                              imageRef: item.imageRef,
+                              percent: item.percent,
+                              name: item.name,
+                              subtitle: item.subtitle,
+                              index: index
+                            })
+                          }.onClick(() => {
+                            this.playItem(item)
+                          })
+                        }, (item: VideoItem) => item.id)
+                        ListItem().width(8)
+                      }
+                      .width('100%')
+                      .height(HORIZONTAL_CARD_LIST_HEIGHT)
+                      .margin({ top: 12 })
+                      .listDirection(Axis.Horizontal)
+                      .scrollBar(BarState.Off)
+                    }
+                    .width('100%')
+                    .margin({
+                      top: 20
+                    })
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                }
+                if (this.ui.nextUpList.length > 0) {
+                  ListItem() {
+                    Column() {
+                      Text('接下来')
+                        .fontSize(20)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(this.useNativeSurface() ?
+                          $r('sys.color.font_primary') : $r('app.color.text_primary'))
+                        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2 })
+                      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) }) {
+                        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()))
+
+                        ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
+                          ListItem() {
+                            HorizontalVideoCard({
+                              image: item.image,
+                              imageRef: item.imageRef,
+                              percent: item.percent,
+                              name: item.name,
+                              subtitle: item.subtitle,
+                              index: index
+                            })
+                          }.onClick(() => {
+                            this.playItem(item)
+                          })
+                        })
+                        ListItem().width(8)
+                      }
+                      .width('100%')
+                      .height(HORIZONTAL_CARD_LIST_HEIGHT)
+                      .margin({ top: 12 })
+                      .listDirection(Axis.Horizontal)
+                      .scrollBar(BarState.Off)
+                    }
+                    .width('100%')
+                    .margin({
+                      top: 20
+                    })
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                }
+
+                ListItemGroup({ header: this.latestMediaStickyHeader() }) {
+                  ListItem() {
+                  HomeLatestMediaSection({
+                    latestMap: this.ui.latestMap,
+                    selectedMediaId: this.ui.selectedLatestMediaId,
+                    nativeSurface: this.useNativeSurface(),
+                    currentBreakpoint: this.contentBreakpoint(),
+                    gridColumnCount: this.latestGridColumnCount,
+                    loading: this.ui.latestMediaLoading,
+                    loadingMore: this.ui.latestMediaLoadingMore,
+                    hasMore: this.ui.latestMediaHasMore,
+                    loadFailed: this.ui.latestMediaLoadFailed,
+                    contentMinHeight: this.latestFeedContentMinHeight(),
+                    onRetry: (): void => {
+                      this.vm.retryLatestMedia()
+                    }
+                  })
+                  }
+                }
+              }
+
+              ListItem().height(this.scrollTail())
+          }
+          .width('100%')
+          .height('100%')
+          .clip(false)
+          .edgeEffect(EdgeEffect.None)
+          .listDirection(Axis.Vertical)
+          .sticky(this.useNativeSurface() ?
+            StickyStyle.Header : StickyStyle.None)
+          .scrollBar(BarState.Off)
+          .onScrollFrameBegin((offset: number, state: ScrollState) => {
+            if ((false) && this.stretchNativeHero(offset, state)) {
+              return { offsetRemain: 0 }
+            }
+            return { offsetRemain: offset }
+          })
+          .onDidScroll(() => {
+            this.updateTabletHeroVisibility()
+            if ((false) && this.contentScroller.currentOffset().yOffset === 0 &&
+              this.nativeHeroScrollState === ScrollState.Scroll) {
+              this.springBackNativeHero()
+            }
+          })
+          .onReachEnd(() => {
+            this.vm.loadMoreLatestMedia()
+          })
+        }
+        .pullDownRatio(0.3)
+        .refreshOffset(64)
+        .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
+        .height('100%')
+        .onStateChange((status) => {
+          this.ui.refreshStatus = status
+        })
+        .onOffsetChange((offset) => {
+          this.ui.refreshOffset = offset
+        })
+        .onRefreshing(() => {
+          this.vm.init()
+        })
       }
-      return { offsetRemain: offset }
-    })
-    .onDidScroll(() => {
-      if (nativeHeroStretch && this.contentScroller.currentOffset().yOffset === 0 &&
-        this.nativeHeroScrollState === ScrollState.Scroll) {
-        this.springBackNativeHero()
-      }
-    })
-    .onReachEnd(() => {
-      this.vm.loadMoreLatestMedia()
-    })
-  }
-
-  @Builder
-  private homeRefreshContent() {
-    if (this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')) {
-      this.homeContentList(true)
-    } else {
-      Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
-        this.homeContentList(false)
-      }
-      .pullDownRatio(0.3)
-      .refreshOffset(64)
-      .maxPullDownDistance(64 + this.vm.appUIState.safeTop)
-      .height('100%')
-      .onStateChange((status) => {
-        this.ui.refreshStatus = status
-      })
-      .onOffsetChange((offset) => {
-        this.ui.refreshOffset = offset
-      })
-      .onRefreshing(() => {
-        this.vm.init()
-      })
-    }
-  }
-
-  @Builder
-  private standardHome() {
-    Stack() {
-      this.homeRefreshContent()
-
-      if (this.vm.appUIState.currentBreakpoint.includes('s')) {
-        this.feiniuHomeHeader()
+      if (!(this.useNativeSurface() && this.contentBreakpoint().includes('s')) &&
+        this.contentBreakpoint().includes('s')) {
+        Row({ space: 12 }) {
+          Row({ space: AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 8 : 0 }) {
+            Image($r('app.media.app_icon'))
+              .height(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 32 : 40)
+            Text($r('app.string.app_name'))
+              .fontColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                $r('sys.color.font_primary') : $r('app.color.text_primary'))
+              .fontSize(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ? 22 : 18)
+              .fontWeight(FontWeight.Bold)
+          }
+          Blank()
+          if (this.ui.hasLiveTv) {
+            Image($r('app.media.iptv'))
+              .height(40)
+              .fillColor(AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+                $r('sys.color.icon_primary') : $r('app.color.text_primary'))
+              .padding(9)
+              .onClick(() => {
+                HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+              })
+          }
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(24)
+            .fontWeight(FontWeight.Medium)
+            .align(Alignment.Center)
+            .height(40)
+            .fontColor([AppThemeTokens.isNative(this.vm.appUIState.themeStyle) ?
+              $r('sys.color.icon_primary') : $r('app.color.text_primary')])
+            .onClick(() => {
+              HMRouterMgr.to(RouterConsts.SearchPage).push()
+            })
+        }
+        .width('100%')
+        .height(UIConstants.ACTION_BAR_HEIGHT + this.vm.appUIState.safeTop)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+        .padding({
+          left: 8,
+          right: 16,
+          top: this.vm.appUIState.safeTop
+          })
       }
     }
     .width('100%')
@@ -626,429 +1289,16 @@ export struct HomeTab {
     .alignContent(Alignment.Top)
   }
 
-  build() {
-    if (this.useNativeSurface() && this.vm.appUIState.currentBreakpoint.includes('s')) {
-      this.homeRefreshContent()
-    } else {
-      this.standardHome()
-    }
-  }
 
-  @Builder
-  buildMediaList() {
-    Column() {
-      List({ space: 8 }) {
-        ListItem().width(8)
-        ForEach(this.ui.mediaList, (item: MediaItem) => {
-          ListItem() {
-            Stack() {
-              MediaNetworkImage({
-                imageRef: item.imageRef,
-                fallbackSource: item.image,
-                objectFit: ImageFit.Contain,
-                radius: 6
-              })
-                .width('100%')
-                .height(80)
-            }
-            .width(150)
-            .height(90)
-            .padding({
-              top: 4,
-              left: 4,
-              right: 4,
-              bottom: 4
-            })
-            .borderColor(AppThemeSurfaceResolver.mediaOutline(
-              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
-            .borderRadius(8)
-          }.onClick(() => {
-            if (item.libraryKind === MediaLibraryKind.LiveTv || item.kind === MediaRefKind.LiveChannel) {
-              HMRouterMgr.to(RouterConsts.LiveTvPage)
-                .push()
-              return
-            }
-            if (item.libraryKind !== MediaLibraryKind.Movies &&
-              item.libraryKind !== MediaLibraryKind.Series &&
-              item.libraryKind !== MediaLibraryKind.Mixed &&
-              item.libraryKind !== MediaLibraryKind.Other) {
-              ToastUtil.showToast(this.getUIContext(), '暂不支持混合文件夹')
-              return;
-            }
-            HMRouterMgr.to(RouterConsts.VideoListPage)
-              .withParam(item)
-              .push()
-          })
-        })
-        ListItem().width(8)
-      }.width('100%').height(90).listDirection(Axis.Horizontal).scrollBar(BarState.Off)
-    }
-  }
 
-  @Builder
-  private nativeHomeHeroCarousel() {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      Swiper() {
-        ForEach(this.ui.recommendationList, (item: VideoItem) => {
-          this.nativeHomeHero(item)
-        }, (item: VideoItem) => item.id)
-      }
-      .width('100%')
-      .height('100%')
-      .autoPlay(this.ui.recommendationList.length > 1)
-      .interval(HERO_AUTOPLAY_INTERVAL)
-      .duration(HERO_TRANSITION_DURATION)
-      .loop(this.ui.recommendationList.length > 1)
-      .indicator(false)
-      .onChange((index: number) => {
-        this.restartHeroProgress(index)
-      })
 
-      if (this.ui.recommendationList.length > 1) {
-        this.nativeHomeHeroProgressIndicator()
-      }
 
-      if (this.nativeHeroRefreshProgress > 0 || this.ui.isRefreshing) {
-        this.nativeHomeHeroRefreshIndicator()
-      }
-    }
-    .width('100%')
-    .height('100%')
-    .onAppear(() => {
-      this.restartHeroProgress(this.heroIndex)
-    })
-    .onDisAppear(() => {
-      this.stopHeroProgress()
-    })
-  }
 
-  @Builder
-  private tabletHomeHeroCarousel() {
-    Row() {
-      Blank().width(this.latestMediaHeaderSidePadding())
 
-      Column({ space: TABLET_HERO_TITLE_GAP }) {
-        Text('推荐')
-          .width('100%')
-          .height(TABLET_HERO_TITLE_HEIGHT)
-          .fontSize(22)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.useNativeSurface() ?
-            $r('sys.color.font_primary') : $r('app.color.text_primary'))
-          .textAlign(TextAlign.Start)
 
-        Swiper() {
-          ForEach(this.ui.recommendationList, (item: VideoItem) => {
-            this.tabletHomeHero(item)
-          }, (item: VideoItem) => `tablet-hero:${item.id}`)
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .displayCount(this.tabletHeroDisplayCount())
-        .itemSpace(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-        .autoPlay(this.ui.recommendationList.length > this.tabletHeroDisplayCount())
-        .interval(HERO_AUTOPLAY_INTERVAL)
-        .duration(HERO_TRANSITION_DURATION)
-        .loop(this.ui.recommendationList.length > this.tabletHeroDisplayCount())
-        .indicator(false)
-        .onChange((index: number) => {
-          this.heroIndex = index
-        })
-      }
-      .layoutWeight(1)
-      .height('100%')
-      .padding({
-        top: TABLET_HERO_VERTICAL_INSET,
-        bottom: TABLET_HERO_VERTICAL_INSET
-      })
-      .alignItems(HorizontalAlign.Start)
 
-      Blank().width(this.latestMediaHeaderSidePadding())
-    }
-    .width('100%')
-    .height('100%')
-  }
 
-  @Builder
-  private tabletHomeHero(item: VideoItem) {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      MediaNetworkImage({
-        imageRef: item.imageRef,
-        fallbackSource: item.image
-      })
-        .width('100%')
-        .height('100%')
 
-      Column()
-        .width('100%')
-        .height('72%')
-        .linearGradient({
-          angle: 180,
-          colors: [
-            [Color.Transparent, 0.0],
-            ['rgba(0,0,0,0.30)', 0.42],
-            ['rgba(0,0,0,0.88)', 1.0]
-          ]
-        })
 
-      Column({ space: 5 }) {
-        Text(item.name)
-          .fontSize(this.tabletHeroDisplayCount() === 1 ? 26 : 22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        if (item.subtitle && item.subtitle.length > 0) {
-          Text(item.subtitle)
-            .fontSize(13)
-            .fontColor('rgba(255,255,255,0.80)')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, bottom: 16 })
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .height('100%')
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(Color.Black)
-    .onClick((): void => {
-      this.openHeroDetails(item)
-    })
-  }
-
-  @Builder
-  private nativeHomeHeroRefreshIndicator() {
-    Row() {
-      Progress({
-        value: this.nativeHeroRefreshProgress,
-        total: 100,
-        type: ProgressType.Ring
-      })
-        .width(22)
-        .height(22)
-        .color(Color.White)
-        .style({
-          strokeWidth: 3,
-          status: this.ui.isRefreshing ? ProgressStatus.LOADING : ProgressStatus.PROGRESSING
-        })
-    }
-    .width(36)
-    .height(36)
-    .justifyContent(FlexAlign.Center)
-    .borderRadius(18)
-    .backgroundColor('rgba(0,0,0,0.30)')
-    .opacity(this.ui.isRefreshing ? 1 : Math.min(1, this.nativeHeroRefreshProgress / 35))
-    .position({
-      x: (this.vm.appUIState.deviceWidth - 36) / 2,
-      y: this.vm.appUIState.safeTop + UIConstants.ACTION_BAR_HEIGHT + 8
-    })
-  }
-
-  @Builder
-  private nativeHomeHeroProgressIndicator() {
-    Row({ space: 4 }) {
-      ForEach(this.ui.recommendationList, (item: VideoItem, index: number) => {
-        Progress({
-          value: this.heroSegmentProgress(index),
-          total: 100,
-          type: ProgressType.Linear
-        })
-          .layoutWeight(1)
-          .height(3)
-          .color($r('sys.color.icon_primary'))
-          .backgroundColor(this.heroProgressTrackColor())
-          .style({
-            strokeWidth: 3,
-            strokeRadius: 1.5,
-            enableSmoothEffect: false,
-            enableScanEffect: false
-          })
-      }, (item: VideoItem) => `hero-progress:${item.id}`)
-    }
-    .width('100%')
-    .height(3)
-    .padding({ left: 16, right: 16 })
-    .margin({ bottom: 14 })
-  }
-
-  @Builder
-  private nativeHomeHeroReadabilityScrim() {
-    Column()
-      .width('100%')
-      .height('100%')
-      .linearGradient({
-        angle: 180,
-        colors: [
-          ['rgba(0,0,0,0.08)', 0.0],
-          ['rgba(0,0,0,0.16)', 0.42],
-          ['rgba(0,0,0,0.88)', 1.0]
-        ]
-      })
-  }
-
-  @Builder
-  private nativeHomeHeroCanvasTransition() {
-    Column()
-      .width('100%')
-      .height(96)
-      .linearGradient({
-        angle: 180,
-        colors: [
-          [Color.Transparent, 0.0],
-          [this.useNativeSurface() ? $r('app.color.native_canvas_background') :
-            $r('app.color.bg_main'), 1.0]
-        ]
-      })
-  }
-
-  @Builder
-  private nativeHomeHero(item: VideoItem) {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      MediaNetworkImage({
-        imageRef: item.imageRef,
-        fallbackSource: item.image
-      })
-        .width('100%')
-        .height('100%')
-
-      this.nativeHomeHeroReadabilityScrim()
-      this.nativeHomeHeroCanvasTransition()
-
-      Column({ space: 8 }) {
-        Text(item.name)
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        if (item.subtitle && item.subtitle.length > 0) {
-          Text(item.subtitle)
-            .fontSize(14)
-            .fontColor('rgba(255,255,255,0.82)')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-
-        if (item.description && item.description.length > 0) {
-          Text(item.description)
-            .fontSize(13)
-            .fontColor('rgba(255,255,255,0.74)')
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-
-      }
-      .width('100%')
-      .padding({
-        left: 16,
-        right: 16,
-        bottom: 44
-      })
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(Color.Black)
-    .onClick((): void => {
-      this.openHeroDetails(item)
-    })
-  }
-
-  @Builder
-  buildResumeList() {
-    Column() {
-      Text('继续观看')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.useNativeSurface() ?
-          $r('sys.color.font_primary') : $r('app.color.text_primary'))
-        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
-      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
-        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-        ForEach(this.ui.resumeList, (item: VideoItem, index: number) => {
-          ListItem() {
-            HorizontalVideoCard({
-              image: item.image,
-              imageRef: item.imageRef,
-              percent: item.percent,
-              name: item.name,
-              subtitle: item.subtitle,
-              index: index
-            })
-          }.onClick(() => {
-            this.playItem(item)
-          })
-        }, (item: VideoItem) => item.id)
-        ListItem().width(8)
-      }
-      .width('100%')
-      .height(HORIZONTAL_CARD_LIST_HEIGHT)
-      .margin({ top: 12 })
-      .listDirection(Axis.Horizontal)
-      .scrollBar(BarState.Off)
-    }
-    .width('100%')
-    .margin({
-      top: 20
-    })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  buildNextUpList() {
-    Column() {
-      Text('接下来')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.useNativeSurface() ?
-          $r('sys.color.font_primary') : $r('app.color.text_primary'))
-        .margin({ left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2 })
-      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
-        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-
-        ForEach(this.ui.nextUpList, (item: VideoItem, index: number) => {
-          ListItem() {
-            HorizontalVideoCard({
-              image: item.image,
-              imageRef: item.imageRef,
-              percent: item.percent,
-              name: item.name,
-              subtitle: item.subtitle,
-              index: index
-            })
-          }.onClick(() => {
-            this.playItem(item)
-          })
-        })
-        ListItem().width(8)
-      }
-      .width('100%')
-      .height(HORIZONTAL_CARD_LIST_HEIGHT)
-      .margin({ top: 12 })
-      .listDirection(Axis.Horizontal)
-      .scrollBar(BarState.Off)
-    }
-    .width('100%')
-    .margin({
-      top: 20
-    })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  customRefreshComponent() {
-    CustomRefreshComponent({
-      refreshOffset: this.ui.refreshOffset,
-      refreshStatus: this.ui.refreshStatus
-    })
-  }
 
 }

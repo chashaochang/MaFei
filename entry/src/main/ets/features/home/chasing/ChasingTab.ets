@@ -17,6 +17,186 @@ import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../../theme/Ap
 import { MediaProviderRegistry } from "../../../media/MediaProviderRegistry"
 
 @ComponentV2
+struct ChasingFilterChip {
+  @Require @Param label: string
+  @Require @Param index: number
+  @Require @Param selectedIndex: number
+  @Require @Param nativeSurface: boolean
+  @Require @Param systemMaterialAvailable: boolean
+  @Event onSelect: (index: number) => void = () => {
+  }
+
+  build() {
+    if (this.nativeSurface && this.selectedIndex !== this.index) {
+      Text(this.label)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_secondary'))
+        .textAlign(TextAlign.Center)
+        .layoutWeight(1)
+        .height(36)
+        .padding({ left: 8, right: 8 })
+        .borderRadius(18)
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.InteractiveFloating,
+          true,
+          this.systemMaterialAvailable
+        ))
+        .onClick(() => this.onSelect(this.index))
+    } else {
+      Text(this.label)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.selectedIndex === this.index ? Color.White : $r('app.color.text_1'))
+        .textAlign(TextAlign.Center)
+        .layoutWeight(1)
+        .height(36)
+        .padding({ left: 8, right: 8 })
+        .backgroundColor(this.selectedIndex === this.index ?
+          $r('app.color.color_main') : $r('app.color.bg_1'))
+        .borderColor(this.selectedIndex === this.index ?
+          $r('app.color.color_main') : $r('app.color.border'))
+        .borderWidth(this.nativeSurface ? 0 : 0.5)
+        .borderRadius(18)
+        .onClick(() => this.onSelect(this.index))
+    }
+  }
+}
+
+@ComponentV2
+struct ChasingFeaturedUpdate {
+  @Require @Param item: VideoItem
+  @Require @Param horizontalSpacing: number
+  @Event onPressed: (item: VideoItem) => void = () => {
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.BottomStart }) {
+      ImageKnifeComponent({
+        imageKnifeOption: {
+          loadSrc: this.item.image,
+          objectFit: ImageFit.Cover,
+          placeholderSrc: $r('app.media.placeholder_video'),
+          placeholderObjectFit: ImageFit.CENTER
+        }
+      })
+        .width('100%')
+        .height('100%')
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 180,
+          colors: [[Color.Transparent, 0.0], ['rgba(0,0,0,0.70)', 1.0]]
+        })
+      Column({ space: 8 }) {
+        Text('下一集待看')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .backgroundColor($r('app.color.color_main'))
+          .borderRadius(99)
+        Text(this.item.name)
+          .fontSize(21)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.item.subtitle)
+          .fontSize(13)
+          .fontColor('rgba(255,255,255,0.82)')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .padding(16)
+      .width('100%')
+    }
+    .width('calc(100% - 32vp)')
+    .height(148)
+    .borderRadius(22)
+    .clip(true)
+    .margin({ left: this.horizontalSpacing * 2, right: this.horizontalSpacing * 2, top: 14 })
+    .onClick(() => this.onPressed(this.item))
+  }
+}
+
+@ComponentV2
+struct ChasingSectionList {
+  @Require @Param title: string
+  @Require @Param subtitle: string
+  @Require @Param items: VideoItem[]
+  @Require @Param kind: string
+  @Require @Param horizontalSpacing: number
+  @Require @Param nativeSurface: boolean
+  @Require @Param primaryColor: ResourceColor
+  @Require @Param secondaryColor: ResourceColor
+  @Event onItemPressed: (item: VideoItem, kind: string) => void = () => {
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Column({ space: 3 }) {
+          Text(this.title)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryColor)
+          Text(this.subtitle)
+            .fontSize(12)
+            .fontColor(this.secondaryColor)
+        }
+        .alignItems(HorizontalAlign.Start)
+        Blank().layoutWeight(1)
+        Text(this.items.length.toString())
+          .fontSize(12)
+          .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .backgroundColor(this.nativeSurface ? Color.Transparent : $r('app.color.bg_1'))
+          .borderRadius(99)
+      }
+      .width('100%')
+      .padding({ left: this.horizontalSpacing * 2, right: this.horizontalSpacing * 2 })
+
+      List({ space: this.horizontalSpacing }) {
+        ListItem().width(this.horizontalSpacing)
+        ForEach(this.items, (item: VideoItem, index: number) => {
+          ListItem() {
+            HorizontalVideoCard({
+              image: item.image,
+              percent: item.percent,
+              name: item.name,
+              subtitle: item.subtitle,
+              index
+            })
+          }
+          .onClick(() => this.onItemPressed(item, this.kind))
+        })
+        ListItem().width(this.horizontalSpacing)
+      }
+      .width('100%')
+      .height(HORIZONTAL_CARD_LIST_HEIGHT)
+      .margin({ top: 12 })
+      .listDirection(Axis.Horizontal)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .margin({ top: 22 })
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+
+@ComponentV2
+struct ChasingRefreshIndicator {
+  @Require @Param refreshOffset: number
+  @Require @Param refreshStatus: RefreshStatus
+
+  build() {
+    CustomRefreshComponent({ refreshOffset: this.refreshOffset, refreshStatus: this.refreshStatus })
+  }
+}
+
+@ComponentV2
 export struct ChasingTab {
   @Param fromHome: boolean = false
   @Param contentTopInset: number = 0
@@ -128,66 +308,159 @@ export struct ChasingTab {
       .push()
   }
 
-  @Builder
-  private topBar() {
-    if (this.useNativeSurface()) {
-      ActionBar({
-        title: '追剧',
-        showBackButton: false
-      })
-        .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
-    } else {
-      ActionBar({
-        title: '追剧',
-        showBackButton: false
-      })
-        .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-        .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+  private handleSectionItem(item: VideoItem, kind: string): void {
+    if (kind === 'completed') {
+      this.openSeriesDetail(item)
+      return
     }
+    if (kind === 'continue') {
+      this.playItem(item)
+      return
+    }
+    this.openItem(item)
+  }
+
+  private horizontalSpacing(): number {
+    return HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
+  }
+
+  // CustomBuilderAdapter: chasing-refresh-indicator
+  @Builder
+  private refreshIndicatorBuilder() {
+    ChasingRefreshIndicator({
+      refreshOffset: this.ui.refreshOffset,
+      refreshStatus: this.ui.refreshStatus
+    })
   }
 
   build() {
     Stack() {
       Column() {
-        this.topBar()
+        if (this.useNativeSurface()) {
+          ActionBar({ title: '追剧', showBackButton: false })
+            .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+        } else {
+          ActionBar({ title: '追剧', showBackButton: false })
+            .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+            .visibility(this.fromHome ? Visibility.None : Visibility.Visible)
+        }
 
-        Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
+        Refresh({
+          refreshing: $$this.ui.isRefreshing,
+          builder: () => {
+            this.refreshIndicatorBuilder()
+          }
+        }) {
           List({ scroller: this.contentScroller }) {
             if (this.ownedContentTopInset() > 0) {
               ListItem().height(this.ownedContentTopInset())
             }
             if (this.ui.followedCount > 0 || this.ui.totalCount > 0) {
               ListItem() {
-                this.filterRow()
+                Row({ space: 8 }) {
+                  ForEach(['待看', '继续看', '已看完', '全部'], (label: string, index: number) => {
+                    ChasingFilterChip({
+                      label,
+                      index,
+                      selectedIndex: this.selectedFilterIndex,
+                      nativeSurface: this.useNativeSurface(),
+                      systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                      onSelect: (selectedIndex: number) => {
+                        this.selectedFilterIndex = selectedIndex
+                      }
+                    })
+                  })
+                }
+                .width('calc(100% - 32vp)')
+                .margin({
+                  left: this.horizontalSpacing() * 2,
+                  right: this.horizontalSpacing() * 2,
+                  top: 12
+                })
               }
             }
             if (this.ui.followedCount > 0 && this.getFilteredItems().length === 0) {
               ListItem() {
-                this.filterEmptyState()
+                Column({ space: 8 }) {
+                  Text(this.getFilterEmptyTitle())
+                    .fontSize(16)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.primaryTextColor())
+                    .textAlign(TextAlign.Center)
+                  Text(this.getFilterSubtitle())
+                    .fontSize(13)
+                    .fontColor(this.secondaryTextColor())
+                    .textAlign(TextAlign.Center)
+                }
+                .width('100%')
+                .height(180)
+                .padding({ left: 32, right: 32 })
+                .justifyContent(FlexAlign.Center)
               }
             } else if (this.selectedFilterIndex === 0 && this.getSectionItems('nextUp').length > 0) {
               ListItem() {
-                this.featuredUpdate(this.getSectionItems('nextUp')[0])
+                ChasingFeaturedUpdate({
+                  item: this.getSectionItems('nextUp')[0],
+                  horizontalSpacing: this.horizontalSpacing(),
+                  onPressed: (item: VideoItem) => this.openItem(item)
+                })
               }
               if (this.getRemainingNextUpItems().length > 0) {
                 ListItem() {
-                  this.sectionList('接下来', `${this.getRemainingNextUpItems().length} 集等待播放`,
-                    this.getRemainingNextUpItems(), 'nextUp')
+                  ChasingSectionList({
+                    title: '接下来',
+                    subtitle: `${this.getRemainingNextUpItems().length} 集等待播放`,
+                    items: this.getRemainingNextUpItems(),
+                    kind: 'nextUp',
+                    horizontalSpacing: this.horizontalSpacing(),
+                    nativeSurface: this.useNativeSurface(),
+                    primaryColor: this.primaryTextColor(),
+                    secondaryColor: this.secondaryTextColor(),
+                    onItemPressed: (item: VideoItem, kind: string) => this.handleSectionItem(item, kind)
+                  })
                 }
               }
             } else if (this.selectedFilterIndex === 1) {
               ListItem() {
-                this.sectionList('继续观看', `${this.getSectionItems('continue').length} 个内容可继续播放`,
-                  this.getSectionItems('continue'), 'continue')
+                ChasingSectionList({
+                  title: '继续观看',
+                  subtitle: `${this.getSectionItems('continue').length} 个内容可继续播放`,
+                  items: this.getSectionItems('continue'),
+                  kind: 'continue',
+                  horizontalSpacing: this.horizontalSpacing(),
+                  nativeSurface: this.useNativeSurface(),
+                  primaryColor: this.primaryTextColor(),
+                  secondaryColor: this.secondaryTextColor(),
+                  onItemPressed: (item: VideoItem, kind: string) => this.handleSectionItem(item, kind)
+                })
               }
             } else if (this.selectedFilterIndex === 2) {
               ListItem() {
-                this.sectionList('已看完', `${this.getSectionItems('completed').length} 部剧集已看完`,
-                  this.getSectionItems('completed'), 'completed')
+                ChasingSectionList({
+                  title: '已看完',
+                  subtitle: `${this.getSectionItems('completed').length} 部剧集已看完`,
+                  items: this.getSectionItems('completed'),
+                  kind: 'completed',
+                  horizontalSpacing: this.horizontalSpacing(),
+                  nativeSurface: this.useNativeSurface(),
+                  primaryColor: this.primaryTextColor(),
+                  secondaryColor: this.secondaryTextColor(),
+                  onItemPressed: (item: VideoItem, kind: string) => this.handleSectionItem(item, kind)
+                })
               }
             } else if (this.selectedFilterIndex === 3) {
               ListItem() {
-                this.sectionList('全部追剧', this.getFilterSubtitle(), this.getFilteredItems(), 'all')
+                ChasingSectionList({
+                  title: '全部追剧',
+                  subtitle: this.getFilterSubtitle(),
+                  items: this.getFilteredItems(),
+                  kind: 'all',
+                  horizontalSpacing: this.horizontalSpacing(),
+                  nativeSurface: this.useNativeSurface(),
+                  primaryColor: this.primaryTextColor(),
+                  secondaryColor: this.secondaryTextColor(),
+                  onItemPressed: (item: VideoItem, kind: string) => this.handleSectionItem(item, kind)
+                })
               }
             }
             ListItem().height(this.scrollTail())
@@ -262,264 +535,4 @@ export struct ChasingTab {
     return '暂无可展示的追剧内容'
   }
 
-  @Builder
-  private filterEmptyState() {
-    Column({ space: 8 }) {
-      Text(this.getFilterEmptyTitle())
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.primaryTextColor())
-        .textAlign(TextAlign.Center)
-      Text(this.getFilterSubtitle())
-        .fontSize(13)
-        .fontColor(this.secondaryTextColor())
-        .textAlign(TextAlign.Center)
-    }
-    .width('100%')
-    .height(180)
-    .padding({ left: 32, right: 32 })
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  filterRow() {
-    Row({ space: 8 }) {
-      ForEach(['待看', '继续看', '已看完', '全部'], (label: string, index: number) => {
-        if (this.useNativeSurface()) {
-          this.nativeFilterChip(label, index)
-        } else {
-          this.feiniuFilterChip(label, index)
-        }
-      })
-    }
-    .width('calc(100% - 32vp)')
-    .margin({
-      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      top: 12
-    })
-  }
-
-  @Builder
-  private nativeFilterChip(label: string, index: number) {
-    if (this.selectedFilterIndex === index) {
-      this.nativeSelectedFilterChip(label, index)
-    } else {
-      this.nativeUnselectedFilterChip(label, index)
-    }
-  }
-
-  @Builder
-  private nativeSelectedFilterChip(label: string, index: number) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(Color.White)
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .height(36)
-      .padding({ left: 8, right: 8 })
-      .backgroundColor($r('app.color.color_main'))
-      .borderRadius(18)
-      .onClick(() => {
-        this.selectedFilterIndex = index
-      })
-  }
-
-  @Builder
-  private nativeUnselectedFilterChip(label: string, index: number) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('sys.color.font_secondary'))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .height(36)
-      .padding({ left: 8, right: 8 })
-      .borderRadius(18)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.InteractiveFloating,
-        this.useNativeSurface(),
-        this.vm.appUIState.systemMaterialAvailable
-      ))
-      .onClick(() => {
-        this.selectedFilterIndex = index
-      })
-  }
-
-  @Builder
-  private feiniuFilterChip(label: string, index: number) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.selectedFilterIndex === index ? Color.White : $r('app.color.text_1'))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .height(36)
-      .padding({ left: 8, right: 8 })
-      .backgroundColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.bg_1'))
-      .borderColor(this.selectedFilterIndex === index ? $r('app.color.color_main') : $r('app.color.border'))
-      .borderWidth(0.5)
-      .borderRadius(18)
-      .onClick(() => {
-        this.selectedFilterIndex = index
-      })
-  }
-
-  @Builder
-  private nativeSectionCount(count: number) {
-    Text(count.toString())
-      .fontSize(12)
-      .fontColor($r('sys.color.font_secondary'))
-      .padding({
-        left: 8,
-        right: 8,
-        top: 3,
-        bottom: 3
-      })
-      .borderRadius(99)
-  }
-
-  @Builder
-  private feiniuSectionCount(count: number) {
-    Text(count.toString())
-      .fontSize(12)
-      .fontColor($r('app.color.text_2'))
-      .padding({
-        left: 8,
-        right: 8,
-        top: 3,
-        bottom: 3
-      })
-      .backgroundColor($r('app.color.bg_1'))
-      .borderRadius(99)
-  }
-
-  @Builder
-  featuredUpdate(item: VideoItem) {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      ImageKnifeComponent({
-        imageKnifeOption: {
-          loadSrc: item.image,
-          objectFit: ImageFit.Cover,
-          placeholderSrc: $r('app.media.placeholder_video'),
-          placeholderObjectFit: ImageFit.CENTER
-        }
-      })
-        .width('100%')
-        .height('100%')
-      Column()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 180,
-          colors: [[Color.Transparent, 0.0], ['rgba(0,0,0,0.70)', 1.0]]
-        })
-      Column({ space: 8 }) {
-        Text('下一集待看')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.color_main'))
-          .borderRadius(99)
-        Text(item.name)
-          .fontSize(21)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(item.subtitle)
-          .fontSize(13)
-          .fontColor('rgba(255,255,255,0.82)')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .padding(16)
-      .width('100%')
-    }
-    .width('calc(100% - 32vp)')
-    .height(148)
-    .borderRadius(22)
-    .clip(true)
-    .margin({
-      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      top: 14
-    })
-    .onClick(() => {
-      this.openItem(item)
-    })
-  }
-
-  @Builder
-  sectionList(title: string, subtitle: string, items: VideoItem[], kind: string) {
-    Column() {
-      Row() {
-        Column({ space: 3 }) {
-          Text(title)
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.primaryTextColor())
-          Text(subtitle)
-            .fontSize(12)
-            .fontColor(this.secondaryTextColor())
-        }
-        .alignItems(HorizontalAlign.Start)
-        Blank().layoutWeight(1)
-        if (this.useNativeSurface()) {
-          this.nativeSectionCount(items.length)
-        } else {
-          this.feiniuSectionCount(items.length)
-        }
-      }
-      .width('100%')
-      .padding({
-        left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-        right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
-      })
-
-      List({ space: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) }) {
-        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-        ForEach(items, (item: VideoItem, index: number) => {
-          ListItem() {
-            HorizontalVideoCard({
-              image: item.image,
-              percent: item.percent,
-              name: item.name,
-              subtitle: item.subtitle,
-              index: index
-            })
-          }.onClick(() => {
-            if (kind === 'completed') {
-              this.openSeriesDetail(item)
-              return
-            }
-            if (kind === 'continue') {
-              this.playItem(item)
-              return
-            }
-            this.openItem(item)
-          })
-        })
-        ListItem().width(HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint))
-      }
-      .width('100%')
-      .height(HORIZONTAL_CARD_LIST_HEIGHT)
-      .margin({ top: 12 })
-      .listDirection(Axis.Horizontal)
-      .scrollBar(BarState.Off)
-    }
-    .width('100%')
-    .margin({ top: 22 })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  customRefreshComponent() {
-    CustomRefreshComponent({
-      refreshOffset: this.ui.refreshOffset,
-      refreshStatus: this.ui.refreshStatus
-    })
-  }
 }

@@ -1,8 +1,6 @@
 import { NavDestinationHelper } from '@hadss/hmrouter'
-import { AppStorageV2, LengthMetrics } from '@kit.ArkUI'
+import { AppStorageV2, AttributeUpdater, LengthMetrics } from '@kit.ArkUI'
 import {
-  HdsNavDestination,
-  HdsNavDestinationTitleMode,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
   TitleBarContentOptions,
@@ -10,110 +8,159 @@ import {
   TitleSize,
   hdsMaterial
 } from '@kit.UIDesignKit'
+import { UIConstants } from '../common/UIConstants'
 import { AppUIState } from '../entity/AppUIState'
 import { ThemeStyle } from '../entity/ThemeStyle'
 import { AppThemeSurfaceResolver } from '../theme/AppThemeSurfaceResolver'
 import { HdsUiCapability } from '../theme/HdsUiCapability'
-import { UIConstants } from '../common/UIConstants'
 
-@Builder
-function EmptyRouteContent() {
+export interface AppRouteDestinationOptions {
+  title?: ResourceStr
+  titleBarVisible?: boolean
+  backButtonVisible?: boolean
+  contentExtendsUnderTitleBar?: boolean
+  heroTitleChrome?: boolean
+  titleMaterialFollowsSystem?: boolean
+  ownsRootNavigationChrome?: boolean
+  menus?: Array<NavigationMenuItem>
+  scrollControllers?: Array<Scroller>
+  beforeBack?: () => boolean
 }
 
-@Component
-export struct AppRouteDestination {
-  @Prop title: ResourceStr = ''
-  @Prop titleBarVisible: boolean = true
-  @Prop backButtonVisible: boolean = true
-  @Prop contentExtendsUnderTitleBar: boolean = false
-  @Prop heroTitleChrome: boolean = false
-  @Prop titleMaterialFollowsSystem: boolean = true
-  @Prop ownsRootNavigationChrome: boolean = false
-  @Prop menus: Array<NavigationMenuItem> = []
-  @Prop scrollControllers: Array<Scroller> = []
-  @Prop hasTitleBarStackBuilder: boolean = false
-  @BuilderParam contentBuilder: () => void = EmptyRouteContent
-  @BuilderParam legacyContentBuilder: () => void = EmptyRouteContent
-  @BuilderParam titleBarStackBuilder: () => void = EmptyRouteContent
-  beforeBack: () => boolean = () => false
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
-  private helper: NavDestinationHelper = new NavDestinationHelper(this)
+class AppLegacyRouteModifier extends AttributeUpdater<NavDestinationAttribute> {
+  private readonly controller: AppRouteDestination
+  private readonly options: AppRouteDestinationOptions
 
-  private usesNativeChrome(): boolean {
+  constructor(controller: AppRouteDestination, options: AppRouteDestinationOptions) {
+    super()
+    this.controller = controller
+    this.options = options
+  }
+
+  initializeModifier(instance: NavDestinationAttribute): void {
+    this.controller.helper.modifier.initializeModifier(instance)
+    instance.backgroundColor(AppThemeSurfaceResolver.routeBackground(
+      this.controller.appUIState.themeStyle,
+      HdsUiCapability.supportsNativeTheme()
+    ))
+    instance.title(this.options.title ?? '', { barStyle: BarStyle.STANDARD })
+    instance.menus([])
+    instance.hideTitleBar(true)
+    instance.hideBackButton(!this.controller.backButtonVisible(this.options))
+    instance.onWillAppear(() => this.controller.helper.onWillAppear())
+    instance.onAppear(() => this.controller.helper.onAppear())
+    instance.onWillShow(() => this.controller.helper.onWillShow())
+    instance.onShown(() => this.controller.helper.onShown())
+    instance.onWillHide(() => this.controller.helper.onWillHide())
+    instance.onHidden(() => this.controller.helper.onHidden())
+    instance.onWillDisappear(() => this.controller.helper.onWillDisappear())
+    instance.onDisAppear(() => this.controller.helper.onDisAppear())
+    instance.onReady((ctx: NavDestinationContext) => this.controller.helper.onReady(ctx))
+    instance.onBackPressed(() => this.controller.handleBackPressed(this.options))
+    instance.onResult((result: ESObject) => this.controller.helper.onResult(result))
+    instance.onActive((reason: NavDestinationActiveReason) => this.controller.helper.onActive(reason))
+    instance.onInactive((reason: NavDestinationActiveReason) => this.controller.helper.onInactive(reason))
+    instance.onNewParam((param: ESObject) => this.controller.helper.onNewParam(param))
+    instance.expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    instance.width('100%')
+    instance.height('100%')
+  }
+}
+
+export class AppRouteDestination {
+  readonly appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
+  readonly helper: NavDestinationHelper
+
+  constructor(component: CustomComponent) {
+    this.helper = new NavDestinationHelper(component)
+  }
+
+  get gestureModifier(): GestureModifier {
+    return this.helper.gestureModifier
+  }
+
+  usesNativeChrome(): boolean {
     return HdsUiCapability.supportsHdsComponents() &&
       this.appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()
   }
 
-  private usesHdsDestination(): boolean {
+  usesHdsDestination(): boolean {
     return HdsUiCapability.supportsHdsComponents()
   }
 
-  private nativeSafeAreaTypes(): Array<LayoutSafeAreaType> {
-    return this.usesNativeChrome() ? [LayoutSafeAreaType.SYSTEM] : []
+  titleBarVisible(options: AppRouteDestinationOptions): boolean {
+    return options.titleBarVisible ?? true
   }
 
-  private nativeSafeAreaEdges(): Array<LayoutSafeAreaEdge> {
-    return this.usesNativeChrome() ? [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : []
+  backButtonVisible(options: AppRouteDestinationOptions): boolean {
+    return options.backButtonVisible ?? true
   }
 
-  private nativeContentTopInset(): number {
-    if (this.contentExtendsUnderTitleBar || !this.titleBarVisible || !this.usesNativeChrome()) {
+  scrollControllers(options: AppRouteDestinationOptions): Array<Scroller> {
+    return options.scrollControllers ?? []
+  }
+
+  rootHomeLibraryPinned(options: AppRouteDestinationOptions): boolean {
+    return (options.ownsRootNavigationChrome ?? false) && this.appUIState.rootNavigationHomeLibraryPinned
+  }
+
+  nativeContentTopInset(options: AppRouteDestinationOptions): number {
+    if ((options.contentExtendsUnderTitleBar ?? false) || !this.titleBarVisible(options) || !this.usesNativeChrome()) {
       return 0
     }
     return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
   }
 
-  private nativeMenus(): Array<HdsNavigationMenuItemOptions> {
-    return this.menus.map((item: NavigationMenuItem): HdsNavigationMenuItemOptions => {
-      return {
-        content: {
-          icon: item.icon,
-          label: item.value,
-          isEnabled: item.isEnabled ?? true,
-          action: item.action
-        }
-      }
-    })
+  nativeSafeAreaTypes(): Array<LayoutSafeAreaType> {
+    return this.usesNativeChrome() ? [LayoutSafeAreaType.SYSTEM] : []
   }
 
-  private rootHomeLibraryPinned(): boolean {
-    return this.ownsRootNavigationChrome && this.appUIState.rootNavigationHomeLibraryPinned
+  nativeSafeAreaEdges(): Array<LayoutSafeAreaEdge> {
+    return this.usesNativeChrome() ? [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : []
   }
 
-  private nativeMainTitle(): ResourceStr {
-    return this.rootHomeLibraryPinned() ? '' : this.title
+  hdsBackgroundColor(): ResourceColor {
+    return AppThemeSurfaceResolver.destinationCanvasBackground(
+      this.appUIState.themeStyle,
+      HdsUiCapability.supportsNativeTheme()
+    )
   }
 
-  private nativeTitleBarOptions(): HdsNavigationTitleBarOptions {
+  hdsTitleBarHidden(options: AppRouteDestinationOptions): boolean {
+    return !this.titleBarVisible(options) || !this.usesNativeChrome() || this.rootHomeLibraryPinned(options)
+  }
+
+  hdsBoundScrollers(options: AppRouteDestinationOptions): Array<Scroller> {
+    return this.titleBarVisible(options) && this.usesNativeChrome() ? this.scrollControllers(options) : []
+  }
+
+  nativeTitleBarOptions(options: AppRouteDestinationOptions): HdsNavigationTitleBarOptions {
     const content: TitleBarContentOptions = {
       title: {
-        mainTitle: this.nativeMainTitle(),
+        mainTitle: this.rootHomeLibraryPinned(options) ? '' : (options.title ?? ''),
         mainTitleSize: TitleSize.TITLE_S
       },
       menu: {
-        value: this.nativeMenus(),
+        value: this.nativeMenus(options),
         maxCount: 3
       }
     }
-    if (this.hasTitleBarStackBuilder) {
-      content.stackBuilder = this.titleBarStackBuilder
-    }
+    const heroTitleChrome = options.heroTitleChrome ?? false
+    const followsSystem = options.titleMaterialFollowsSystem ?? true
     return {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false,
       content: content,
       style: {
         scrollEffectOpts: {
-          enableScrollEffect: !this.rootHomeLibraryPinned(),
+          enableScrollEffect: !this.rootHomeLibraryPinned(options),
           scrollEffectType: HdsScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
           blurEffectiveStartOffset: LengthMetrics.vp(1),
           blurEffectiveEndOffset: LengthMetrics.vp(24)
         },
         systemMaterialEffect: {
-          materialType: this.titleMaterialFollowsSystem ?
-            hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: this.titleMaterialFollowsSystem ?
-            hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE
+          materialType: followsSystem ? hdsMaterial.MaterialType.ADAPTIVE : hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: followsSystem ? hdsMaterial.MaterialLevel.ADAPTIVE : hdsMaterial.MaterialLevel.GENTLE
         },
         originalStyle: {
           backgroundStyle: {
@@ -123,15 +170,15 @@ export struct AppRouteDestination {
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),
-              subTitleColor: this.heroTitleChrome ? Color.White : $r('app.color.text_2')
+              mainTitleColor: heroTitleChrome ? Color.White : $r('app.color.text_primary'),
+              subTitleColor: heroTitleChrome ? Color.White : $r('app.color.text_2')
             },
             menuStyle: {
-              iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary'),
-              textColor: this.heroTitleChrome ? Color.White : $r('app.color.color_main')
+              iconColor: heroTitleChrome ? Color.White : $r('app.color.text_primary'),
+              textColor: heroTitleChrome ? Color.White : $r('app.color.color_main')
             },
             backIconStyle: {
-              iconColor: this.heroTitleChrome ? Color.White : $r('app.color.text_primary')
+              iconColor: heroTitleChrome ? Color.White : $r('app.color.text_primary')
             }
           }
         },
@@ -159,157 +206,24 @@ export struct AppRouteDestination {
     }
   }
 
-  private handleBackPressed(): boolean {
-    return this.beforeBack() || this.helper.onBackPressed()
+  legacyModifier(options: AppRouteDestinationOptions): AttributeModifier<NavDestinationAttribute> {
+    return new AppLegacyRouteModifier(this, options)
   }
 
-  @Builder
-  private hdsContent() {
-    Column() {
-      Blank().height(this.nativeContentTopInset())
-      Stack() {
-        if (this.usesNativeChrome()) {
-          this.contentBuilder()
-        } else {
-          this.legacyContentBuilder()
+  handleBackPressed(options: AppRouteDestinationOptions): boolean {
+    return (options.beforeBack?.() ?? false) || this.helper.onBackPressed()
+  }
+
+  private nativeMenus(options: AppRouteDestinationOptions): Array<HdsNavigationMenuItemOptions> {
+    return (options.menus ?? []).map((item: NavigationMenuItem): HdsNavigationMenuItemOptions => {
+      return {
+        content: {
+          icon: item.icon,
+          label: item.value,
+          isEnabled: item.isEnabled ?? true,
+          action: item.action
         }
       }
-      .width('100%')
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  private hdsDestination() {
-    HdsNavDestination() {
-      this.hdsContent()
-    }
-    .backgroundColor(AppThemeSurfaceResolver.destinationCanvasBackground(
-      this.appUIState.themeStyle,
-      HdsUiCapability.supportsNativeTheme()
-    ))
-    .titleMode(HdsNavDestinationTitleMode.MINI)
-    .titleBar(this.nativeTitleBarOptions())
-    .hideTitleBar(!this.titleBarVisible || !this.usesNativeChrome() ||
-      this.rootHomeLibraryPinned())
-    .hideBackButton(!this.backButtonVisible)
-    .hideToolBar(true)
-    .bindToScrollable(this.titleBarVisible && this.usesNativeChrome() ? this.scrollControllers : [])
-    .onWillAppear(() => {
-      this.helper.onWillAppear()
     })
-    .onAppear(() => {
-      this.helper.onAppear()
-    })
-    .onWillShow(() => {
-      this.helper.onWillShow()
-    })
-    .onShown(() => {
-      this.helper.onShown()
-    })
-    .onWillHide(() => {
-      this.helper.onWillHide()
-    })
-    .onHidden(() => {
-      this.helper.onHidden()
-    })
-    .onWillDisappear(() => {
-      this.helper.onWillDisappear()
-    })
-    .onDisAppear(() => {
-      this.helper.onDisAppear()
-    })
-    .onReady((ctx: NavDestinationContext) => {
-      this.helper.onReady(ctx)
-    })
-    .onBackPressed(() => this.handleBackPressed())
-    .onResult((result: ESObject) => {
-      this.helper.onResult(result)
-    })
-    .onActive((activeReason: NavDestinationActiveReason) => {
-      this.helper.onActive(activeReason)
-    })
-    .onInactive((inactiveReason: NavDestinationActiveReason) => {
-      this.helper.onInactive(inactiveReason)
-    })
-    .ignoreLayoutSafeArea(
-      this.nativeSafeAreaTypes(),
-      this.nativeSafeAreaEdges()
-    )
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  private legacyDestination() {
-    NavDestination() {
-      this.legacyContentBuilder()
-    }
-    .backgroundColor(AppThemeSurfaceResolver.routeBackground(
-      this.appUIState.themeStyle,
-      HdsUiCapability.supportsNativeTheme()
-    ))
-    .title(this.title, { barStyle: BarStyle.STANDARD })
-    .menus([])
-    .hideTitleBar(true)
-    .hideBackButton(!this.backButtonVisible)
-    .attributeModifier(this.helper.modifier)
-    .gestureModifier(this.helper.gestureModifier)
-    .onWillAppear(() => {
-      this.helper.onWillAppear()
-    })
-    .onAppear(() => {
-      this.helper.onAppear()
-    })
-    .onWillShow(() => {
-      this.helper.onWillShow()
-    })
-    .onShown(() => {
-      this.helper.onShown()
-    })
-    .onWillHide(() => {
-      this.helper.onWillHide()
-    })
-    .onHidden(() => {
-      this.helper.onHidden()
-    })
-    .onWillDisappear(() => {
-      this.helper.onWillDisappear()
-    })
-    .onDisAppear(() => {
-      this.helper.onDisAppear()
-    })
-    .onReady((ctx: NavDestinationContext) => {
-      this.helper.onReady(ctx)
-    })
-    .onBackPressed(() => this.handleBackPressed())
-    .onResult((result: ESObject) => {
-      this.helper.onResult(result)
-    })
-    .onActive((activeReason: NavDestinationActiveReason) => {
-      this.helper.onActive(activeReason)
-    })
-    .onInactive((inactiveReason: NavDestinationActiveReason) => {
-      this.helper.onInactive(inactiveReason)
-    })
-    .onNewParam((newParam: ESObject) => {
-      this.helper.onNewParam(newParam)
-    })
-    .expandSafeArea(
-      [SafeAreaType.SYSTEM],
-      [SafeAreaEdge.BOTTOM]
-    )
-    .width('100%')
-    .height('100%')
-  }
-
-  build() {
-    if (this.usesHdsDestination()) {
-      this.hdsDestination()
-    } else {
-      this.legacyDestination()
-    }
   }
 }

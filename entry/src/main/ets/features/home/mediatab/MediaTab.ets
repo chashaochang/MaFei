@@ -1,7 +1,6 @@
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { PageState } from "../../../common/base/BaseUIState";
-import { CustomRefreshComponent } from "../../../common/CustomRefreshComponent";
 import { RouterConsts } from "../../../common/RouterConsts";
 import { UIConstants } from "../../../common/UIConstants";
 import { ActionBar } from "../../../component/ActionBar";
@@ -16,6 +15,53 @@ import { MediaViewModel } from "./MediaViewModel";
 import { HomeInsetsPolicy } from "../HomeInsetsPolicy";
 import { MediaItem } from "../hometab/HomeUIState";
 import { MediaLibraryKind } from "../../../media/catalog/MediaCatalogModels";
+
+@ComponentV2
+struct MediaAdministratorAction {
+  @Require @Param title: ResourceStr
+  @Require @Param icon: Resource
+  @Require @Param controlEnabled: boolean
+  @Require @Param primary: boolean
+  @Require @Param nativeSurface: boolean
+  @Require @Param systemMaterialAvailable: boolean
+  @Event onPressed: () => void = () => {
+  }
+
+  private textColor(): ResourceColor {
+    if (this.primary) {
+      return $r('app.color.on_primary')
+    }
+    return this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  build() {
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: 6 }) {
+        SymbolGlyph(this.icon)
+          .fontSize(17)
+          .fontColor([this.textColor()])
+        Text(this.title)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor())
+          .maxLines(1)
+      }
+    }
+    .height(40)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(20)
+    .backgroundColor(this.nativeSurface ? Color.Transparent :
+      (this.primary ? $r('app.color.color_main') : $r('app.color.bg_1')))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      this.primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveControl,
+      this.nativeSurface,
+      this.systemMaterialAvailable
+    ))
+    .enabled(this.controlEnabled)
+    .opacity(this.controlEnabled ? 1 : 0.55)
+    .onClick(() => this.onPressed())
+  }
+}
 
 @ComponentV2
 export struct MediaTab {
@@ -106,146 +152,68 @@ export struct MediaTab {
     })
   }
 
-  private actionTextColor(primary: boolean): ResourceColor {
-    if (primary) {
-      return $r('app.color.on_primary')
-    }
-    return this.useNativeSurface() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
-  }
-
-  @Builder
-  private administratorActionContent(title: ResourceStr, icon: Resource, primary: boolean) {
-    Row({ space: 6 }) {
-      SymbolGlyph(icon)
-        .fontSize(17)
-        .fontColor([this.actionTextColor(primary)])
-      Text(title)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.actionTextColor(primary))
-        .maxLines(1)
-    }
-  }
-
-  @Builder
-  private nativeAdministratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
-    primary: boolean, action: () => void) {
-    Button({ type: ButtonType.Normal }) {
-      this.administratorActionContent(title, icon, primary)
-    }
-    .height(40)
-    .padding({ left: 14, right: 14 })
-    .borderRadius(20)
-    .backgroundColor(Color.Transparent)
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      primary ? AppThemeMaterialRole.PrimaryInteractive : AppThemeMaterialRole.AdaptiveControl,
-      this.useNativeSurface(),
-      this.appUIState.systemMaterialAvailable
-    ))
-    .enabled(enabled)
-    .opacity(enabled ? 1 : 0.55)
-    .onClick(action)
-  }
-
-  @Builder
-  private feiniuAdministratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
-    primary: boolean, action: () => void) {
-    Button({ type: ButtonType.Normal }) {
-      this.administratorActionContent(title, icon, primary)
-    }
-    .height(40)
-    .padding({ left: 14, right: 14 })
-    .borderRadius(20)
-    .backgroundColor(primary ? $r('app.color.color_main') : $r('app.color.bg_1'))
-    .enabled(enabled)
-    .opacity(enabled ? 1 : 0.55)
-    .onClick(action)
-  }
-
-  @Builder
-  private administratorAction(title: ResourceStr, icon: Resource, enabled: boolean,
-    primary: boolean, action: () => void) {
-    if (this.useNativeSurface()) {
-      this.nativeAdministratorAction(title, icon, enabled, primary, action)
-    } else {
-      this.feiniuAdministratorAction(title, icon, enabled, primary, action)
-    }
-  }
-
-  @Builder
-  private administratorActions() {
-    if (!this.rootTitleBarOwned && this.ui.isAdministrator) {
-      Scroll() {
-        Row({ space: 8 }) {
-          this.administratorAction($r('app.string.management_library_add'), $r('sys.symbol.plus'), true,
-            false, () => {
-              HMRouterMgr.to(RouterConsts.ManagementLibraryEditorPage)
-                .withParam({ libraryId: '' })
-                .push()
-            })
-          this.administratorAction($r('app.string.management_library_scan_all'), $r('sys.symbol.play_fill'),
-            !this.ui.isScanBusy, true, () => {
-              this.vm.scanAll().then((result: ManagementLibraryOperationResult) => this.showScanResult(result))
-            })
-          this.administratorAction($r('app.string.management_library_title'),
-            $r('sys.symbol.list_bullet_square'), true, false, () => {
-              HMRouterMgr.to(RouterConsts.ManagementLibrariesPage).push()
-            })
-          this.administratorAction($r('app.string.management_refresh'), $r('sys.symbol.arrow_clockwise'), true,
-            false, () => this.emitLibraryRefresh())
-        }
-      }
-      .width('100%')
-      .height(48)
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-    }
-  }
-
-  @Builder
-  private topBar() {
-    if (!this.rootTitleBarOwned) {
-      if (this.useNativeSurface()) {
-        ActionBar({
-          title: '媒体库',
-          showBackButton: false
-        })
-      } else {
-        ActionBar({
-          title: '媒体库',
-          showBackButton: false
-        })
-          .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-      }
-    }
-  }
-
-  @Builder
-  private loadingContent() {
-    Column() {
-      Blank().height(this.contentTopSpacer())
-      Column() {
-        LoadingProgress()
-          .width(42)
-          .height(42)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-  }
-
   build() {
     Stack() {
       if (this.ui.pageState === PageState.Content) {
-        Refresh({ refreshing: $$this.ui.isRefreshing, builder: this.customRefreshComponent() }) {
+        Refresh({ refreshing: $$this.ui.isRefreshing }) {
           Scroll(this.contentScroller) {
             Column() {
               Blank().height(this.contentTopSpacer())
-              this.administratorActions()
+              if (!this.rootTitleBarOwned && this.ui.isAdministrator) {
+                Scroll() {
+                  Row({ space: 8 }) {
+                    MediaAdministratorAction({
+                      title: $r('app.string.management_library_add'),
+                      icon: $r('sys.symbol.plus'),
+                      controlEnabled: true,
+                      primary: false,
+                      nativeSurface: this.useNativeSurface(),
+                      systemMaterialAvailable: this.appUIState.systemMaterialAvailable,
+                      onPressed: () => {
+                        HMRouterMgr.to(RouterConsts.ManagementLibraryEditorPage)
+                          .withParam({ libraryId: '' })
+                          .push()
+                      }
+                    })
+                    MediaAdministratorAction({
+                      title: $r('app.string.management_library_scan_all'),
+                      icon: $r('sys.symbol.play_fill'),
+                      controlEnabled: !this.ui.isScanBusy,
+                      primary: true,
+                      nativeSurface: this.useNativeSurface(),
+                      systemMaterialAvailable: this.appUIState.systemMaterialAvailable,
+                      onPressed: () => {
+                        this.vm.scanAll().then((result: ManagementLibraryOperationResult) =>
+                          this.showScanResult(result))
+                      }
+                    })
+                    MediaAdministratorAction({
+                      title: $r('app.string.management_library_title'),
+                      icon: $r('sys.symbol.list_bullet_square'),
+                      controlEnabled: true,
+                      primary: false,
+                      nativeSurface: this.useNativeSurface(),
+                      systemMaterialAvailable: this.appUIState.systemMaterialAvailable,
+                      onPressed: () => {
+                        HMRouterMgr.to(RouterConsts.ManagementLibrariesPage).push()
+                      }
+                    })
+                    MediaAdministratorAction({
+                      title: $r('app.string.management_refresh'),
+                      icon: $r('sys.symbol.arrow_clockwise'),
+                      controlEnabled: true,
+                      primary: false,
+                      nativeSurface: this.useNativeSurface(),
+                      systemMaterialAvailable: this.appUIState.systemMaterialAvailable,
+                      onPressed: () => this.emitLibraryRefresh()
+                    })
+                  }
+                }
+                .width('100%')
+                .height(48)
+                .scrollable(ScrollDirection.Horizontal)
+                .scrollBar(BarState.Off)
+              }
               // ListGroup({
               //   items: [new BaseGroupItem('收藏', $r('app.media.ic_unlike'), this.ui.favoriteCount + '')],
               //   onItemClick: (_index) => {
@@ -289,7 +257,20 @@ export struct MediaTab {
         })
       }
       if (this.ui.pageState === PageState.Loading) {
-        this.loadingContent()
+        Column() {
+          Blank().height(this.contentTopSpacer())
+          Column() {
+            LoadingProgress()
+              .width(42)
+              .height(42)
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width('100%')
+        .height('100%')
       }
       if (this.ui.pageState === PageState.Error) {
         FailedView()
@@ -298,7 +279,14 @@ export struct MediaTab {
           })
       }
 
-      this.topBar()
+      if (!this.rootTitleBarOwned) {
+        if (this.useNativeSurface()) {
+          ActionBar({ title: '媒体库', showBackButton: false })
+        } else {
+          ActionBar({ title: '媒体库', showBackButton: false })
+            .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+        }
+      }
     }
     .backgroundColor(AppThemeSurfaceResolver.routeBackground(
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
@@ -307,11 +295,4 @@ export struct MediaTab {
     .alignContent(Alignment.Top)
   }
 
-  @Builder
-  customRefreshComponent() {
-    CustomRefreshComponent({
-      refreshOffset: this.ui.refreshOffset,
-      refreshStatus: this.ui.refreshStatus
-    })
-  }
 }

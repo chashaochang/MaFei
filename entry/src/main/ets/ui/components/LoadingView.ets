@@ -14,16 +14,18 @@
  */
 import { CommonConstants } from "../../utils/CommonConstants"
 
-@Builder
-export function LoadingView() {
-  Column() {
-    Row() {
-      LoadingProgress()
+@ComponentV2
+export struct LoadingView {
+  build() {
+    Column() {
+      Row() {
+        LoadingProgress()
+      }
+      .margin({ top: $r('app.float.loading_img_margin') })
+      .width($r('app.float.loading_img_size'))
+      .height($r('app.float.loading_img_size'))
     }
-    .margin({ top: $r('app.float.loading_img_margin') })
-    .width($r('app.float.loading_img_size'))
-    .height($r('app.float.loading_img_size'))
+    .height(CommonConstants.FULL_PERCENT)
+    .width(CommonConstants.FULL_PERCENT)
   }
-  .height(CommonConstants.FULL_PERCENT)
-  .width(CommonConstants.FULL_PERCENT)
 }

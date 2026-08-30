@@ -1,7 +1,7 @@
 import { HMRouter } from '@hadss/hmrouter';
 import { RouterConsts } from '../../common/RouterConsts';
 import { ActionBar } from '../../component/ActionBar';
-import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination';
 import { ThemeStylePreview } from '../../component/ThemeStylePreview';
 import { AppPreference } from '../../data/AppPreference';
 import { AppUIState } from '../../entity/AppUIState';
@@ -15,20 +15,153 @@ import { HdsUiCapability } from '../../theme/HdsUiCapability';
 import { nativeThemeCapability } from '../../theme/NativeThemeCapability';
 import { themePromptService, ThemeWriteStatus } from '../../theme/ThemePromptService';
 import { setAutoColorMode, setDarkColorMode, setLightColorMode } from './ColorModeChangeFunctions';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
-@HMRouter({
-  pageUrl: RouterConsts.ColorModePage,
-  useNavDst: true
-})
+class ColorModeItem {
+  mode: CustomColorMode
+  title: ResourceStr
+
+  constructor(mode: CustomColorMode, title: ResourceStr) {
+    this.mode = mode
+    this.title = title
+  }
+}
+
 @ComponentV2
-export struct ColorModePage {
-  private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-  private readonly contentScroller: Scroller = new Scroller()
+struct ColorModeThemeChoice {
+  @Require @Param style: ThemeStyle
+  @Require @Param title: ResourceStr
+  @Require @Param description: ResourceStr
+  @Require @Param selectedTheme: ThemeStyle
+  @Require @Param pressedTheme: ThemeStyle | undefined
+  @Require @Param nativeSurface: boolean
+  @Event onSelect: (style: ThemeStyle) => void = () => {
+  }
+  @Event onPressedChange: (style: ThemeStyle | undefined) => void = () => {
+  }
+
+  private nativeBackground(): ResourceColor {
+    if (this.pressedTheme === this.style) {
+      return '#142173DF'
+    }
+    return this.selectedTheme === this.style ? '#1F2173DF' : Color.Transparent
+  }
+
+  build() {
+    if (this.nativeSurface) {
+      Row({ space: 12 }) {
+        ThemeStylePreview({ style: this.style })
+        Column({ space: 4 }) {
+          Text(this.title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+          Text(this.description)
+            .fontSize(12)
+            .fontColor($r('sys.color.font_secondary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        if (this.selectedTheme === this.style) {
+          SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+            .fontSize(22)
+            .fontColor([$r('app.color.color_main')])
+        } else {
+          Blank().width(22).height(22)
+        }
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 86 })
+      .padding(12)
+      .backgroundColor(this.nativeBackground())
+      .borderRadius(12)
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          this.onPressedChange(this.style)
+        } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+          this.onPressedChange(undefined)
+        }
+      })
+      .onClick(() => this.onSelect(this.style))
+    } else {
+      Row({ space: 12 }) {
+        ThemeStylePreview({ style: this.style })
+        Column({ space: 4 }) {
+          Text(this.title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.style === ThemeStyle.Native ?
+              $r('sys.color.font_primary') : $r('app.color.text_primary'))
+          Text(this.description)
+            .fontSize(12)
+            .fontColor(this.style === ThemeStyle.Native ?
+              $r('sys.color.font_secondary') : $r('app.color.text_1'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Radio({ value: this.style, group: 'themeStyle' })
+          .checked(this.selectedTheme === this.style)
+          .onChange(() => this.onSelect(this.style))
+      }
+      .width('100%')
+      .height(86)
+      .padding(12)
+      .backgroundColor(this.style === ThemeStyle.Native ?
+        $r('sys.color.comp_background_secondary') : $r('app.color.bg_1'))
+      .borderRadius(AppThemeTokens.groupRadius(this.style))
+      .borderWidth(this.selectedTheme === this.style ? 2 : 1)
+      .borderColor(this.selectedTheme === this.style ? $r('app.color.color_main') : $r('app.color.border'))
+      .onClick(() => this.onSelect(this.style))
+    }
+  }
+}
+
+@ComponentV2
+struct ColorModeSelector {
+  @Require @Param items: ColorModeItem[]
+  @Require @Param selectedMode: CustomColorMode
+  @Require @Param nativeSurface: boolean
+  @Event onSelect: (mode: CustomColorMode) => void = () => {
+  }
+
+  build() {
+    Row({ space: 6 }) {
+      ForEach(this.items, (item: ColorModeItem) => {
+        Button(item.title, { type: ButtonType.Normal })
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.selectedMode === item.mode ?
+            $r('app.color.on_primary') :
+            (this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')))
+          .backgroundColor(this.selectedMode === item.mode ?
+            $r('app.color.color_main') : Color.Transparent)
+          .borderRadius(11)
+          .height(44)
+          .layoutWeight(1)
+          .onClick(() => this.onSelect(item.mode))
+      })
+    }
+    .width('100%')
+    .padding(5)
+    .borderRadius(16)
+    .clip(this.nativeSurface)
+    .backgroundColor(this.nativeSurface ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.component_bg'))
+  }
+}
+
+@ComponentV2
+struct ColorModePageSurface {
+  @Require @Param showLegacyActionBar: boolean
+  @Require @Param contentScroller: Scroller
+  private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext
   @Local selectedTheme: ThemeStyle = ThemeStyle.Feiniu
   @Local selectedColorMode: CustomColorMode = CustomColorMode.Auto
   @Local pressedTheme: ThemeStyle | undefined = undefined
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
-  colorModes: Array<ColorModeItem> = [
+  private appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
+  private colorModes: ColorModeItem[] = [
     new ColorModeItem(CustomColorMode.Auto, $r('app.string.color_mode_auto')),
     new ColorModeItem(CustomColorMode.Light, $r('app.string.color_mode_light')),
     new ColorModeItem(CustomColorMode.Dark, $r('app.string.color_mode_dark'))
@@ -81,203 +214,10 @@ export struct ColorModePage {
     )
   }
 
-  private contentTopPadding(showLegacyActionBar: boolean): number {
-    return 12
-  }
-
-  private nativeThemeChoiceBackground(style: ThemeStyle): ResourceColor {
-    if (this.pressedTheme === style) {
-      return '#142173DF'
-    }
-    return this.selectedTheme === style ? '#1F2173DF' : Color.Transparent
-  }
-
-  @Builder
-  private feiniuThemeChoice(style: ThemeStyle, title: ResourceStr, description: ResourceStr) {
-    Row({ space: 12 }) {
-      ThemeStylePreview({ style: style })
-      Column({ space: 4 }) {
-        Text(title)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(style === ThemeStyle.Native ?
-            $r('sys.color.font_primary') : $r('app.color.text_primary'))
-        Text(description)
-          .fontSize(12)
-          .fontColor(style === ThemeStyle.Native ?
-            $r('sys.color.font_secondary') : $r('app.color.text_1'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Radio({ value: style, group: 'themeStyle' })
-        .checked(this.selectedTheme === style)
-        .onChange(() => {
-          this.selectTheme(style)
-        })
-    }
-    .width('100%')
-    .height(86)
-    .padding(12)
-    .backgroundColor(style === ThemeStyle.Native ?
-      $r('sys.color.comp_background_secondary') : $r('app.color.bg_1'))
-    .borderRadius(AppThemeTokens.groupRadius(style))
-    .borderWidth(this.selectedTheme === style ? 2 : 1)
-    .borderColor(this.selectedTheme === style ? $r('app.color.color_main') : $r('app.color.border'))
-    .onClick(() => {
-      this.selectTheme(style)
-    })
-  }
-
-  @Builder
-  private nativeThemeChoice(style: ThemeStyle, title: ResourceStr, description: ResourceStr) {
-    Row({ space: 12 }) {
-      ThemeStylePreview({ style: style })
-      Column({ space: 4 }) {
-        Text(title)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-        Text(description)
-          .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      if (this.selectedTheme === style) {
-        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(22)
-          .fontColor([$r('app.color.color_main')])
-      } else {
-        Blank().width(22).height(22)
-      }
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 86 })
-    .padding(12)
-    .backgroundColor(this.nativeThemeChoiceBackground(style))
-    .borderRadius(12)
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedTheme = style
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.pressedTheme = undefined
-      }
-    })
-    .onClick(() => {
-      this.selectTheme(style)
-    })
-  }
-
-  @Builder
-  private themeChoicesGroup() {
+  build() {
     Column() {
-      this.nativeThemeChoice(
-        ThemeStyle.Native,
-        $r('app.string.theme_native_name'),
-        $r('app.string.theme_native_desc')
-      )
-      Divider()
-        .color($r('sys.color.comp_divider'))
-        .margin({ left: 12, right: 12 })
-      this.nativeThemeChoice(
-        ThemeStyle.Feiniu,
-        $r('app.string.theme_feiniu_name'),
-        $r('app.string.theme_feiniu_desc')
-      )
-    }
-    .width('100%')
-    .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuThemeChoicesGroup() {
-    Column({ space: 12 }) {
-      this.feiniuThemeChoice(
-        ThemeStyle.Native,
-        $r('app.string.theme_native_name'),
-        $r('app.string.theme_native_desc')
-      )
-      this.feiniuThemeChoice(
-        ThemeStyle.Feiniu,
-        $r('app.string.theme_feiniu_name'),
-        $r('app.string.theme_feiniu_desc')
-      )
-    }
-    .width('100%')
-  }
-
-  @Builder
-  private themeChoicesSurface() {
-    if (this.useNativeSurface()) {
-      this.themeChoicesGroup()
-    } else {
-      this.feiniuThemeChoicesGroup()
-    }
-  }
-
-  @Builder
-  private colorModeButtons(native: boolean) {
-    ForEach(this.colorModes, (item: ColorModeItem) => {
-      Button(item.title, { type: ButtonType.Normal })
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.selectedColorMode === item.mode ?
-          $r('app.color.on_primary') :
-          (native ? $r('sys.color.font_secondary') : $r('app.color.text_1')))
-        .backgroundColor(this.selectedColorMode === item.mode ?
-          $r('app.color.color_main') : Color.Transparent)
-        .borderRadius(11)
-        .height(44)
-        .layoutWeight(1)
-        .onClick(() => {
-          this.selectColorMode(item.mode)
-        })
-    })
-  }
-
-  @Builder
-  private colorModeSelector() {
-    Row({ space: 6 }) {
-      this.colorModeButtons(true)
-    }
-    .width('100%')
-    .padding(5)
-    .borderRadius(16)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuColorModeSelector() {
-    Row({ space: 6 }) {
-      this.colorModeButtons(false)
-    }
-    .width('100%')
-    .padding(5)
-    .borderRadius(16)
-    .backgroundColor($r('app.color.component_bg'))
-  }
-
-  @Builder
-  private colorModeSelectorSurface() {
-    if (this.useNativeSurface()) {
-      this.colorModeSelector()
-    } else {
-      this.feiniuColorModeSelector()
-    }
-  }
-
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Column() {
-      if (showLegacyActionBar) {
-        ActionBar({
-          title: $r('app.string.appearance_title')
-        })
+      if (this.showLegacyActionBar) {
+        ActionBar({ title: $r('app.string.appearance_title') })
       }
       Scroll(this.contentScroller) {
         Column({ space: 12 }) {
@@ -289,7 +229,42 @@ export struct ColorModePage {
                 $r('sys.color.font_secondary') : $r('app.color.text_1'))
               .width('100%')
               .margin({ left: 4 })
-            this.themeChoicesSurface()
+            Column({ space: this.useNativeSurface() ? 0 : 12 }) {
+              ColorModeThemeChoice({
+                style: ThemeStyle.Native,
+                title: $r('app.string.theme_native_name'),
+                description: $r('app.string.theme_native_desc'),
+                selectedTheme: this.selectedTheme,
+                pressedTheme: this.pressedTheme,
+                nativeSurface: this.useNativeSurface(),
+                onSelect: (style: ThemeStyle) => this.selectTheme(style),
+                onPressedChange: (style: ThemeStyle | undefined) => {
+                  this.pressedTheme = style
+                }
+              })
+              if (this.useNativeSurface()) {
+                Divider()
+                  .color($r('sys.color.comp_divider'))
+                  .margin({ left: 12, right: 12 })
+              }
+              ColorModeThemeChoice({
+                style: ThemeStyle.Feiniu,
+                title: $r('app.string.theme_feiniu_name'),
+                description: $r('app.string.theme_feiniu_desc'),
+                selectedTheme: this.selectedTheme,
+                pressedTheme: this.pressedTheme,
+                nativeSurface: this.useNativeSurface(),
+                onSelect: (style: ThemeStyle) => this.selectTheme(style),
+                onPressedChange: (style: ThemeStyle | undefined) => {
+                  this.pressedTheme = style
+                }
+              })
+            }
+            .width('100%')
+            .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
+            .clip(this.useNativeSurface())
+            .backgroundColor(this.useNativeSurface() ?
+              AppThemeSurfaceResolver.contentGroupBackground() : Color.Transparent)
           }
           Text($r('app.string.color_mode_title'))
             .fontSize(14)
@@ -298,7 +273,12 @@ export struct ColorModePage {
               $r('sys.color.font_secondary') : $r('app.color.text_1'))
             .width('100%')
             .margin({ top: 10, left: 4 })
-          this.colorModeSelectorSurface()
+          ColorModeSelector({
+            items: this.colorModes,
+            selectedMode: this.selectedColorMode,
+            nativeSurface: this.useNativeSurface(),
+            onSelect: (mode: CustomColorMode) => this.selectColorMode(mode)
+          })
           Text($r('app.string.color_mode_auto_desc'))
             .fontSize(12)
             .fontColor(AppThemeTokens.isNative(this.appUIState.themeStyle) ?
@@ -310,12 +290,7 @@ export struct ColorModePage {
         }
         .width('100%')
         .constraintSize({ maxWidth: 560 })
-        .padding({
-          left: 16,
-          right: 16,
-          top: this.contentTopPadding(showLegacyActionBar),
-          bottom: 32
-        })
+        .padding({ left: 16, right: 16, top: 12, bottom: 32 })
         .alignItems(HorizontalAlign.Center)
       }
       .width('100%')
@@ -325,30 +300,88 @@ export struct ColorModePage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
+    .backgroundColor(this.showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-  }
-
-  build() {
-    AppRouteDestination({
-      title: $r('app.string.appearance_title'),
-      scrollControllers: [this.contentScroller],
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
-      }
-    })
   }
 }
 
-class ColorModeItem {
-  mode: CustomColorMode
-  title: ResourceStr
+@HMRouter({
+  pageUrl: RouterConsts.ColorModePage,
+  useNavDst: true
+})
+@ComponentV2
+export struct ColorModePage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  private readonly contentScroller: Scroller = new Scroller()
 
-  constructor(mode: CustomColorMode, title: ResourceStr) {
-    this.mode = mode
-    this.title = title
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: $r('app.string.appearance_title'),
+        scrollControllers: [this.contentScroller]
+      }
+  }
+
+  build() {
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              ColorModePageSurface({
+                showLegacyActionBar: false,
+                contentScroller: this.contentScroller
+              })
+            } else {
+              ColorModePageSurface({
+                showLegacyActionBar: true,
+                contentScroller: this.contentScroller
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
+      }
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        ColorModePageSurface({
+          showLegacyActionBar: true,
+          contentScroller: this.contentScroller
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

@@ -31,31 +31,52 @@ export struct MusicLibrarySkeleton {
     return this.nativeSurface ? $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2')
   }
 
-  @Builder
-  private gridSkeleton(artistMode: boolean) {
+  build() {
+    if (this.section === MusicLibrarySection.Tracks) {
+      MusicTrackSkeleton({
+        blockColor: this.blockColor(),
+        nativeSurface: this.nativeSurface
+      })
+    } else {
+      MusicGridSkeleton({
+        columnCount: this.columnCount(),
+        artistMode: this.section === MusicLibrarySection.Artists,
+        blockColor: this.blockColor()
+      })
+    }
+  }
+}
+
+@ComponentV2
+struct MusicGridSkeleton {
+  @Require @Param columnCount: number
+  @Param artistMode: boolean = false
+  @Require @Param blockColor: ResourceColor
+
+  build() {
     Grid() {
-      ForEach(Array.from({ length: this.columnCount() * 4 }, (_value: Object, index: number) => index),
+      ForEach(Array.from({ length: this.columnCount * 4 }, (_value: Object, index: number) => index),
         (index: number) => {
           GridItem() {
-            Column({ space: artistMode ? 8 : 7 }) {
+            Column({ space: this.artistMode ? 8 : 7 }) {
               Row()
                 .width('100%')
                 .aspectRatio(1)
                 .borderRadius(8)
-                .backgroundColor(this.blockColor())
+                .backgroundColor(this.blockColor)
                 .opacity(0.72)
               Row()
                 .width(index % 3 === 0 ? '76%' : '60%')
                 .height(13)
                 .borderRadius(7)
-                .backgroundColor(this.blockColor())
+                .backgroundColor(this.blockColor)
                 .opacity(0.72)
-              if (!artistMode) {
+              if (!this.artistMode) {
                 Row()
                   .width(index % 2 === 0 ? '54%' : '42%')
                   .height(11)
                   .borderRadius(6)
-                  .backgroundColor(this.blockColor())
+                  .backgroundColor(this.blockColor)
                   .opacity(0.58)
               }
             }
@@ -66,15 +87,20 @@ export struct MusicLibrarySkeleton {
     }
     .width('100%')
     .height('100%')
-    .columnsTemplate('1fr '.repeat(this.columnCount()))
+    .columnsTemplate('1fr '.repeat(this.columnCount))
     .columnsGap(12)
     .rowsGap(18)
     .scrollBar(BarState.Off)
     .enabled(false)
   }
+}
 
-  @Builder
-  private trackSkeleton() {
+@ComponentV2
+struct MusicTrackSkeleton {
+  @Require @Param blockColor: ResourceColor
+  @Param nativeSurface: boolean = false
+
+  build() {
     Column() {
       ForEach(MUSIC_SKELETON_ROWS, (index: number) => {
         Row({ space: 12 }) {
@@ -82,20 +108,20 @@ export struct MusicLibrarySkeleton {
             .width(26)
             .height(12)
             .borderRadius(6)
-            .backgroundColor(this.blockColor())
+            .backgroundColor(this.blockColor)
             .opacity(0.58)
           Column({ space: 6 }) {
             Row()
               .width(index % 3 === 0 ? '78%' : '62%')
               .height(14)
               .borderRadius(7)
-              .backgroundColor(this.blockColor())
+              .backgroundColor(this.blockColor)
               .opacity(0.72)
             Row()
               .width(index % 2 === 0 ? '56%' : '44%')
               .height(11)
               .borderRadius(6)
-              .backgroundColor(this.blockColor())
+              .backgroundColor(this.blockColor)
               .opacity(0.58)
           }
           .layoutWeight(1)
@@ -104,7 +130,7 @@ export struct MusicLibrarySkeleton {
             .width(34)
             .height(11)
             .borderRadius(6)
-            .backgroundColor(this.blockColor())
+            .backgroundColor(this.blockColor)
             .opacity(0.58)
         }
         .width('100%')
@@ -122,13 +148,5 @@ export struct MusicLibrarySkeleton {
     .width('100%')
     .height('100%')
     .enabled(false)
-  }
-
-  build() {
-    if (this.section === MusicLibrarySection.Tracks) {
-      this.trackSkeleton()
-    } else {
-      this.gridSkeleton(this.section === MusicLibrarySection.Artists)
-    }
   }
 }

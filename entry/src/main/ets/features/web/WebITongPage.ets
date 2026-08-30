@@ -1,55 +1,55 @@
-import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { RouterConsts } from '../../common/RouterConsts';
-import { UIConstants } from '../../common/UIConstants';
-import { WebITongUIState } from './WebITongUIState';
-import { WebITongViewModel } from './WebITongViewModel';
-import { ApiClient } from '../../network/ApiClient';
-import { ActivityEventHandler } from '../../events/ActivityEventHandler';
-import { AppRouteDestination } from '../../component/AppRouteDestination';
-import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver';
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
+import { RouterConsts } from '../../common/RouterConsts'
+import { UIConstants } from '../../common/UIConstants'
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination'
+import { ActivityEventHandler } from '../../events/ActivityEventHandler'
+import { ApiClient } from '../../network/ApiClient'
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../theme/AppThemeSurfaceResolver'
+import { WebITongUIState } from './WebITongUIState'
+import { WebITongViewModel } from './WebITongViewModel'
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
-@HMRouter({
-  pageUrl: RouterConsts.WebITongPage,
-  useNavDst: true
-})
 @ComponentV2
-export struct WebITongPage {
-  @Local ui: WebITongUIState = new WebITongUIState(this.getUIContext());
-  @Local vm: WebITongViewModel = new WebITongViewModel(this.ui)
-  @Consumer() activityEventHandler: ActivityEventHandler =
-    new ActivityEventHandler(this.vm.appUIState.context!.eventHub)
-
-  private routeTitle(): string {
-    return this.ui.pageTitle.length > 0 ? this.ui.pageTitle : '网(Web)易通'
-  }
+struct WebITongContent {
+  @Require @Param ui: WebITongUIState
+  @Require @Param vm: WebITongViewModel
+  @Require @Param activityEventHandler: ActivityEventHandler
+  @Require @Param showLegacyTopInset: boolean
+  @Event onClose: () => void = () => {}
 
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
-  private handleRouteBack(): boolean {
+  private goBack(): void {
     if (this.vm.controller?.accessBackward()) {
       this.vm.controller?.backward()
-      return true
+      return
     }
-    return false
+    this.onClose()
   }
 
-  @Builder
-  private pageContent(showLegacyTopInset: boolean) {
+  private refresh(): void {
+    try {
+      this.vm.controller?.refresh()
+    } catch (error) {
+      console.log(`刷新失败:${JSON.stringify(error)}`)
+    }
+  }
+
+  build() {
     Stack() {
       Column() {
-        if (showLegacyTopInset) {
+        if (this.showLegacyTopInset) {
           Stack()
             .width('100%')
             .height(this.vm.appUIState.safeTop)
             .backgroundColor(this.ui.progress === 100 ?
               $r('app.color.start_window_background') : Color.Transparent)
         }
-        Progress({
-          value: this.ui.progress
-        }).visibility(this.ui.progress === 100 && !this.vm.isFirst ? Visibility.None : Visibility.Visible)
+        Progress({ value: this.ui.progress })
+          .visibility(this.ui.progress === 100 && !this.vm.isFirst ? Visibility.None : Visibility.Visible)
         Web({
           controller: this.vm.controller,
           src: ApiClient.Instance().basePath
@@ -62,12 +62,8 @@ export struct WebITongPage {
           .mixedMode(MixedMode.All)
           .cacheMode(CacheMode.Default)
           .javaScriptAccess(true)
-          .onControllerAttached(() => {
-            this.vm.registerJavaScriptProxy(this.activityEventHandler)
-          })
-          .onPageEnd(() => {
-            this.vm.injectCredentials()
-          })
+          .onControllerAttached(() => this.vm.registerJavaScriptProxy(this.activityEventHandler))
+          .onPageEnd(() => this.vm.injectCredentials())
           .onProgressChange((event) => {
             this.ui.progress = event.newProgress
           })
@@ -75,56 +71,13 @@ export struct WebITongPage {
             this.ui.pageTitle = event.title
           })
           .onInterceptRequest((event) => {
-            if (!event) {
-              return;
-            }
-            // 此处匹配自己想要加载的本地离线资源，进行资源拦截替换，绕过跨域
-            let path = event.request.getRequestUrl()
-            return this.vm.interceptRequest(path);
+            if (!event) return
+            return this.vm.interceptRequest(event.request.getRequestUrl())
           })
-          .onHttpErrorReceive((e) => {
-            if (e.request.getRequestUrl() == ApiClient.Instance().basePath) {
-              //this.handleError()
-            }
+          .onHttpErrorReceive((_event) => {
           })
-          .onSslErrorEventReceive((event) => {
-            event.handler.handleCancel()
-            //this.handleError()
-          })
-          .onConsole((e) => {
-            // if (e.message.getMessage().includes('redirecting to login page')) {
-            //   HMRouterMgr.to('/LoginPage').onResult((info) => {
-            //     if (info.result) {
-            //       let res = info.result['loginRes'] as AuthenticationResult
-            //       this.controller.runJavaScript("JSON.parse(window.localStorage.getItem('jellyfin_credentials'))")
-            //         .then(result => {
-            //           const credentials: Credentials | null = JSON.parse(result)
-            //           if (credentials) {
-            //             let server = credentials.Servers[0]
-            //             server.UserId = res.User!.Id!
-            //             server.AccessToken = res.AccessToken!
-            //             this.controller.runJavaScript('window.localStorage.setItem("jellyfin_credentials", JSON.stringify(' +
-            //             JSON.stringify(credentials) + '))')
-            //               .then(() => {
-            //                 this.controller.runJavaScript('window.localStorage.setItem("user-' + res.User?.Id + '-' +
-            //                   res.User?.ServerId + '", JSON.stringify(' +
-            //                 JSON.stringify(res.User) + '))')
-            //                   .then(() => {
-            //                     this.apiClientController.setupUser(this.server.id, server.UserId, server.AccessToken)
-            //                     AppStorage.setOrCreate('userId', server.UserId)
-            //                     this.controller.loadUrl(ApiClient.Instance().basePath)
-            //                   }).catch()
-            //               }).catch()
-            //           }
-            //         })
-            //         .catch(() => {
-            //           throw Error('Failed to extract credentials')
-            //         })
-            //     }
-            //   }).push()
-            // }
-            return false
-          })
+          .onSslErrorEventReceive((event) => event.handler.handleCancel())
+          .onConsole((_event) => false)
       }
       .width('100%')
       .height('100%')
@@ -146,13 +99,7 @@ export struct WebITongPage {
           this.useNativeSurface(),
           this.vm.appUIState.systemMaterialAvailable
         ))
-        .onClick(() => {
-          if (this.vm.controller?.accessBackward()) {
-            this.vm.controller?.backward()
-          } else {
-            HMRouterMgr.pop()
-          }
-        })
+        .onClick(() => this.goBack())
         .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Stack() {
@@ -171,9 +118,7 @@ export struct WebITongPage {
           this.useNativeSurface(),
           this.vm.appUIState.systemMaterialAvailable
         ))
-        .onClick(() => {
-          HMRouterMgr.pop()
-        })
+        .onClick(() => this.onClose())
         .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Text(this.ui.pageTitle)
@@ -181,9 +126,7 @@ export struct WebITongPage {
           .fontColor($r('app.color.text_primary'))
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
-          .textOverflow({
-            overflow: TextOverflow.Ellipsis
-          })
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
           .height(40)
           .borderWidth(AppThemeSurfaceResolver.outlineWidth(
@@ -196,9 +139,7 @@ export struct WebITongPage {
             this.vm.appUIState.systemMaterialAvailable
           ))
           .borderRadius(6)
-          .padding({
-            left: 12, right: 12
-          })
+          .padding({ left: 12, right: 12 })
           .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Stack() {
@@ -217,13 +158,7 @@ export struct WebITongPage {
           this.useNativeSurface(),
           this.vm.appUIState.systemMaterialAvailable
         ))
-        .onClick(() => {
-          try {
-            this.vm.controller?.refresh()
-          } catch (error) {
-            console.log("刷新失败:" + JSON.stringify(error));
-          }
-        })
+        .onClick(() => this.refresh())
         .visibility(this.ui.expandControl ? Visibility.Visible : Visibility.None)
 
         Stack() {
@@ -251,29 +186,117 @@ export struct WebITongPage {
       .justifyContent(FlexAlign.End)
       .height(UIConstants.ACTION_BAR_HEIGHT)
       .width('100%')
-      .padding({
-        left: 16,
-        right: 16,
-      })
-      .margin({
-        bottom: this.vm.appUIState.safeBottom
-      })
-    }.width('100%')
+      .padding({ left: 16, right: 16 })
+      .margin({ bottom: this.vm.appUIState.safeBottom })
+    }
+    .width('100%')
     .height('100%')
     .align(Alignment.Bottom)
   }
+}
+
+@HMRouter({
+  pageUrl: RouterConsts.WebITongPage,
+  useNavDst: true
+})
+@ComponentV2
+export struct WebITongPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  @Local ui: WebITongUIState = new WebITongUIState(this.getUIContext())
+  @Local vm: WebITongViewModel = new WebITongViewModel(this.ui)
+  @Consumer() activityEventHandler: ActivityEventHandler =
+    new ActivityEventHandler(this.vm.appUIState.context!.eventHub)
+
+  private routeTitle(): string {
+    return this.ui.pageTitle.length > 0 ? this.ui.pageTitle : '网(Web)易通'
+  }
+
+  private handleRouteBack(): boolean {
+    if (this.vm.controller?.accessBackward()) {
+      this.vm.controller?.backward()
+      return true
+    }
+    return false
+  }
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: this.routeTitle(),
+        titleBarVisible: false,
+        beforeBack: () => this.handleRouteBack()
+      }
+  }
 
   build() {
-    AppRouteDestination({
-      title: this.routeTitle(),
-      titleBarVisible: false,
-      beforeBack: () => this.handleRouteBack(),
-      contentBuilder: () => {
-        this.pageContent(true)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              WebITongContent({
+                ui: this.ui,
+                vm: this.vm,
+                activityEventHandler: this.activityEventHandler,
+                showLegacyTopInset: true,
+                onClose: () => HMRouterMgr.pop()
+              })
+            } else {
+              WebITongContent({
+                ui: this.ui,
+                vm: this.vm,
+                activityEventHandler: this.activityEventHandler,
+                showLegacyTopInset: true,
+                onClose: () => HMRouterMgr.pop()
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        WebITongContent({
+          ui: this.ui,
+          vm: this.vm,
+          activityEventHandler: this.activityEventHandler,
+          showLegacyTopInset: true,
+          onClose: () => HMRouterMgr.pop()
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

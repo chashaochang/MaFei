@@ -8,6 +8,7 @@ import { AppUIState } from "../../entity/AppUIState";
 import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../../theme/AppThemeTokens";
 import { MusicLoginLifecycle } from "../music/MusicHostLifecycle";
+import { ThemeStyle } from "../../entity/ThemeStyle";
 
 @HMRouter({
   pageUrl: '/LoginPage',
@@ -55,93 +56,27 @@ export struct LoginPage {
     })
   }
 
-  @Builder
-  private loginFormContent(nativeSurface: boolean) {
-    Text('用户名')
-      .padding({ bottom: 8 })
-      .fontSize(18)
-      .fontColor(nativeSurface ? $r('sys.color.font_primary') : Color.White)
-    AuthTextField({
-      text: this.username,
-      icon: $r('app.media.ic_user'),
-      placeholder: '请输入用户名',
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.username = v
-      },
-      onSubmit: (): void => {
-        this.onLogin()
-      }
-    })
-    Blank().height(16)
-    Text('密码')
-      .padding({ bottom: 8 })
-      .fontSize(18)
-      .fontColor(nativeSurface ? $r('sys.color.font_primary') : Color.White)
-    AuthTextField({
-      text: this.password,
-      icon: $r('app.media.ic_pwd'),
-      placeholder: '请输入密码',
-      password: true,
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.password = v
-      },
-      onSubmit: (): void => {
-        this.onLogin()
-      }
-    })
-    AnimatedErrorText({ errorText: this.errorText }).padding({ top: 4 })
-    if (!this.loading) {
-      StyledTextButton({
-        text: '登录',
-        enable: this.username.length > 0 && this.password.length > 0,
-        onclick: (): void => {
-          this.onLogin()
-        }
-      })
-    } else {
-      Row() {
-        LoadingProgress().width(32).height(32)
-        Text('正在登录...')
-          .fontColor(nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
-          .padding({ left: 12 })
-      }.padding({ top: 24 })
-    }
-  }
-
-  @Builder
-  private nativeLoginForm() {
-    Column() {
-      this.loginFormContent(true)
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 560 })
-    .alignItems(HorizontalAlign.Start)
-    .padding(16)
-    .borderRadius(AppThemeTokens.groupRadius(this.appUIState.themeStyle))
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuLoginForm() {
-    Column() {
-      this.loginFormContent(false)
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
   build() {
     Column() {
       LoginLogoHeader({ nativeSurface: this.useNativeSurface() })
       Blank().height(8)
-      if (this.useNativeSurface()) {
-        this.nativeLoginForm()
-      } else {
-        this.feiniuLoginForm()
-      }
+      LoginForm({
+        username: this.username,
+        password: this.password,
+        loading: this.loading,
+        errorText: this.errorText,
+        nativeSurface: this.useNativeSurface(),
+        themeStyle: this.appUIState.themeStyle,
+        onUsernameChanged: (value: string): void => {
+          this.username = value
+        },
+        onPasswordChanged: (value: string): void => {
+          this.password = value
+        },
+        onSubmit: (): void => {
+          this.onLogin()
+        }
+      })
 
       Blank().layoutWeight(1)
     }
@@ -152,6 +87,117 @@ export struct LoginPage {
       AppThemeSurfaceResolver.routeBackground(
         this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : '#101010')
     .expandSafeArea([SafeAreaType.SYSTEM],[SafeAreaEdge.BOTTOM])
+  }
+}
+
+@ComponentV2
+struct LoginFormFields {
+  @Param username: string = ''
+  @Param password: string = ''
+  @Param loading: boolean = false
+  @Param errorText: string = ''
+  @Param nativeSurface: boolean = false
+  @Event onUsernameChanged: (value: string) => void = () => {}
+  @Event onPasswordChanged: (value: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
+
+  build() {
+    Column() {
+      Text('用户名')
+        .padding({ bottom: 8 })
+        .fontSize(18)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : Color.White)
+      AuthTextField({
+        text: this.username,
+        icon: $r('app.media.ic_user'),
+        placeholder: '请输入用户名',
+        nativeSurface: this.nativeSurface,
+        onTextChanged: this.onUsernameChanged,
+        onSubmit: this.onSubmit
+      })
+      Blank().height(16)
+      Text('密码')
+        .padding({ bottom: 8 })
+        .fontSize(18)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : Color.White)
+      AuthTextField({
+        text: this.password,
+        icon: $r('app.media.ic_pwd'),
+        placeholder: '请输入密码',
+        password: true,
+        nativeSurface: this.nativeSurface,
+        onTextChanged: this.onPasswordChanged,
+        onSubmit: this.onSubmit
+      })
+      AnimatedErrorText({ errorText: this.errorText }).padding({ top: 4 })
+      if (!this.loading) {
+        StyledTextButton({
+          text: '登录',
+          enable: this.username.length > 0 && this.password.length > 0,
+          onPressed: this.onSubmit
+        })
+      } else {
+        Row() {
+          LoadingProgress().width(32).height(32)
+          Text('正在登录...')
+            .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
+            .padding({ left: 12 })
+        }.padding({ top: 24 })
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+
+@ComponentV2
+struct LoginForm {
+  @Param username: string = ''
+  @Param password: string = ''
+  @Param loading: boolean = false
+  @Param errorText: string = ''
+  @Param nativeSurface: boolean = false
+  @Require @Param themeStyle: ThemeStyle
+  @Event onUsernameChanged: (value: string) => void = () => {}
+  @Event onPasswordChanged: (value: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
+
+  build() {
+    if (this.nativeSurface) {
+      Column() {
+        LoginFormFields({
+          username: this.username,
+          password: this.password,
+          loading: this.loading,
+          errorText: this.errorText,
+          nativeSurface: true,
+          onUsernameChanged: this.onUsernameChanged,
+          onPasswordChanged: this.onPasswordChanged,
+          onSubmit: this.onSubmit
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 560 })
+      .alignItems(HorizontalAlign.Start)
+      .padding(16)
+      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
+      .clip(true)
+      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+    } else {
+      Column() {
+        LoginFormFields({
+          username: this.username,
+          password: this.password,
+          loading: this.loading,
+          errorText: this.errorText,
+          onUsernameChanged: this.onUsernameChanged,
+          onPasswordChanged: this.onPasswordChanged,
+          onSubmit: this.onSubmit
+        })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
   }
 }
 
@@ -175,17 +221,15 @@ struct LoginLogoHeader {
 }
 
 // Reusable text field for username / password
-@Component
+@ComponentV2
 struct AuthTextField {
-  @Prop text: string
-  @Prop icon: ResourceStr
-  @Prop placeholder: string
-  @Prop password: boolean = false
-  @Prop nativeSurface: boolean = false
-  onTextChanged: (val: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Require @Param icon: ResourceStr
+  @Param placeholder: string = ''
+  @Param password: boolean = false
+  @Param nativeSurface: boolean = false
+  @Event onTextChanged: (val: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   build() {
     Stack() {
@@ -211,9 +255,9 @@ struct AuthTextField {
   }
 }
 
-@Component
+@ComponentV2
 export struct AnimatedErrorText {
-  @Prop errorText: string
+  @Param errorText: string = ''
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
@@ -224,12 +268,11 @@ export struct AnimatedErrorText {
   }
 }
 
-@Component
+@ComponentV2
 export struct StyledTextButton {
-  @Prop text: string
-  @Prop enable: boolean
-  onclick: () => void = () => {
-  }
+  @Require @Param text: ResourceStr
+  @Param enable: boolean = false
+  @Event onPressed: () => void = () => {}
 
   build() {
     Button(this.text, { type: ButtonType.Normal, stateEffect: true })
@@ -237,7 +280,7 @@ export struct StyledTextButton {
       .backgroundColor(0x317aff)
       .width('100%')
       .height(56)
-      .onClick(() => this.onclick())
+      .onClick(() => this.onPressed())
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })

@@ -6,78 +6,50 @@ import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../theme/AppTheme
 import { AppThemeTokens } from "../theme/AppThemeTokens";
 
 @ComponentV2
-export struct ActionBar {
-  @Param title: ResourceStr = ""
-  @Param showBackButton: boolean = true
-  @Param floating: boolean = false
-  @Param onBackClick: () => void = () => {
-    HMRouterMgr.pop()
-  }
+struct NativeActionBarItems {
+  @Require @Param title: ResourceStr
+  @Require @Param showBackButton: boolean
+  @Require @Param rightBtnAccessibilityText: Resource
+  @Require @Param appUIState: AppUIState
   @Param rightBtnIcon?: Resource = undefined
-  @Param rightBtnAccessibilityText?: Resource = undefined
-  @Param onRightBtnClick?: () => void = () => {
-  }
-  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+  @Event onBackPressed: () => void = () => {}
+  @Event onRightPressed: () => void = () => {}
 
-  private rightButtonAccessibilityText(): Resource {
-    return this.rightBtnAccessibilityText || $r('app.string.app_name')
-  }
-
-  private useNativeSurface(): boolean {
-    return AppThemeSurfaceResolver.useNativeSurface(
-      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
-  }
-
-  @Builder
-  nativeActionButton(icon: Resource, onClick: () => void) {
-    Button() {
-      SymbolGlyph(icon)
-        .fontSize(22)
-        .fontColor([$r('sys.color.icon_primary')])
-    }
-    .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-    .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-    .borderRadius(20)
-    .backgroundColor(Color.Transparent)
-    .onClick(onClick)
-  }
-
-  @Builder
-  nativeBarItems() {
-    if (this.showBackButton) {
-      this.nativeActionButton($r('sys.symbol.chevron_backward'), () => {
-        this.onBackClick()
-      })
-    }
-    Text(this.title)
-      .fontSize(AppThemeTokens.titleSize(this.appUIState.themeStyle))
-      .fontColor($r('sys.color.font_primary'))
-      .fontWeight(FontWeight.Bold)
-      .maxLines(1)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .layoutWeight(1)
-    if (this.rightBtnIcon) {
-      Button() {
-        Image(this.rightBtnIcon)
-          .width(20)
-          .height(20)
-          .fillColor($r('sys.color.icon_primary'))
-      }
-      .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-      .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText(this.rightButtonAccessibilityText())
-      .onClick(() => {
-        this.onRightBtnClick && this.onRightBtnClick()
-      })
-    }
-  }
-
-  @Builder
-  nativeBarContent() {
+  build() {
     Row({ space: 4 }) {
-      this.nativeBarItems()
+      if (this.showBackButton) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.chevron_backward'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.icon_primary')])
+        }
+        .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+        .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+        .borderRadius(20)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => this.onBackPressed())
+      }
+      Text(this.title)
+        .fontSize(AppThemeTokens.titleSize(this.appUIState.themeStyle))
+        .fontColor($r('sys.color.font_primary'))
+        .fontWeight(FontWeight.Bold)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      if (this.rightBtnIcon) {
+        Button() {
+          Image(this.rightBtnIcon)
+            .width(20)
+            .height(20)
+            .fillColor($r('sys.color.icon_primary'))
+        }
+        .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+        .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+        .borderRadius(20)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText(this.rightBtnAccessibilityText)
+        .onClick(() => this.onRightPressed())
+      }
     }
     .width('100%')
     .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
@@ -88,34 +60,19 @@ export struct ActionBar {
     })
     .alignItems(VerticalAlign.Center)
   }
+}
 
-  @Builder
-  nativeBar() {
-    if (this.floating) {
-      Row({ space: 4 }) {
-        this.nativeBarItems()
-      }
-      .width('100%')
-      .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
-      .padding({
-        top: this.appUIState.safeTop,
-        left: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen),
-        right: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen)
-      })
-      .alignItems(VerticalAlign.Center)
-      .renderGroup(true)
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.Floating,
-        true,
-        this.appUIState.systemMaterialAvailable
-      ))
-    } else {
-      this.nativeBarContent()
-    }
-  }
+@ComponentV2
+struct FeiniuActionBar {
+  @Require @Param title: ResourceStr
+  @Require @Param showBackButton: boolean
+  @Require @Param safeTop: number
+  @Require @Param rightBtnAccessibilityText: Resource
+  @Param rightBtnIcon?: Resource = undefined
+  @Event onBackPressed: () => void = () => {}
+  @Event onRightPressed: () => void = () => {}
 
-  @Builder
-  feiniuBar() {
+  build() {
     Stack() {
       Row() {
         SymbolGlyph($r('sys.symbol.arrow_left'))
@@ -128,9 +85,7 @@ export struct ActionBar {
           .padding(16)
           .borderRadius(20)
           .backgroundColor(Color.Transparent)
-          .onClick(() => {
-            this.onBackClick()
-          })
+          .onClick(() => this.onBackPressed())
           .visibility(this.showBackButton ? Visibility.Visible : Visibility.Hidden)
         Blank()
         if (this.rightBtnIcon) {
@@ -141,12 +96,12 @@ export struct ActionBar {
             .borderRadius(20)
             .backgroundColor(Color.Transparent)
             .fillColor($r('app.color.text_primary'))
-            .accessibilityText(this.rightButtonAccessibilityText())
-            .onClick(() => {
-              this.onRightBtnClick && this.onRightBtnClick()
-            })
+            .accessibilityText(this.rightBtnAccessibilityText)
+            .onClick(() => this.onRightPressed())
         }
-      }.width('100%').height('100%')
+      }
+      .width('100%')
+      .height('100%')
 
       Text(this.title)
         .fontSize(18)
@@ -157,15 +112,72 @@ export struct ActionBar {
         .constraintSize({ maxWidth: '70%' })
     }
     .width('100%')
-    .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
-    .padding({ top: this.appUIState.safeTop })
+    .height(UIConstants.ACTION_BAR_HEIGHT + this.safeTop)
+    .padding({ top: this.safeTop })
+  }
+}
+
+@ComponentV2
+export struct ActionBar {
+  @Param title: ResourceStr = ""
+  @Param showBackButton: boolean = true
+  @Param floating: boolean = false
+  @Event onBackClick: () => void = () => {
+    HMRouterMgr.pop()
+  }
+  @Param rightBtnIcon?: Resource = undefined
+  @Param rightBtnAccessibilityText?: Resource = undefined
+  @Event onRightBtnClick: () => void = () => {}
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
+
+  private rightButtonAccessibilityText(): Resource {
+    return this.rightBtnAccessibilityText || $r('app.string.app_name')
+  }
+
+  private useNativeSurface(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(
+      this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
   build() {
     if (this.useNativeSurface()) {
-      this.nativeBar()
+      if (this.floating) {
+        NativeActionBarItems({
+          title: this.title,
+          showBackButton: this.showBackButton,
+          rightBtnIcon: this.rightBtnIcon,
+          rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
+          appUIState: this.appUIState,
+          onBackPressed: () => this.onBackClick(),
+          onRightPressed: () => this.onRightBtnClick()
+        })
+          .renderGroup(true)
+          .attributeModifier(AppThemeSurfaceResolver.modifier(
+            AppThemeMaterialRole.Floating,
+            true,
+            this.appUIState.systemMaterialAvailable
+          ))
+      } else {
+        NativeActionBarItems({
+          title: this.title,
+          showBackButton: this.showBackButton,
+          rightBtnIcon: this.rightBtnIcon,
+          rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
+          appUIState: this.appUIState,
+          onBackPressed: () => this.onBackClick(),
+          onRightPressed: () => this.onRightBtnClick()
+        })
+      }
     } else {
-      this.feiniuBar()
+      FeiniuActionBar({
+        title: this.title,
+        showBackButton: this.showBackButton,
+        safeTop: this.appUIState.safeTop,
+        rightBtnIcon: this.rightBtnIcon,
+        rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
+        onBackPressed: () => this.onBackClick(),
+        onRightPressed: () => this.onRightBtnClick()
+      })
     }
   }
 }

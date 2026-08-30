@@ -19,8 +19,43 @@ import { MFPlayerView } from "./MFPlayerView"
 import { RouterConsts } from "../../common/RouterConsts"
 import { PlayerFullscreenHelper } from "../../player/ui/PlayerFullscreenHelper"
 import { WindowUtil } from "../../utils/WindowUtil"
-import { AppRouteDestination } from "../../component/AppRouteDestination"
+import { AppRouteDestination, AppRouteDestinationOptions } from "../../component/AppRouteDestination"
 import { AppPreference } from '../../data/AppPreference'
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+
+@ComponentV2
+struct PlayerPageContent {
+  @Param videoUrl: string = ''
+  @Event onBack: () => void = () => {}
+  @Event onFullscreenToggle: () => void = () => {}
+
+  build() {
+    Stack() {
+      if (!this.videoUrl) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.icon_load'))
+            .objectFit(ImageFit.Auto)
+            .width('120px')
+            .height('120px')
+        }
+        .width('100%')
+        .height('100%')
+      } else {
+        MFPlayerView({
+          videoUrl: this.videoUrl,
+          onBack: (): void => this.onBack(),
+          onFullscreenToggle: (): void => this.onFullscreenToggle()
+        })
+          .width('100%')
+          .height('100%')
+      }
+    }
+    .alignContent(Alignment.Top)
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
+  }
+}
 
 @HMRouter({
   pageUrl: RouterConsts.PlayerPage,
@@ -30,6 +65,7 @@ import { AppPreference } from '../../data/AppPreference'
 })
 @ComponentV2
 export struct PlayerPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
   options: PlayOptions = HMRouterMgr.getCurrentParam() as PlayOptions
   @Provider() ui: PlayerPageUIState = new PlayerPageUIState(this.getUIContext())
   @Provider() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
@@ -201,52 +237,77 @@ export struct PlayerPage {
     return true
   }
 
-  @Builder
-  private playerContent(): void {
-    Stack() {
-      if (!this.ui.url) {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.icon_load'))
-            .objectFit(ImageFit.Auto)
-            .width('120px')
-            .height('120px')
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: '',
+        titleBarVisible: false,
+        contentExtendsUnderTitleBar: true,
+        heroTitleChrome: false,
+        titleMaterialFollowsSystem: false,
+        beforeBack: () => this.handleNativeNavigationBack()
+      }
+  }
+
+  build() {
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            PlayerPageContent({
+              videoUrl: this.ui.url,
+              onBack: (): void => {
+                this.onBackPress()
+              },
+              onFullscreenToggle: (): void => this.toggleFullscreen()
+            })
+          }
+          .width('100%')
+          .layoutWeight(1)
         }
         .width('100%')
         .height('100%')
-      } else {
-        MFPlayerView({
+      }
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        PlayerPageContent({
           videoUrl: this.ui.url,
           onBack: (): void => {
             this.onBackPress()
           },
-          onFullscreenToggle: (): void => {
-            this.toggleFullscreen()
-          }
+          onFullscreenToggle: (): void => this.toggleFullscreen()
         })
-          .width('100%')
-          .height('100%')
       }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
     }
-    .alignContent(Alignment.Top)
-    .width('100%')
-    .height('100%')
-    .backgroundColor(Color.Black)
-  }
-
-  build() {
-    AppRouteDestination({
-      title: '',
-      titleBarVisible: false,
-      contentExtendsUnderTitleBar: true,
-      heroTitleChrome: false,
-      titleMaterialFollowsSystem: false,
-      beforeBack: () => this.handleNativeNavigationBack(),
-      contentBuilder: () => {
-        this.playerContent()
-      },
-      legacyContentBuilder: () => {
-        this.playerContent()
-      }
-    })
   }
 }

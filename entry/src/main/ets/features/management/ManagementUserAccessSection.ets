@@ -10,17 +10,20 @@ import {
 } from './ManagementUserModels';
 
 @ComponentV2
-export struct ManagementUserAccessSection {
-  @Require
-  @Param ui: ManagementUserDetailUIState
-  @Require
-  @Param themeStyle: ThemeStyle
-  @Param nativeThemeAvailable: boolean = false
-  @Event onChanged: () => void = () => {
+struct ManagementAccessGroup {
+  @Require @Param title: ResourceStr
+  @Require @Param description: ResourceStr
+  @Require @Param allowAllTitle: ResourceStr
+  @Require @Param allowAllDescription: ResourceStr
+  @Require @Param allowAll: boolean
+  @Require @Param options: ManagementUserOption[]
+  @Require @Param status: ManagementUserOperationStatus
+  @Require @Param selectedIds: string[]
+  @Require @Param themeStyle: ThemeStyle
+  @Require @Param nativeMaterial: boolean
+  @Event onAllowAllChange: (value: boolean) => void = () => {
   }
-
-  private useNativeMaterial(): boolean {
-    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
+  @Event onOptionChange: (optionId: string, checked: boolean) => void = () => {
   }
 
   private primaryTextColor(): ResourceColor {
@@ -31,6 +34,111 @@ export struct ManagementUserAccessSection {
   private secondaryTextColor(): ResourceColor {
     return AppThemeTokens.isNative(this.themeStyle) ?
       $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  build() {
+    Column() {
+      Column({ space: 4 }) {
+        Text(this.title)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.primaryTextColor())
+          .width('100%')
+        Text(this.description)
+          .fontSize(12)
+          .fontColor(this.secondaryTextColor())
+          .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
+      Row({ space: 12 }) {
+        Column({ space: 3 }) {
+          Text(this.allowAllTitle)
+            .fontSize(14)
+            .fontColor(this.primaryTextColor())
+            .width('100%')
+          Text(this.allowAllDescription)
+            .fontSize(11)
+            .fontColor(this.secondaryTextColor())
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Toggle({ type: ToggleType.Switch, isOn: this.allowAll })
+          .selectedColor($r('app.color.color_main'))
+          .onChange((value: boolean) => {
+            this.onAllowAllChange(value)
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 58 })
+
+      if (!this.allowAll) {
+        if (this.status === ManagementUserOperationStatus.Error) {
+          Text($r('app.string.management_user_access_options_failed'))
+            .fontSize(12)
+            .fontColor($r('app.color.main_red_color'))
+            .width('100%')
+            .padding({ top: 14, bottom: 14 })
+        } else if (this.options.length === 0) {
+          Text($r('app.string.management_user_access_empty'))
+            .fontSize(12)
+            .fontColor(this.secondaryTextColor())
+            .width('100%')
+            .padding({ top: 14, bottom: 14 })
+        }
+
+        ForEach(this.options, (option: ManagementUserOption) => {
+          Row({ space: 12 }) {
+            Toggle({ type: ToggleType.Checkbox, isOn: this.selectedIds.includes(option.id) })
+              .selectedColor($r('app.color.color_main'))
+              .onChange((checked: boolean) => {
+                this.onOptionChange(option.id, checked)
+              })
+            Column({ space: 2 }) {
+              Text(option.name)
+                .fontSize(13)
+                .fontColor(this.primaryTextColor())
+                .width('100%')
+                .maxLines(2)
+              if (option.detail) {
+                Text(option.detail)
+                  .fontSize(11)
+                  .fontColor(this.secondaryTextColor())
+                  .width('100%')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+          }
+          .width('100%')
+          .constraintSize({ minHeight: 48 })
+        }, (option: ManagementUserOption) => option.id)
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
+    .clip(this.nativeMaterial)
+    .backgroundColor(this.nativeMaterial ?
+      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+  }
+}
+
+@ComponentV2
+export struct ManagementUserAccessSection {
+  @Require @Param ui: ManagementUserDetailUIState
+  @Require @Param themeStyle: ThemeStyle
+  @Param nativeThemeAvailable: boolean = false
+  @Event onChanged: () => void = () => {
+  }
+
+  private useNativeMaterial(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
   }
 
   private copyAccess(): ManagementAccessDraft {
@@ -56,263 +164,76 @@ export struct ManagementUserAccessSection {
     return ids.slice()
   }
 
-  @Builder
-  private groupHeader(title: ResourceStr, description: ResourceStr) {
-    Column({ space: 4 }) {
-      Text(title)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.primaryTextColor())
-        .width('100%')
-      Text(description)
-        .fontSize(12)
-        .fontColor(this.secondaryTextColor())
-        .width('100%')
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private allowAllRow(title: ResourceStr, description: ResourceStr, value: boolean,
-    onChange: (value: boolean) => void) {
-    Row({ space: 12 }) {
-      Column({ space: 3 }) {
-        Text(title)
-          .fontSize(14)
-          .fontColor(this.primaryTextColor())
-          .width('100%')
-        Text(description)
-          .fontSize(11)
-          .fontColor(this.secondaryTextColor())
-          .width('100%')
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Toggle({ type: ToggleType.Switch, isOn: value })
-        .selectedColor($r('app.color.color_main'))
-        .onChange(onChange)
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 58 })
-  }
-
-  @Builder
-  private optionRow(option: ManagementUserOption, selected: boolean,
-    onChange: (checked: boolean) => void) {
-    Row({ space: 12 }) {
-      Toggle({ type: ToggleType.Checkbox, isOn: selected })
-        .selectedColor($r('app.color.color_main'))
-        .onChange(onChange)
-      Column({ space: 2 }) {
-        Text(option.name)
-          .fontSize(13)
-          .fontColor(this.primaryTextColor())
-          .width('100%')
-          .maxLines(2)
-        if (option.detail) {
-          Text(option.detail)
-            .fontSize(11)
-            .fontColor(this.secondaryTextColor())
-            .width('100%')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 48 })
-  }
-
-  @Builder
-  private optionState(status: ManagementUserOperationStatus, options: ManagementUserOption[]) {
-    if (status === ManagementUserOperationStatus.Error) {
-      Text($r('app.string.management_user_access_options_failed'))
-        .fontSize(12)
-        .fontColor($r('app.color.main_red_color'))
-        .width('100%')
-        .padding({ top: 14, bottom: 14 })
-    } else if (options.length === 0) {
-      Text($r('app.string.management_user_access_empty'))
-        .fontSize(12)
-        .fontColor(this.secondaryTextColor())
-        .width('100%')
-        .padding({ top: 14, bottom: 14 })
-    }
-  }
-
-  @Builder
-  private foldersContent() {
-    Column() {
-      this.groupHeader($r('app.string.management_user_access_folders'),
-        $r('app.string.management_user_access_folders_desc'))
-      this.allowAllRow($r('app.string.management_user_access_all_folders'),
-        $r('app.string.management_user_access_all_folders_desc'),
-        this.ui.access.enableAllFolders, (value: boolean) => {
+  build() {
+    Column({ space: AppThemeTokens.groupSpacing(this.themeStyle) }) {
+      ManagementAccessGroup({
+        title: $r('app.string.management_user_access_folders'),
+        description: $r('app.string.management_user_access_folders_desc'),
+        allowAllTitle: $r('app.string.management_user_access_all_folders'),
+        allowAllDescription: $r('app.string.management_user_access_all_folders_desc'),
+        allowAll: this.ui.access.enableAllFolders,
+        options: this.ui.folders,
+        status: this.ui.foldersStatus,
+        selectedIds: this.ui.access.enabledFolderIds,
+        themeStyle: this.themeStyle,
+        nativeMaterial: this.useNativeMaterial(),
+        onAllowAllChange: (value: boolean) => {
           const next = this.copyAccess()
           next.enableAllFolders = value
           this.commitAccess(next)
-        })
-      if (!this.ui.access.enableAllFolders) {
-        this.optionState(this.ui.foldersStatus, this.ui.folders)
-        ForEach(this.ui.folders, (option: ManagementUserOption) => {
-          this.optionRow(option, this.ui.access.enabledFolderIds.includes(option.id),
-            (checked: boolean) => {
-              const next = this.copyAccess()
-              next.enabledFolderIds = this.updateSelection(next.enabledFolderIds, option.id, checked)
-              this.commitAccess(next)
-            })
-        }, (option: ManagementUserOption) => option.id)
-      }
-    }
-    .width('100%')
-    .padding(16)
-    .alignItems(HorizontalAlign.Start)
-  }
+        },
+        onOptionChange: (optionId: string, checked: boolean) => {
+          const next = this.copyAccess()
+          next.enabledFolderIds = this.updateSelection(next.enabledFolderIds, optionId, checked)
+          this.commitAccess(next)
+        }
+      })
 
-  @Builder
-  private foldersGroup() {
-    Column() { this.foldersContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuFoldersGroup() {
-    Column() { this.foldersContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-  }
-
-  @Builder
-  private foldersSurface() {
-    if (this.useNativeMaterial()) {
-      this.foldersGroup()
-    } else {
-      this.feiniuFoldersGroup()
-    }
-  }
-
-  @Builder
-  private channelsContent() {
-    Column() {
-      this.groupHeader($r('app.string.management_user_access_channels'),
-        $r('app.string.management_user_access_channels_desc'))
-      this.allowAllRow($r('app.string.management_user_access_all_channels'),
-        $r('app.string.management_user_access_all_channels_desc'),
-        this.ui.access.enableAllChannels, (value: boolean) => {
+      ManagementAccessGroup({
+        title: $r('app.string.management_user_access_channels'),
+        description: $r('app.string.management_user_access_channels_desc'),
+        allowAllTitle: $r('app.string.management_user_access_all_channels'),
+        allowAllDescription: $r('app.string.management_user_access_all_channels_desc'),
+        allowAll: this.ui.access.enableAllChannels,
+        options: this.ui.channels,
+        status: this.ui.channelsStatus,
+        selectedIds: this.ui.access.enabledChannelIds,
+        themeStyle: this.themeStyle,
+        nativeMaterial: this.useNativeMaterial(),
+        onAllowAllChange: (value: boolean) => {
           const next = this.copyAccess()
           next.enableAllChannels = value
           this.commitAccess(next)
-        })
-      if (!this.ui.access.enableAllChannels) {
-        this.optionState(this.ui.channelsStatus, this.ui.channels)
-        ForEach(this.ui.channels, (option: ManagementUserOption) => {
-          this.optionRow(option, this.ui.access.enabledChannelIds.includes(option.id),
-            (checked: boolean) => {
-              const next = this.copyAccess()
-              next.enabledChannelIds = this.updateSelection(next.enabledChannelIds, option.id, checked)
-              this.commitAccess(next)
-            })
-        }, (option: ManagementUserOption) => option.id)
-      }
-    }
-    .width('100%')
-    .padding(16)
-    .alignItems(HorizontalAlign.Start)
-  }
+        },
+        onOptionChange: (optionId: string, checked: boolean) => {
+          const next = this.copyAccess()
+          next.enabledChannelIds = this.updateSelection(next.enabledChannelIds, optionId, checked)
+          this.commitAccess(next)
+        }
+      })
 
-  @Builder
-  private channelsGroup() {
-    Column() { this.channelsContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuChannelsGroup() {
-    Column() { this.channelsContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-  }
-
-  @Builder
-  private channelsSurface() {
-    if (this.useNativeMaterial()) {
-      this.channelsGroup()
-    } else {
-      this.feiniuChannelsGroup()
-    }
-  }
-
-  @Builder
-  private devicesContent() {
-    Column() {
-      this.groupHeader($r('app.string.management_user_access_devices'),
-        $r('app.string.management_user_access_devices_desc'))
-      this.allowAllRow($r('app.string.management_user_access_all_devices'),
-        $r('app.string.management_user_access_all_devices_desc'),
-        this.ui.access.enableAllDevices, (value: boolean) => {
+      ManagementAccessGroup({
+        title: $r('app.string.management_user_access_devices'),
+        description: $r('app.string.management_user_access_devices_desc'),
+        allowAllTitle: $r('app.string.management_user_access_all_devices'),
+        allowAllDescription: $r('app.string.management_user_access_all_devices_desc'),
+        allowAll: this.ui.access.enableAllDevices,
+        options: this.ui.devices,
+        status: this.ui.devicesStatus,
+        selectedIds: this.ui.access.enabledDeviceIds,
+        themeStyle: this.themeStyle,
+        nativeMaterial: this.useNativeMaterial(),
+        onAllowAllChange: (value: boolean) => {
           const next = this.copyAccess()
           next.enableAllDevices = value
           this.commitAccess(next)
-        })
-      if (!this.ui.access.enableAllDevices) {
-        this.optionState(this.ui.devicesStatus, this.ui.devices)
-        ForEach(this.ui.devices, (option: ManagementUserOption) => {
-          this.optionRow(option, this.ui.access.enabledDeviceIds.includes(option.id),
-            (checked: boolean) => {
-              const next = this.copyAccess()
-              next.enabledDeviceIds = this.updateSelection(next.enabledDeviceIds, option.id, checked)
-              this.commitAccess(next)
-            })
-        }, (option: ManagementUserOption) => option.id)
-      }
-    }
-    .width('100%')
-    .padding(16)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private devicesGroup() {
-    Column() { this.devicesContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
-
-  @Builder
-  private feiniuDevicesGroup() {
-    Column() { this.devicesContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-  }
-
-  @Builder
-  private devicesSurface() {
-    if (this.useNativeMaterial()) {
-      this.devicesGroup()
-    } else {
-      this.feiniuDevicesGroup()
-    }
-  }
-
-  build() {
-    Column({ space: AppThemeTokens.groupSpacing(this.themeStyle) }) {
-      this.foldersSurface()
-      this.channelsSurface()
-      this.devicesSurface()
+        },
+        onOptionChange: (optionId: string, checked: boolean) => {
+          const next = this.copyAccess()
+          next.enabledDeviceIds = this.updateSelection(next.enabledDeviceIds, optionId, checked)
+          this.commitAccess(next)
+        }
+      })
     }
     .width('100%')
   }

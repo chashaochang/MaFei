@@ -1,6 +1,68 @@
 import { SmartDialog } from "ohos_smart_dialog";
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 
+interface DialogArgs {
+  title: string,
+  list: Array<string>,
+  selectIndex: number,
+  onItemClick?: (index: number) => void,
+  nativeSurface: boolean
+}
+
+// CustomBuilderAdapter: smart-list-dialog-content
+@Builder
+function listDialogBuilder(args: DialogArgs) {
+  ListDialogSurface({ args })
+}
+
+@ComponentV2
+struct ListDialogSurface {
+  @Require @Param args: DialogArgs
+
+  build() {
+    Column() {
+      Text(this.args.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .padding({ top: 16, bottom: 0 })
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .fontColor(this.args.nativeSurface ?
+          $r('sys.color.font_primary') : $r('app.color.text_primary'))
+      List() {
+        ForEach(this.args.list, (item: string, index: number) => {
+          ListItem() {
+            Text(item)
+              .fontSize(16)
+              .padding({ top: 10, bottom: 10, left: 16, right: 16 })
+              .width('100%')
+              .textAlign(TextAlign.Start)
+              .fontColor(this.args.selectIndex === index ?
+                (this.args.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')) :
+                (this.args.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2')))
+              .onClick(() => {
+                this.args.onItemClick?.(index)
+              })
+          }
+          .width('100%')
+        })
+      }
+      .listDirection(Axis.Vertical)
+      .width('100%')
+      .layoutWeight(1)
+    }
+    .padding({ bottom: 20 })
+    .constraintSize({ maxHeight: '40%' })
+    .borderRadius({ topLeft: 16, topRight: 16 })
+    .clip(this.args.nativeSurface)
+    .backgroundColor(this.args.nativeSurface ? Color.Transparent : $r('app.color.component_bg'))
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating,
+      this.args.nativeSurface
+    ))
+  }
+}
+
 export class ListDialog {
   title: string = "";
   list: Array<string>;
@@ -39,100 +101,4 @@ export class ListDialog {
       tag: this.tag
     });
   }
-}
-
-@Builder
-function listDialogContent(args: DialogArgs, nativeSurface: boolean) {
-  Text(args.title)
-    .fontSize(18)
-    .fontWeight(FontWeight.Bold)
-    .padding({
-      top: 16,
-      bottom: 0
-    })
-    .width('100%')
-    .textAlign(TextAlign.Center)
-    .fontColor(nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
-  List() {
-    ForEach(args.list, (item: string, index: number) => {
-      ListItem() {
-        Text(item)
-          .fontSize(16)
-          .padding({
-            top: 10,
-            bottom: 10,
-            left: 16,
-            right: 16
-          })
-          .width('100%')
-          .textAlign(TextAlign.Start)
-          .fontColor(args.selectIndex === index ?
-            (nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')) :
-            (nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2')))
-          .onClick(() => {
-            args.onItemClick && args.onItemClick(index);
-          })
-      }.width('100%')
-    })
-  }.listDirection(Axis.Vertical)
-  .width('100%')
-  .layoutWeight(1)
-}
-
-@Builder
-function nativeListDialog(args: DialogArgs) {
-  Column() {
-    listDialogContent(args, true)
-  }
-  .padding({
-    bottom: 20
-  })
-  .constraintSize({
-    maxHeight: '40%'
-  })
-  .borderRadius({
-    topLeft: 16,
-    topRight: 16
-  })
-  .clip(true)
-  .attributeModifier(AppThemeSurfaceResolver.modifier(
-    AppThemeMaterialRole.Floating,
-    true
-  ))
-}
-
-@Builder
-function feiniuListDialog(args: DialogArgs) {
-  Column() {
-    listDialogContent(args, false)
-  }
-  .padding({
-    bottom: 20
-  })
-  .backgroundColor($r('app.color.component_bg'))
-  .constraintSize({
-    maxHeight: '40%'
-  })
-  .borderRadius({
-    topLeft: 16,
-    topRight: 16
-  })
-}
-
-@Builder
-export function listDialogBuilder(args: DialogArgs) {
-  if (args.nativeSurface) {
-    nativeListDialog(args)
-  } else {
-    feiniuListDialog(args)
-  }
-}
-
-// 定义参数类型
-interface DialogArgs {
-  title: string,
-  list: Array<string>,
-  selectIndex: number,
-  onItemClick?: (index: number) => void,
-  nativeSurface: boolean
 }

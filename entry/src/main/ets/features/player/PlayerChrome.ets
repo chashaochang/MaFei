@@ -41,6 +41,7 @@ const PLAYER_MENU_SECONDARY_TEXT_COLOR: string = '#99FFFFFF'
 const PLAYER_MENU_DIVIDER_COLOR: string = '#24FFFFFF'
 const PLAYER_MENU_CELL_COLOR: string = '#26000000'
 
+// CustomBuilderAdapter: player-cast-picker-icon
 @Builder
 function PlayerCastPickerIcon() {
   SymbolGlyph($r('sys.symbol.wireless_projection'))
@@ -48,6 +49,7 @@ function PlayerCastPickerIcon() {
     .fontColor([Color.White])
     .renderingStrategy(SymbolRenderingStrategy.SINGLE)
 }
+
 const PLAYER_MENU_SELECTED_CELL_COLOR: string = '#3DFFFFFF'
 const PLAYER_MENU_GRADIENT_MIDDLE_COLOR: string = '#8A000000'
 const PLAYER_MENU_GRADIENT_END_COLOR: string = '#DC000000'

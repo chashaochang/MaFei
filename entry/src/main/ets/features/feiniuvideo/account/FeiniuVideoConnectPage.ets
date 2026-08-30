@@ -2,7 +2,7 @@ import { AppStorageV2 } from '@kit.ArkUI'
 import { KeyCode } from '@kit.InputKit'
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { ActionBar } from '../../../component/ActionBar'
-import { AppRouteDestination } from '../../../component/AppRouteDestination'
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../../component/AppRouteDestination'
 import { RouterConsts } from '../../../common/RouterConsts'
 import { AppUIState } from '../../../entity/AppUIState'
 import {
@@ -11,6 +11,7 @@ import {
 } from '../../../theme/AppThemeSurfaceResolver'
 import { FeiniuVideoConnectionUIState } from './FeiniuVideoConnectionUIState'
 import { FeiniuVideoConnectionViewModel } from './FeiniuVideoConnectionViewModel'
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
 @HMRouter({
   pageUrl: RouterConsts.FeiniuVideoConnectPage,
@@ -18,21 +19,66 @@ import { FeiniuVideoConnectionViewModel } from './FeiniuVideoConnectionViewModel
 })
 @ComponentV2
 export struct FeiniuVideoConnectPage {
-  @Builder
-  private pageContent(showRouteActionBar: boolean): void {
-    FeiniuVideoConnectScreen({ showRouteActionBar: showRouteActionBar })
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: $r('app.string.feiniu_video_connect_title')
+      }
   }
 
   build() {
-    AppRouteDestination({
-      title: $r('app.string.feiniu_video_connect_title'),
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              FeiniuVideoConnectScreen({ showRouteActionBar: false })
+            } else {
+              FeiniuVideoConnectScreen({ showRouteActionBar: true })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        FeiniuVideoConnectScreen({ showRouteActionBar: true })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }
 
@@ -60,100 +106,15 @@ export struct FeiniuVideoConnectScreen {
     HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
   }
 
-  @Builder
-  private connectionFormContent(nativeSurface: boolean) {
-    AddressSelection({
-      text: this.ui.address,
-      errorText: '',
-      nativeSurface: nativeSurface,
-      onTextChange: (value: string) => {
-        this.ui.address = value
-        this.ui.errorText = ''
-      },
-      onSubmit: () => {
-        this.submitLogin()
-      }
-    })
-
-    Blank().height(16)
-    AuthTextField({
-      text: this.ui.username,
-      placeholder: $r('app.string.feiniu_video_username_placeholder'),
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.ui.username = v
-      }
-    })
-    Blank().height(16)
-    AuthTextField({
-      text: this.ui.password,
-      placeholder: $r('app.string.feiniu_video_password_placeholder'),
-      password: true,
-      nativeSurface: nativeSurface,
-      onTextChanged: (v: string) => {
-        this.ui.password = v
-      }
-    })
-    AnimatedErrorText({
-      errorText: this.ui.errorText,
-      nativeSurface: nativeSurface
-    }).padding({ top: 4 })
-    Text($r('app.string.feiniu_video_password_notice'))
-      .fontSize(12)
-      .fontColor(nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
-      .padding({ top: 6 })
-
-    if (!this.ui.loading) {
-      Blank().height(20)
-      StyledTextButton({
-        text: $r('app.string.feiniu_video_login_action'),
-        enable: this.ui.address.trim().length > 0 && this.ui.username.trim().length > 0 &&
-          this.ui.password.length > 0,
-        nativeSurface: nativeSurface,
-        onclick: (): void => {
+  build() {
+    if (this.embedded) {
+      FeiniuVideoConnectionForm({
+        ui: this.ui,
+        nativeSurface: this.useNativeSurface(),
+        onSubmit: (): void => {
           this.submitLogin()
         }
       })
-    } else {
-      Row() {
-        LoadingProgress().width(32).height(32)
-        Text($r('app.string.feiniu_video_logging_in'))
-          .fontColor(nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
-          .padding({ left: 12 })
-      }.padding({ top: 24 })
-    }
-  }
-
-  @Builder
-  private nativeConnectionForm() {
-    Column() {
-      this.connectionFormContent(true)
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 375 })
-    .alignItems(HorizontalAlign.Start)
-    .padding({ top: 16, bottom: 16, left: 12, right: 12 })
-    .margin({ top: 20 })
-  }
-
-  @Builder
-  private feiniuConnectionForm() {
-    Column() {
-      this.connectionFormContent(false)
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 375 })
-    .alignItems(HorizontalAlign.Start)
-    .margin({ top: 30 })
-  }
-
-  build() {
-    if (this.embedded) {
-      if (this.useNativeSurface()) {
-        this.nativeConnectionForm()
-      } else {
-        this.feiniuConnectionForm()
-      }
     } else {
       Scroll() {
         Column() {
@@ -164,11 +125,13 @@ export struct FeiniuVideoConnectScreen {
             })
           }
           FeiniuVideoLogoHeader({ nativeSurface: this.useNativeSurface() })
-          if (this.useNativeSurface()) {
-            this.nativeConnectionForm()
-          } else {
-            this.feiniuConnectionForm()
-          }
+          FeiniuVideoConnectionForm({
+            ui: this.ui,
+            nativeSurface: this.useNativeSurface(),
+            onSubmit: (): void => {
+              this.submitLogin()
+            }
+          })
         }
         .width('100%')
         .height('100%')
@@ -183,6 +146,111 @@ export struct FeiniuVideoConnectScreen {
       .align(Alignment.Top)
       .backgroundColor(this.showRouteActionBar ? AppThemeSurfaceResolver.routeBackground(
         this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : Color.Transparent)
+    }
+  }
+}
+
+@ComponentV2
+struct FeiniuVideoConnectionFields {
+  @Require @Param ui: FeiniuVideoConnectionUIState
+  @Param nativeSurface: boolean = false
+  @Event onSubmit: () => void = () => {}
+
+  build() {
+    Column() {
+      AddressSelection({
+        text: this.ui.address,
+        nativeSurface: this.nativeSurface,
+        onTextChange: (value: string): void => {
+          this.ui.address = value
+          this.ui.errorText = ''
+        },
+        onSubmit: this.onSubmit
+      })
+
+      Blank().height(16)
+      AuthTextField({
+        text: this.ui.username,
+        placeholder: $r('app.string.feiniu_video_username_placeholder'),
+        nativeSurface: this.nativeSurface,
+        onTextChanged: (value: string): void => {
+          this.ui.username = value
+        }
+      })
+      Blank().height(16)
+      AuthTextField({
+        text: this.ui.password,
+        placeholder: $r('app.string.feiniu_video_password_placeholder'),
+        password: true,
+        nativeSurface: this.nativeSurface,
+        onTextChanged: (value: string): void => {
+          this.ui.password = value
+        }
+      })
+      AnimatedErrorText({
+        errorText: this.ui.errorText,
+        nativeSurface: this.nativeSurface
+      }).padding({ top: 4 })
+      Text($r('app.string.feiniu_video_password_notice'))
+        .fontSize(12)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_2'))
+        .padding({ top: 6 })
+
+      if (!this.ui.loading) {
+        Blank().height(20)
+        StyledTextButton({
+          text: $r('app.string.feiniu_video_login_action'),
+          enable: this.ui.address.trim().length > 0 && this.ui.username.trim().length > 0 &&
+            this.ui.password.length > 0,
+          nativeSurface: this.nativeSurface,
+          onPressed: this.onSubmit
+        })
+      } else {
+        Row() {
+          LoadingProgress().width(32).height(32)
+          Text($r('app.string.feiniu_video_logging_in'))
+            .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : Color.Gray)
+            .padding({ left: 12 })
+        }.padding({ top: 24 })
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+}
+
+@ComponentV2
+struct FeiniuVideoConnectionForm {
+  @Require @Param ui: FeiniuVideoConnectionUIState
+  @Param nativeSurface: boolean = false
+  @Event onSubmit: () => void = () => {}
+
+  build() {
+    if (this.nativeSurface) {
+      Column() {
+        FeiniuVideoConnectionFields({
+          ui: this.ui,
+          nativeSurface: true,
+          onSubmit: this.onSubmit
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 375 })
+      .alignItems(HorizontalAlign.Start)
+      .padding({ top: 16, bottom: 16, left: 12, right: 12 })
+      .margin({ top: 20 })
+    } else {
+      Column() {
+        FeiniuVideoConnectionFields({
+          ui: this.ui,
+          nativeSurface: false,
+          onSubmit: this.onSubmit
+        })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 375 })
+      .alignItems(HorizontalAlign.Start)
+      .margin({ top: 30 })
     }
   }
 }
@@ -203,16 +271,14 @@ struct FeiniuVideoLogoHeader {
 }
 
 // Reusable text field for username / password
-@Component
+@ComponentV2
 struct AuthTextField {
-  @Prop text: string
-  @Prop placeholder: ResourceStr
-  @Prop password: boolean = false
-  @Prop nativeSurface: boolean = false
-  onTextChanged: (val: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Require @Param placeholder: ResourceStr
+  @Param password: boolean = false
+  @Param nativeSurface: boolean = false
+  @Event onTextChanged: (val: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   build() {
     Stack() {
@@ -253,10 +319,10 @@ struct AuthTextField {
 }
 
 
-@Component
+@ComponentV2
 export struct AnimatedErrorText {
-  @Prop errorText: string
-  @Prop nativeSurface: boolean = false
+  @Param errorText: string = ''
+  @Param nativeSurface: boolean = false
 
   build() {
     if (this.errorText && this.errorText.length > 0) {
@@ -269,13 +335,12 @@ export struct AnimatedErrorText {
   }
 }
 
-@Component
+@ComponentV2
 export struct StyledTextButton {
-  @Prop text: ResourceStr
-  @Prop enable: boolean
-  @Prop nativeSurface: boolean = false
-  onclick: () => void = () => {
-  }
+  @Require @Param text: ResourceStr
+  @Param enable: boolean = false
+  @Param nativeSurface: boolean = false
+  @Event onPressed: () => void = () => {}
 
   build() {
     Button(this.text, { type: ButtonType.Normal, stateEffect: true })
@@ -284,7 +349,7 @@ export struct StyledTextButton {
       .fontColor(Color.White)
       .width('100%')
       .height(48)
-      .onClick(() => this.onclick())
+      .onClick(() => this.onPressed())
       .enabled(this.enable)
       .padding({ top: 4, bottom: 4 })
       .margin({ top: 24 })
@@ -295,15 +360,12 @@ export struct StyledTextButton {
   }
 }
 
-@Component
+@ComponentV2
 struct AddressSelection {
-  @Prop text: string
-  @Prop errorText: string
-  @Prop nativeSurface: boolean = false
-  onTextChange: (x: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Param nativeSurface: boolean = false
+  @Event onTextChange: (x: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   build() {
     Column() {
@@ -313,22 +375,16 @@ struct AddressSelection {
         onTextChanged: this.onTextChange,
         onSubmit: this.onSubmit
       })
-      AnimatedErrorText({
-        errorText: this.errorText,
-        nativeSurface: this.nativeSurface
-      })
     }
   }
 }
 
-@Component
+@ComponentV2
 struct ServerUrlField {
-  @Prop text: string
-  @Prop nativeSurface: boolean = false
-  onTextChanged: (val: string) => void = () => {
-  }
-  onSubmit: () => void = () => {
-  }
+  @Param text: string = ''
+  @Param nativeSurface: boolean = false
+  @Event onTextChanged: (val: string) => void = () => {}
+  @Event onSubmit: () => void = () => {}
 
   private openAccountHistory(): void {
     HMRouterMgr.to(RouterConsts.AccountPage).withParam({

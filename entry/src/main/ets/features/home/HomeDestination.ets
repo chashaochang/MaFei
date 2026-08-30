@@ -1,4 +1,5 @@
 export enum HomeDestination {
+  Search = 'search',
   Home = 'home',
   Chasing = 'chasing',
   Favorite = 'favorite',

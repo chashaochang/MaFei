@@ -4,7 +4,7 @@ import { ImageKnifeComponent, ImageKnifeOption } from "@ohos/imageknifepro";
 import { PageState } from "../../common/base/BaseUIState";
 import { RouterConsts } from "../../common/RouterConsts";
 import { ActionBar } from "../../component/ActionBar";
-import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination';
 import { EmptyView } from "../../component/EmptyView";
 import { FailedView } from "../../component/FailedView";
 import { SkeletonGridView } from "../../component/skeleton/SkeletonGridView";
@@ -25,6 +25,8 @@ import { ManagementMediaDeleteDialog } from "../management/library/ManagementMed
 import { createMediaImageKnifeOption } from "../../media/catalog/MediaImageKnifeAdapter";
 import { MediaRefKind } from "../../media/MediaRef";
 import { toMediaRouteRefData } from "../../media/navigation/MediaRouteRef";
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 @HMRouter({
   pageUrl: RouterConsts.VideoListPage,
@@ -32,8 +34,10 @@ import { toMediaRouteRefData } from "../../media/navigation/MediaRouteRef";
 })
 @ComponentV2
 export struct VideoListPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
   //首页来的要隐藏顶部栏
   @Param fromHome: boolean = false
+  @Param useHomeContentWidth: boolean = false
   @Param mediaItem: MediaItem = {} as MediaItem
   @Local ui: VideoListUIState = new VideoListUIState(this.getUIContext())
   @Local vm: VideoListViewModel = new VideoListViewModel(this.ui)
@@ -52,6 +56,10 @@ export struct VideoListPage {
 
   private primaryTextColor(nativeSurface: boolean): ResourceColor {
     return nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(this.vm.appUIState, this.useHomeContentWidth)
   }
 
   private getString(name: string): string {
@@ -153,245 +161,9 @@ export struct VideoListPage {
     }
   }
 
+  // CustomBuilderAdapter: video-list-grid-item
   @Builder
-  private nativeCountLabel() {
-    Text(this.ui.totalCount)
-      .fontSize(12)
-      .fontColor($r('sys.color.font_secondary'))
-      .padding({
-        left: 6,
-        right: 6,
-        top: 4,
-        bottom: 4
-      })
-      .margin({
-        left: 12
-      })
-      .borderRadius(4)
-  }
-
-  @Builder
-  private feiniuCountLabel() {
-    Text(this.ui.totalCount)
-      .fontSize(12)
-      .fontColor($r('app.color.text_1'))
-      .backgroundColor($r('app.color.bg_1'))
-      .padding({
-        left: 6,
-        right: 6,
-        top: 4,
-        bottom: 4
-      })
-      .margin({
-        left: 12
-      })
-      .borderRadius(4)
-  }
-
-  @Builder
-  private selectionToolbar(showTitle: boolean) {
-    Row({ space: 8 }) {
-      if (showTitle) {
-        Text(this.routeTitle())
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.primaryTextColor(this.useNativeSurface()))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-      } else {
-        Blank().layoutWeight(1)
-      }
-      Button({ type: ButtonType.Circle, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.trash'))
-          .fontSize(20)
-          .fontColor([$r('app.color.main_red_color')])
-      }
-      .width(40)
-      .height(40)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
-      .accessibilityText($r('app.string.management_media_delete'))
-      .onClick(() => this.openDeleteDialog())
-      Button({ type: ButtonType.Circle, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(20)
-          .fontColor([this.primaryTextColor(this.useNativeSurface())])
-      }
-      .width(40)
-      .height(40)
-      .buttonStyle(ButtonStyleMode.TEXTUAL)
-      .enabled(!this.ui.deletingSelection)
-      .accessibilityText($r('app.string.management_cancel'))
-      .onClick(() => this.vm.cancelSelection())
-    }
-    .width('100%')
-    .height(48)
-  }
-
-  @Builder
-  private listContent(nativeSurface: boolean) {
-    Column() {
-      if (this.ui.selectionMode && (this.fromHome || !nativeSurface)) {
-        this.selectionToolbar(this.fromHome)
-      }
-      Row() {
-        Text(sortOptions[this.ui.selectedSortIndex].label)
-          .fontSize(14)
-          .fontColor(this.primaryTextColor(nativeSurface))
-          .height(46)
-          .onClick(() => {
-            this.vm.sortDialog.show()
-          })
-        Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
-          .width(16)
-          .height(16)
-          .fillColor(this.primaryTextColor(nativeSurface))
-          .margin({ left: 6 })
-          .onClick(() => {
-            if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
-              this.ui.isDesc = !this.ui.isDesc
-              this.vm.refresh()
-            }
-          })
-        if (nativeSurface) {
-          this.nativeCountLabel()
-        } else {
-          this.feiniuCountLabel()
-        }
-        Blank().layoutWeight(1)
-      }
-      .width('100%')
-      .height(46)
-
-      GridView({
-        lazyDataSource: this.vm.dataSource,
-        onLazyDataSource: (dataSource) => {
-          this.vm.dataSource = dataSource
-        },
-        itemLayout: (item, index) => this.itemLayout(item, index),
-        emptyLayout: () => this.emptyLayout(),
-        showEmptyLayout: this.ui.totalCount === '0',
-        controller: this.vm.controller,
-        onRefresh: () => {
-          this.vm.refresh()
-        },
-        onLoadMore: () => {
-          this.vm.loadMore()
-        },
-        gridAttribute: (attr) => {
-          attr.scrollBar = BarState.Off
-          switch (this.vm.appUIState.currentBreakpoint) {
-            case BreakpointTypeEnum.XS:
-              attr.columnsTemplate = '1fr '.repeat(2)
-              break
-            case BreakpointTypeEnum.SM:
-              attr.columnsTemplate = '1fr '.repeat(3)
-              break
-            case BreakpointTypeEnum.MD:
-              attr.columnsTemplate = '1fr '.repeat(4)
-              break
-            case BreakpointTypeEnum.LG:
-              attr.columnsTemplate = '1fr '.repeat(6)
-              break
-            case BreakpointTypeEnum.XL:
-              attr.columnsTemplate = '1fr '.repeat(8)
-              break
-            case BreakpointTypeEnum.XXL:
-              attr.columnsTemplate = '1fr '.repeat(12)
-              break
-            default:
-              attr.columnsTemplate = '1fr '.repeat(3)
-              break
-          }
-          attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint)
-        },
-        lazyCachedCount: 10
-      }).width('100%')
-        .layoutWeight(1)
-      if (this.ui.pageState == PageState.Loading) {
-        SkeletonGridView()
-      }
-      if (this.ui.pageState == PageState.Error) {
-        FailedView()
-          .onClick(() => {
-            this.vm.refresh()
-          })
-      }
-    }
-    .width('100%')
-    .layoutWeight(1)
-    .backgroundColor(nativeSurface ? Color.Transparent : this.pageBackground())
-    .borderRadius({
-      topLeft: nativeSurface ? 0 : 20,
-      topRight: nativeSurface ? 0 : 20
-    })
-    .padding({
-      left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      right: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2,
-      bottom: this.vm.appUIState.safeBottom
-    })
-  }
-
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Column() {
-      if (showLegacyActionBar) {
-        ActionBar({
-          title: this.routeTitle(),
-          onBackClick: () => {
-            if (this.ui.selectionMode) {
-              this.vm.cancelSelection()
-            } else {
-              HMRouterMgr.pop()
-            }
-          }
-        })
-      }
-      this.listContent(!showLegacyActionBar)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(showLegacyActionBar ? $r('app.color.bg_main') : Color.Transparent)
-  }
-
-  @Builder
-  private embeddedContent() {
-    Column() {
-      this.listContent(this.useNativeSurface())
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(this.pageBackground())
-  }
-
-  build() {
-    if (this.fromHome) {
-      this.embeddedContent()
-    } else {
-      AppRouteDestination({
-        title: this.routeTitle(),
-        menus: this.selectionMenus(),
-        beforeBack: () => {
-          if (this.ui.selectionMode) {
-            this.vm.cancelSelection()
-            return true
-          }
-          return false
-        },
-        contentBuilder: () => {
-          this.pageContent(false)
-        },
-        legacyContentBuilder: () => {
-          this.pageContent(true)
-        }
-      })
-    }
-  }
-
-  @Builder
-  itemLayout(item: Object, _index: number): void {
-    // 自定义item
+  private gridItemBuilder(item: Object, _index: number) {
     VideoCard({
       item: item as VideoItem,
       selectable: this.vm.canSelect(item as VideoItem),
@@ -408,17 +180,795 @@ export struct VideoListPage {
             mediaName: (item as VideoItem).mediaName,
             isTvShows: (item as VideoItem).kind === MediaRefKind.Series ||
               (item as VideoItem).mediaRef?.kind === MediaRefKind.Series ||
-              (item as VideoItem).type === 'Series',
+              (item as VideoItem).type === 'Series'
           })
           .push()
       }
     })
   }
 
+  // CustomBuilderAdapter: video-list-grid-empty
   @Builder
-  emptyLayout() {
+  private gridEmptyBuilder() {
     EmptyView()
   }
+
+
+
+
+
+
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+          title: this.routeTitle(),
+          menus: this.selectionMenus(),
+          beforeBack: () => {
+                    if (this.ui.selectionMode) {
+                      this.vm.cancelSelection()
+                      return true
+                    }
+                    return false
+                  }
+        }
+  }
+
+  build() {
+    if (this.fromHome) {
+      Column() {
+        Column() {
+          if (this.ui.selectionMode && (this.fromHome || !(this.useNativeSurface()))) {
+            Row({ space: 8 }) {
+              if ((this.fromHome)) {
+                Text(this.routeTitle())
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.primaryTextColor(this.useNativeSurface()))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+              } else {
+                Blank().layoutWeight(1)
+              }
+              Button({ type: ButtonType.Circle, stateEffect: true }) {
+                SymbolGlyph($r('sys.symbol.trash'))
+                  .fontSize(20)
+                  .fontColor([$r('app.color.main_red_color')])
+              }
+              .width(40)
+              .height(40)
+              .buttonStyle(ButtonStyleMode.TEXTUAL)
+              .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
+              .accessibilityText($r('app.string.management_media_delete'))
+              .onClick(() => this.openDeleteDialog())
+              Button({ type: ButtonType.Circle, stateEffect: true }) {
+                SymbolGlyph($r('sys.symbol.xmark'))
+                  .fontSize(20)
+                  .fontColor([this.primaryTextColor(this.useNativeSurface())])
+              }
+              .width(40)
+              .height(40)
+              .buttonStyle(ButtonStyleMode.TEXTUAL)
+              .enabled(!this.ui.deletingSelection)
+              .accessibilityText($r('app.string.management_cancel'))
+              .onClick(() => this.vm.cancelSelection())
+            }
+            .width('100%')
+            .height(48)
+          }
+          Row() {
+            Text(sortOptions[this.ui.selectedSortIndex].label)
+              .fontSize(14)
+              .fontColor(this.primaryTextColor((this.useNativeSurface())))
+              .height(46)
+              .onClick(() => {
+                this.vm.sortDialog.show()
+              })
+            Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+              .width(16)
+              .height(16)
+              .fillColor(this.primaryTextColor((this.useNativeSurface())))
+              .margin({ left: 6 })
+              .onClick(() => {
+                if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+                  this.ui.isDesc = !this.ui.isDesc
+                  this.vm.refresh()
+                }
+              })
+            if ((this.useNativeSurface())) {
+              Text(this.ui.totalCount)
+                .fontSize(12)
+                .fontColor($r('sys.color.font_secondary'))
+                .padding({
+                  left: 6,
+                  right: 6,
+                  top: 4,
+                  bottom: 4
+                })
+                .margin({
+                  left: 12
+                })
+                .borderRadius(4)
+            } else {
+              Text(this.ui.totalCount)
+                .fontSize(12)
+                .fontColor($r('app.color.text_1'))
+                .backgroundColor($r('app.color.bg_1'))
+                .padding({
+                  left: 6,
+                  right: 6,
+                  top: 4,
+                  bottom: 4
+                })
+                .margin({
+                  left: 12
+                })
+                .borderRadius(4)
+            }
+            Blank().layoutWeight(1)
+          }
+          .width('100%')
+          .height(46)
+
+          GridView({
+            lazyDataSource: this.vm.dataSource,
+            onLazyDataSource: (dataSource) => {
+              this.vm.dataSource = dataSource
+            },
+            itemLayout: (item, index) => this.gridItemBuilder(item, index),
+            emptyLayout: () => this.gridEmptyBuilder(),
+            showEmptyLayout: this.ui.totalCount === '0',
+            controller: this.vm.controller,
+            onRefresh: () => {
+              this.vm.refresh()
+            },
+            onLoadMore: () => {
+              this.vm.loadMore()
+            },
+            gridAttribute: (attr) => {
+              attr.scrollBar = BarState.Off
+              switch (this.contentBreakpoint()) {
+                case BreakpointTypeEnum.XS:
+                  attr.columnsTemplate = '1fr '.repeat(2)
+                  break
+                case BreakpointTypeEnum.SM:
+                  attr.columnsTemplate = '1fr '.repeat(3)
+                  break
+                case BreakpointTypeEnum.MD:
+                  attr.columnsTemplate = '1fr '.repeat(4)
+                  break
+                case BreakpointTypeEnum.LG:
+                  attr.columnsTemplate = '1fr '.repeat(6)
+                  break
+                case BreakpointTypeEnum.XL:
+                  attr.columnsTemplate = '1fr '.repeat(8)
+                  break
+                case BreakpointTypeEnum.XXL:
+                  attr.columnsTemplate = '1fr '.repeat(12)
+                  break
+                default:
+                  attr.columnsTemplate = '1fr '.repeat(3)
+                  break
+              }
+              attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint())
+            },
+            lazyCachedCount: 10
+          }).width('100%')
+            .layoutWeight(1)
+          if (this.ui.pageState == PageState.Loading) {
+            SkeletonGridView()
+          }
+          if (this.ui.pageState == PageState.Error) {
+            FailedView()
+              .onClick(() => {
+                this.vm.refresh()
+              })
+          }
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .backgroundColor((this.useNativeSurface()) ? Color.Transparent : this.pageBackground())
+        .borderRadius({
+          topLeft: (this.useNativeSurface()) ? 0 : 20,
+          topRight: (this.useNativeSurface()) ? 0 : 20
+        })
+        .padding({
+          left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+          right: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+          bottom: this.vm.appUIState.safeBottom
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(this.pageBackground())
+    } else {
+      if (this.routeDestination.usesHdsDestination()) {
+        HdsNavDestination() {
+          Column() {
+            Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+            Stack() {
+              if (this.routeDestination.usesNativeChrome()) {
+                Column() {
+                  if ((false)) {
+                    ActionBar({
+                      title: this.routeTitle(),
+                      onBackClick: () => {
+                        if (this.ui.selectionMode) {
+                          this.vm.cancelSelection()
+                        } else {
+                          HMRouterMgr.pop()
+                        }
+                      }
+                    })
+                  }
+                  Column() {
+                    if (this.ui.selectionMode && (this.fromHome || !(!(false)))) {
+                      Row({ space: 8 }) {
+                        if ((this.fromHome)) {
+                          Text(this.routeTitle())
+                            .fontSize(15)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(this.primaryTextColor(this.useNativeSurface()))
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .layoutWeight(1)
+                        } else {
+                          Blank().layoutWeight(1)
+                        }
+                        Button({ type: ButtonType.Circle, stateEffect: true }) {
+                          SymbolGlyph($r('sys.symbol.trash'))
+                            .fontSize(20)
+                            .fontColor([$r('app.color.main_red_color')])
+                        }
+                        .width(40)
+                        .height(40)
+                        .buttonStyle(ButtonStyleMode.TEXTUAL)
+                        .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
+                        .accessibilityText($r('app.string.management_media_delete'))
+                        .onClick(() => this.openDeleteDialog())
+                        Button({ type: ButtonType.Circle, stateEffect: true }) {
+                          SymbolGlyph($r('sys.symbol.xmark'))
+                            .fontSize(20)
+                            .fontColor([this.primaryTextColor(this.useNativeSurface())])
+                        }
+                        .width(40)
+                        .height(40)
+                        .buttonStyle(ButtonStyleMode.TEXTUAL)
+                        .enabled(!this.ui.deletingSelection)
+                        .accessibilityText($r('app.string.management_cancel'))
+                        .onClick(() => this.vm.cancelSelection())
+                      }
+                      .width('100%')
+                      .height(48)
+                    }
+                    Row() {
+                      Text(sortOptions[this.ui.selectedSortIndex].label)
+                        .fontSize(14)
+                        .fontColor(this.primaryTextColor((!(false))))
+                        .height(46)
+                        .onClick(() => {
+                          this.vm.sortDialog.show()
+                        })
+                      Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+                        .width(16)
+                        .height(16)
+                        .fillColor(this.primaryTextColor((!(false))))
+                        .margin({ left: 6 })
+                        .onClick(() => {
+                          if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+                            this.ui.isDesc = !this.ui.isDesc
+                            this.vm.refresh()
+                          }
+                        })
+                      if ((!(false))) {
+                        Text(this.ui.totalCount)
+                          .fontSize(12)
+                          .fontColor($r('sys.color.font_secondary'))
+                          .padding({
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: 4
+                          })
+                          .margin({
+                            left: 12
+                          })
+                          .borderRadius(4)
+                      } else {
+                        Text(this.ui.totalCount)
+                          .fontSize(12)
+                          .fontColor($r('app.color.text_1'))
+                          .backgroundColor($r('app.color.bg_1'))
+                          .padding({
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: 4
+                          })
+                          .margin({
+                            left: 12
+                          })
+                          .borderRadius(4)
+                      }
+                      Blank().layoutWeight(1)
+                    }
+                    .width('100%')
+                    .height(46)
+
+                    GridView({
+                      lazyDataSource: this.vm.dataSource,
+                      onLazyDataSource: (dataSource) => {
+                        this.vm.dataSource = dataSource
+                      },
+                      itemLayout: (item, index) => this.gridItemBuilder(item, index),
+                      emptyLayout: () => this.gridEmptyBuilder(),
+                      showEmptyLayout: this.ui.totalCount === '0',
+                      controller: this.vm.controller,
+                      onRefresh: () => {
+                        this.vm.refresh()
+                      },
+                      onLoadMore: () => {
+                        this.vm.loadMore()
+                      },
+                      gridAttribute: (attr) => {
+                        attr.scrollBar = BarState.Off
+                        switch (this.contentBreakpoint()) {
+                          case BreakpointTypeEnum.XS:
+                            attr.columnsTemplate = '1fr '.repeat(2)
+                            break
+                          case BreakpointTypeEnum.SM:
+                            attr.columnsTemplate = '1fr '.repeat(3)
+                            break
+                          case BreakpointTypeEnum.MD:
+                            attr.columnsTemplate = '1fr '.repeat(4)
+                            break
+                          case BreakpointTypeEnum.LG:
+                            attr.columnsTemplate = '1fr '.repeat(6)
+                            break
+                          case BreakpointTypeEnum.XL:
+                            attr.columnsTemplate = '1fr '.repeat(8)
+                            break
+                          case BreakpointTypeEnum.XXL:
+                            attr.columnsTemplate = '1fr '.repeat(12)
+                            break
+                          default:
+                            attr.columnsTemplate = '1fr '.repeat(3)
+                            break
+                        }
+                        attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint())
+                      },
+                      lazyCachedCount: 10
+                    }).width('100%')
+                      .layoutWeight(1)
+                    if (this.ui.pageState == PageState.Loading) {
+                      SkeletonGridView()
+                    }
+                    if (this.ui.pageState == PageState.Error) {
+                      FailedView()
+                        .onClick(() => {
+                          this.vm.refresh()
+                        })
+                    }
+                  }
+                  .width('100%')
+                  .layoutWeight(1)
+                  .backgroundColor((!(false)) ? Color.Transparent : this.pageBackground())
+                  .borderRadius({
+                    topLeft: (!(false)) ? 0 : 20,
+                    topRight: (!(false)) ? 0 : 20
+                  })
+                  .padding({
+                    left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+                    right: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+                    bottom: this.vm.appUIState.safeBottom
+                  })
+                }
+                .width('100%')
+                .height('100%')
+                .backgroundColor((false) ? $r('app.color.bg_main') : Color.Transparent)
+              } else {
+                Column() {
+                  if ((true)) {
+                    ActionBar({
+                      title: this.routeTitle(),
+                      onBackClick: () => {
+                        if (this.ui.selectionMode) {
+                          this.vm.cancelSelection()
+                        } else {
+                          HMRouterMgr.pop()
+                        }
+                      }
+                    })
+                  }
+                  Column() {
+                    if (this.ui.selectionMode && (this.fromHome || !(!(true)))) {
+                      Row({ space: 8 }) {
+                        if ((this.fromHome)) {
+                          Text(this.routeTitle())
+                            .fontSize(15)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(this.primaryTextColor(this.useNativeSurface()))
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                            .layoutWeight(1)
+                        } else {
+                          Blank().layoutWeight(1)
+                        }
+                        Button({ type: ButtonType.Circle, stateEffect: true }) {
+                          SymbolGlyph($r('sys.symbol.trash'))
+                            .fontSize(20)
+                            .fontColor([$r('app.color.main_red_color')])
+                        }
+                        .width(40)
+                        .height(40)
+                        .buttonStyle(ButtonStyleMode.TEXTUAL)
+                        .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
+                        .accessibilityText($r('app.string.management_media_delete'))
+                        .onClick(() => this.openDeleteDialog())
+                        Button({ type: ButtonType.Circle, stateEffect: true }) {
+                          SymbolGlyph($r('sys.symbol.xmark'))
+                            .fontSize(20)
+                            .fontColor([this.primaryTextColor(this.useNativeSurface())])
+                        }
+                        .width(40)
+                        .height(40)
+                        .buttonStyle(ButtonStyleMode.TEXTUAL)
+                        .enabled(!this.ui.deletingSelection)
+                        .accessibilityText($r('app.string.management_cancel'))
+                        .onClick(() => this.vm.cancelSelection())
+                      }
+                      .width('100%')
+                      .height(48)
+                    }
+                    Row() {
+                      Text(sortOptions[this.ui.selectedSortIndex].label)
+                        .fontSize(14)
+                        .fontColor(this.primaryTextColor((!(true))))
+                        .height(46)
+                        .onClick(() => {
+                          this.vm.sortDialog.show()
+                        })
+                      Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+                        .width(16)
+                        .height(16)
+                        .fillColor(this.primaryTextColor((!(true))))
+                        .margin({ left: 6 })
+                        .onClick(() => {
+                          if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+                            this.ui.isDesc = !this.ui.isDesc
+                            this.vm.refresh()
+                          }
+                        })
+                      if ((!(true))) {
+                        Text(this.ui.totalCount)
+                          .fontSize(12)
+                          .fontColor($r('sys.color.font_secondary'))
+                          .padding({
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: 4
+                          })
+                          .margin({
+                            left: 12
+                          })
+                          .borderRadius(4)
+                      } else {
+                        Text(this.ui.totalCount)
+                          .fontSize(12)
+                          .fontColor($r('app.color.text_1'))
+                          .backgroundColor($r('app.color.bg_1'))
+                          .padding({
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: 4
+                          })
+                          .margin({
+                            left: 12
+                          })
+                          .borderRadius(4)
+                      }
+                      Blank().layoutWeight(1)
+                    }
+                    .width('100%')
+                    .height(46)
+
+                    GridView({
+                      lazyDataSource: this.vm.dataSource,
+                      onLazyDataSource: (dataSource) => {
+                        this.vm.dataSource = dataSource
+                      },
+                      itemLayout: (item, index) => this.gridItemBuilder(item, index),
+                      emptyLayout: () => this.gridEmptyBuilder(),
+                      showEmptyLayout: this.ui.totalCount === '0',
+                      controller: this.vm.controller,
+                      onRefresh: () => {
+                        this.vm.refresh()
+                      },
+                      onLoadMore: () => {
+                        this.vm.loadMore()
+                      },
+                      gridAttribute: (attr) => {
+                        attr.scrollBar = BarState.Off
+                        switch (this.contentBreakpoint()) {
+                          case BreakpointTypeEnum.XS:
+                            attr.columnsTemplate = '1fr '.repeat(2)
+                            break
+                          case BreakpointTypeEnum.SM:
+                            attr.columnsTemplate = '1fr '.repeat(3)
+                            break
+                          case BreakpointTypeEnum.MD:
+                            attr.columnsTemplate = '1fr '.repeat(4)
+                            break
+                          case BreakpointTypeEnum.LG:
+                            attr.columnsTemplate = '1fr '.repeat(6)
+                            break
+                          case BreakpointTypeEnum.XL:
+                            attr.columnsTemplate = '1fr '.repeat(8)
+                            break
+                          case BreakpointTypeEnum.XXL:
+                            attr.columnsTemplate = '1fr '.repeat(12)
+                            break
+                          default:
+                            attr.columnsTemplate = '1fr '.repeat(3)
+                            break
+                        }
+                        attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint())
+                      },
+                      lazyCachedCount: 10
+                    }).width('100%')
+                      .layoutWeight(1)
+                    if (this.ui.pageState == PageState.Loading) {
+                      SkeletonGridView()
+                    }
+                    if (this.ui.pageState == PageState.Error) {
+                      FailedView()
+                        .onClick(() => {
+                          this.vm.refresh()
+                        })
+                    }
+                  }
+                  .width('100%')
+                  .layoutWeight(1)
+                  .backgroundColor((!(true)) ? Color.Transparent : this.pageBackground())
+                  .borderRadius({
+                    topLeft: (!(true)) ? 0 : 20,
+                    topRight: (!(true)) ? 0 : 20
+                  })
+                  .padding({
+                    left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+                    right: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+                    bottom: this.vm.appUIState.safeBottom
+                  })
+                }
+                .width('100%')
+                .height('100%')
+                .backgroundColor((true) ? $r('app.color.bg_main') : Color.Transparent)
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .height('100%')
+        }
+        .backgroundColor(this.routeDestination.hdsBackgroundColor())
+        .titleMode(HdsNavDestinationTitleMode.MINI)
+        .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+        .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+        .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+        .hideToolBar(true)
+        .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+        .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+        .onAppear(() => this.routeDestination.helper.onAppear())
+        .onWillShow(() => this.routeDestination.helper.onWillShow())
+        .onShown(() => this.routeDestination.helper.onShown())
+        .onWillHide(() => this.routeDestination.helper.onWillHide())
+        .onHidden(() => this.routeDestination.helper.onHidden())
+        .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+        .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+        .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+        .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+        .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+        .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+        .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+        .ignoreLayoutSafeArea(
+          this.routeDestination.nativeSafeAreaTypes(),
+          this.routeDestination.nativeSafeAreaEdges()
+        )
+        .width('100%')
+        .height('100%')
+      } else {
+        NavDestination() {
+          Column() {
+            if ((true)) {
+              ActionBar({
+                title: this.routeTitle(),
+                onBackClick: () => {
+                  if (this.ui.selectionMode) {
+                    this.vm.cancelSelection()
+                  } else {
+                    HMRouterMgr.pop()
+                  }
+                }
+              })
+            }
+            Column() {
+              if (this.ui.selectionMode && (this.fromHome || !(!(true)))) {
+                Row({ space: 8 }) {
+                  if ((this.fromHome)) {
+                    Text(this.routeTitle())
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.primaryTextColor(this.useNativeSurface()))
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .layoutWeight(1)
+                  } else {
+                    Blank().layoutWeight(1)
+                  }
+                  Button({ type: ButtonType.Circle, stateEffect: true }) {
+                    SymbolGlyph($r('sys.symbol.trash'))
+                      .fontSize(20)
+                      .fontColor([$r('app.color.main_red_color')])
+                  }
+                  .width(40)
+                  .height(40)
+                  .buttonStyle(ButtonStyleMode.TEXTUAL)
+                  .enabled(!this.ui.deletingSelection && this.ui.selectedIds.length > 0)
+                  .accessibilityText($r('app.string.management_media_delete'))
+                  .onClick(() => this.openDeleteDialog())
+                  Button({ type: ButtonType.Circle, stateEffect: true }) {
+                    SymbolGlyph($r('sys.symbol.xmark'))
+                      .fontSize(20)
+                      .fontColor([this.primaryTextColor(this.useNativeSurface())])
+                  }
+                  .width(40)
+                  .height(40)
+                  .buttonStyle(ButtonStyleMode.TEXTUAL)
+                  .enabled(!this.ui.deletingSelection)
+                  .accessibilityText($r('app.string.management_cancel'))
+                  .onClick(() => this.vm.cancelSelection())
+                }
+                .width('100%')
+                .height(48)
+              }
+              Row() {
+                Text(sortOptions[this.ui.selectedSortIndex].label)
+                  .fontSize(14)
+                  .fontColor(this.primaryTextColor((!(true))))
+                  .height(46)
+                  .onClick(() => {
+                    this.vm.sortDialog.show()
+                  })
+                Image(this.ui.isDesc ? $r('app.media.jiangxu') : $r('app.media.shengxu'))
+                  .width(16)
+                  .height(16)
+                  .fillColor(this.primaryTextColor((!(true))))
+                  .margin({ left: 6 })
+                  .onClick(() => {
+                    if (this.vm.controller.getRefreshLayoutStatus() === RefreshLayoutStatus.Finish) {
+                      this.ui.isDesc = !this.ui.isDesc
+                      this.vm.refresh()
+                    }
+                  })
+                if ((!(true))) {
+                  Text(this.ui.totalCount)
+                    .fontSize(12)
+                    .fontColor($r('sys.color.font_secondary'))
+                    .padding({
+                      left: 6,
+                      right: 6,
+                      top: 4,
+                      bottom: 4
+                    })
+                    .margin({
+                      left: 12
+                    })
+                    .borderRadius(4)
+                } else {
+                  Text(this.ui.totalCount)
+                    .fontSize(12)
+                    .fontColor($r('app.color.text_1'))
+                    .backgroundColor($r('app.color.bg_1'))
+                    .padding({
+                      left: 6,
+                      right: 6,
+                      top: 4,
+                      bottom: 4
+                    })
+                    .margin({
+                      left: 12
+                    })
+                    .borderRadius(4)
+                }
+                Blank().layoutWeight(1)
+              }
+              .width('100%')
+              .height(46)
+
+              GridView({
+                lazyDataSource: this.vm.dataSource,
+                onLazyDataSource: (dataSource) => {
+                  this.vm.dataSource = dataSource
+                },
+                itemLayout: (item, index) => this.gridItemBuilder(item, index),
+                emptyLayout: () => this.gridEmptyBuilder(),
+                showEmptyLayout: this.ui.totalCount === '0',
+                controller: this.vm.controller,
+                onRefresh: () => {
+                  this.vm.refresh()
+                },
+                onLoadMore: () => {
+                  this.vm.loadMore()
+                },
+                gridAttribute: (attr) => {
+                  attr.scrollBar = BarState.Off
+                  switch (this.contentBreakpoint()) {
+                    case BreakpointTypeEnum.XS:
+                      attr.columnsTemplate = '1fr '.repeat(2)
+                      break
+                    case BreakpointTypeEnum.SM:
+                      attr.columnsTemplate = '1fr '.repeat(3)
+                      break
+                    case BreakpointTypeEnum.MD:
+                      attr.columnsTemplate = '1fr '.repeat(4)
+                      break
+                    case BreakpointTypeEnum.LG:
+                      attr.columnsTemplate = '1fr '.repeat(6)
+                      break
+                    case BreakpointTypeEnum.XL:
+                      attr.columnsTemplate = '1fr '.repeat(8)
+                      break
+                    case BreakpointTypeEnum.XXL:
+                      attr.columnsTemplate = '1fr '.repeat(12)
+                      break
+                    default:
+                      attr.columnsTemplate = '1fr '.repeat(3)
+                      break
+                  }
+                  attr.columnsGap = HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint())
+                },
+                lazyCachedCount: 10
+              }).width('100%')
+                .layoutWeight(1)
+              if (this.ui.pageState == PageState.Loading) {
+                SkeletonGridView()
+              }
+              if (this.ui.pageState == PageState.Error) {
+                FailedView()
+                  .onClick(() => {
+                    this.vm.refresh()
+                  })
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
+            .backgroundColor((!(true)) ? Color.Transparent : this.pageBackground())
+            .borderRadius({
+              topLeft: (!(true)) ? 0 : 20,
+              topRight: (!(true)) ? 0 : 20
+            })
+            .padding({
+              left: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+              right: HORIZONTAL_CARD_SPACE.getValue(this.contentBreakpoint()) * 2,
+              bottom: this.vm.appUIState.safeBottom
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .backgroundColor((true) ? $r('app.color.bg_main') : Color.Transparent)
+        }
+        .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+        .gestureModifier(this.routeDestination.gestureModifier)
+        .width('100%')
+        .height('100%')
+      }
+    }
+  }
+
+
 }
 
 @ComponentV2
@@ -444,6 +994,20 @@ export struct VideoCard {
       $r('app.media.placeholder_folder') : $r('app.media.placeholder_video')
     option.placeholderObjectFit = ImageFit.CENTER
     return option
+  }
+
+  private displayTags(): string[] {
+    const visibleTags: string[] = []
+    this.item.tags?.forEach((tag: string): void => {
+      const normalized = tag.trim().toUpperCase()
+      if (normalized.length === 0 || normalized.startsWith('OTH') || visibleTags.length >= 2) {
+        return
+      }
+      if (!visibleTags.some((visibleTag: string): boolean => visibleTag.toUpperCase() === normalized)) {
+        visibleTags.push(tag.trim())
+      }
+    })
+    return visibleTags
   }
 
   build() {
@@ -490,9 +1054,9 @@ export struct VideoCard {
             // .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
             .borderRadius(4)
         }
-        if (this.item.tags && this.item.tags.length > 0) {
+        if (this.displayTags().length > 0) {
           Row({ space: 4 }) {
-            ForEach(this.item.tags, (tag: string) => {
+            ForEach(this.displayTags(), (tag: string) => {
               if (tag === '4K') {
                 Image($r('app.media.4K')).height(20).width(28).opacity(0.7).objectFit(ImageFit.Fill)
               } else {

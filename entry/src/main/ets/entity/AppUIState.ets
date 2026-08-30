@@ -25,6 +25,8 @@ export class AppUIState {
   @Trace deviceWidth: number = 0
   @Trace deviceHeight: number = 0
   @Trace currentBreakpoint: string = BreakpointTypeEnum.MD
+  @Trace homeContentWidth: number = 0
+  @Trace homeContentBreakpoint: string = BreakpointTypeEnum.MD
   @Trace isBigScreen: boolean = false // 大屏幕设备
   @Trace feiniuPointLightEnabled: boolean = false
   @Trace rootNavigationTitle: string = '首页'

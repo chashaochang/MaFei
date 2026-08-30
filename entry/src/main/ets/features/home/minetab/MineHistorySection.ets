@@ -6,15 +6,104 @@ import { MineHistoryPoster } from './MineHistoryPoster'
 import { MineHistoryState } from './MineUIState'
 
 @ComponentV2
+struct MineHistoryLoadingGrid {
+  @Require @Param items: number[]
+  @Require @Param columnsTemplate: string
+  @Require @Param nativeSurface: boolean
+
+  build() {
+    Grid() {
+      ForEach(this.items, (index: number) => {
+        GridItem() {
+          Column({ space: 8 }) {
+            Column()
+              .width('100%')
+              .aspectRatio(2 / 3)
+              .borderRadius(10)
+              .backgroundColor(this.nativeSurface ?
+                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
+            Column()
+              .width('72%')
+              .height(13)
+              .borderRadius(6.5)
+              .backgroundColor(this.nativeSurface ?
+                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+      }, (index: number) => index.toString())
+    }
+    .width('100%')
+    .columnsTemplate(this.columnsTemplate)
+    .columnsGap(10)
+    .rowsGap(14)
+    .scrollBar(BarState.Off)
+    .opacity(0.7)
+  }
+}
+
+@ComponentV2
+struct MineHistoryGrid {
+  @Require @Param items: MineHistoryItem[]
+  @Require @Param columnsTemplate: string
+  @Require @Param nativeSurface: boolean
+  @Event onItemPressed: (item: MineHistoryItem) => void = (_item: MineHistoryItem) => {}
+
+  private itemKey(item: MineHistoryItem): string {
+    return `${item.id}|${item.latestSeasonNumber || 0}|${item.latestEpisodeNumber || 0}|` +
+      `${item.seriesHasMultipleSeasons ? 1 : 0}`
+  }
+
+  build() {
+    Grid() {
+      ForEach(this.items, (item: MineHistoryItem) => {
+        GridItem() {
+          MineHistoryPoster({
+            item,
+            nativeSurface: this.nativeSurface
+          })
+        }
+        .onClick(() => this.onItemPressed(item))
+      }, (item: MineHistoryItem) => this.itemKey(item))
+    }
+    .width('100%')
+    .columnsTemplate(this.columnsTemplate)
+    .columnsGap(10)
+    .rowsGap(14)
+    .scrollBar(BarState.Off)
+  }
+}
+
+@ComponentV2
+struct MineHistoryErrorState {
+  @Require @Param secondaryTextColor: ResourceColor
+  @Event onRetry: () => void = () => {}
+
+  build() {
+    Row({ space: 8 }) {
+      Text($r('app.string.mine_history_retry'))
+        .fontSize(14)
+        .fontColor(this.secondaryTextColor)
+      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        .fontSize(18)
+        .fontColor([this.secondaryTextColor])
+    }
+    .height(64)
+    .onClick(() => this.onRetry())
+  }
+}
+
+@ComponentV2
 export struct MineHistorySection {
   @Require @Param state: MineHistoryState
   @Require @Param items: MineHistoryItem[]
   @Require @Param currentBreakpoint: string
   @Require @Param nativeSurface: boolean
   @Require @Param themeStyle: ThemeStyle
-  @Require @Param onItemClick: (item: MineHistoryItem) => void
-  @Require @Param onRetry: () => void
-  @Require @Param onMore: () => void
+  @Event onItemClick: (item: MineHistoryItem) => void = (_item: MineHistoryItem) => {}
+  @Event onRetry: () => void = () => {}
+  @Event onMore: () => void = () => {}
 
   private columnCount(): number {
     return this.currentBreakpoint.includes('s') || this.currentBreakpoint === 'md' ? 3 : 4
@@ -32,87 +121,12 @@ export struct MineHistorySection {
     return this.columnCount() === 4 ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr'
   }
 
-  private historyItemKey(item: MineHistoryItem): string {
-    return `${item.id}|${item.latestSeasonNumber || 0}|${item.latestEpisodeNumber || 0}|` +
-      `${item.seriesHasMultipleSeasons ? 1 : 0}`
-  }
-
   private primaryTextColor(): ResourceColor {
     return this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary')
   }
 
   private secondaryTextColor(): ResourceColor {
     return this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
-  }
-
-  @Builder
-  private loadingGrid(nativeSurface: boolean) {
-    Grid() {
-      ForEach(this.skeletonItems(), (_index: number) => {
-        GridItem() {
-          Column({ space: 8 }) {
-            Column()
-              .width('100%')
-              .aspectRatio(2 / 3)
-              .borderRadius(10)
-              .backgroundColor(nativeSurface ?
-                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
-            Column()
-              .width('72%')
-              .height(13)
-              .borderRadius(6.5)
-              .backgroundColor(nativeSurface ?
-                $r('sys.color.comp_background_tertiary') : $r('app.color.bg_2'))
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-        }
-      })
-    }
-    .width('100%')
-    .columnsTemplate(this.columnsTemplate())
-    .columnsGap(10)
-    .rowsGap(14)
-    .scrollBar(BarState.Off)
-    .opacity(0.7)
-  }
-
-  @Builder
-  private historyGrid() {
-    Grid() {
-      ForEach(this.visibleItems(), (item: MineHistoryItem) => {
-        GridItem() {
-          MineHistoryPoster({
-            item,
-            nativeSurface: this.nativeSurface
-          })
-        }
-        .onClick(() => {
-          this.onItemClick(item)
-        })
-      }, (item: MineHistoryItem) => this.historyItemKey(item))
-    }
-    .width('100%')
-    .columnsTemplate(this.columnsTemplate())
-    .columnsGap(10)
-    .rowsGap(14)
-    .scrollBar(BarState.Off)
-  }
-
-  @Builder
-  private errorState() {
-    Row({ space: 8 }) {
-      Text($r('app.string.mine_history_retry'))
-        .fontSize(14)
-        .fontColor(this.secondaryTextColor())
-      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-        .fontSize(18)
-        .fontColor([this.secondaryTextColor()])
-    }
-    .height(64)
-    .onClick(() => {
-      this.onRetry()
-    })
   }
 
   build() {
@@ -145,11 +159,23 @@ export struct MineHistorySection {
         .width('100%')
         .alignItems(VerticalAlign.Center)
         if (this.state === MineHistoryState.Loading) {
-          this.loadingGrid(this.nativeSurface)
+          MineHistoryLoadingGrid({
+            items: this.skeletonItems(),
+            columnsTemplate: this.columnsTemplate(),
+            nativeSurface: this.nativeSurface
+          })
         } else if (this.state === MineHistoryState.Error) {
-          this.errorState()
+          MineHistoryErrorState({
+            secondaryTextColor: this.secondaryTextColor(),
+            onRetry: () => this.onRetry()
+          })
         } else {
-          this.historyGrid()
+          MineHistoryGrid({
+            items: this.visibleItems(),
+            columnsTemplate: this.columnsTemplate(),
+            nativeSurface: this.nativeSurface,
+            onItemPressed: (item: MineHistoryItem) => this.onItemClick(item)
+          })
         }
       }
       .width('100%')

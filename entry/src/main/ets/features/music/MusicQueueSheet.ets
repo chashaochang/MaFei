@@ -7,8 +7,88 @@ import { MusicPlaybackController } from './MusicPlaybackController'
 import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackState'
 
 @ComponentV2
+struct MusicQueueRow {
+  @Require @Param item: MusicQueueItem
+  @Require @Param index: number
+  @Require @Param currentIndex: number
+  @Require @Param candidateItemId: string
+  @Require @Param candidateStatus: MusicPlaybackCandidateStatus
+  @Require @Param primaryTextColor: ResourceColor
+  @Require @Param secondaryTextColor: ResourceColor
+  @Event onPressed: () => void = () => {}
+  @Event onRemove: () => void = () => {}
+
+  build() {
+    Row({ space: 10 }) {
+      Row({ space: 10 }) {
+        Stack() {
+          if (this.candidateItemId === this.item.id &&
+            this.candidateStatus === MusicPlaybackCandidateStatus.Preparing) {
+            LoadingProgress()
+              .width(18)
+              .height(18)
+              .color($r('app.color.color_main'))
+          } else if (this.candidateItemId === this.item.id &&
+            this.candidateStatus === MusicPlaybackCandidateStatus.Error) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+              .fontSize(18)
+              .fontColor([$r('app.color.main_red_color')])
+          } else if (this.index === this.currentIndex) {
+            SymbolGlyph($r('sys.symbol.music_badge_wave_2'))
+              .fontSize(18)
+              .fontColor([$r('app.color.color_main')])
+          }
+        }
+        .width(24)
+        .height(24)
+        Column({ space: 2 }) {
+          Text(this.item.title)
+            .width('100%')
+            .fontSize(15)
+            .fontWeight(this.index === this.currentIndex ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(this.primaryTextColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.item.artist || this.item.album)
+            .width('100%')
+            .fontSize(11)
+            .fontColor(this.secondaryTextColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Text(MusicFormatters.duration(this.item.durationMs))
+          .fontSize(11)
+          .fontColor(this.secondaryTextColor)
+      }
+      .layoutWeight(1)
+      .height(58)
+      .onClick(() => this.onPressed())
+      if (this.index !== this.currentIndex) {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(16)
+            .fontColor([this.secondaryTextColor])
+        }
+        .width(36)
+        .height(36)
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .backgroundColor(Color.Transparent)
+        .enabled(this.candidateStatus === MusicPlaybackCandidateStatus.None)
+        .accessibilityText($r('app.string.music_remove'))
+        .onClick(() => this.onRemove())
+      }
+    }
+    .width('100%')
+    .height(58)
+    .padding({ left: 16, right: 12 })
+  }
+}
+
+@ComponentV2
 export struct MusicQueueSheet {
-  @Require @Param onCleared: () => void
+  @Event onCleared: () => void = () => {}
   private appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
   private playbackState: MusicPlaybackState = connectMusicPlaybackState()
   private controller: MusicPlaybackController = MusicPlaybackController.instance()
@@ -50,79 +130,6 @@ export struct MusicQueueSheet {
     }).catch((): void => {})
   }
 
-  @Builder
-  private currentIndicator(item: MusicQueueItem, current: boolean) {
-    Stack() {
-      if (this.playbackState.candidateItemId === item.id &&
-        this.playbackState.candidateStatus === MusicPlaybackCandidateStatus.Preparing) {
-        LoadingProgress()
-          .width(18)
-          .height(18)
-          .color($r('app.color.color_main'))
-      } else if (this.playbackState.candidateItemId === item.id &&
-        this.playbackState.candidateStatus === MusicPlaybackCandidateStatus.Error) {
-        SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-          .fontSize(18)
-          .fontColor([$r('app.color.main_red_color')])
-      } else if (current) {
-        SymbolGlyph($r('sys.symbol.music_badge_wave_2'))
-          .fontSize(18)
-          .fontColor([$r('app.color.color_main')])
-      }
-    }
-    .width(24)
-    .height(24)
-  }
-
-  @Builder
-  private queueRow(item: MusicQueueItem, index: number) {
-    Row({ space: 10 }) {
-      Row({ space: 10 }) {
-        this.currentIndicator(item, index === this.playbackState.currentIndex)
-        Column({ space: 2 }) {
-          Text(item.title)
-            .width('100%')
-            .fontSize(15)
-            .fontWeight(index === this.playbackState.currentIndex ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(this.primaryTextColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(item.artist || item.album)
-            .width('100%')
-            .fontSize(11)
-            .fontColor(this.secondaryTextColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        Text(MusicFormatters.duration(item.durationMs))
-          .fontSize(11)
-          .fontColor(this.secondaryTextColor())
-      }
-      .layoutWeight(1)
-      .height(58)
-      .onClick(() => this.jumpTo(index))
-      if (index !== this.playbackState.currentIndex) {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([this.secondaryTextColor()])
-        }
-        .width(36)
-        .height(36)
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .backgroundColor(Color.Transparent)
-        .enabled(this.playbackState.candidateStatus === MusicPlaybackCandidateStatus.None)
-        .accessibilityText($r('app.string.music_remove'))
-        .onClick(() => this.removeAt(index))
-      }
-    }
-    .width('100%')
-    .height(58)
-    .padding({ left: 16, right: 12 })
-  }
-
   build() {
     Column() {
       Row() {
@@ -146,7 +153,17 @@ export struct MusicQueueSheet {
       List() {
         ForEach(this.playbackState.queue, (item: MusicQueueItem, index: number) => {
           ListItem() {
-            this.queueRow(item, index)
+            MusicQueueRow({
+              item,
+              index,
+              currentIndex: this.playbackState.currentIndex,
+              candidateItemId: this.playbackState.candidateItemId,
+              candidateStatus: this.playbackState.candidateStatus,
+              primaryTextColor: this.primaryTextColor(),
+              secondaryTextColor: this.secondaryTextColor(),
+              onPressed: () => this.jumpTo(index),
+              onRemove: () => this.removeAt(index)
+            })
           }
         }, (item: MusicQueueItem, index: number) => `${item.id}-${index}`)
       }

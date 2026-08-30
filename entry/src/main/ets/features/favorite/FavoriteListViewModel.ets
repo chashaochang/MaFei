@@ -27,8 +27,7 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
   sortDialog = new ListDialog("排序", sortOptions.map((e) => e.label), this.ui.selectedSortIndex, (index) => {
     this.ui.selectedSortIndex = index
     this.sortBy = [mediaCatalogSortField(sortOptions[this.ui.selectedSortIndex].value)]
-    this.startIndex = 0
-    this.getFavoriteList()
+    this.refresh()
     this.sortDialog.dismiss()
   }, () => AppThemeSurfaceResolver.useNativeSurface(
     this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable))
@@ -88,6 +87,7 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
           if (page.startIndex === 0) {
             this.ui.pageState = PageState.Content
             this.dataSource.initData(videoList)
+            this.ui.isRefreshing = false
             this.controller.finishRefresh()
           } else {
             this.dataSource.pushDataArray(videoList)
@@ -99,6 +99,7 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
             this.dataSource.deleteAll()
           }
           this.ui.pageState = PageState.Content
+          this.ui.isRefreshing = false
           this.controller.finishRefresh()
           this.controller.finishLoadMore(noMore)
         }
@@ -110,6 +111,7 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
         }
         this.controller.finishRefresh()
         this.controller.finishLoadMore(false)
+        this.ui.isRefreshing = false
         if (this.startIndex === 0) {
           this.ui.pageState = PageState.Error
         }
@@ -134,17 +136,20 @@ export class FavoriteListViewModel extends BaseViewModel<FavoriteListUIState> {
     this.dataSource.deleteAll()
     this.ui.totalCount = '0'
     this.ui.pageState = PageState.Content
+    this.ui.isRefreshing = false
     this.controller.finishRefresh()
     this.controller.finishLoadMore(true)
   }
 
   private finishFailure(): void {
+    this.ui.isRefreshing = false
     this.controller.finishRefresh()
     this.controller.finishLoadMore(false)
     if (this.startIndex === 0) this.ui.pageState = PageState.Error
   }
 
   refresh() {
+    this.ui.isRefreshing = true
     this.startIndex = 0
     this.getFavoriteList()
   }

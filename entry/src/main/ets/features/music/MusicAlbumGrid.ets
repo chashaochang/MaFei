@@ -2,6 +2,7 @@ import { ImageKnifeComponent } from '@ohos/imageknifepro'
 import { BreakpointTypeEnum } from '../../utils/BreakpointSystem'
 import { musicBrowseErrorText } from './MusicErrorText'
 import { MusicAlbum, MusicBrowseErrorCode } from './MusicModels'
+import { MusicGridFooter } from './MusicGridFooter'
 
 @ComponentV2
 export struct MusicAlbumGrid {
@@ -45,33 +46,6 @@ export struct MusicAlbumGrid {
 
   private secondaryTextColor(): ResourceColor {
     return this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
-  }
-
-  @Builder
-  private footer() {
-    if (this.loadingMore) {
-      Row({ space: 8 }) {
-        LoadingProgress().width(20).height(20)
-        Text($r('app.string.music_loading_more'))
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor())
-      }
-      .height(52)
-      .justifyContent(FlexAlign.Center)
-    } else if (this.loadMoreFailed) {
-      Column({ space: 6 }) {
-        Text(musicBrowseErrorText(this.loadMoreErrorCode))
-          .fontSize(12)
-          .fontColor(this.secondaryTextColor())
-        Button($r('app.string.music_retry'), { type: ButtonType.Normal })
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor(Color.Transparent)
-          .fontColor(this.secondaryTextColor())
-          .onClick(() => this.onRetryLoadMore())
-      }
-      .padding({ top: 8, bottom: 8 })
-    }
   }
 
   build() {
@@ -118,7 +92,15 @@ export struct MusicAlbumGrid {
       }, (album: MusicAlbum) => album.id)
       if (this.loadingMore || this.loadMoreFailed) {
         GridItem() {
-          this.footer()
+          MusicGridFooter({
+            loadingMore: this.loadingMore,
+            loadMoreFailed: this.loadMoreFailed,
+            errorText: musicBrowseErrorText(this.loadMoreErrorCode),
+            textColor: this.secondaryTextColor(),
+            progressSize: 20,
+            showLoadingText: true,
+            onRetry: () => this.onRetryLoadMore()
+          })
         }
         .columnStart(0)
         .columnEnd(this.columnCount() - 1)

@@ -4,6 +4,7 @@ import {
   PhotoDateGroup,
   PhotoItem
 } from './PhotoModels'
+import { PhotoGridFooter } from './PhotoGridFooter'
 
 @ComponentV2
 export struct PhotoGrid {
@@ -63,27 +64,6 @@ export struct PhotoGrid {
     return 0
   }
 
-  @Builder
-  private footer() {
-    if (this.loadingMore) {
-      Row({ space: 8 }) {
-        LoadingProgress().width(20).height(20)
-        Text($r('app.string.photo_loading_more'))
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor())
-      }
-      .height(52)
-      .justifyContent(FlexAlign.Center)
-    } else if (this.loadMoreFailed) {
-      Button($r('app.string.photo_load_more_failed'), { type: ButtonType.Normal })
-        .height(44)
-        .borderRadius(22)
-        .backgroundColor(Color.Transparent)
-        .fontColor(this.secondaryTextColor())
-        .onClick(() => this.onRetryLoadMore())
-    }
-  }
-
   build() {
     Grid(this.scroller) {
       ForEach(this.groups, (group: PhotoDateGroup) => {
@@ -120,7 +100,14 @@ export struct PhotoGrid {
 
       if (this.loadingMore || this.loadMoreFailed) {
         GridItem() {
-          this.footer()
+          PhotoGridFooter({
+            loadingMore: this.loadingMore,
+            loadMoreFailed: this.loadMoreFailed,
+            textColor: this.secondaryTextColor(),
+            progressSize: 20,
+            showLoadingText: true,
+            onRetry: () => this.onRetryLoadMore()
+          })
         }
         .columnStart(0)
         .columnEnd(this.columnCount() - 1)

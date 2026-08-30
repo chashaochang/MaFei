@@ -10,7 +10,7 @@ import {
 import { RouterConsts } from '../../../common/RouterConsts';
 import { UIConstants } from '../../../common/UIConstants';
 import { ActionBar } from '../../../component/ActionBar';
-import { AppRouteDestination } from '../../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../../component/AppRouteDestination';
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver';
 import {
   AppThemeOverlayPolicy,
@@ -29,22 +29,21 @@ import {
 } from './ManagementSessionModels';
 import { ManagementSessionsUIState } from './ManagementSessionsUIState';
 import { ManagementSessionsViewModel } from './ManagementSessionsViewModel';
+import { ManagementDetailRow } from '../ManagementDetailRow';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
 interface ManagementSessionStopDialogOptions extends promptAction.ShowDialogOptions {
   systemMaterial?: Object
 }
 
-@HMRouter({
-  pageUrl: RouterConsts.ManagementSessionDetailPage,
-  useNavDst: true
-})
 @ComponentV2
-export struct ManagementSessionDetailPage {
+struct ManagementSessionDetailContent {
+  @Param showLegacyActionBar: boolean = false
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: ManagementSessionsUIState = new ManagementSessionsUIState(this.getUIContext())
   @Local vm: ManagementSessionsViewModel = new ManagementSessionsViewModel(this.ui)
   private lifecycleOwner: IHMLifecycleOwner | null = null
   private sessionId: string = ''
-  private readonly contentScroller: Scroller = new Scroller()
   private pageShownCallback = (_context: HMLifecycleContext): void => {
     this.vm.initDetail(this.sessionId)
   }
@@ -222,471 +221,669 @@ export struct ManagementSessionDetailPage {
     }
   }
 
-  @Builder
-  private detailRow(label: ResourceStr, value: ResourceStr, showDivider: boolean = true) {
-    Column() {
-      Row({ space: 16 }) {
-        Text(label)
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor())
-          .constraintSize({ minWidth: 104 })
-        Text(value)
-          .fontSize(13)
-          .fontColor(this.primaryTextColor())
-          .layoutWeight(1)
-          .textAlign(TextAlign.End)
-          .maxLines(3)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .width('100%')
-      .constraintSize({ minHeight: 48 })
-      .alignItems(VerticalAlign.Center)
-      if (showDivider) {
-        Divider()
-          .height('0.5px')
-          .backgroundColor(this.useNativeMaterial() ?
-            $r('sys.color.comp_divider') : $r('app.color.border'))
-      }
-    }
-    .width('100%')
-  }
 
-  @Builder
-  private staleNotice(message: ResourceStr) {
-    Row({ space: 8 }) {
-      Text(message)
-        .fontSize(12)
-        .fontColor($r('app.color.status_warning'))
-        .layoutWeight(1)
-      Button($r('app.string.management_retry'), { type: ButtonType.Normal })
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(this.useNativeMaterial() ? 16 : 8)
-        .fontSize(12)
-        .fontColor($r('app.color.color_main'))
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .onClick(() => this.vm.refresh())
-    }
-    .width('100%')
-    .padding(12)
-    .borderRadius(8)
-    .backgroundColor(this.useNativeMaterial() ?
-      $r('sys.color.comp_background_secondary') : $r('app.color.component_bg'))
-  }
 
-  @Builder
-  private nativeStatusGroup(item: ManagementSessionItem) {
-    Column({ space: 12 }) {
-      if (item.imageUrl) {
-        ImageKnifeComponent({
-          imageKnifeOption: {
-            loadSrc: item.imageUrl,
-            objectFit: ImageFit.Cover,
-            border: { radius: 8 },
-            placeholderSrc: $r('app.media.placeholder_video'),
-            placeholderObjectFit: ImageFit.CENTER
-          }
-        })
-          .width('100%')
-          .height(190)
-          .accessibilityText(item.itemName)
-      }
-      Row({ space: 12 }) {
-        Column({ space: 4 }) {
-          Text(item.hasMedia ? this.displayValue(item.itemName) : this.displayValue(item.deviceName))
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.primaryTextColor())
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (item.itemSubtitle) {
-            Text(item.itemSubtitle)
-              .fontSize(13)
-              .fontColor(this.secondaryTextColor())
-              .maxLines(2)
-          }
-          Text(`${item.userName} · ${item.deviceName}`)
-            .fontSize(12)
-            .fontColor(this.secondaryTextColor())
-            .maxLines(2)
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        Text(this.sessionStateText(item))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(item.hasMedia && !item.paused ?
-            $r('app.color.status_success') : this.secondaryTextColor())
-      }
-      .width('100%')
-      if (item.hasMedia && item.runtimeTicks > 0) {
-        Progress({ value: item.positionTicks, total: item.runtimeTicks, type: ProgressType.Linear })
-          .width('100%')
-          .height(5)
-          .color($r('app.color.color_main'))
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
-        Text(`${this.formatTicks(item.positionTicks)} / ${this.formatTicks(item.runtimeTicks)}`)
-          .fontSize(11)
-          .fontColor(this.secondaryTextColor())
-          .width('100%')
-          .textAlign(TextAlign.End)
-      }
-    }
-    .width('100%')
-    .padding(18)
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
 
-  @Builder
-  private nativePlaybackGroup(item: ManagementSessionItem) {
-    Column() {
-      this.detailRow($r('app.string.management_session_playback_method'), this.playbackText(item))
-      if (item.hasMedia && item.runtimeTicks > 0) {
-        this.detailRow($r('app.string.management_detail_progress'),
-          `${this.formatTicks(item.positionTicks)} / ${this.formatTicks(item.runtimeTicks)}`)
-      }
-      this.detailRow($r('app.string.management_detail_last_activity'),
-        this.displayValue(ManagementSessionPresentation.formatActivityDate(item.lastActivityDate)), false)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
 
-  @Builder
-  private nativeTranscodeGroup(item: ManagementSessionItem) {
-    Column() {
-      this.detailRow($r('app.string.management_session_bitrate'),
-        item.bitrate > 0 ? item.bitrate.toString() : $r('app.string.management_detail_unknown'))
-      this.detailRow($r('app.string.management_session_framerate'),
-        item.framerate > 0 ? item.framerate.toString() : $r('app.string.management_detail_unknown'))
-      this.detailRow($r('app.string.management_session_container'), this.displayValue(item.container))
-      this.detailRow($r('app.string.management_session_video_codec'), this.displayValue(item.videoCodec))
-      this.detailRow($r('app.string.management_session_audio_codec'), this.displayValue(item.audioCodec))
-      this.detailRow($r('app.string.management_session_resolution'), this.displayValue(item.resolution))
-      this.detailRow($r('app.string.management_session_transcode_reasons'),
-        this.transcodeReasonsText(item.transcodeReasons), false)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
 
-  @Builder
-  private nativeConnectionGroup(item: ManagementSessionItem) {
-    Column() {
-      this.detailRow($r('app.string.management_detail_user'), this.displayValue(item.userName))
-      this.detailRow($r('app.string.management_detail_device'), this.displayValue(item.deviceName))
-      this.detailRow($r('app.string.management_detail_device_type'), this.displayValue(item.deviceType))
-      this.detailRow($r('app.string.management_detail_client'),
-        this.displayValue(`${item.client} ${item.applicationVersion}`.trim()))
-      this.detailRow($r('app.string.management_detail_remote_endpoint'),
-        this.displayValue(item.remoteEndPoint), false)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-    .borderRadius(8)
-    .clip(true)
-    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
 
-  @Builder
-  private nativeContent(item: ManagementSessionItem) {
-    Column({ space: 12 }) {
-      this.nativeStatusGroup(item)
-      this.nativePlaybackGroup(item)
-      if (item.playbackKind === ManagementPlaybackKind.Transcode) {
-        this.nativeTranscodeGroup(item)
-      }
-      this.nativeConnectionGroup(item)
-    }
-    .width('100%')
-  }
 
-  @Builder
-  private legacyContent(item: ManagementSessionItem) {
-    Column({ space: 12 }) {
-      Column({ space: 8 }) {
-        if (item.imageUrl) {
-          ImageKnifeComponent({
-            imageKnifeOption: {
-              loadSrc: item.imageUrl,
-              objectFit: ImageFit.Cover,
-              border: { radius: 8 },
-              placeholderSrc: $r('app.media.placeholder_video'),
-              placeholderObjectFit: ImageFit.CENTER
-            }
-          })
-            .width('100%')
-            .height(180)
-            .accessibilityText(item.itemName)
-        }
-        Text(item.hasMedia ? item.itemName : item.deviceName)
-          .fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.primaryTextColor())
-        if (item.itemSubtitle) {
-          Text(item.itemSubtitle).fontSize(13).fontColor(this.secondaryTextColor())
-        }
-        Text(`${item.userName} · ${item.deviceName} · ${item.client} ${item.applicationVersion}`)
-          .fontSize(12).fontColor(this.secondaryTextColor()).maxLines(2)
-        if (item.hasMedia && item.runtimeTicks > 0) {
-          Progress({ value: item.positionTicks, total: item.runtimeTicks, type: ProgressType.Linear })
-            .width('100%').height(5).color($r('app.color.color_main'))
-          Text(`${this.formatTicks(item.positionTicks)} / ${this.formatTicks(item.runtimeTicks)}`)
-            .fontSize(11).fontColor(this.secondaryTextColor())
-        }
-      }
-      .width('100%')
-      .padding(18)
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-      Column() {
-        this.detailRow($r('app.string.management_session_playback_method'), this.playbackText(item))
-        this.detailRow($r('app.string.management_detail_last_activity'),
-          this.displayValue(ManagementSessionPresentation.formatActivityDate(item.lastActivityDate)),
-          item.playbackKind === ManagementPlaybackKind.Transcode)
-        if (item.playbackKind === ManagementPlaybackKind.Transcode) {
-          this.detailRow($r('app.string.management_session_bitrate'), item.bitrate.toString())
-          this.detailRow($r('app.string.management_session_framerate'), item.framerate.toString())
-          this.detailRow($r('app.string.management_session_container'), item.container)
-          this.detailRow($r('app.string.management_session_video_codec'), item.videoCodec)
-          this.detailRow($r('app.string.management_session_audio_codec'), item.audioCodec)
-          this.detailRow($r('app.string.management_session_resolution'), item.resolution)
-          this.detailRow($r('app.string.management_session_transcode_reasons'),
-            this.transcodeReasonsText(item.transcodeReasons), false)
-        }
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 })
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-      if (this.showRemoteBar(item)) {
-        Column({ space: 10 }) {
-          if (item.hasMedia) {
-            Row({ space: 10 }) {
-              Button(item.paused ? $r('app.string.management_session_resume') :
-                $r('app.string.management_session_pause'), { type: ButtonType.Normal })
-                .layoutWeight(1)
-                .height(42)
-                .enabled(this.ui.pendingAction === ManagementSessionAction.None)
-                .onClick(() => this.playPause())
-              Button($r('app.string.management_session_stop'), { type: ButtonType.Normal })
-                .layoutWeight(1)
-                .height(42)
-                .fontColor($r('app.color.main_red_color'))
-                .enabled(this.ui.pendingAction === ManagementSessionAction.None)
-                .onClick(() => this.confirmStop(item))
-            }
-          }
-          Row({ space: 8 }) {
-            TextInput({
-              text: this.ui.messageDraft,
-              placeholder: $r('app.string.management_session_message_placeholder')
-            })
-              .layoutWeight(1)
-              .height(42)
-              .onChange((value: string) => this.ui.messageDraft = value)
-            Button($r('app.string.management_session_send'), { type: ButtonType.Normal })
-              .height(42)
-              .enabled(this.ui.pendingAction === ManagementSessionAction.None &&
-                this.ui.messageDraft.trim().length > 0)
-              .onClick(() => this.sendMessage())
-          }
-        }
-        .width('100%')
-        .padding(16)
-        .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-        .backgroundColor($r('app.color.bg_1'))
-      }
-    }
-    .width('100%')
-  }
 
-  @Builder
-  private sessionContent(item: ManagementSessionItem, native: boolean) {
-    Column({ space: 12 }) {
-      if (this.ui.stale) {
-        this.staleNotice($r('app.string.management_stale_result'))
-      }
-      if (native) {
-        this.nativeContent(item)
-      } else {
-        this.legacyContent(item)
-      }
-    }
-    .width('100%')
-  }
 
   private showRemoteBar(item: ManagementSessionItem): boolean {
     return item.controllable && !this.ui.ended
   }
 
-  @Builder
-  private remoteActionBar(item: ManagementSessionItem) {
-    Row({ space: 8 }) {
-      if (item.hasMedia) {
-        Button(item.paused ? $r('app.string.management_session_resume') :
-          $r('app.string.management_session_pause'), { type: ButtonType.Normal })
-          .height(42)
-          .padding({ left: 14, right: 14 })
-          .borderRadius(21)
-          .fontColor(this.primaryTextColor())
-          .backgroundColor(Color.Transparent)
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveControl, true))
-          .enabled(this.ui.pendingAction === ManagementSessionAction.None)
-          .onClick(() => this.playPause())
-      }
-      TextInput({
-        text: this.ui.messageDraft,
-        placeholder: $r('app.string.management_session_message_placeholder')
-      })
-        .layoutWeight(1)
-        .height(42)
-        .borderRadius(8)
-        .backgroundColor($r('sys.color.comp_background_tertiary'))
-        .onChange((value: string) => this.ui.messageDraft = value)
-      Button($r('app.string.management_session_send'), { type: ButtonType.Normal })
-        .height(42)
-        .padding({ left: 14, right: 14 })
-        .borderRadius(21)
-        .fontColor($r('app.color.on_primary'))
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.PrimaryInteractive, true))
-        .enabled(this.ui.pendingAction === ManagementSessionAction.None &&
-          this.ui.messageDraft.trim().length > 0)
-        .onClick(() => this.sendMessage())
-      if (item.hasMedia) {
-        Button($r('app.string.management_session_stop'), { type: ButtonType.Normal })
-          .height(42)
-          .padding({ left: 12, right: 12 })
-          .borderRadius(21)
-          .fontColor($r('app.color.main_red_color'))
-          .backgroundColor(Color.Transparent)
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.AdaptiveControl, true))
-          .enabled(this.ui.pendingAction === ManagementSessionAction.None)
-          .onClick(() => this.confirmStop(item))
-      }
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
-    .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
-  }
 
-  @Builder
-  private nativeDetailPage(item: ManagementSessionItem) {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Scroll(this.contentScroller) {
-        Column({ space: 12 }) {
-          Blank().height(this.nativeTopSpacer())
-          this.sessionContent(item, true)
-        }
-        .width('100%')
-        .constraintSize({ maxWidth: 760 })
-        .padding({
-          left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-          right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-          bottom: ManagementNativePagePolicy.contentBottomPadding(
-            this.vm.appUIState.safeBottom + 24, this.showRemoteBar(item))
-        })
-      }
-      .width('100%')
-      .height('100%')
-      .scrollBar(BarState.Auto)
-      if (this.showRemoteBar(item)) this.remoteActionBar(item)
-    }
-    .layoutWeight(1)
-    .width('100%')
-  }
 
-  @Builder
-  private legacyDetailPage(item: ManagementSessionItem) {
-    Scroll() {
-      this.sessionContent(item, false)
-    }
-    .layoutWeight(1)
-    .width('100%')
-    .scrollBar(BarState.Off)
-    .padding({ left: 16, right: 16, top: 12, bottom: this.vm.appUIState.safeBottom + 24 })
-  }
 
-  @Builder
-  private unavailableContent() {
-    Column({ space: 12 }) {
-      Text(this.ui.ended ? $r('app.string.management_session_ended') :
-        $r('app.string.management_detail_unavailable'))
-        .fontSize(16)
-        .fontColor(this.secondaryTextColor())
-      if (this.ui.ended) {
-        Button($r('app.string.management_session_return_dashboard'), { type: ButtonType.Normal })
-          .height(42)
-          .padding({ left: 22, right: 22 })
-          .borderRadius(this.useNativeMaterial() ? 21 : 10)
-          .fontColor($r('app.color.on_primary'))
-          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
-          .onClick(() => HMRouterMgr.pop())
-      } else {
-        Button($r('app.string.management_retry'), { type: ButtonType.Normal })
-          .height(42)
-          .padding({ left: 22, right: 22 })
-          .borderRadius(this.useNativeMaterial() ? 21 : 10)
-          .fontColor($r('app.color.on_primary'))
-          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
-          .onClick(() => this.vm.refresh())
-      }
-    }
-    .layoutWeight(1)
-    .justifyContent(FlexAlign.Center)
-  }
 
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
+  build() {
     Column() {
-      if (showLegacyActionBar) {
+      if (this.showLegacyActionBar) {
         ActionBar({ title: $r('app.string.management_session_detail_title') })
       }
       if (this.ui.detail) {
-        if (showLegacyActionBar) {
-          this.legacyDetailPage(this.ui.detail!)
-        } else {
-          this.nativeDetailPage(this.ui.detail!)
+        Stack({ alignContent: Alignment.Bottom }) {
+          Scroll(this.contentScroller) {
+            Column({ space: 12 }) {
+              if (!this.showLegacyActionBar) {
+                Blank().height(this.nativeTopSpacer())
+              }
+              Column({ space: 12 }) {
+                if (this.ui.stale) {
+                  Row({ space: 8 }) {
+                    Text(($r('app.string.management_stale_result')))
+                      .fontSize(12)
+                      .fontColor($r('app.color.status_warning'))
+                      .layoutWeight(1)
+                    Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+                      .height(32)
+                      .padding({ left: 12, right: 12 })
+                      .borderRadius(this.useNativeMaterial() ? 16 : 8)
+                      .fontSize(12)
+                      .fontColor($r('app.color.color_main'))
+                      .backgroundColor(Color.Transparent)
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                      .onClick(() => this.vm.refresh())
+                  }
+                  .width('100%')
+                  .padding(12)
+                  .borderRadius(8)
+                  .backgroundColor(this.useNativeMaterial() ?
+                    $r('sys.color.comp_background_secondary') : $r('app.color.component_bg'))
+                }
+                if ((!this.showLegacyActionBar)) {
+                  Column({ space: 12 }) {
+                    Column({ space: 12 }) {
+                      if ((((this.ui.detail!))).imageUrl) {
+                        ImageKnifeComponent({
+                          imageKnifeOption: {
+                            loadSrc: (((this.ui.detail!))).imageUrl,
+                            objectFit: ImageFit.Cover,
+                            border: { radius: 8 },
+                            placeholderSrc: $r('app.media.placeholder_video'),
+                            placeholderObjectFit: ImageFit.CENTER
+                          }
+                        })
+                          .width('100%')
+                          .height(190)
+                          .accessibilityText((((this.ui.detail!))).itemName)
+                      }
+                      Row({ space: 12 }) {
+                        Column({ space: 4 }) {
+                          Text((((this.ui.detail!))).hasMedia ? this.displayValue((((this.ui.detail!))).itemName) : this.displayValue((((this.ui.detail!))).deviceName))
+                            .fontSize(20)
+                            .fontWeight(FontWeight.Bold)
+                            .fontColor(this.primaryTextColor())
+                            .maxLines(2)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                          if ((((this.ui.detail!))).itemSubtitle) {
+                            Text((((this.ui.detail!))).itemSubtitle)
+                              .fontSize(13)
+                              .fontColor(this.secondaryTextColor())
+                              .maxLines(2)
+                          }
+                          Text(`${(this.ui.detail!).userName} · ${(this.ui.detail!).deviceName}`)
+                            .fontSize(12)
+                            .fontColor(this.secondaryTextColor())
+                            .maxLines(2)
+                        }
+                        .layoutWeight(1)
+                        .alignItems(HorizontalAlign.Start)
+                        Text(this.sessionStateText((((this.ui.detail!)))))
+                          .fontSize(12)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor((((this.ui.detail!))).hasMedia && !(((this.ui.detail!))).paused ?
+                            $r('app.color.status_success') : this.secondaryTextColor())
+                      }
+                      .width('100%')
+                      if ((((this.ui.detail!))).hasMedia && (((this.ui.detail!))).runtimeTicks > 0) {
+                        Progress({ value: (((this.ui.detail!))).positionTicks, total: (((this.ui.detail!))).runtimeTicks, type: ProgressType.Linear })
+                          .width('100%')
+                          .height(5)
+                          .color($r('app.color.color_main'))
+                          .backgroundColor($r('sys.color.comp_background_tertiary'))
+                        Text(`${this.formatTicks((this.ui.detail!).positionTicks)} / ` +
+                          `${this.formatTicks((this.ui.detail!).runtimeTicks)}`)
+                          .fontSize(11)
+                          .fontColor(this.secondaryTextColor())
+                          .width('100%')
+                          .textAlign(TextAlign.End)
+                      }
+                    }
+                    .width('100%')
+                    .padding(18)
+                    .borderRadius(8)
+                    .clip(true)
+                    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+                    Column() {
+                      ManagementDetailRow({
+                        label: $r('app.string.management_session_playback_method'),
+                        value: this.playbackText((((this.ui.detail!)))),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      if ((((this.ui.detail!))).hasMedia && (((this.ui.detail!))).runtimeTicks > 0) {
+                        ManagementDetailRow({
+                          label: $r('app.string.management_detail_progress'),
+                          value: `${this.formatTicks((this.ui.detail!).positionTicks)} / ` +
+                            `${this.formatTicks((this.ui.detail!).runtimeTicks)}`,
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                      }
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_last_activity'),
+                        value: this.displayValue(ManagementSessionPresentation.formatActivityDate((((this.ui.detail!))).lastActivityDate)),
+                        showDivider: false,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                    .borderRadius(8)
+                    .clip(true)
+                    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+                    if (((this.ui.detail!)).playbackKind === ManagementPlaybackKind.Transcode) {
+                      Column() {
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_bitrate'),
+                          value: (((this.ui.detail!))).bitrate > 0 ? (((this.ui.detail!))).bitrate.toString() : $r('app.string.management_detail_unknown'),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_framerate'),
+                          value: (((this.ui.detail!))).framerate > 0 ? (((this.ui.detail!))).framerate.toString() : $r('app.string.management_detail_unknown'),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_container'),
+                          value: this.displayValue((((this.ui.detail!))).container),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_video_codec'),
+                          value: this.displayValue((((this.ui.detail!))).videoCodec),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_audio_codec'),
+                          value: this.displayValue((((this.ui.detail!))).audioCodec),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_resolution'),
+                          value: this.displayValue((((this.ui.detail!))).resolution),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_transcode_reasons'),
+                          value: this.transcodeReasonsText((((this.ui.detail!))).transcodeReasons),
+                          showDivider: false,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                      }
+                      .width('100%')
+                      .padding({ left: 16, right: 16 })
+                      .borderRadius(8)
+                      .clip(true)
+                      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+                    }
+                    Column() {
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_user'),
+                        value: this.displayValue((((this.ui.detail!))).userName),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_device'),
+                        value: this.displayValue((((this.ui.detail!))).deviceName),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_device_type'),
+                        value: this.displayValue((((this.ui.detail!))).deviceType),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_client'),
+                        value: this.displayValue(
+                          `${(this.ui.detail!).client} ${(this.ui.detail!).applicationVersion}`.trim()),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_remote_endpoint'),
+                        value: this.displayValue((((this.ui.detail!))).remoteEndPoint),
+                        showDivider: false,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                    .borderRadius(8)
+                    .clip(true)
+                    .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
+                  }
+                  .width('100%')
+                } else {
+                  Column({ space: 12 }) {
+                    Column({ space: 8 }) {
+                      if (((this.ui.detail!)).imageUrl) {
+                        ImageKnifeComponent({
+                          imageKnifeOption: {
+                            loadSrc: ((this.ui.detail!)).imageUrl,
+                            objectFit: ImageFit.Cover,
+                            border: { radius: 8 },
+                            placeholderSrc: $r('app.media.placeholder_video'),
+                            placeholderObjectFit: ImageFit.CENTER
+                          }
+                        })
+                          .width('100%')
+                          .height(180)
+                          .accessibilityText(((this.ui.detail!)).itemName)
+                      }
+                      Text(((this.ui.detail!)).hasMedia ? ((this.ui.detail!)).itemName : ((this.ui.detail!)).deviceName)
+                        .fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.primaryTextColor())
+                      if (((this.ui.detail!)).itemSubtitle) {
+                        Text(((this.ui.detail!)).itemSubtitle).fontSize(13).fontColor(this.secondaryTextColor())
+                      }
+                      Text(`${(this.ui.detail!).userName} · ${(this.ui.detail!).deviceName} · ` +
+                        `${(this.ui.detail!).client} ${(this.ui.detail!).applicationVersion}`)
+                        .fontSize(12).fontColor(this.secondaryTextColor()).maxLines(2)
+                      if (((this.ui.detail!)).hasMedia && ((this.ui.detail!)).runtimeTicks > 0) {
+                        Progress({ value: ((this.ui.detail!)).positionTicks, total: ((this.ui.detail!)).runtimeTicks, type: ProgressType.Linear })
+                          .width('100%').height(5).color($r('app.color.color_main'))
+                        Text(`${this.formatTicks((this.ui.detail!).positionTicks)} / ` +
+                          `${this.formatTicks((this.ui.detail!).runtimeTicks)}`)
+                          .fontSize(11).fontColor(this.secondaryTextColor())
+                      }
+                    }
+                    .width('100%')
+                    .padding(18)
+                    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+                    .backgroundColor($r('app.color.bg_1'))
+                    Column() {
+                      ManagementDetailRow({
+                        label: $r('app.string.management_session_playback_method'),
+                        value: this.playbackText(((this.ui.detail!))),
+                        showDivider: true,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      ManagementDetailRow({
+                        label: $r('app.string.management_detail_last_activity'),
+                        value: this.displayValue(ManagementSessionPresentation.formatActivityDate(((this.ui.detail!)).lastActivityDate)),
+                        showDivider: ((this.ui.detail!)).playbackKind === ManagementPlaybackKind.Transcode,
+                        labelMinWidth: 104,
+                        valueMaxLines: 3,
+                        primaryTextColor: this.primaryTextColor(),
+                        secondaryTextColor: this.secondaryTextColor(),
+                        dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                      })
+                      if (((this.ui.detail!)).playbackKind === ManagementPlaybackKind.Transcode) {
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_bitrate'),
+                          value: ((this.ui.detail!)).bitrate.toString(),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_framerate'),
+                          value: ((this.ui.detail!)).framerate.toString(),
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_container'),
+                          value: ((this.ui.detail!)).container,
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_video_codec'),
+                          value: ((this.ui.detail!)).videoCodec,
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_audio_codec'),
+                          value: ((this.ui.detail!)).audioCodec,
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_resolution'),
+                          value: ((this.ui.detail!)).resolution,
+                          showDivider: true,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                        ManagementDetailRow({
+                          label: $r('app.string.management_session_transcode_reasons'),
+                          value: this.transcodeReasonsText(((this.ui.detail!)).transcodeReasons),
+                          showDivider: false,
+                          labelMinWidth: 104,
+                          valueMaxLines: 3,
+                          primaryTextColor: this.primaryTextColor(),
+                          secondaryTextColor: this.secondaryTextColor(),
+                          dividerColor: this.useNativeMaterial() ? $r("sys.color.comp_divider") : $r("app.color.border")
+                        })
+                      }
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+                    .backgroundColor($r('app.color.bg_1'))
+                    if (this.showRemoteBar(((this.ui.detail!)))) {
+                      Column({ space: 10 }) {
+                        if (((this.ui.detail!)).hasMedia) {
+                          Row({ space: 10 }) {
+                            Button(((this.ui.detail!)).paused ? $r('app.string.management_session_resume') :
+                              $r('app.string.management_session_pause'), { type: ButtonType.Normal })
+                              .layoutWeight(1)
+                              .height(42)
+                              .enabled(this.ui.pendingAction === ManagementSessionAction.None)
+                              .onClick(() => this.playPause())
+                            Button($r('app.string.management_session_stop'), { type: ButtonType.Normal })
+                              .layoutWeight(1)
+                              .height(42)
+                              .fontColor($r('app.color.main_red_color'))
+                              .enabled(this.ui.pendingAction === ManagementSessionAction.None)
+                              .onClick(() => this.confirmStop(((this.ui.detail!))))
+                          }
+                        }
+                        Row({ space: 8 }) {
+                          TextInput({
+                            text: this.ui.messageDraft,
+                            placeholder: $r('app.string.management_session_message_placeholder')
+                          })
+                            .layoutWeight(1)
+                            .height(42)
+                            .onChange((value: string) => this.ui.messageDraft = value)
+                          Button($r('app.string.management_session_send'), { type: ButtonType.Normal })
+                            .height(42)
+                            .enabled(this.ui.pendingAction === ManagementSessionAction.None &&
+                              this.ui.messageDraft.trim().length > 0)
+                            .onClick(() => this.sendMessage())
+                        }
+                      }
+                      .width('100%')
+                      .padding(16)
+                      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+                      .backgroundColor($r('app.color.bg_1'))
+                    }
+                  }
+                  .width('100%')
+                }
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .constraintSize({ maxWidth: this.showLegacyActionBar ? '100%' : 760 })
+            .padding({
+              left: this.showLegacyActionBar ? 16 : (this.vm.appUIState.deviceWidth >= 600 ? 24 : 16),
+              right: this.showLegacyActionBar ? 16 : (this.vm.appUIState.deviceWidth >= 600 ? 24 : 16),
+              top: this.showLegacyActionBar ? 12 : 0,
+              bottom: this.showLegacyActionBar ? this.vm.appUIState.safeBottom + 24 :
+                ManagementNativePagePolicy.contentBottomPadding(
+                  this.vm.appUIState.safeBottom + 24, this.showRemoteBar(this.ui.detail!))
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .scrollBar(this.showLegacyActionBar ? BarState.Off : BarState.Auto)
+          if (!this.showLegacyActionBar && this.showRemoteBar(this.ui.detail!)) {
+            Row({ space: 8 }) {
+              if ((this.ui.detail!).hasMedia) {
+                Button((this.ui.detail!).paused ? $r('app.string.management_session_resume') :
+                  $r('app.string.management_session_pause'), { type: ButtonType.Normal })
+                  .height(42)
+                  .padding({ left: 14, right: 14 })
+                  .borderRadius(21)
+                  .fontColor(this.primaryTextColor())
+                  .backgroundColor(Color.Transparent)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, true))
+                  .enabled(this.ui.pendingAction === ManagementSessionAction.None)
+                  .onClick(() => this.playPause())
+              }
+              TextInput({
+                text: this.ui.messageDraft,
+                placeholder: $r('app.string.management_session_message_placeholder')
+              })
+                .layoutWeight(1)
+                .height(42)
+                .borderRadius(8)
+                .backgroundColor($r('sys.color.comp_background_tertiary'))
+                .onChange((value: string) => this.ui.messageDraft = value)
+              Button($r('app.string.management_session_send'), { type: ButtonType.Normal })
+                .height(42)
+                .padding({ left: 14, right: 14 })
+                .borderRadius(21)
+                .fontColor($r('app.color.on_primary'))
+                .backgroundColor(Color.Transparent)
+                .attributeModifier(AppThemeSurfaceResolver.modifier(
+                  AppThemeMaterialRole.PrimaryInteractive, true))
+                .enabled(this.ui.pendingAction === ManagementSessionAction.None &&
+                  this.ui.messageDraft.trim().length > 0)
+                .onClick(() => this.sendMessage())
+              if ((this.ui.detail!).hasMedia) {
+                Button($r('app.string.management_session_stop'), { type: ButtonType.Normal })
+                  .height(42)
+                  .padding({ left: 12, right: 12 })
+                  .borderRadius(21)
+                  .fontColor($r('app.color.main_red_color'))
+                  .backgroundColor(Color.Transparent)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, true))
+                  .enabled(this.ui.pendingAction === ManagementSessionAction.None)
+                  .onClick(() => this.confirmStop((this.ui.detail!)))
+              }
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
+            .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
+          }
         }
+        .layoutWeight(1)
+        .width('100%')
       } else if (this.ui.status === ManagementSectionStatus.Loading) {
         LoadingProgress().layoutWeight(1).width(32).height(32).color($r('app.color.color_main'))
       } else {
-        this.unavailableContent()
+        Column({ space: 12 }) {
+          Text(this.ui.ended ? $r('app.string.management_session_ended') :
+            $r('app.string.management_detail_unavailable'))
+            .fontSize(16)
+            .fontColor(this.secondaryTextColor())
+          if (this.ui.ended) {
+            Button($r('app.string.management_session_return_dashboard'), { type: ButtonType.Normal })
+              .height(42)
+              .padding({ left: 22, right: 22 })
+              .borderRadius(this.useNativeMaterial() ? 21 : 10)
+              .fontColor($r('app.color.on_primary'))
+              .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+              .attributeModifier(AppThemeSurfaceResolver.modifier(
+                AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
+              .onClick(() => HMRouterMgr.pop())
+          } else {
+            Button($r('app.string.management_retry'), { type: ButtonType.Normal })
+              .height(42)
+              .padding({ left: 22, right: 22 })
+              .borderRadius(this.useNativeMaterial() ? 21 : 10)
+              .fontColor($r('app.color.on_primary'))
+              .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+              .attributeModifier(AppThemeSurfaceResolver.modifier(
+                AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
+              .onClick(() => this.vm.refresh())
+          }
+        }
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+    .backgroundColor(this.showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+  }
+}
+
+@HMRouter({
+  pageUrl: RouterConsts.ManagementSessionDetailPage,
+  useNavDst: true
+})
+@ComponentV2
+export struct ManagementSessionDetailPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  private readonly contentScroller: Scroller = new Scroller()
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: $r('app.string.management_session_detail_title'),
+        contentExtendsUnderTitleBar: true,
+        scrollControllers: [this.contentScroller]
+      }
   }
 
   build() {
-    AppRouteDestination({
-      title: $r('app.string.management_session_detail_title'),
-      contentExtendsUnderTitleBar: true,
-      scrollControllers: [this.contentScroller],
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              ManagementSessionDetailContent({
+                showLegacyActionBar: false,
+                contentScroller: this.contentScroller
+              })
+            } else {
+              ManagementSessionDetailContent({
+                showLegacyActionBar: true,
+                contentScroller: this.contentScroller
+              })
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
       }
-    })
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        ManagementSessionDetailContent({
+          showLegacyActionBar: true,
+          contentScroller: this.contentScroller
+        })
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
+    }
   }
 }

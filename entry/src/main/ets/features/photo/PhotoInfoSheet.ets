@@ -20,10 +20,6 @@ export struct PhotoInfoSheet {
     return this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
   }
 
-  private dividerColor(): ResourceColor {
-    return this.nativeSurface ? $r('sys.color.comp_divider') : $r('app.color.border')
-  }
-
   private formatDate(value: string): string {
     if (value.length === 0) {
       return ''
@@ -115,73 +111,6 @@ export struct PhotoInfoSheet {
     return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
   }
 
-  @Builder
-  private row(label: ResourceStr, value: ResourceStr, multiLine: boolean = false) {
-    Row({ space: 16 }) {
-      Text(label)
-        .width(88)
-        .fontSize(13)
-        .fontColor(this.secondaryTextColor())
-      Text(value)
-        .layoutWeight(1)
-        .fontSize(14)
-        .fontColor(this.primaryTextColor())
-        .maxLines(multiLine ? 3 : 1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .textAlign(TextAlign.End)
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 48 })
-    .padding({ top: 10, bottom: 10 })
-    .border({ width: { bottom: 0.5 }, color: this.dividerColor() })
-  }
-
-  @Builder
-  private details(photo: PhotoItem) {
-    if (photo.dateTaken.length > 0) {
-      this.row($r('app.string.photo_info_date'), this.formatDate(photo.dateTaken))
-    }
-    if (photo.width > 0 && photo.height > 0) {
-      this.row($r('app.string.photo_info_dimensions'), `${photo.width} × ${photo.height}`)
-    }
-    if (photo.fileName.length > 0) {
-      this.row($r('app.string.photo_info_file_name'), photo.fileName, true)
-    }
-    if (photo.format.length > 0) {
-      this.row($r('app.string.photo_info_format'), photo.format.toUpperCase())
-    }
-    if (photo.path.length > 0) {
-      this.row($r('app.string.photo_info_path'), photo.path, true)
-    }
-    if (this.camera(photo).length > 0) {
-      this.row($r('app.string.photo_info_camera'), this.camera(photo))
-    }
-    if (photo.exif.software.length > 0) {
-      this.row($r('app.string.photo_info_software'), photo.exif.software)
-    }
-    if (this.exposure(photo).length > 0) {
-      this.row($r('app.string.photo_info_exposure'), this.exposure(photo))
-    }
-    if (this.focalLength(photo).length > 0) {
-      this.row($r('app.string.photo_info_focal_length'), this.focalLength(photo))
-    }
-    if (this.aperture(photo).length > 0) {
-      this.row($r('app.string.photo_info_aperture'), this.aperture(photo))
-    }
-    if (this.shutterSpeed(photo).length > 0) {
-      this.row($r('app.string.photo_info_shutter_speed'), this.shutterSpeed(photo))
-    }
-    if (this.iso(photo).length > 0) {
-      this.row($r('app.string.photo_info_iso'), this.iso(photo))
-    }
-    if (this.location(photo).length > 0) {
-      this.row($r('app.string.photo_info_location'), this.location(photo), true)
-    }
-    if (this.hasOrientation(photo)) {
-      this.row($r('app.string.photo_info_orientation'), this.orientation(photo))
-    }
-  }
-
   build() {
     Scroll() {
       Column() {
@@ -193,7 +122,107 @@ export struct PhotoInfoSheet {
           .padding({ top: 4, bottom: 12 })
 
         if (this.photo) {
-          this.details(this.photo)
+          if (this.photo.dateTaken.length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_date'),
+              value: this.formatDate(this.photo.dateTaken),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.photo.width > 0 && this.photo.height > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_dimensions'),
+              value: `${this.photo.width} × ${this.photo.height}`,
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.photo.fileName.length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_file_name'),
+              value: this.photo.fileName,
+              multiLine: true,
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.photo.format.length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_format'),
+              value: this.photo.format.toUpperCase(),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.photo.path.length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_path'),
+              value: this.photo.path,
+              multiLine: true,
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.camera(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_camera'),
+              value: this.camera(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.photo.exif.software.length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_software'),
+              value: this.photo.exif.software,
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.exposure(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_exposure'),
+              value: this.exposure(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.focalLength(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_focal_length'),
+              value: this.focalLength(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.aperture(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_aperture'),
+              value: this.aperture(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.shutterSpeed(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_shutter_speed'),
+              value: this.shutterSpeed(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.iso(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_iso'),
+              value: this.iso(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.location(this.photo).length > 0) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_location'),
+              value: this.location(this.photo),
+              multiLine: true,
+              nativeSurface: this.nativeSurface
+            })
+          }
+          if (this.hasOrientation(this.photo)) {
+            PhotoInfoRow({
+              label: $r('app.string.photo_info_orientation'),
+              value: this.orientation(this.photo),
+              nativeSurface: this.nativeSurface
+            })
+          }
         }
 
         if (this.loading) {
@@ -226,5 +255,36 @@ export struct PhotoInfoSheet {
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
+  }
+}
+
+@ComponentV2
+struct PhotoInfoRow {
+  @Require @Param label: ResourceStr
+  @Require @Param value: ResourceStr
+  @Param multiLine: boolean = false
+  @Param nativeSurface: boolean = false
+
+  build() {
+    Row({ space: 16 }) {
+      Text(this.label)
+        .width(88)
+        .fontSize(13)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1'))
+      Text(this.value)
+        .layoutWeight(1)
+        .fontSize(14)
+        .fontColor(this.nativeSurface ? $r('sys.color.font_primary') : $r('app.color.text_primary'))
+        .maxLines(this.multiLine ? 3 : 1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.End)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 48 })
+    .padding({ top: 10, bottom: 10 })
+    .border({
+      width: { bottom: 0.5 },
+      color: this.nativeSurface ? $r('sys.color.comp_divider') : $r('app.color.border')
+    })
   }
 }

@@ -4,30 +4,23 @@ import { ChasingTab } from "./chasing/ChasingTab";
 import { MediaTab } from "./mediatab/MediaTab";
 import { MineTab } from "./minetab/MineTab";
 import { AppStorageV2 } from "@kit.ArkUI";
+import { ConfigurationConstant } from '@kit.AbilityKit'
 import { BreakpointTypeEnum } from "../../utils/BreakpointPolicy";
 import { HomeScreenUIState, PadMenuItem, PadMenuType } from "./HomeScreenUIState";
 import { HomeScreenViewModel } from "./HomeScreenViewModel";
 import { getUIAbilityContext } from "../../common/CommonFunc";
-import { RouterConsts } from "../../common/RouterConsts";
 import { HomeBackPressedEvent } from "../../events/Events";
-import { HMRouterMgr } from "@hadss/hmrouter";
 import { process } from "@kit.ArkTS";
 import { FavoriteListPage } from "../favorite/FavoriteListPage";
-import { VideoListPage } from "../videolist/VideoListPage";
-import { MusicLibraryPage } from "../music/MusicLibraryPage";
-import { PhotoLibraryPage } from "../photo/PhotoLibraryPage";
 import { LoadingView } from "../../ui/components/LoadingView";
-import { MediaItem } from "./hometab/HomeUIState";
-import { MediaLibraryKind } from "../../media/catalog/MediaCatalogModels";
-import { HORIZONTAL_CARD_SPACE } from "../../common/OneMoreConst";
+import { MediaItem, VideoItem } from "./hometab/HomeUIState";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { PadTopTab, TabItem } from "../../component/tabbar/PadTopTab";
 import { ThemeUpgradeDialog } from "../../component/ThemeUpgradeDialog";
 import { ThemeStyle } from "../../entity/ThemeStyle";
 import { themePromptService, ThemeWriteStatus } from "../../theme/ThemePromptService";
 import { nativeThemeCapability } from "../../theme/NativeThemeCapability";
-import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
-import { FeiniuPointLightModifier } from "../../theme/FeiniuPointLightModifier";
+import { AppThemeSurfaceResolver } from "../../theme/AppThemeSurfaceResolver";
 import { HdsUiCapability } from "../../theme/HdsUiCapability";
 import { NativeThemeConstructionProbe } from "../../theme/NativeThemeConstructionProbe";
 import { HomeShellKind, HomeShellPolicy } from "./HomeShellPolicy";
@@ -40,6 +33,18 @@ import { connectMusicHostUIState, MusicHostUIState } from "../music/MusicHostUIS
 import { MusicHostVisibilityPolicy } from "../music/MusicHostVisibilityPolicy";
 import { connectMusicPlaybackState, MusicPlaybackState } from "../music/MusicPlaybackState";
 import { MediaProviderRegistry } from "../../media/MediaProviderRegistry";
+import { BreakpointPolicy } from '../../utils/BreakpointPolicy'
+import { HomeContentLayoutPolicy } from './HomeContentLayoutPolicy'
+import { HomeSidebarMenu } from './HomeSidebarMenu'
+import {
+  HomeMinePane,
+  HomeSidebarItem,
+  HomeSidebarItemType
+} from './HomePadNavigation'
+import { HomeMineWorkspace } from './HomeMineWorkspace'
+import { HomeMediaLibraryContent } from './HomeMediaLibraryContent'
+import { SearchPageContent } from '../search/SearchPage'
+import { HomePadBackdrop, HomePadHeroLayer } from './HomePadBackdrop'
 
 @ComponentV2
 export struct HomeScreen {
@@ -55,6 +60,12 @@ export struct HomeScreen {
   private musicHostUIState: MusicHostUIState = connectMusicHostUIState()
   private musicPlaybackState: MusicPlaybackState = connectMusicPlaybackState()
   @Local mediaAdministrator: boolean = false
+  @Local mineManagementAvailable: boolean = false
+  @Local tabletHeroItems: VideoItem[] = []
+  @Local tabletHeroSelectedIndex: number = 0
+  @Local tabletHeroPagePositions: number[] = []
+  @Local tabletHeroMainAxisLength: number = 0
+  @Local tabletHeroVerticalOffset: number = 0
   private lastTime: number = 0;
   private themePromptChecked: boolean = false
   private themePromptCompleted: boolean = false
@@ -81,12 +92,14 @@ export struct HomeScreen {
 
   @Monitor('appUIState.themeStyle')
   onThemeStyleChange() {
+    this.syncPadShellVisibility()
     this.updateFeiniuPointLightEnabled()
     this.updateRootNavigationTitleBar()
   }
 
   @Monitor('appUIState.nativeThemeAvailable')
   onNativeThemeAvailabilityChange() {
+    this.syncPadShellVisibility()
     this.updateRootNavigationTitleBar()
   }
 
@@ -106,6 +119,14 @@ export struct HomeScreen {
 
   private syncPadShellVisibility(): void {
     const shell = this.resolveShell()
+    if ((HomeShellPolicy.usesOverlayDrawer(shell) || HomeShellPolicy.usesEmbeddedSidebar(shell)) &&
+      this.ui.selectedDestination === HomeDestination.Chasing) {
+      this.ui.selectedDestination = HomeDestination.Home
+    }
+    if (!HomeShellPolicy.usesOverlayDrawer(shell) && !HomeShellPolicy.usesEmbeddedSidebar(shell) &&
+      this.ui.selectedDestination === HomeDestination.Search) {
+      this.ui.selectedDestination = HomeDestination.Home
+    }
     this.ui.isMenuModalVisible = false
     if (HomeShellPolicy.usesOverlayDrawer(shell)) {
       this.ui.isLeftSidebarVisible = false
@@ -118,6 +139,15 @@ export struct HomeScreen {
     this.lastSynchronizedShell = shell
   }
 
+  private openPadMenu(): void {
+    const shell = this.resolveShell()
+    if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
+      this.ui.isLeftSidebarVisible = true
+    } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {
+      this.ui.isMenuModalVisible = true
+    }
+  }
+
   private get shell(): HomeShellKind {
     return this.resolveShell()
   }
@@ -125,10 +155,6 @@ export struct HomeScreen {
   private useNativeSurface(): boolean {
     return AppThemeSurfaceResolver.useNativeSurface(
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
-  }
-
-  private padActionBackground(): ResourceColor {
-    return this.useNativeSurface() ? Color.Transparent : $r('app.color.bg_main')
   }
 
   private get navigationChromeInset(): number {
@@ -167,10 +193,6 @@ export struct HomeScreen {
     return MediaProviderRegistry.instance().getActiveSession()?.capabilities.music !== false
   }
 
-  private photoCapabilityEnabled(): boolean {
-    return MediaProviderRegistry.instance().getActiveSession()?.capabilities.photos !== false
-  }
-
   private compactPlayerChrome(): boolean {
     return MusicHostVisibilityPolicy.compactHomeChrome(
       this.musicHostUIState.homeVisible,
@@ -197,19 +219,63 @@ export struct HomeScreen {
     return HomeDestinationMapper.phoneIndex(this.ui.selectedDestination)
   }
 
-  private padSelectedIndex(): number {
-    return HomeDestinationMapper.padMenuIndex(
+  private contentSelectedIndex(): number {
+    if (this.usesPadMediaContent()) {
+      if (this.ui.selectedDestination === HomeDestination.Search) {
+        return 5
+      }
+      if (this.ui.selectedDestination === HomeDestination.Favorite) {
+        return 2
+      }
+      if (this.ui.selectedDestination === HomeDestination.Media) {
+        return 3
+      }
+      if (this.ui.selectedDestination === HomeDestination.Mine) {
+        return 4
+      }
+      return 0
+    }
+    return HomeDestinationMapper.contentIndex(
       this.ui.selectedDestination,
+      false,
       this.ui.lastSelectedMediaIndex
     )
   }
 
-  private contentSelectedIndex(): number {
-    return HomeDestinationMapper.contentIndex(
-      this.ui.selectedDestination,
-      this.usesPadMediaContent(),
-      this.ui.lastSelectedMediaIndex
-    )
+  private selectedPadMediaItem(): MediaItem | undefined {
+    if (!this.usesPadMediaContent()) {
+      return undefined
+    }
+    const selectedIndex = this.effectiveMediaDataSourceIndex()
+    if (selectedIndex < 0) {
+      return undefined
+    }
+    return this.vm.datasource.getData(selectedIndex).extra
+  }
+
+  private isMediaDataSourceIndex(index: number): boolean {
+    return index >= 0 && index < this.vm.datasource.totalCount() &&
+      this.vm.datasource.getData(index).type === PadMenuType.ITEM &&
+      this.vm.datasource.getData(index).extra !== undefined
+  }
+
+  private effectiveMediaDataSourceIndex(): number {
+    if (this.isMediaDataSourceIndex(this.ui.selectedMediaDataSourceIndex)) {
+      return this.ui.selectedMediaDataSourceIndex
+    }
+    if (this.isMediaDataSourceIndex(this.ui.lastSelectedMediaIndex)) {
+      return this.ui.lastSelectedMediaIndex
+    }
+    const firstMediaIndex = this.vm.datasource.getFirstMediaItemIndex()
+    return this.isMediaDataSourceIndex(firstMediaIndex) ? firstMediaIndex : -1
+  }
+
+  private selectDefaultMediaItem(): void {
+    const selectedIndex = this.effectiveMediaDataSourceIndex()
+    this.ui.selectedMediaDataSourceIndex = selectedIndex
+    if (selectedIndex >= 0) {
+      this.ui.lastSelectedMediaIndex = selectedIndex
+    }
   }
 
   private homeContentKey(item: PadMenuItem, index: number): string {
@@ -224,23 +290,13 @@ export struct HomeScreen {
     this.ui.selectedDestination = HomeDestinationMapper.fromPhoneIndex(index)
   }
 
-  private selectPadMenu(index: number, item: PadMenuItem): void {
-    if (item.extra) {
-      this.ui.lastSelectedMediaIndex = index
-    }
-    this.ui.selectedDestination = HomeDestinationMapper.fromPadMenuIndex(
-      index,
-      item.extra !== undefined
-    )
-  }
-
   @Monitor('ui.selectedDestination')
   onDestinationChange(): void {
     this.contentTabsController.changeIndex(this.contentSelectedIndex())
     this.updateRootNavigationTitleBar()
   }
 
-  @Monitor('ui.lastSelectedMediaIndex')
+  @Monitor('ui.selectedMediaDataSourceIndex')
   onSelectedMediaChange(): void {
     this.contentTabsController.changeIndex(this.contentSelectedIndex())
   }
@@ -257,6 +313,9 @@ export struct HomeScreen {
   }
 
   private rootNavigationTitle(): string {
+    if (this.ui.selectedDestination === HomeDestination.Search) {
+      return '搜索'
+    }
     if (this.ui.selectedDestination === HomeDestination.Chasing) {
       return '追剧'
     }
@@ -321,6 +380,22 @@ export struct HomeScreen {
       this.themePromptTimer = -1
     }
     getUIAbilityContext().eventHub.off(HomeBackPressedEvent)
+  }
+
+  // CustomBuilderAdapter: home-theme-upgrade-dialog
+  @Builder
+  private themePromptDialogBuilder() {
+    ThemeUpgradeDialog({
+      onSelectFeiniu: () => {
+        this.saveThemePrompt(ThemeStyle.Feiniu)
+      },
+      onSelectNative: () => {
+        this.saveThemePrompt(ThemeStyle.Native)
+      },
+      onDismiss: () => {
+        this.saveThemePrompt(ThemeStyle.Feiniu)
+      }
+    })
   }
 
   private showThemePromptIfNeeded(): void {
@@ -400,638 +475,525 @@ export struct HomeScreen {
     }
   }
 
-  @Builder
-  themePromptDialogBuilder() {
-    ThemeUpgradeDialog({
-      onSelectFeiniu: () => {
-        this.saveThemePrompt(ThemeStyle.Feiniu)
-      },
-      onSelectNative: () => {
-        this.saveThemePrompt(ThemeStyle.Native)
-      },
-      onDismiss: () => {
-        this.saveThemePrompt(ThemeStyle.Feiniu)
-      }
-    })
-  }
-
   private getPadTopTabItems(): TabItem[] {
-    void this.ui.padMenuDataVersion
-    const ds = this.vm.datasource
-    if (ds.totalCount() < 3) {
-      return [
-        new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
-        new TabItem('追剧', $r('app.media.history'), $r('app.media.history')),
-        new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
-        new TabItem('全部', $r('app.media.all'), $r('app.media.all'))
-      ]
-    }
-    const thirdIndex = this.getThirdItemDatasourceIndex()
-    const thirdItem = ds.getData(thirdIndex)
     return [
       new TabItem('首页', $r('app.media.ic_home_sel'), $r('app.media.ic_home_unsel')),
-      new TabItem('追剧', $r('app.media.history'), $r('app.media.history')),
       new TabItem('收藏', $r('app.media.ic_favorite_sel'), $r('app.media.ic_favorite_unsel')),
-      new TabItem(thirdItem.title, thirdItem.selectedIcon as Resource, thirdItem.unselectedIcon as Resource)
+      new TabItem('媒体库', $r('app.media.ic_media_sel'), $r('app.media.ic_media_unsel')),
+      new TabItem('我的', $r('app.media.ic_mine_sel'), $r('app.media.ic_mine_unsel'))
     ]
   }
 
   private getPadTopTabSelectIndex(): number {
-    const selectedIndex = this.padSelectedIndex()
-    if (selectedIndex >= 0 && selectedIndex <= 2) {
-      return selectedIndex
+    if (this.ui.selectedDestination === HomeDestination.Search) {
+      return -1
     }
-    return this.ui.selectedDestination === HomeDestination.Media ? 3 : -1
-  }
-
-  private getThirdItemDatasourceIndex(): number {
-    const ds = this.vm.datasource
-    if (this.ui.selectedDestination !== HomeDestination.Media) {
-      const lastMedia = this.ui.lastSelectedMediaIndex
-      if (lastMedia >= 0 && lastMedia < ds.totalCount() && ds.getData(lastMedia).type === PadMenuType.ITEM &&
-        ds.getData(lastMedia).extra) {
-        return lastMedia
-      }
-      return ds.getFirstMediaItemIndex()
+    if (this.ui.selectedDestination === HomeDestination.Favorite) {
+      return 1
     }
-    return this.padSelectedIndex()
-  }
-
-  private currentPadTitle(): string {
-    const selectedIndex = this.padSelectedIndex()
-    if (selectedIndex >= 0 && selectedIndex < this.vm.datasource.totalCount()) {
-      return this.vm.datasource.getData(selectedIndex).title
+    if (this.ui.selectedDestination === HomeDestination.Media) {
+      return 2
     }
     if (this.ui.selectedDestination === HomeDestination.Mine) {
-      return '我的'
+      return 3
     }
-    return '首页'
+    return 0
   }
 
-  @Builder
-  private leftMenuContent(onItemSelect: (index: number) => void, nativeSurface: boolean) {
-    Row() {
-      Row() {
-        Image($r('app.media.app_icon')).height(48)
-        Text($r('app.string.app_name'))
-          .fontColor($r('app.color.text_primary'))
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-          .fontStyle(FontStyle.Italic)
-      }
-      .layoutWeight(1)
-      .justifyContent(FlexAlign.Start)
-
-      if (HomeShellPolicy.usesEmbeddedSidebar(this.resolveShell()) &&
-        this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc()) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.close_sidebar'))
-            .fontSize(20)
-            .fontColor([$r('app.color.text_primary')])
-        }
-        .width(40)
-        .height(40)
-        .borderRadius(20)
-        .align(Alignment.Center)
-        .backgroundColor(nativeSurface ? Color.Transparent : $r('app.color.bg_main'))
-        .onClick(() => {
-          this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-            this.ui.isLeftSidebarVisible = false
-          })
-        })
-      } else {
-        Blank().width(40).height(40)
-      }
-    }
-    .width('100%')
-    .padding({
-      left: 12,
-      right: 12,
-      bottom: 18
-    })
-
-    List() {
-      LazyForEach(this.vm.datasource, (item: PadMenuItem, index: number) => {
-        if (item.type == PadMenuType.TITLE) {
-          ListItem() {
-            Text(item.title).fontColor($r('app.color.text_1')).fontSize(12)
-              .height(20)
-              .margin({
-                top: 20,
-                left: 10
-              })
-          }
-        } else {
-          ListItem() {
-            Row({ space: 8 }) {
-              Image(this.padSelectedIndex() == index ? item.selectedIcon : item.unselectedIcon)
-                .fillColor(this.padSelectedIndex() == index ? $r('app.color.color_main') :
-                  $r('app.color.text_primary'))
-                .width(20)
-                .height(20)
-              Text(item.title)
-                .fontColor(this.padSelectedIndex() == index ? $r('app.color.color_main') :
-                  $r('app.color.text_primary'))
-                .fontSize(14)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-              Text(item.badge > 0 ? item.badge > 99 ? '99+' : item.badge.toString() : '')
-                .fontColor(this.padSelectedIndex() == index ? $r('app.color.color_main') :
-                  $r('app.color.text_primary'))
-                .fontSize(14)
-            }
-            .backgroundBlurStyle(nativeSurface ? BlurStyle.NONE :
-              (this.padSelectedIndex() == index ? BlurStyle.Thin : BlurStyle.NONE))
-            .backgroundColor(nativeSurface ?
-              (this.padSelectedIndex() == index ?
-                AppThemeSurfaceResolver.interactionOverlay(this.appUIState.themeStyle) : Color.Transparent) :
-              ((this.padSelectedIndex() == index && this.resolveShell() === HomeShellKind.LargeSidebar) ?
-                $r('app.color.menu_item_bg') : Color.Transparent))
-            .width('100%')
-            .padding(10)
-            .borderRadius(8)
-            .onClick(() => {
-              if (this.padSelectedIndex() === index) {
-                return
-              }
-              this.selectPadMenu(index, item)
-              onItemSelect(index)
-            })
-          }
-        }
-      })
-    }.padding({
-      left: 20,
-      right: 20,
-    })
-    .width('100%')
-    .listDirection(Axis.Vertical)
-    .layoutWeight(1)
-  }
-
-  @Builder
-  private nativeLeftMenuBuilder(onItemSelect: (index: number) => void) {
-    Column() {
-      this.leftMenuContent(onItemSelect, true)
-    }
-    .width(240)
-    .height('100%')
-    .padding({
-      top: 20,
-      bottom: 32
-    })
-    .borderRadius(20)
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.Floating,
-      true,
-      this.appUIState.systemMaterialAvailable
-    ))
-    .borderColor(this.appUIState.systemMaterialAvailable ?
-      Color.Transparent : $r('sys.color.comp_divider'))
-    .borderWidth(this.appUIState.systemMaterialAvailable ? 0 : 1)
-  }
-
-  @Builder
-  private feiniuLeftMenuBuilder(onItemSelect: (index: number) => void) {
-    Column() {
-      this.leftMenuContent(onItemSelect, false)
-    }
-    .width(240)
-    .height('100%')
-    .padding({
-      top: 20,
-      bottom: 32
-    })
-    .backgroundBlurStyle(BlurStyle.Thin)
-    .borderColor($r('app.color.border'))
-    .borderWidth(1)
-    .borderRadius(20)
-    .visualEffect(FeiniuPointLightModifier.build({
-      enabled: this.appUIState.feiniuPointLightEnabled
-    }))
-  }
-
-  @Builder
-  leftMenuBuilder(onItemSelect: (index: number) => void) {
-    if (this.useNativeSurface()) {
-      this.nativeLeftMenuBuilder(onItemSelect)
+  private selectPadTopTab(index: number): void {
+    if (index === 1) {
+      this.ui.selectedDestination = HomeDestination.Favorite
+    } else if (index === 2) {
+      this.selectDefaultMediaItem()
+      this.ui.selectedDestination = HomeDestination.Media
+    } else if (index === 3) {
+      this.ui.selectedDestination = HomeDestination.Mine
     } else {
-      this.feiniuLeftMenuBuilder(onItemSelect)
+      this.ui.selectedDestination = HomeDestination.Home
     }
   }
 
-  @Builder
-  menuModalBuilder() {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .onClick(() => {
-          this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-            this.ui.isMenuModalVisible = false
-          })
-        })
-      Row() {
-        Column() {
-          this.leftMenuBuilder(() => {
-            this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-              this.ui.isMenuModalVisible = false
-            })
-          })
-        }
-        .width(240)
-        .height('100%')
-        .margin({ left: 12 })
-        .padding({
-          top: this.appUIState.safeTop + 12,
-          bottom: this.appUIState.safeBottom + 12,
-        })
-        .transition(TransitionEffect.translate({ x: -240 }).animation({ duration: 300, curve: Curve.FastOutSlowIn }))
+  private padChromeHeight(): number {
+    const topTabsVisible = HomeShellPolicy.usesOverlayDrawer(this.shell) ||
+      (HomeShellPolicy.usesEmbeddedSidebar(this.shell) && !this.ui.isLeftSidebarVisible)
+    return topTabsVisible ? 88 : 0
+  }
 
-        Blank()
-          .layoutWeight(1)
-          .onClick(() => {
-            this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-              this.ui.isMenuModalVisible = false
-            })
-          })
-      }
-      .width('100%')
-      .height('100%')
-      .alignItems(VerticalAlign.Top)
-      .justifyContent(FlexAlign.Start)
+  private tabletHeroLeadingOverflow(): number {
+    if (!HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
+      return 0
     }
-    .width('100%')
-    .height('100%')
-    .alignContent(Alignment.Start)
+    return this.ui.isLeftSidebarVisible ? 252 : 12
   }
 
-  @Builder
-  private homeTabContent() {
-    HomeTab({
-      active: this.ui.selectedDestination === HomeDestination.Home,
-      contentBottomInset: this.contentBottomInset,
-      contentScroller: this.homeScroller
-    })
-  }
-
-  @Builder
-  private chasingTabContent() {
-    ChasingTab({
-      fromHome: true,
-      contentTopInset: this.nativeFromHomeTopInset,
-      contentBottomInset: this.contentBottomInset,
-      contentScroller: this.chasingScroller
-    })
-  }
-
-  @Builder
-  private favoriteTabContent() {
-    FavoriteListPage({
-      fromHome: true,
-      contentTopInset: this.nativeFromHomeTopInset,
-      contentBottomInset: this.contentBottomInset,
-      contentScroller: this.favoriteScroller
-    })
-  }
-
-  @Builder
-  private mediaTabContent() {
-    MediaTab({
-      contentBottomInset: this.contentBottomInset,
-      rootTitleBarOwned: this.shell === HomeShellKind.PhoneNativeHds,
-      contentScroller: this.mediaScroller,
-      onAdministratorStateChange: (isAdministrator: boolean) => {
-        this.mediaAdministrator = isAdministrator
-        this.updateRootNavigationTitleBar()
-      }
-    })
-  }
-
-  @Builder
-  private mineTabContent() {
-    MineTab({
-      contentBottomInset: this.contentBottomInset,
-      compactTopInset: this.shell === HomeShellKind.PhoneNativeHds,
-      contentScroller: this.mineScroller
-    })
-  }
-
-  @Builder
-  private homeContentOwner() {
-    Tabs({
-      index: this.contentSelectedIndex(),
-      controller: this.contentTabsController
-    }) {
-      TabContent() {
-        this.homeTabContent()
-      }
-      TabContent() {
-        this.chasingTabContent()
-      }
-      TabContent() {
-        this.favoriteTabContent()
-      }
-      TabContent() {
-        this.mediaTabContent()
-      }
-      TabContent() {
-        this.mineTabContent()
-      }
-
-      LazyForEach(this.vm.datasource, (item: PadMenuItem) => {
-        TabContent() {
-          if (item.extra) {
-            if ((item.extra as MediaItem).libraryKind === MediaLibraryKind.Music) {
-              if (this.musicCapabilityEnabled()) {
-                MusicLibraryPage({
-                  fromHome: true,
-                  mediaItem: item.extra as MediaItem
-                })
-              } else {
-                Stack()
-              }
-            } else if ((item.extra as MediaItem).libraryKind === MediaLibraryKind.Photos) {
-              if (this.photoCapabilityEnabled()) {
-                PhotoLibraryPage({
-                  fromHome: true,
-                  mediaItem: item.extra as MediaItem,
-                  contentBottomInset: this.contentBottomInset
-                })
-              } else {
-                Stack()
-              }
-            } else {
-              VideoListPage({
-                fromHome: true,
-                mediaItem: item.extra as MediaItem
-              })
-            }
-          } else {
-            Stack()
-          }
-        }
-      }, (item: PadMenuItem, index: number) => this.homeContentKey(item, index))
+  private tabletHomeGridColumnCount(): number {
+    if (HomeShellPolicy.usesOverlayDrawer(this.shell)) {
+      return 4
     }
-    .barHeight(0)
-    .barWidth(0)
-    .vertical(false)
-    .scrollable(false)
-    .animationDuration(0)
-    .width('100%')
-    .height('100%')
+    if (HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
+      return this.ui.isLeftSidebarVisible ? 5 : 6
+    }
+    return 0
   }
 
-  @Builder
-  private padChromeBuilder(shell: HomeShellKind) {
-    Stack() {
-      Row() {
-        Column() {
-          this.leftMenuBuilder(() => {
-          })
-        }
-        .width(240)
-        .height('100%')
-        .padding({
-          top: this.appUIState.safeTop + 12,
-          bottom: this.appUIState.safeBottom + 12
-        })
-        .visibility((HomeShellPolicy.usesEmbeddedSidebar(shell) && this.ui.isLeftSidebarVisible) ?
-          Visibility.Visible : Visibility.None)
-        .transition(TransitionEffect.asymmetric(
-          TransitionEffect.scale({ x: 0, y: 0 })
-            .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-            .animation({ duration: 300, curve: Curve.FastOutSlowIn }),
-          TransitionEffect.scale({ x: 0, y: 0 })
-            .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-            .animation({ duration: 300, curve: Curve.FastOutSlowIn })
-        ))
+  private updateTabletHeroState(items: VideoItem[], selectedIndex: number,
+    pagePositions: number[], mainAxisLength: number, verticalOffset: number): void {
+    this.tabletHeroItems = items
+    this.tabletHeroSelectedIndex = selectedIndex
+    this.tabletHeroPagePositions = pagePositions
+    this.tabletHeroMainAxisLength = mainAxisLength
+    this.tabletHeroVerticalOffset = verticalOffset
+  }
 
-        Stack() {
-          Column() {
-            Row({ space: 16 }) {
-              Text(this.currentPadTitle())
-                .fontSize(24)
-                .fontWeight(FontWeight.Bold)
-                .margin({
-                  left: HORIZONTAL_CARD_SPACE.getValue(this.vm.appUIState.currentBreakpoint) * 2
-                })
-                .hitTestBehavior(HitTestMode.None)
-              Blank()
-                .layoutWeight(1)
-                .hitTestBehavior(HitTestMode.None)
-              Button() {
-                SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                  .fontSize(20)
-                  .fontColor([$r('app.color.text_primary')])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .align(Alignment.Center)
-              .backgroundColor(this.padActionBackground())
-              .onClick(() => {
-                HMRouterMgr.to(RouterConsts.SearchPage).push()
-              })
+  private showTabletHomeBackdrop(): boolean {
+    return (HomeShellPolicy.usesOverlayDrawer(this.shell) ||
+      HomeShellPolicy.usesEmbeddedSidebar(this.shell)) &&
+      this.ui.selectedDestination === HomeDestination.Home && this.tabletHeroItems.length > 0
+  }
 
-              Button() {
-                SymbolGlyph($r('sys.symbol.person'))
-                  .fontSize(20)
-                  .fontColor([$r('app.color.text_primary')])
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .align(Alignment.Center)
-              .backgroundColor(this.padActionBackground())
-              .onClick(() => {
-                HMRouterMgr.to(RouterConsts.MinePage).push()
-              })
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-            .height(88)
-            .padding({
-              top: this.vm.appUIState.safeTop,
-              right: 24
-            })
-            .hitTestBehavior(HitTestMode.Transparent)
+  private rootSidebarItem(id: string, title: string, icon: ResourceStr,
+    destination: HomeDestination, badge: number = 0): HomeSidebarItem {
+    const item = new HomeSidebarItem(id, HomeSidebarItemType.Item, title, icon, badge)
+    item.destination = destination
+    return item
+  }
 
-            Blank()
-              .layoutWeight(1)
-              .hitTestBehavior(HitTestMode.None)
-          }
-          .hitTestBehavior(HitTestMode.Transparent)
+  private searchSidebarItem(): HomeSidebarItem {
+    const item = this.rootSidebarItem('root:search', '搜索', '', HomeDestination.Search)
+    item.symbolIcon = $r('sys.symbol.magnifyingglass')
+    return item
+  }
 
-          PadTopTab({
-            list: this.getPadTopTabItems(),
-            selectIndex: this.getPadTopTabSelectIndex(),
-            onItemClick: (index: number) => {
-              const targetIndex = index === 0 ? 0 : index === 1 ? 1 : index === 2 ? 2 :
-                this.getThirdItemDatasourceIndex()
-              if (targetIndex < 0 || targetIndex >= this.vm.datasource.totalCount()) {
-                return
-              }
-              this.selectPadMenu(targetIndex, this.vm.datasource.getData(targetIndex))
-            },
-            onMenuButtonClick: () => {
-              if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
-                this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-                  this.ui.isLeftSidebarVisible = true
-                })
-              } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {
-                this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
-                  this.ui.isMenuModalVisible = true
-                })
-              }
-            }
-          })
-            .margin({
-              top: this.appUIState.safeTop
-            })
-            .visibility((HomeShellPolicy.usesEmbeddedSidebar(shell) && this.ui.isLeftSidebarVisible) ?
-              Visibility.None : Visibility.Visible)
-        }
-        .layoutWeight(1)
-        .height('100%')
-        .alignContent(Alignment.Top)
-        .hitTestBehavior(HitTestMode.Transparent)
-      }
-      .width('100%')
-      .height('100%')
-      .hitTestBehavior(HitTestMode.Transparent)
+  private titleSidebarItem(id: string, title: string): HomeSidebarItem {
+    return new HomeSidebarItem(id, HomeSidebarItemType.Title, title)
+  }
 
-      if (this.ui.isLoading) {
-        LoadingView()
-      }
-
-      if (this.ui.isMenuModalVisible && HomeShellPolicy.usesOverlayDrawer(shell)) {
-        this.menuModalBuilder()
+  private sidebarItems(): HomeSidebarItem[] {
+    void this.ui.padMenuDataVersion
+    const items: HomeSidebarItem[] = [
+      this.searchSidebarItem(),
+      this.rootSidebarItem('root:home', '首页', $r('app.media.ic_home_sel'), HomeDestination.Home),
+      this.rootSidebarItem('root:favorite', '收藏', $r('app.media.ic_favorite_sel'),
+        HomeDestination.Favorite, this.ui.favoriteCount)
+    ]
+    for (let index = 0; index < this.vm.datasource.totalCount(); index++) {
+      const sourceItem = this.vm.datasource.getData(index)
+      if (sourceItem.type === PadMenuType.TITLE) {
+        items.push(this.titleSidebarItem(`media-title:${index}`, sourceItem.title))
+      } else if (sourceItem.extra) {
+        const mediaItem = new HomeSidebarItem(
+          `media:${sourceItem.extra.id}`,
+          HomeSidebarItemType.Item,
+          sourceItem.title,
+          sourceItem.selectedIcon,
+          sourceItem.badge
+        )
+        mediaItem.mediaDataSourceIndex = index
+        items.push(mediaItem)
       }
     }
-    .width('100%')
-    .height('100%')
-    .alignContent(Alignment.TopStart)
-    .padding({
-      left: HomeShellPolicy.usesEmbeddedSidebar(shell) ? 12 : 0
-    })
-    .hitTestBehavior(HitTestMode.Transparent)
+    return items
   }
 
-  @Builder
-  private largeSidebarBuilder() {
-    this.padChromeBuilder(HomeShellKind.LargeSidebar)
+  private sidebarBottomItems(): HomeSidebarItem[] {
+    return [
+      this.rootSidebarItem('root:mine', '我的', $r('app.media.ic_mine_sel'), HomeDestination.Mine)
+    ]
   }
 
-  @Builder
-  private mediumDrawerBuilder() {
-    this.padChromeBuilder(HomeShellKind.MediumDrawer)
+  private selectedSidebarId(): string {
+    if (this.ui.selectedDestination === HomeDestination.Media) {
+      const selectedIndex = this.effectiveMediaDataSourceIndex()
+      if (selectedIndex < 0) {
+        return ''
+      }
+      const mediaItem = this.vm.datasource.getData(selectedIndex)
+      return mediaItem.extra ? `media:${mediaItem.extra.id}` : 'root:media'
+    }
+    return `root:${this.ui.selectedDestination}`
   }
 
-  private runtimeShellProbeLabel(shell: HomeShellKind): string {
+  private selectSidebarItem(item: HomeSidebarItem): void {
+    if (item.mediaDataSourceIndex >= 0) {
+      this.ui.selectedMediaDataSourceIndex = item.mediaDataSourceIndex
+      this.ui.lastSelectedMediaIndex = item.mediaDataSourceIndex
+      this.ui.selectedDestination = HomeDestination.Media
+      return
+    }
+    if (item.minePane !== undefined) {
+      this.ui.selectedMinePane = item.minePane
+      this.ui.selectedDestination = HomeDestination.Mine
+      return
+    }
+    if (item.destination === HomeDestination.Media) {
+      this.ui.selectedMediaDataSourceIndex = -1
+    } else if (item.destination === HomeDestination.Mine) {
+      this.ui.selectedMinePane = HomeMinePane.Overview
+    }
+    if (item.destination !== undefined) {
+      this.ui.selectedDestination = item.destination
+    }
+  }
+
+  private updateHomeContentMetrics(area: Area): void {
+    const width = Number(area.width)
+    if (!Number.isFinite(width) || width <= 0) {
+      return
+    }
+    if (Math.abs(this.appUIState.homeContentWidth - width) < 0.5) {
+      return
+    }
+    this.appUIState.homeContentWidth = width
+    this.appUIState.homeContentBreakpoint = BreakpointPolicy.fromWidth(width)
+  }
+
+
+
+
+
+
+
+
+
+
+  private runtimeShellProbeLabel(): string {
     return NativeThemeConstructionProbe.label(
       this.appUIState.deviceWidth,
       this.appUIState.currentBreakpoint,
-      shell
+      this.shell
     )
   }
 
-  @Builder
-  private runtimeShellProbe(shell: HomeShellKind) {
-    Text(this.runtimeShellProbeLabel(shell))
-      .fontSize(1)
-      .width(1)
-      .height(1)
-      .opacity(0.01)
-      .accessibilityText(this.runtimeShellProbeLabel(shell))
-      .hitTestBehavior(HitTestMode.None)
-  }
 
-  @Builder
-  private legacyPadContent(shell: HomeShellKind) {
-    Row() {
-      if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
-        // Keep the content in the same column as the legacy large-screen
-        // chrome: 12vp outer gutter plus the visible 240vp sidebar.
-        Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)
-      }
-
-      Column() {
-        // The legacy pad title row owns this 88vp strip.  Without reserving
-        // it, the routed tab content starts behind the title row and status
-        // area on the API 24–25 blur fallback.
-        Blank().height(88)
-        Stack() {
-          this.homeContentOwner()
-        }
-          .layoutWeight(1)
-          .width('100%')
-      }
-      .layoutWeight(1)
-      .height('100%')
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  private nonNativeHomeShell(shell: HomeShellKind) {
-    Stack({ alignContent: Alignment.Bottom }) {
-      if (HomeShellPolicy.usesOverlayDrawer(shell) || HomeShellPolicy.usesEmbeddedSidebar(shell)) {
-        this.legacyPadContent(shell)
-      } else {
-        this.homeContentOwner()
-      }
-
-      if (HomeShellPolicy.usesEmbeddedSidebar(shell)) {
-        this.largeSidebarBuilder()
-      } else if (HomeShellPolicy.usesOverlayDrawer(shell)) {
-        this.mediumDrawerBuilder()
-      } else {
-        HomePhoneStandardTabs({
-          selectedIndex: this.phoneSelectedIndex(),
-          navigationChromeInset: this.navigationChromeInset,
-          onSelectedIndexChange: (index: number) => {
-            this.selectPhoneIndex(index)
-          }
-        })
-      }
-    }
-    .width('100%')
-    .height('100%')
-  }
 
   build() {
-    Stack() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      if (this.showTabletHomeBackdrop()) {
+        HomePadBackdrop({
+          items: this.tabletHeroItems,
+          selectedIndex: this.tabletHeroSelectedIndex,
+          pagePositions: this.tabletHeroPagePositions,
+          mainAxisLength: this.tabletHeroMainAxisLength,
+          fallbackPageWidth: this.appUIState.deviceWidth,
+          canvasColor: this.useNativeSurface() ?
+            $r('app.color.native_canvas_background') : $r('app.color.bg_main'),
+          darkMode: this.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+        })
+        HomePadHeroLayer({
+          items: this.tabletHeroItems,
+          selectedIndex: this.tabletHeroSelectedIndex,
+          pagePositions: this.tabletHeroPagePositions,
+          mainAxisLength: this.tabletHeroMainAxisLength,
+          fallbackPageWidth: this.appUIState.deviceWidth,
+          heroHeight: HomeContentLayoutPolicy.tabletHeroHeight(this.appUIState, true),
+          verticalOffset: this.tabletHeroVerticalOffset
+        })
+      }
       if (this.shell === HomeShellKind.PhoneNativeHds) {
         HomePhoneNativeTabs({
           selectedIndex: this.phoneSelectedIndex(),
           safeBottom: this.appUIState.safeBottom,
           compactPlayerChrome: this.compactPlayerChrome(),
           homeContentScroller: this.homeScroller,
+          favoriteContentScroller: this.favoriteScroller,
+          mediaContentScroller: this.mediaScroller,
+          mineContentScroller: this.mineScroller,
+          contentTopInset: this.nativeFromHomeTopInset,
+          contentBottomInset: this.contentBottomInset,
           onSelectedIndexChange: (index: number) => {
             this.selectPhoneIndex(index)
           },
-          homeContentBuilder: () => {
-            this.homeTabContent()
-          },
-          favoriteContentBuilder: () => {
-            this.favoriteTabContent()
-          },
-          mediaContentBuilder: () => {
-            this.mediaTabContent()
-          },
-          mineContentBuilder: () => {
-            this.mineTabContent()
+          onMediaAdministratorStateChange: (isAdministrator: boolean) => {
+            this.mediaAdministrator = isAdministrator
+            this.updateRootNavigationTitleBar()
           }
         })
       } else {
-        this.nonNativeHomeShell(this.shell)
+        Stack({ alignContent: Alignment.Bottom }) {
+          Row() {
+            if (HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
+              // Keep the content in the same column as the legacy large-screen
+              // chrome: 12vp outer gutter plus the visible 240vp sidebar.
+              Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)
+            }
+            Column() {
+              Stack() {
+                Tabs({
+                  index: this.contentSelectedIndex(),
+                  controller: this.contentTabsController
+                }) {
+                  TabContent() {
+                    HomeTab({
+                      active: this.ui.selectedDestination === HomeDestination.Home,
+                      useHomeContentWidth: this.usesPadMediaContent(),
+                      tabletHeroLeadingOverflow: this.tabletHeroLeadingOverflow(),
+                      latestGridColumnCount: this.tabletHomeGridColumnCount(),
+                      stickyHeaderAnchorY: this.padChromeHeight(),
+                      stickyHeaderPinnedTopInset: this.padChromeHeight() > 0 ?
+                        this.padChromeHeight() : Math.max(0, this.appUIState.safeTop),
+                      contentBottomInset: this.contentBottomInset,
+                      contentScroller: this.homeScroller,
+                      onTabletHeroStateChange: (items: VideoItem[], selectedIndex: number,
+                        pagePositions: number[], mainAxisLength: number, verticalOffset: number): void => {
+                        this.updateTabletHeroState(items, selectedIndex, pagePositions, mainAxisLength, verticalOffset)
+                      }
+                    })
+                  }
+                  TabContent() {
+                    ChasingTab({
+                      fromHome: true,
+                      contentTopInset: this.nativeFromHomeTopInset,
+                      contentBottomInset: this.contentBottomInset,
+                      contentScroller: this.chasingScroller
+                    })
+                  }
+                  TabContent() {
+                    FavoriteListPage({
+                      fromHome: true,
+                      useHomeContentWidth: this.usesPadMediaContent(),
+                      contentTopInset: this.nativeFromHomeTopInset,
+                      contentBottomInset: this.contentBottomInset,
+                      contentScroller: this.favoriteScroller
+                    })
+                  }
+                  TabContent() {
+                    if (this.selectedPadMediaItem() !== undefined) {
+                      HomeMediaLibraryContent({
+                        mediaItem: this.selectedPadMediaItem() as MediaItem,
+                        useHomeContentWidth: true,
+                        contentBottomInset: this.contentBottomInset
+                      })
+                    } else {
+                      MediaTab({
+                        contentBottomInset: this.contentBottomInset,
+                        rootTitleBarOwned: false,
+                        contentScroller: this.mediaScroller,
+                        onAdministratorStateChange: (isAdministrator: boolean) => {
+                          this.mediaAdministrator = isAdministrator
+                          this.updateRootNavigationTitleBar()
+                        }
+                      })
+                    }
+                  }
+                  TabContent() {
+                    if (this.usesPadMediaContent()) {
+                      HomeMineWorkspace({
+                        selectedPane: this.ui.selectedMinePane,
+                        contentWidth: this.appUIState.homeContentWidth,
+                        onAdministratorStateChange: (available: boolean) => {
+                          this.mineManagementAvailable = available
+                        },
+                        onPaneFallback: (pane: HomeMinePane) => {
+                          this.ui.selectedMinePane = pane
+                        }
+                      })
+                    } else {
+                      MineTab({
+                        contentBottomInset: this.contentBottomInset,
+                        compactTopInset: false,
+                        contentScroller: this.mineScroller
+                      })
+                    }
+                  }
+                  TabContent() {
+                    SearchPageContent({
+                      showLegacyActionBar: !this.useNativeSurface(),
+                      embedded: true
+                    })
+                  }
+
+                  LazyForEach(this.vm.datasource, (item: PadMenuItem) => {
+                    TabContent() {
+                      if (item.extra) {
+                        HomeMediaLibraryContent({
+                          mediaItem: item.extra as MediaItem,
+                          useHomeContentWidth: this.usesPadMediaContent(),
+                          contentBottomInset: this.contentBottomInset
+                        })
+                      } else {
+                        Stack()
+                      }
+                    }
+                  }, (item: PadMenuItem, index: number) => this.homeContentKey(item, index))
+                }
+                .barHeight(0)
+                .barWidth(0)
+                .vertical(false)
+                .scrollable(false)
+                .animationDuration(0)
+                .width('100%')
+                .height('100%')
+              }
+              .layoutWeight(1)
+              .width('100%')
+            }
+            .layoutWeight(1)
+            .height('100%')
+            .onAreaChange((_oldValue: Area, newValue: Area): void => {
+              if (this.usesPadMediaContent()) {
+                this.updateHomeContentMetrics(newValue)
+              }
+            })
+          }
+          .width('100%')
+          .height('100%')
+
+          if (HomeShellPolicy.usesEmbeddedSidebar(this.shell) || HomeShellPolicy.usesOverlayDrawer(this.shell)) {
+            Stack() {
+              Row() {
+                Column() {
+                  HomeSidebarMenu({
+                    items: this.sidebarItems(),
+                    bottomItems: this.sidebarBottomItems(),
+                    appUIState: this.appUIState,
+                    selectedId: this.selectedSidebarId(),
+                    shell: (this.shell),
+                    showCloseButton: HomeShellPolicy.usesEmbeddedSidebar(this.resolveShell()) &&
+                      this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc(),
+                    nativeSurface: this.useNativeSurface(),
+                    onClose: () => {
+                      this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                        this.ui.isLeftSidebarVisible = false
+                      })
+                    },
+                    onItemSelect: (item: HomeSidebarItem) => {
+                      this.selectSidebarItem(item)
+                    }
+                  })
+                }
+                .width(240)
+                .height('100%')
+                .padding({
+                  top: this.appUIState.safeTop + 12,
+                  bottom: this.appUIState.safeBottom
+                })
+                .visibility((HomeShellPolicy.usesEmbeddedSidebar((this.shell)) && this.ui.isLeftSidebarVisible) ?
+                  Visibility.Visible : Visibility.None)
+                .transition(TransitionEffect.asymmetric(
+                  TransitionEffect.scale({ x: 0, y: 0 })
+                    .combine(TransitionEffect.translate({ x: 120, y: -300 }))
+                    .animation({ duration: 300, curve: Curve.FastOutSlowIn }),
+                  TransitionEffect.scale({ x: 0, y: 0 })
+                    .combine(TransitionEffect.translate({ x: 120, y: -300 }))
+                    .animation({ duration: 300, curve: Curve.FastOutSlowIn })
+                ))
+
+                Stack() {
+                  PadTopTab({
+                    list: this.getPadTopTabItems(),
+                    selectIndex: this.getPadTopTabSelectIndex(),
+                    onItemClick: (index: number) => {
+                      this.selectPadTopTab(index)
+                    },
+                    onMenuButtonClick: () => {
+                      this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                        this.openPadMenu()
+                      })
+                    }
+                  })
+                    .margin({
+                      top: this.appUIState.safeTop
+                    })
+                    .visibility((HomeShellPolicy.usesEmbeddedSidebar((this.shell)) && this.ui.isLeftSidebarVisible) ?
+                      Visibility.None : Visibility.Visible)
+                }
+                .layoutWeight(1)
+                .height('100%')
+                .alignContent(Alignment.Top)
+                .hitTestBehavior(HitTestMode.Transparent)
+              }
+              .width('100%')
+              .height('100%')
+              .hitTestBehavior(HitTestMode.Transparent)
+
+              if (this.ui.isLoading) {
+                LoadingView()
+              }
+
+              if (this.ui.isMenuModalVisible && HomeShellPolicy.usesOverlayDrawer((this.shell))) {
+                Stack() {
+                  Column()
+                    .width('100%')
+                    .height('100%')
+                    .backgroundColor('rgba(0,0,0,0.5)')
+                    .onClick(() => {
+                      this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                        this.ui.isMenuModalVisible = false
+                      })
+                    })
+                  Row() {
+                    Column() {
+                      HomeSidebarMenu({
+                        items: this.sidebarItems(),
+                        bottomItems: this.sidebarBottomItems(),
+                        appUIState: this.appUIState,
+                        selectedId: this.selectedSidebarId(),
+                        shell: (this.shell),
+                        showCloseButton: false,
+                        nativeSurface: this.useNativeSurface(),
+                        onItemSelect: (item: HomeSidebarItem) => {
+                          this.selectSidebarItem(item)
+                          this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                            this.ui.isMenuModalVisible = false
+                          })
+                        }
+                      })
+                    }
+                    .width(240)
+                    .height('100%')
+                    .margin({ left: 12 })
+                    .padding({
+                      top: this.appUIState.safeTop + 12,
+                      bottom: this.appUIState.safeBottom,
+                    })
+                    .transition(TransitionEffect.translate({ x: -240 }).animation({ duration: 300, curve: Curve.FastOutSlowIn }))
+
+                    Blank()
+                      .layoutWeight(1)
+                      .onClick(() => {
+                        this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                          this.ui.isMenuModalVisible = false
+                        })
+                      })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .alignItems(VerticalAlign.Top)
+                  .justifyContent(FlexAlign.Start)
+                }
+                .width('100%')
+                .height('100%')
+                .alignContent(Alignment.Start)
+              }
+            }
+            .width('100%')
+            .height('100%')
+            .alignContent(Alignment.TopStart)
+            .padding({
+              left: HomeShellPolicy.usesEmbeddedSidebar((this.shell)) ? 12 : 0
+            })
+            .hitTestBehavior(HitTestMode.Transparent)
+          } else {
+            HomePhoneStandardTabs({
+              selectedIndex: this.phoneSelectedIndex(),
+              navigationChromeInset: this.navigationChromeInset,
+              onSelectedIndexChange: (index: number) => {
+                this.selectPhoneIndex(index)
+              }
+            })
+          }
+        }
+        .width('100%')
+        .height('100%')
       }
 
-      this.runtimeShellProbe(this.shell)
+      Text(this.runtimeShellProbeLabel())
+        .fontSize(1)
+        .width(1)
+        .height(1)
+        .opacity(0.01)
+        .accessibilityText(this.runtimeShellProbeLabel())
+        .hitTestBehavior(HitTestMode.None)
     }
     .width('100%')
     .height('100%')

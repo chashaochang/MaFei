@@ -1,7 +1,7 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { CacheStrategy, ImageKnife, ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknifepro';
 import { ActionBar } from '../../component/ActionBar';
-import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination';
 import { VideoDetailUIState } from './VideoDetailUIState';
 import { CalculateHeightParam, VideoDetailViewModel } from './VideoDetailViewModel';
 import { LengthUnit } from '@ohos.arkui.node';
@@ -17,6 +17,7 @@ import { SkeletonDetailView } from '../../component/skeleton/SkeletonDetailView'
 import { AudioSubtitleSelector } from './components/AudioSubtitleSelector';
 import { MediaSourceSelector } from './components/MediaSourceSelector';
 import { VideoInfoDetail } from './components/VideoInfoDetail';
+import { OverviewSheetContent, VideoInfoSheetContent } from './components/DetailSheetContent';
 import { VideoDetailRefreshEvent } from '../../events/Events';
 import {
   AppThemeMaterialRole,
@@ -47,6 +48,7 @@ import {
   parseMediaRouteRefData,
   toMediaRouteRefData
 } from '../../media/navigation/MediaRouteRef'
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
 const VIDEO_HERO_LOG_DOMAIN: number = 0xFF00
 const VIDEO_HERO_LOG_TAG: string = 'mafei-video-hero'
@@ -220,6 +222,7 @@ struct NativeDetailIconAction {
 })
 @ComponentV2
 export struct VideoDetailPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
   @Local ui: VideoDetailUIState = new VideoDetailUIState(this.getUIContext())
   @Local vm: VideoDetailViewModel = new VideoDetailViewModel(this.ui)
   @Local heroBackdropPixelMap?: image.PixelMap
@@ -707,366 +710,16 @@ export struct VideoDetailPage {
     )
   }
 
-  @Builder
-  private nativeHeroBackdrop() {
-    Stack() {
-      if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
-        Image(this.heroFeatheredPixelMap)
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Cover)
-          .transition(TransitionEffect.OPACITY)
-          .hitTestBehavior(HitTestMode.None)
-      } else {
-        ImageKnifeComponent({
-          imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
-        })
-          .width('100%')
-          .height('100%')
-          .opacity(0)
-          .hitTestBehavior(HitTestMode.None)
-      }
 
-      Stack()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 0,
-          colors: [
-            ['rgba(0, 0, 0, 0)', 0],
-            ['rgba(0, 0, 0, 0.08)', 0.24],
-            ['rgba(0, 0, 0, 0.26)', 0.64],
-            ['rgba(0, 0, 0, 0)', 1]
-          ]
-        })
-    }
-    .width('100%')
-    .height('100%')
-  }
 
-  @Builder
-  private nativePageBackdrop() {
-    Stack() {
-      if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
-        Image(this.heroBackdropPixelMap)
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Cover)
-          .scale({ x: 1.18, y: 1.18 })
-          .blur(128)
-          .opacity(0.95)
-      } else {
-        ImageKnifeComponent({
-          imageKnifeOption: this.heroImageOption()
-        })
-          .width('100%')
-          .height('100%')
-          .scale({ x: 1.18, y: 1.18 })
-          .blur(128)
-          .opacity(0.95)
-      }
 
-      Stack()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 0,
-          colors: [
-            [$r('app.color.native_detail_page_overlay_soft'), 0],
-            [$r('app.color.native_detail_page_overlay_soft'), 0.56],
-            [$r('app.color.native_detail_page_overlay_strong'), 1]
-          ]
-        })
-    }
-    .width('100%')
-    .height('100%')
-    .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
-    .hitTestBehavior(HitTestMode.None)
-  }
 
-  @Builder
-  private nativeHeroTextLabel() {
-    if (this.heroTitleUsesCalligraphy()) {
-      Text(this.ui.title)
-        .fontSize(68)
-        .minFontSize(34)
-        .maxFontSize(68)
-        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
-        .fontFamily(HERO_TITLE_FONT_FAMILY)
-        .fontWeight(FontWeight.Normal)
-        .fontColor(Color.White)
-        .textShadow([
-          { radius: 10, color: 'rgba(0, 0, 0, 0.86)', offsetX: 0, offsetY: 3 },
-          { radius: 20, color: 'rgba(0, 90, 255, 0.26)', offsetX: 0, offsetY: 0 }
-        ])
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .textAlign(TextAlign.Center)
-        .width('100%')
-    } else {
-      Text(this.ui.title)
-        .fontSize(38)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .textShadow({ radius: 10, color: 'rgba(0, 0, 0, 0.82)', offsetX: 0, offsetY: 3 })
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .textAlign(TextAlign.Center)
-        .width('100%')
-    }
-  }
 
-  @Builder
-  private nativeHeroTitle() {
-    if (this.ui.logo.length > 0) {
-      Row() {
-        ImageKnifeComponent({
-          imageKnifeOption: this.logoImageOption()
-        })
-          .height(76)
-          .aspectRatio(80 / 31)
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
-      .translate({ x: this.heroLogoTranslateX(), y: this.heroLogoTranslateY() })
-      .opacity(this.heroTitleOpacity())
-    } else {
-      Column({ space: 6 }) {
-        if (this.ui.subtitle.length > 0) {
-          Text(this.ui.subtitle)
-            .fontSize(14)
-            .fontColor(Color.White)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        this.nativeHeroTextLabel()
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Center)
-      .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
-      .translate({ x: this.heroTextTranslateX(), y: this.heroTitleTranslateY() })
-      .opacity(this.heroTitleOpacity())
-    }
-  }
 
-  @Builder
-  private nativeHeroMetadataLine() {
-    Column({ space: 4 }) {
-      if (this.ui.score > 0 || this.ui.primaryInfo.length > 0) {
-        Scroll() {
-          Text() {
-            if (this.ui.score > 0) {
-              Span(this.ui.score.toFixed(1) + '分')
-                .fontColor($r('app.color.text_score'))
-            }
-            if (this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
-              Span(' · ')
-            }
-            if (this.ui.primaryInfo.length > 0) {
-              Span(this.ui.primaryInfo)
-            }
-          }
-          .fontSize(13)
-          .fontColor(Color.White)
-          .maxLines(1)
-        }
-        .width('100%')
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
-      }
 
-      if (this.ui.secondaryInfo.length > 0) {
-        Scroll() {
-          Text(this.ui.secondaryInfo)
-            .fontSize(13)
-            .fontColor(Color.White)
-            .maxLines(1)
-        }
-        .width('100%')
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
 
-  @Builder
-  private nativeHeroMetadata() {
-    Column({ space: 10 }) {
-      this.nativeHeroTitle()
 
-      this.nativeHeroMetadataLine()
 
-      if (!this.ui.isTvShows && this.ui.playbackSources.length > 0) {
-        Row({ space: 14 }) {
-          ForEach(this.vm.getTags(), (item: string) => {
-            Image(item)
-              .height(21)
-              .colorFilter(this.heroTagColorFilter)
-          })
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-      }
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, bottom: 8 })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private nativeCollapsedTitle() {
-    Row() {
-      Text(this.ui.title)
-        .fontSize(17)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .constraintSize({ maxWidth: '100%' })
-        .onAreaChange((_oldValue: Area, newValue: Area): void => {
-          this.updateCollapsedTitleArea(newValue)
-        })
-    }
-    .width('calc(100% - 136vp)')
-    .height('100%')
-    .justifyContent(FlexAlign.Start)
-    .align(Alignment.Center)
-    .opacity(this.collapsedTitleOpacity())
-    .scale({ x: this.collapsedTitleScale(), y: this.collapsedTitleScale() })
-    .hitTestBehavior(HitTestMode.None)
-  }
-
-  @Builder
-  private nativeDetailActions() {
-    Row({ space: 8 }) {
-      NativeDetailPlayAction({
-        label: this.ui.playButtonText,
-        remainingTime: this.ui.remainingTime,
-        progress: this.ui.percentageWatched,
-        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-        onAction: () => {
-          this.vm.playCurrent()
-        }
-      })
-        .layoutWeight(1)
-
-      NativeDetailIconAction({
-        icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
-        buttonSize: 44,
-        selectedColor: $r('app.color.main_red_color'),
-        preserveOriginalColor: this.ui.isFavorite,
-        accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
-        selected: this.ui.isFavorite,
-        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-        onAction: () => {
-          this.vm.changeFavorite()
-        }
-      })
-      NativeDetailIconAction({
-        icon: $r('app.media.ic_check'),
-        buttonSize: 44,
-        accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
-        selected: this.ui.played,
-        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
-        onAction: () => {
-          this.vm.changePlayedState()
-        }
-      })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-  }
-
-  @Builder
-  private legacyDetailActions() {
-    Row({ space: 8 }) {
-      Button() {
-        Row() {
-          Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-          Text(this.ui.playButtonText)
-            .fontSize(16)
-            .fontColor(Color.White)
-            .fontWeight(FontWeight.Medium)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .padding({ left: 18, right: 18 })
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-      }
-      .height(50)
-      .layoutWeight(1)
-      .margin({ right: 12 })
-      .borderRadius(25)
-      .onClick(() => {
-        this.vm.playCurrent()
-      })
-
-      Button() {
-        Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
-          .fillColor($r('app.color.text_1'))
-          .width(this.ui.isTvShows ? 20 : 22)
-          .height(this.ui.isTvShows ? 20 : 22)
-      }
-      .width(this.ui.isTvShows ? 44 : 50)
-      .height(this.ui.isTvShows ? 44 : 50)
-      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-      .borderColor(AppThemeSurfaceResolver.contentOutline(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-      .borderRadius(this.ui.isTvShows ? 22 : 25)
-      .backgroundColor(this.secondarySurfaceBackground())
-      .onClick(() => {
-        this.vm.changeFavorite()
-      })
-
-      Button() {
-        Image($r('app.media.ic_check'))
-          .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
-          .width(this.ui.isTvShows ? 20 : 22)
-          .height(this.ui.isTvShows ? 20 : 22)
-      }
-      .width(this.ui.isTvShows ? 44 : 50)
-      .height(this.ui.isTvShows ? 44 : 50)
-      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
-      .borderColor(AppThemeSurfaceResolver.contentOutline(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-      .borderRadius(this.ui.isTvShows ? 22 : 25)
-      .backgroundColor(this.secondarySurfaceBackground())
-      .onClick(() => {
-        this.vm.changePlayedState()
-      })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
-  }
-
-  @Builder
-  private feiniuHeroBackdrop() {
-    Column() {
-      ImageKnifeComponent({
-        imageKnifeOption: this.heroImageOption()
-      }).width('100%')
-        .height('100%')
-        .blur(this.ui.blur)
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
-  private feiniuActionBar() {
-    ActionBar({
-      title: this.ui.showActionBar ? this.ui.title : ''
-    })
-      .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
-  }
 
   @Monitor('vm.appUIState.colorMode')
   onColorModeChange(): void {
@@ -1137,612 +790,2609 @@ export struct VideoDetailPage {
     this.heroBackdropLoadingKey = ''
   }
 
+
+
+
+
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+        title: this.ui.showActionBar ? this.ui.title : '',
+        contentExtendsUnderTitleBar: true,
+        heroTitleChrome: true,
+        menus: this.navigationMenus(),
+        scrollControllers: [this.ui.scroller]
+      }
+  }
+
+  // CustomBuilderAdapter: video-detail-overview-sheet
   @Builder
-  private overviewTriggerContent() {
-    TextExpandView({
-      text: this.ui.overview,
-      onMoreClick: () => {
-        this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
-      },
-      lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+  private overviewSheetBuilder(blurFallback: boolean) {
+    OverviewSheetContent({
+      overview: this.ui.overview,
+      textColor: 'app.color.text_1',
+      blurFallback
     })
   }
 
+  // CustomBuilderAdapter: video-detail-info-sheet
   @Builder
-  private overviewSheetTrigger() {
-    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Row() {
-        this.overviewTriggerContent()
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(true), {
-        height: 420,
-        preferType: SheetType.BOTTOM,
-        title: { title: '简介' },
-        backgroundColor: Color.Transparent
-      })
-    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-      Row() {
-        this.overviewTriggerContent()
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
-        height: 420,
-        preferType: SheetType.BOTTOM,
-        title: { title: '简介' },
-        backgroundColor: Color.Transparent,
-        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
-      })
-    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-      Row() {
-        this.overviewTriggerContent()
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
-        height: 420,
-        preferType: SheetType.BOTTOM,
-        title: { title: '简介' },
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      })
-    } else {
-      Row() {
-        this.overviewTriggerContent()
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 })
-      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
-        height: 420,
-        preferType: SheetType.BOTTOM,
-        title: { title: '简介' }
-      })
-    }
-  }
-
-  @Builder
-  private videoInfoTriggerContent() {
-    Text('查看全部')
-      .fontColor($r('app.color.text_1'))
-      .fontSize(12)
-      .fontWeight(FontWeight.Medium)
-      .layoutWeight(1)
-    SymbolGlyph($r('sys.symbol.chevron_right'))
-      .fontSize(16)
-      .fontColor([$r('app.color.text_1')])
-      .fontWeight(FontWeight.Bold)
-  }
-
-  @Builder
-  private videoInfoSheetTrigger() {
-    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
-      Row({ space: 10 }) {
-        this.videoInfoTriggerContent()
-      }
-      .width('100%')
-      .padding({ top: 4, left: 4, bottom: 8 })
-      .onClick(() => {
-        this.ui.isShowVideoInfoSheet = true
-      })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(true), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        title: { title: '文件媒体信息' },
-        backgroundColor: Color.Transparent
-      })
-    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
-      Row({ space: 10 }) {
-        this.videoInfoTriggerContent()
-      }
-      .width('100%')
-      .padding({ top: 4, left: 4, bottom: 8 })
-      .onClick(() => {
-        this.ui.isShowVideoInfoSheet = true
-      })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        title: { title: '文件媒体信息' },
-        backgroundColor: Color.Transparent,
-        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
-      })
-    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
-      Row({ space: 10 }) {
-        this.videoInfoTriggerContent()
-      }
-      .width('100%')
-      .padding({ top: 4, left: 4, bottom: 8 })
-      .onClick(() => {
-        this.ui.isShowVideoInfoSheet = true
-      })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        title: { title: '文件媒体信息' },
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      })
-    } else {
-      Row({ space: 10 }) {
-        this.videoInfoTriggerContent()
-      }
-      .width('100%')
-      .padding({ top: 4, left: 4, bottom: 8 })
-      .onClick(() => {
-        this.ui.isShowVideoInfoSheet = true
-      })
-      .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
-        height: '70%',
-        preferType: SheetType.BOTTOM,
-        title: { title: '文件媒体信息' }
-      })
-    }
-  }
-
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Stack() {
-      if (this.useNativeSurface() && !this.ui.firstLoading) {
-        this.nativePageBackdrop()
-      }
-
-      if (this.ui.firstLoading) {
-        SkeletonDetailView()
-      } else {
-        Scroll(this.ui.scroller) {
-          Column() {
-            Stack() {
-              if (this.useNativeSurface()) {
-                this.nativeHeroBackdrop()
-              } else {
-                this.feiniuHeroBackdrop()
-              }
-
-              if (!this.useNativeSurface()) {
-                Stack().width('100%')
-                  .height('100%')
-                  .linearGradient({
-                    angle: 0,
-                    colors: [
-                      ['rgba(26, 30, 35, 0.8)', 0],
-                      ['rgba(26, 30, 35, 0.6)', 0.3],
-                      ['rgba(26, 30, 35, 0.2)', 0.4],
-                      ['rgba(26, 30, 35, 0.1)', 1]
-                    ]
-                  })
-              }
-
-              if (this.useNativeSurface()) {
-                this.nativeHeroMetadata()
-              } else if (this.ui.logo.length > 0) {
-                ImageKnifeComponent({
-                  imageKnifeOption: this.logoImageOption()
-                })
-                  .height(80)
-                  .aspectRatio(80 / 31) // 刮削的logo都是800x310
-                  .margin({ bottom: 18, left: 16 })
-              } else {
-                Column({ space: 12 }) {
-                  Text(this.ui.subtitle)
-                    .fontSize(14)
-                    .fontColor(Color.White)
-                    .maxLines(1)
-                    .ellipsisMode(EllipsisMode.END)
-                    .textOverflow({
-                      overflow: TextOverflow.Ellipsis
-                    })
-                    .textAlign(TextAlign.Center)
-                  Text(this.ui.title)
-                    .fontSize(26)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(Color.White)
-                    .maxLines(1)
-                    .ellipsisMode(EllipsisMode.END)
-                    .textOverflow({
-                      overflow: TextOverflow.Ellipsis
-                    })
-                    .textAlign(TextAlign.Center)
-                }
-                .padding(16)
-                .alignItems(HorizontalAlign.Start)
-              }
-            }.width('100%')
-            .height(this.ui.imageHeight)
-            .alignContent(Alignment.BottomStart)
-
-            Stack() {
-              Column() {
-              if (!this.useNativeSurface()) {
-                Column({ space: 4 }) {
-                  if ((!this.ui.isTvShows && this.ui.score > 0) || this.ui.primaryInfo.length > 0) {
-                    Text() {
-                      if (!this.ui.isTvShows && this.ui.score > 0) {
-                        Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
-                      }
-                      if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
-                        Span(' · ')
-                      }
-                      if (this.ui.primaryInfo.length > 0) {
-                        Span(this.ui.primaryInfo)
-                      }
-                    }
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_1'))
-                    .width('100%')
-                    .textAlign(TextAlign.Start)
-                  }
-
-                  if (this.ui.secondaryInfo.length > 0) {
-                    Text(this.ui.secondaryInfo)
-                      .fontSize(12)
-                      .fontColor($r('app.color.text_1'))
-                      .width('100%')
-                      .textAlign(TextAlign.Start)
-                  }
-                }
-                .width('100%')
-                .padding({ left: 16, right: 16 })
-                .alignItems(HorizontalAlign.Start)
-              }
-
-              if (!this.useNativeSurface() && !this.ui.isTvShows &&
-                this.ui.selectedMediaSourceIndex >= 0 &&
-                this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
-                Blank().height(10)
-                Row({ space: 16 }) {
-                  ForEach(this.vm.getTags(), (item: string) => {
-                    Image(item)
-                      .height(22)
-                      .colorFilter(this.ui.colorFilter)
-                  })
-                }.padding({ left: 16, right: 16 })
-              }
-
-              Blank().height(16)
-              if (this.useNativeSurface()) {
-                this.nativeDetailActions()
-              } else {
-                this.legacyDetailActions()
-              }
-
-
-              // TextExpandView({
-              //   textSectionAttribute: this.textSectionAttribute,
-              //   lastSpanAttribute: new LastSpanAttribute(0, 2,
-              //     this.handleContent(), 16,
-              //     $r('app.color.text_expand_selected_tab_name'))
-              // }).id(`textClick${this.index}`)
-              if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
-                this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
-                Blank().height(16)
-                Row() {
-                  if (this.ui.playbackSources.length > 1) {
-                    MediaSourceSelector({
-                      sources: this.ui.playbackSources,
-                      selectedIndex: this.ui.selectedMediaSourceIndex,
-                      onSelect: (index: number) => {
-                        this.vm.selectMediaSource(index)
-                      }
-                    })
-                      .layoutWeight(1)
-                  }
-                  AudioSubtitleSelector({
-                    subtitleOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].subtitleOptions,
-                    audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
-                    selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
-                    selectedAudioIndex: this.ui.selectedAudioOptionIndex,
-                    selectedSubtitleLabel: this.ui.selectedSubtitleOptionLabel,
-                    selectedAudioLabel: this.ui.selectedAudioOptionLabel,
-                    triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
-                    onSelectSubtitle: (index: number) => {
-                      this.vm.selectSubtitleOption(index)
-                    },
-                    onSelectAudio: (index: number) => {
-                      this.vm.selectAudioOption(index)
-                    }
-                  })
-                    .layoutWeight(this.ui.playbackSources.length > 1 ? 2 : 1)
-                }
-                .width('calc(100% - 24vp)')
-                .height(32)
-                .alignSelf(ItemAlign.Center)
-              }
-              if (this.ui.overview.length > 0) {
-                Blank().height(28)
-                this.overviewSheetTrigger()
-                Blank().height(12)
-              }
-
-              if (this.ui.isTvShows) {
-                if (this.ui.seasons.length > 1) {
-                  Blank().height(20)
-                  Text(`共${this.ui.seasons.length}季`)
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary')).padding({ left: 16, right: 16 })
-                }
-                Blank().height(20)
-                Grid() {
-                  ForEach(this.ui.seasons, (item: VideoItem) => {
-                    GridItem() {
-                      VideoCard({
-                        item: item,
-                        textAlign: TextAlign.Center,
-                        onOpen: () => {
-                          HMRouterMgr.to(RouterConsts.SeasonDetailPage)
-                            .withParam({
-                              id: item.id,
-                              ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
-                              mediaName: this.ui.mediaName,
-                              seasons: this.ui.seasons,
-                              info: this.ui.info,
-                              parentId: this.ui.id,
-                              seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
-                            })
-                            .push()
-                        }
-                      })
-                    }
-                  })
-                }
-                .columnsTemplate('1fr 1fr 1fr')
-                .columnsGap(8)
-                .rowsGap(20)
-                .width('100%')
-                .padding({ left: 16, right: 16 })
-              }
-              if (this.ui.people.length > 0) {
-                Blank().height(16)
-                CastView({
-                  peopleList: this.ui.people
-                })
-              }
-              if (!this.ui.isTvShows && (this.hasFileInformation() || this.hasVideoInformation())) {
-                Column() {
-                  Blank().height(16)
-
-                  if (this.hasFileInformation()) {
-                    Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-
-                    Column({ space: 16 }) {
-                      if (this.ui.path.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
-                        }.width('100%').alignItems(HorizontalAlign.Start)
-                      }
-                      if (this.ui.size.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
-                        }.width('100%').alignItems(HorizontalAlign.Start)
-                      }
-                      if (this.ui.createDate.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('文件创建日期').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
-                        }.width('100%').alignItems(HorizontalAlign.Start)
-                      }
-                      if (this.ui.addedDate.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('添加日期').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.addedDate).fontSize(12).fontColor($r('app.color.text_1'))
-                        }.width('100%').alignItems(HorizontalAlign.Start)
-                      }
-                    }
-                    .width('100%')
-                    .backgroundColor(this.detailInformationBackground())
-                    .borderRadius(12)
-                    .padding(12)
-                    .alignItems(HorizontalAlign.Start)
-                    .margin({ top: 12 })
-                  }
-
-                  if (this.hasVideoInformation()) {
-                    if (this.hasFileInformation()) {
-                      Blank().height(16)
-                    }
-
-                    Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-
-                    Column({ space: 16 }) {
-                      if (this.ui.videoInfo.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.videoInfo)
-                            .fontSize(12)
-                            .fontColor($r('app.color.text_1'))
-                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                        }.width('100%')
-                        .alignItems(HorizontalAlign.Start)
-                      }
-                      if (this.ui.audioInfo.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.audioInfo)
-                            .fontSize(12)
-                            .fontColor($r('app.color.text_1'))
-                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                        }.width('100%')
-                        .alignItems(HorizontalAlign.Start)
-                      }
-                      if (this.ui.subtitleInfo.trim().length > 0) {
-                        Column({ space: 10 }) {
-                          Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
-                          Text(this.ui.subtitleInfo)
-                            .fontSize(12)
-                            .fontColor($r('app.color.text_1'))
-                            .lineSpacing({ value: 4, unit: LengthUnit.VP })
-                        }.width('100%')
-                        .alignItems(HorizontalAlign.Start)
-                      }
-
-                      if (this.hasSelectedMediaStreams()) {
-                        Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
-                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-                        this.videoInfoSheetTrigger()
-                      }
-                    }
-                    .width('100%')
-                    .backgroundColor(this.detailInformationBackground())
-                    .borderRadius(12)
-                    .padding(12)
-                    .margin({ top: 12 })
-                  }
-                }.padding({ left: 16, right: 16 })
-                .alignItems(HorizontalAlign.Start)
-              }
-
-              if (this.ui.externalUrls.length) {
-                Blank().height(16)
-                Text('链接')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                  .padding({ left: 16, right: 16 })
-                Row({ space: 6 }) {
-                  ForEach(this.ui.externalUrls, (item: MediaExternalLink) => {
-                    Text(item.title)
-                      .fontSize(12)
-                      .fontColor($r('app.color.text_1'))
-                      .backgroundColor(this.detailInformationBackground())
-                      .borderRadius(4)
-                      .padding({
-                        left: 12,
-                        right: 12,
-                        top: 8,
-                        bottom: 8
-                      })
-                      .onClick(() => {
-                        this.vm.openExternalUrl(item.url)
-                      })
-                  })
-                }.margin({ top: 12 }).padding({ left: 16, right: 16 })
-              }
-              Blank().height(30 + this.vm.appUIState.safeBottom)
-
-              }.alignItems(HorizontalAlign.Start).padding({
-                top: this.useNativeSurface() ? 0 : 12
-              })
-              .width('100%')
-              .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
-              .align(Alignment.Top)
-            }
-            .width('100%')
-            .alignContent(Alignment.Top)
-
-          }.constraintSize({
-            minHeight: 850
-          })
-        }
-        .width('100%')
-        .height('100%')
-        .onScrollFrameBegin((offset: number, state: ScrollState) => {
-          const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
-          const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
-          if (imageHeightChange) {
-            return { offsetRemain: 0 };
-          }
-          return { offsetRemain: offset };
-        })
-        .scrollBar(BarState.Off)
-        .onDidScroll(() => {
-          let y = this.ui.scroller.currentOffset().yOffset
-          this.updateTitleCollapseProgress(y)
-          if (y === 0 && this.ui.currentScrollState === 1) {
-            this.vm.bannerSpringBack();
-          }
-          this.ui.blur = y / 10
-          if (y > 200) {
-            this.ui.showActionBar = true
-          } else {
-            this.ui.showActionBar = false
-          }
-        })
-      }
-
-      if (showLegacyActionBar) {
-        this.feiniuActionBar()
-      }
-    }
-    .backgroundColor(this.useNativeSurface() ? Color.Transparent : AppThemeSurfaceResolver.routeBackground(
-      this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
-    .alignContent(Alignment.Top)
+  private videoInfoSheetBuilder(blurFallback: boolean) {
+    VideoInfoSheetContent({
+      sections: this.ui.mediaInfoSections,
+      safeBottom: this.vm.appUIState.safeBottom,
+      blurFallback
+    })
   }
 
   build() {
-    AppRouteDestination({
-      title: '',
-      contentExtendsUnderTitleBar: true,
-      heroTitleChrome: true,
-      menus: this.navigationMenus(),
-      scrollControllers: [this.ui.scroller],
-      hasTitleBarStackBuilder: true,
-      titleBarStackBuilder: () => {
-        this.nativeCollapsedTitle()
-      },
-      contentBuilder: () => {
-        this.pageContent(false)
-      },
-      legacyContentBuilder: () => {
-        this.pageContent(true)
-      }
-    })
-  }
+    if (this.routeDestination.usesHdsDestination()) {
+      HdsNavDestination() {
+        Column() {
+          Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+          Stack() {
+            if (this.routeDestination.usesNativeChrome()) {
+              Stack() {
+                if (this.useNativeSurface() && !this.ui.firstLoading) {
+                  Stack() {
+                    if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                      Image(this.heroBackdropPixelMap)
+                        .width('100%')
+                        .height('100%')
+                        .objectFit(ImageFit.Cover)
+                        .scale({ x: 1.18, y: 1.18 })
+                        .blur(128)
+                        .opacity(0.95)
+                    } else {
+                      ImageKnifeComponent({
+                        imageKnifeOption: this.heroImageOption()
+                      })
+                        .width('100%')
+                        .height('100%')
+                        .scale({ x: 1.18, y: 1.18 })
+                        .blur(128)
+                        .opacity(0.95)
+                    }
 
-  @Builder
-  overviewSheetBuilder(blurFallback: boolean) {
-    Scroll() {
-      Text(this.ui.overview)
+                    Stack()
+                      .width('100%')
+                      .height('100%')
+                      .linearGradient({
+                        angle: 0,
+                        colors: [
+                          [$r('app.color.native_detail_page_overlay_soft'), 0],
+                          [$r('app.color.native_detail_page_overlay_soft'), 0.56],
+                          [$r('app.color.native_detail_page_overlay_strong'), 1]
+                        ]
+                      })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
+                  .hitTestBehavior(HitTestMode.None)
+                }
+
+                if (this.ui.firstLoading) {
+                  SkeletonDetailView()
+                } else {
+                  Scroll(this.ui.scroller) {
+                    Column() {
+                      Stack() {
+                        if (this.useNativeSurface()) {
+                          Stack() {
+                            if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                              Image(this.heroFeatheredPixelMap)
+                                .width('100%')
+                                .height('100%')
+                                .objectFit(ImageFit.Cover)
+                                .transition(TransitionEffect.OPACITY)
+                                .hitTestBehavior(HitTestMode.None)
+                            } else {
+                              ImageKnifeComponent({
+                                imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
+                              })
+                                .width('100%')
+                                .height('100%')
+                                .opacity(0)
+                                .hitTestBehavior(HitTestMode.None)
+                            }
+
+                            Stack()
+                              .width('100%')
+                              .height('100%')
+                              .linearGradient({
+                                angle: 0,
+                                colors: [
+                                  ['rgba(0, 0, 0, 0)', 0],
+                                  ['rgba(0, 0, 0, 0.08)', 0.24],
+                                  ['rgba(0, 0, 0, 0.26)', 0.64],
+                                  ['rgba(0, 0, 0, 0)', 1]
+                                ]
+                              })
+                          }
+                          .width('100%')
+                          .height('100%')
+                        } else {
+                          Column() {
+                            ImageKnifeComponent({
+                              imageKnifeOption: this.heroImageOption()
+                            }).width('100%')
+                              .height('100%')
+                              .blur(this.ui.blur)
+                          }
+                          .width('100%')
+                          .height('100%')
+                        }
+
+                        if (!this.useNativeSurface()) {
+                          Stack().width('100%')
+                            .height('100%')
+                            .linearGradient({
+                              angle: 0,
+                              colors: [
+                                ['rgba(26, 30, 35, 0.8)', 0],
+                                ['rgba(26, 30, 35, 0.6)', 0.3],
+                                ['rgba(26, 30, 35, 0.2)', 0.4],
+                                ['rgba(26, 30, 35, 0.1)', 1]
+                              ]
+                            })
+                        }
+
+                        if (this.useNativeSurface()) {
+                          Column({ space: 10 }) {
+                            if (this.ui.logo.length > 0) {
+                              Row() {
+                                ImageKnifeComponent({
+                                  imageKnifeOption: this.logoImageOption()
+                                })
+                                  .height(76)
+                                  .aspectRatio(80 / 31)
+                              }
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                              .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                              .translate({ x: this.heroLogoTranslateX(), y: this.heroLogoTranslateY() })
+                              .opacity(this.heroTitleOpacity())
+                            } else {
+                              Column({ space: 6 }) {
+                                if (this.ui.subtitle.length > 0) {
+                                  Text(this.ui.subtitle)
+                                    .fontSize(14)
+                                    .fontColor(Color.White)
+                                    .maxLines(1)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                }
+                                if (this.heroTitleUsesCalligraphy()) {
+                                  Text(this.ui.title)
+                                    .fontSize(68)
+                                    .minFontSize(34)
+                                    .maxFontSize(68)
+                                    .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
+                                    .fontFamily(HERO_TITLE_FONT_FAMILY)
+                                    .fontWeight(FontWeight.Normal)
+                                    .fontColor(Color.White)
+                                    .textShadow([
+                                      { radius: 10, color: 'rgba(0, 0, 0, 0.86)', offsetX: 0, offsetY: 3 },
+                                      { radius: 20, color: 'rgba(0, 90, 255, 0.26)', offsetX: 0, offsetY: 0 }
+                                    ])
+                                    .maxLines(2)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                    .textAlign(TextAlign.Center)
+                                    .width('100%')
+                                } else {
+                                  Text(this.ui.title)
+                                    .fontSize(38)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontColor(Color.White)
+                                    .textShadow({ radius: 10, color: 'rgba(0, 0, 0, 0.82)', offsetX: 0, offsetY: 3 })
+                                    .maxLines(2)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                    .textAlign(TextAlign.Center)
+                                    .width('100%')
+                                }
+                              }
+                              .width('100%')
+                              .alignItems(HorizontalAlign.Center)
+                              .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                              .translate({ x: this.heroTextTranslateX(), y: this.heroTitleTranslateY() })
+                              .opacity(this.heroTitleOpacity())
+                            }
+
+                            Column({ space: 4 }) {
+                              if (this.ui.score > 0 || this.ui.primaryInfo.length > 0) {
+                                Scroll() {
+                                  Text() {
+                                    if (this.ui.score > 0) {
+                                      Span(this.ui.score.toFixed(1) + '分')
+                                        .fontColor($r('app.color.text_score'))
+                                    }
+                                    if (this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                                      Span(' · ')
+                                    }
+                                    if (this.ui.primaryInfo.length > 0) {
+                                      Span(this.ui.primaryInfo)
+                                    }
+                                  }
+                                  .fontSize(13)
+                                  .fontColor(Color.White)
+                                  .maxLines(1)
+                                }
+                                .width('100%')
+                                .scrollable(ScrollDirection.Horizontal)
+                                .scrollBar(BarState.Off)
+                                .edgeEffect(EdgeEffect.None)
+                              }
+
+                              if (this.ui.secondaryInfo.length > 0) {
+                                Scroll() {
+                                  Text(this.ui.secondaryInfo)
+                                    .fontSize(13)
+                                    .fontColor(Color.White)
+                                    .maxLines(1)
+                                }
+                                .width('100%')
+                                .scrollable(ScrollDirection.Horizontal)
+                                .scrollBar(BarState.Off)
+                                .edgeEffect(EdgeEffect.None)
+                              }
+                            }
+                            .width('100%')
+                            .alignItems(HorizontalAlign.Start)
+
+                            if (!this.ui.isTvShows && this.ui.playbackSources.length > 0) {
+                              Row({ space: 14 }) {
+                                ForEach(this.vm.getTags(), (item: string) => {
+                                  Image(item)
+                                    .height(21)
+                                    .colorFilter(this.heroTagColorFilter)
+                                })
+                              }
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                            }
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16, bottom: 8 })
+                          .alignItems(HorizontalAlign.Start)
+                        } else if (this.ui.logo.length > 0) {
+                          ImageKnifeComponent({
+                            imageKnifeOption: this.logoImageOption()
+                          })
+                            .height(80)
+                            .aspectRatio(80 / 31) // 刮削的logo都是800x310
+                            .margin({ bottom: 18, left: 16 })
+                        } else {
+                          Column({ space: 12 }) {
+                            Text(this.ui.subtitle)
+                              .fontSize(14)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                              .ellipsisMode(EllipsisMode.END)
+                              .textOverflow({
+                                overflow: TextOverflow.Ellipsis
+                              })
+                              .textAlign(TextAlign.Center)
+                            Text(this.ui.title)
+                              .fontSize(26)
+                              .fontWeight(FontWeight.Medium)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                              .ellipsisMode(EllipsisMode.END)
+                              .textOverflow({
+                                overflow: TextOverflow.Ellipsis
+                              })
+                              .textAlign(TextAlign.Center)
+                          }
+                          .padding(16)
+                          .alignItems(HorizontalAlign.Start)
+                        }
+                      }.width('100%')
+                      .height(this.ui.imageHeight)
+                      .alignContent(Alignment.BottomStart)
+
+                      Stack() {
+                        Column() {
+                        if (!this.useNativeSurface()) {
+                          Column({ space: 4 }) {
+                            if ((!this.ui.isTvShows && this.ui.score > 0) || this.ui.primaryInfo.length > 0) {
+                              Text() {
+                                if (!this.ui.isTvShows && this.ui.score > 0) {
+                                  Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                                }
+                                if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                                  Span(' · ')
+                                }
+                                if (this.ui.primaryInfo.length > 0) {
+                                  Span(this.ui.primaryInfo)
+                                }
+                              }
+                              .fontSize(12)
+                              .fontColor($r('app.color.text_1'))
+                              .width('100%')
+                              .textAlign(TextAlign.Start)
+                            }
+
+                            if (this.ui.secondaryInfo.length > 0) {
+                              Text(this.ui.secondaryInfo)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .width('100%')
+                                .textAlign(TextAlign.Start)
+                            }
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                          .alignItems(HorizontalAlign.Start)
+                        }
+
+                        if (!this.useNativeSurface() && !this.ui.isTvShows &&
+                          this.ui.selectedMediaSourceIndex >= 0 &&
+                          this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                          Blank().height(10)
+                          Row({ space: 16 }) {
+                            ForEach(this.vm.getTags(), (item: string) => {
+                              Image(item)
+                                .height(22)
+                                .colorFilter(this.ui.colorFilter)
+                            })
+                          }.padding({ left: 16, right: 16 })
+                        }
+
+                        Blank().height(16)
+                        if (this.useNativeSurface()) {
+                          Row({ space: 8 }) {
+                            NativeDetailPlayAction({
+                              label: this.ui.playButtonText,
+                              remainingTime: this.ui.remainingTime,
+                              progress: this.ui.percentageWatched,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.playCurrent()
+                              }
+                            })
+                              .layoutWeight(1)
+
+                            NativeDetailIconAction({
+                              icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
+                              buttonSize: 44,
+                              selectedColor: $r('app.color.main_red_color'),
+                              preserveOriginalColor: this.ui.isFavorite,
+                              accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
+                              selected: this.ui.isFavorite,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.changeFavorite()
+                              }
+                            })
+                            NativeDetailIconAction({
+                              icon: $r('app.media.ic_check'),
+                              buttonSize: 44,
+                              accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+                              selected: this.ui.played,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.changePlayedState()
+                              }
+                            })
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        } else {
+                          Row({ space: 8 }) {
+                            Button() {
+                              Row() {
+                                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                                Text(this.ui.playButtonText)
+                                  .fontSize(16)
+                                  .fontColor(Color.White)
+                                  .fontWeight(FontWeight.Medium)
+                                  .maxLines(1)
+                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              }
+                              .padding({ left: 18, right: 18 })
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                            }
+                            .height(50)
+                            .layoutWeight(1)
+                            .margin({ right: 12 })
+                            .borderRadius(25)
+                            .onClick(() => {
+                              this.vm.playCurrent()
+                            })
+
+                            Button() {
+                              Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                                .fillColor($r('app.color.text_1'))
+                                .width(this.ui.isTvShows ? 20 : 22)
+                                .height(this.ui.isTvShows ? 20 : 22)
+                            }
+                            .width(this.ui.isTvShows ? 44 : 50)
+                            .height(this.ui.isTvShows ? 44 : 50)
+                            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                            .borderColor(AppThemeSurfaceResolver.contentOutline(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            .borderRadius(this.ui.isTvShows ? 22 : 25)
+                            .backgroundColor(this.secondarySurfaceBackground())
+                            .onClick(() => {
+                              this.vm.changeFavorite()
+                            })
+
+                            Button() {
+                              Image($r('app.media.ic_check'))
+                                .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+                                .width(this.ui.isTvShows ? 20 : 22)
+                                .height(this.ui.isTvShows ? 20 : 22)
+                            }
+                            .width(this.ui.isTvShows ? 44 : 50)
+                            .height(this.ui.isTvShows ? 44 : 50)
+                            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                            .borderColor(AppThemeSurfaceResolver.contentOutline(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            .borderRadius(this.ui.isTvShows ? 22 : 25)
+                            .backgroundColor(this.secondarySurfaceBackground())
+                            .onClick(() => {
+                              this.vm.changePlayedState()
+                            })
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        }
+
+
+                        // TextExpandView({
+                        //   textSectionAttribute: this.textSectionAttribute,
+                        //   lastSpanAttribute: new LastSpanAttribute(0, 2,
+                        //     this.handleContent(), 16,
+                        //     $r('app.color.text_expand_selected_tab_name'))
+                        // }).id(`textClick${this.index}`)
+                        if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+                          this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                          Blank().height(16)
+                          Row() {
+                            if (this.ui.playbackSources.length > 1) {
+                              MediaSourceSelector({
+                                sources: this.ui.playbackSources,
+                                selectedIndex: this.ui.selectedMediaSourceIndex,
+                                onSelect: (index: number) => {
+                                  this.vm.selectMediaSource(index)
+                                }
+                              })
+                                .layoutWeight(1)
+                            }
+                            AudioSubtitleSelector({
+                              subtitleOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].subtitleOptions,
+                              audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
+                              selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
+                              selectedAudioIndex: this.ui.selectedAudioOptionIndex,
+                              selectedSubtitleLabel: this.ui.selectedSubtitleOptionLabel,
+                              selectedAudioLabel: this.ui.selectedAudioOptionLabel,
+                              triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
+                              onSelectSubtitle: (index: number) => {
+                                this.vm.selectSubtitleOption(index)
+                              },
+                              onSelectAudio: (index: number) => {
+                                this.vm.selectAudioOption(index)
+                              }
+                            })
+                              .layoutWeight(this.ui.playbackSources.length > 1 ? 2 : 1)
+                          }
+                          .width('calc(100% - 24vp)')
+                          .height(32)
+                          .alignSelf(ItemAlign.Center)
+                        }
+                        if (this.ui.overview.length > 0) {
+                          Blank().height(28)
+                          if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(true), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              backgroundColor: Color.Transparent
+                            })
+                          } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              backgroundColor: Color.Transparent,
+                              systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                            })
+                          } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                            })
+                          } else {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' }
+                            })
+                          }
+                          Blank().height(12)
+                        }
+
+                        if (this.ui.isTvShows) {
+                          if (this.ui.seasons.length > 1) {
+                            Blank().height(20)
+                            Text(`共${this.ui.seasons.length}季`)
+                              .fontSize(15)
+                              .fontWeight(FontWeight.Medium)
+                              .fontColor($r('app.color.text_primary')).padding({ left: 16, right: 16 })
+                          }
+                          Blank().height(20)
+                          Grid() {
+                            ForEach(this.ui.seasons, (item: VideoItem) => {
+                              GridItem() {
+                                VideoCard({
+                                  item: item,
+                                  textAlign: TextAlign.Center,
+                                  onOpen: () => {
+                                    HMRouterMgr.to(RouterConsts.SeasonDetailPage)
+                                      .withParam({
+                                        id: item.id,
+                                        ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
+                                        mediaName: this.ui.mediaName,
+                                        seasons: this.ui.seasons,
+                                        info: this.ui.info,
+                                        parentId: this.ui.id,
+                                        seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
+                                      })
+                                      .push()
+                                  }
+                                })
+                              }
+                            })
+                          }
+                          .columnsTemplate('1fr 1fr 1fr')
+                          .columnsGap(8)
+                          .rowsGap(20)
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        }
+                        if (this.ui.people.length > 0) {
+                          Blank().height(16)
+                          CastView({
+                            peopleList: this.ui.people
+                          })
+                        }
+                        if (!this.ui.isTvShows && (this.hasFileInformation() || this.hasVideoInformation())) {
+                          Column() {
+                            Blank().height(16)
+
+                            if (this.hasFileInformation()) {
+                              Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                              Column({ space: 16 }) {
+                                if (this.ui.path.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.size.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.createDate.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件创建日期').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.addedDate.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('添加日期').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.addedDate).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                              }
+                              .width('100%')
+                              .backgroundColor(this.detailInformationBackground())
+                              .borderRadius(12)
+                              .padding(12)
+                              .alignItems(HorizontalAlign.Start)
+                              .margin({ top: 12 })
+                            }
+
+                            if (this.hasVideoInformation()) {
+                              if (this.hasFileInformation()) {
+                                Blank().height(16)
+                              }
+
+                              Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                              Column({ space: 16 }) {
+                                if (this.ui.videoInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.videoInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.audioInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.audioInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.subtitleInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.subtitleInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+
+                                if (this.hasSelectedMediaStreams()) {
+                                  Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
+                                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                                  if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(true), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      backgroundColor: Color.Transparent
+                                    })
+                                  } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      backgroundColor: Color.Transparent,
+                                      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                                    })
+                                  } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                                    })
+                                  } else {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' }
+                                    })
+                                  }
+                                }
+                              }
+                              .width('100%')
+                              .backgroundColor(this.detailInformationBackground())
+                              .borderRadius(12)
+                              .padding(12)
+                              .margin({ top: 12 })
+                            }
+                          }.padding({ left: 16, right: 16 })
+                          .alignItems(HorizontalAlign.Start)
+                        }
+
+                        if (this.ui.externalUrls.length) {
+                          Blank().height(16)
+                          Text('链接')
+                            .fontSize(15)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor($r('app.color.text_primary'))
+                            .padding({ left: 16, right: 16 })
+                          Row({ space: 6 }) {
+                            ForEach(this.ui.externalUrls, (item: MediaExternalLink) => {
+                              Text(item.title)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .backgroundColor(this.detailInformationBackground())
+                                .borderRadius(4)
+                                .padding({
+                                  left: 12,
+                                  right: 12,
+                                  top: 8,
+                                  bottom: 8
+                                })
+                                .onClick(() => {
+                                  this.vm.openExternalUrl(item.url)
+                                })
+                            })
+                          }.margin({ top: 12 }).padding({ left: 16, right: 16 })
+                        }
+                        Blank().height(30 + this.vm.appUIState.safeBottom)
+
+                        }.alignItems(HorizontalAlign.Start).padding({
+                          top: this.useNativeSurface() ? 0 : 12
+                        })
+                        .width('100%')
+                        .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+                        .align(Alignment.Top)
+                      }
+                      .width('100%')
+                      .alignContent(Alignment.Top)
+
+                    }.constraintSize({
+                      minHeight: 850
+                    })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .onScrollFrameBegin((offset: number, state: ScrollState) => {
+                    const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
+                    const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
+                    if (imageHeightChange) {
+                      return { offsetRemain: 0 };
+                    }
+                    return { offsetRemain: offset };
+                  })
+                  .scrollBar(BarState.Off)
+                  .onDidScroll(() => {
+                    let y = this.ui.scroller.currentOffset().yOffset
+                    this.updateTitleCollapseProgress(y)
+                    if (y === 0 && this.ui.currentScrollState === 1) {
+                      this.vm.bannerSpringBack();
+                    }
+                    this.ui.blur = y / 10
+                    if (y > 200) {
+                      this.ui.showActionBar = true
+                    } else {
+                      this.ui.showActionBar = false
+                    }
+                  })
+                }
+
+                if ((false)) {
+                  ActionBar({
+                    title: this.ui.showActionBar ? this.ui.title : ''
+                  })
+                    .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
+                }
+              }
+              .backgroundColor(this.useNativeSurface() ? Color.Transparent : AppThemeSurfaceResolver.routeBackground(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+              .alignContent(Alignment.Top)
+            } else {
+              Stack() {
+                if (this.useNativeSurface() && !this.ui.firstLoading) {
+                  Stack() {
+                    if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                      Image(this.heroBackdropPixelMap)
+                        .width('100%')
+                        .height('100%')
+                        .objectFit(ImageFit.Cover)
+                        .scale({ x: 1.18, y: 1.18 })
+                        .blur(128)
+                        .opacity(0.95)
+                    } else {
+                      ImageKnifeComponent({
+                        imageKnifeOption: this.heroImageOption()
+                      })
+                        .width('100%')
+                        .height('100%')
+                        .scale({ x: 1.18, y: 1.18 })
+                        .blur(128)
+                        .opacity(0.95)
+                    }
+
+                    Stack()
+                      .width('100%')
+                      .height('100%')
+                      .linearGradient({
+                        angle: 0,
+                        colors: [
+                          [$r('app.color.native_detail_page_overlay_soft'), 0],
+                          [$r('app.color.native_detail_page_overlay_soft'), 0.56],
+                          [$r('app.color.native_detail_page_overlay_strong'), 1]
+                        ]
+                      })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
+                  .hitTestBehavior(HitTestMode.None)
+                }
+
+                if (this.ui.firstLoading) {
+                  SkeletonDetailView()
+                } else {
+                  Scroll(this.ui.scroller) {
+                    Column() {
+                      Stack() {
+                        if (this.useNativeSurface()) {
+                          Stack() {
+                            if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                              Image(this.heroFeatheredPixelMap)
+                                .width('100%')
+                                .height('100%')
+                                .objectFit(ImageFit.Cover)
+                                .transition(TransitionEffect.OPACITY)
+                                .hitTestBehavior(HitTestMode.None)
+                            } else {
+                              ImageKnifeComponent({
+                                imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
+                              })
+                                .width('100%')
+                                .height('100%')
+                                .opacity(0)
+                                .hitTestBehavior(HitTestMode.None)
+                            }
+
+                            Stack()
+                              .width('100%')
+                              .height('100%')
+                              .linearGradient({
+                                angle: 0,
+                                colors: [
+                                  ['rgba(0, 0, 0, 0)', 0],
+                                  ['rgba(0, 0, 0, 0.08)', 0.24],
+                                  ['rgba(0, 0, 0, 0.26)', 0.64],
+                                  ['rgba(0, 0, 0, 0)', 1]
+                                ]
+                              })
+                          }
+                          .width('100%')
+                          .height('100%')
+                        } else {
+                          Column() {
+                            ImageKnifeComponent({
+                              imageKnifeOption: this.heroImageOption()
+                            }).width('100%')
+                              .height('100%')
+                              .blur(this.ui.blur)
+                          }
+                          .width('100%')
+                          .height('100%')
+                        }
+
+                        if (!this.useNativeSurface()) {
+                          Stack().width('100%')
+                            .height('100%')
+                            .linearGradient({
+                              angle: 0,
+                              colors: [
+                                ['rgba(26, 30, 35, 0.8)', 0],
+                                ['rgba(26, 30, 35, 0.6)', 0.3],
+                                ['rgba(26, 30, 35, 0.2)', 0.4],
+                                ['rgba(26, 30, 35, 0.1)', 1]
+                              ]
+                            })
+                        }
+
+                        if (this.useNativeSurface()) {
+                          Column({ space: 10 }) {
+                            if (this.ui.logo.length > 0) {
+                              Row() {
+                                ImageKnifeComponent({
+                                  imageKnifeOption: this.logoImageOption()
+                                })
+                                  .height(76)
+                                  .aspectRatio(80 / 31)
+                              }
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                              .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                              .translate({ x: this.heroLogoTranslateX(), y: this.heroLogoTranslateY() })
+                              .opacity(this.heroTitleOpacity())
+                            } else {
+                              Column({ space: 6 }) {
+                                if (this.ui.subtitle.length > 0) {
+                                  Text(this.ui.subtitle)
+                                    .fontSize(14)
+                                    .fontColor(Color.White)
+                                    .maxLines(1)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                }
+                                if (this.heroTitleUsesCalligraphy()) {
+                                  Text(this.ui.title)
+                                    .fontSize(68)
+                                    .minFontSize(34)
+                                    .maxFontSize(68)
+                                    .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
+                                    .fontFamily(HERO_TITLE_FONT_FAMILY)
+                                    .fontWeight(FontWeight.Normal)
+                                    .fontColor(Color.White)
+                                    .textShadow([
+                                      { radius: 10, color: 'rgba(0, 0, 0, 0.86)', offsetX: 0, offsetY: 3 },
+                                      { radius: 20, color: 'rgba(0, 90, 255, 0.26)', offsetX: 0, offsetY: 0 }
+                                    ])
+                                    .maxLines(2)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                    .textAlign(TextAlign.Center)
+                                    .width('100%')
+                                } else {
+                                  Text(this.ui.title)
+                                    .fontSize(38)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontColor(Color.White)
+                                    .textShadow({ radius: 10, color: 'rgba(0, 0, 0, 0.82)', offsetX: 0, offsetY: 3 })
+                                    .maxLines(2)
+                                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                    .textAlign(TextAlign.Center)
+                                    .width('100%')
+                                }
+                              }
+                              .width('100%')
+                              .alignItems(HorizontalAlign.Center)
+                              .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                              .translate({ x: this.heroTextTranslateX(), y: this.heroTitleTranslateY() })
+                              .opacity(this.heroTitleOpacity())
+                            }
+
+                            Column({ space: 4 }) {
+                              if (this.ui.score > 0 || this.ui.primaryInfo.length > 0) {
+                                Scroll() {
+                                  Text() {
+                                    if (this.ui.score > 0) {
+                                      Span(this.ui.score.toFixed(1) + '分')
+                                        .fontColor($r('app.color.text_score'))
+                                    }
+                                    if (this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                                      Span(' · ')
+                                    }
+                                    if (this.ui.primaryInfo.length > 0) {
+                                      Span(this.ui.primaryInfo)
+                                    }
+                                  }
+                                  .fontSize(13)
+                                  .fontColor(Color.White)
+                                  .maxLines(1)
+                                }
+                                .width('100%')
+                                .scrollable(ScrollDirection.Horizontal)
+                                .scrollBar(BarState.Off)
+                                .edgeEffect(EdgeEffect.None)
+                              }
+
+                              if (this.ui.secondaryInfo.length > 0) {
+                                Scroll() {
+                                  Text(this.ui.secondaryInfo)
+                                    .fontSize(13)
+                                    .fontColor(Color.White)
+                                    .maxLines(1)
+                                }
+                                .width('100%')
+                                .scrollable(ScrollDirection.Horizontal)
+                                .scrollBar(BarState.Off)
+                                .edgeEffect(EdgeEffect.None)
+                              }
+                            }
+                            .width('100%')
+                            .alignItems(HorizontalAlign.Start)
+
+                            if (!this.ui.isTvShows && this.ui.playbackSources.length > 0) {
+                              Row({ space: 14 }) {
+                                ForEach(this.vm.getTags(), (item: string) => {
+                                  Image(item)
+                                    .height(21)
+                                    .colorFilter(this.heroTagColorFilter)
+                                })
+                              }
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                            }
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16, bottom: 8 })
+                          .alignItems(HorizontalAlign.Start)
+                        } else if (this.ui.logo.length > 0) {
+                          ImageKnifeComponent({
+                            imageKnifeOption: this.logoImageOption()
+                          })
+                            .height(80)
+                            .aspectRatio(80 / 31) // 刮削的logo都是800x310
+                            .margin({ bottom: 18, left: 16 })
+                        } else {
+                          Column({ space: 12 }) {
+                            Text(this.ui.subtitle)
+                              .fontSize(14)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                              .ellipsisMode(EllipsisMode.END)
+                              .textOverflow({
+                                overflow: TextOverflow.Ellipsis
+                              })
+                              .textAlign(TextAlign.Center)
+                            Text(this.ui.title)
+                              .fontSize(26)
+                              .fontWeight(FontWeight.Medium)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                              .ellipsisMode(EllipsisMode.END)
+                              .textOverflow({
+                                overflow: TextOverflow.Ellipsis
+                              })
+                              .textAlign(TextAlign.Center)
+                          }
+                          .padding(16)
+                          .alignItems(HorizontalAlign.Start)
+                        }
+                      }.width('100%')
+                      .height(this.ui.imageHeight)
+                      .alignContent(Alignment.BottomStart)
+
+                      Stack() {
+                        Column() {
+                        if (!this.useNativeSurface()) {
+                          Column({ space: 4 }) {
+                            if ((!this.ui.isTvShows && this.ui.score > 0) || this.ui.primaryInfo.length > 0) {
+                              Text() {
+                                if (!this.ui.isTvShows && this.ui.score > 0) {
+                                  Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                                }
+                                if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                                  Span(' · ')
+                                }
+                                if (this.ui.primaryInfo.length > 0) {
+                                  Span(this.ui.primaryInfo)
+                                }
+                              }
+                              .fontSize(12)
+                              .fontColor($r('app.color.text_1'))
+                              .width('100%')
+                              .textAlign(TextAlign.Start)
+                            }
+
+                            if (this.ui.secondaryInfo.length > 0) {
+                              Text(this.ui.secondaryInfo)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .width('100%')
+                                .textAlign(TextAlign.Start)
+                            }
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                          .alignItems(HorizontalAlign.Start)
+                        }
+
+                        if (!this.useNativeSurface() && !this.ui.isTvShows &&
+                          this.ui.selectedMediaSourceIndex >= 0 &&
+                          this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                          Blank().height(10)
+                          Row({ space: 16 }) {
+                            ForEach(this.vm.getTags(), (item: string) => {
+                              Image(item)
+                                .height(22)
+                                .colorFilter(this.ui.colorFilter)
+                            })
+                          }.padding({ left: 16, right: 16 })
+                        }
+
+                        Blank().height(16)
+                        if (this.useNativeSurface()) {
+                          Row({ space: 8 }) {
+                            NativeDetailPlayAction({
+                              label: this.ui.playButtonText,
+                              remainingTime: this.ui.remainingTime,
+                              progress: this.ui.percentageWatched,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.playCurrent()
+                              }
+                            })
+                              .layoutWeight(1)
+
+                            NativeDetailIconAction({
+                              icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
+                              buttonSize: 44,
+                              selectedColor: $r('app.color.main_red_color'),
+                              preserveOriginalColor: this.ui.isFavorite,
+                              accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
+                              selected: this.ui.isFavorite,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.changeFavorite()
+                              }
+                            })
+                            NativeDetailIconAction({
+                              icon: $r('app.media.ic_check'),
+                              buttonSize: 44,
+                              accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+                              selected: this.ui.played,
+                              systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                              onAction: () => {
+                                this.vm.changePlayedState()
+                              }
+                            })
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        } else {
+                          Row({ space: 8 }) {
+                            Button() {
+                              Row() {
+                                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                                Text(this.ui.playButtonText)
+                                  .fontSize(16)
+                                  .fontColor(Color.White)
+                                  .fontWeight(FontWeight.Medium)
+                                  .maxLines(1)
+                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              }
+                              .padding({ left: 18, right: 18 })
+                              .width('100%')
+                              .justifyContent(FlexAlign.Center)
+                            }
+                            .height(50)
+                            .layoutWeight(1)
+                            .margin({ right: 12 })
+                            .borderRadius(25)
+                            .onClick(() => {
+                              this.vm.playCurrent()
+                            })
+
+                            Button() {
+                              Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                                .fillColor($r('app.color.text_1'))
+                                .width(this.ui.isTvShows ? 20 : 22)
+                                .height(this.ui.isTvShows ? 20 : 22)
+                            }
+                            .width(this.ui.isTvShows ? 44 : 50)
+                            .height(this.ui.isTvShows ? 44 : 50)
+                            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                            .borderColor(AppThemeSurfaceResolver.contentOutline(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            .borderRadius(this.ui.isTvShows ? 22 : 25)
+                            .backgroundColor(this.secondarySurfaceBackground())
+                            .onClick(() => {
+                              this.vm.changeFavorite()
+                            })
+
+                            Button() {
+                              Image($r('app.media.ic_check'))
+                                .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+                                .width(this.ui.isTvShows ? 20 : 22)
+                                .height(this.ui.isTvShows ? 20 : 22)
+                            }
+                            .width(this.ui.isTvShows ? 44 : 50)
+                            .height(this.ui.isTvShows ? 44 : 50)
+                            .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                            .borderColor(AppThemeSurfaceResolver.contentOutline(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            .borderRadius(this.ui.isTvShows ? 22 : 25)
+                            .backgroundColor(this.secondarySurfaceBackground())
+                            .onClick(() => {
+                              this.vm.changePlayedState()
+                            })
+                          }
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        }
+
+
+                        // TextExpandView({
+                        //   textSectionAttribute: this.textSectionAttribute,
+                        //   lastSpanAttribute: new LastSpanAttribute(0, 2,
+                        //     this.handleContent(), 16,
+                        //     $r('app.color.text_expand_selected_tab_name'))
+                        // }).id(`textClick${this.index}`)
+                        if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+                          this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                          Blank().height(16)
+                          Row() {
+                            if (this.ui.playbackSources.length > 1) {
+                              MediaSourceSelector({
+                                sources: this.ui.playbackSources,
+                                selectedIndex: this.ui.selectedMediaSourceIndex,
+                                onSelect: (index: number) => {
+                                  this.vm.selectMediaSource(index)
+                                }
+                              })
+                                .layoutWeight(1)
+                            }
+                            AudioSubtitleSelector({
+                              subtitleOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].subtitleOptions,
+                              audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
+                              selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
+                              selectedAudioIndex: this.ui.selectedAudioOptionIndex,
+                              selectedSubtitleLabel: this.ui.selectedSubtitleOptionLabel,
+                              selectedAudioLabel: this.ui.selectedAudioOptionLabel,
+                              triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
+                              onSelectSubtitle: (index: number) => {
+                                this.vm.selectSubtitleOption(index)
+                              },
+                              onSelectAudio: (index: number) => {
+                                this.vm.selectAudioOption(index)
+                              }
+                            })
+                              .layoutWeight(this.ui.playbackSources.length > 1 ? 2 : 1)
+                          }
+                          .width('calc(100% - 24vp)')
+                          .height(32)
+                          .alignSelf(ItemAlign.Center)
+                        }
+                        if (this.ui.overview.length > 0) {
+                          Blank().height(28)
+                          if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(true), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              backgroundColor: Color.Transparent
+                            })
+                          } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              backgroundColor: Color.Transparent,
+                              systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                            })
+                          } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' },
+                              systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                            })
+                          } else {
+                            Row() {
+                              TextExpandView({
+                                text: this.ui.overview,
+                                onMoreClick: () => {
+                                  this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                                },
+                                lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                              })
+                            }
+                            .width('100%')
+                            .padding({ left: 16, right: 16 })
+                            .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                              height: 420,
+                              preferType: SheetType.BOTTOM,
+                              title: { title: '简介' }
+                            })
+                          }
+                          Blank().height(12)
+                        }
+
+                        if (this.ui.isTvShows) {
+                          if (this.ui.seasons.length > 1) {
+                            Blank().height(20)
+                            Text(`共${this.ui.seasons.length}季`)
+                              .fontSize(15)
+                              .fontWeight(FontWeight.Medium)
+                              .fontColor($r('app.color.text_primary')).padding({ left: 16, right: 16 })
+                          }
+                          Blank().height(20)
+                          Grid() {
+                            ForEach(this.ui.seasons, (item: VideoItem) => {
+                              GridItem() {
+                                VideoCard({
+                                  item: item,
+                                  textAlign: TextAlign.Center,
+                                  onOpen: () => {
+                                    HMRouterMgr.to(RouterConsts.SeasonDetailPage)
+                                      .withParam({
+                                        id: item.id,
+                                        ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
+                                        mediaName: this.ui.mediaName,
+                                        seasons: this.ui.seasons,
+                                        info: this.ui.info,
+                                        parentId: this.ui.id,
+                                        seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
+                                      })
+                                      .push()
+                                  }
+                                })
+                              }
+                            })
+                          }
+                          .columnsTemplate('1fr 1fr 1fr')
+                          .columnsGap(8)
+                          .rowsGap(20)
+                          .width('100%')
+                          .padding({ left: 16, right: 16 })
+                        }
+                        if (this.ui.people.length > 0) {
+                          Blank().height(16)
+                          CastView({
+                            peopleList: this.ui.people
+                          })
+                        }
+                        if (!this.ui.isTvShows && (this.hasFileInformation() || this.hasVideoInformation())) {
+                          Column() {
+                            Blank().height(16)
+
+                            if (this.hasFileInformation()) {
+                              Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                              Column({ space: 16 }) {
+                                if (this.ui.path.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.size.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.createDate.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('文件创建日期').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.addedDate.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('添加日期').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.addedDate).fontSize(12).fontColor($r('app.color.text_1'))
+                                  }.width('100%').alignItems(HorizontalAlign.Start)
+                                }
+                              }
+                              .width('100%')
+                              .backgroundColor(this.detailInformationBackground())
+                              .borderRadius(12)
+                              .padding(12)
+                              .alignItems(HorizontalAlign.Start)
+                              .margin({ top: 12 })
+                            }
+
+                            if (this.hasVideoInformation()) {
+                              if (this.hasFileInformation()) {
+                                Blank().height(16)
+                              }
+
+                              Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                              Column({ space: 16 }) {
+                                if (this.ui.videoInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.videoInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.audioInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.audioInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+                                if (this.ui.subtitleInfo.trim().length > 0) {
+                                  Column({ space: 10 }) {
+                                    Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
+                                    Text(this.ui.subtitleInfo)
+                                      .fontSize(12)
+                                      .fontColor($r('app.color.text_1'))
+                                      .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                                  }.width('100%')
+                                  .alignItems(HorizontalAlign.Start)
+                                }
+
+                                if (this.hasSelectedMediaStreams()) {
+                                  Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
+                                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                                  if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(true), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      backgroundColor: Color.Transparent
+                                    })
+                                  } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      backgroundColor: Color.Transparent,
+                                      systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                                    })
+                                  } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' },
+                                      systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                                    })
+                                  } else {
+                                    Row({ space: 10 }) {
+                                      Text('查看全部')
+                                        .fontColor($r('app.color.text_1'))
+                                        .fontSize(12)
+                                        .fontWeight(FontWeight.Medium)
+                                        .layoutWeight(1)
+                                      SymbolGlyph($r('sys.symbol.chevron_right'))
+                                        .fontSize(16)
+                                        .fontColor([$r('app.color.text_1')])
+                                        .fontWeight(FontWeight.Bold)
+                                    }
+                                    .width('100%')
+                                    .padding({ top: 4, left: 4, bottom: 8 })
+                                    .onClick(() => {
+                                      this.ui.isShowVideoInfoSheet = true
+                                    })
+                                    .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                      height: '70%',
+                                      preferType: SheetType.BOTTOM,
+                                      title: { title: '文件媒体信息' }
+                                    })
+                                  }
+                                }
+                              }
+                              .width('100%')
+                              .backgroundColor(this.detailInformationBackground())
+                              .borderRadius(12)
+                              .padding(12)
+                              .margin({ top: 12 })
+                            }
+                          }.padding({ left: 16, right: 16 })
+                          .alignItems(HorizontalAlign.Start)
+                        }
+
+                        if (this.ui.externalUrls.length) {
+                          Blank().height(16)
+                          Text('链接')
+                            .fontSize(15)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor($r('app.color.text_primary'))
+                            .padding({ left: 16, right: 16 })
+                          Row({ space: 6 }) {
+                            ForEach(this.ui.externalUrls, (item: MediaExternalLink) => {
+                              Text(item.title)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .backgroundColor(this.detailInformationBackground())
+                                .borderRadius(4)
+                                .padding({
+                                  left: 12,
+                                  right: 12,
+                                  top: 8,
+                                  bottom: 8
+                                })
+                                .onClick(() => {
+                                  this.vm.openExternalUrl(item.url)
+                                })
+                            })
+                          }.margin({ top: 12 }).padding({ left: 16, right: 16 })
+                        }
+                        Blank().height(30 + this.vm.appUIState.safeBottom)
+
+                        }.alignItems(HorizontalAlign.Start).padding({
+                          top: this.useNativeSurface() ? 0 : 12
+                        })
+                        .width('100%')
+                        .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+                        .align(Alignment.Top)
+                      }
+                      .width('100%')
+                      .alignContent(Alignment.Top)
+
+                    }.constraintSize({
+                      minHeight: 850
+                    })
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .onScrollFrameBegin((offset: number, state: ScrollState) => {
+                    const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
+                    const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
+                    if (imageHeightChange) {
+                      return { offsetRemain: 0 };
+                    }
+                    return { offsetRemain: offset };
+                  })
+                  .scrollBar(BarState.Off)
+                  .onDidScroll(() => {
+                    let y = this.ui.scroller.currentOffset().yOffset
+                    this.updateTitleCollapseProgress(y)
+                    if (y === 0 && this.ui.currentScrollState === 1) {
+                      this.vm.bannerSpringBack();
+                    }
+                    this.ui.blur = y / 10
+                    if (y > 200) {
+                      this.ui.showActionBar = true
+                    } else {
+                      this.ui.showActionBar = false
+                    }
+                  })
+                }
+
+                if ((true)) {
+                  ActionBar({
+                    title: this.ui.showActionBar ? this.ui.title : ''
+                  })
+                    .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
+                }
+              }
+              .backgroundColor(this.useNativeSurface() ? Color.Transparent : AppThemeSurfaceResolver.routeBackground(
+                this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+              .alignContent(Alignment.Top)
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        }
         .width('100%')
-        .fontColor($r('app.color.text_1'))
-        .fontSize(14)
-        .textAlign(TextAlign.Start)
-        .lineSpacing({
-          value: 6,
-          unit: LengthUnit.VP
-        })
+        .height('100%')
+      }
+      .backgroundColor(this.routeDestination.hdsBackgroundColor())
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+      .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+      .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+      .hideToolBar(true)
+      .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+      .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+      .onAppear(() => this.routeDestination.helper.onAppear())
+      .onWillShow(() => this.routeDestination.helper.onWillShow())
+      .onShown(() => this.routeDestination.helper.onShown())
+      .onWillHide(() => this.routeDestination.helper.onWillHide())
+      .onHidden(() => this.routeDestination.helper.onHidden())
+      .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+      .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+      .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+      .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+      .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+      .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+      .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+      .ignoreLayoutSafeArea(
+        this.routeDestination.nativeSafeAreaTypes(),
+        this.routeDestination.nativeSafeAreaEdges()
+      )
+      .width('100%')
+      .height('100%')
+    } else {
+      NavDestination() {
+        Stack() {
+          if (this.useNativeSurface() && !this.ui.firstLoading) {
+            Stack() {
+              if (this.heroBackdropPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                Image(this.heroBackdropPixelMap)
+                  .width('100%')
+                  .height('100%')
+                  .objectFit(ImageFit.Cover)
+                  .scale({ x: 1.18, y: 1.18 })
+                  .blur(128)
+                  .opacity(0.95)
+              } else {
+                ImageKnifeComponent({
+                  imageKnifeOption: this.heroImageOption()
+                })
+                  .width('100%')
+                  .height('100%')
+                  .scale({ x: 1.18, y: 1.18 })
+                  .blur(128)
+                  .opacity(0.95)
+              }
+
+              Stack()
+                .width('100%')
+                .height('100%')
+                .linearGradient({
+                  angle: 0,
+                  colors: [
+                    [$r('app.color.native_detail_page_overlay_soft'), 0],
+                    [$r('app.color.native_detail_page_overlay_soft'), 0.56],
+                    [$r('app.color.native_detail_page_overlay_strong'), 1]
+                  ]
+                })
+            }
+            .width('100%')
+            .height('100%')
+            .brightness(this.vm.appUIState.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? 0.58 : 1)
+            .hitTestBehavior(HitTestMode.None)
+          }
+
+          if (this.ui.firstLoading) {
+            SkeletonDetailView()
+          } else {
+            Scroll(this.ui.scroller) {
+              Column() {
+                Stack() {
+                  if (this.useNativeSurface()) {
+                    Stack() {
+                      if (this.heroFeatheredPixelMap && this.heroBackdropKey === this.currentHeroBackdropKey()) {
+                        Image(this.heroFeatheredPixelMap)
+                          .width('100%')
+                          .height('100%')
+                          .objectFit(ImageFit.Cover)
+                          .transition(TransitionEffect.OPACITY)
+                          .hitTestBehavior(HitTestMode.None)
+                      } else {
+                        ImageKnifeComponent({
+                          imageKnifeOption: this.heroImageOption(() => this.prepareHeroBackdrop())
+                        })
+                          .width('100%')
+                          .height('100%')
+                          .opacity(0)
+                          .hitTestBehavior(HitTestMode.None)
+                      }
+
+                      Stack()
+                        .width('100%')
+                        .height('100%')
+                        .linearGradient({
+                          angle: 0,
+                          colors: [
+                            ['rgba(0, 0, 0, 0)', 0],
+                            ['rgba(0, 0, 0, 0.08)', 0.24],
+                            ['rgba(0, 0, 0, 0.26)', 0.64],
+                            ['rgba(0, 0, 0, 0)', 1]
+                          ]
+                        })
+                    }
+                    .width('100%')
+                    .height('100%')
+                  } else {
+                    Column() {
+                      ImageKnifeComponent({
+                        imageKnifeOption: this.heroImageOption()
+                      }).width('100%')
+                        .height('100%')
+                        .blur(this.ui.blur)
+                    }
+                    .width('100%')
+                    .height('100%')
+                  }
+
+                  if (!this.useNativeSurface()) {
+                    Stack().width('100%')
+                      .height('100%')
+                      .linearGradient({
+                        angle: 0,
+                        colors: [
+                          ['rgba(26, 30, 35, 0.8)', 0],
+                          ['rgba(26, 30, 35, 0.6)', 0.3],
+                          ['rgba(26, 30, 35, 0.2)', 0.4],
+                          ['rgba(26, 30, 35, 0.1)', 1]
+                        ]
+                      })
+                  }
+
+                  if (this.useNativeSurface()) {
+                    Column({ space: 10 }) {
+                      if (this.ui.logo.length > 0) {
+                        Row() {
+                          ImageKnifeComponent({
+                            imageKnifeOption: this.logoImageOption()
+                          })
+                            .height(76)
+                            .aspectRatio(80 / 31)
+                        }
+                        .width('100%')
+                        .justifyContent(FlexAlign.Center)
+                        .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                        .translate({ x: this.heroLogoTranslateX(), y: this.heroLogoTranslateY() })
+                        .opacity(this.heroTitleOpacity())
+                      } else {
+                        Column({ space: 6 }) {
+                          if (this.ui.subtitle.length > 0) {
+                            Text(this.ui.subtitle)
+                              .fontSize(14)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                              .textOverflow({ overflow: TextOverflow.Ellipsis })
+                          }
+                          if (this.heroTitleUsesCalligraphy()) {
+                            Text(this.ui.title)
+                              .fontSize(68)
+                              .minFontSize(34)
+                              .maxFontSize(68)
+                              .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
+                              .fontFamily(HERO_TITLE_FONT_FAMILY)
+                              .fontWeight(FontWeight.Normal)
+                              .fontColor(Color.White)
+                              .textShadow([
+                                { radius: 10, color: 'rgba(0, 0, 0, 0.86)', offsetX: 0, offsetY: 3 },
+                                { radius: 20, color: 'rgba(0, 90, 255, 0.26)', offsetX: 0, offsetY: 0 }
+                              ])
+                              .maxLines(2)
+                              .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              .textAlign(TextAlign.Center)
+                              .width('100%')
+                          } else {
+                            Text(this.ui.title)
+                              .fontSize(38)
+                              .fontWeight(FontWeight.Bold)
+                              .fontColor(Color.White)
+                              .textShadow({ radius: 10, color: 'rgba(0, 0, 0, 0.82)', offsetX: 0, offsetY: 3 })
+                              .maxLines(2)
+                              .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              .textAlign(TextAlign.Center)
+                              .width('100%')
+                          }
+                        }
+                        .width('100%')
+                        .alignItems(HorizontalAlign.Center)
+                        .scale({ x: this.heroTitleScale(), y: this.heroTitleScale() })
+                        .translate({ x: this.heroTextTranslateX(), y: this.heroTitleTranslateY() })
+                        .opacity(this.heroTitleOpacity())
+                      }
+
+                      Column({ space: 4 }) {
+                        if (this.ui.score > 0 || this.ui.primaryInfo.length > 0) {
+                          Scroll() {
+                            Text() {
+                              if (this.ui.score > 0) {
+                                Span(this.ui.score.toFixed(1) + '分')
+                                  .fontColor($r('app.color.text_score'))
+                              }
+                              if (this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                                Span(' · ')
+                              }
+                              if (this.ui.primaryInfo.length > 0) {
+                                Span(this.ui.primaryInfo)
+                              }
+                            }
+                            .fontSize(13)
+                            .fontColor(Color.White)
+                            .maxLines(1)
+                          }
+                          .width('100%')
+                          .scrollable(ScrollDirection.Horizontal)
+                          .scrollBar(BarState.Off)
+                          .edgeEffect(EdgeEffect.None)
+                        }
+
+                        if (this.ui.secondaryInfo.length > 0) {
+                          Scroll() {
+                            Text(this.ui.secondaryInfo)
+                              .fontSize(13)
+                              .fontColor(Color.White)
+                              .maxLines(1)
+                          }
+                          .width('100%')
+                          .scrollable(ScrollDirection.Horizontal)
+                          .scrollBar(BarState.Off)
+                          .edgeEffect(EdgeEffect.None)
+                        }
+                      }
+                      .width('100%')
+                      .alignItems(HorizontalAlign.Start)
+
+                      if (!this.ui.isTvShows && this.ui.playbackSources.length > 0) {
+                        Row({ space: 14 }) {
+                          ForEach(this.vm.getTags(), (item: string) => {
+                            Image(item)
+                              .height(21)
+                              .colorFilter(this.heroTagColorFilter)
+                          })
+                        }
+                        .width('100%')
+                        .justifyContent(FlexAlign.Center)
+                      }
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16, bottom: 8 })
+                    .alignItems(HorizontalAlign.Start)
+                  } else if (this.ui.logo.length > 0) {
+                    ImageKnifeComponent({
+                      imageKnifeOption: this.logoImageOption()
+                    })
+                      .height(80)
+                      .aspectRatio(80 / 31) // 刮削的logo都是800x310
+                      .margin({ bottom: 18, left: 16 })
+                  } else {
+                    Column({ space: 12 }) {
+                      Text(this.ui.subtitle)
+                        .fontSize(14)
+                        .fontColor(Color.White)
+                        .maxLines(1)
+                        .ellipsisMode(EllipsisMode.END)
+                        .textOverflow({
+                          overflow: TextOverflow.Ellipsis
+                        })
+                        .textAlign(TextAlign.Center)
+                      Text(this.ui.title)
+                        .fontSize(26)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(Color.White)
+                        .maxLines(1)
+                        .ellipsisMode(EllipsisMode.END)
+                        .textOverflow({
+                          overflow: TextOverflow.Ellipsis
+                        })
+                        .textAlign(TextAlign.Center)
+                    }
+                    .padding(16)
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                }.width('100%')
+                .height(this.ui.imageHeight)
+                .alignContent(Alignment.BottomStart)
+
+                Stack() {
+                  Column() {
+                  if (!this.useNativeSurface()) {
+                    Column({ space: 4 }) {
+                      if ((!this.ui.isTvShows && this.ui.score > 0) || this.ui.primaryInfo.length > 0) {
+                        Text() {
+                          if (!this.ui.isTvShows && this.ui.score > 0) {
+                            Span(this.ui.score + '分').fontColor($r('app.color.text_score'))
+                          }
+                          if (!this.ui.isTvShows && this.ui.score > 0 && this.ui.primaryInfo.length > 0) {
+                            Span(' · ')
+                          }
+                          if (this.ui.primaryInfo.length > 0) {
+                            Span(this.ui.primaryInfo)
+                          }
+                        }
+                        .fontSize(12)
+                        .fontColor($r('app.color.text_1'))
+                        .width('100%')
+                        .textAlign(TextAlign.Start)
+                      }
+
+                      if (this.ui.secondaryInfo.length > 0) {
+                        Text(this.ui.secondaryInfo)
+                          .fontSize(12)
+                          .fontColor($r('app.color.text_1'))
+                          .width('100%')
+                          .textAlign(TextAlign.Start)
+                      }
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                    .alignItems(HorizontalAlign.Start)
+                  }
+
+                  if (!this.useNativeSurface() && !this.ui.isTvShows &&
+                    this.ui.selectedMediaSourceIndex >= 0 &&
+                    this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                    Blank().height(10)
+                    Row({ space: 16 }) {
+                      ForEach(this.vm.getTags(), (item: string) => {
+                        Image(item)
+                          .height(22)
+                          .colorFilter(this.ui.colorFilter)
+                      })
+                    }.padding({ left: 16, right: 16 })
+                  }
+
+                  Blank().height(16)
+                  if (this.useNativeSurface()) {
+                    Row({ space: 8 }) {
+                      NativeDetailPlayAction({
+                        label: this.ui.playButtonText,
+                        remainingTime: this.ui.remainingTime,
+                        progress: this.ui.percentageWatched,
+                        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                        onAction: () => {
+                          this.vm.playCurrent()
+                        }
+                      })
+                        .layoutWeight(1)
+
+                      NativeDetailIconAction({
+                        icon: this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'),
+                        buttonSize: 44,
+                        selectedColor: $r('app.color.main_red_color'),
+                        preserveOriginalColor: this.ui.isFavorite,
+                        accessibilityLabel: this.ui.isFavorite ? '取消收藏' : '收藏',
+                        selected: this.ui.isFavorite,
+                        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                        onAction: () => {
+                          this.vm.changeFavorite()
+                        }
+                      })
+                      NativeDetailIconAction({
+                        icon: $r('app.media.ic_check'),
+                        buttonSize: 44,
+                        accessibilityLabel: this.ui.played ? '标记为未播放' : '标记为已播放',
+                        selected: this.ui.played,
+                        systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
+                        onAction: () => {
+                          this.vm.changePlayedState()
+                        }
+                      })
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                  } else {
+                    Row({ space: 8 }) {
+                      Button() {
+                        Row() {
+                          Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
+                          Text(this.ui.playButtonText)
+                            .fontSize(16)
+                            .fontColor(Color.White)
+                            .fontWeight(FontWeight.Medium)
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        }
+                        .padding({ left: 18, right: 18 })
+                        .width('100%')
+                        .justifyContent(FlexAlign.Center)
+                      }
+                      .height(50)
+                      .layoutWeight(1)
+                      .margin({ right: 12 })
+                      .borderRadius(25)
+                      .onClick(() => {
+                        this.vm.playCurrent()
+                      })
+
+                      Button() {
+                        Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
+                          .fillColor($r('app.color.text_1'))
+                          .width(this.ui.isTvShows ? 20 : 22)
+                          .height(this.ui.isTvShows ? 20 : 22)
+                      }
+                      .width(this.ui.isTvShows ? 44 : 50)
+                      .height(this.ui.isTvShows ? 44 : 50)
+                      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                      .borderColor(AppThemeSurfaceResolver.contentOutline(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                      .borderRadius(this.ui.isTvShows ? 22 : 25)
+                      .backgroundColor(this.secondarySurfaceBackground())
+                      .onClick(() => {
+                        this.vm.changeFavorite()
+                      })
+
+                      Button() {
+                        Image($r('app.media.ic_check'))
+                          .fillColor(this.ui.played ? $r('app.color.color_main') : $r('app.color.text_1'))
+                          .width(this.ui.isTvShows ? 20 : 22)
+                          .height(this.ui.isTvShows ? 20 : 22)
+                      }
+                      .width(this.ui.isTvShows ? 44 : 50)
+                      .height(this.ui.isTvShows ? 44 : 50)
+                      .borderWidth(AppThemeSurfaceResolver.outlineWidth(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1))
+                      .borderColor(AppThemeSurfaceResolver.contentOutline(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                      .borderRadius(this.ui.isTvShows ? 22 : 25)
+                      .backgroundColor(this.secondarySurfaceBackground())
+                      .onClick(() => {
+                        this.vm.changePlayedState()
+                      })
+                    }
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                  }
+
+
+                  // TextExpandView({
+                  //   textSectionAttribute: this.textSectionAttribute,
+                  //   lastSpanAttribute: new LastSpanAttribute(0, 2,
+                  //     this.handleContent(), 16,
+                  //     $r('app.color.text_expand_selected_tab_name'))
+                  // }).id(`textClick${this.index}`)
+                  if (!this.ui.isTvShows && this.ui.selectedMediaSourceIndex >= 0 &&
+                    this.ui.selectedMediaSourceIndex < this.ui.playbackSources.length) {
+                    Blank().height(16)
+                    Row() {
+                      if (this.ui.playbackSources.length > 1) {
+                        MediaSourceSelector({
+                          sources: this.ui.playbackSources,
+                          selectedIndex: this.ui.selectedMediaSourceIndex,
+                          onSelect: (index: number) => {
+                            this.vm.selectMediaSource(index)
+                          }
+                        })
+                          .layoutWeight(1)
+                      }
+                      AudioSubtitleSelector({
+                        subtitleOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].subtitleOptions,
+                        audioOptions: this.ui.playbackSources[this.ui.selectedMediaSourceIndex].audioOptions,
+                        selectedSubtitleIndex: this.ui.selectedSubtitleOptionIndex,
+                        selectedAudioIndex: this.ui.selectedAudioOptionIndex,
+                        selectedSubtitleLabel: this.ui.selectedSubtitleOptionLabel,
+                        selectedAudioLabel: this.ui.selectedAudioOptionLabel,
+                        triggerTextColor: this.useNativeSurface() ? Color.White : $r('app.color.text_primary'),
+                        onSelectSubtitle: (index: number) => {
+                          this.vm.selectSubtitleOption(index)
+                        },
+                        onSelectAudio: (index: number) => {
+                          this.vm.selectAudioOption(index)
+                        }
+                      })
+                        .layoutWeight(this.ui.playbackSources.length > 1 ? 2 : 1)
+                    }
+                    .width('calc(100% - 24vp)')
+                    .height(32)
+                    .alignSelf(ItemAlign.Center)
+                  }
+                  if (this.ui.overview.length > 0) {
+                    Blank().height(28)
+                    if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                      Row() {
+                        TextExpandView({
+                          text: this.ui.overview,
+                          onMoreClick: () => {
+                            this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                          },
+                          lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                        })
+                      }
+                      .width('100%')
+                      .padding({ left: 16, right: 16 })
+                      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(true), {
+                        height: 420,
+                        preferType: SheetType.BOTTOM,
+                        title: { title: '简介' },
+                        backgroundColor: Color.Transparent
+                      })
+                    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                      Row() {
+                        TextExpandView({
+                          text: this.ui.overview,
+                          onMoreClick: () => {
+                            this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                          },
+                          lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                        })
+                      }
+                      .width('100%')
+                      .padding({ left: 16, right: 16 })
+                      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                        height: 420,
+                        preferType: SheetType.BOTTOM,
+                        title: { title: '简介' },
+                        backgroundColor: Color.Transparent,
+                        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                      })
+                    } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                      Row() {
+                        TextExpandView({
+                          text: this.ui.overview,
+                          onMoreClick: () => {
+                            this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                          },
+                          lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                        })
+                      }
+                      .width('100%')
+                      .padding({ left: 16, right: 16 })
+                      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                        height: 420,
+                        preferType: SheetType.BOTTOM,
+                        title: { title: '简介' },
+                        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                      })
+                    } else {
+                      Row() {
+                        TextExpandView({
+                          text: this.ui.overview,
+                          onMoreClick: () => {
+                            this.ui.isShowOverviewSheet = !this.ui.isShowOverviewSheet;
+                          },
+                          lastSpanAttribute: new LastSpanAttribute(0, 2, ['更多', '收起'], 13, $r('app.color.color_main'))
+                        })
+                      }
+                      .width('100%')
+                      .padding({ left: 16, right: 16 })
+                      .bindSheet($$this.ui.isShowOverviewSheet, this.overviewSheetBuilder(false), {
+                        height: 420,
+                        preferType: SheetType.BOTTOM,
+                        title: { title: '简介' }
+                      })
+                    }
+                    Blank().height(12)
+                  }
+
+                  if (this.ui.isTvShows) {
+                    if (this.ui.seasons.length > 1) {
+                      Blank().height(20)
+                      Text(`共${this.ui.seasons.length}季`)
+                        .fontSize(15)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor($r('app.color.text_primary')).padding({ left: 16, right: 16 })
+                    }
+                    Blank().height(20)
+                    Grid() {
+                      ForEach(this.ui.seasons, (item: VideoItem) => {
+                        GridItem() {
+                          VideoCard({
+                            item: item,
+                            textAlign: TextAlign.Center,
+                            onOpen: () => {
+                              HMRouterMgr.to(RouterConsts.SeasonDetailPage)
+                                .withParam({
+                                  id: item.id,
+                                  ref: item.mediaRef ? toMediaRouteRefData(item.mediaRef) : undefined,
+                                  mediaName: this.ui.mediaName,
+                                  seasons: this.ui.seasons,
+                                  info: this.ui.info,
+                                  parentId: this.ui.id,
+                                  seriesRef: this.ui.mediaRef ? toMediaRouteRefData(this.ui.mediaRef) : undefined
+                                })
+                                .push()
+                            }
+                          })
+                        }
+                      })
+                    }
+                    .columnsTemplate('1fr 1fr 1fr')
+                    .columnsGap(8)
+                    .rowsGap(20)
+                    .width('100%')
+                    .padding({ left: 16, right: 16 })
+                  }
+                  if (this.ui.people.length > 0) {
+                    Blank().height(16)
+                    CastView({
+                      peopleList: this.ui.people
+                    })
+                  }
+                  if (!this.ui.isTvShows && (this.hasFileInformation() || this.hasVideoInformation())) {
+                    Column() {
+                      Blank().height(16)
+
+                      if (this.hasFileInformation()) {
+                        Text('文件信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                        Column({ space: 16 }) {
+                          if (this.ui.path.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('文件位置').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.path).fontSize(12).fontColor($r('app.color.text_1'))
+                            }.width('100%').alignItems(HorizontalAlign.Start)
+                          }
+                          if (this.ui.size.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('文件大小').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.size).fontSize(12).fontColor($r('app.color.text_1'))
+                            }.width('100%').alignItems(HorizontalAlign.Start)
+                          }
+                          if (this.ui.createDate.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('文件创建日期').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.createDate).fontSize(12).fontColor($r('app.color.text_1'))
+                            }.width('100%').alignItems(HorizontalAlign.Start)
+                          }
+                          if (this.ui.addedDate.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('添加日期').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.addedDate).fontSize(12).fontColor($r('app.color.text_1'))
+                            }.width('100%').alignItems(HorizontalAlign.Start)
+                          }
+                        }
+                        .width('100%')
+                        .backgroundColor(this.detailInformationBackground())
+                        .borderRadius(12)
+                        .padding(12)
+                        .alignItems(HorizontalAlign.Start)
+                        .margin({ top: 12 })
+                      }
+
+                      if (this.hasVideoInformation()) {
+                        if (this.hasFileInformation()) {
+                          Blank().height(16)
+                        }
+
+                        Text('视频信息').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+
+                        Column({ space: 16 }) {
+                          if (this.ui.videoInfo.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('视频').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.videoInfo)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                            }.width('100%')
+                            .alignItems(HorizontalAlign.Start)
+                          }
+                          if (this.ui.audioInfo.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('音频').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.audioInfo)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                            }.width('100%')
+                            .alignItems(HorizontalAlign.Start)
+                          }
+                          if (this.ui.subtitleInfo.trim().length > 0) {
+                            Column({ space: 10 }) {
+                              Text('字幕').fontSize(12).fontColor($r('app.color.text_2'))
+                              Text(this.ui.subtitleInfo)
+                                .fontSize(12)
+                                .fontColor($r('app.color.text_1'))
+                                .lineSpacing({ value: 4, unit: LengthUnit.VP })
+                            }.width('100%')
+                            .alignItems(HorizontalAlign.Start)
+                          }
+
+                          if (this.hasSelectedMediaStreams()) {
+                            Divider().height(0.5).color(AppThemeSurfaceResolver.contentDivider(
+                              this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+                            if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
+                              Row({ space: 10 }) {
+                                Text('查看全部')
+                                  .fontColor($r('app.color.text_1'))
+                                  .fontSize(12)
+                                  .fontWeight(FontWeight.Medium)
+                                  .layoutWeight(1)
+                                SymbolGlyph($r('sys.symbol.chevron_right'))
+                                  .fontSize(16)
+                                  .fontColor([$r('app.color.text_1')])
+                                  .fontWeight(FontWeight.Bold)
+                              }
+                              .width('100%')
+                              .padding({ top: 4, left: 4, bottom: 8 })
+                              .onClick(() => {
+                                this.ui.isShowVideoInfoSheet = true
+                              })
+                              .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(true), {
+                                height: '70%',
+                                preferType: SheetType.BOTTOM,
+                                title: { title: '文件媒体信息' },
+                                backgroundColor: Color.Transparent
+                              })
+                            } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
+                              Row({ space: 10 }) {
+                                Text('查看全部')
+                                  .fontColor($r('app.color.text_1'))
+                                  .fontSize(12)
+                                  .fontWeight(FontWeight.Medium)
+                                  .layoutWeight(1)
+                                SymbolGlyph($r('sys.symbol.chevron_right'))
+                                  .fontSize(16)
+                                  .fontColor([$r('app.color.text_1')])
+                                  .fontWeight(FontWeight.Bold)
+                              }
+                              .width('100%')
+                              .padding({ top: 4, left: 4, bottom: 8 })
+                              .onClick(() => {
+                                this.ui.isShowVideoInfoSheet = true
+                              })
+                              .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                height: '70%',
+                                preferType: SheetType.BOTTOM,
+                                title: { title: '文件媒体信息' },
+                                backgroundColor: Color.Transparent,
+                                systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+                              })
+                            } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
+                              Row({ space: 10 }) {
+                                Text('查看全部')
+                                  .fontColor($r('app.color.text_1'))
+                                  .fontSize(12)
+                                  .fontWeight(FontWeight.Medium)
+                                  .layoutWeight(1)
+                                SymbolGlyph($r('sys.symbol.chevron_right'))
+                                  .fontSize(16)
+                                  .fontColor([$r('app.color.text_1')])
+                                  .fontWeight(FontWeight.Bold)
+                              }
+                              .width('100%')
+                              .padding({ top: 4, left: 4, bottom: 8 })
+                              .onClick(() => {
+                                this.ui.isShowVideoInfoSheet = true
+                              })
+                              .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                height: '70%',
+                                preferType: SheetType.BOTTOM,
+                                title: { title: '文件媒体信息' },
+                                systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+                              })
+                            } else {
+                              Row({ space: 10 }) {
+                                Text('查看全部')
+                                  .fontColor($r('app.color.text_1'))
+                                  .fontSize(12)
+                                  .fontWeight(FontWeight.Medium)
+                                  .layoutWeight(1)
+                                SymbolGlyph($r('sys.symbol.chevron_right'))
+                                  .fontSize(16)
+                                  .fontColor([$r('app.color.text_1')])
+                                  .fontWeight(FontWeight.Bold)
+                              }
+                              .width('100%')
+                              .padding({ top: 4, left: 4, bottom: 8 })
+                              .onClick(() => {
+                                this.ui.isShowVideoInfoSheet = true
+                              })
+                              .bindSheet($$this.ui.isShowVideoInfoSheet, this.videoInfoSheetBuilder(false), {
+                                height: '70%',
+                                preferType: SheetType.BOTTOM,
+                                title: { title: '文件媒体信息' }
+                              })
+                            }
+                          }
+                        }
+                        .width('100%')
+                        .backgroundColor(this.detailInformationBackground())
+                        .borderRadius(12)
+                        .padding(12)
+                        .margin({ top: 12 })
+                      }
+                    }.padding({ left: 16, right: 16 })
+                    .alignItems(HorizontalAlign.Start)
+                  }
+
+                  if (this.ui.externalUrls.length) {
+                    Blank().height(16)
+                    Text('链接')
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor($r('app.color.text_primary'))
+                      .padding({ left: 16, right: 16 })
+                    Row({ space: 6 }) {
+                      ForEach(this.ui.externalUrls, (item: MediaExternalLink) => {
+                        Text(item.title)
+                          .fontSize(12)
+                          .fontColor($r('app.color.text_1'))
+                          .backgroundColor(this.detailInformationBackground())
+                          .borderRadius(4)
+                          .padding({
+                            left: 12,
+                            right: 12,
+                            top: 8,
+                            bottom: 8
+                          })
+                          .onClick(() => {
+                            this.vm.openExternalUrl(item.url)
+                          })
+                      })
+                    }.margin({ top: 12 }).padding({ left: 16, right: 16 })
+                  }
+                  Blank().height(30 + this.vm.appUIState.safeBottom)
+
+                  }.alignItems(HorizontalAlign.Start).padding({
+                    top: this.useNativeSurface() ? 0 : 12
+                  })
+                  .width('100%')
+                  .constraintSize({ maxWidth: this.useNativeSurface() ? 720 : '100%' })
+                  .align(Alignment.Top)
+                }
+                .width('100%')
+                .alignContent(Alignment.Top)
+
+              }.constraintSize({
+                minHeight: 850
+              })
+            }
+            .width('100%')
+            .height('100%')
+            .onScrollFrameBegin((offset: number, state: ScrollState) => {
+              const param: CalculateHeightParam = { offset, state, yOffset: this.ui.scroller.currentOffset().yOffset };
+              const imageHeightChange: boolean | void = this.vm.calculateImageHeight(param);
+              if (imageHeightChange) {
+                return { offsetRemain: 0 };
+              }
+              return { offsetRemain: offset };
+            })
+            .scrollBar(BarState.Off)
+            .onDidScroll(() => {
+              let y = this.ui.scroller.currentOffset().yOffset
+              this.updateTitleCollapseProgress(y)
+              if (y === 0 && this.ui.currentScrollState === 1) {
+                this.vm.bannerSpringBack();
+              }
+              this.ui.blur = y / 10
+              if (y > 200) {
+                this.ui.showActionBar = true
+              } else {
+                this.ui.showActionBar = false
+              }
+            })
+          }
+
+          if ((true)) {
+            ActionBar({
+              title: this.ui.showActionBar ? this.ui.title : ''
+            })
+              .backgroundBlurStyle(this.ui.showActionBar ? BlurStyle.BACKGROUND_THICK : BlurStyle.NONE)
+          }
+        }
+        .backgroundColor(this.useNativeSurface() ? Color.Transparent : AppThemeSurfaceResolver.routeBackground(
+          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable))
+        .alignContent(Alignment.Top)
+      }
+      .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+      .gestureModifier(this.routeDestination.gestureModifier)
+      .width('100%')
+      .height('100%')
     }
-    .scrollable(ScrollDirection.Vertical)
-    .padding({
-      left: 16,
-      right: 16,
-      bottom: 10
-    })
-    .width('100%')
-    .height('100%')
-    .align(Alignment.Top)
-    .nestedScroll({
-      scrollForward: NestedScrollMode.PARENT_FIRST,
-      scrollBackward: NestedScrollMode.SELF_FIRST,
-    })
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.Floating, blurFallback, false))
   }
 
-  @Builder
-  videoInfoSheetBuilder(blurFallback: boolean) {
-    Scroll() {
-      VideoInfoDetail({
-        sections: this.ui.mediaInfoSections
-      })
-    }
-    .scrollBar(BarState.Off)
-    .scrollable(ScrollDirection.Vertical)
-    .edgeEffect(EdgeEffect.None)
-    .padding({
-      left: 16,
-      right: 16,
-      bottom: 10 + this.vm.appUIState.safeBottom
-    })
-    .width('100%')
-    .height('100%')
-    .align(Alignment.Top)
-    .nestedScroll({
-      scrollForward: NestedScrollMode.PARENT_FIRST,
-      scrollBackward: NestedScrollMode.SELF_FIRST,
-    })
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.Floating, blurFallback, false))
-  }
+
 }

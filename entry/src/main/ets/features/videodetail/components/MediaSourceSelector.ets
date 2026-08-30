@@ -18,7 +18,7 @@ struct MediaSourceOptionItem {
   @Require @Param selected: boolean
   @Require @Param title: string
   @Require @Param summary: string
-  @Require @Param onSelect: (index: number) => void
+  @Event onSelect: (index: number) => void = (_index: number) => {}
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
   private isNativeTheme(): boolean {
@@ -83,10 +83,81 @@ struct MediaSourceOptionItem {
 }
 
 @ComponentV2
+struct MediaSourceOptionsContent {
+  @Require @Param sources: PlaybackSourceViewData[]
+  @Require @Param selectedIndex: number
+  @Require @Param safeBottom: number
+  @Require @Param contentMaxHeight: number
+  @Param blurFallback: boolean = false
+  @Event onSelect: (index: number) => void = (_index: number) => {}
+
+  build() {
+    Scroll() {
+      Column({ space: 4 }) {
+        ForEach(this.sources, (source: PlaybackSourceViewData, index: number) => {
+          MediaSourceOptionItem({
+            index: index,
+            selected: index === this.selectedIndex,
+            title: source.title,
+            summary: source.summary,
+            onSelect: (selectedIndex: number) => this.onSelect(selectedIndex)
+          })
+        }, (source: PlaybackSourceViewData): string => source.id)
+      }
+      .width('calc(100% - 32vp)')
+      .padding({ bottom: 10 + this.safeBottom })
+      .alignSelf(ItemAlign.Center)
+    }
+    .width('100%')
+    .constraintSize({ maxHeight: this.contentMaxHeight })
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.None)
+    .nestedScroll({
+      scrollForward: NestedScrollMode.PARENT_FIRST,
+      scrollBackward: NestedScrollMode.SELF_FIRST
+    })
+    .attributeModifier(AppThemeSurfaceResolver.modifier(
+      AppThemeMaterialRole.Floating,
+      this.blurFallback,
+      false
+    ))
+  }
+}
+
+@ComponentV2
+struct MediaSourceTriggerContent {
+  @Require @Param label: string
+  @Require @Param isShowingOptions: boolean
+  @Require @Param primaryColor: ResourceColor
+
+  build() {
+    Row({ space: 2 }) {
+      Text(this.label)
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.primaryColor)
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: 'calc(100% - 18vp)' })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      SymbolGlyph(this.isShowingOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
+        .fontColor([this.primaryColor])
+        .width(14)
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+}
+
+@ComponentV2
 export struct MediaSourceSelector {
   @Require @Param sources: PlaybackSourceViewData[]
   @Require @Param selectedIndex: number
-  @Require @Param onSelect: (index: number) => void
+  @Event onSelect: (index: number) => void = (_index: number) => {}
   @Local isShowingOptions: boolean = false
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
@@ -143,68 +214,28 @@ export struct MediaSourceSelector {
     return Math.max(180, Math.floor(deviceHeight * 0.7) - 72)
   }
 
+  // CustomBuilderAdapter: media-source-sheet-content
   @Builder
-  private optionsContent(blurFallback: boolean) {
-    Scroll() {
-      Column({ space: 4 }) {
-        ForEach(this.sources, (source: PlaybackSourceViewData, index: number) => {
-          MediaSourceOptionItem({
-            index: index,
-            selected: index === this.selectedIndex,
-            title: source.title,
-            summary: source.summary,
-            onSelect: (selectedIndex: number) => this.select(selectedIndex)
-          })
-        }, (source: PlaybackSourceViewData): string => source.id)
-      }
-      .width('calc(100% - 32vp)')
-      .padding({ bottom: 10 + this.appUIState.safeBottom })
-      .alignSelf(ItemAlign.Center)
-    }
-    .width('100%')
-    .constraintSize({ maxHeight: this.optionsMaxHeight() })
-    .scrollable(ScrollDirection.Vertical)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.None)
-    .nestedScroll({
-      scrollForward: NestedScrollMode.PARENT_FIRST,
-      scrollBackward: NestedScrollMode.SELF_FIRST
-    })
-    .attributeModifier(AppThemeSurfaceResolver.modifier(
-      AppThemeMaterialRole.Floating,
+  private optionsSheetContent(blurFallback: boolean) {
+    MediaSourceOptionsContent({
+      sources: this.sources,
+      selectedIndex: this.selectedIndex,
+      safeBottom: this.appUIState.safeBottom,
+      contentMaxHeight: this.optionsMaxHeight(),
       blurFallback,
-      false
-    ))
+      onSelect: (selectedIndex: number) => this.select(selectedIndex)
+    })
   }
 
-  @Builder
-  private triggerContent() {
-    Row({ space: 2 }) {
-      Text(this.selectedSourceLabel())
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.primaryTextColor())
-        .textAlign(TextAlign.Center)
-        .constraintSize({ maxWidth: 'calc(100% - 18vp)' })
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      SymbolGlyph(this.isShowingOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor([this.primaryTextColor()])
-        .width(14)
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  private trigger() {
-    if (this.selectedSource()) {
+  build() {
+    if (this.sources.length > 1 && this.selectedSource()) {
       if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseFloatingMaterial) {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          this.triggerContent()
+          MediaSourceTriggerContent({
+            label: this.selectedSourceLabel(),
+            isShowingOptions: this.isShowingOptions,
+            primaryColor: this.primaryTextColor()
+          })
         }
         .width('calc(100% - 8vp)')
         .margin({ left: 4, right: 4 })
@@ -219,7 +250,7 @@ export struct MediaSourceSelector {
           this.appUIState.systemMaterialAvailable
         ))
         .onClick(() => this.openOptions())
-        .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
+        .bindSheet($$this.isShowingOptions, this.optionsSheetContent(false), {
           height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
@@ -229,7 +260,11 @@ export struct MediaSourceSelector {
         })
       } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.UseBlurFallback) {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          this.triggerContent()
+          MediaSourceTriggerContent({
+            label: this.selectedSourceLabel(),
+            isShowingOptions: this.isShowingOptions,
+            primaryColor: this.primaryTextColor()
+          })
         }
         .width('calc(100% - 8vp)')
         .margin({ left: 4, right: 4 })
@@ -244,7 +279,7 @@ export struct MediaSourceSelector {
           this.appUIState.systemMaterialAvailable
         ))
         .onClick(() => this.openOptions())
-        .bindSheet($$this.isShowingOptions, this.optionsContent(true), {
+        .bindSheet($$this.isShowingOptions, this.optionsSheetContent(true), {
           height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
@@ -253,7 +288,11 @@ export struct MediaSourceSelector {
         })
       } else if (this.sheetMaterialDecision() === OverlayMaterialDecision.DisableSystemMaterial) {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          this.triggerContent()
+          MediaSourceTriggerContent({
+            label: this.selectedSourceLabel(),
+            isShowingOptions: this.isShowingOptions,
+            primaryColor: this.primaryTextColor()
+          })
         }
         .width('calc(100% - 8vp)')
         .margin({ left: 4, right: 4 })
@@ -268,7 +307,7 @@ export struct MediaSourceSelector {
           this.appUIState.systemMaterialAvailable
         ))
         .onClick(() => this.openOptions())
-        .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
+        .bindSheet($$this.isShowingOptions, this.optionsSheetContent(false), {
           height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
@@ -278,7 +317,11 @@ export struct MediaSourceSelector {
         })
       } else {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          this.triggerContent()
+          MediaSourceTriggerContent({
+            label: this.selectedSourceLabel(),
+            isShowingOptions: this.isShowingOptions,
+            primaryColor: this.primaryTextColor()
+          })
         }
         .width('calc(100% - 8vp)')
         .margin({ left: 4, right: 4 })
@@ -293,19 +336,13 @@ export struct MediaSourceSelector {
           this.appUIState.systemMaterialAvailable
         ))
         .onClick(() => this.openOptions())
-        .bindSheet($$this.isShowingOptions, this.optionsContent(false), {
+        .bindSheet($$this.isShowingOptions, this.optionsSheetContent(false), {
           height: SheetSize.FIT_CONTENT,
           preferType: SheetType.BOTTOM,
           showClose: true,
           title: { title: $r('app.string.video_detail_choose_playback_version') }
         })
       }
-    }
-  }
-
-  build() {
-    if (this.sources.length > 1) {
-      this.trigger()
     }
   }
 }

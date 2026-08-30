@@ -2,6 +2,7 @@ import { BaseUIState } from "../../common/base/BaseUIState"
 import { BaseDataSource } from "../../data/BaseDataSource"
 import { MediaItem } from "./hometab/HomeUIState"
 import { HomeDestination } from "./HomeDestination"
+import { HomeMinePane } from './HomePadNavigation'
 
 export enum PadMenuType {
   TITLE,
@@ -31,12 +32,15 @@ export class HomeScreenUIState extends BaseUIState {
   @Trace favoriteCount: number = 0
   @Trace chasingCount: number = 0
   @Trace selectedDestination: HomeDestination = HomeDestination.Home
+  @Trace selectedMinePane: HomeMinePane = HomeMinePane.Overview
+  /** Active media child in the Pad sidebar. -1 keeps the media overview selected. */
+  @Trace selectedMediaDataSourceIndex: number = -1
   @Trace isLoading: boolean = true
   /** Large screen: whether left sidebar is visible (default true) */
   @Trace isLeftSidebarVisible: boolean = true
   /** Medium screen: whether menu modal is visible (default false) */
   @Trace isMenuModalVisible: boolean = false
-  /** Last selected media item index, used for PadTopTab media slot when fixed tabs are selected */
+  /** Last valid media item index, retained when the media overview is selected. */
   @Trace lastSelectedMediaIndex: number = 0
   /** Incremented when datasource changes, triggers PadTopTab list refresh */
   @Trace padMenuDataVersion: number = 0

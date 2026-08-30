@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "adapters": {
+    "account-delete-dialog": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "account-list-empty": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "account-list-group-header": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "account-list-item": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "cast-overview-sheet": "entry/src/main/ets/features/cast/CastDetailPage.ets",
+    "chasing-refresh-indicator": "entry/src/main/ets/features/home/chasing/ChasingTab.ets",
+    "home-latest-media-sticky-header": "entry/src/main/ets/features/home/hometab/HomeTab.ets",
+    "home-phone-tab-bar-item": "entry/src/main/ets/features/home/phone/HomePhoneNativeTabs.ets",
+    "home-theme-upgrade-dialog": "entry/src/main/ets/features/home/HomeScreen.ets",
+    "live-tv-grid-empty": "entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets",
+    "live-tv-grid-item": "entry/src/main/ets/features/livetv/LiveTvChannelListPage.ets",
+    "management-activity-sheet": "entry/src/main/ets/features/management/activity/ManagementActivityPage.ets",
+    "management-devices-filter-sheet": "entry/src/main/ets/features/management/devices/ManagementDevicesPage.ets",
+    "management-parental-tag-dialog": "entry/src/main/ets/features/management/ManagementUserParentalSection.ets",
+    "management-users-filter-sheet": "entry/src/main/ets/features/management/ManagementUsersPage.ets",
+    "media-option-sheet-content": "entry/src/main/ets/features/videodetail/components/AudioSubtitleSelector.ets",
+    "media-source-sheet-content": "entry/src/main/ets/features/videodetail/components/MediaSourceSelector.ets",
+    "music-mini-player-menu": "entry/src/main/ets/features/music/MusicMiniPlayer.ets",
+    "music-player-queue-sheet": "entry/src/main/ets/features/music/MusicPlayerPage.ets",
+    "photo-viewer-info-sheet": "entry/src/main/ets/features/photo/PhotoViewerPage.ets",
+    "player-cast-picker-icon": "entry/src/main/ets/features/player/PlayerChrome.ets",
+    "search-delete-history-dialog": "entry/src/main/ets/features/search/SearchPage.ets",
+    "season-overview-sheet": "entry/src/main/ets/features/seasondetail/SeasonDetailPage.ets",
+    "smart-list-dialog-content": "entry/src/main/ets/component/ListDialog.ets",
+    "video-detail-info-sheet": "entry/src/main/ets/features/videodetail/VideoDetailPage.ets",
+    "video-detail-overview-sheet": "entry/src/main/ets/features/videodetail/VideoDetailPage.ets",
+    "video-list-grid-empty": "entry/src/main/ets/features/videolist/VideoListPage.ets",
+    "video-list-grid-item": "entry/src/main/ets/features/videolist/VideoListPage.ets"
+  }
+}

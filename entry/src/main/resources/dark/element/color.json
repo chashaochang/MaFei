@@ -175,6 +175,10 @@
     {
       "name": "menu_item_bg",
       "value": "#1F2937"
+    },
+    {
+      "name": "sidebar_item_selected_bg",
+      "value": "#66000000"
     }
   ]
 }

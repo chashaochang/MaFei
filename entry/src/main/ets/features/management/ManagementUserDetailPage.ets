@@ -3,7 +3,7 @@ import { PageState } from '../../common/base/BaseUIState';
 import { RouterConsts } from '../../common/RouterConsts';
 import { UIConstants } from '../../common/UIConstants';
 import { ActionBar } from '../../component/ActionBar';
-import { AppRouteDestination } from '../../component/AppRouteDestination';
+import { AppRouteDestination, AppRouteDestinationOptions } from '../../component/AppRouteDestination';
 import {
   AppThemeMaterialRole,
   AppThemeSurfaceResolver
@@ -27,24 +27,26 @@ import {
 import { ManagementUserParentalSection } from './ManagementUserParentalSection';
 import { ManagementUserPasswordSection } from './ManagementUserPasswordSection';
 import { ManagementUserProfileSection } from './ManagementUserProfileSection';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 
-@HMRouter({
-  pageUrl: RouterConsts.ManagementUserDetailPage,
-  useNavDst: true
-})
 @ComponentV2
-export struct ManagementUserDetailPage {
+struct ManagementUserDetailContent {
   @Param embedded: boolean = false
   @Param embeddedUserId: string = ''
   @Param embeddedInitialTab: ManagementUserTab = ManagementUserTab.Profile
+  @Param showLegacyActionBar: boolean = false
+  @Param contentScroller: Scroller = new Scroller()
   @Local ui: ManagementUserDetailUIState = new ManagementUserDetailUIState(this.getUIContext())
   @Local vm: ManagementUserDetailViewModel = new ManagementUserDetailViewModel(this.ui)
-  private readonly contentScroller: Scroller = new Scroller()
   private readonly tabsController: TabsController = new TabsController()
   @Event onDeleted: (userId: string) => void = (_userId: string) => {
   }
+  @Event onRegisterBackHandler: (handler: () => boolean) => void = (_handler: () => boolean) => {}
 
   aboutToAppear(): void {
+    if (!this.embedded) {
+      this.onRegisterBackHandler(() => this.handleRouteBack())
+    }
     if (this.embedded) {
       this.vm.init(this.embeddedUserId, this.embeddedInitialTab)
       return
@@ -510,453 +512,32 @@ export struct ManagementUserDetailPage {
     }
   }
 
-  @Builder
-  tabBar() {
-    List({ space: 6 }) {
-      ForEach([
-        ManagementUserTab.Profile,
-        ManagementUserTab.Access,
-        ManagementUserTab.Parental,
-        ManagementUserTab.Password
-      ], (tab: ManagementUserTab) => {
-        ListItem() {
-          Button(this.tabLabel(tab), { type: ButtonType.Normal })
-            .height(40)
-            .padding({ left: 16, right: 16 })
-            .fontSize(14)
-            .fontWeight(this.ui.selectedTab === tab ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(this.ui.selectedTab === tab ? $r('app.color.color_main') :
-              this.secondaryTextColor())
-            .backgroundColor(this.ui.selectedTab === tab ?
-              AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
-              Color.Transparent)
-            .borderRadius(this.useNativeMaterial() ? 20 : 9)
-            .onClick(() => this.selectTab(tab))
-        }
-      }, (tab: ManagementUserTab) => tab.toString())
-    }
-    .width('100%')
-    .height(44)
-    .listDirection(Axis.Horizontal)
-    .scrollBar(BarState.Off)
-  }
 
-  @Builder
-  sectionPlaceholder(icon: Resource, title: ResourceStr, description: ResourceStr) {
-    Column({ space: 12 }) {
-      SymbolGlyph(icon)
-        .fontSize(34)
-        .fontColor([$r('app.color.color_main')])
-      Text(title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.primaryTextColor())
-      Text(description)
-        .fontSize(13)
-        .fontColor(this.secondaryTextColor())
-        .textAlign(TextAlign.Center)
-        .maxLines(3)
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 260 })
-    .padding(24)
-    .justifyContent(FlexAlign.Center)
-  }
 
-  @Builder
-  private avatar() {
-    if (this.ui.user.avatarUrl) {
-      Image(this.ui.user.avatarUrl)
-        .width(64)
-        .height(64)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(32)
-    } else {
-      Stack() {
-        SymbolGlyph($r('sys.symbol.person_fill'))
-          .fontSize(30)
-          .fontColor([$r('app.color.color_main')])
-      }
-      .width(64)
-      .height(64)
-      .borderRadius(32)
-      .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(
-        this.vm.appUIState.themeStyle))
-    }
-  }
 
-  @Builder
-  private profileHeaderContent() {
-    Row({ space: 14 }) {
-      this.avatar()
-      Column({ space: 4 }) {
-        Text(this.ui.userName || $r('app.string.management_user_title'))
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.primaryTextColor())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.ui.user.administrator ?
-          $r('app.string.management_user_role_administrator') :
-          $r('app.string.management_user_filter_standard'))
-          .fontSize(12)
-          .fontColor(this.secondaryTextColor())
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Button() {
-        SymbolGlyph($r('sys.symbol.plus'))
-          .fontSize(18)
-          .fontColor([$r('app.color.color_main')])
-      }
-      .width(44)
-      .height(44)
-      .borderRadius(this.useNativeMaterial() ? 22 : 10)
-      .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
-        AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
-      .attributeModifier(AppThemeSurfaceResolver.modifier(
-        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-      .enabled(!this.vm.isSaving())
-      .accessibilityText($r('app.string.management_user_change_avatar'))
-      .onClick(() => this.updateAvatar())
-      if (this.ui.user.avatarUrl) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(17)
-            .fontColor([$r('app.color.main_red_color')])
-        }
-        .width(44)
-        .height(44)
-        .borderRadius(this.useNativeMaterial() ? 22 : 10)
-        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .border({
-          width: AppThemeSurfaceResolver.outlineWidth(
-            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
-          color: $r('app.color.main_red_color')
-        })
-        .enabled(!this.vm.isSaving())
-        .accessibilityText($r('app.string.management_user_remove_avatar'))
-        .onClick(() => this.confirmRemoveAvatar())
-      }
-    }
-    .width('100%')
-    .padding(14)
-  }
 
-  @Builder
-  private profileHeader() {
-    Column() { this.profileHeaderContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .clip(true)
-      .backgroundColor(AppThemeSurfaceResolver.contentGroupBackground())
-  }
 
-  @Builder
-  private feiniuProfileHeader() {
-    Column() { this.profileHeaderContent() }
-      .width('100%')
-      .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-      .backgroundColor($r('app.color.bg_1'))
-  }
 
-  @Builder
-  private profileHeaderSurface() {
-    if (this.useNativeMaterial()) {
-      this.profileHeader()
-    } else {
-      this.feiniuProfileHeader()
-    }
-  }
 
-  @Builder
-  currentSection() {
-    if (this.ui.selectedTab === ManagementUserTab.Access) {
-      this.accessSection()
-    } else if (this.ui.selectedTab === ManagementUserTab.Parental) {
-      this.parentalSection()
-    } else if (this.ui.selectedTab === ManagementUserTab.Password) {
-      this.passwordSection()
-    } else {
-      this.profileSection()
-    }
-  }
 
-  @Builder
-  private profileSection() {
-    ManagementUserProfileSection({
-      ui: this.ui,
-      themeStyle: this.vm.appUIState.themeStyle,
-      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onChanged: () => this.vm.markCurrentTabDirty()
-    })
-  }
 
-  @Builder
-  private accessSection() {
-    ManagementUserAccessSection({
-      ui: this.ui,
-      themeStyle: this.vm.appUIState.themeStyle,
-      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onChanged: () => this.vm.markCurrentTabDirty()
-    })
-  }
 
-  @Builder
-  private parentalSection() {
-    ManagementUserParentalSection({
-      ui: this.ui,
-      themeStyle: this.vm.appUIState.themeStyle,
-      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onChanged: () => this.vm.markCurrentTabDirty()
-    })
-  }
 
-  @Builder
-  private passwordSection() {
-    ManagementUserPasswordSection({
-      ui: this.ui,
-      themeStyle: this.vm.appUIState.themeStyle,
-      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
-      onChanged: () => this.vm.markCurrentTabDirty(),
-      onSetPassword: () => this.setPassword(),
-      onResetPassword: () => this.confirmResetPassword(),
-      onClearPassword: () => this.confirmClearPassword()
-    })
-  }
 
-  @Builder
-  private nativeTabs() {
-    Tabs({
-      index: this.managementTabIndex(this.ui.selectedTab),
-      controller: this.tabsController
-    }) {
-      TabContent() { this.profileSection() }
-        .tabBar($r('app.string.management_user_tab_profile'))
-      TabContent() { this.accessSection() }
-        .tabBar($r('app.string.management_user_tab_access'))
-      TabContent() { this.parentalSection() }
-        .tabBar($r('app.string.management_user_tab_parental'))
-      TabContent() { this.passwordSection() }
-        .tabBar($r('app.string.management_user_tab_password'))
-    }
-    .width('100%')
-    .height('auto')
-    .barMode(BarMode.Fixed)
-    .scrollable(false)
-    .animationDuration(0)
-    .onChange((index: number) => this.selectSystemTab(index))
-  }
 
-  @Builder
-  private dangerousActions() {
-    Column({ space: 10 }) {
-      Column({ space: 4 }) {
-        Text($r('app.string.management_user_delete_title'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.main_red_color'))
-          .width('100%')
-        Text($r('app.string.management_user_delete_impact'))
-          .fontSize(12)
-          .fontColor(this.secondaryTextColor())
-          .width('100%')
-        if (this.deleteProtected()) {
-          Text(this.deleteProtectionMessage())
-            .fontSize(12)
-            .fontColor($r('app.color.main_red_color'))
-            .width('100%')
-        }
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-      Button(this.ui.deleteStatus === ManagementUserOperationStatus.Saving ?
-        $r('app.string.management_user_saving') :
-        $r('app.string.management_user_delete'), { type: ButtonType.Normal })
-        .width('100%')
-        .height(42)
-        .fontColor($r('app.color.main_red_color'))
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .border({
-          width: AppThemeSurfaceResolver.outlineWidth(
-            this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
-          color: $r('app.color.main_red_color')
-        })
-        .borderRadius(this.useNativeMaterial() ? 21 : 8)
-        .enabled(!this.vm.isSaving() && !this.deleteProtected())
-        .onClick(() => this.requestDelete())
-    }
-    .width('100%')
-    .padding(16)
-    .alignItems(HorizontalAlign.Start)
-    .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
-    .backgroundColor(this.useNativeMaterial() ?
-      AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
-    .border({
-      width: AppThemeSurfaceResolver.outlineWidth(
-        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
-      color: $r('app.color.main_red_color')
-    })
-  }
 
-  @Builder
-  private editorBody(useSystemTabs: boolean) {
-    Column({ space: 12 }) {
-      this.profileHeaderSurface()
-      if (useSystemTabs) {
-        this.nativeTabs()
-      } else {
-        this.tabBar()
-        this.currentSection()
-      }
-      this.dangerousActions()
-      if (this.ui.message) {
-        Text(this.localizedMessage(this.ui.message))
-          .fontSize(12)
-          .fontColor($r('app.color.main_red_color'))
-          .width('100%')
-      }
-    }
-    .width('100%')
-    .constraintSize({ maxWidth: 900 })
-  }
 
-  @Builder
-  nativeEditorContent() {
-    Scroll(this.contentScroller) {
-      Column({ space: 12 }) {
-        Blank().height(this.nativeTopSpacer())
-        this.editorBody(true)
-      }
-      .width('100%')
-      .constraintSize({ maxWidth: 900 })
-      .padding({
-        left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-        right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-        bottom: ManagementNativePagePolicy.contentBottomPadding(
-          this.vm.appUIState.safeBottom + 24, this.showSaveBar())
-      })
-    }
-    .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Auto)
-  }
 
-  @Builder
-  legacyEditorContent() {
-    Scroll() {
-      Column() {
-        this.editorBody(false)
-      }
-        .width('100%')
-        .padding({
-          left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-          right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
-          top: 12,
-          bottom: this.showSaveBar() ? 104 : 24
-        })
-    }
-    .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Auto)
-  }
 
-  @Builder
-  saveBarContent() {
-    Row({ space: 10 }) {
-      Text($r('app.string.management_user_unsaved_short'))
-        .fontSize(13)
-        .fontColor(this.secondaryTextColor())
-        .layoutWeight(1)
-      Button($r('app.string.management_user_discard'), { type: ButtonType.Normal })
-        .height(40)
-        .padding({ left: 16, right: 16 })
-        .borderRadius(this.useNativeMaterial() ? 20 : 8)
-        .fontColor(this.secondaryTextColor())
-        .backgroundColor(Color.Transparent)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
-        .onClick(() => this.vm.discardCurrentTab())
-      Button(this.currentStatus() === ManagementUserOperationStatus.Saving ?
-        $r('app.string.management_user_saving') : $r('app.string.management_user_save'),
-      { type: ButtonType.Normal })
-        .height(40)
-        .padding({ left: 20, right: 20 })
-        .fontColor($r('app.color.on_primary'))
-        .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-        .borderRadius(this.useNativeMaterial() ? 20 : 10)
-        .attributeModifier(AppThemeSurfaceResolver.modifier(
-          AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
-        .enabled(this.currentStatus() !== ManagementUserOperationStatus.Saving)
-        .onClick(() => this.vm.saveCurrentTab())
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
-  }
 
-  @Builder
-  saveBar() {
+
+
+
+
+
+  build() {
     Column() {
-      this.saveBarContent()
-    }
-    .width('100%')
-    .attributeModifier(AppThemeSurfaceResolver.modifier(AppThemeMaterialRole.Floating, true))
-  }
-
-  @Builder
-  feiniuSaveBar() {
-    Column() {
-      this.saveBarContent()
-    }
-    .width('100%')
-    .backgroundColor($r('app.color.bg_1'))
-  }
-
-  @Builder
-  saveBarSurface() {
-    if (this.useNativeMaterial()) {
-      this.saveBar()
-    } else {
-      this.feiniuSaveBar()
-    }
-  }
-
-  @Builder
-  stateView(message: ResourceStr, retry: boolean = false) {
-    Column({ space: 14 }) {
-      SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-        .fontSize(40)
-        .fontColor([$r('app.color.color_main')])
-      Text(message)
-        .fontSize(14)
-        .fontColor(this.secondaryTextColor())
-        .textAlign(TextAlign.Center)
-      if (retry) {
-        Button($r('app.string.management_user_retry'), { type: ButtonType.Normal })
-          .height(40)
-          .padding({ left: 20, right: 20 })
-          .fontColor($r('app.color.on_primary'))
-          .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
-          .borderRadius(this.useNativeMaterial() ? 20 : 10)
-          .attributeModifier(AppThemeSurfaceResolver.modifier(
-            AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
-          .onClick(() => this.vm.reload())
-      }
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .padding(24)
-  }
-
-  @Builder
-  private pageContent(showLegacyActionBar: boolean) {
-    Column() {
-      if (showLegacyActionBar) {
+      if ((this.showLegacyActionBar)) {
         ActionBar({
           title: this.ui.userName || $r('app.string.management_user_title'),
           showBackButton: true,
@@ -975,15 +556,338 @@ export struct ManagementUserDetailPage {
           .height('100%')
           .justifyContent(FlexAlign.Center)
         } else if (this.ui.pageState === PageState.Error) {
-          this.stateView(this.localizedMessage(this.ui.permissionMessage || this.ui.message), true)
-        } else {
-          if (showLegacyActionBar) {
-            this.legacyEditorContent()
-          } else {
-            this.nativeEditorContent()
+          Column({ space: 14 }) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+              .fontSize(40)
+              .fontColor([$r('app.color.color_main')])
+            Text((this.localizedMessage(this.ui.permissionMessage || this.ui.message)))
+              .fontSize(14)
+              .fontColor(this.secondaryTextColor())
+              .textAlign(TextAlign.Center)
+            if ((true)) {
+              Button($r('app.string.management_user_retry'), { type: ButtonType.Normal })
+                .height(40)
+                .padding({ left: 20, right: 20 })
+                .fontColor($r('app.color.on_primary'))
+                .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+                .borderRadius(this.useNativeMaterial() ? 20 : 10)
+                .attributeModifier(AppThemeSurfaceResolver.modifier(
+                  AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
+                .onClick(() => this.vm.reload())
+            }
           }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+          .padding(24)
+        } else {
+          Scroll(this.contentScroller) {
+            Column({ space: 12 }) {
+              if (!(this.showLegacyActionBar)) {
+                Blank().height(this.nativeTopSpacer())
+              }
+              Column({ space: 12 }) {
+                Column() {
+                  Row({ space: 14 }) {
+                    if (this.ui.user.avatarUrl) {
+                      Image(this.ui.user.avatarUrl)
+                        .width(64)
+                        .height(64)
+                        .objectFit(ImageFit.Cover)
+                        .borderRadius(32)
+                    } else {
+                      Stack() {
+                        SymbolGlyph($r('sys.symbol.person_fill'))
+                          .fontSize(30)
+                          .fontColor([$r('app.color.color_main')])
+                      }
+                      .width(64)
+                      .height(64)
+                      .borderRadius(32)
+                      .backgroundColor(AppThemeSurfaceResolver.interactionOverlay(
+                        this.vm.appUIState.themeStyle))
+                    }
+                    Column({ space: 4 }) {
+                      Text(this.ui.userName || $r('app.string.management_user_title'))
+                        .fontSize(20)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(this.primaryTextColor())
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text(this.ui.user.administrator ?
+                        $r('app.string.management_user_role_administrator') :
+                        $r('app.string.management_user_filter_standard'))
+                        .fontSize(12)
+                        .fontColor(this.secondaryTextColor())
+                    }
+                    .layoutWeight(1)
+                    .alignItems(HorizontalAlign.Start)
+                    Button() {
+                      SymbolGlyph($r('sys.symbol.plus'))
+                        .fontSize(18)
+                        .fontColor([$r('app.color.color_main')])
+                    }
+                    .width(44)
+                    .height(44)
+                    .borderRadius(this.useNativeMaterial() ? 22 : 10)
+                    .backgroundColor(this.useNativeMaterial() ? Color.Transparent :
+                      AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle))
+                    .attributeModifier(AppThemeSurfaceResolver.modifier(
+                      AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                    .enabled(!this.vm.isSaving())
+                    .accessibilityText($r('app.string.management_user_change_avatar'))
+                    .onClick(() => this.updateAvatar())
+                    if (this.ui.user.avatarUrl) {
+                      Button() {
+                        SymbolGlyph($r('sys.symbol.xmark'))
+                          .fontSize(17)
+                          .fontColor([$r('app.color.main_red_color')])
+                      }
+                      .width(44)
+                      .height(44)
+                      .borderRadius(this.useNativeMaterial() ? 22 : 10)
+                      .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+                      .attributeModifier(AppThemeSurfaceResolver.modifier(
+                        AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                      .border({
+                        width: AppThemeSurfaceResolver.outlineWidth(
+                          this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+                        color: $r('app.color.main_red_color')
+                      })
+                      .enabled(!this.vm.isSaving())
+                      .accessibilityText($r('app.string.management_user_remove_avatar'))
+                      .onClick(() => this.confirmRemoveAvatar())
+                    }
+                  }
+                  .width('100%')
+                  .padding(14)
+                }
+                .width('100%')
+                .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+                .clip(true)
+                .backgroundColor(this.useNativeMaterial() ?
+                  AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+                if ((!(this.showLegacyActionBar))) {
+                  Tabs({
+                    index: this.managementTabIndex(this.ui.selectedTab),
+                    controller: this.tabsController
+                  }) {
+                    TabContent() {
+                      ManagementUserProfileSection({
+                        ui: this.ui,
+                        themeStyle: this.vm.appUIState.themeStyle,
+                        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                        onChanged: () => this.vm.markCurrentTabDirty()
+                      })
+                    }
+                      .tabBar($r('app.string.management_user_tab_profile'))
+                    TabContent() {
+                      ManagementUserAccessSection({
+                        ui: this.ui,
+                        themeStyle: this.vm.appUIState.themeStyle,
+                        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                        onChanged: () => this.vm.markCurrentTabDirty()
+                      })
+                    }
+                      .tabBar($r('app.string.management_user_tab_access'))
+                    TabContent() {
+                      ManagementUserParentalSection({
+                        ui: this.ui,
+                        themeStyle: this.vm.appUIState.themeStyle,
+                        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                        onChanged: () => this.vm.markCurrentTabDirty()
+                      })
+                    }
+                      .tabBar($r('app.string.management_user_tab_parental'))
+                    TabContent() {
+                      ManagementUserPasswordSection({
+                        ui: this.ui,
+                        themeStyle: this.vm.appUIState.themeStyle,
+                        nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                        onChanged: () => this.vm.markCurrentTabDirty(),
+                        onSetPassword: () => this.setPassword(),
+                        onResetPassword: () => this.confirmResetPassword(),
+                        onClearPassword: () => this.confirmClearPassword()
+                      })
+                    }
+                      .tabBar($r('app.string.management_user_tab_password'))
+                  }
+                  .width('100%')
+                  .height('auto')
+                  .barMode(BarMode.Fixed)
+                  .scrollable(false)
+                  .animationDuration(0)
+                  .onChange((index: number) => this.selectSystemTab(index))
+                } else {
+                  List({ space: 6 }) {
+                    ForEach([
+                      ManagementUserTab.Profile,
+                      ManagementUserTab.Access,
+                      ManagementUserTab.Parental,
+                      ManagementUserTab.Password
+                    ], (tab: ManagementUserTab) => {
+                      ListItem() {
+                        Button(this.tabLabel(tab), { type: ButtonType.Normal })
+                          .height(40)
+                          .padding({ left: 16, right: 16 })
+                          .fontSize(14)
+                          .fontWeight(this.ui.selectedTab === tab ? FontWeight.Medium : FontWeight.Regular)
+                          .fontColor(this.ui.selectedTab === tab ? $r('app.color.color_main') :
+                            this.secondaryTextColor())
+                          .backgroundColor(this.ui.selectedTab === tab ?
+                            AppThemeSurfaceResolver.interactionOverlay(this.vm.appUIState.themeStyle) :
+                            Color.Transparent)
+                          .borderRadius(this.useNativeMaterial() ? 20 : 9)
+                          .onClick(() => this.selectTab(tab))
+                      }
+                    }, (tab: ManagementUserTab) => tab.toString())
+                  }
+                  .width('100%')
+                  .height(44)
+                  .listDirection(Axis.Horizontal)
+                  .scrollBar(BarState.Off)
+                  if (this.ui.selectedTab === ManagementUserTab.Access) {
+                    ManagementUserAccessSection({
+                      ui: this.ui,
+                      themeStyle: this.vm.appUIState.themeStyle,
+                      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                      onChanged: () => this.vm.markCurrentTabDirty()
+                    })
+                  } else if (this.ui.selectedTab === ManagementUserTab.Parental) {
+                    ManagementUserParentalSection({
+                      ui: this.ui,
+                      themeStyle: this.vm.appUIState.themeStyle,
+                      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                      onChanged: () => this.vm.markCurrentTabDirty()
+                    })
+                  } else if (this.ui.selectedTab === ManagementUserTab.Password) {
+                    ManagementUserPasswordSection({
+                      ui: this.ui,
+                      themeStyle: this.vm.appUIState.themeStyle,
+                      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                      onChanged: () => this.vm.markCurrentTabDirty(),
+                      onSetPassword: () => this.setPassword(),
+                      onResetPassword: () => this.confirmResetPassword(),
+                      onClearPassword: () => this.confirmClearPassword()
+                    })
+                  } else {
+                    ManagementUserProfileSection({
+                      ui: this.ui,
+                      themeStyle: this.vm.appUIState.themeStyle,
+                      nativeThemeAvailable: this.vm.appUIState.nativeThemeAvailable,
+                      onChanged: () => this.vm.markCurrentTabDirty()
+                    })
+                  }
+                }
+                Column({ space: 10 }) {
+                  Column({ space: 4 }) {
+                    Text($r('app.string.management_user_delete_title'))
+                      .fontSize(16)
+                      .fontWeight(FontWeight.Bold)
+                      .fontColor($r('app.color.main_red_color'))
+                      .width('100%')
+                    Text($r('app.string.management_user_delete_impact'))
+                      .fontSize(12)
+                      .fontColor(this.secondaryTextColor())
+                      .width('100%')
+                    if (this.deleteProtected()) {
+                      Text(this.deleteProtectionMessage())
+                        .fontSize(12)
+                        .fontColor($r('app.color.main_red_color'))
+                        .width('100%')
+                    }
+                  }
+                  .width('100%')
+                  .alignItems(HorizontalAlign.Start)
+                  Button(this.ui.deleteStatus === ManagementUserOperationStatus.Saving ?
+                    $r('app.string.management_user_saving') :
+                    $r('app.string.management_user_delete'), { type: ButtonType.Normal })
+                    .width('100%')
+                    .height(42)
+                    .fontColor($r('app.color.main_red_color'))
+                    .backgroundColor(Color.Transparent)
+                    .attributeModifier(AppThemeSurfaceResolver.modifier(
+                      AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                    .border({
+                      width: AppThemeSurfaceResolver.outlineWidth(
+                        this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+                      color: $r('app.color.main_red_color')
+                    })
+                    .borderRadius(this.useNativeMaterial() ? 21 : 8)
+                    .enabled(!this.vm.isSaving() && !this.deleteProtected())
+                    .onClick(() => this.requestDelete())
+                }
+                .width('100%')
+                .padding(16)
+                .alignItems(HorizontalAlign.Start)
+                .borderRadius(AppThemeTokens.groupRadius(this.vm.appUIState.themeStyle))
+                .backgroundColor(this.useNativeMaterial() ?
+                  AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1'))
+                .border({
+                  width: AppThemeSurfaceResolver.outlineWidth(
+                    this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 1),
+                  color: $r('app.color.main_red_color')
+                })
+                if (this.ui.message) {
+                  Text(this.localizedMessage(this.ui.message))
+                    .fontSize(12)
+                    .fontColor($r('app.color.main_red_color'))
+                    .width('100%')
+                }
+              }
+              .width('100%')
+              .constraintSize({ maxWidth: 900 })
+            }
+            .width('100%')
+            .constraintSize({ maxWidth: 900 })
+            .padding({
+              left: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+              right: this.vm.appUIState.deviceWidth >= 600 ? 24 : 16,
+              top: (this.showLegacyActionBar) ? 12 : 0,
+              bottom: (this.showLegacyActionBar) ? (this.showSaveBar() ? 104 : 24) :
+                ManagementNativePagePolicy.contentBottomPadding(
+                  this.vm.appUIState.safeBottom + 24, this.showSaveBar())
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .scrollBar(BarState.Auto)
           if (this.showSaveBar()) {
-            this.saveBarSurface()
+            Column() {
+              Row({ space: 10 }) {
+                Text($r('app.string.management_user_unsaved_short'))
+                  .fontSize(13)
+                  .fontColor(this.secondaryTextColor())
+                  .layoutWeight(1)
+                Button($r('app.string.management_user_discard'), { type: ButtonType.Normal })
+                  .height(40)
+                  .padding({ left: 16, right: 16 })
+                  .borderRadius(this.useNativeMaterial() ? 20 : 8)
+                  .fontColor(this.secondaryTextColor())
+                  .backgroundColor(Color.Transparent)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+                  .onClick(() => this.vm.discardCurrentTab())
+                Button(this.currentStatus() === ManagementUserOperationStatus.Saving ?
+                  $r('app.string.management_user_saving') : $r('app.string.management_user_save'),
+                { type: ButtonType.Normal })
+                  .height(40)
+                  .padding({ left: 20, right: 20 })
+                  .fontColor($r('app.color.on_primary'))
+                  .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.color_main'))
+                  .borderRadius(this.useNativeMaterial() ? 20 : 10)
+                  .attributeModifier(AppThemeSurfaceResolver.modifier(
+                    AppThemeMaterialRole.PrimaryInteractive, this.useNativeMaterial()))
+                  .enabled(this.currentStatus() !== ManagementUserOperationStatus.Saving)
+                  .onClick(() => this.vm.saveCurrentTab())
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 10, bottom: this.vm.appUIState.safeBottom + 10 })
+            }
+            .width('100%')
+            .backgroundColor(this.useNativeMaterial() ? Color.Transparent : $r('app.color.bg_1'))
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.Floating, this.useNativeMaterial()))
           }
         }
       }
@@ -992,26 +896,109 @@ export struct ManagementUserDetailPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(showLegacyActionBar ? AppThemeSurfaceResolver.routeBackground(
+    .backgroundColor((this.showLegacyActionBar) ? AppThemeSurfaceResolver.routeBackground(
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable) : Color.Transparent)
+  }
+}
+
+@HMRouter({
+  pageUrl: RouterConsts.ManagementUserDetailPage,
+  useNavDst: true
+})
+@ComponentV2
+export struct ManagementUserDetailPage {
+  private readonly routeDestination: AppRouteDestination = new AppRouteDestination(this)
+  @Param embedded: boolean = false
+  @Param embeddedUserId: string = ''
+  @Param embeddedInitialTab: ManagementUserTab = ManagementUserTab.Profile
+  @Event onDeleted: (userId: string) => void = (_userId: string) => {}
+  private readonly contentScroller: Scroller = new Scroller()
+  private backHandler: () => boolean = () => false
+
+  private routeOptions(): AppRouteDestinationOptions {
+    return {
+          title: $r('app.string.management_user_title'),
+          contentExtendsUnderTitleBar: true,
+          scrollControllers: [this.contentScroller],
+          beforeBack: () => this.backHandler()
+        }
   }
 
   build() {
     if (this.embedded) {
-      this.pageContent(false)
-    } else {
-      AppRouteDestination({
-        title: this.ui.userName || $r('app.string.management_user_title'),
-        contentExtendsUnderTitleBar: true,
-        scrollControllers: [this.contentScroller],
-        contentBuilder: () => {
-          this.pageContent(false)
-        },
-        legacyContentBuilder: () => {
-          this.pageContent(true)
-        },
-        beforeBack: () => this.handleRouteBack()
+      ManagementUserDetailContent({
+        embedded: true,
+        embeddedUserId: this.embeddedUserId,
+        embeddedInitialTab: this.embeddedInitialTab,
+        showLegacyActionBar: false,
+        contentScroller: this.contentScroller,
+        onDeleted: this.onDeleted
       })
+    } else {
+      if (this.routeDestination.usesHdsDestination()) {
+        HdsNavDestination() {
+          Column() {
+            Blank().height(this.routeDestination.nativeContentTopInset(this.routeOptions()))
+            Stack() {
+              if (this.routeDestination.usesNativeChrome()) {
+                ManagementUserDetailContent({
+                  showLegacyActionBar: false,
+                  contentScroller: this.contentScroller,
+                  onRegisterBackHandler: (handler: () => boolean) => this.backHandler = handler
+                })
+              } else {
+                ManagementUserDetailContent({
+                  showLegacyActionBar: true,
+                  contentScroller: this.contentScroller,
+                  onRegisterBackHandler: (handler: () => boolean) => this.backHandler = handler
+                })
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .height('100%')
+        }
+        .backgroundColor(this.routeDestination.hdsBackgroundColor())
+        .titleMode(HdsNavDestinationTitleMode.MINI)
+        .titleBar(this.routeDestination.nativeTitleBarOptions(this.routeOptions()))
+        .hideTitleBar(this.routeDestination.hdsTitleBarHidden(this.routeOptions()))
+        .hideBackButton(!this.routeDestination.backButtonVisible(this.routeOptions()))
+        .hideToolBar(true)
+        .bindToScrollable(this.routeDestination.hdsBoundScrollers(this.routeOptions()))
+        .onWillAppear(() => this.routeDestination.helper.onWillAppear())
+        .onAppear(() => this.routeDestination.helper.onAppear())
+        .onWillShow(() => this.routeDestination.helper.onWillShow())
+        .onShown(() => this.routeDestination.helper.onShown())
+        .onWillHide(() => this.routeDestination.helper.onWillHide())
+        .onHidden(() => this.routeDestination.helper.onHidden())
+        .onWillDisappear(() => this.routeDestination.helper.onWillDisappear())
+        .onDisAppear(() => this.routeDestination.helper.onDisAppear())
+        .onReady((ctx: NavDestinationContext) => this.routeDestination.helper.onReady(ctx))
+        .onBackPressed(() => this.routeDestination.handleBackPressed(this.routeOptions()))
+        .onResult((result: ESObject) => this.routeDestination.helper.onResult(result))
+        .onActive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onActive(reason))
+        .onInactive((reason: NavDestinationActiveReason) => this.routeDestination.helper.onInactive(reason))
+        .ignoreLayoutSafeArea(
+          this.routeDestination.nativeSafeAreaTypes(),
+          this.routeDestination.nativeSafeAreaEdges()
+        )
+        .width('100%')
+        .height('100%')
+      } else {
+        NavDestination() {
+          ManagementUserDetailContent({
+            showLegacyActionBar: true,
+            contentScroller: this.contentScroller,
+            onRegisterBackHandler: (handler: () => boolean) => this.backHandler = handler
+          })
+        }
+        .attributeModifier(this.routeDestination.legacyModifier(this.routeOptions()))
+        .gestureModifier(this.routeDestination.gestureModifier)
+        .width('100%')
+        .height('100%')
+      }
     }
   }
 }
