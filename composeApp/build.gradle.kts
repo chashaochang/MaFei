@@ -126,7 +126,10 @@ kotlin {
                 implementation("org.jetbrains.compose.ui:ui:1.9.2")
                 implementation("org.jetbrains.compose.material3:material3:1.9.0")
                 implementation("org.jetbrains.compose.components:components-resources:1.9.2")
-                implementation(compose.desktop.currentOs)
+                // CPF publishes the OHOS Compose artifacts with a -1.0.0 suffix,
+                // but no matching Desktop bundle exists. MaFei only targets ARM Macs,
+                // so use JetBrains' official macOS ARM64 Desktop artifact explicitly.
+                implementation(libs.compose.desktop)
                 implementation(project(":player:runtime-macos"))
                 implementation(project(":platform:http-macos"))
                 implementation(project(":platform:secure-storage-macos"))
