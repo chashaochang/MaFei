@@ -190,6 +190,45 @@ class HttpRedirectsTest {
     }
 
     @Test
+    fun queryOnlyAndFragmentOnlyReferencesNeverTouchTheBasePath() {
+        // base URL carries literal dot segments; parse keeps them verbatim
+        val dottedBase: HttpUrl = HttpUrl.parse("https://media.example.org/jellyfin/./Items/../Images?Limit=10")
+        assertEquals("/jellyfin/./Items/../Images", dottedBase.encodedPath)
+
+        // query-only reference: base path survives untouched (no dot-segment removal)
+        val queryOnly = HttpRedirects.nextRequest(request(dottedBase), redirect(302, "?page=2", from = dottedBase), 0)!!
+        assertEquals("/jellyfin/./Items/../Images", queryOnly.url.encodedPath)
+        assertEquals("2", queryOnly.url.queryParameters.first("page"))
+
+        // fragment-only reference: base path survives untouched
+        val fragmentOnly = HttpRedirects.nextRequest(request(dottedBase), redirect(302, "#top", from = dottedBase), 0)!!
+        assertEquals("/jellyfin/./Items/../Images", fragmentOnly.url.encodedPath)
+        assertEquals("10", fragmentOnly.url.queryParameters.first("Limit"))
+        assertEquals("top", fragmentOnly.url.fragment)
+    }
+
+    @Test
+    fun emptyPathSegmentsSurviveDotSegmentRemoval() {
+        val previous = request()
+
+        // root-relative reference keeps double slashes
+        assertEquals(
+            "https://media.example.org/a//b",
+            HttpRedirects.nextRequest(previous, redirect(302, "/a//b"), 0)!!.url.toString(),
+        )
+        // relative reference: ".." pops the directory, "//" inside the reference survives
+        assertEquals(
+            "https://media.example.org/x//y",
+            HttpRedirects.nextRequest(previous, redirect(302, "../x//y"), 0)!!.url.toString(),
+        )
+        // network-path references also get dot-segment removal, keeping empty segments
+        assertEquals(
+            "https://mirror.example.org/a//b",
+            HttpRedirects.nextRequest(previous, redirect(302, "//mirror.example.org/a//b"), 0)!!.url.toString(),
+        )
+    }
+
+    @Test
     fun sameOriginRedirectKeepsCredentials() {
         val previous = request(headers = listOf("Authorization" to "MediaBrowser token", "Cookie" to "mc=1"))
         val next = HttpRedirects.nextRequest(previous, redirect(302, "/same/origin"), 0)!!

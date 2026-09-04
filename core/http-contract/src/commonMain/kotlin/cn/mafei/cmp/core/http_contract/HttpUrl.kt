@@ -257,18 +257,20 @@ class HttpUrl private constructor(
 
         /**
          * Shared host validation for parser and builder: hosts must be
-         * non-empty and free of `/`, `?`, `#`, whitespace and control
-         * characters. `:` is allowed only where the grammar puts it (the
-         * authority/port split or bracketed IPv6 literals), not inside the
-         * plain-host rule itself.
+         * non-empty and free of userinfo (`@`), `/`, `?`, `#`, whitespace and
+         * control characters. `:` is allowed only where the grammar puts it
+         * (the authority/port split or bracketed IPv6 literals), not inside
+         * the plain-host rule itself.
          */
         private fun isHostValid(host: String): Boolean =
             host.isNotEmpty() &&
-                host.none { it == '/' || it == '?' || it == '#' } &&
+                host.none { it == '@' || it == '/' || it == '?' || it == '#' } &&
                 host.none { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
 
         private fun validateHost(host: String) {
-            require(isHostValid(host)) { "host is empty or contains reserved, whitespace or control characters: '$host'" }
+            require(isHostValid(host)) {
+                "host is empty or contains userinfo, reserved, whitespace or control characters: '$host'"
+            }
         }
 
         /**

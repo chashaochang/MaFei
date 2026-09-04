@@ -91,14 +91,16 @@ data object HttpRedirects {
 
     /**
      * Resolves a `Location` header value against the URL that produced the
-     * redirect. Supports:
-     * - absolute URLs and protocol-relative (`//host/...`) references;
+     * redirect, per RFC 3986 §5 (reference resolution):
+     * - absolute URLs and network-path (`//host/...`) references;
      * - root-relative (`/path`) and directory-relative (`item`, `./item`,
      *   `../up`) references — literal `.` and `..` dot segments are removed
-     *   per RFC 3986 §5.2.4 and clamped at the root;
-     * - query-only (`?page=2`) and fragment-only (`#section`) references,
-     *   which keep the current path (and query, for fragment references).
+     *   per §5.2.4 and clamped at the root;
+     * - query-only (`?page=2`) and fragment-only (`#section`) references keep
+     *   the base path **verbatim**: dot-segment removal applies only to the
+     *   path contributed by the reference itself, never to the base path.
      *
+     * Empty path segments are preserved (`/a//b` stays `/a//b`).
      * Returns `null` for anything unparseable — including references carrying
      * user info — instead of guessing.
      */
@@ -107,59 +109,72 @@ data object HttpRedirects {
         if (trimmed.isEmpty()) return null
 
         val origin = base.scheme + "://" + authorityOf(base)
-        val candidate = when {
+        var candidate: String
+        // RFC 5.3 component-wise: only references that contribute a path get
+        // their dot segments removed; the base path is copied verbatim.
+        var referenceContributesPath: Boolean
+
+        when {
             trimmed.contains("://") -> return HttpUrl.parseOrNull(trimmed)
-            trimmed.startsWith("//") -> base.scheme + ":" + trimmed
-            trimmed.startsWith("/") -> origin + trimmed // root-relative
-            trimmed.startsWith("?") -> origin + base.encodedPath + trimmed
-            trimmed.startsWith("#") -> origin + base.encodedPath + baseQueryString(base) + trimmed
+            trimmed.startsWith("//") -> {
+                candidate = base.scheme + ":" + trimmed
+                referenceContributesPath = true
+            }
+            trimmed.startsWith("/") -> {
+                candidate = origin + trimmed
+                referenceContributesPath = true
+            }
+            trimmed.startsWith("?") -> {
+                candidate = origin + base.encodedPath + trimmed
+                referenceContributesPath = false
+            }
+            trimmed.startsWith("#") -> {
+                candidate = origin + base.encodedPath + baseQueryString(base) + trimmed
+                referenceContributesPath = false
+            }
             else -> {
-                // path-relative references resolve against the current directory,
-                // then literal dot segments are removed
+                // path-relative references merge against the current directory
                 val directory = base.encodedPath.substringBeforeLast('/')
                 val prefix = origin + if (directory.isEmpty()) "/" else "$directory/"
-                prefix + trimmed
+                candidate = prefix + trimmed
+                referenceContributesPath = true
             }
         }
         val resolved = HttpUrl.parseOrNull(candidate) ?: return null
-        return if (isPathReference(trimmed)) resolved.withoutDotSegments() else resolved
+        return if (referenceContributesPath) resolved.withDotSegmentsRemoved() else resolved
     }
-
-    private fun isPathReference(location: String): Boolean =
-        !location.contains("://") && !location.startsWith("//")
 
     private fun baseQueryString(base: HttpUrl): String {
         val query = base.queryParameters.toEncodedString()
         return if (query.isEmpty()) "" else "?$query"
     }
 
-    private fun HttpUrl.withoutDotSegments(): HttpUrl {
+    private fun HttpUrl.withDotSegmentsRemoved(): HttpUrl {
         val normalized = removeDotSegments(encodedPath)
         if (normalized == encodedPath) return this
         return newBuilder().encodedPath(normalized).build()
     }
 
     /**
-     * RFC 3986 §5.2.4 restricted to literal `.`/`..` segments, clamped at the
-     * root. Only applies to path-relative redirect targets; empty segments
-     * (`//`) collapse in the process.
+     * RFC 3986 §5.2.4 over literal `.`/`..` segments, operating on the full
+     * segment list so empty segments (`//`) are preserved verbatim. `..`
+     * pops the last segment and clamps silently at the root; a trailing `.`
+     * or `..` leaves a directory marker (trailing slash).
      */
     private fun removeDotSegments(path: String): String {
-        val segments = path.split('/').filter { it.isNotEmpty() }
+        val segments = path.split('/') // absolute path: first element is always ""
         val out = mutableListOf<String>()
-        for (segment in segments) {
-            when (segment) {
-                "." -> {}
-                ".." -> if (out.isNotEmpty()) out.removeAt(out.size - 1)
+        for (index in 1 until segments.size) {
+            when (val segment = segments[index]) {
+                "." -> if (index == segments.size - 1) out.add("")
+                ".." -> {
+                    if (out.isNotEmpty()) out.removeAt(out.size - 1)
+                    if (index == segments.size - 1) out.add("")
+                }
                 else -> out.add(segment)
             }
         }
-        var result = out.joinToString("/", prefix = "/")
-        val endsAsDirectory = path.endsWith("/") ||
-            segments.lastOrNull() == "." ||
-            segments.lastOrNull() == ".."
-        if (endsAsDirectory && !result.endsWith("/")) result += "/"
-        return result
+        return "/" + out.joinToString("/")
     }
 
     private fun authorityOf(url: HttpUrl): String = buildString {

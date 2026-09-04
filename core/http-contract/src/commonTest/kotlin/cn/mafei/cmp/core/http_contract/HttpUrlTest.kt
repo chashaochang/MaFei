@@ -97,9 +97,11 @@ class HttpUrlTest {
         assertNull(HttpUrl.parseOrNull("http://host\u0007"))
         // path and query characters must not appear in the host via the builder
         val builder = HttpUrl.Builder(scheme = "http", host = "ok")
-        for (bad in listOf("a/b", "a?b", "a#b", "a b", "a\tb")) {
+        for (bad in listOf("a/b", "a?b", "a#b", "a b", "a\tb", "user@host")) {
             assertFailsWith<IllegalArgumentException>("host '$bad' must be rejected") { builder.host(bad) }
         }
+        // userinfo is forbidden in the Builder exactly like in the parser
+        assertFailsWith<IllegalArgumentException> { HttpUrl.Builder(scheme = "http", host = "user@example.org") }
     }
 
     @Test
