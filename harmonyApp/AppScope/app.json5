@@ -1,0 +1,9 @@
+{
+  "app": {
+    "bundleName": "cn.xiaobai.mafei.cmp.dev",
+    "vendor": "xiaobaihome",
+    "versionCode": 2000000,
+    "versionName": "2.0.0-dev",
+    "label": "$string:app_name"
+  }
+}

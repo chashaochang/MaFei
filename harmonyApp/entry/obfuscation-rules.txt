@@ -1,0 +1,1 @@
+# MaFei CMP HarmonyOS release obfuscation rules.

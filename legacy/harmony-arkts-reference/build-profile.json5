@@ -1,6 +1,5 @@
 {
   "app": {
-    "signingConfigs": [],
     "products": [
       {
         "name": "default",
@@ -22,8 +21,8 @@
         "icon": "$media:app_icon",
         "label": "$string:app_name",
         "bundleType": "app",
-        "versionCode": 2000000,
-        "versionName": "2.0.0.0",
+        "versionCode": 2000005,
+        "versionName": "2.0.0.5",
         "output": {
           "artifactName": "Mafei_Release"
         },

@@ -1,29 +1,47 @@
-/node_modules
-/oh_modules
-/local.properties
-/.idea
-**/build
-/.hvigor
-.cxx
-/.clangd
-/.clang-format
-/.clang-tidy
-**/.test
-/.appanalyzer
-**/**lock.json5
+# Gradle / Kotlin
+.gradle/
+**/.gradle/
+build/
+**/build/
+.kotlin/
+local.properties
+
+# IDE / operating system
+.idea/
+.DS_Store
+.cxx/
+.clangd
+.clang-format
+.clang-tidy
+
+# HarmonyOS generated dependencies and outputs
+harmonyApp/node_modules/
+harmonyApp/oh_modules/
+harmonyApp/.hvigor/
+harmonyApp/.cxx/
+harmonyApp/entry/oh_modules/
+harmonyApp/entry/libs/*.har
+harmonyApp/entry/libs/arm64-v8a/libkn.so
+harmonyApp/entry/src/main/cpp/include/arm64-v8a/libkn_api.h
+harmonyApp/entry/src/main/resources/rawfile/composeResources/
+**/*lock.json5
 **/BuildProfile.ets
 
-# HMRouter generates these sources and route maps at build time.
-/entry/src/main/ets/generated/
-/entry/src/main/resources/base/profile/hm_router_map.json
-/entry/src/main/resources/rawfile/hm_router_map.json
+# Archived ArkTS reference: retain source, ignore local-only material
+legacy/harmony-arkts-reference/node_modules/
+legacy/harmony-arkts-reference/oh_modules/
+legacy/harmony-arkts-reference/.hvigor/
+legacy/harmony-arkts-reference/.cxx/
+legacy/harmony-arkts-reference/entry/oh_modules/
+legacy/harmony-arkts-reference/entry/libs/*.har
+legacy/harmony-arkts-reference/entry/src/main/ets/generated/
+legacy/harmony-arkts-reference/entry/src/main/resources/base/profile/hm_router_map.json
+legacy/harmony-arkts-reference/entry/src/main/resources/rawfile/hm_router_map.json
+legacy/harmony-arkts-reference/**/api-config.ets
 
-# API配置文件 - 包含敏感信息，不应上传到版本控制
-**/api-config.ets
-
-# 仅在本地维护的私有内容和旧工程外层目录
+# Private project material
 /docs/
-/ohosApp/
+/diagnosis/
 /.private/
 /.local/
 /.tmp/
@@ -34,7 +52,7 @@
 /.superpowers/
 build-profile.private.json5
 
-# 签名、云服务配置及私有播放器二进制
+# Signing and cloud-service material
 *.p12
 *.pfx
 *.pem
@@ -44,5 +62,3 @@ build-profile.private.json5
 *.p7b
 *.csr
 agconnect-services.json
-/entry/libs/*.har
-!/entry/libs/README.md
