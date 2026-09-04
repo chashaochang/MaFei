@@ -16,6 +16,8 @@ import { MusicPlaybackController } from './MusicPlaybackController'
 import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackState'
 import { MusicTrackRow } from './MusicTrackList'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 interface MusicArtistRouteParam {
   artistId?: string
@@ -47,8 +49,20 @@ export struct MusicArtistPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private useHomeContentWidth(): boolean {
+    return this.vm.appUIState.homeContentNavigationMounted
+  }
+
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(this.vm.appUIState, this.useHomeContentWidth())
+  }
+
+  private contentWidth(): number {
+    return HomeContentLayoutPolicy.width(this.vm.appUIState, this.useHomeContentWidth())
+  }
+
   private isWide(): boolean {
-    return this.vm.appUIState.deviceWidth >= 840
+    return this.contentWidth() >= 840
   }
 
   private horizontalPadding(): number {
@@ -68,7 +82,7 @@ export struct MusicArtistPage {
   }
 
   private columnCount(): number {
-    switch (this.vm.appUIState.currentBreakpoint) {
+    switch (this.contentBreakpoint()) {
       case BreakpointTypeEnum.SM:
         return 3
       case BreakpointTypeEnum.MD:
@@ -91,8 +105,8 @@ export struct MusicArtistPage {
     }
     const columns = this.columnCount()
     const rows = Math.ceil(this.ui.albums.length / columns)
-    const windowWidth = Math.max(360, this.vm.appUIState.deviceWidth)
-    const availableWidth = Math.min(1200, windowWidth - this.horizontalPadding() * 2)
+    const contentWidth = Math.max(360, this.contentWidth())
+    const availableWidth = Math.min(1200, contentWidth - this.horizontalPadding() * 2)
     const itemWidth = Math.max(120, (availableWidth - (columns - 1) * 12) / columns)
     return rows * (itemWidth + 42) + Math.max(0, rows - 1) * 18
   }
@@ -111,7 +125,9 @@ export struct MusicArtistPage {
 
   private playTrack(track: MusicTrack, index: number): void {
     if (this.playbackState.currentItem()?.id === track.id) {
-      HMRouterMgr.to(RouterConsts.MusicPlayerPage).push()
+      HMRouterMgr.to(RouterConsts.MusicPlayerPage)
+        .withNavigation(Constants.NAVIGATION_ID)
+        .push()
       return
     }
     this.playbackController.playQueue(this.ui.popularTracks, index).catch((): void => {})

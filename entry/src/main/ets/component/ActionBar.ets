@@ -4,6 +4,7 @@ import { AppUIState } from "../entity/AppUIState";
 import { AppStorageV2 } from "@kit.ArkUI";
 import { AppThemeMaterialRole, AppThemeSurfaceResolver } from "../theme/AppThemeSurfaceResolver";
 import { AppThemeTokens } from "../theme/AppThemeTokens";
+import { HomeContentNavigationController } from "../features/home/HomeContentNavigationController";
 
 @ComponentV2
 struct NativeActionBarItems {
@@ -11,6 +12,7 @@ struct NativeActionBarItems {
   @Require @Param showBackButton: boolean
   @Require @Param rightBtnAccessibilityText: Resource
   @Require @Param appUIState: AppUIState
+  @Require @Param safeTop: number
   @Param rightBtnIcon?: Resource = undefined
   @Event onBackPressed: () => void = () => {}
   @Event onRightPressed: () => void = () => {}
@@ -52,9 +54,9 @@ struct NativeActionBarItems {
       }
     }
     .width('100%')
-    .height(UIConstants.ACTION_BAR_HEIGHT + this.appUIState.safeTop)
+    .height(UIConstants.ACTION_BAR_HEIGHT + this.safeTop)
     .padding({
-      top: this.appUIState.safeTop,
+      top: this.safeTop,
       left: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen),
       right: AppThemeTokens.pageHorizontalPadding(this.appUIState.themeStyle, this.appUIState.isBigScreen)
     })
@@ -123,6 +125,9 @@ export struct ActionBar {
   @Param showBackButton: boolean = true
   @Param floating: boolean = false
   @Event onBackClick: () => void = () => {
+    if (HomeContentNavigationController.popHomeContentIfNeeded()) {
+      return
+    }
     HMRouterMgr.pop()
   }
   @Param rightBtnIcon?: Resource = undefined
@@ -139,6 +144,10 @@ export struct ActionBar {
       this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable)
   }
 
+  private effectiveSafeTop(): number {
+    return this.appUIState.homeContentNavigationVisible ? 0 : this.appUIState.safeTop
+  }
+
   build() {
     if (this.useNativeSurface()) {
       if (this.floating) {
@@ -148,6 +157,7 @@ export struct ActionBar {
           rightBtnIcon: this.rightBtnIcon,
           rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
           appUIState: this.appUIState,
+          safeTop: this.effectiveSafeTop(),
           onBackPressed: () => this.onBackClick(),
           onRightPressed: () => this.onRightBtnClick()
         })
@@ -164,6 +174,7 @@ export struct ActionBar {
           rightBtnIcon: this.rightBtnIcon,
           rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
           appUIState: this.appUIState,
+          safeTop: this.effectiveSafeTop(),
           onBackPressed: () => this.onBackClick(),
           onRightPressed: () => this.onRightBtnClick()
         })
@@ -172,7 +183,7 @@ export struct ActionBar {
       FeiniuActionBar({
         title: this.title,
         showBackButton: this.showBackButton,
-        safeTop: this.appUIState.safeTop,
+        safeTop: this.effectiveSafeTop(),
         rightBtnIcon: this.rightBtnIcon,
         rightBtnAccessibilityText: this.rightButtonAccessibilityText(),
         onBackPressed: () => this.onBackClick(),

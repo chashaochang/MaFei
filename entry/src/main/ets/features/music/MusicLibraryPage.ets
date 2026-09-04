@@ -14,6 +14,8 @@ import { MusicPlaybackController } from './MusicPlaybackController'
 import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackState'
 import { MusicTrackList } from './MusicTrackList'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 @ComponentV2
 struct MusicLibraryEmptyState {
@@ -319,9 +321,22 @@ export struct MusicLibraryPage {
   private readonly tracksScroller: Scroller = new Scroller()
   private restoreEpoch: number = 0
 
+  private initEmbeddedMediaItem(force: boolean = false): void {
+    const libraryId = this.mediaItem.id || ''
+    if (!this.fromHome || libraryId.length === 0 || (!force && this.ui.libraryId === libraryId)) {
+      return
+    }
+    this.vm.init(libraryId, this.mediaItem.name || '')
+  }
+
+  @Monitor('mediaItem')
+  onEmbeddedMediaItemChange(): void {
+    this.initEmbeddedMediaItem(true)
+  }
+
   aboutToAppear(): void {
     if (this.fromHome) {
-      this.vm.init(this.mediaItem.id || '', this.mediaItem.name || '')
+      this.initEmbeddedMediaItem()
       return
     }
     const param = HMRouterMgr.getCurrentParam() as MediaItem | undefined
@@ -338,8 +353,15 @@ export struct MusicLibraryPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(
+      this.vm.appUIState,
+      this.vm.appUIState.homeContentNavigationMounted
+    )
+  }
+
   private horizontalPadding(): number {
-    return this.vm.appUIState.currentBreakpoint.includes('s') ? 16 : 24
+    return this.contentBreakpoint().includes('s') ? 16 : 24
   }
 
   private title(): ResourceStr {
@@ -368,7 +390,9 @@ export struct MusicLibraryPage {
 
   private onTrackClick(track: MusicTrack, index: number): void {
     if (this.playbackState.currentItem()?.id === track.id) {
-      HMRouterMgr.to(RouterConsts.MusicPlayerPage).push()
+      HMRouterMgr.to(RouterConsts.MusicPlayerPage)
+        .withNavigation(Constants.NAVIGATION_ID)
+        .push()
       return
     }
     this.playbackController.playQueue(this.ui.tracks, index).catch((): void => {})
@@ -444,7 +468,7 @@ export struct MusicLibraryPage {
     if (this.fromHome) {
       MusicLibraryPageContent({
         ui: this.ui,
-        currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+        currentBreakpoint: this.contentBreakpoint(),
         nativeSurface: this.useNativeSurface(),
         tabsController: this.tabsController,
         albumsScroller: this.albumsScroller,
@@ -471,7 +495,7 @@ export struct MusicLibraryPage {
               if (this.routeDestination.usesNativeChrome()) {
                 MusicLibraryPageContent({
                   ui: this.ui,
-                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  currentBreakpoint: this.contentBreakpoint(),
                   nativeSurface: true,
                   tabsController: this.tabsController,
                   albumsScroller: this.albumsScroller,
@@ -492,7 +516,7 @@ export struct MusicLibraryPage {
               } else {
                 MusicLibraryPageContent({
                   ui: this.ui,
-                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  currentBreakpoint: this.contentBreakpoint(),
                   nativeSurface: false,
                   tabsController: this.tabsController,
                   albumsScroller: this.albumsScroller,
@@ -548,7 +572,7 @@ export struct MusicLibraryPage {
         NavDestination() {
           MusicLibraryPageContent({
             ui: this.ui,
-            currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+            currentBreakpoint: this.contentBreakpoint(),
             nativeSurface: false,
             tabsController: this.tabsController,
             albumsScroller: this.albumsScroller,

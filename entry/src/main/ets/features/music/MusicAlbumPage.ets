@@ -12,6 +12,7 @@ import { MusicPlaybackController } from './MusicPlaybackController'
 import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackState'
 import { MusicTrackList } from './MusicTrackList'
 import { HdsNavDestination, HdsNavDestinationAttribute, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
 
 interface MusicAlbumRouteParam {
   albumId?: string
@@ -136,7 +137,9 @@ export struct MusicAlbumPage {
 
   private onTrackClick(track: MusicTrack, index: number): void {
     if (this.playbackState.currentItem()?.id === track.id) {
-      HMRouterMgr.to(RouterConsts.MusicPlayerPage).push()
+      HMRouterMgr.to(RouterConsts.MusicPlayerPage)
+        .withNavigation(Constants.NAVIGATION_ID)
+        .push()
       return
     }
     this.playbackController.playQueue(this.ui.tracks, index).catch((): void => {})

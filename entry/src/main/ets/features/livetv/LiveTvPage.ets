@@ -52,7 +52,7 @@ export struct LiveTvPage {
 
   onBackPress(): boolean | void {
     this.vm.appUIState.isFullScreen = false
-    HMRouterMgr.pop()
+    HMRouterMgr.pop({ navigationId: Constants.NAVIGATION_ID })
   }
 
   private toggleFullscreen(): void {

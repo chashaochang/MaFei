@@ -60,6 +60,10 @@ export interface FnMediaPlayItem {
   title: string
   type: string
   poster?: string
+  still_path?: string
+  can_play?: number
+  single_child_guid?: string
+  play_item_guid?: string
   media_guid?: string
   video_guid?: string
   audio_guid?: string
@@ -84,8 +88,8 @@ export interface FnMediaPlayItem {
 
 export interface FnMediaItemStream {
   resolutions?: string[]
-  audio_type?: string
-  color_range_type?: string
+  audio_type?: string | string[]
+  color_range_type?: string | string[]
   progress?: number
   current_time?: number
 }
@@ -95,6 +99,7 @@ export interface FnMediaItem {
   title: string
   type?: string
   poster?: string
+  still_path?: string
   can_play?: number
   parent_guid?: string
   parent_title?: string
@@ -159,6 +164,7 @@ export interface FnMediaItemFile {
   create_time?: number
   update_time?: number
   file_birth_time?: number
+  timestamp?: number
   media_stream?: FnMediaItemStream
 }
 

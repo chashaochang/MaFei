@@ -12,6 +12,8 @@ import { photoBrowseErrorText } from './PhotoErrorText'
 import { PhotoSkeletonGrid } from './PhotoSkeletonGrid'
 import { photoViewerSourceStore } from './PhotoViewerSourceStore'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 interface PhotoAlbumRouteParams {
   albumId: string
@@ -126,8 +128,15 @@ export struct PhotoAlbumPage {
     return this.ui.albumName.length > 0 ? this.ui.albumName : $r('app.string.photo_tab_albums')
   }
 
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(
+      this.vm.appUIState,
+      this.vm.appUIState.homeContentNavigationMounted
+    )
+  }
+
   private horizontalPadding(): number {
-    return this.vm.appUIState.currentBreakpoint.includes('s') ? 12 : 24
+    return this.contentBreakpoint().includes('s') ? 12 : 24
   }
 
   private openPhoto(photo: PhotoItem, _index: number): void {
@@ -140,7 +149,10 @@ export struct PhotoAlbumPage {
       sourceKey: sourceKey,
       initialPhotoId: photo.id
     }
-    HMRouterMgr.to(RouterConsts.PhotoViewerPage).withParam(params).push()
+    HMRouterMgr.to(RouterConsts.PhotoViewerPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withParam(params)
+      .push()
   }
 
   private routeOptions(): AppRouteDestinationOptions {
@@ -164,7 +176,7 @@ export struct PhotoAlbumPage {
             if (this.routeDestination.usesNativeChrome()) {
               PhotoAlbumContent({
                 ui: this.ui,
-                currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                currentBreakpoint: this.contentBreakpoint(),
                 nativeSurface: true,
                 horizontalPadding: this.horizontalPadding(),
                 scroller: this.scroller,
@@ -178,7 +190,7 @@ export struct PhotoAlbumPage {
             } else {
               PhotoAlbumContent({
                 ui: this.ui,
-                currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                currentBreakpoint: this.contentBreakpoint(),
                 nativeSurface: false,
                 horizontalPadding: this.horizontalPadding(),
                 scroller: this.scroller,
@@ -227,7 +239,7 @@ export struct PhotoAlbumPage {
       NavDestination() {
         PhotoAlbumContent({
           ui: this.ui,
-          currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+          currentBreakpoint: this.contentBreakpoint(),
           nativeSurface: false,
           horizontalPadding: this.horizontalPadding(),
           scroller: this.scroller,

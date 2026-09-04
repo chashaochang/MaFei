@@ -53,25 +53,104 @@ interface SeasonDetailRouteParams {
 @ComponentV2
 struct NativeSeasonPlayAction {
   @Require @Param label: string
+  @Require @Param remainingTime: string
+  @Require @Param progress: number
   @Require @Param systemMaterialAvailable: boolean
   @Require @Param onAction: () => void
 
+  private normalizedProgress(): number {
+    return Math.min(100, Math.max(0, this.progress))
+  }
+
+  private hasPlaybackProgress(): boolean {
+    const progress = this.normalizedProgress()
+    return this.remainingTime.length > 0 && progress > 0 && progress < 100
+  }
+
+  private compactRemainingTime(): string {
+    return this.remainingTime
+      .replace('剩余 ', '剩余')
+      .replace(' 小时 ', '小时')
+      .replace(' 分钟', '分')
+  }
+
   build() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.play_fill'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_primary')])
-        Text(this.label)
-          .fontSize(16)
-          .fontColor($r('sys.color.font_primary'))
-          .fontWeight(FontWeight.Medium)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Stack({ alignContent: Alignment.Start }) {
+        if (this.hasPlaybackProgress()) {
+          Stack() {
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('rgba(255, 255, 255, 0.26)')
+
+            Particle({
+              particles: [
+                {
+                  emitter: {
+                    particle: {
+                      type: ParticleType.POINT,
+                      config: { radius: 1.1 },
+                      count: -1,
+                      lifetime: 1600,
+                      lifetimeRange: 400
+                    },
+                    emitRate: 8,
+                    shape: ParticleEmitterShape.RECTANGLE
+                  },
+                  color: {
+                    range: ['rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0.92)']
+                  },
+                  opacity: {
+                    range: [0.3, 0.78]
+                  },
+                  scale: {
+                    range: [0.65, 1.15]
+                  },
+                  velocity: {
+                    speed: [3, 9],
+                    angle: [-10, 10]
+                  }
+                }
+              ]
+            })
+              .width('100%')
+              .height('100%')
+              .hitTestBehavior(HitTestMode.None)
+          }
+          .width(`${this.normalizedProgress()}%`)
+          .height('100%')
+          .clip(true)
+          .hitTestBehavior(HitTestMode.None)
+        }
+
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.play_fill'))
+            .fontSize(20)
+            .fontColor([$r('sys.color.icon_primary')])
+          Column({ space: 1 }) {
+            Text(this.label)
+              .fontSize(16)
+              .fontColor($r('sys.color.font_primary'))
+              .fontWeight(FontWeight.Medium)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            if (this.remainingTime.length > 0) {
+              Text(this.compactRemainingTime())
+                .fontSize(12)
+                .fontColor($r('sys.color.font_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .padding({ left: 20, right: 20 })
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
       }
-      .padding({ left: 20, right: 20 })
       .width('100%')
-      .justifyContent(FlexAlign.Center)
+      .height('100%')
     }
     .height(50)
     .padding(0)
@@ -81,7 +160,120 @@ struct NativeSeasonPlayAction {
     .backgroundColor(Color.Transparent)
     .attributeModifier(AppThemeSurfaceResolver.modifier(
       AppThemeMaterialRole.InteractiveFloating, true, this.systemMaterialAvailable))
-    .accessibilityText(this.label)
+    .accessibilityText(this.remainingTime.length > 0 ? `${this.label} ${this.remainingTime}` : this.label)
+    .onClick(() => {
+      this.onAction()
+    })
+  }
+}
+
+@ComponentV2
+struct LegacySeasonPlayAction {
+  @Require @Param label: string
+  @Require @Param remainingTime: string
+  @Require @Param progress: number
+  @Require @Param onAction: () => void
+
+  private normalizedProgress(): number {
+    return Math.min(100, Math.max(0, this.progress))
+  }
+
+  private hasPlaybackProgress(): boolean {
+    const progress = this.normalizedProgress()
+    return this.remainingTime.length > 0 && progress > 0 && progress < 100
+  }
+
+  private compactRemainingTime(): string {
+    return this.remainingTime
+      .replace('剩余 ', '剩余')
+      .replace(' 小时 ', '小时')
+      .replace(' 分钟', '分')
+  }
+
+  build() {
+    Button() {
+      Stack({ alignContent: Alignment.Start }) {
+        if (this.hasPlaybackProgress()) {
+          Stack() {
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('rgba(255, 255, 255, 0.26)')
+
+            Particle({
+              particles: [
+                {
+                  emitter: {
+                    particle: {
+                      type: ParticleType.POINT,
+                      config: { radius: 1.1 },
+                      count: -1,
+                      lifetime: 1600,
+                      lifetimeRange: 400
+                    },
+                    emitRate: 8,
+                    shape: ParticleEmitterShape.RECTANGLE
+                  },
+                  color: {
+                    range: ['rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0.92)']
+                  },
+                  opacity: {
+                    range: [0.3, 0.78]
+                  },
+                  scale: {
+                    range: [0.65, 1.15]
+                  },
+                  velocity: {
+                    speed: [3, 9],
+                    angle: [-10, 10]
+                  }
+                }
+              ]
+            })
+              .width('100%')
+              .height('100%')
+              .hitTestBehavior(HitTestMode.None)
+          }
+          .width(`${this.normalizedProgress()}%`)
+          .height('100%')
+          .clip(true)
+          .hitTestBehavior(HitTestMode.None)
+        }
+
+        Row({ space: 8 }) {
+          Image($r('app.media.ic_play_round'))
+            .width(20)
+            .height(20)
+          Column({ space: 1 }) {
+            Text(this.label)
+              .fontSize(16)
+              .fontColor(Color.White)
+              .fontWeight(FontWeight.Medium)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            if (this.remainingTime.length > 0) {
+              Text(this.compactRemainingTime())
+                .fontSize(12)
+                .fontColor('rgba(255, 255, 255, 0.78)')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20 })
+        .justifyContent(FlexAlign.Center)
+      }
+      .width('100%')
+      .height('100%')
+    }
+    .height(50)
+    .padding(0)
+    .borderRadius(25)
+    .clip(true)
+    .backgroundColor($r('app.color.color_main'))
+    .accessibilityText(this.remainingTime.length > 0 ? `${this.label} ${this.remainingTime}` : this.label)
     .onClick(() => {
       this.onAction()
     })
@@ -291,6 +483,10 @@ export struct SeasonDetailPage {
     option.errorObjectFit = ImageFit.CENTER
     option.border = { radius: 6 }
     return option
+  }
+
+  private episodeProgress(item: VideoItem): number {
+    return Math.min(100, Math.max(0, item.percent || 0))
   }
 
   private legacyMediaRef(id: string, kind: MediaRefKind): MediaRef | undefined {
@@ -599,6 +795,8 @@ export struct SeasonDetailPage {
                             Row({ space: 8 }) {
                               NativeSeasonPlayAction({
                                 label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                                remainingTime: this.ui.remainingTime,
+                                progress: this.ui.percentageWatched,
                                 systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
                                 onAction: () => {
                                   this.vm.playFirst()
@@ -619,23 +817,16 @@ export struct SeasonDetailPage {
                             .padding({ left: 16, right: 16 })
                           } else {
                             Row({ space: 8 }) {
-                              Button() {
-                                Row() {
-                                  Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                                  Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
-                                    .fontSize(16)
-                                    .fontColor(Color.White)
-                                    .fontWeight(FontWeight.Medium)
+                              LegacySeasonPlayAction({
+                                label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                                remainingTime: this.ui.remainingTime,
+                                progress: this.ui.percentageWatched,
+                                onAction: () => {
+                                  this.vm.playFirst()
                                 }
-                              }
+                              })
                               .layoutWeight(1)
                               .margin({ right: 12 })
-                              .borderRadius(25)
-                              .height(50)
-                              .backgroundColor($r('app.color.color_main'))
-                              .onClick(() => {
-                                this.vm.playFirst()
-                              })
 
                               Button() {
                                 Image($r('app.media.ic_check'))
@@ -922,6 +1113,26 @@ export struct SeasonDetailPage {
                                         this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
                                       .borderRadius(6)
                                       .clip(true)
+                                    if (this.episodeProgress(item) > 0 && this.episodeProgress(item) < 100) {
+                                      Progress({
+                                        value: this.episodeProgress(item),
+                                        total: 100,
+                                        type: ProgressType.Linear
+                                      })
+                                        .width('100%')
+                                        .height(4)
+                                        .color($r('app.color.color_main'))
+                                        .alignRules({
+                                          bottom: {
+                                            anchor: '__container__',
+                                            align: VerticalAlign.Bottom
+                                          },
+                                          left: {
+                                            anchor: '__container__',
+                                            align: HorizontalAlign.Start
+                                          }
+                                        })
+                                    }
                                     if (item.tags && item.tags.length > 0) {
                                       Row({ space: 4 }) {
                                         ForEach(item.tags, (tag: string) => {
@@ -1266,6 +1477,8 @@ export struct SeasonDetailPage {
                             Row({ space: 8 }) {
                               NativeSeasonPlayAction({
                                 label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                                remainingTime: this.ui.remainingTime,
+                                progress: this.ui.percentageWatched,
                                 systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
                                 onAction: () => {
                                   this.vm.playFirst()
@@ -1286,23 +1499,16 @@ export struct SeasonDetailPage {
                             .padding({ left: 16, right: 16 })
                           } else {
                             Row({ space: 8 }) {
-                              Button() {
-                                Row() {
-                                  Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                                  Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
-                                    .fontSize(16)
-                                    .fontColor(Color.White)
-                                    .fontWeight(FontWeight.Medium)
+                              LegacySeasonPlayAction({
+                                label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                                remainingTime: this.ui.remainingTime,
+                                progress: this.ui.percentageWatched,
+                                onAction: () => {
+                                  this.vm.playFirst()
                                 }
-                              }
+                              })
                               .layoutWeight(1)
                               .margin({ right: 12 })
-                              .borderRadius(25)
-                              .height(50)
-                              .backgroundColor($r('app.color.color_main'))
-                              .onClick(() => {
-                                this.vm.playFirst()
-                              })
 
                               Button() {
                                 Image($r('app.media.ic_check'))
@@ -1589,6 +1795,26 @@ export struct SeasonDetailPage {
                                         this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
                                       .borderRadius(6)
                                       .clip(true)
+                                    if (this.episodeProgress(item) > 0 && this.episodeProgress(item) < 100) {
+                                      Progress({
+                                        value: this.episodeProgress(item),
+                                        total: 100,
+                                        type: ProgressType.Linear
+                                      })
+                                        .width('100%')
+                                        .height(4)
+                                        .color($r('app.color.color_main'))
+                                        .alignRules({
+                                          bottom: {
+                                            anchor: '__container__',
+                                            align: VerticalAlign.Bottom
+                                          },
+                                          left: {
+                                            anchor: '__container__',
+                                            align: HorizontalAlign.Start
+                                          }
+                                        })
+                                    }
                                     if (item.tags && item.tags.length > 0) {
                                       Row({ space: 4 }) {
                                         ForEach(item.tags, (tag: string) => {
@@ -1968,6 +2194,8 @@ export struct SeasonDetailPage {
                       Row({ space: 8 }) {
                         NativeSeasonPlayAction({
                           label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                          remainingTime: this.ui.remainingTime,
+                          progress: this.ui.percentageWatched,
                           systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
                           onAction: () => {
                             this.vm.playFirst()
@@ -1988,23 +2216,16 @@ export struct SeasonDetailPage {
                       .padding({ left: 16, right: 16 })
                     } else {
                       Row({ space: 8 }) {
-                        Button() {
-                          Row() {
-                            Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                            Text(this.ui.episodeName != '' ? this.ui.episodeName : '播放')
-                              .fontSize(16)
-                              .fontColor(Color.White)
-                              .fontWeight(FontWeight.Medium)
+                        LegacySeasonPlayAction({
+                          label: this.ui.episodeName !== '' ? this.ui.episodeName : '播放',
+                          remainingTime: this.ui.remainingTime,
+                          progress: this.ui.percentageWatched,
+                          onAction: () => {
+                            this.vm.playFirst()
                           }
-                        }
+                        })
                         .layoutWeight(1)
                         .margin({ right: 12 })
-                        .borderRadius(25)
-                        .height(50)
-                        .backgroundColor($r('app.color.color_main'))
-                        .onClick(() => {
-                          this.vm.playFirst()
-                        })
 
                         Button() {
                           Image($r('app.media.ic_check'))
@@ -2291,6 +2512,26 @@ export struct SeasonDetailPage {
                                   this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable, 0.5))
                                 .borderRadius(6)
                                 .clip(true)
+                              if (this.episodeProgress(item) > 0 && this.episodeProgress(item) < 100) {
+                                Progress({
+                                  value: this.episodeProgress(item),
+                                  total: 100,
+                                  type: ProgressType.Linear
+                                })
+                                  .width('100%')
+                                  .height(4)
+                                  .color($r('app.color.color_main'))
+                                  .alignRules({
+                                    bottom: {
+                                      anchor: '__container__',
+                                      align: VerticalAlign.Bottom
+                                    },
+                                    left: {
+                                      anchor: '__container__',
+                                      align: HorizontalAlign.Start
+                                    }
+                                  })
+                              }
                               if (item.tags && item.tags.length > 0) {
                                 Row({ space: 4 }) {
                                   ForEach(item.tags, (tag: string) => {

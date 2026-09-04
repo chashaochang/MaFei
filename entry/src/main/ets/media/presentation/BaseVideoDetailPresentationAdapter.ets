@@ -21,13 +21,20 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
       const videos = this.streamsOfKind(source, MediaStreamKind.Video)
       const audios = this.streamsOfKind(source, MediaStreamKind.Audio)
       const subtitles = this.streamsOfKind(source, MediaStreamKind.Subtitle)
-      const video = videos.length > 0 ? videos[0] : undefined
-      const audio = audios.length > 0 ? audios[0] : undefined
+      const selectedVideoIndex = source.defaultVideoStreamIndex
+      const video = selectedVideoIndex === undefined
+        ? videos[0] : (videos.find((stream: MediaStreamInfo): boolean => stream.index === selectedVideoIndex) || videos[0])
+      const defaultAudioOptionIndex = this.defaultAudioOptionIndex(audios, source.defaultAudioStreamIndex)
+      const defaultSubtitleOptionIndex = this.defaultSubtitleOptionIndex(
+        subtitles, source.defaultSubtitleStreamIndex)
+      const audio = defaultAudioOptionIndex >= 0 && defaultAudioOptionIndex < audios.length ?
+        audios[defaultAudioOptionIndex] : undefined
       const audioOptions = audios.map((stream: MediaStreamInfo, optionIndex: number): MediaOptionViewData => {
         return this.audioOption(stream, optionIndex)
       })
-      const subtitleOptions = subtitles.map((stream: MediaStreamInfo, optionIndex: number): MediaOptionViewData => {
-        return this.subtitleOption(stream, optionIndex)
+      const subtitleOptions: MediaOptionViewData[] = [this.noSubtitleOption()]
+      subtitles.forEach((stream: MediaStreamInfo, optionIndex: number): void => {
+        subtitleOptions.push(this.subtitleOption(stream, optionIndex))
       })
       return {
         id: source.id,
@@ -41,8 +48,8 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
         tagKeys: this.videoTags(source.streams),
         audioOptions: audioOptions,
         subtitleOptions: subtitleOptions,
-        defaultAudioOptionIndex: this.defaultOptionIndex(audios),
-        defaultSubtitleOptionIndex: this.defaultOptionIndex(subtitles),
+        defaultAudioOptionIndex: defaultAudioOptionIndex,
+        defaultSubtitleOptionIndex: defaultSubtitleOptionIndex,
         videoSummary: this.videoStreamSummary(videos),
         audioSummary: this.audioStreamSummary(audios),
         subtitleSummary: this.subtitleStreamSummary(subtitles),
@@ -128,6 +135,9 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
     this.appendUnique(parts, this.resolutionLabel(video))
     this.appendUnique(parts, `${video?.codec || ''}`.trim().toUpperCase())
     this.appendUnique(parts, this.dynamicRangeLabel(video))
+    this.appendUnique(parts, `${audio?.audioType || ''}`.trim())
+    this.appendUnique(parts, `${audio?.codec || ''}`.trim().toUpperCase())
+    this.appendUnique(parts, audio ? this.audioChannelText(audio) : '')
     this.appendUnique(parts, source.container.trim().toUpperCase())
     this.appendUnique(parts, this.fileSize(source.sizeBytes))
     return parts
@@ -137,9 +147,34 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
     return source.streams.filter((stream: MediaStreamInfo): boolean => stream.kind === kind)
   }
 
-  private defaultOptionIndex(streams: MediaStreamInfo[]): number {
-    const index = streams.findIndex((stream: MediaStreamInfo): boolean => stream.default)
+  private preferredOptionIndex(streams: MediaStreamInfo[], preferredStreamIndex?: number): number {
+    if (preferredStreamIndex !== undefined && preferredStreamIndex >= 0) {
+      const preferredIndex = streams.findIndex((stream: MediaStreamInfo): boolean =>
+        stream.index === preferredStreamIndex)
+      if (preferredIndex >= 0) return preferredIndex
+    }
+    return streams.findIndex((stream: MediaStreamInfo): boolean => stream.default)
+  }
+
+  private defaultAudioOptionIndex(streams: MediaStreamInfo[], preferredStreamIndex?: number): number {
+    const index = this.preferredOptionIndex(streams, preferredStreamIndex)
     return index >= 0 ? index : 0
+  }
+
+  private defaultSubtitleOptionIndex(streams: MediaStreamInfo[], preferredStreamIndex?: number): number {
+    if (preferredStreamIndex === -1) return 0
+    const index = this.preferredOptionIndex(streams, preferredStreamIndex)
+    return index >= 0 ? index + 1 : 0
+  }
+
+  private noSubtitleOption(): MediaOptionViewData {
+    return {
+      id: 'subtitle:none',
+      streamIndex: -1,
+      compactLabel: '无字幕',
+      title: '无字幕',
+      summary: ''
+    }
   }
 
   protected compactOptionLabel(title: string, details: string[]): string {
@@ -228,7 +263,9 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
   private hasVideoDetails(video: MediaStreamInfo): boolean {
     return this.hasText(video.title) || this.hasText(video.displayTitle) || this.hasText(video.codec) ||
       this.hasText(video.profile) || video.level !== undefined || (video.width || 0) > 0 ||
-      (video.height || 0) > 0 || this.hasText(video.resolutionType) || this.hasText(video.aspectRatio) ||
+      (video.height || 0) > 0 || (video.codedWidth || 0) > 0 || (video.codedHeight || 0) > 0 ||
+      video.rotation !== undefined || video.bluray !== undefined || this.hasText(video.resolutionType) ||
+      this.hasText(video.aspectRatio) ||
       video.frameRate !== undefined || video.bitrate !== undefined || this.hasText(video.videoRangeType) ||
       (video.dvProfile || 0) > 0 || this.hasText(video.colorPrimaries) || this.hasText(video.colorSpace) ||
       this.hasText(video.colorTransfer) || video.bitDepth !== undefined || this.hasText(video.pixelFormat) ||
@@ -239,13 +276,13 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
     return this.hasText(audio.title) || this.hasText(audio.displayTitle) || this.hasText(audio.language) ||
       this.hasText(audio.codec) || this.hasText(audio.profile) || audio.channels !== undefined ||
       audio.sampleRate !== undefined || audio.bitrate !== undefined || this.hasText(audio.audioType) ||
-      this.hasText(audio.channelLayout)
+      this.hasText(audio.channelLayout) || audio.fake !== undefined
   }
 
   private hasSubtitleDetails(subtitle: MediaStreamInfo): boolean {
     return this.hasText(subtitle.title) || this.hasText(subtitle.displayTitle) ||
       this.hasText(subtitle.language) || this.hasText(subtitle.codec) || subtitle.external ||
-      subtitle.default || subtitle.forced
+      subtitle.default || subtitle.forced || this.hasText(subtitle.source) || subtitle.fileSizeBytes !== undefined
   }
 
   private hasText(value?: string): boolean {
@@ -261,11 +298,17 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
       id: `video:${video.index}:${index}`,
       title: titleParts.length > 0 ? titleParts.join(' ') : `视频 ${index + 1}`,
       rows: [
+        this.infoRow('标题', video.title),
+        this.infoRow('显示标题', video.displayTitle),
         this.infoRow('编码器', video.codec.trim().toLowerCase()),
         this.infoRow('配置', video.profile),
         this.infoRow('等级', video.level !== undefined ? video.level.toString() : ''),
         this.infoRow('分辨率', this.detailedResolution(video)),
+        this.infoRow('编码分辨率', (video.codedWidth || 0) > 0 && (video.codedHeight || 0) > 0
+          ? `${video.codedWidth} * ${video.codedHeight}` : ''),
         this.infoRow('宽高比', video.aspectRatio),
+        this.infoRow('旋转', video.rotation !== undefined ? `${video.rotation}°` : ''),
+        this.infoRow('蓝光源', video.bluray === undefined ? '' : (video.bluray ? '是' : '否')),
         this.infoRow('隔行扫描', video.interlaced === undefined ? '--' : (video.interlaced ? '是' : '否'), true),
         this.infoRow('帧率', video.frameRate !== undefined ? `${video.frameRate} fps` : ''),
         this.infoRow('码率', video.bitrate !== undefined ? this.bitrateText(video.bitrate) : ''),
@@ -290,9 +333,13 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
       id: `audio:${audio.index}:${index}`,
       title: titleParts.length > 0 ? titleParts.join(' ') : `音频 ${index + 1}`,
       rows: [
+        this.infoRow('标题', audio.title),
+        this.infoRow('显示标题', audio.displayTitle),
         this.infoRow('语言', language),
         this.infoRow('编码器', audio.codec.trim().toLowerCase()),
         this.infoRow('配置', audio.profile),
+        this.infoRow('音频类型', audio.audioType),
+        this.infoRow('伪音轨', audio.fake === undefined ? '' : (audio.fake ? '是' : '否')),
         this.infoRow('声道', audio.channels !== undefined ? `${audio.channels} ch` : '', true),
         this.infoRow('采样率', audio.sampleRate !== undefined ? `${audio.sampleRate} Hz` : ''),
         this.infoRow('码率', audio.bitrate !== undefined ? this.bitrateText(audio.bitrate) : ''),
@@ -310,8 +357,12 @@ export abstract class BaseVideoDetailPresentationAdapter implements VideoDetailP
       id: `subtitle:${subtitle.index}:${index}`,
       title: title,
       rows: [
+        this.infoRow('标题', subtitle.title),
+        this.infoRow('显示标题', subtitle.displayTitle),
         this.infoRow('语言', language),
         this.infoRow('编码器', subtitle.codec.trim().toLowerCase()),
+        this.infoRow('来源', subtitle.source),
+        this.infoRow('文件大小', subtitle.fileSizeBytes !== undefined ? this.fileSize(subtitle.fileSizeBytes) : ''),
         this.infoRow('外置字幕', subtitle.external ? '是' : '否'),
         this.infoRow('默认', subtitle.default ? '是' : '否'),
         this.infoRow('强制', subtitle.forced ? '是' : '否')

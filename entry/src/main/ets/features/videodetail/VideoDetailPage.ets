@@ -171,6 +171,118 @@ struct NativeDetailPlayAction {
 }
 
 @ComponentV2
+struct LegacyDetailPlayAction {
+  @Require @Param label: string
+  @Require @Param remainingTime: string
+  @Require @Param progress: number
+  @Require @Param onAction: () => void
+
+  private normalizedProgress(): number {
+    return Math.min(100, Math.max(0, this.progress))
+  }
+
+  private hasPlaybackProgress(): boolean {
+    const progress = this.normalizedProgress()
+    return this.remainingTime.length > 0 && progress > 0 && progress < 100
+  }
+
+  private compactRemainingTime(): string {
+    return this.remainingTime
+      .replace('剩余 ', '剩余')
+      .replace(' 小时 ', '小时')
+      .replace(' 分钟', '分')
+  }
+
+  build() {
+    Button() {
+      Stack({ alignContent: Alignment.Start }) {
+        if (this.hasPlaybackProgress()) {
+          Stack() {
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('rgba(255, 255, 255, 0.26)')
+
+            Particle({
+              particles: [
+                {
+                  emitter: {
+                    particle: {
+                      type: ParticleType.POINT,
+                      config: { radius: 1.1 },
+                      count: -1,
+                      lifetime: 1600,
+                      lifetimeRange: 400
+                    },
+                    emitRate: 8,
+                    shape: ParticleEmitterShape.RECTANGLE
+                  },
+                  color: {
+                    range: ['rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0.92)']
+                  },
+                  opacity: {
+                    range: [0.3, 0.78]
+                  },
+                  scale: {
+                    range: [0.65, 1.15]
+                  },
+                  velocity: {
+                    speed: [3, 9],
+                    angle: [-10, 10]
+                  }
+                }
+              ]
+            })
+              .width('100%')
+              .height('100%')
+              .hitTestBehavior(HitTestMode.None)
+          }
+          .width(`${this.normalizedProgress()}%`)
+          .height('100%')
+          .clip(true)
+          .hitTestBehavior(HitTestMode.None)
+        }
+
+        Row({ space: 8 }) {
+          Image($r('app.media.ic_play_round'))
+            .width(20)
+            .height(20)
+          Column({ space: 1 }) {
+            Text(this.label)
+              .fontSize(16)
+              .fontColor(Color.White)
+              .fontWeight(FontWeight.Medium)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            if (this.remainingTime.length > 0) {
+              Text(this.compactRemainingTime())
+                .fontSize(12)
+                .fontColor('rgba(255, 255, 255, 0.78)')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .padding({ left: 18, right: 18 })
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+      }
+      .width('100%')
+      .height('100%')
+    }
+    .height(50)
+    .padding(0)
+    .borderRadius(25)
+    .clip(true)
+    .accessibilityText(this.remainingTime.length > 0 ? `${this.label} ${this.remainingTime}` : this.label)
+    .onClick(() => {
+      this.onAction()
+    })
+  }
+}
+
+@ComponentV2
 struct NativeDetailIconAction {
   @Param icon: ResourceStr | undefined = undefined
   @Param symbol: Resource | undefined = undefined
@@ -656,18 +768,36 @@ export struct VideoDetailPage {
     return 0.92 + 0.08 * this.collapsedTitleOpacity()
   }
 
+  private detailViewportWidth(): number {
+    if (this.vm.appUIState.homeContentNavigationMounted && this.vm.appUIState.homeContentWidth > 0) {
+      return this.vm.appUIState.homeContentWidth
+    }
+    return this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
+  }
+
+  private detailViewportGlobalX(): number {
+    if (!this.vm.appUIState.homeContentNavigationMounted || this.vm.appUIState.homeContentWidth <= 0) {
+      return 0
+    }
+    return Math.max(0, this.vm.appUIState.deviceWidth - this.vm.appUIState.homeContentWidth)
+  }
+
   private heroLogoTranslateX(): number {
-    const viewportWidth = this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
+    const viewportWidth = this.detailViewportWidth()
+    const viewportGlobalX = this.detailViewportGlobalX()
     const logoWidth = 76 * 80 / 31
-    const targetLeft = this.collapsedTitleGlobalX > 0 ? this.collapsedTitleGlobalX : 68
+    const targetLeft = this.collapsedTitleGlobalX > 0 ? this.collapsedTitleGlobalX : viewportGlobalX + 68
     const targetCenter = targetLeft + logoWidth * 0.28 / 2
-    return (targetCenter - viewportWidth / 2) * this.easedTitlePhase(0.24)
+    const sourceCenter = viewportGlobalX + viewportWidth / 2
+    return (targetCenter - sourceCenter) * this.easedTitlePhase(0.24)
   }
 
   private heroTextTranslateX(): number {
-    const viewportWidth = this.vm.appUIState.deviceWidth > 0 ? this.vm.appUIState.deviceWidth : 360
-    const targetCenter = this.collapsedTitleCenterX > 0 ? this.collapsedTitleCenterX : 112
-    return (targetCenter - viewportWidth / 2) * this.easedTitlePhase(0.24)
+    const viewportWidth = this.detailViewportWidth()
+    const viewportGlobalX = this.detailViewportGlobalX()
+    const targetCenter = this.collapsedTitleCenterX > 0 ? this.collapsedTitleCenterX : viewportGlobalX + 112
+    const sourceCenter = viewportGlobalX + viewportWidth / 2
+    return (targetCenter - sourceCenter) * this.easedTitlePhase(0.24)
   }
 
   private heroTitleTranslateY(): number {
@@ -1179,27 +1309,16 @@ export struct VideoDetailPage {
                           .padding({ left: 16, right: 16 })
                         } else {
                           Row({ space: 8 }) {
-                            Button() {
-                              Row() {
-                                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                                Text(this.ui.playButtonText)
-                                  .fontSize(16)
-                                  .fontColor(Color.White)
-                                  .fontWeight(FontWeight.Medium)
-                                  .maxLines(1)
-                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                            LegacyDetailPlayAction({
+                              label: this.ui.playButtonText,
+                              remainingTime: this.ui.remainingTime,
+                              progress: this.ui.percentageWatched,
+                              onAction: () => {
+                                this.vm.playCurrent()
                               }
-                              .padding({ left: 18, right: 18 })
-                              .width('100%')
-                              .justifyContent(FlexAlign.Center)
-                            }
-                            .height(50)
+                            })
                             .layoutWeight(1)
                             .margin({ right: 12 })
-                            .borderRadius(25)
-                            .onClick(() => {
-                              this.vm.playCurrent()
-                            })
 
                             Button() {
                               Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
@@ -2019,27 +2138,16 @@ export struct VideoDetailPage {
                           .padding({ left: 16, right: 16 })
                         } else {
                           Row({ space: 8 }) {
-                            Button() {
-                              Row() {
-                                Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                                Text(this.ui.playButtonText)
-                                  .fontSize(16)
-                                  .fontColor(Color.White)
-                                  .fontWeight(FontWeight.Medium)
-                                  .maxLines(1)
-                                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                            LegacyDetailPlayAction({
+                              label: this.ui.playButtonText,
+                              remainingTime: this.ui.remainingTime,
+                              progress: this.ui.percentageWatched,
+                              onAction: () => {
+                                this.vm.playCurrent()
                               }
-                              .padding({ left: 18, right: 18 })
-                              .width('100%')
-                              .justifyContent(FlexAlign.Center)
-                            }
-                            .height(50)
+                            })
                             .layoutWeight(1)
                             .margin({ right: 12 })
-                            .borderRadius(25)
-                            .onClick(() => {
-                              this.vm.playCurrent()
-                            })
 
                             Button() {
                               Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))
@@ -2894,27 +3002,16 @@ export struct VideoDetailPage {
                     .padding({ left: 16, right: 16 })
                   } else {
                     Row({ space: 8 }) {
-                      Button() {
-                        Row() {
-                          Image($r('app.media.ic_play_round')).width(20).height(20).margin({ right: 8 })
-                          Text(this.ui.playButtonText)
-                            .fontSize(16)
-                            .fontColor(Color.White)
-                            .fontWeight(FontWeight.Medium)
-                            .maxLines(1)
-                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      LegacyDetailPlayAction({
+                        label: this.ui.playButtonText,
+                        remainingTime: this.ui.remainingTime,
+                        progress: this.ui.percentageWatched,
+                        onAction: () => {
+                          this.vm.playCurrent()
                         }
-                        .padding({ left: 18, right: 18 })
-                        .width('100%')
-                        .justifyContent(FlexAlign.Center)
-                      }
-                      .height(50)
+                      })
                       .layoutWeight(1)
                       .margin({ right: 12 })
-                      .borderRadius(25)
-                      .onClick(() => {
-                        this.vm.playCurrent()
-                      })
 
                       Button() {
                         Image(this.ui.isFavorite ? $r('app.media.ic_like') : $r('app.media.ic_unlike'))

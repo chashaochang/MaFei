@@ -21,6 +21,7 @@ import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackSt
 import { MusicPlayerViewModel } from './MusicPlayerViewModel'
 import { MusicQueueSheet } from './MusicQueueSheet'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
 
 @ComponentV2
 struct MusicSecondaryControl {
@@ -93,6 +94,10 @@ export struct MusicPlayerPage {
 
   private currentItem(): MusicQueueItem | undefined {
     return this.playbackState.currentItem()
+  }
+
+  private closePlayer(): void {
+    HMRouterMgr.pop({ navigationId: Constants.NAVIGATION_ID })
   }
 
   private hasArtwork(): boolean {
@@ -333,7 +338,7 @@ export struct MusicPlayerPage {
                           .height(44)
                           .backgroundColor($r('app.color.bg_tab_item'))
                           .accessibilityText($r('app.string.music_back'))
-                          .onClick(() => HMRouterMgr.pop())
+                          .onClick(() => this.closePlayer())
                           Blank().layoutWeight(1)
                           Button({ type: ButtonType.Circle, stateEffect: true }) {
                             SymbolGlyph($r('sys.symbol.music_note_list'))
@@ -814,7 +819,7 @@ export struct MusicPlayerPage {
                               .height(44)
                               .backgroundColor($r('app.color.bg_tab_item'))
                               .accessibilityText($r('app.string.music_back'))
-                              .onClick(() => HMRouterMgr.pop())
+                              .onClick(() => this.closePlayer())
                               Blank().layoutWeight(1)
                               Button({ type: ButtonType.Circle, stateEffect: true }) {
                                 SymbolGlyph($r('sys.symbol.music_note_list'))
@@ -942,7 +947,7 @@ export struct MusicPlayerPage {
                           .height(44)
                           .backgroundColor($r('app.color.bg_tab_item'))
                           .accessibilityText($r('app.string.music_back'))
-                          .onClick(() => HMRouterMgr.pop())
+                          .onClick(() => this.closePlayer())
                           Blank().layoutWeight(1)
                           Button({ type: ButtonType.Circle, stateEffect: true }) {
                             SymbolGlyph($r('sys.symbol.music_note_list'))
@@ -1423,7 +1428,7 @@ export struct MusicPlayerPage {
                               .height(44)
                               .backgroundColor($r('app.color.bg_tab_item'))
                               .accessibilityText($r('app.string.music_back'))
-                              .onClick(() => HMRouterMgr.pop())
+                              .onClick(() => this.closePlayer())
                               Blank().layoutWeight(1)
                               Button({ type: ButtonType.Circle, stateEffect: true }) {
                                 SymbolGlyph($r('sys.symbol.music_note_list'))
@@ -1577,7 +1582,7 @@ export struct MusicPlayerPage {
                     .height(44)
                     .backgroundColor($r('app.color.bg_tab_item'))
                     .accessibilityText($r('app.string.music_back'))
-                    .onClick(() => HMRouterMgr.pop())
+                    .onClick(() => this.closePlayer())
                     Blank().layoutWeight(1)
                     Button({ type: ButtonType.Circle, stateEffect: true }) {
                       SymbolGlyph($r('sys.symbol.music_note_list'))
@@ -2058,7 +2063,7 @@ export struct MusicPlayerPage {
                         .height(44)
                         .backgroundColor($r('app.color.bg_tab_item'))
                         .accessibilityText($r('app.string.music_back'))
-                        .onClick(() => HMRouterMgr.pop())
+                        .onClick(() => this.closePlayer())
                         Blank().layoutWeight(1)
                         Button({ type: ButtonType.Circle, stateEffect: true }) {
                           SymbolGlyph($r('sys.symbol.music_note_list'))

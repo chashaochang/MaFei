@@ -45,6 +45,8 @@ import { HomeMineWorkspace } from './HomeMineWorkspace'
 import { HomeMediaLibraryContent } from './HomeMediaLibraryContent'
 import { SearchPageContent } from '../search/SearchPage'
 import { HomePadBackdrop, HomePadHeroLayer } from './HomePadBackdrop'
+import { HomeContentNavigation } from './HomeContentNavigation'
+import { HomeContentNavigationController } from './HomeContentNavigationController'
 
 @ComponentV2
 export struct HomeScreen {
@@ -174,6 +176,9 @@ export struct HomeScreen {
   }
 
   private musicMiniPlayerVisible(): boolean {
+    if (this.appUIState.homeContentNavigationActive) {
+      return false
+    }
     if (!this.musicCapabilityEnabled()) {
       return false
     }
@@ -501,6 +506,7 @@ export struct HomeScreen {
   }
 
   private selectPadTopTab(index: number): void {
+    HomeContentNavigationController.reset(this.appUIState)
     if (index === 1) {
       this.ui.selectedDestination = HomeDestination.Favorite
     } else if (index === 2) {
@@ -514,12 +520,64 @@ export struct HomeScreen {
   }
 
   private padChromeHeight(): number {
+    if (this.appUIState.homeContentNavigationActive) {
+      return 0
+    }
     const topTabsVisible = HomeShellPolicy.usesOverlayDrawer(this.shell) ||
       (HomeShellPolicy.usesEmbeddedSidebar(this.shell) && !this.ui.isLeftSidebarVisible)
     return topTabsVisible ? 88 : 0
   }
 
+  private secondaryContentStageActive(): boolean {
+    return HomeShellPolicy.usesEmbeddedSidebar(this.shell) &&
+      this.appUIState.homeContentNavigationActive
+  }
+
+  private compactSecondarySidebar(): boolean {
+    return this.secondaryContentStageActive() && !this.ui.isLeftSidebarVisible
+  }
+
+  private embeddedSidebarVisible(): boolean {
+    return HomeShellPolicy.usesEmbeddedSidebar(this.shell) &&
+      (this.ui.isLeftSidebarVisible || this.compactSecondarySidebar())
+  }
+
+  private embeddedSidebarWidth(): number {
+    if (!HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
+      return 240
+    }
+    if (this.ui.isLeftSidebarVisible) {
+      return 240
+    }
+    return this.compactSecondarySidebar() ? 56 : 0
+  }
+
+  private padContentLeadingInset(): number {
+    if (!HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
+      return 0
+    }
+    if (this.secondaryContentStageActive()) {
+      return 12 + this.embeddedSidebarWidth() + 12
+    }
+    return this.ui.isLeftSidebarVisible ? 252 : 12
+  }
+
+  private showPadTopTabs(): boolean {
+    if (this.appUIState.homeContentNavigationActive) {
+      return false
+    }
+    return !HomeShellPolicy.usesEmbeddedSidebar(this.shell) || !this.ui.isLeftSidebarVisible
+  }
+
+  private padContentStageCanvas(): ResourceColor {
+    return this.useNativeSurface() ?
+      $r('app.color.native_canvas_background') : $r('app.color.bg_main')
+  }
+
   private tabletHeroLeadingOverflow(): number {
+    if (this.appUIState.homeContentNavigationActive) {
+      return 0
+    }
     if (!HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
       return 0
     }
@@ -546,7 +604,8 @@ export struct HomeScreen {
   }
 
   private showTabletHomeBackdrop(): boolean {
-    return (HomeShellPolicy.usesOverlayDrawer(this.shell) ||
+    return !this.appUIState.homeContentNavigationActive &&
+      (HomeShellPolicy.usesOverlayDrawer(this.shell) ||
       HomeShellPolicy.usesEmbeddedSidebar(this.shell)) &&
       this.ui.selectedDestination === HomeDestination.Home && this.tabletHeroItems.length > 0
   }
@@ -614,6 +673,7 @@ export struct HomeScreen {
   }
 
   private selectSidebarItem(item: HomeSidebarItem): void {
+    HomeContentNavigationController.reset(this.appUIState)
     if (item.mediaDataSourceIndex >= 0) {
       this.ui.selectedMediaDataSourceIndex = item.mediaDataSourceIndex
       this.ui.lastSelectedMediaIndex = item.mediaDataSourceIndex
@@ -712,9 +772,7 @@ export struct HomeScreen {
         Stack({ alignContent: Alignment.Bottom }) {
           Row() {
             if (HomeShellPolicy.usesEmbeddedSidebar(this.shell)) {
-              // Keep the content in the same column as the legacy large-screen
-              // chrome: 12vp outer gutter plus the visible 240vp sidebar.
-              Blank().width(this.ui.isLeftSidebarVisible ? 252 : 12)
+              Blank().width(this.padContentLeadingInset())
             }
             Column() {
               Stack() {
@@ -724,7 +782,8 @@ export struct HomeScreen {
                 }) {
                   TabContent() {
                     HomeTab({
-                      active: this.ui.selectedDestination === HomeDestination.Home,
+                      active: this.ui.selectedDestination === HomeDestination.Home &&
+                        !this.appUIState.homeContentNavigationActive,
                       useHomeContentWidth: this.usesPadMediaContent(),
                       tabletHeroLeadingOverflow: this.tabletHeroLeadingOverflow(),
                       latestGridColumnCount: this.tabletHomeGridColumnCount(),
@@ -823,16 +882,47 @@ export struct HomeScreen {
                 .animationDuration(0)
                 .width('100%')
                 .height('100%')
+
+                if (this.appUIState.homeContentNavigationActive) {
+                  Column()
+                    .width('100%')
+                    .height('100%')
+                    .backgroundColor(this.padContentStageCanvas())
+                    .transition(TransitionEffect.OPACITY.animation({
+                      duration: 180,
+                      curve: Curve.EaseOut
+                    }))
+                    .hitTestBehavior(HitTestMode.None)
+                }
+
+                if (this.usesPadMediaContent()) {
+                  HomeContentNavigation()
+                }
               }
               .layoutWeight(1)
               .width('100%')
+              .borderRadius(this.secondaryContentStageActive() ? 20 : 0)
+              .clip(this.secondaryContentStageActive())
+              .backgroundColor(this.secondaryContentStageActive() ?
+                this.padContentStageCanvas() : Color.Transparent)
+              .borderColor(this.secondaryContentStageActive() ?
+                AppThemeSurfaceResolver.contentOutline(
+                  this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable) : Color.Transparent)
+              .borderWidth(this.secondaryContentStageActive() ?
+                AppThemeSurfaceResolver.outlineWidth(
+                  this.appUIState.themeStyle, this.appUIState.nativeThemeAvailable, 1) : 0)
+              .onAreaChange((_oldValue: Area, newValue: Area): void => {
+                if (this.usesPadMediaContent()) {
+                  this.updateHomeContentMetrics(newValue)
+                }
+              })
             }
             .layoutWeight(1)
             .height('100%')
-            .onAreaChange((_oldValue: Area, newValue: Area): void => {
-              if (this.usesPadMediaContent()) {
-                this.updateHomeContentMetrics(newValue)
-              }
+            .padding({
+              top: this.secondaryContentStageActive() ? this.appUIState.safeTop + 12 : 0,
+              right: this.secondaryContentStageActive() ? 12 : 0,
+              bottom: this.secondaryContentStageActive() ? this.appUIState.safeBottom : 0
             })
           }
           .width('100%')
@@ -848,6 +938,8 @@ export struct HomeScreen {
                     appUIState: this.appUIState,
                     selectedId: this.selectedSidebarId(),
                     shell: (this.shell),
+                    compact: this.compactSecondarySidebar(),
+                    activateSelectedItem: this.appUIState.homeContentNavigationActive,
                     showCloseButton: HomeShellPolicy.usesEmbeddedSidebar(this.resolveShell()) &&
                       this.ui.isLeftSidebarVisible && !OneMoreUtil.isPc(),
                     nativeSurface: this.useNativeSurface(),
@@ -856,27 +948,28 @@ export struct HomeScreen {
                         this.ui.isLeftSidebarVisible = false
                       })
                     },
+                    onExpand: () => {
+                      this.ui.context.animateTo({ duration: 300, curve: Curve.FastOutSlowIn }, () => {
+                        this.ui.isLeftSidebarVisible = true
+                      })
+                    },
                     onItemSelect: (item: HomeSidebarItem) => {
                       this.selectSidebarItem(item)
                     }
                   })
                 }
-                .width(240)
+                .width(this.embeddedSidebarWidth())
                 .height('100%')
                 .padding({
                   top: this.appUIState.safeTop + 12,
                   bottom: this.appUIState.safeBottom
                 })
-                .visibility((HomeShellPolicy.usesEmbeddedSidebar((this.shell)) && this.ui.isLeftSidebarVisible) ?
+                .visibility(HomeShellPolicy.usesEmbeddedSidebar(this.shell) ?
                   Visibility.Visible : Visibility.None)
-                .transition(TransitionEffect.asymmetric(
-                  TransitionEffect.scale({ x: 0, y: 0 })
-                    .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-                    .animation({ duration: 300, curve: Curve.FastOutSlowIn }),
-                  TransitionEffect.scale({ x: 0, y: 0 })
-                    .combine(TransitionEffect.translate({ x: 120, y: -300 }))
-                    .animation({ duration: 300, curve: Curve.FastOutSlowIn })
-                ))
+                .opacity(this.embeddedSidebarVisible() ? 1 : 0)
+                .clip(true)
+                .hitTestBehavior(this.embeddedSidebarVisible() ?
+                  HitTestMode.Default : HitTestMode.BLOCK_DESCENDANTS)
 
                 Stack() {
                   PadTopTab({
@@ -894,8 +987,7 @@ export struct HomeScreen {
                     .margin({
                       top: this.appUIState.safeTop
                     })
-                    .visibility((HomeShellPolicy.usesEmbeddedSidebar((this.shell)) && this.ui.isLeftSidebarVisible) ?
-                      Visibility.None : Visibility.Visible)
+                    .visibility(this.showPadTopTabs() ? Visibility.Visible : Visibility.None)
                 }
                 .layoutWeight(1)
                 .height('100%')

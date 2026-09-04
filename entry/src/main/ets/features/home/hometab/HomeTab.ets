@@ -25,6 +25,7 @@ import { toMediaRouteRefData } from '../../../media/navigation/MediaRouteRef'
 import { MediaNetworkImage } from '../../../component/MediaNetworkImage'
 import { HomeContentLayoutPolicy } from '../HomeContentLayoutPolicy'
 import { HomeTabletHero } from './HomeTabletHero'
+import { Constants } from '../../../utils/Constants'
 
 const HERO_AUTOPLAY_INTERVAL: number = 6500
 const HERO_TRANSITION_DURATION: number = 450
@@ -569,7 +570,9 @@ export struct HomeTab {
       systemMaterialAvailable: this.vm.appUIState.systemMaterialAvailable,
       onSelectedIdChange: (id: string): void => this.selectLatestMedia(id),
       onLiveTv: (): void => {
-        HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+        HMRouterMgr.to(RouterConsts.LiveTvPage)
+          .withNavigation(Constants.NAVIGATION_ID)
+          .push()
       },
       onSearch: (): void => {
         HMRouterMgr.to(RouterConsts.SearchPage).push()
@@ -1260,7 +1263,9 @@ export struct HomeTab {
                 $r('sys.color.icon_primary') : $r('app.color.text_primary'))
               .padding(9)
               .onClick(() => {
-                HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+                HMRouterMgr.to(RouterConsts.LiveTvPage)
+                  .withNavigation(Constants.NAVIGATION_ID)
+                  .push()
               })
           }
           SymbolGlyph($r('sys.symbol.magnifyingglass'))

@@ -8,6 +8,7 @@ import { MusicPlaybackStatus, MusicQueueItem } from './MusicModels'
 import { MusicPlaybackController } from './MusicPlaybackController'
 import { connectMusicPlaybackState, MusicPlaybackState } from './MusicPlaybackState'
 import { MusicHostVisibilityPolicy } from './MusicHostVisibilityPolicy'
+import { Constants } from '../../utils/Constants'
 
 @ComponentV2
 struct MusicMiniCover {
@@ -230,7 +231,9 @@ export struct MusicMiniPlayer {
   }
 
   private openPlayer(): void {
-    HMRouterMgr.to(RouterConsts.MusicPlayerPage).push()
+    HMRouterMgr.to(RouterConsts.MusicPlayerPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
   }
 
   build() {

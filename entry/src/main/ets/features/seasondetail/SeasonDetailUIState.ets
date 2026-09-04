@@ -16,6 +16,9 @@ export class SeasonDetailUIState extends BaseUIState {
   @Trace image: string = ''
   @Trace imageRef?: MediaImageRef
   @Trace episodeName : string = ''
+  @Trace percentageWatched: number = 0
+  @Trace playbackPositionMs: number = 0
+  @Trace remainingTime: string = ''
   //剧名
   @Trace seriesName = ''
   //第几季

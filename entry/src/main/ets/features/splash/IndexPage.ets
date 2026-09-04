@@ -30,6 +30,7 @@ import {
   AppThemeSurfaceResolver
 } from '../../theme/AppThemeSurfaceResolver';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
 
 @HMRouter({
   pageUrl: RouterConsts.IndexPage,
@@ -339,7 +340,9 @@ export struct IndexPage {
         value: '电视直播',
         icon: $r('app.media.iptv'),
         action: () => {
-          HMRouterMgr.to(RouterConsts.LiveTvPage).push()
+          HMRouterMgr.to(RouterConsts.LiveTvPage)
+            .withNavigation(Constants.NAVIGATION_ID)
+            .push()
         }
       })
     }
@@ -440,7 +443,10 @@ export struct IndexPage {
                         this.appUIState.systemMaterialAvailable
                       ))
                       .onClick((): void => {
-                        HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                        HMRouterMgr.to(RouterConsts.AccountPage)
+                          .withNavigation(Constants.NAVIGATION_ID)
+                          .withParam({ fromLogin: true })
+                          .push()
                       })
                   }
                   .width('100%')
@@ -526,7 +532,10 @@ export struct IndexPage {
                         this.appUIState.systemMaterialAvailable
                       ))
                       .onClick((): void => {
-                        HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                        HMRouterMgr.to(RouterConsts.AccountPage)
+                          .withNavigation(Constants.NAVIGATION_ID)
+                          .withParam({ fromLogin: true })
+                          .push()
                       })
                   }
                   .width('100%')
@@ -647,7 +656,10 @@ export struct IndexPage {
                   this.appUIState.systemMaterialAvailable
                 ))
                 .onClick((): void => {
-                  HMRouterMgr.to(RouterConsts.AccountPage).withParam({ fromLogin: true }).push()
+                  HMRouterMgr.to(RouterConsts.AccountPage)
+                    .withNavigation(Constants.NAVIGATION_ID)
+                    .withParam({ fromLogin: true })
+                    .push()
                 })
             }
             .width('100%')

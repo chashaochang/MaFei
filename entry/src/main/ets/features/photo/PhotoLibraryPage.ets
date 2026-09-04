@@ -17,6 +17,8 @@ import { photoBrowseErrorText } from './PhotoErrorText'
 import { PhotoSkeletonGrid } from './PhotoSkeletonGrid'
 import { photoViewerSourceStore } from './PhotoViewerSourceStore'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 @ComponentV2
 struct PhotoLibrarySectionContent {
@@ -211,16 +213,30 @@ export struct PhotoLibraryPage {
   private readonly albumsScroller: Scroller = new Scroller()
   private initialized: boolean = false
 
+  private initEmbeddedMediaItem(force: boolean = false): void {
+    const libraryId = this.mediaItem.id || ''
+    if (!this.fromHome || libraryId.length === 0 || (!force && this.ui.libraryId === libraryId)) {
+      return
+    }
+    this.initialized = true
+    void this.vm.init(libraryId, this.mediaItem.name || '')
+  }
+
+  @Monitor('mediaItem')
+  onEmbeddedMediaItemChange(): void {
+    this.initEmbeddedMediaItem(true)
+  }
+
   aboutToAppear(): void {
+    if (this.fromHome) {
+      this.initEmbeddedMediaItem()
+      return
+    }
     if (this.initialized) {
       this.vm.refreshCurrent()
       return
     }
     this.initialized = true
-    if (this.fromHome) {
-      this.vm.init(this.mediaItem.id || '', this.mediaItem.name || '')
-      return
-    }
     const param = HMRouterMgr.getCurrentParam() as MediaItem | undefined
     this.vm.init(param?.id || '', param?.name || '')
   }
@@ -230,8 +246,15 @@ export struct PhotoLibraryPage {
       this.vm.appUIState.themeStyle, this.vm.appUIState.nativeThemeAvailable)
   }
 
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(
+      this.vm.appUIState,
+      this.vm.appUIState.homeContentNavigationMounted
+    )
+  }
+
   private horizontalPadding(): number {
-    return this.vm.appUIState.currentBreakpoint.includes('s') ? 12 : 24
+    return this.contentBreakpoint().includes('s') ? 12 : 24
   }
 
   private title(): ResourceStr {
@@ -256,7 +279,10 @@ export struct PhotoLibraryPage {
       sourceKey: sourceKey,
       initialPhotoId: photo.id
     }
-    HMRouterMgr.to(RouterConsts.PhotoViewerPage).withParam(params).push()
+    HMRouterMgr.to(RouterConsts.PhotoViewerPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withParam(params)
+      .push()
   }
 
   private openAlbum(album: PhotoAlbumItem): void {
@@ -282,7 +308,7 @@ export struct PhotoLibraryPage {
     if (this.fromHome) {
       PhotoLibraryContent({
         ui: this.ui,
-        currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+        currentBreakpoint: this.contentBreakpoint(),
         nativeSurface: this.useNativeSurface(),
         horizontalPadding: this.horizontalPadding(),
         bottomInset: this.bottomInset(),
@@ -308,7 +334,7 @@ export struct PhotoLibraryPage {
               if (this.routeDestination.usesNativeChrome()) {
                 PhotoLibraryContent({
                   ui: this.ui,
-                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  currentBreakpoint: this.contentBreakpoint(),
                   nativeSurface: true,
                   horizontalPadding: this.horizontalPadding(),
                   bottomInset: this.bottomInset(),
@@ -328,7 +354,7 @@ export struct PhotoLibraryPage {
               } else {
                 PhotoLibraryContent({
                   ui: this.ui,
-                  currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+                  currentBreakpoint: this.contentBreakpoint(),
                   nativeSurface: false,
                   horizontalPadding: this.horizontalPadding(),
                   bottomInset: this.bottomInset(),
@@ -383,7 +409,7 @@ export struct PhotoLibraryPage {
         NavDestination() {
           PhotoLibraryContent({
             ui: this.ui,
-            currentBreakpoint: this.vm.appUIState.currentBreakpoint,
+            currentBreakpoint: this.contentBreakpoint(),
             nativeSurface: false,
             horizontalPadding: this.horizontalPadding(),
             bottomInset: this.bottomInset(),

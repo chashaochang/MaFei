@@ -1,4 +1,4 @@
-import { NavDestinationHelper } from '@hadss/hmrouter'
+import { HMRouterMgr, NavDestinationHelper } from '@hadss/hmrouter'
 import { AppStorageV2, AttributeUpdater, LengthMetrics } from '@kit.ArkUI'
 import {
   HdsNavigationMenuItemOptions,
@@ -13,6 +13,7 @@ import { AppUIState } from '../entity/AppUIState'
 import { ThemeStyle } from '../entity/ThemeStyle'
 import { AppThemeSurfaceResolver } from '../theme/AppThemeSurfaceResolver'
 import { HdsUiCapability } from '../theme/HdsUiCapability'
+import { HomeContentNavigationController } from '../features/home/HomeContentNavigationController'
 
 export interface AppRouteDestinationOptions {
   title?: ResourceStr
@@ -23,6 +24,7 @@ export interface AppRouteDestinationOptions {
   titleMaterialFollowsSystem?: boolean
   ownsRootNavigationChrome?: boolean
   menus?: Array<NavigationMenuItem>
+  titleBarStackBuilder?: () => void
   scrollControllers?: Array<Scroller>
   beforeBack?: () => boolean
 }
@@ -108,7 +110,8 @@ export class AppRouteDestination {
     if ((options.contentExtendsUnderTitleBar ?? false) || !this.titleBarVisible(options) || !this.usesNativeChrome()) {
       return 0
     }
-    return Math.max(0, this.appUIState.safeTop) + UIConstants.ACTION_BAR_HEIGHT
+    const safeTop = this.appUIState.homeContentNavigationVisible ? 0 : Math.max(0, this.appUIState.safeTop)
+    return safeTop + UIConstants.ACTION_BAR_HEIGHT
   }
 
   nativeSafeAreaTypes(): Array<LayoutSafeAreaType> {
@@ -140,10 +143,16 @@ export class AppRouteDestination {
         mainTitle: this.rootHomeLibraryPinned(options) ? '' : (options.title ?? ''),
         mainTitleSize: TitleSize.TITLE_S
       },
+      backIcon: {
+        action: (): void => this.handleTitleBarBack(options)
+      },
       menu: {
         value: this.nativeMenus(options),
         maxCount: 3
       }
+    }
+    if (options.titleBarStackBuilder) {
+      content.stackBuilder = options.titleBarStackBuilder
     }
     const heroTitleChrome = options.heroTitleChrome ?? false
     const followsSystem = options.titleMaterialFollowsSystem ?? true
@@ -212,6 +221,16 @@ export class AppRouteDestination {
 
   handleBackPressed(options: AppRouteDestinationOptions): boolean {
     return (options.beforeBack?.() ?? false) || this.helper.onBackPressed()
+  }
+
+  private handleTitleBarBack(options: AppRouteDestinationOptions): void {
+    if (options.beforeBack?.()) {
+      return
+    }
+    if (HomeContentNavigationController.popHomeContentIfNeeded()) {
+      return
+    }
+    HMRouterMgr.pop()
   }
 
   private nativeMenus(options: AppRouteDestinationOptions): Array<HdsNavigationMenuItemOptions> {

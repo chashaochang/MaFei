@@ -21,6 +21,7 @@ import {
 } from './AccountUIState'
 import { AccountViewModel } from './AccountViewModel'
 import { HdsNavDestination, HdsNavDestinationAttribute, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../../utils/Constants'
 
 @ComponentV2
 struct AccountRowContent {
@@ -118,6 +119,78 @@ struct AccountEmptyState {
 }
 
 @ComponentV2
+struct AccountProviderMenuButton {
+  @Event onJellyfin: () => void = () => {}
+  @Event onFeiniuVideo: () => void = () => {}
+  appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
+
+  private iconColor(): ResourceColor {
+    return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
+      $r('sys.color.icon_primary') : $r('app.color.text_primary')
+  }
+
+  private providerMenuOptions(): MenuOptions {
+    const decision = AppThemeOverlayPolicy.resolve(
+      OverlaySurfaceRole.AppFloating,
+      this.appUIState.themeStyle,
+      HdsUiCapability.supportsSystemMaterial(),
+      this.appUIState.nativeThemeAvailable
+    )
+    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
+      }
+    }
+    if (decision === OverlayMaterialDecision.UseBlurFallback) {
+      return {
+        placement: Placement.BottomRight,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.Thin
+      }
+    }
+    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
+      return {
+        placement: Placement.BottomRight,
+        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
+      }
+    }
+    return { placement: Placement.BottomRight }
+  }
+
+  // CustomBuilderAdapter: account-provider-menu
+  @Builder
+  private providerMenu() {
+    Menu() {
+      MenuItem({
+        startIcon: $r('app.media.jellyfin_logo'),
+        content: $r('app.string.provider_jellyfin_name')
+      }).onClick(this.onJellyfin)
+      MenuItem({
+        startIcon: $r('app.media.feiniu_video_logo'),
+        content: $r('app.string.feiniu_video_service_name')
+      }).onClick(this.onFeiniuVideo)
+    }
+  }
+
+  build() {
+    Button() {
+      SymbolGlyph($r('sys.symbol.plus'))
+        .fontSize(22)
+        .fontColor([this.iconColor()])
+    }
+    .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+    .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
+    .borderRadius(AppThemeTokens.actionSize(this.appUIState.themeStyle) / 2)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText($r('app.string.account_add_title'))
+    .bindMenu(this.providerMenu(), this.providerMenuOptions())
+  }
+}
+
+@ComponentV2
 struct AccountGroupHeader {
   @Require @Param title: string
   @Require @Param primaryTextColor: ResourceColor
@@ -199,11 +272,15 @@ export struct AccountContent {
   }
 
   private openJellyfin(): void {
-    HMRouterMgr.to(RouterConsts.JellyfinConnectPage).push()
+    HMRouterMgr.to(RouterConsts.JellyfinConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
   }
 
   private openFeiniuVideo(): void {
-    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()
+    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
   }
 
   private openProviderActionMenu(): void {
@@ -220,40 +297,6 @@ export struct AccountContent {
     }).catch(() => {
     })
   }
-
-  private providerMenuOptions(): MenuOptions {
-    const decision = AppThemeOverlayPolicy.resolve(
-      OverlaySurfaceRole.AppFloating,
-      this.appUIState.themeStyle,
-      HdsUiCapability.supportsSystemMaterial(),
-      this.appUIState.nativeThemeAvailable
-    )
-    if (decision === OverlayMaterialDecision.UseFloatingMaterial) {
-      return {
-        placement: Placement.BottomRight,
-        backgroundColor: Color.Transparent,
-        backgroundBlurStyle: BlurStyle.NONE,
-        systemMaterial: AppThemeSurfaceResolver.material(AppThemeMaterialRole.Floating)
-      }
-    }
-    if (decision === OverlayMaterialDecision.UseBlurFallback) {
-      return {
-        placement: Placement.BottomRight,
-        backgroundColor: Color.Transparent,
-        backgroundBlurStyle: BlurStyle.Thin
-      }
-    }
-    if (decision === OverlayMaterialDecision.DisableSystemMaterial) {
-      return {
-        placement: Placement.BottomRight,
-        systemMaterial: AppThemeSurfaceResolver.disabledSystemMaterial()
-      }
-    }
-    return { placement: Placement.BottomRight }
-  }
-
-
-
 
   private primaryTextColor(): Resource {
     return AppThemeTokens.isNative(this.appUIState.themeStyle) ?
@@ -389,17 +432,10 @@ export struct AccountContent {
           })
           if (!this.fromLogin) {
             Row() {
-              Button() {
-                SymbolGlyph($r('sys.symbol.plus'))
-                  .fontSize(22)
-                  .fontColor([this.iconColor()])
-              }
-              .width(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-              .height(AppThemeTokens.actionSize(this.appUIState.themeStyle))
-              .borderRadius(AppThemeTokens.actionSize(this.appUIState.themeStyle) / 2)
-              .backgroundColor(Color.Transparent)
-              .accessibilityText($r('app.string.account_add_title'))
-              .onClick(() => this.openProviderActionMenu())
+              AccountProviderMenuButton({
+                onJellyfin: () => this.openJellyfin(),
+                onFeiniuVideo: () => this.openFeiniuVideo()
+              })
             }
               .align(Alignment.TopEnd)
               .margin({
@@ -517,31 +553,43 @@ export struct AccountPage {
   @Local fromLogin: boolean = HMRouterMgr.getCurrentParam() ?
     (HMRouterMgr.getCurrentParam() as Record<string, boolean>)['fromLogin'] : false
 
-  private openProviderActionMenu(): void {
-    this.getUIContext().getPromptAction().showActionMenu({
-      title: $r('app.string.account_add_title'),
-      buttons: [{ text: $r('app.string.provider_jellyfin_name'), color: $r('sys.color.font_primary') },
-        { text: $r('app.string.feiniu_video_service_name'), color: $r('sys.color.font_primary') }]
-    }).then((result) => {
-      if (result.index === 0) {
-        HMRouterMgr.to(RouterConsts.JellyfinConnectPage).push()
-      } else if (result.index === 1) {
-        HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()
-      }
-    }).catch(() => {
-    })
+  private openJellyfin(): void {
+    HMRouterMgr.to(RouterConsts.JellyfinConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
+  }
+
+  private openFeiniuVideo(): void {
+    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
+  }
+
+  // CustomBuilderAdapter: account-provider-title-bar-stack
+  @Builder
+  private providerTitleBarStack() {
+    Row() {
+      Blank()
+      AccountProviderMenuButton({
+        onJellyfin: () => this.openJellyfin(),
+        onFeiniuVideo: () => this.openFeiniuVideo()
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ right: AppThemeTokens.pageHorizontalPadding(
+      this.routeDestination.appUIState.themeStyle, this.routeDestination.appUIState.isBigScreen) })
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   private routeOptions(): AppRouteDestinationOptions {
     return {
-        title: this.fromLogin ?
-                $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
-        menus: this.fromLogin ? [] : [{
-                value: $r('app.string.account_add_title'),
-                icon: $r('sys.symbol.plus'),
-                action: () => this.openProviderActionMenu()
-              }]
+      title: this.fromLogin ?
+        $r('app.string.account_history_title') : $r('app.string.account_switch_title'),
+      titleBarStackBuilder: this.fromLogin ? undefined : (): void => {
+        this.providerTitleBarStack()
       }
+    }
   }
 
   build() {

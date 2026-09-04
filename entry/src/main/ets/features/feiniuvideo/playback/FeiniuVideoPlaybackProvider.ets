@@ -232,16 +232,29 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
 
   async resolveSource(request: MediaPlaybackResolveRequest): Promise<MediaPlaybackSource> {
     this.requireOwnedRef(request.ref, 'resolveSource')
-    const item = await this.getItem(request.ref.id)
+    const requestedItem = await this.getItem(request.ref.id)
     const explicitlySelectedMediaGuid = `${request.mediaSourceId || ''}`.trim()
+    const initialPlayInfo = await this.getPlayInfo(request.ref.id, explicitlySelectedMediaGuid)
+    const playableItemGuid = this.playableItemGuid(requestedItem, initialPlayInfo)
+    let item = requestedItem
+    let playInfo = initialPlayInfo
+    if (playableItemGuid !== request.ref.id) {
+      item = await this.getItem(playableItemGuid)
+      try {
+        playInfo = await this.getPlayInfo(playableItemGuid, explicitlySelectedMediaGuid)
+      } catch (_error) {
+        playInfo = initialPlayInfo
+      }
+    }
+    if (item.can_play === 0) {
+      throw new Error(`${item.play_error || 'UnsupportedContent'}`.trim() || 'UnsupportedContent')
+    }
     const supplemental = await Promise.all([
-      this.getPlayInfo(request.ref.id, explicitlySelectedMediaGuid),
-      this.getStreamList(request.ref.id),
+      this.getStreamList(item.guid),
       this.playbackHierarchy(item)
     ])
-    const playInfo = supplemental[0] as FnMediaPlayInfoResp
-    const streamData = supplemental[1] as FnMediaStreamListData
-    const hierarchy = supplemental[2] as FeiniuVideoPlaybackHierarchy
+    const streamData = supplemental[0] as FnMediaStreamListData
+    const hierarchy = supplemental[1] as FeiniuVideoPlaybackHierarchy
     const preferredMediaGuid = `${explicitlySelectedMediaGuid || playInfo.data?.media_guid ||
       item.media_guid || ''}`.trim()
 
@@ -338,7 +351,7 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
     if (videoUrl.length === 0) {
       throw new Error('UnsupportedContent')
     }
-    const playSessionId = this.nextPlaySessionId(request.ref.id)
+    const playSessionId = this.nextPlaySessionId(item.guid)
     const audioGuid = `${selectedAudio?.guid || ''}`.trim()
     const subtitleGuid = mapper.normalizeSubtitleGuid(`${selectedSubtitle?.guid || ''}`)
     this.contexts.set(playSessionId, new FeiniuVideoResolvedPlaybackContext(
@@ -651,6 +664,17 @@ export class FeiniuVideoPlaybackProvider implements MediaPlaybackProvider, Media
       throw new Error('NetworkFailure')
     }
     return response.data
+  }
+
+  private playableItemGuid(item: FnMediaItemDetailResp, playInfo: FnMediaPlayInfoResp): string {
+    const itemGuid = `${item.guid || ''}`.trim()
+    if ((item.can_play || 0) > 0) return itemGuid
+    const candidates = [playInfo.data?.guid, item.play_item_guid, item.single_child_guid]
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = `${candidates[index] || ''}`.trim()
+      if (candidate.length > 0 && candidate !== itemGuid) return candidate
+    }
+    return itemGuid
   }
 
   private async getPlayInfo(itemGuid: string, mediaGuid: string): Promise<FnMediaPlayInfoResp> {

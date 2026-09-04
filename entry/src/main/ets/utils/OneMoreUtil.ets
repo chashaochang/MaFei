@@ -1,7 +1,5 @@
 import { deviceInfo } from "@kit.BasicServicesKit";
 import { display, window } from "@kit.ArkUI";
-import { HMRouterMgr } from "@hadss/hmrouter";
-import { Constants } from "./Constants";
 import { NavModifier } from "../pages/Index";
 import { AppUIState } from "../entity/AppUIState";
 import { GridAttr } from "@abner/refresh_v2";
@@ -64,7 +62,8 @@ export class OneMoreUtil {
   }
 
   static shouldRequestPlayerManualRotation(windowClass?: window.Window): boolean {
-    if (deviceInfo.deviceType !== 'phone' && deviceInfo.deviceType !== 'tablet') {
+    // Pad/2in1 播放器始终跟随系统方向，不能由全屏按钮主动锁定横竖屏。
+    if (!OneMoreUtil.isNormalPhone()) {
       return false
     }
     if (!windowClass || !canIUse('SystemCapability.Window.SessionManager')) {
@@ -79,40 +78,18 @@ export class OneMoreUtil {
     }
   }
 
-  static getNavigationMode(currentDisplay: display.Orientation): NavigationMode {
-    switch (currentDisplay) {
-      case display.Orientation.PORTRAIT:
-      case display.Orientation.PORTRAIT_INVERTED:
-        return NavigationMode.Stack
-      case display.Orientation.LANDSCAPE:
-      case display.Orientation.LANDSCAPE_INVERTED:
-        let stack = HMRouterMgr.getPathStack(Constants.NAVIGATION_ID)
-        if (stack && stack.size() > 0) {
-          return NavigationMode.Split
-        } else {
-          return NavigationMode.Stack
-        }
-    }
+  static getNavigationMode(_currentDisplay: display.Orientation): NavigationMode {
+    return NavigationMode.Stack
   }
 
   static updateNavModifier(appUIState: AppUIState, instance?: NavigationAttribute) {
     let modifier = AppStorage.get<NavModifier>('modifier')
     let navInstance = instance || modifier?.instance
-    let mode = OneMoreUtil.getNavigationMode(appUIState.orientation)
-    if (OneMoreUtil.isBigScreen() && !OneMoreUtil.isPc()) {
-      navInstance?.mode(mode)
-    } else {
-      mode = NavigationMode.Stack
-    }
-    navInstance?.mode(mode)
+    navInstance?.mode(NavigationMode.Stack)
     if (appUIState.isFullScreen) {
       navInstance?.navBarWidth(0)
     } else {
-      if (mode == NavigationMode.Stack) {
-        navInstance?.navBarWidth('100%')
-      } else {
-        navInstance?.navBarWidth('33%')
-      }
+      navInstance?.navBarWidth('100%')
     }
 
   }

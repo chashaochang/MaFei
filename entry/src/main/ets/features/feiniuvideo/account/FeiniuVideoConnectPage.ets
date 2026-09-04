@@ -12,6 +12,8 @@ import {
 import { FeiniuVideoConnectionUIState } from './FeiniuVideoConnectionUIState'
 import { FeiniuVideoConnectionViewModel } from './FeiniuVideoConnectionViewModel'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../../utils/Constants'
+import { HomeContentNavigationController } from '../../home/HomeContentNavigationController'
 
 @HMRouter({
   pageUrl: RouterConsts.FeiniuVideoConnectPage,
@@ -102,8 +104,12 @@ export struct FeiniuVideoConnectScreen {
     if (this.embedded) {
       return
     }
-    HMRouterMgr.getCurrentPathStack()?.clear()
-    HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+    HomeContentNavigationController.reset(this.appUIState)
+    HMRouterMgr.getPathStack(Constants.NAVIGATION_ID)?.clear()
+    HMRouterMgr.to(RouterConsts.IndexPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withAnimator(false)
+      .replace()
   }
 
   build() {
@@ -387,9 +393,10 @@ struct ServerUrlField {
   @Event onSubmit: () => void = () => {}
 
   private openAccountHistory(): void {
-    HMRouterMgr.to(RouterConsts.AccountPage).withParam({
-      fromLogin: true
-    }).push()
+    HMRouterMgr.to(RouterConsts.AccountPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withParam({ fromLogin: true })
+      .push()
   }
 
   build() {

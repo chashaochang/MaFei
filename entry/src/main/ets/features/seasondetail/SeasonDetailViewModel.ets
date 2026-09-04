@@ -1,7 +1,12 @@
 import { BaseViewModel } from "../../common/base/BaseViewModel";
 import { playMediaRefs } from "../../common/CommonFunc";
 import { currentMediaCatalogProvider } from "../../media/MediaCatalogAccess";
-import { MediaDetail, MediaEpisode, MediaPage } from "../../media/catalog/MediaCatalogModels";
+import {
+  MediaDetail,
+  MediaEpisode,
+  MediaPage,
+  MediaPlaybackTarget
+} from "../../media/catalog/MediaCatalogModels";
 import {
   MediaCatalogProvider,
   MediaEpisodeQueryProfile
@@ -18,23 +23,64 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
   private springBackAnimation: curves.ICurve = curves.interpolatingSpring(0, 1, 288, 30);
   private catalog?: MediaCatalogProvider
   private requestGeneration: number = 0
+  private selectedEpisodeDurationMs: number = 0
   episodeList: MediaRef[] = []
   episodeStartIndex: number = 0
+
+  private episodePlayedPercentage(episode: MediaEpisode): number {
+    let percentage = Math.min(100, Math.max(0, episode.userState.watched.playedPercentage))
+    if (percentage <= 0 && episode.userState.watched.playbackPositionMs > 0 && episode.durationMs > 0) {
+      percentage = Math.min(100, episode.userState.watched.playbackPositionMs * 100 / episode.durationMs)
+    }
+    return percentage
+  }
+
+  private applyPlaybackProgress(playbackPositionMs: number, playedPercentage: number,
+    durationMs: number): void {
+    const position = Math.max(0, playbackPositionMs)
+    const duration = Math.max(0, durationMs)
+    let percentage = Math.min(100, Math.max(0, playedPercentage))
+    if (percentage <= 0 && position > 0 && duration > 0) {
+      percentage = Math.min(100, position * 100 / duration)
+    }
+    const displayPosition = position > 0 ? position :
+      (percentage > 0 && percentage < 100 && duration > 0 ? duration * percentage / 100 : 0)
+
+    this.selectedEpisodeDurationMs = duration
+    this.ui.playbackPositionMs = position
+    this.ui.percentageWatched = percentage
+    this.ui.remainingTime = ''
+    if (displayPosition <= 0 || duration <= displayPosition || percentage >= 100) return
+
+    const remainingMinutes = Math.max(0, Math.floor((duration - displayPosition) / 60000))
+    const hours = Math.floor(remainingMinutes / 60)
+    const minutes = remainingMinutes % 60
+    this.ui.remainingTime = hours > 0 ? `剩余 ${hours} 小时 ${minutes} 分钟` : `剩余 ${minutes} 分钟`
+  }
+
+  private clearPlaybackQueue(): void {
+    this.episodeList = []
+    this.episodeStartIndex = 0
+    this.ui.episodeName = ''
+    this.applyPlaybackProgress(0, 0, 0)
+  }
 
   // 将剧集按30个一组分组，并生成组名与视频列表
   private groupEpisodes(items: MediaEpisode[]): void {
     // 先映射为 VideoItem 列表
     const mapped: VideoItem[] = items.map<VideoItem>((episode: MediaEpisode) => {
+      const image = episode.primaryImage ?? episode.backdropImage
       return {
         id: episode.ref.id,
         mediaRef: episode.ref,
         kind: episode.ref.kind,
-        name: `${episode.episodeNumber || ''}.${episode.title}`.trim(),
-        image: episode.primaryImage?.url || '',
-        imageRef: episode.primaryImage,
+        name: `${episode.episodeNumber ?? ''}.${episode.title}`.trim(),
+        image: image?.url || '',
+        imageRef: image,
         subtitle: episode.overview,
         score: episode.communityRating || 0,
         tags: episode.tags.slice(),
+        percent: this.episodePlayedPercentage(episode),
         mediaName: this.ui.title,
         type: 'Episode',
         time: `${episode.durationMs > 0 ? (() => {
@@ -67,8 +113,8 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     for (let start = 0; start < total; start += groupSize) {
       const endExclusive = Math.min(start + groupSize, total)
       const slice = mapped.slice(start, endExclusive)
-      const displayStart = start + 1
-      const displayEnd = endExclusive
+      const displayStart = items[start].episodeNumber ?? start + 1
+      const displayEnd = items[endExclusive - 1].episodeNumber ?? endExclusive
       let groupName: string
       if (slice.length === 1) {
         // 单独一集只显示单号，如 61
@@ -89,6 +135,7 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     const generation = ++this.requestGeneration
     if (partialRefresh) {
       this.ui.episodeLoading = true
+      this.clearPlaybackQueue()
     } else {
       this.ui.firstLoading = true
       this.ui.episodeLoading = false
@@ -144,12 +191,14 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
         return
       }
       this.groupEpisodes(pages[0].items)
-      this.applyEpisodeQueue(pages[1].items)
+      this.applyEpisodeQueue(pages[1].items, detail.playbackTarget)
     } catch (_error) {
       if (this.isCurrent(catalog, ref, generation)) {
-        this.ui.videoGroups = []
-        this.ui.videos = []
-        this.episodeList = []
+        if (!partialRefresh) {
+          this.ui.videoGroups = []
+          this.ui.videos = []
+        }
+        this.clearPlaybackQueue()
       }
     } finally {
       if (this.isCurrent(catalog, ref, generation)) {
@@ -174,26 +223,53 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     this.ui.played = detail.userState.watched.watched
   }
 
-  private applyEpisodeQueue(items: MediaEpisode[]): void {
+  private applyEpisodeQueue(items: MediaEpisode[], playbackTarget?: MediaPlaybackTarget): void {
     if (items.length === 0) {
-      this.episodeList = []
-      this.episodeStartIndex = 0
-      this.ui.episodeName = ''
+      this.clearPlaybackQueue()
       return
     }
-    const firstNotPlayedIndex = items.findIndex((episode: MediaEpisode): boolean =>
-      !episode.userState.watched.watched)
-    this.episodeStartIndex = firstNotPlayedIndex >= 0 ? firstNotPlayedIndex : 0
+    const targetRef = playbackTarget?.ref
+    let targetIndex = targetRef
+      ? items.findIndex((episode: MediaEpisode): boolean => episode.ref.equals(targetRef)) : -1
+    if (targetIndex < 0 && playbackTarget?.episodeNumber !== undefined) {
+      targetIndex = items.findIndex((episode: MediaEpisode): boolean =>
+        episode.episodeNumber === playbackTarget.episodeNumber)
+    }
+    const matchedPlaybackTarget = targetIndex >= 0
+    if (targetIndex < 0) {
+      targetIndex = items.findIndex((episode: MediaEpisode): boolean => {
+        const percentage = this.episodePlayedPercentage(episode)
+        return percentage > 0 && percentage < 100
+      })
+    }
+    if (targetIndex < 0) {
+      targetIndex = items.findIndex((episode: MediaEpisode): boolean => !episode.userState.watched.watched)
+    }
+    this.episodeStartIndex = targetIndex >= 0 ? targetIndex : 0
     const targetEpisode = items[this.episodeStartIndex]
-    this.ui.episodeName = '第 ' + (targetEpisode.episodeNumber || this.episodeStartIndex + 1) + ' 集'
+    this.ui.episodeName = '第 ' + (targetEpisode.episodeNumber ?? this.episodeStartIndex + 1) + ' 集'
     this.episodeList = items.map((episode: MediaEpisode): MediaRef => episode.ref)
+    const targetPosition = matchedPlaybackTarget ? Math.max(0, playbackTarget?.playbackPositionMs || 0) : 0
+    const targetPercentage = matchedPlaybackTarget ? Math.max(0, playbackTarget?.playedPercentage || 0) : 0
+    const durationMs = Math.max(0,
+      (matchedPlaybackTarget ? playbackTarget?.durationMs : 0) || targetEpisode.durationMs)
+    if (targetPosition > 0 || targetPercentage > 0) {
+      this.applyPlaybackProgress(targetPosition, targetPercentage, durationMs)
+    } else {
+      this.applyPlaybackProgress(
+        targetEpisode.userState.watched.playbackPositionMs,
+        targetEpisode.userState.watched.playedPercentage,
+        targetEpisode.durationMs
+      )
+    }
   }
 
   playFirst(): void {
     if (this.ui.episodeName == '' || this.episodeList.length === 0) {
       return
     }
-    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
+    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex,
+      this.ui.playbackPositionMs > 0 ? this.ui.playbackPositionMs * 10000 : undefined)
   }
 
   initializeHeroHeight(height: number): void {
@@ -268,6 +344,8 @@ export class SeasonDetailViewModel extends BaseViewModel<SeasonDetailUIState> {
     catalog.setWatched(ref, watched).then((state) => {
       if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
         this.ui.played = state.watched
+        this.applyPlaybackProgress(state.playbackPositionMs, state.playedPercentage,
+          this.selectedEpisodeDurationMs)
         ToastUtil.showToast(this.ui.context, state.watched ? '标记为已观看' : '标记为未观看')
       }
     }).catch((): void => ToastUtil.showToast(this.ui.context, '操作失败'))

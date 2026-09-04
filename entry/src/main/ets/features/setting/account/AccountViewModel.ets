@@ -29,6 +29,7 @@ import connectionHelper from '../../../setup/ConnectionHelper'
 import { CheckUrlStateType, Success } from '../../../ui/state/CheckUrlState'
 import { Constants } from '../../../utils/Constants'
 import { FeiniuVideoAccountStore } from '../../feiniuvideo/account/FeiniuVideoAccountStore'
+import { HomeContentNavigationController } from '../../home/HomeContentNavigationController'
 import {
   AccountItemGroup,
   AccountRowViewModel,
@@ -561,8 +562,12 @@ export class AccountViewModel extends BaseViewModel<AccountUIState> {
   }
 
   private navigateHome(): void {
-    HMRouterMgr.getCurrentPathStack()?.clear()
-    HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+    HomeContentNavigationController.reset(this.appUIState)
+    HMRouterMgr.getPathStack(Constants.NAVIGATION_ID)?.clear()
+    HMRouterMgr.to(RouterConsts.IndexPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withAnimator(false)
+      .replace()
   }
 
   private localized(name: string): string {

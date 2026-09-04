@@ -21,6 +21,7 @@ import { PhotoViewerUIState } from './PhotoViewerUIState'
 import { PhotoViewerViewModel } from './PhotoViewerViewModel'
 import { PhotoZoomableImage } from './PhotoZoomableImage'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../utils/Constants'
 
 @ComponentV2
 struct PhotoViewerInfoContent {
@@ -136,6 +137,10 @@ export struct PhotoViewerPage {
 
   private currentPhoto(): PhotoItem | undefined {
     return this.vm.currentPhoto()
+  }
+
+  private closeViewer(): void {
+    HMRouterMgr.pop({ navigationId: Constants.NAVIGATION_ID })
   }
 
   private indexText(): string {
@@ -294,7 +299,7 @@ export struct PhotoViewerPage {
                     Button($r('app.string.photo_back'), { type: ButtonType.Normal })
                       .height(42)
                       .borderRadius(21)
-                      .onClick(() => HMRouterMgr.pop())
+                      .onClick(() => this.closeViewer())
                   }
                 } else {
                   Swiper(this.swiperController) {
@@ -331,7 +336,7 @@ export struct PhotoViewerPage {
                         PhotoViewerFloatingButton({
                           symbol: $r('sys.symbol.chevron_backward'),
                           accessibilityLabel: $r('app.string.photo_back'),
-                          action: () => HMRouterMgr.pop(),
+                          action: () => this.closeViewer(),
                           active: false,
                           pending: false,
                           nativeSurface: this.useNativeSurface(),
@@ -508,7 +513,7 @@ export struct PhotoViewerPage {
                     Button($r('app.string.photo_back'), { type: ButtonType.Normal })
                       .height(42)
                       .borderRadius(21)
-                      .onClick(() => HMRouterMgr.pop())
+                      .onClick(() => this.closeViewer())
                   }
                 } else {
                   Swiper(this.swiperController) {
@@ -545,7 +550,7 @@ export struct PhotoViewerPage {
                         PhotoViewerFloatingButton({
                           symbol: $r('sys.symbol.chevron_backward'),
                           accessibilityLabel: $r('app.string.photo_back'),
-                          action: () => HMRouterMgr.pop(),
+                          action: () => this.closeViewer(),
                           active: false,
                           pending: false,
                           nativeSurface: this.useNativeSurface(),
@@ -756,7 +761,7 @@ export struct PhotoViewerPage {
               Button($r('app.string.photo_back'), { type: ButtonType.Normal })
                 .height(42)
                 .borderRadius(21)
-                .onClick(() => HMRouterMgr.pop())
+                .onClick(() => this.closeViewer())
             }
           } else {
             Swiper(this.swiperController) {
@@ -793,7 +798,7 @@ export struct PhotoViewerPage {
                   PhotoViewerFloatingButton({
                     symbol: $r('sys.symbol.chevron_backward'),
                     accessibilityLabel: $r('app.string.photo_back'),
-                    action: () => HMRouterMgr.pop(),
+                    action: () => this.closeViewer(),
                     active: false,
                     pending: false,
                     nativeSurface: this.useNativeSurface(),

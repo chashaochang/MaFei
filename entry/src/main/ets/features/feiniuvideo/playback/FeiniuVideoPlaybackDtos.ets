@@ -167,6 +167,8 @@ export interface FnMediaStreamFileInfo {
   update_time?: number
   file_birth_time?: number
   progress_thumb_hash_dir?: string
+  duration?: number
+  direct_link_qualities?: FnMediaOfficialStreamDirectLinkQuality[]
 }
 
 export interface FnMediaStreamVideoInfo {

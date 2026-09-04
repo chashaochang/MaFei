@@ -42,6 +42,8 @@ interface EpisodeQueueSelection {
   readonly refs: MediaRef[]
   readonly startIndex: number
   readonly label: string
+  readonly selectedEpisode?: MediaEpisode
+  readonly playbackTarget?: MediaPlaybackTarget
 }
 
 export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
@@ -51,6 +53,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private catalog?: MediaCatalogProvider
   private mediaSources: MediaFileInfo[] = []
   private requestGeneration: number = 0
+  private currentDurationMs: number = 0
+  private detailPathFallback: string = ''
   episodeList: MediaRef[] = []
   episodeStartIndex: number = 0
 
@@ -104,6 +108,30 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     return parts.join(' · ')
   }
 
+  private applyPlaybackProgress(playbackPositionMs: number, playedPercentage: number,
+    durationMs: number): void {
+    const position = Math.max(0, playbackPositionMs)
+    const duration = Math.max(0, durationMs)
+    let percentage = Math.min(100, Math.max(0, playedPercentage))
+    if (percentage <= 0 && position > 0 && duration > 0) {
+      percentage = Math.min(100, position * 100 / duration)
+    }
+    const displayPosition = position > 0 ? position :
+      (percentage > 0 && percentage < 100 && duration > 0 ? duration * percentage / 100 : 0)
+
+    this.ui.playbackPositionMs = position
+    this.ui.percentageWatched = percentage
+    this.ui.remainingTime = ''
+    this.ui.playButtonText = '播放'
+    if (displayPosition <= 0 || duration <= displayPosition || percentage >= 100) return
+
+    const remainingMinutes = Math.max(0, Math.floor((duration - displayPosition) / 60000))
+    const hours = Math.floor(remainingMinutes / 60)
+    const minutes = remainingMinutes % 60
+    this.ui.remainingTime = hours > 0 ? `剩余 ${hours} 小时 ${minutes} 分钟` : `剩余 ${minutes} 分钟`
+    this.ui.playButtonText = '继续播放'
+  }
+
   private applyDetail(detail: MediaDetail, catalog: MediaCatalogProvider): void {
     this.ui.mediaRef = detail.ref
     this.ui.seriesRef = detail.seriesRef
@@ -121,14 +149,18 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.people = detail.personCredits.slice()
     this.ui.isFavorite = detail.userState.favorite.favorite
     this.ui.played = detail.userState.watched.watched
-    this.mediaSources = detail.mediaFiles.slice()
+    this.currentDurationMs = detail.durationMs
+    this.detailPathFallback = `${detail.path || ''}`.trim()
+    const playableSources = detail.mediaFiles.filter((source: MediaFileInfo): boolean => source.playable !== false)
+    this.mediaSources = playableSources.length > 0 ? playableSources : detail.mediaFiles.slice()
     const presentationAdapter = this.presentationAdapter(catalog)
     this.ui.playbackSources = presentationAdapter.present(this.mediaSources)
     this.ui.externalUrls = detail.externalLinks.slice()
-    this.ui.playbackPositionMs = detail.userState.watched.playbackPositionMs
-    this.ui.percentageWatched = detail.userState.watched.playedPercentage
-    this.ui.remainingTime = ''
-    this.ui.playButtonText = '播放'
+    this.applyPlaybackProgress(
+      detail.userState.watched.playbackPositionMs,
+      detail.userState.watched.playedPercentage,
+      detail.durationMs
+    )
     this.ui.subtitle = ''
     this.ui.episodeName = ''
     this.ui.selectedMediaSourceIndex = this.preferredMediaSourceIndex(detail.ref, this.mediaSources)
@@ -161,7 +193,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       } else if (detail.seasonNumber !== undefined) {
         episodeParts.push(`第 ${detail.seasonNumber} 季`)
       }
-      episodeParts.push(`第 ${detail.episodeNumber || 1} 集`)
+      episodeParts.push(`第 ${detail.episodeNumber ?? 1} 集`)
       this.ui.subtitle = episodeParts.join(' · ')
     }
     this.ui.primaryInfo = this.primaryMediaInfo(detail)
@@ -169,14 +201,6 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.ui.info = [this.ui.primaryInfo, this.ui.secondaryInfo]
       .filter((part: string): boolean => part.length > 0)
       .join(' · ')
-    if (this.ui.playbackPositionMs > 0) {
-      const remainingMs = Math.max(0, detail.durationMs - this.ui.playbackPositionMs)
-      const remainingMinutes = Math.max(0, Math.floor(remainingMs / 60000))
-      const hours = Math.floor(remainingMinutes / 60)
-      const minutes = remainingMinutes % 60
-      this.ui.remainingTime = hours > 0 ? `剩余 ${hours} 小时 ${minutes} 分钟` : `剩余 ${minutes} 分钟`
-      this.ui.playButtonText = '继续播放'
-    }
   }
 
   private mapSeasons(seasons: MediaSeason[]): VideoItem[] {
@@ -205,6 +229,26 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     this.episodeList = selection.refs.slice()
     this.episodeStartIndex = selection.startIndex
     this.ui.episodeName = selection.label
+    const targetPosition = Math.max(0, selection.playbackTarget?.playbackPositionMs || 0)
+    const targetPercentage = Math.max(0, selection.playbackTarget?.playedPercentage || 0)
+    const durationMs = Math.max(0,
+      selection.playbackTarget?.durationMs || selection.selectedEpisode?.durationMs || 0)
+    this.currentDurationMs = durationMs
+    if (targetPosition > 0 || targetPercentage > 0) {
+      this.applyPlaybackProgress(
+        targetPosition,
+        targetPercentage,
+        durationMs
+      )
+    } else if (selection.selectedEpisode) {
+      this.applyPlaybackProgress(
+        selection.selectedEpisode.userState.watched.playbackPositionMs,
+        selection.selectedEpisode.userState.watched.playedPercentage,
+        selection.selectedEpisode.durationMs
+      )
+    } else {
+      this.applyPlaybackProgress(0, 0, durationMs)
+    }
     if (selection.label.length > 0) this.ui.playButtonText = selection.label
   }
 
@@ -224,7 +268,10 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         return {
           ref: next.ref,
           seasonNumber: next.seasonNumber,
-          episodeNumber: next.episodeNumber
+          episodeNumber: next.episodeNumber,
+          playbackPositionMs: next.userState.watched.playbackPositionMs,
+          playedPercentage: next.userState.watched.playedPercentage,
+          durationMs: next.durationMs
         }
       }
     } catch (_error) {
@@ -241,8 +288,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     const targetLabel = adapter.episodeLabel(target?.seasonNumber, target?.episodeNumber)
     const hasTargetNumber = target?.seasonNumber !== undefined || target?.episodeNumber !== undefined
     if (seasons.length === 0) {
-      return target?.ref ? { refs: [target.ref], startIndex: 0, label: targetLabel }
-        : { refs: [], startIndex: 0, label: '' }
+      return target?.ref ? {
+        refs: [target.ref], startIndex: 0, label: targetLabel, playbackTarget: target
+      } : { refs: [], startIndex: 0, label: '', playbackTarget: target }
     }
     const targetSeason = target?.seasonNumber !== undefined
       ? seasons.find((season: MediaSeason): boolean => season.seasonNumber === target.seasonNumber)
@@ -257,8 +305,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     })
     const episodes = episodePage.items
     if (episodes.length === 0) {
-      return target?.ref ? { refs: [target.ref], startIndex: 0, label: targetLabel }
-        : { refs: [], startIndex: 0, label: '' }
+      return target?.ref ? {
+        refs: [target.ref], startIndex: 0, label: targetLabel, playbackTarget: target
+      } : { refs: [], startIndex: 0, label: '', playbackTarget: target }
     }
     let startIndex = target?.ref
       ? episodes.findIndex((episode: MediaEpisode): boolean => episode.ref.equals(target.ref)) : -1
@@ -276,12 +325,26 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       refs: episodes.map((episode: MediaEpisode): MediaRef => episode.ref),
       startIndex: startIndex,
       label: hasTargetNumber ? targetLabel :
-        adapter.episodeLabel(selected.seasonNumber, selected.episodeNumber)
+        adapter.episodeLabel(selected.seasonNumber, selected.episodeNumber),
+      selectedEpisode: selected,
+      playbackTarget: target
     }
   }
 
   private async episodeQueue(catalog: MediaCatalogProvider, detail: MediaDetail): Promise<EpisodeQueueSelection> {
-    if (!detail.seriesRef) return { refs: [detail.ref], startIndex: 0, label: this.ui.episodeName }
+    const playbackTarget: MediaPlaybackTarget = {
+      ref: detail.ref,
+      seasonNumber: detail.seasonNumber,
+      episodeNumber: detail.episodeNumber,
+      playbackPositionMs: detail.userState.watched.playbackPositionMs,
+      playedPercentage: detail.userState.watched.playedPercentage,
+      durationMs: detail.durationMs
+    }
+    if (!detail.seriesRef) {
+      return {
+        refs: [detail.ref], startIndex: 0, label: this.ui.episodeName, playbackTarget: playbackTarget
+      }
+    }
     const episodePage = await catalog.getEpisodes({
       seriesRef: detail.seriesRef,
       seasonRef: detail.seasonRef,
@@ -290,7 +353,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       profile: MediaEpisodeQueryProfile.PlaybackQueue
     })
     if (episodePage.items.length === 0) {
-      return { refs: [detail.ref], startIndex: 0, label: this.ui.episodeName }
+      return {
+        refs: [detail.ref], startIndex: 0, label: this.ui.episodeName, playbackTarget: playbackTarget
+      }
     }
     let startIndex = episodePage.items.findIndex((episode: MediaEpisode): boolean => episode.ref.equals(detail.ref))
     if (startIndex < 0) startIndex = 0
@@ -298,7 +363,9 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       refs: episodePage.items.map((episode: MediaEpisode): MediaRef => episode.ref),
       startIndex: startIndex,
       label: this.presentationAdapter(catalog).episodeLabel(
-        episodePage.items[startIndex].seasonNumber, episodePage.items[startIndex].episodeNumber)
+        episodePage.items[startIndex].seasonNumber, episodePage.items[startIndex].episodeNumber),
+      selectedEpisode: episodePage.items[startIndex],
+      playbackTarget: playbackTarget
     }
   }
 
@@ -346,8 +413,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
         try {
           const selection = await this.episodeQueue(catalog, detail)
           if (this.isCurrent(catalog, ref, generation)) {
-            this.episodeList = selection.refs.slice()
-            this.episodeStartIndex = selection.startIndex
+            this.applyEpisodeQueue(selection)
           }
         } catch (_error) {
           if (this.isCurrent(catalog, ref, generation)) {
@@ -435,7 +501,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
 
   playFirst(): void {
     if (this.episodeList.length === 0) return
-    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex)
+    playMediaRefs(this.episodeList, getContext(), undefined, undefined, this.episodeStartIndex,
+      this.ui.playbackPositionMs > 0 ? this.ui.playbackPositionMs * 10000 : undefined)
   }
 
   /**
@@ -551,6 +618,8 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
     catalog.setWatched(ref, watched).then((state): void => {
       if (this.catalog === catalog && this.ui.mediaRef?.equals(ref)) {
         this.ui.played = state.watched
+        this.applyPlaybackProgress(state.playbackPositionMs, state.playedPercentage, this.currentDurationMs)
+        if (this.ui.episodeName.length > 0) this.ui.playButtonText = this.ui.episodeName
         ToastUtil.showToast(this.ui.context, state.watched ? '标记为已观看' : '标记为未观看')
       }
     }).catch((): void => ToastUtil.showToast(this.ui.context, '操作失败'))
@@ -601,7 +670,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
   private applySelectedSourcePresentation(): void {
     const source = this.currentPlaybackSource()
     if (!source) {
-      this.ui.path = ''
+      this.ui.path = this.detailPathFallback
       this.ui.size = ''
       this.ui.createDate = ''
       this.ui.addedDate = ''
@@ -616,7 +685,7 @@ export class VideoDetailViewModel extends BaseViewModel<VideoDetailUIState> {
       this.ui.selectedSubtitleOptionLabel = '无字幕'
       return
     }
-    this.ui.path = source.filePath
+    this.ui.path = source.filePath.trim().length > 0 ? source.filePath : this.detailPathFallback
     this.ui.size = source.fileSize
     this.ui.createDate = source.fileCreatedDate
     this.ui.addedDate = source.addedDate

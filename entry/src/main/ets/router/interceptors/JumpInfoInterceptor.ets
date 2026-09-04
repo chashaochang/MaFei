@@ -1,18 +1,20 @@
-import { HMInterceptor, HMInterceptorAction, HMInterceptorInfo, IHMInterceptor } from "@hadss/hmrouter";
+import { HMInterceptor, HMInterceptorAction, HMInterceptorInfo, HMRouterMgr, IHMInterceptor } from "@hadss/hmrouter";
 import { OneMoreUtil } from "../../utils/OneMoreUtil";
 import { WindowUtil } from "../../utils/WindowUtil";
-import { AppStorageV2, display } from "@kit.ArkUI";
-import { AppUIState } from "../../entity/AppUIState";
-import { NavModifier } from "../../pages/Index";
 import { HomeRefreshEvent, VideoDetailRefreshEvent } from "../../events/Events";
 import { RouterConsts } from "../../common/RouterConsts";
+import { Constants } from "../../utils/Constants";
 
 @HMInterceptor({ interceptorName: 'jumpInfoInterceptor', global: true })
 export class JumpInfoInterceptor implements IHMInterceptor {
+  private isVideoDetailActiveInHomeContent(): boolean {
+    const names = HMRouterMgr.getPathStack(Constants.HOME_CONTENT_NAVIGATION_ID)?.getAllPathName() ?? []
+    return names.length > 0 && names[names.length - 1] === RouterConsts.VideoDetailPage
+  }
+
   handle(info: HMInterceptorInfo): HMInterceptorAction {
     let connectionInfo: string = info.type === 'push' ? 'jump to' : 'back to';
     console.log(`${info.srcName} ${connectionInfo} ${info.targetName}`)
-    let appOrientation: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
     if (info.type === 'push' && info.targetName === RouterConsts.PlayerPage) {
       if (OneMoreUtil.isNormalPhone()) {//普通手机
         //跳转到PlayerView支持旋转
@@ -20,22 +22,12 @@ export class JumpInfoInterceptor implements IHMInterceptor {
       }
     } else if (info.type === 'pop' && info.srcName === RouterConsts.PlayerPage) {
       info.context.getHostContext()?.eventHub.emit(HomeRefreshEvent)
-      if (info.targetName === RouterConsts.VideoDetailPage) {
+      if (info.targetName === RouterConsts.VideoDetailPage || this.isVideoDetailActiveInHomeContent()) {
         info.context.getHostContext()?.eventHub.emit(VideoDetailRefreshEvent)
       }
       if (OneMoreUtil.isNormalPhone()) {//普通手机
         //跳出PlayerView锁定竖屏
         WindowUtil.setMainWindowPortrait(getContext(this))
-      } else {
-        //跳转到PlayerView支持旋转
-        if (OneMoreUtil.isBigScreen() && (appOrientation.orientation == display.Orientation.LANDSCAPE ||
-          appOrientation.orientation == display.Orientation.LANDSCAPE_INVERTED)) {
-          //横屏退出分栏模式
-          let modifier = AppStorage.get<NavModifier>('modifier')
-          let navInstance = modifier?.instance
-          navInstance?.mode(NavigationMode.Stack)
-          navInstance?.navBarWidth('100%')
-        }
       }
 
     }

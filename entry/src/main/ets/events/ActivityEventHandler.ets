@@ -60,6 +60,7 @@ export class ActivityEventHandler {
     })
     this.eventHub.on(ActivityEventType.OpenSettings,()=>{
       HMRouterMgr.push({
+        navigationId: Constants.NAVIGATION_ID,
         pageUrl:'/Setting'
       })
     })

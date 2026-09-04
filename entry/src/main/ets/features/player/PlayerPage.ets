@@ -71,8 +71,16 @@ export struct PlayerPage {
   @Provider() vm: PlayerPageViewModel = new PlayerPageViewModel(this.ui)
   castController: avSession.AVCastController | undefined = undefined;
   playerFullscreenHelper: PlayerFullscreenHelper = new PlayerFullscreenHelper()
+  private playerNavigationId(): string {
+    return OneMoreUtil.isPc() ? Constants.PLAYER_NAVIGATION_ID : Constants.NAVIGATION_ID
+  }
+
+  private popPlayer(): void {
+    HMRouterMgr.pop({ navigationId: this.playerNavigationId() })
+  }
+
   backClickListener: () => void = () => {
-    HMRouterMgr.pop()
+    this.popPlayer()
   }
   @Local lifecycle: PlayerLifecycle = HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as PlayerLifecycle;
 
@@ -229,7 +237,7 @@ export struct PlayerPage {
     }
     this.restorePlayerWindowState()
     this.vm.reportPlaybackStop()
-    HMRouterMgr.pop()
+    this.popPlayer()
   }
 
   private handleNativeNavigationBack(): boolean {

@@ -50,14 +50,18 @@ export struct HomeTabletHero {
     return this.leadingOverflow > 0 ? `calc(100% - ${this.leadingOverflow}vp)` : '100%'
   }
 
+  private textScrimHeight(): number {
+    return Math.min(this.heroHeight, 240)
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Swiper() {
         ForEach(this.items, (item: VideoItem, index: number) => {
           Stack({ alignContent: Alignment.BottomStart }) {
             Stack()
-              .width('100%')
-              .height('100%')
+              .width('72%')
+              .height(this.textScrimHeight())
               .linearGradient({
                 angle: 180,
                 colors: [
@@ -67,6 +71,7 @@ export struct HomeTabletHero {
                   ['rgba(0,0,0,0)', 1.0]
                 ]
               })
+              .position({ x: 0, y: Math.max(0, this.heroHeight - this.textScrimHeight()) })
               .hitTestBehavior(HitTestMode.None)
 
             Column({ space: 8 }) {

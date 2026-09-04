@@ -13,6 +13,7 @@ import { MediaProviderKind } from "../../media/MediaProviderKind"
 import { FeiniuVideoConnectScreen } from "../feiniuvideo/account/FeiniuVideoConnectPage"
 import { ManagementNativeSelect } from "../management/ManagementNativeSelect"
 import { ThemeStyle } from "../../entity/ThemeStyle"
+import { Constants } from "../../utils/Constants"
 
 @ComponentV2
 export struct ConnectScreen {
@@ -175,6 +176,7 @@ struct JellyfinConnectionFields {
 
   private openServerDiscovery(): void {
     HMRouterMgr.to(RouterConsts.ServerDiscoveryPage)
+      .withNavigation(Constants.NAVIGATION_ID)
       .onResult((res) => {
         if (res && res.result) {
           this.ui.hostname = res.result as string
@@ -434,9 +436,10 @@ struct ServerUrlField {
   @Event onSubmit: () => void = () => {}
 
   private openAccountHistory(): void {
-    HMRouterMgr.to(RouterConsts.AccountPage).withParam({
-      fromLogin: true
-    }).push()
+    HMRouterMgr.to(RouterConsts.AccountPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withParam({ fromLogin: true })
+      .push()
   }
 
   build() {

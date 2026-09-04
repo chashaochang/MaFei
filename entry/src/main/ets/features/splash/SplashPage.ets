@@ -7,6 +7,7 @@ import { CustomColorMode } from '../../entity/CustomColorMode';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { RouterConsts } from '../../common/RouterConsts';
+import { Constants } from '../../utils/Constants';
 
 @HMRouter({
   pageUrl: RouterConsts.SplashPage
@@ -46,7 +47,10 @@ export struct SplashPage {
   }
 
   jump(): void {
-    HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+    HMRouterMgr.to(RouterConsts.IndexPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .withAnimator(false)
+      .replace()
   }
 
   build() {

@@ -5,6 +5,8 @@
     "account-list-empty": "entry/src/main/ets/features/setting/account/AccountPage.ets",
     "account-list-group-header": "entry/src/main/ets/features/setting/account/AccountPage.ets",
     "account-list-item": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "account-provider-menu": "entry/src/main/ets/features/setting/account/AccountPage.ets",
+    "account-provider-title-bar-stack": "entry/src/main/ets/features/setting/account/AccountPage.ets",
     "cast-overview-sheet": "entry/src/main/ets/features/cast/CastDetailPage.ets",
     "chasing-refresh-indicator": "entry/src/main/ets/features/home/chasing/ChasingTab.ets",
     "home-latest-media-sticky-header": "entry/src/main/ets/features/home/hometab/HomeTab.ets",

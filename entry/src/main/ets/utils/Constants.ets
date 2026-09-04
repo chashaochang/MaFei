@@ -54,6 +54,7 @@ export class Constants {
   static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'
   static readonly TICKS_PER_MILLISECOND = 10000
   static readonly NAVIGATION_ID = 'mainNavigation'
+  static readonly HOME_CONTENT_NAVIGATION_ID = 'homeContentNavigation'
   static readonly PLAYER_NAVIGATION_ID = 'playerNavigation'
   // Video player constants
   static readonly LANGUAGE_UNDEFINED = "und"

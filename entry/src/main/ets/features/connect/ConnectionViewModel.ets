@@ -15,6 +15,8 @@ import { HMRouterMgr } from "@hadss/hmrouter";
 import { RouterConsts } from "../../common/RouterConsts";
 import ServerEntity from "../../data/ServerEntity";
 import { DBManager } from "../../data/DBManager";
+import { Constants } from "../../utils/Constants";
+import { HomeContentNavigationController } from "../home/HomeContentNavigationController";
 
 const CONNECTION_ERROR_TEXT: string = '无法建立连接。 请检查主机名和你的网络连接。'
 const INVALID_CREDENTIALS_TEXT: string = '登录失败，用户名或密码错误'
@@ -98,8 +100,12 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         token, userEntity.username)
       this.appUIState.isLogin = true
       if (isFromAddAccount) {
-        HMRouterMgr.getCurrentPathStack()?.clear()
-        HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+        HomeContentNavigationController.reset(this.appUIState)
+        HMRouterMgr.getPathStack(Constants.NAVIGATION_ID)?.clear()
+        HMRouterMgr.to(RouterConsts.IndexPage)
+          .withNavigation(Constants.NAVIGATION_ID)
+          .withAnimator(false)
+          .replace()
       }
       this.appUIState.isConnecting = false
     } else {
@@ -133,8 +139,12 @@ export class ConnectionViewModel extends BaseViewModel<ConnectionUIState> {
         preference.setAccessToken(result.data.AccessToken!)
         this.appUIState.isLogin = true
         if (isFromAddAccount) {
-          HMRouterMgr.getCurrentPathStack()?.clear()
-          HMRouterMgr.to(RouterConsts.IndexPage).withAnimator(false).replace()
+          HomeContentNavigationController.reset(this.appUIState)
+          HMRouterMgr.getPathStack(Constants.NAVIGATION_ID)?.clear()
+          HMRouterMgr.to(RouterConsts.IndexPage)
+            .withNavigation(Constants.NAVIGATION_ID)
+            .withAnimator(false)
+            .replace()
         }
       } else {
         this.ui.errorText = LOGIN_FAILED_TEXT

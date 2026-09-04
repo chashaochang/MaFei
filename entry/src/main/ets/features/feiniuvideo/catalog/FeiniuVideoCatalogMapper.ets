@@ -5,6 +5,7 @@ import {
   createMediaUserState,
   MediaCatalogCounts,
   MediaDetail,
+  MediaDirectLinkInfo,
   MediaEpisode,
   MediaExternalLink,
   MediaFavoriteState,
@@ -39,6 +40,7 @@ import {
 } from './FeiniuVideoDtos'
 import {
   FnMediaPlayInfoResp,
+  FnMediaOfficialStreamDirectLinkQuality,
   FnMediaStreamAudioInfo,
   FnMediaStreamFileInfo,
   FnMediaStreamListData,
@@ -73,6 +75,12 @@ export interface FeiniuVideoCatalogItemContext {
   readonly primaryImagePath?: string
   readonly backdropImagePath?: string
   readonly logoImagePath?: string
+}
+
+interface FeiniuSelectableStream {
+  readonly guid?: string
+  readonly index?: number
+  readonly is_default?: number
 }
 
 export class FeiniuVideoCatalogMapper {
@@ -212,7 +220,8 @@ export class FeiniuVideoCatalogMapper {
     const seriesId = `${context?.seriesId || ''}`.trim()
     const seasonId = this.episodeSeasonId(item.parent_guid, seriesId, context)
     const seriesTitle = `${context?.seriesTitle || FeiniuVideoCatalogMapper.seriesTitle(item)}`.trim()
-    const primaryImagePath = `${item.poster || context?.primaryImagePath || context?.backdropImagePath || ''}`.trim()
+    const primaryImagePath = `${item.still_path || item.poster || context?.primaryImagePath ||
+      context?.backdropImagePath || ''}`.trim()
     const backdropImagePath = `${context?.backdropImagePath || item.poster || context?.primaryImagePath || ''}`.trim()
     return {
       ref: owner,
@@ -226,7 +235,7 @@ export class FeiniuVideoCatalogMapper {
       seriesTitle: seriesTitle.length > 0 ? seriesTitle : undefined,
       seasonNumber: this.positiveNumber(item.season_number),
       episodeNumber: this.positiveNumber(item.episode_number),
-      lastPlayedDate: this.playedDate(item.watched_ts, item.ts),
+      lastPlayedDate: this.playedDate(item.watched_ts),
       genres: [],
       tags: [],
       primaryImage: this.image(owner, primaryImagePath, MediaImageKind.Primary,
@@ -252,6 +261,7 @@ export class FeiniuVideoCatalogMapper {
       })
     }
     const countries = item.production_countries || []
+    const mediaFiles = this.mediaFiles(owner, item, streamData, playInfo)
     return {
       ref: owner,
       seriesRef: this.optionalRef(this.seriesId(item, context), MediaRefKind.Series),
@@ -272,15 +282,16 @@ export class FeiniuVideoCatalogMapper {
       durationMs: this.durationMs(item.duration, item.runtime),
       officialRating: item.content_ratings || '',
       communityRating: this.rating(item.vote_average),
+      path: mediaFiles.length > 0 ? mediaFiles[0].path : undefined,
       genres: this.genres(item),
       tags: this.mediaTags(item).concat(countries),
       studios: [],
       personCredits: this.personCredits(people),
       seasons: seasons.slice(),
       playbackTarget: this.playbackTarget(playInfo),
-      mediaFiles: this.mediaFiles(owner, item, streamData),
+      mediaFiles: mediaFiles,
       externalLinks: externalLinks,
-      primaryImage: this.image(owner, item.poster || item.posters || context?.primaryImagePath ||
+      primaryImage: this.image(owner, item.still_path || item.poster || item.posters || context?.primaryImagePath ||
         context?.backdropImagePath || '',
         MediaImageKind.Primary, 'detail-primary-720', 720),
       backdropImage: this.image(owner, item.backdrops || context?.backdropImagePath ||
@@ -288,13 +299,13 @@ export class FeiniuVideoCatalogMapper {
         MediaImageKind.Backdrop, 'detail-backdrop-1280', 1280),
       logoImage: this.image(owner, item.logos || context?.logoImagePath || '',
         MediaImageKind.Logo, 'detail-logo-720', 720),
-      userState: this.userState(item)
+      userState: this.detailUserState(item, playInfo)
     }
   }
 
   private mediaFiles(owner: MediaRef, item: FnMediaItemDetailResp,
-    streamData?: FnMediaStreamListData): MediaFileInfo[] {
-    const files = streamData?.files || []
+    streamData?: FnMediaStreamListData, playInfo?: FnMediaPlayInfoResp): MediaFileInfo[] {
+    const files = this.mediaFileSources(item, streamData, playInfo)
     const videos = streamData?.video_streams || []
     const audios = streamData?.audio_streams || []
     const subtitles = streamData?.subtitle_streams || []
@@ -305,6 +316,10 @@ export class FeiniuVideoCatalogMapper {
       const sourceAudios = this.audiosForMedia(audios, mediaGuid, singleFileFallback)
       const sourceSubtitles = this.subtitlesForMedia(subtitles, mediaGuid, singleFileFallback)
       const primaryVideo = sourceVideos.length > 0 ? sourceVideos[0] : undefined
+      const selectedVideoIndex = this.selectedStreamIndex(sourceVideos, playInfo?.data?.video_guid)
+      const selectedAudioIndex = this.selectedStreamIndex(sourceAudios, playInfo?.data?.audio_guid,
+        playInfo?.data?.direct_link_audio_index)
+      const selectedSubtitleIndex = this.selectedSubtitleIndex(sourceSubtitles, playInfo?.data?.subtitle_guid)
       const streams: MediaStreamInfo[] = []
       sourceVideos.forEach((video: FnMediaStreamVideoInfo): void => {
         streams.push(this.videoStream(video))
@@ -326,13 +341,104 @@ export class FeiniuVideoCatalogMapper {
         bitrate: this.numberValue(primaryVideo?.bps),
         durationMs: Math.max(
           this.durationMs(item.duration, item.runtime),
+          this.durationMs(file.duration),
           this.durationMs(primaryVideo?.duration)
         ),
-        fileCreatedAtMs: this.timestampMs(file.file_birth_time),
-        addedAtMs: this.timestampMs(file.create_time),
+        fileCreatedAtMs: this.timestampMs(file.file_birth_time || file.create_time || file.update_time),
+        addedAtMs: this.timestampMs(file.create_time || file.update_time || file.timestamp),
+        sortOrder: file.sort_num,
+        playable: file.can_play === undefined ? undefined : file.can_play > 0,
+        playError: `${file.play_error || ''}`.trim() || undefined,
+        defaultVideoStreamIndex: selectedVideoIndex,
+        defaultAudioStreamIndex: selectedAudioIndex,
+        defaultSubtitleStreamIndex: selectedSubtitleIndex,
+        directLinks: this.directLinks(file.direct_link_qualities),
         streams: streams
       }
     })
+  }
+
+  private mediaFileSources(item: FnMediaItemDetailResp, streamData?: FnMediaStreamListData,
+    playInfo?: FnMediaPlayInfoResp): FnMediaStreamFileInfo[] {
+    const files = (streamData?.files || []).slice().sort((left: FnMediaStreamFileInfo,
+      right: FnMediaStreamFileInfo): number => {
+      if (left.sort_num !== undefined && right.sort_num !== undefined && left.sort_num !== right.sort_num) {
+        return left.sort_num - right.sort_num
+      }
+      if (left.sort_num !== undefined && right.sort_num === undefined) return -1
+      if (left.sort_num === undefined && right.sort_num !== undefined) return 1
+      return `${left.file_name || left.path || left.guid || ''}`.localeCompare(
+        `${right.file_name || right.path || right.guid || ''}`)
+    })
+    if (files.length === 0) {
+      const mediaGuids: string[] = []
+      const append = (value?: string): void => {
+        const normalized = `${value || ''}`.trim()
+        if (normalized.length > 0 && mediaGuids.indexOf(normalized) < 0) mediaGuids.push(normalized)
+      }
+      ;(streamData?.video_streams || []).forEach((stream: FnMediaStreamVideoInfo): void => append(stream.media_guid))
+      ;(streamData?.audio_streams || []).forEach((stream: FnMediaStreamAudioInfo): void => append(stream.media_guid))
+      ;(streamData?.subtitle_streams || []).forEach((stream: FnMediaStreamSubtitleInfo): void =>
+        append(stream.media_guid))
+      append(playInfo?.data?.media_guid)
+      append(item.media_guid)
+      if (mediaGuids.length === 0 && ((streamData?.video_streams || []).length > 0 ||
+        (streamData?.audio_streams || []).length > 0 || (streamData?.subtitle_streams || []).length > 0)) {
+        append(item.guid)
+      }
+      mediaGuids.forEach((mediaGuid: string): void => {
+        files.push({
+          guid: mediaGuid,
+          file_name: item.file_name,
+          can_play: item.can_play,
+          play_error: item.play_error
+        })
+      })
+    }
+    const preferredMediaGuid = `${playInfo?.data?.media_guid || item.media_guid || ''}`.trim()
+    const preferredIndex = files.findIndex((file: FnMediaStreamFileInfo): boolean =>
+      `${file.guid || ''}`.trim() === preferredMediaGuid)
+    if (preferredIndex > 0) {
+      const preferred = files[preferredIndex]
+      files.splice(preferredIndex, 1)
+      files.unshift(preferred)
+    }
+    return files
+  }
+
+  private selectedStreamIndex<T extends FeiniuSelectableStream>(streams: T[],
+    preferredGuid?: string, fallbackIndex?: number): number | undefined {
+    const normalizedGuid = `${preferredGuid || ''}`.trim()
+    if (normalizedGuid.length > 0) {
+      const selected = streams.find((stream: T): boolean => `${stream.guid || ''}`.trim() === normalizedGuid)
+      if (selected?.index !== undefined) return selected.index
+    }
+    if (fallbackIndex !== undefined) {
+      const selected = streams.find((stream: T): boolean => stream.index === fallbackIndex)
+      if (selected?.index !== undefined) return selected.index
+    }
+    const defaultStream = streams.find((stream: T): boolean => (stream.is_default || 0) > 0)
+    return defaultStream?.index
+  }
+
+  private selectedSubtitleIndex(streams: FnMediaStreamSubtitleInfo[], preferredGuid?: string): number | undefined {
+    const normalizedGuid = `${preferredGuid || ''}`.trim()
+    if (normalizedGuid === '_no_display_') return -1
+    return this.selectedStreamIndex(streams, normalizedGuid)
+  }
+
+  private directLinks(values?: FnMediaOfficialStreamDirectLinkQuality[]): MediaDirectLinkInfo[] | undefined {
+    const result = (values || []).filter((value: FnMediaOfficialStreamDirectLinkQuality): boolean =>
+      `${value.url || ''}`.trim().length > 0).map((value: FnMediaOfficialStreamDirectLinkQuality): MediaDirectLinkInfo => {
+      return {
+        url: `${value.url || ''}`.trim(),
+        resolution: `${value.resolution || ''}`.trim(),
+        bitrate: Math.max(0, Math.floor(value.bitrate || 0)),
+        progressive: value.progressive === true,
+        hls: value.is_m3u8 === true
+      }
+    })
+    return result.length > 0 ? result : undefined
   }
 
   private videosForMedia(values: FnMediaStreamVideoInfo[], mediaGuid: string,
@@ -398,9 +504,12 @@ export class FeiniuVideoCatalogMapper {
       refFrames: this.numberValue(value.refs || value.reference_frames),
       width: this.numberValue(value.width),
       height: this.numberValue(value.height),
+      codedWidth: this.numberValue(value.coded_width),
+      codedHeight: this.numberValue(value.coded_height),
       aspectRatio: `${value.display_aspect_ratio || ''}`.trim() || undefined,
       frameRate: this.numberValue(value.avg_frame_rate) || this.numberValue(value.frame_rate) ||
         this.numberValue(value.r_frame_rate) || this.numberValue(value.fps),
+      rotation: value.rotation,
       interlaced: value.progressive === undefined ? undefined : value.progressive <= 0,
       resolutionType: `${value.resolution_type || ''}`.trim() || undefined,
       videoRangeType: `${value.color_range_type || value.color_range || ''}`.trim() || undefined,
@@ -409,6 +518,7 @@ export class FeiniuVideoCatalogMapper {
       colorSpace: `${value.color_space || ''}`.trim() || undefined,
       colorTransfer: `${value.color_transfer || ''}`.trim() || undefined,
       pixelFormat: `${value.pix_fmt || ''}`.trim() || undefined,
+      bluray: value.is_bluray,
       external: false,
       default: false,
       forced: false
@@ -429,6 +539,7 @@ export class FeiniuVideoCatalogMapper {
       channels: this.numberValue(value.channels),
       audioType: `${value.audio_type || ''}`.trim() || undefined,
       channelLayout: `${value.channel_layout || ''}`.trim() || undefined,
+      fake: value.is_fake,
       external: false,
       default: (value.is_default || 0) > 0,
       forced: false
@@ -443,6 +554,8 @@ export class FeiniuVideoCatalogMapper {
       displayTitle: this.subtitleTitle(value),
       codec: `${value.codec_name || value.codec_type || value.format || ''}`.trim(),
       language: `${value.language || ''}`.trim(),
+      source: `${value.Source || value.source_id || ''}`.trim() || undefined,
+      fileSizeBytes: this.numberValue(value.file_size),
       external: this.isExternalSubtitle(value),
       default: (value.is_default || 0) > 0,
       forced: (value.forced || 0) > 0
@@ -516,14 +629,42 @@ export class FeiniuVideoCatalogMapper {
     const targetId = `${playInfo?.data?.guid || ''}`.trim()
     const seasonNumber = this.positiveNumber(item?.season_number)
     const episodeNumber = this.positiveNumber(item?.episode_number)
+    const playbackPositionMs = Math.max(0, playInfo?.data?.ts || 0) * FEINIU_SECONDS_TO_MILLISECONDS
+    const durationMs = this.durationMs(item?.duration)
+    const playedPercentage = durationMs > 0 && playbackPositionMs > 0
+      ? this.normalizePercentage(playbackPositionMs * 100 / durationMs) : 0
     if (targetId.length === 0 && seasonNumber === undefined && episodeNumber === undefined) {
       return undefined
     }
     return {
       ref: targetId.length > 0 ? this.ref(targetId, MediaRefKind.Episode) : undefined,
       seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber
+      episodeNumber: episodeNumber,
+      playbackPositionMs: playbackPositionMs,
+      playedPercentage: playedPercentage,
+      durationMs: durationMs
     }
+  }
+
+  private detailUserState(item: FnMediaItemDetailResp, playInfo?: FnMediaPlayInfoResp): MediaUserState {
+    const base = this.userState(item)
+    const playInfoPositionMs = Math.max(0, playInfo?.data?.ts || 0) * FEINIU_SECONDS_TO_MILLISECONDS
+    const playbackPositionMs = Math.max(base.watched.playbackPositionMs, playInfoPositionMs)
+    const durationMs = Math.max(this.durationMs(item.duration, item.runtime),
+      this.durationMs(playInfo?.data?.item?.duration))
+    let playedPercentage = base.watched.playedPercentage
+    if (playbackPositionMs > 0 && durationMs > 0) {
+      playedPercentage = Math.max(playedPercentage,
+        this.normalizePercentage(playbackPositionMs * 100 / durationMs))
+    }
+    return createMediaUserState(
+      base.favorite.favorite,
+      base.watched.watched,
+      playbackPositionMs,
+      playedPercentage,
+      base.favorite.canUpdate,
+      base.watched.canUpdate
+    )
   }
 
   season(item: FnMediaSeasonItem, seriesRef: MediaRef): MediaSeason {
@@ -565,9 +706,9 @@ export class FeiniuVideoCatalogMapper {
       durationMs: this.durationMs(item.duration, item.runtime),
       communityRating: this.rating(item.vote_average),
       tags: this.mediaTags(item),
-      primaryImage: this.image(owner, item.poster || '', MediaImageKind.Primary,
+      primaryImage: this.image(owner, item.still_path || item.poster || '', MediaImageKind.Primary,
         'episode-primary-640', 640),
-      backdropImage: this.image(owner, item.poster || '', MediaImageKind.Backdrop,
+      backdropImage: this.image(owner, item.still_path || item.poster || '', MediaImageKind.Backdrop,
         'episode-backdrop-1280', 1280),
       userState: this.userState(item)
     }
@@ -667,7 +808,7 @@ export class FeiniuVideoCatalogMapper {
   private createSummary(item: FnMediaItem, owner: MediaRef, title: string, subtitle: string,
     context?: FeiniuVideoCatalogItemContext): MediaSummary {
     const detail = item as FnMediaItemDetailResp
-    const primaryImagePath = `${item.poster || detail.posters || context?.primaryImagePath ||
+    const primaryImagePath = `${item.still_path || item.poster || detail.posters || context?.primaryImagePath ||
       context?.backdropImagePath || ''}`.trim()
     const backdropImagePath = `${detail.backdrops || context?.backdropImagePath || primaryImagePath}`.trim()
     return {
@@ -704,17 +845,20 @@ export class FeiniuVideoCatalogMapper {
 
   private personCredits(people: FnMediaPersonListItem[]): MediaPersonCredit[] {
     const credits: MediaPersonCredit[] = []
-    people.forEach((person: FnMediaPersonListItem): void => {
-      const id = `${person.person_guid || person.trim_id || ''}`.trim()
+    people.slice().sort((left: FnMediaPersonListItem, right: FnMediaPersonListItem): number =>
+      (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER))
+      .forEach((person: FnMediaPersonListItem): void => {
+      const id = `${person.person_guid || person.trim_id || person.imdb_id || person.name || ''}`.trim()
       if (id.length === 0) {
         return
       }
       const owner = this.ref(id, MediaRefKind.Person)
+      const role = `${person.role || person.job || person.department || person.known_for_department || ''}`.trim()
       credits.push({
         personRef: owner,
         name: person.name || person.original_name || '',
-        kind: this.personKind(person.job),
-        role: person.role || '',
+        kind: this.personKind(person.job || person.department || person.known_for_department),
+        role: role,
         primaryImage: this.image(owner, person.profile_path || '', MediaImageKind.Avatar,
           'person-credit-240', 240)
       })
@@ -833,7 +977,7 @@ export class FeiniuVideoCatalogMapper {
 
   private userState(item: FnMediaItem): MediaUserState {
     const durationSeconds = this.durationSeconds(item.duration, item.runtime)
-    const positionSeconds = Math.max(0, item.ts || item.media_stream?.current_time || 0)
+    const positionSeconds = Math.max(0, item.ts || 0, item.media_stream?.current_time || 0)
     let percentage = this.normalizePercentage(item.media_stream?.progress)
     if (percentage === 0 && positionSeconds > 0 && durationSeconds > 0) {
       percentage = this.normalizePercentage(positionSeconds * 100 / durationSeconds)
@@ -855,7 +999,7 @@ export class FeiniuVideoCatalogMapper {
 
   private playUserState(item: FnMediaPlayItem): MediaUserState {
     const durationSeconds = Math.max(0, item.duration || 0)
-    const positionSeconds = Math.max(0, item.ts || item.media_stream?.current_time || 0)
+    const positionSeconds = Math.max(0, item.ts || 0, item.media_stream?.current_time || 0)
     let percentage = this.normalizePercentage(item.media_stream?.progress)
     if (percentage === 0 && positionSeconds > 0 && durationSeconds > 0) {
       percentage = this.normalizePercentage(positionSeconds * 100 / durationSeconds)
@@ -872,15 +1016,19 @@ export class FeiniuVideoCatalogMapper {
 
   private mediaTags(item: FnMediaItem): string[] {
     const tags = this.resolutionTags(item)
-    const audioType = `${item.media_stream?.audio_type || ''}`.trim()
-    if (audioType.length > 0 && tags.indexOf(audioType) < 0) {
-      tags.push(audioType)
-    }
-    const colorRange = `${item.media_stream?.color_range_type || ''}`.trim()
-    if (colorRange.length > 0 && tags.indexOf(colorRange) < 0) {
-      tags.push(colorRange)
-    }
+    this.stringValues(item.media_stream?.audio_type).forEach((audioType: string): void => {
+      if (tags.indexOf(audioType) < 0) tags.push(audioType)
+    })
+    this.stringValues(item.media_stream?.color_range_type).forEach((colorRange: string): void => {
+      if (tags.indexOf(colorRange) < 0) tags.push(colorRange)
+    })
     return tags
+  }
+
+  private stringValues(value?: string | string[]): string[] {
+    const values = Array.isArray(value) ? value : [value || '']
+    return values.map((item: string): string => item.trim())
+      .filter((item: string): boolean => item.length > 0)
   }
 
   private resolutionTags(item: FnMediaItem): string[] {
@@ -922,8 +1070,8 @@ export class FeiniuVideoCatalogMapper {
     return value.length > 0 ? value : undefined
   }
 
-  private playedDate(watchedTimestamp?: number, fallbackTimestamp?: number): string | undefined {
-    const seconds = watchedTimestamp && watchedTimestamp > 0 ? watchedTimestamp : (fallbackTimestamp || 0)
+  private playedDate(watchedTimestamp?: number): string | undefined {
+    const seconds = watchedTimestamp && watchedTimestamp > 0 ? watchedTimestamp : 0
     if (seconds <= 0) {
       return undefined
     }
@@ -960,7 +1108,7 @@ export class FeiniuVideoCatalogMapper {
   }
 
   private positiveNumber(value?: number): number | undefined {
-    return value && value > 0 ? Math.floor(value) : undefined
+    return value !== undefined && value >= 0 ? Math.floor(value) : undefined
   }
 
   private timestampMs(value?: number): number | undefined {
@@ -976,9 +1124,21 @@ export class FeiniuVideoCatalogMapper {
     variant: string, width: number): MediaImageRef | undefined {
     const normalizedPath = path.trim()
     const baseUrl = this.normalizedBaseUrl(this.access.baseUrl)
-    if (normalizedPath.length === 0 || baseUrl.length === 0) {
+    if (normalizedPath.length === 0) {
       return undefined
     }
+    if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
+      return new MediaImageRef({
+        owner: owner,
+        kind: kind,
+        url: normalizedPath,
+        requestPath: '',
+        variant: variant,
+        revision: normalizedPath,
+        headers: []
+      })
+    }
+    if (baseUrl.length === 0) return undefined
     const imagePath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`
     const requestPath = `/v/api/v1/sys/img${imagePath}?w=${Math.max(1, Math.floor(width))}`
     return new MediaImageRef({

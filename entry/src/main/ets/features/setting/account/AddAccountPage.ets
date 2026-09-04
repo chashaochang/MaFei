@@ -7,6 +7,7 @@ import { AppUIState } from '../../../entity/AppUIState'
 import { AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
 import { AppThemeTokens } from '../../../theme/AppThemeTokens'
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { Constants } from '../../../utils/Constants'
 
 @HMRouter({
   pageUrl: RouterConsts.AddAccountPage,
@@ -18,11 +19,15 @@ export struct AddAccountPage {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!
 
   private openJellyfin(): void {
-    HMRouterMgr.to(RouterConsts.JellyfinConnectPage).push()
+    HMRouterMgr.to(RouterConsts.JellyfinConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
   }
 
   private openFeiniuVideo(): void {
-    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage).push()
+    HMRouterMgr.to(RouterConsts.FeiniuVideoConnectPage)
+      .withNavigation(Constants.NAVIGATION_ID)
+      .push()
   }
 
   private routeOptions(): AppRouteDestinationOptions {

@@ -522,6 +522,8 @@ export class JellyfinCatalogMapper {
         sizeBytes: Math.max(0, source.Size || 0),
         bitrate: source.Bitrate ?? undefined,
         durationMs: this.ticksToMilliseconds(source.RunTimeTicks),
+        defaultAudioStreamIndex: source.DefaultAudioStreamIndex ?? undefined,
+        defaultSubtitleStreamIndex: source.DefaultSubtitleStreamIndex ?? -1,
         streams: (source.MediaStreams || []).map((stream: MediaStream): MediaStreamInfo => {
           return this.streamInfo(stream)
         })

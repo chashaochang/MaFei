@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { ActivityEventHandler } from '../events/ActivityEventHandler';
-import { AppStorageV2, AttributeUpdater, display } from '@kit.ArkUI';
-import { HMDefaultGlobalAnimator, HMNavigation } from '@hadss/hmrouter';
+import { AppStorageV2, AttributeUpdater, display, uiObserver } from '@kit.ArkUI';
+import { HMDefaultGlobalAnimator, HMNavigation, HMRouterMgr } from '@hadss/hmrouter';
 import { Constants } from '../utils/Constants';
 import { BackController } from '../webapp/BackController';
 import { OhosSmartDialog } from 'ohos_smart_dialog';
@@ -18,6 +18,7 @@ import { connectMusicHostUIState, MusicHostUIState } from '../features/music/Mus
 import { MusicHostVisibilityPolicy } from '../features/music/MusicHostVisibilityPolicy';
 import { MusicMiniPlayer } from '../features/music/MusicMiniPlayer';
 import { connectMusicPlaybackState, MusicPlaybackState } from '../features/music/MusicPlaybackState';
+import { HomeContentNavigationController } from '../features/home/HomeContentNavigationController';
 
 function usesNativeTopSafeArea(appUIState: AppUIState): boolean {
   return appUIState.themeStyle === ThemeStyle.Native && HdsUiCapability.supportsNativeTheme()
@@ -43,6 +44,12 @@ struct Index {
   appUIState: AppUIState = AppStorageV2.connect(AppUIState, () => new AppUIState())!;
   private musicHostUIState: MusicHostUIState = connectMusicHostUIState()
   private musicPlaybackState: MusicPlaybackState = connectMusicPlaybackState()
+  private readonly rootNavigationObserverOptions: uiObserver.NavDestinationSwitchObserverOptions = {
+    navigationId: Constants.NAVIGATION_ID
+  }
+  private readonly onRootDestinationSwitch = (_info: uiObserver.NavDestinationSwitchInfo): void => {
+    HomeContentNavigationController.syncDefaultNavigation(this.appUIState)
+  }
 
   private homeShell(): HomeShellKind {
     return HomeShellPolicy.resolve(
@@ -55,6 +62,9 @@ struct Index {
   }
 
   private musicMiniPlayerVisible(): boolean {
+    if (this.appUIState.homeContentNavigationActive) {
+      return false
+    }
     return MusicHostVisibilityPolicy.shouldShow({
       queueSize: this.musicPlaybackState.queue.length,
       isLogin: this.appUIState.isLogin,
@@ -112,13 +122,7 @@ struct Index {
 
   @Monitor('appUIState.isFullScreen')
   onFullScreenChanged() {
-    if (OneMoreUtil.isBigScreen()) {
-      if (this.appUIState.isFullScreen) {
-        this.modifier.instance?.navBarWidth(0)
-      } else {
-        this.modifier.instance?.navBarWidth('33%')
-      }
-    }
+    OneMoreUtil.updateNavModifier(this.appUIState, this.modifier.instance)
   }
 
   @Monitor('appUIState.colorMode')
@@ -139,10 +143,21 @@ struct Index {
   }
 
   aboutToAppear(): void {
+    HMRouterMgr.setDefaultNavigationId(Constants.NAVIGATION_ID)
+    this.getUIContext().getUIObserver().on(
+      'navDestinationSwitch',
+      this.rootNavigationObserverOptions,
+      this.onRootDestinationSwitch
+    )
     this.activityEventHandler.subscribe()
   }
 
   aboutToDisappear(): void {
+    this.getUIContext().getUIObserver().off(
+      'navDestinationSwitch',
+      this.rootNavigationObserverOptions,
+      this.onRootDestinationSwitch
+    )
     this.activityEventHandler.unsubscribe()
   }
 
@@ -191,6 +206,9 @@ struct Index {
 
   onBackPress(): boolean | void {
     console.log('Index', 'onBackPress');
+    if (HomeContentNavigationController.popHomeContentIfNeeded()) {
+      return true
+    }
     return this.backController?.onBackPress()
   }
 }

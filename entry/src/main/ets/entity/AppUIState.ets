@@ -37,6 +37,9 @@ export class AppUIState {
   @Trace rootNavigationHomeHeroVisible: boolean = false
   @Trace rootNavigationLiveTvAvailable: boolean = false
   @Trace rootNavigationHomeLibraryPinned: boolean = false
+  @Trace homeContentNavigationMounted: boolean = false
+  @Trace homeContentNavigationActive: boolean = false
+  @Trace homeContentNavigationVisible: boolean = false
   context?: common.UIAbilityContext
   windowClass?: window.Window
   navInstance?: NavigationAttribute

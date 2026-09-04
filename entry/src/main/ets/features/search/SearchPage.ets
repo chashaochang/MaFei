@@ -16,6 +16,7 @@ import { toMediaRouteRefData } from "../../media/navigation/MediaRouteRef";
 import { MediaRefKind } from "../../media/MediaRef";
 import { BreakpointTypeEnum } from '../../utils/BreakpointSystem';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
+import { HomeContentLayoutPolicy } from '../home/HomeContentLayoutPolicy'
 
 @ComponentV2
 struct SearchDeleteHistoryDialog {
@@ -68,8 +69,15 @@ struct SearchResultsSection {
     return this.nativeSurface ? $r('sys.color.font_secondary') : $r('app.color.text_1')
   }
 
+  private contentBreakpoint(): string {
+    return HomeContentLayoutPolicy.breakpoint(
+      this.vm.appUIState,
+      this.vm.appUIState.homeContentNavigationMounted
+    )
+  }
+
   private columnsTemplate(): string {
-    switch (this.vm.appUIState.currentBreakpoint) {
+    switch (this.contentBreakpoint()) {
       case BreakpointTypeEnum.XS:
         return '1fr '.repeat(2)
       case BreakpointTypeEnum.SM:
@@ -88,18 +96,18 @@ struct SearchResultsSection {
   }
 
   private columnsGap(): number {
-    return this.vm.appUIState.currentBreakpoint === BreakpointTypeEnum.XS ? 12 : 16
+    return this.contentBreakpoint() === BreakpointTypeEnum.XS ? 12 : 16
   }
 
   private rowsGap(): number {
-    return this.vm.appUIState.currentBreakpoint === BreakpointTypeEnum.XS ? 18 : 20
+    return this.contentBreakpoint() === BreakpointTypeEnum.XS ? 18 : 20
   }
 
   private gridHorizontalPadding(): number {
-    if (this.vm.appUIState.currentBreakpoint === BreakpointTypeEnum.XS) {
+    if (this.contentBreakpoint() === BreakpointTypeEnum.XS) {
       return 8
     }
-    if (this.vm.appUIState.currentBreakpoint === BreakpointTypeEnum.SM) {
+    if (this.contentBreakpoint() === BreakpointTypeEnum.SM) {
       return 12
     }
     return 0

@@ -231,6 +231,9 @@ export interface MediaPlaybackTarget {
   readonly ref?: MediaRef
   readonly seasonNumber?: number
   readonly episodeNumber?: number
+  readonly playbackPositionMs?: number
+  readonly playedPercentage?: number
+  readonly durationMs?: number
 }
 
 export interface MediaStreamInfo {
@@ -249,8 +252,11 @@ export interface MediaStreamInfo {
   readonly channels?: number
   readonly width?: number
   readonly height?: number
+  readonly codedWidth?: number
+  readonly codedHeight?: number
   readonly aspectRatio?: string
   readonly frameRate?: number
+  readonly rotation?: number
   readonly interlaced?: boolean
   readonly resolutionType?: string
   readonly videoRangeType?: string
@@ -261,9 +267,21 @@ export interface MediaStreamInfo {
   readonly pixelFormat?: string
   readonly audioType?: string
   readonly channelLayout?: string
+  readonly bluray?: boolean
+  readonly fake?: boolean
+  readonly source?: string
+  readonly fileSizeBytes?: number
   readonly external: boolean
   readonly default: boolean
   readonly forced: boolean
+}
+
+export interface MediaDirectLinkInfo {
+  readonly url: string
+  readonly resolution: string
+  readonly bitrate: number
+  readonly progressive: boolean
+  readonly hls: boolean
 }
 
 export interface MediaFileInfo {
@@ -278,6 +296,13 @@ export interface MediaFileInfo {
   readonly durationMs: number
   readonly fileCreatedAtMs?: number
   readonly addedAtMs?: number
+  readonly sortOrder?: number
+  readonly playable?: boolean
+  readonly playError?: string
+  readonly defaultVideoStreamIndex?: number
+  readonly defaultAudioStreamIndex?: number
+  readonly defaultSubtitleStreamIndex?: number
+  readonly directLinks?: MediaDirectLinkInfo[]
   readonly streams: MediaStreamInfo[]
 }
 

@@ -500,12 +500,12 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
           console.warn(`[FeiniuVideoCatalog] season list failed item=${ref.id} error=${error.message || 'unknown'}`)
           return []
         }) : Promise.resolve([])
-      const streamPromise: Promise<FnMediaStreamListData | undefined> =
-        this.supportsDetailStreams(detailKind)
-          ? this.detailStreams(detail)
-          : Promise.resolve(undefined)
-      const playInfoPromise: Promise<FnMediaPlayInfoResp | undefined> = detailKind === MediaRefKind.Series
+      const playInfoPromise: Promise<FnMediaPlayInfoResp | undefined> = this.supportsPlayInfo(detailKind)
         ? this.optionalPlayInfo(ref.id) : Promise.resolve(undefined)
+      const streamPromise: Promise<FnMediaStreamListData | undefined> = this.supportsDetailStreams(detailKind)
+        ? playInfoPromise.then((playInfo: FnMediaPlayInfoResp | undefined): Promise<FnMediaStreamListData> =>
+          this.detailStreams(detail, playInfo))
+        : Promise.resolve(undefined)
       const genrePromise = this.ensureGenres()
       const contextPromise = this.itemContext(detail, detailKind)
       const peopleResponse = await peoplePromise
@@ -598,6 +598,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     result.title = item.title
     result.type = item.type
     result.poster = item.poster
+    result.still_path = item.still_path
     result.parent_guid = item.parent_guid
     result.parent_title = item.parent_title
     result.ancestor_guid = item.ancestor_guid
@@ -617,6 +618,9 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     result.audio_guid = item.audio_guid
     result.subtitle_guid = item.subtitle_guid
     result.file_name = item.file_name
+    result.single_child_guid = item.single_child_guid
+    result.play_item_guid = item.play_item_guid
+    result.can_play = item.can_play
     if (item.media_stream) {
       const stream = {} as FnMediaItemStream
       stream.progress = item.media_stream.progress
@@ -630,6 +634,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     detail.title = detail.title || fallback.title
     detail.type = detail.type || fallback.type
     detail.poster = detail.poster || fallback.poster
+    detail.still_path = detail.still_path || fallback.still_path
     detail.parent_guid = detail.parent_guid || fallback.parent_guid
     detail.parent_title = detail.parent_title || fallback.parent_title
     detail.ancestor_guid = detail.ancestor_guid || fallback.ancestor_guid
@@ -653,6 +658,9 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     detail.audio_guid = detail.audio_guid || fallback.audio_guid
     detail.subtitle_guid = detail.subtitle_guid || fallback.subtitle_guid
     detail.file_name = detail.file_name || fallback.file_name
+    detail.single_child_guid = detail.single_child_guid || fallback.single_child_guid
+    detail.play_item_guid = detail.play_item_guid || fallback.play_item_guid
+    detail.can_play = detail.can_play === undefined ? fallback.can_play : detail.can_play
     detail.watched = detail.watched === undefined ? fallback.watched : detail.watched
     detail.watched_ts = detail.watched_ts === undefined ? fallback.watched_ts : detail.watched_ts
     detail.is_favorite = detail.is_favorite === undefined ? fallback.is_favorite : detail.is_favorite
@@ -733,7 +741,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
 
   private itemPrimaryImagePath(item: FnMediaItem): string {
     const detail = item as FnMediaItemDetailResp
-    return `${item.poster || detail.posters || ''}`.trim()
+    return `${item.still_path || item.poster || detail.posters || ''}`.trim()
   }
 
   private uniqueResumeSummaries(items: MediaSummary[]): MediaSummary[] {
@@ -754,6 +762,11 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     return kind === MediaRefKind.Movie || kind === MediaRefKind.Episode || kind === MediaRefKind.Video
   }
 
+  private supportsPlayInfo(kind: MediaRefKind): boolean {
+    return kind === MediaRefKind.Movie || kind === MediaRefKind.Series || kind === MediaRefKind.Season ||
+      kind === MediaRefKind.Episode || kind === MediaRefKind.Video
+  }
+
   private async streamList(itemId: string): Promise<FnMediaStreamListData> {
     const response = await this.request<FnMediaStreamListResp>(
       `/v/api/v1/stream/list/${encodeURIComponent(itemId)}`,
@@ -764,17 +777,16 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
     return response.data || {}
   }
 
-  private async detailStreams(detail: FnMediaItemDetailResp): Promise<FnMediaStreamListData> {
+  private async detailStreams(detail: FnMediaItemDetailResp,
+    playInfo?: FnMediaPlayInfoResp): Promise<FnMediaStreamListData> {
     const supplemental = await Promise.all([
       this.optionalStreamList(detail.guid),
-      this.optionalItemFiles(detail.guid),
-      this.optionalPlayInfo(detail.guid)
+      this.optionalItemFiles(detail.guid)
     ])
     const listed = this.mergeItemFiles(
       supplemental[0] as FnMediaStreamListData,
       supplemental[1] as FnMediaItemFile[]
     )
-    const playInfo = supplemental[2] as FnMediaPlayInfoResp | undefined
 
     const preferredMediaGuid = `${playInfo?.data?.media_guid || detail.media_guid || ''}`.trim()
     const mediaGuids = this.detailMediaGuids(detail, listed, preferredMediaGuid)
@@ -854,7 +866,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
   private mergeItemFiles(listed: FnMediaStreamListData, itemFiles: FnMediaItemFile[]): FnMediaStreamListData {
     const files = (listed.files || []).slice()
     itemFiles.forEach((item: FnMediaItemFile): void => {
-      const mediaGuid = `${item.media_guid || ''}`.trim()
+      const mediaGuid = `${item.media_guid || item.item_guid || ''}`.trim()
       if (mediaGuid.length === 0) return
       const existingIndex = files.findIndex((file: FnMediaStreamFileInfo): boolean =>
         `${file.guid || ''}`.trim() === mediaGuid)
@@ -866,6 +878,8 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
         existing.create_time = existing.create_time || item.create_time
         existing.update_time = existing.update_time || item.update_time
         existing.file_birth_time = existing.file_birth_time || item.file_birth_time
+        existing.timestamp = existing.timestamp || item.timestamp
+        existing.duration = existing.duration || item.duration
         return
       }
       files.push({
@@ -875,7 +889,9 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
         size: item.size || item.file_size,
         create_time: item.create_time,
         update_time: item.update_time,
-        file_birth_time: item.file_birth_time
+        file_birth_time: item.file_birth_time,
+        timestamp: item.timestamp,
+        duration: item.duration
       })
     })
     return {
@@ -888,7 +904,16 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
 
   private preferMediaFile(data: FnMediaStreamListData, preferredMediaGuid: string): FnMediaStreamListData {
     const preferred = preferredMediaGuid.trim()
-    const files = (data.files || []).slice()
+    const files = (data.files || []).slice().sort((left: FnMediaStreamFileInfo,
+      right: FnMediaStreamFileInfo): number => {
+      const leftSort = left.sort_num
+      const rightSort = right.sort_num
+      if (leftSort !== undefined && rightSort !== undefined && leftSort !== rightSort) return leftSort - rightSort
+      if (leftSort !== undefined && rightSort === undefined) return -1
+      if (leftSort === undefined && rightSort !== undefined) return 1
+      return `${left.file_name || left.path || left.guid || ''}`.localeCompare(
+        `${right.file_name || right.path || right.guid || ''}`)
+    })
     if (preferred.length > 0) {
       const index = files.findIndex((file: FnMediaStreamFileInfo): boolean =>
         `${file.guid || ''}`.trim() === preferred)
@@ -972,6 +997,7 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       const file = data.file_stream
       if (file) {
         if (`${file.guid || ''}`.trim().length === 0) file.guid = mediaGuid
+        file.direct_link_qualities = data.direct_link_qualities || data.qualities || file.direct_link_qualities
         const fileIndex = files.findIndex((value: FnMediaStreamFileInfo): boolean =>
           `${value.guid || ''}`.trim() === mediaGuid)
         if (fileIndex >= 0) {
@@ -988,6 +1014,8 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
           file.update_time = file.update_time || listedFile.update_time
           file.file_birth_time = file.file_birth_time || listedFile.file_birth_time
           file.progress_thumb_hash_dir = file.progress_thumb_hash_dir || listedFile.progress_thumb_hash_dir
+          file.duration = file.duration || listedFile.duration
+          file.direct_link_qualities = file.direct_link_qualities || listedFile.direct_link_qualities
           files[fileIndex] = file
         } else files.push(file)
       } else if (!files.some((value: FnMediaStreamFileInfo): boolean =>
@@ -996,7 +1024,8 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
           guid: mediaGuid,
           file_name: detail.file_name,
           path: '',
-          size: 0
+          size: 0,
+          direct_link_qualities: data.direct_link_qualities || data.qualities
         })
       }
 
@@ -1035,7 +1064,46 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
         (value.index ?? 0) === (replacement.index ?? 0)
     })
-    if (index >= 0) result[index] = replacement
+    if (index >= 0) {
+      const current = result[index]
+      result[index] = {
+        media_guid: replacement.media_guid || current.media_guid,
+        guid: replacement.guid || current.guid,
+        title: replacement.title || current.title,
+        index: replacement.index ?? current.index,
+        resolution_type: replacement.resolution_type || current.resolution_type,
+        color_range_type: replacement.color_range_type || current.color_range_type,
+        color_range: replacement.color_range || current.color_range,
+        codec_name: replacement.codec_name || current.codec_name,
+        codec_type: replacement.codec_type || current.codec_type,
+        profile: replacement.profile || current.profile,
+        width: replacement.width ?? current.width,
+        height: replacement.height ?? current.height,
+        coded_width: replacement.coded_width ?? current.coded_width,
+        coded_height: replacement.coded_height ?? current.coded_height,
+        display_aspect_ratio: replacement.display_aspect_ratio || current.display_aspect_ratio,
+        pix_fmt: replacement.pix_fmt || current.pix_fmt,
+        level: replacement.level || current.level,
+        color_space: replacement.color_space || current.color_space,
+        color_transfer: replacement.color_transfer || current.color_transfer,
+        color_primaries: replacement.color_primaries || current.color_primaries,
+        dv_profile: replacement.dv_profile ?? current.dv_profile,
+        bits_per_raw_sample: replacement.bits_per_raw_sample || current.bits_per_raw_sample,
+        wrapper: replacement.wrapper || current.wrapper,
+        duration: replacement.duration ?? current.duration,
+        bps: replacement.bps ?? current.bps,
+        fps: replacement.fps ?? current.fps,
+        frame_rate: replacement.frame_rate ?? current.frame_rate,
+        avg_frame_rate: replacement.avg_frame_rate || current.avg_frame_rate,
+        r_frame_rate: replacement.r_frame_rate || current.r_frame_rate,
+        progressive: replacement.progressive ?? current.progressive,
+        bit_depth: replacement.bit_depth ?? current.bit_depth,
+        refs: replacement.refs ?? current.refs,
+        reference_frames: replacement.reference_frames ?? current.reference_frames,
+        rotation: replacement.rotation ?? current.rotation,
+        is_bluray: replacement.is_bluray ?? current.is_bluray
+      }
+    }
     else result.push(replacement)
     return result
   }
@@ -1049,7 +1117,27 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
         (value.index ?? 0) === (replacement.index ?? 0)
     })
-    if (index >= 0) result[index] = replacement
+    if (index >= 0) {
+      const current = result[index]
+      result[index] = {
+        media_guid: replacement.media_guid || current.media_guid,
+        guid: replacement.guid || current.guid,
+        index: replacement.index ?? current.index,
+        title: replacement.title || current.title,
+        audio_type: replacement.audio_type || current.audio_type,
+        codec_name: replacement.codec_name || current.codec_name,
+        codec_type: replacement.codec_type || current.codec_type,
+        language: replacement.language || current.language,
+        channels: replacement.channels ?? current.channels,
+        profile: replacement.profile || current.profile,
+        sample_rate: replacement.sample_rate || current.sample_rate,
+        is_default: replacement.is_default ?? current.is_default,
+        channel_layout: replacement.channel_layout || current.channel_layout,
+        duration: replacement.duration ?? current.duration,
+        bps: replacement.bps ?? current.bps,
+        is_fake: replacement.is_fake ?? current.is_fake
+      }
+    }
     else result.push(replacement)
     return result
   }
@@ -1063,7 +1151,30 @@ export class FeiniuVideoCatalogProvider implements MediaCatalogProvider {
       return `${value.media_guid || ''}`.trim() === `${replacement.media_guid || ''}`.trim() &&
         (value.index ?? 0) === (replacement.index ?? 0)
     })
-    if (index >= 0) result[index] = replacement
+    if (index >= 0) {
+      const current = result[index]
+      result[index] = {
+        media_guid: replacement.media_guid || current.media_guid,
+        guid: replacement.guid || current.guid,
+        index: replacement.index ?? current.index,
+        title: replacement.title || current.title,
+        codec_name: replacement.codec_name || current.codec_name,
+        codec_type: replacement.codec_type || current.codec_type,
+        format: replacement.format || current.format,
+        language: replacement.language || current.language,
+        forced: replacement.forced ?? current.forced,
+        is_default: replacement.is_default ?? current.is_default,
+        is_external: replacement.is_external ?? current.is_external,
+        trim_id: replacement.trim_id || current.trim_id,
+        source_id: replacement.source_id || current.source_id,
+        Source: replacement.Source || current.Source,
+        create_time: replacement.create_time ?? current.create_time,
+        update_time: replacement.update_time ?? current.update_time,
+        extra_file: replacement.extra_file ?? current.extra_file,
+        is_bitmap: replacement.is_bitmap ?? current.is_bitmap,
+        file_size: replacement.file_size ?? current.file_size
+      }
+    }
     else result.push(replacement)
     return result
   }

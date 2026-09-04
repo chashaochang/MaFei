@@ -59,7 +59,9 @@ export struct VideoListPage {
   }
 
   private contentBreakpoint(): string {
-    return HomeContentLayoutPolicy.breakpoint(this.vm.appUIState, this.useHomeContentWidth)
+    const useHomeContentWidth = this.fromHome ? this.useHomeContentWidth :
+      this.vm.appUIState.homeContentNavigationMounted
+    return HomeContentLayoutPolicy.breakpoint(this.vm.appUIState, useHomeContentWidth)
   }
 
   private getString(name: string): string {
@@ -150,14 +152,31 @@ export struct VideoListPage {
     }]
   }
 
+  private initEmbeddedMediaItem(): void {
+    if (!this.fromHome || !this.mediaItem?.id) {
+      return
+    }
+    const currentRefIdentity = this.vm.mediaItem?.mediaRef?.identity || ''
+    const nextRefIdentity = this.mediaItem.mediaRef?.identity || ''
+    if (this.vm.mediaItem?.id === this.mediaItem.id && currentRefIdentity === nextRefIdentity) {
+      return
+    }
+    this.vm.init(this.mediaItem)
+  }
+
+  @Monitor('mediaItem')
+  onEmbeddedMediaItemChange(): void {
+    this.initEmbeddedMediaItem()
+  }
+
   aboutToAppear(): void {
-    if (this.fromHome && this.mediaItem) {
-      this.vm.init(this.mediaItem)
-    } else {
-      let param = HMRouterMgr.getCurrentParam()
-      if (param) {
-        this.vm.init(param as MediaItem)
-      }
+    if (this.fromHome) {
+      this.initEmbeddedMediaItem()
+      return
+    }
+    let param = HMRouterMgr.getCurrentParam()
+    if (param) {
+      this.vm.init(param as MediaItem)
     }
   }
 
