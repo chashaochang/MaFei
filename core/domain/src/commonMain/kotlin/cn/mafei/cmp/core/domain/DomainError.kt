@@ -147,7 +147,14 @@ class ClientConfigError(
     cause: Throwable? = null,
 ) : DomainError(ErrorSource.Client, isRetryable = false, visibility = UserVisibility.Blocking, message = message, cause = cause)
 
-/** Anything not covered by the other branches. */
+/**
+ * Anything not covered by the other branches.
+ *
+ * Frozen semantics: `isRetryable = true` is a *hint* that a retry may help
+ * (transient engine failures usually do); it never mandates automatic
+ * retries. Retry loops and backoff stay in the data-layer retry policy,
+ * which caps attempts regardless of this flag.
+ */
 class UnknownDomainError(
     message: String? = null,
     cause: Throwable? = null,

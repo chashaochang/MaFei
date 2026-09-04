@@ -61,6 +61,23 @@ class HttpContentDecodeException(
     cause: Throwable? = null,
 ) : HttpException(message = message, cause = cause)
 
+/** More than [maxRedirects] redirects were attempted for a single call. */
+class HttpRedirectLimitExceededException(
+    val url: HttpUrl,
+    val maxRedirects: Int,
+    val lastStatusCode: Int,
+) : HttpException(
+        message = "Exceeded the redirect limit of $maxRedirects for $url (last status $lastStatusCode)",
+    )
+
+/** A redirect tried to downgrade from HTTPS to a non-HTTPS URL. */
+class HttpInsecureRedirectException(
+    val from: HttpUrl,
+    val to: HttpUrl,
+) : HttpException(
+        message = "Refusing insecure redirect from $from to $to",
+    )
+
 /** The body exceeded the limit configured via [BodyReadPolicy.BufferedAtMost]. */
 class HttpBodyLimitExceededException(
     val url: HttpUrl,

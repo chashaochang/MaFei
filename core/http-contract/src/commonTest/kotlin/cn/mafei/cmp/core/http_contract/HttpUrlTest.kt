@@ -58,6 +58,61 @@ class HttpUrlTest {
     }
 
     @Test
+    fun parsesIpv6HostWithoutPort() {
+        val url = HttpUrl.parse("http://[::1]/emby")
+        assertEquals("::1", url.host)
+        assertEquals(80, url.port)
+        assertEquals("http://[::1]/emby", url.toString())
+    }
+
+    @Test
+    fun rejectsBareIpv6AndMalformedAuthorities() {
+        // bare IPv6 without brackets is ambiguous, never a valid authority
+        assertNull(HttpUrl.parseOrNull("http://::1"))
+        assertNull(HttpUrl.parseOrNull("http://[::1"))
+        assertNull(HttpUrl.parseOrNull("http://[::1]junk"))
+        assertNull(HttpUrl.parseOrNull("http://[::1]:"))
+        assertNull(HttpUrl.parseOrNull("http://:8080"))
+        assertNull(HttpUrl.parseOrNull("http://host:"))
+        assertNull(HttpUrl.parseOrNull("http://host:notaport"))
+        assertNull(HttpUrl.parseOrNull("http://host:99999"))
+        assertNull(HttpUrl.parseOrNull("http://user@example.org/"))
+        assertNull(HttpUrl.parseOrNull("http://h/a%zz"))
+        assertNull(HttpUrl.parseOrNull("http://h/a%2"))
+        // valid escapes pass:
+        assertEquals("/%E4%B8%AD", HttpUrl.parseOrNull("http://h/%E4%B8%AD")!!.encodedPath)
+    }
+
+    @Test
+    fun trailingSlashIsPreserved() {
+        assertEquals("/a/", HttpUrl.parse("http://h/a/").encodedPath)
+        assertEquals("http://h/a/", HttpUrl.parse("http://h/a/").toString())
+        assertEquals("/a//b/", HttpUrl.parse("http://h/a//b/").encodedPath)
+    }
+
+    @Test
+    fun builderRejectsEmptyHostAndQueryNames() {
+        assertFailsWith<IllegalArgumentException> { HttpUrl.Builder(scheme = "http", host = "") }
+        val builder = HttpUrl.Builder(scheme = "http", host = "ok")
+        assertFailsWith<IllegalArgumentException> { builder.host("") }
+        assertFailsWith<IllegalArgumentException> { builder.addQueryParameter("", "x") }
+        assertFailsWith<IllegalArgumentException> { builder.setQueryParameter("", "x") }
+        assertEquals("http://ok/", builder.build().toString())
+    }
+
+    @Test
+    fun decodesMixedEncodedAndRawUtf8QueryValues() {
+        val url = HttpUrl.parse("http://h/search?q=%E4%B8%AD%E6%96%87%20mix")
+        assertEquals("中文 mix", url.queryParameters.first("q"))
+
+        val rendered = HttpUrl.Builder(scheme = "http", host = "h")
+            .encodedPath("/search")
+            .addQueryParameter("q", "中文 mix")
+            .build()
+        assertEquals("http://h/search?q=%E4%B8%AD%E6%96%87%20mix", rendered.toString())
+    }
+
+    @Test
     fun queryParametersKeepMultipleValuesInOrder() {
         val url = HttpUrl.parse("http://h/p?tag=a&tag=b&other=1&tag=c")
         assertEquals(listOf("a", "b", "c"), url.queryParameters.values("tag"))

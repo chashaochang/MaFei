@@ -78,6 +78,21 @@ class CommonCoreTest {
         assertEquals("value", success.getOrThrow())
     }
 
+    @Test
+    fun runCatchingSuspendCancellableAcceptsSuspendingBlocks() = runTest {
+        // mirrors provider usage: a suspend HTTP call inside the helper must compile and complete
+        val result = runCatchingSuspendCancellable { suspendEcho("ok") }
+        assertEquals("ok", result.getOrThrow())
+
+        val failure = runCatchingSuspendCancellable<String> { suspendFail() }
+        assertTrue(failure.isFailure)
+        assertTrue(failure.exceptionOrNull() is IllegalStateException)
+    }
+
+    private suspend fun suspendEcho(value: String): String = value
+
+    private suspend fun suspendFail(): String = error("transport exploded")
+
     // ------------------------------------------------------------- TextChecks
 
     @Test

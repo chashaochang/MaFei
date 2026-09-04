@@ -75,6 +75,24 @@ class JsonSnapshotStorageTest {
     }
 
     @Test
+    fun loadSaveRoundTripDropsUnknownFieldsByContract() = runTest {
+        val fixture = Fixture()
+        fixture.storage.save("home", HomeSnapshot(serverId = "srv-1"), HomeSnapshot.serializer())
+        val needle = "\"payload\":{\"serverId\":\"srv-1\"}"
+        val replacement = "\"payload\":{\"serverId\":\"srv-1\",\"futureField\":{\"x\":1}}"
+        fixture.writeRaw("home", fixture.backing.getString("home")!!.replace(needle, replacement))
+
+        // reading tolerates the unknown field...
+        assertEquals(HomeSnapshot(serverId = "srv-1"), fixture.storage.load("home", HomeSnapshot.serializer()))
+
+        // ...but saving again normalizes: unknown fields are dropped by contract
+        fixture.storage.save("home", fixture.storage.load("home", HomeSnapshot.serializer())!!, HomeSnapshot.serializer())
+        val normalized = fixture.backing.getString("home")!!
+        assertTrue(!normalized.contains("futureField"), "save must normalize away unknown fields: " + normalized)
+        assertEquals(HomeSnapshot(serverId = "srv-1"), fixture.storage.load("home", HomeSnapshot.serializer()))
+    }
+
+    @Test
     fun malformedEnvelopeThrowsCorrupted() = runTest {
         val fixture = Fixture()
         fixture.storage.save("home", HomeSnapshot(serverId = "s"), HomeSnapshot.serializer())

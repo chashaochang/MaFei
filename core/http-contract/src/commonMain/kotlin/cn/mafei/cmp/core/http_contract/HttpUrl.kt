@@ -84,7 +84,10 @@ class HttpUrl private constructor(
 
         fun scheme(value: String): Builder = apply { normalizedScheme = normalizeScheme(value) }
 
-        fun host(value: String): Builder = apply { normalizedHost = normalizeHost(value) }
+        fun host(value: String): Builder = apply {
+            require(value.isNotEmpty()) { "host must not be empty" }
+            normalizedHost = normalizeHost(value)
+        }
 
         fun port(value: Int): Builder = apply {
             require(value in 1..65535) { "port must be within 1..65535 but was $value" }
@@ -109,6 +112,7 @@ class HttpUrl private constructor(
         }
 
         fun addQueryParameter(name: String, value: String): Builder = apply {
+            require(name.isNotEmpty()) { "query parameter name must not be empty" }
             queryParameters = queryParameters + (name to value)
         }
 
@@ -117,6 +121,7 @@ class HttpUrl private constructor(
         }
 
         fun setQueryParameter(name: String, value: String): Builder = apply {
+            require(name.isNotEmpty()) { "query parameter name must not be empty" }
             queryParameters = QueryParameters.of(name to value) + queryParameters.without(name)
         }
 
@@ -174,7 +179,7 @@ class HttpUrl private constructor(
             var fragment: String? = null
             val fragmentStart = working.indexOf('#')
             if (fragmentStart != -1) {
-                fragment = PercentCodec.decode(working.substring(fragmentStart + 1))
+                fragment = PercentCodec.decode(working.substring(fragmentStart + 1)) ?: return null
                 working = working.substring(0, fragmentStart)
             }
 
@@ -187,6 +192,7 @@ class HttpUrl private constructor(
             }
 
             val path = if (working.isEmpty()) "/" else normalizeEncodedPath(working)
+            if (!PercentCodec.hasValidPercentEscapes(path)) return null
 
             // authority: [ipv6] or host, optional :port, no userinfo
             val (host, port) = parseAuthority(authority) ?: return null
@@ -210,27 +216,28 @@ class HttpUrl private constructor(
                 val host = authority.substring(1, closing)
                 if (host.isEmpty()) return null
                 val tail = authority.substring(closing + 1)
-                val port = parsePortTail(tail) ?: return null
-                host to port
+                val port = when {
+                    tail.isEmpty() -> null // no port, valid
+                    tail.startsWith(':') && tail.length > 1 ->
+                        tail.substring(1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+                    else -> return null
+                }
+                normalizeHost(host) to port
             } else {
                 val colon = authority.lastIndexOf(':')
-                if (colon == -1) {
-                    authority to null
-                } else {
-                    val host = authority.substring(0, colon)
-                    if (host.isEmpty()) return null
-                    val port = parsePortTail(authority.substring(colon)) ?: return null
-                    host to port
+                when {
+                    colon == -1 -> normalizeHost(authority) to null
+                    else -> {
+                        val host = authority.substring(0, colon)
+                        // a bare IPv6 address without brackets is ambiguous, not a host
+                        if (host.isEmpty() || host.contains(':')) return null
+                        val portText = authority.substring(colon + 1)
+                        if (portText.isEmpty()) return null
+                        val port = portText.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+                        normalizeHost(host) to port
+                    }
                 }
             }
-        }
-
-        private fun parsePortTail(tail: String): Int? {
-            if (tail.isEmpty()) return null
-            if (!tail.startsWith(':')) return null
-            val portText = tail.substring(1)
-            if (portText.isEmpty()) return null
-            return portText.toIntOrNull()?.takeIf { it in 1..65535 }
         }
 
         private fun normalizeScheme(value: String): String =
@@ -243,10 +250,14 @@ class HttpUrl private constructor(
 
         private fun normalizeHost(value: String): String = value.lowercase()
 
+        /**
+         * Guarantees a leading `/`; everything else (including trailing
+         * slashes and duplicate segments) is preserved verbatim because
+         * servers may treat `/a/` and `/a` differently.
+         */
         private fun normalizeEncodedPath(value: String): String {
             val withSlash = if (value.startsWith('/')) value else "/$value"
-            val trimmed = withSlash.trimEnd('/')
-            return if (trimmed.isEmpty()) "/" else trimmed
+            return if (withSlash == "/") "/" else withSlash
         }
 
         private fun parseQuery(raw: String): QueryParameters? {

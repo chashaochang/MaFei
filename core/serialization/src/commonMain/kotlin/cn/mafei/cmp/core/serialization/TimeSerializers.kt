@@ -106,6 +106,14 @@ data object IsoDateSerializer : KSerializer<String> {
     private val DAYS_IN_MONTH = intArrayOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 }
 
+/**
+ * Lenient wire-number decoding, frozen as official compatibility behavior:
+ * inputs are parsed as integers first; on failure they are parsed as doubles
+ * and truncated toward zero (`"10.9"` → `10`). Values beyond the target range
+ * saturate (`"99999999999999999999"` → `Long.MAX_VALUE`). This leniency exists
+ * for dirty legacy payloads only — well-formed producers must send plain
+ * numbers.
+ */
 internal object LenientNumberParsers {
 
     fun parseLong(decoder: JsonDecoder): Long {

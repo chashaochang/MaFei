@@ -177,6 +177,12 @@ class SerializerCompatTest {
         assertEquals(10L, json.decodeFromString(LenientLongPayload.serializer(), """{"count":10}""").count)
         assertEquals(10L, json.decodeFromString(LenientLongPayload.serializer(), """{"count":"10"}""").count)
         assertEquals(10L, json.decodeFromString(LenientLongPayload.serializer(), """{"count":"10.9"}""").count)
+        // frozen behavior: truncation toward zero and saturation for out-of-range inputs
+        assertEquals(-10L, json.decodeFromString(LenientLongPayload.serializer(), """{"count":"-10.9"}""").count)
+        assertEquals(
+            Long.MAX_VALUE,
+            json.decodeFromString(LenientLongPayload.serializer(), """{"count":"99999999999999999999"}""").count,
+        )
     }
 
     @Test

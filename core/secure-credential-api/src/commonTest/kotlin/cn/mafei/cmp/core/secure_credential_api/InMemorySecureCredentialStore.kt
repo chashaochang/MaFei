@@ -15,7 +15,11 @@ open class InMemorySecureCredentialStore : SecureCredentialStore {
                 message = "Alias already exists: $alias",
             )
         }
-        secrets[alias.value] = secret
+        secrets[alias.value] = when (secret) {
+            // copy byte-backed secrets at the boundary like real keystore backends must
+            is SecureSecret.RawBytes -> SecureSecret.RawBytes(secret.value)
+            else -> secret
+        }
     }
 
     override suspend fun read(alias: CredentialAlias): SecureSecret? = secrets[alias.value]

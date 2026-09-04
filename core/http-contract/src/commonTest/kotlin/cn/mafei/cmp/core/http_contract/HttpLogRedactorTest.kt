@@ -11,7 +11,7 @@ class HttpLogRedactorTest {
 
     @Test
     fun masksSensitiveHeaderValues() {
-        for (name in listOf("Authorization", "authorization", "Cookie", "SET-COOKIE", "X-Emby-Token", "Proxy-Authorization")) {
+        for (name in listOf("Authorization", "authorization", "Cookie", "SET-COOKIE", "X-Emby-Token", "Proxy-Authorization", "X-Emby-Authorization", "Trim-MC-token")) {
             val redacted = redactor.redactHeader(name, "super-secret")
             assertFalse(redacted.contains("super-secret"), "header $name leaked")
             assertTrue(redacted.isNotEmpty())
@@ -45,5 +45,11 @@ class HttpLogRedactorTest {
         assertTrue(redactor.isSensitiveHeader("authorization"))
         assertTrue(redactor.isSensitiveHeader("SET-COOKIE"))
         assertFalse(redactor.isSensitiveHeader("accept-language"))
+    }
+
+    @Test
+    fun jellyfinAuthorizationHeaderIsMasked() {
+        val redacted = redactor.redactHeader("X-Emby-Authorization", "MediaBrowser Token=\"secret\"")
+        assertFalse(redacted.contains("secret"))
     }
 }

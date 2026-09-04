@@ -77,6 +77,20 @@ class PagingTest {
     }
 
     @Test
+    fun pageRejectsNegativeTotalEstimate() {
+        assertFailsWith<IllegalArgumentException> {
+            Page<String>(items = emptyList(), totalEstimate = -1)
+        }
+    }
+
+    @Test
+    fun mediaFilterRejectsContradictoryWatchState() {
+        assertFailsWith<IllegalArgumentException> {
+            MediaFilter(playedOnly = true, unplayedOnly = true)
+        }
+    }
+
+    @Test
     fun mediaFilterReportsEmptiness() {
         assertTrue(MediaFilter().isEmpty)
         assertFalse(MediaFilter(mediaTypes = setOf(MediaType.Movie)).isEmpty)

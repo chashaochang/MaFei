@@ -1,6 +1,7 @@
 package cn.mafei.cmp.core.secure_credential_api
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -114,5 +115,27 @@ class SecureCredentialStoreTest {
         store.save(alias, SecureSecret.RawBytes(byteArrayOf(1, 2)))
         assertEquals(SecureSecret.RawBytes(byteArrayOf(1, 2)), store.read(alias))
         assertTrue(store.read(alias) != SecureSecret.RawBytes(byteArrayOf(1, 3)))
+    }
+
+    @Test
+    fun rawBytesAreDefensivelyCopiedAtEveryBoundary() = runTest {
+        val alias = CredentialAlias("k")
+        val source = byteArrayOf(1, 2, 3)
+        val secret = SecureSecret.RawBytes(source)
+
+        // mutating the constructor input must not affect the secret
+        source[0] = 99
+        assertEquals(SecureSecret.RawBytes(byteArrayOf(1, 2, 3)), secret)
+
+        // mutating the value read back must not affect the secret
+        val leaked = secret.value
+        leaked[0] = 42
+        assertContentEquals(byteArrayOf(1, 2, 3), secret.value)
+
+        // mutating the array returned by the store must not affect the stored copy
+        store.save(alias, secret)
+        val fromStore = store.read(alias) as SecureSecret.RawBytes
+        fromStore.value[0] = 77
+        assertEquals(SecureSecret.RawBytes(byteArrayOf(1, 2, 3)), store.read(alias) as SecureSecret.RawBytes)
     }
 }

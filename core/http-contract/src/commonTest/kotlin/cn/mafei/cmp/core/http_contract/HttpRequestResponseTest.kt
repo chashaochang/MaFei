@@ -1,6 +1,7 @@
 package cn.mafei.cmp.core.http_contract
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
@@ -104,6 +105,17 @@ class HttpRequestResponseTest {
     fun ensureSuccessPassesThroughOnSuccess() {
         val response = HttpResponse(200, HttpHeaders.EMPTY, ByteArray(0), url, url)
         assertTrue(response.ensureSuccess().isSuccessful)
+    }
+
+    @Test
+    fun bytesBodyIsCopiedOnConstruction() {
+        val source = byteArrayOf(1, 2, 3)
+        val body = HttpBody.Bytes(source)
+        source[0] = 99
+        assertContentEquals(byteArrayOf(1, 2, 3), body.data)
+
+        body.data[1] = 42 // consumers must not mutate; copy protects equality semantics
+        assertEquals(HttpBody.Bytes(byteArrayOf(1, 42, 3)), body)
     }
 
     @Test

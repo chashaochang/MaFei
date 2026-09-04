@@ -15,8 +15,8 @@ inline fun <T> runCatchingCancellable(block: () -> T): Result<T> = try {
     Result.failure(e)
 }
 
-/** Suspending counterpart of [runCatchingCancellable]. */
-suspend inline fun <T> runCatchingSuspendCancellable(block: () -> T): Result<T> = try {
+/** Suspending counterpart of [runCatchingCancellable]; [block] may itself suspend. */
+suspend inline fun <T> runCatchingSuspendCancellable(block: suspend () -> T): Result<T> = try {
     Result.success(block())
 } catch (e: CancellationException) {
     throw e

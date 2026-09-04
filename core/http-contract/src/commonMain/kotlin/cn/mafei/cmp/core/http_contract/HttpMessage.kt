@@ -45,10 +45,16 @@ sealed class HttpBody {
 
     data object Empty : HttpBody()
 
+    /**
+     * Copies [data] on construction; the caller may reuse its array freely.
+     * The exposed array must not be mutated by consumers.
+     */
     class Bytes(
-        val data: ByteArray,
+        rawData: ByteArray,
         val contentType: String? = null,
     ) : HttpBody() {
+        val data: ByteArray = rawData.copyOf()
+
         override fun equals(other: Any?): Boolean =
             other is Bytes && other.contentType == contentType && other.data.contentEquals(data)
 
@@ -105,8 +111,8 @@ class HttpRequest private constructor(
     )
 
     class Builder internal constructor(
-        private val method: HttpMethod,
-        private val url: HttpUrl,
+        private var method: HttpMethod,
+        private var url: HttpUrl,
         private var headers: HttpHeaders = HttpHeaders.EMPTY,
         private var body: HttpBody = HttpBody.Empty,
         private var timeoutMillis: Long? = null,
@@ -123,6 +129,10 @@ class HttpRequest private constructor(
         fun setHeader(name: String, value: String): Builder = apply {
             headers = headers.without(name) + (name to value)
         }
+
+        fun method(value: HttpMethod): Builder = apply { method = value }
+
+        fun url(value: HttpUrl): Builder = apply { url = value }
 
         fun removeHeader(name: String): Builder = apply {
             headers = headers.without(name)
@@ -174,6 +184,10 @@ class HttpRequest private constructor(
  * A buffered HTTP response. Transports read the body eagerly according to the
  * request's [BodyReadPolicy]; streaming responses are out of scope for this
  * contract (media streams go through the player runtimes).
+ *
+ * Ownership: [bodyBytes] is not defensively copied on read — payloads can be
+ * megabytes and every reader would only need one pass. Transports hand over a
+ * private array; consumers must not mutate it.
  */
 class HttpResponse(
     val statusCode: Int,

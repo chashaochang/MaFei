@@ -5,9 +5,14 @@ package cn.mafei.cmp.core.http_contract
  * and are handed to providers via constructor injection.
  *
  * Contract every implementation must honor:
- * - execute [HttpRequest] and honor its timeout/redirect/read policies;
+ * - execute [HttpRequest] and honor its timeout/read policies; the request
+ *   timeout covers the whole call including any redirect hops;
+ * - drive redirect following exclusively through [HttpRedirects.nextRequest]
+ *   so hop budget, method/body rewriting, origin-based credential stripping
+ *   and downgrade rejection behave identically on every platform;
  * - throw `CancellationException` promptly when the caller is cancelled;
- * - throw [HttpTimeoutException] when the request deadline expires;
+ * - throw [HttpTimeoutException] when the deadline expires (anywhere in the
+ *   redirect chain);
  * - map engine failures to [HttpTransportException] with a precise
  *   [TransportFailureKind];
  * - return any HTTP status as a normal [HttpResponse] (no throw-on-error);

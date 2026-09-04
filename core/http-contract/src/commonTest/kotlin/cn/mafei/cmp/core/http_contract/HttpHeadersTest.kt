@@ -94,4 +94,31 @@ class HttpHeadersTest {
         assertEquals(0, HttpHeaders.EMPTY.size)
         assertNull(HttpHeaders.EMPTY.first("anything"))
     }
+
+    @Test
+    fun plusRejectsHeaderInjection() {
+        val headers = HttpHeaders.of("X" to "ok")
+        assertFailsWith<IllegalArgumentException> {
+            headers + ("Y" to "a\r\nInjected: 1")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            headers + ("Y" to "a\nInjected: 1")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            headers + ("Bad\u0000Name" to "v")
+        }
+        // original collection is untouched by the failed append
+        assertEquals(listOf("ok"), headers.values("X"))
+        assertFalse(headers.contains("Y"))
+    }
+
+    @Test
+    fun builderRejectsInvalidValuesToo() {
+        assertFailsWith<IllegalArgumentException> {
+            HttpHeaders.Builder().add("X", "v\r\nInjected: 1").build()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HttpHeaders.Builder().set("X", "v\nInjected").build()
+        }
+    }
 }

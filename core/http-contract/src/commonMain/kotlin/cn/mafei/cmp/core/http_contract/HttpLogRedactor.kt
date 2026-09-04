@@ -29,8 +29,10 @@ data object DefaultHttpLogRedactor : HttpLogRedactor {
         HttpHeaders.COOKIE.lowercase(),
         HttpHeaders.SET_COOKIE.lowercase(),
         "x-emby-token",
+        "x-emby-authorization", // Jellyfin client/device auth header carries the access token
         "x-auth-token",
         "x-access-token",
+        "trim-mc-token", // FNOS media token header
     )
 
     private val sensitiveQueryNames = setOf(

@@ -57,6 +57,14 @@ data class MediaFilter(
     val playedOnly: Boolean = false,
     val unplayedOnly: Boolean = false,
 ) {
+    init {
+        // Frozen: "only played" and "only unplayed" are mutually exclusive —
+        // combining them is a caller bug that would silently yield empty pages.
+        require(!(playedOnly && unplayedOnly)) {
+            "playedOnly and unplayedOnly are mutually exclusive"
+        }
+    }
+
     val isEmpty: Boolean
         get() = mediaTypes.isEmpty() && genres.isEmpty() && years.isEmpty() &&
             searchTerm.isNullOrBlank() && !favoritesOnly && !playedOnly && !unplayedOnly
@@ -92,8 +100,15 @@ data class PageRequest(
 data class Page<T>(
     val items: List<T> = emptyList(),
     val nextCursor: PageCursor? = null,
+    /** Provider-side estimate of the total result count; frozen as non-negative. */
     val totalEstimate: Int? = null,
 ) {
+    init {
+        require(totalEstimate == null || totalEstimate >= 0) {
+            "totalEstimate must be non-negative but was $totalEstimate"
+        }
+    }
+
     val hasMore: Boolean get() = nextCursor != null
     val isEmpty: Boolean get() = items.isEmpty()
 

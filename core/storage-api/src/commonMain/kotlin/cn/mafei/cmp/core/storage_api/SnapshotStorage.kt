@@ -31,11 +31,18 @@ data class SnapshotEntry<T>(
  * Serialization-backed snapshot persistence over plain [SettingsStorage].
  *
  * Snapshots are larger structured documents (e.g. the legacy migration state
- * or home shelves) written as a whole and read back as a whole. The payload
- * is stored verbatim inside an envelope so unknown fields survive round trips
- * thanks to the injected [Json] configuration. Malformed envelopes and
- * undecodable payloads surface as [StorageCorruptedException] so callers can
- * trigger re-fetch/migration instead of crashing.
+ * or home shelves) written as a whole and read back as a whole. Unknown
+ * payload fields written by *newer* app versions are tolerated on read so an
+ * older client never fails to load a newer snapshot — but this tolerance is
+ * read-only by contract: loading decodes into the caller's model and the
+ * unknown fields are gone. Saving again persists the model as encoded by the
+ * caller's serializer, which **drops** the unknown fields. Callers that must
+ * preserve opaque payloads across versions (e.g. the legacy migration
+ * snapshot) keep the raw envelope untouched or version the schema explicitly.
+ *
+ * Malformed envelopes and undecodable payloads surface as
+ * [StorageCorruptedException] so callers can trigger re-fetch/migration
+ * instead of crashing.
  *
  * The clock is injected (`nowEpochMs`) to keep writes deterministic in tests.
  */

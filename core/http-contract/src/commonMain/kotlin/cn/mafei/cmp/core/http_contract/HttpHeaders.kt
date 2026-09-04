@@ -29,8 +29,16 @@ class HttpHeaders private constructor(
     fun without(name: String): HttpHeaders =
         HttpHeaders(list.filterNot { it.first.equals(name, ignoreCase = true) })
 
-    operator fun plus(entry: Pair<String, String>): HttpHeaders =
-        HttpHeaders(list + entry)
+    /**
+     * Returns a copy with [entry] appended after validating name and value —
+     * the same contract as [Builder.add]. Values containing CR/LF are rejected
+     * so request smuggling through a crafted header value is impossible.
+     */
+    operator fun plus(entry: Pair<String, String>): HttpHeaders {
+        validateName(entry.first)
+        validateValue(entry.second)
+        return HttpHeaders(list + entry)
+    }
 
     override fun iterator(): Iterator<Pair<String, String>> = list.iterator()
 
@@ -46,13 +54,15 @@ class HttpHeaders private constructor(
 
         /** Appends a value keeping multi-value semantics (e.g. `Set-Cookie`). */
         fun add(name: String, value: String): Builder = apply {
-            requireValidName(name)
+            validateName(name)
+            validateValue(value)
             entries += name to value
         }
 
         /** Removes all values of [name] and appends a single [value]. */
         fun set(name: String, value: String): Builder = apply {
-            requireValidName(name)
+            validateName(name)
+            validateValue(value)
             removeAll(name)
             entries += name to value
         }
@@ -74,17 +84,23 @@ class HttpHeaders private constructor(
         private fun removeAll(name: String) {
             entries.removeAll { it.first.equals(name, ignoreCase = true) }
         }
-
-        private fun requireValidName(name: String) {
-            require(name.isNotBlank()) { "header name must not be blank" }
-            require(!name.any { it == '\n' || it == '\r' || it == ':' }) {
-                "header name contains forbidden characters: '$name'"
-            }
-        }
     }
 
     companion object {
         val EMPTY: HttpHeaders = HttpHeaders(emptyList())
+
+        fun validateName(name: String) {
+            require(name.isNotBlank()) { "header name must not be blank" }
+            require(name.none { it == '\n' || it == '\r' || it == ':' || it == '\u0000' }) {
+                "header name contains forbidden characters: '$name'"
+            }
+        }
+
+        fun validateValue(value: String) {
+            require(value.none { it == '\n' || it == '\r' || it == '\u0000' }) {
+                "header value contains line breaks or NUL (header injection rejected)"
+            }
+        }
 
         fun of(vararg entries: Pair<String, String>): HttpHeaders =
             Builder().apply { entries.forEach { add(it.first, it.second) } }.build()
