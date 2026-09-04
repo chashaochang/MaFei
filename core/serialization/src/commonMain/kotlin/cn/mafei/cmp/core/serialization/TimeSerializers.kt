@@ -38,8 +38,9 @@ data object IsoInstantEpochMsSerializer : KSerializer<Long> {
 }
 
 /**
- * Serializes epoch seconds; accepts both JSON numbers and number-shaped
- * strings (some backends wrap numeric fields in strings).
+ * Serializes epoch seconds; accepts JSON numbers and integer-shaped strings
+ * (some backends wrap numeric fields in strings). Fractional or out-of-range
+ * inputs are rejected — see [LenientNumberParsers].
  */
 data object EpochSecondsLongSerializer : KSerializer<Long> {
 
@@ -56,7 +57,7 @@ data object EpochSecondsLongSerializer : KSerializer<Long> {
     }
 }
 
-/** Serializes epoch milliseconds; tolerates number-shaped strings like [EpochSecondsLongSerializer]. */
+/** Serializes epoch milliseconds; tolerates integer-shaped strings like [EpochSecondsLongSerializer]. */
 data object EpochMillisLongSerializer : KSerializer<Long> {
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -107,33 +108,33 @@ data object IsoDateSerializer : KSerializer<String> {
 }
 
 /**
- * Lenient wire-number decoding, frozen as official compatibility behavior:
- * inputs are parsed as integers first; on failure they are parsed as doubles
- * and truncated toward zero (`"10.9"` → `10`). Values beyond the target range
- * saturate (`"99999999999999999999"` → `Long.MAX_VALUE`). This leniency exists
- * for dirty legacy payloads only — well-formed producers must send plain
- * numbers.
+ * Lenient wire-number decoding. Frozen scope: values may arrive as JSON
+ * numbers *or* integer-shaped strings (`"42"`); anything else is rejected.
+ *
+ * Deliberately NOT tolerated (no protocol evidence from Jellyfin/FNOS that
+ * such payloads exist): fractional values are never truncated (`"10.9"` and
+ * `10.9` fail) and out-of-range integers never saturate. If a real server is
+ * proven to send such shapes, add a fixture-backed case here instead of
+ * silently coercing.
  */
 internal object LenientNumberParsers {
 
     fun parseLong(decoder: JsonDecoder): Long {
         val content = requirePrimitive(decoder)
-        content.toLongOrNull()?.let { return it }
-        content.toDoubleOrNull()?.let { return it.toLong() }
-        throw SerializationException("Malformed number: '$content'")
+        return content.toLongOrNull()
+            ?: throw SerializationException("Expected an integer, got: '$content'")
     }
 
     fun parseInt(decoder: JsonDecoder): Int {
         val content = requirePrimitive(decoder)
-        content.toIntOrNull()?.let { return it }
-        content.toDoubleOrNull()?.let { return it.toInt() }
-        throw SerializationException("Malformed number: '$content'")
+        return content.toIntOrNull()
+            ?: throw SerializationException("Expected an integer, got: '$content'")
     }
 
     fun parseDouble(decoder: JsonDecoder): Double {
         val content = requirePrimitive(decoder)
-        content.toDoubleOrNull()?.let { return it }
-        throw SerializationException("Malformed number: '$content'")
+        return content.toDoubleOrNull()
+            ?: throw SerializationException("Malformed number: '$content'")
     }
 
     private fun requirePrimitive(decoder: JsonDecoder): String {

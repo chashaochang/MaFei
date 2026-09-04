@@ -91,6 +91,26 @@ class HttpUrlTest {
     }
 
     @Test
+    fun rejectsHostsWithReservedWhitespaceOrControlCharacters() {
+        assertNull(HttpUrl.parseOrNull("http://ho st.org"))
+        assertNull(HttpUrl.parseOrNull("http://host\texample.org"))
+        assertNull(HttpUrl.parseOrNull("http://host\u0007"))
+        // path and query characters must not appear in the host via the builder
+        val builder = HttpUrl.Builder(scheme = "http", host = "ok")
+        for (bad in listOf("a/b", "a?b", "a#b", "a b", "a\tb")) {
+            assertFailsWith<IllegalArgumentException>("host '$bad' must be rejected") { builder.host(bad) }
+        }
+    }
+
+    @Test
+    fun queryParametersPlusRejectsEmptyNames() {
+        val query = QueryParameters.of("ok" to "1")
+        assertFailsWith<IllegalArgumentException> { query + ("" to "x") }
+        // existing collection untouched
+        assertEquals(1, query.size)
+    }
+
+    @Test
     fun builderRejectsEmptyHostAndQueryNames() {
         assertFailsWith<IllegalArgumentException> { HttpUrl.Builder(scheme = "http", host = "") }
         val builder = HttpUrl.Builder(scheme = "http", host = "ok")

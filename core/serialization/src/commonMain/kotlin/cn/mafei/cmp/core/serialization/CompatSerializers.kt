@@ -83,7 +83,7 @@ abstract class UnknownTolerantEnumSerializer<E : Enum<E>>(
             ?: byLowerAlias[raw.lowercase()]
 }
 
-/** Long that accepts JSON numbers or number-shaped strings (`"42"`, `"10.9"`). */
+/** Long that accepts JSON numbers or integer-shaped strings (`"42"`); fractions/range overflows rejected. */
 data object LenientLongSerializer : KSerializer<Long> {
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -97,7 +97,7 @@ data object LenientLongSerializer : KSerializer<Long> {
     }
 }
 
-/** Int that accepts JSON numbers or number-shaped strings. */
+/** Int that accepts JSON numbers or integer-shaped strings. */
 data object LenientIntSerializer : KSerializer<Int> {
 
     @OptIn(ExperimentalSerializationApi::class)

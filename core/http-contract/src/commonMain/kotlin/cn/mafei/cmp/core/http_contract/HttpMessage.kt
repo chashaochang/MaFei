@@ -16,8 +16,14 @@ enum class RedirectPolicy {
     /** Transparently follow redirects (same or other host). */
     Follow,
 
-    /** Follow redirects only while the host stays the same. */
-    FollowSameHost,
+    /**
+     * Follow redirects only while the origin stays the same, i.e. scheme,
+     * host and port all match. Chosen over a weaker host-only check because
+     * `https://media.example.org` redirecting to
+     * `http://media.example.org` must not silently leak credentials on an
+     * unencrypted channel.
+     */
+    FollowSameOrigin,
 
     /** Return 3xx responses as-is; the caller manages redirects manually. */
     DoNotFollow,

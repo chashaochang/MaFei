@@ -79,13 +79,13 @@ class HttpUrl private constructor(
         private var normalizedHost = normalizeHost(host)
 
         init {
-            require(host.isNotEmpty()) { "host must not be empty" }
+            validateHost(host)
         }
 
         fun scheme(value: String): Builder = apply { normalizedScheme = normalizeScheme(value) }
 
         fun host(value: String): Builder = apply {
-            require(value.isNotEmpty()) { "host must not be empty" }
+            validateHost(value)
             normalizedHost = normalizeHost(value)
         }
 
@@ -222,11 +222,15 @@ class HttpUrl private constructor(
                         tail.substring(1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
                     else -> return null
                 }
+                if (!isHostValid(host)) return null
                 normalizeHost(host) to port
             } else {
                 val colon = authority.lastIndexOf(':')
                 when {
-                    colon == -1 -> normalizeHost(authority) to null
+                    colon == -1 -> {
+                        if (!isHostValid(authority)) return null
+                        normalizeHost(authority) to null
+                    }
                     else -> {
                         val host = authority.substring(0, colon)
                         // a bare IPv6 address without brackets is ambiguous, not a host
@@ -234,6 +238,7 @@ class HttpUrl private constructor(
                         val portText = authority.substring(colon + 1)
                         if (portText.isEmpty()) return null
                         val port = portText.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+                        if (!isHostValid(host)) return null
                         normalizeHost(host) to port
                     }
                 }
@@ -249,6 +254,22 @@ class HttpUrl private constructor(
         }
 
         private fun normalizeHost(value: String): String = value.lowercase()
+
+        /**
+         * Shared host validation for parser and builder: hosts must be
+         * non-empty and free of `/`, `?`, `#`, whitespace and control
+         * characters. `:` is allowed only where the grammar puts it (the
+         * authority/port split or bracketed IPv6 literals), not inside the
+         * plain-host rule itself.
+         */
+        private fun isHostValid(host: String): Boolean =
+            host.isNotEmpty() &&
+                host.none { it == '/' || it == '?' || it == '#' } &&
+                host.none { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F }
+
+        private fun validateHost(host: String) {
+            require(isHostValid(host)) { "host is empty or contains reserved, whitespace or control characters: '$host'" }
+        }
 
         /**
          * Guarantees a leading `/`; everything else (including trailing
@@ -297,7 +318,11 @@ class QueryParameters private constructor(
     /** Returns a copy without every value of [name]. */
     fun without(name: String): QueryParameters = QueryParameters(entries.filterNot { it.first == name })
 
-    operator fun plus(entry: Pair<String, String>): QueryParameters = QueryParameters(entries + entry)
+    /** Appends [entry] with the same name validation as [Builder.add] (empty names rejected). */
+    operator fun plus(entry: Pair<String, String>): QueryParameters {
+        require(entry.first.isNotEmpty()) { "query parameter name must not be empty" }
+        return QueryParameters(entries + entry)
+    }
 
     operator fun plus(other: QueryParameters): QueryParameters = QueryParameters(entries + other.entries)
 

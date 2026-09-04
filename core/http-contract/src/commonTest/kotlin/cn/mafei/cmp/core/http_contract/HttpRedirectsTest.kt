@@ -3,7 +3,9 @@ package cn.mafei.cmp.core.http_contract
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HttpRedirectsTest {
 
@@ -123,6 +125,71 @@ class HttpRedirectsTest {
     }
 
     @Test
+    fun crossOriginRedirectStripsEveryCredentialHeader() {
+        val credentials = HttpCredentialHeaders.ALL.map { it to "leak-me" }
+        val previous = request(headers = credentials)
+        val next = HttpRedirects.nextRequest(previous, redirect(302, "https://mirror.example.org/assets"), 0)!!
+
+        for (name in HttpCredentialHeaders.ALL) {
+            assertNull(next.headers.first(name), "credential header '$name' survived a cross-origin redirect")
+        }
+    }
+
+    @Test
+    fun credentialHeaderSetCoversBothProtocols() {
+        for (expected in listOf("authorization", "proxy-authorization", "cookie", "x-emby-authorization", "x-emby-token", "trim-mc-token")) {
+            assertTrue(
+                HttpCredentialHeaders.ALL.contains(expected),
+                "credential header set must contain '$expected'",
+            )
+        }
+        assertTrue(HttpCredentialHeaders.isCredentialHeader("X-Emby-Authorization"))
+        assertFalse(HttpCredentialHeaders.isCredentialHeader("Accept"))
+    }
+
+    @Test
+    fun dotSegmentAndQueryOnlyLocationsResolve() {
+        val previous = request()
+
+        // "./sibling" resolves inside the current directory
+        assertEquals(
+            "https://media.example.org/jellyfin/sibling",
+            HttpRedirects.nextRequest(previous, redirect(302, "./sibling"), 0)!!.url.toString(),
+        )
+        // "../up" pops one directory
+        assertEquals(
+            "https://media.example.org/up",
+            HttpRedirects.nextRequest(previous, redirect(302, "../up"), 0)!!.url.toString(),
+        )
+        // popping beyond the root clamps at the root
+        assertEquals(
+            "https://media.example.org/beyond",
+            HttpRedirects.nextRequest(previous, redirect(302, "../../beyond"), 0)!!.url.toString(),
+        )
+        // "/a/." and "/a/.." end as directories
+        assertEquals(
+            "https://media.example.org/jellyfin/",
+            HttpRedirects.nextRequest(previous, redirect(302, "/jellyfin/."), 0)!!.url.toString(),
+        )
+        assertEquals(
+            "https://media.example.org/",
+            HttpRedirects.nextRequest(previous, redirect(302, "/jellyfin/.."), 0)!!.url.toString(),
+        )
+    }
+
+    @Test
+    fun queryOnlyAndFragmentOnlyLocationsKeepThePath() {
+        // query-only reference replaces the query, keeps the path
+        val queryOnly = HttpRedirects.nextRequest(previous = request(), response = redirect(302, "?page=2"), hopsCompleted = 0)!!
+        assertEquals("https://media.example.org/jellyfin/Items?page=2", queryOnly.url.toString())
+        assertNull(queryOnly.url.queryParameters.first("Limit"))
+
+        // fragment-only reference keeps path and query, replaces the fragment
+        val fragmentOnly = HttpRedirects.nextRequest(request(), redirect(302, "#section"), 0)!!
+        assertEquals("https://media.example.org/jellyfin/Items?Limit=10#section", fragmentOnly.url.toString())
+    }
+
+    @Test
     fun sameOriginRedirectKeepsCredentials() {
         val previous = request(headers = listOf("Authorization" to "MediaBrowser token", "Cookie" to "mc=1"))
         val next = HttpRedirects.nextRequest(previous, redirect(302, "/same/origin"), 0)!!
@@ -136,7 +203,7 @@ class HttpRedirectsTest {
         val previousDoNotFollow = request(policy = RedirectPolicy.DoNotFollow)
         assertNull(HttpRedirects.nextRequest(previousDoNotFollow, redirect(302, "/x"), 0))
 
-        val previousSameHost = request(policy = RedirectPolicy.FollowSameHost)
+        val previousSameHost = request(policy = RedirectPolicy.FollowSameOrigin)
         assertNull(HttpRedirects.nextRequest(previousSameHost, redirect(302, "https://other.example.org/x"), 0))
         assertEquals(
             "https://media.example.org/stay",

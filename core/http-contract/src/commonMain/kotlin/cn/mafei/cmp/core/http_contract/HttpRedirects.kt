@@ -18,8 +18,10 @@ package cn.mafei.cmp.core.http_contract
  *   string is never trusted blindly; locations carrying user info or
  *   unparseable references end the chain (`null`);
  * - HTTPS → HTTP downgrades are rejected with [HttpInsecureRedirectException];
- * - redirects crossing an origin strip `Authorization` and `Cookie` headers;
- * - with [RedirectPolicy.FollowSameHost], cross-origin redirects end the
+ * - redirects crossing an origin strip every header in
+ *   [HttpCredentialHeaders.ALL] (Authorization, Proxy-Authorization, Cookie,
+ *   X-Emby-Authorization, X-Emby-Token, Trim-MC-token, ...);
+ * - with [RedirectPolicy.FollowSameOrigin], cross-origin redirects end the
  *   chain (`null`); with [RedirectPolicy.DoNotFollow] nothing is followed;
  * - unrecognized 3xx statuses and missing locations end the chain (`null`)
  *   so the original response reaches the caller's error mapping.
@@ -62,7 +64,7 @@ data object HttpRedirects {
         if (previous.url.scheme == "https" && nextUrl.scheme != "https") {
             throw HttpInsecureRedirectException(from = response.effectiveUrl, to = nextUrl)
         }
-        if (previous.redirectPolicy == RedirectPolicy.FollowSameHost && !sameOrigin(previous.url, nextUrl)) {
+        if (previous.redirectPolicy == RedirectPolicy.FollowSameOrigin && !sameOrigin(previous.url, nextUrl)) {
             return null
         }
 
@@ -79,8 +81,9 @@ data object HttpRedirects {
 
         if (!sameOrigin(previous.url, nextUrl)) {
             // credentials never follow across origins
-            builder.removeHeader(HttpHeaders.AUTHORIZATION)
-            builder.removeHeader(HttpHeaders.COOKIE)
+            for (name in HttpCredentialHeaders.ALL) {
+                builder.removeHeader(name)
+            }
         }
 
         return builder.build()
@@ -88,29 +91,75 @@ data object HttpRedirects {
 
     /**
      * Resolves a `Location` header value against the URL that produced the
-     * redirect. Supports absolute URLs, protocol-relative references and
-     * root/relative paths. Returns `null` for anything unparseable — including
-     * references carrying user info — instead of guessing.
+     * redirect. Supports:
+     * - absolute URLs and protocol-relative (`//host/...`) references;
+     * - root-relative (`/path`) and directory-relative (`item`, `./item`,
+     *   `../up`) references — literal `.` and `..` dot segments are removed
+     *   per RFC 3986 §5.2.4 and clamped at the root;
+     * - query-only (`?page=2`) and fragment-only (`#section`) references,
+     *   which keep the current path (and query, for fragment references).
+     *
+     * Returns `null` for anything unparseable — including references carrying
+     * user info — instead of guessing.
      */
     fun resolveLocation(base: HttpUrl, location: String): HttpUrl? {
         val trimmed = location.trim()
         if (trimmed.isEmpty()) return null
 
-        return when {
-            trimmed.contains("://") -> HttpUrl.parseOrNull(trimmed)
-            trimmed.startsWith("//") -> HttpUrl.parseOrNull(base.scheme + ":" + trimmed)
+        val origin = base.scheme + "://" + authorityOf(base)
+        val candidate = when {
+            trimmed.contains("://") -> return HttpUrl.parseOrNull(trimmed)
+            trimmed.startsWith("//") -> base.scheme + ":" + trimmed
+            trimmed.startsWith("/") -> origin + trimmed // root-relative
+            trimmed.startsWith("?") -> origin + base.encodedPath + trimmed
+            trimmed.startsWith("#") -> origin + base.encodedPath + baseQueryString(base) + trimmed
             else -> {
-                val origin = base.scheme + "://" + authorityOf(base)
-                val prefix = if (trimmed.startsWith("/")) {
-                    origin
-                } else {
-                    // relative references resolve against the directory of the current path
-                    val directory = base.encodedPath.substringBeforeLast('/')
-                    origin + if (directory.isEmpty()) "/" else "$directory/"
-                }
-                HttpUrl.parseOrNull(prefix + trimmed)
+                // path-relative references resolve against the current directory,
+                // then literal dot segments are removed
+                val directory = base.encodedPath.substringBeforeLast('/')
+                val prefix = origin + if (directory.isEmpty()) "/" else "$directory/"
+                prefix + trimmed
             }
         }
+        val resolved = HttpUrl.parseOrNull(candidate) ?: return null
+        return if (isPathReference(trimmed)) resolved.withoutDotSegments() else resolved
+    }
+
+    private fun isPathReference(location: String): Boolean =
+        !location.contains("://") && !location.startsWith("//")
+
+    private fun baseQueryString(base: HttpUrl): String {
+        val query = base.queryParameters.toEncodedString()
+        return if (query.isEmpty()) "" else "?$query"
+    }
+
+    private fun HttpUrl.withoutDotSegments(): HttpUrl {
+        val normalized = removeDotSegments(encodedPath)
+        if (normalized == encodedPath) return this
+        return newBuilder().encodedPath(normalized).build()
+    }
+
+    /**
+     * RFC 3986 §5.2.4 restricted to literal `.`/`..` segments, clamped at the
+     * root. Only applies to path-relative redirect targets; empty segments
+     * (`//`) collapse in the process.
+     */
+    private fun removeDotSegments(path: String): String {
+        val segments = path.split('/').filter { it.isNotEmpty() }
+        val out = mutableListOf<String>()
+        for (segment in segments) {
+            when (segment) {
+                "." -> {}
+                ".." -> if (out.isNotEmpty()) out.removeAt(out.size - 1)
+                else -> out.add(segment)
+            }
+        }
+        var result = out.joinToString("/", prefix = "/")
+        val endsAsDirectory = path.endsWith("/") ||
+            segments.lastOrNull() == "." ||
+            segments.lastOrNull() == ".."
+        if (endsAsDirectory && !result.endsWith("/")) result += "/"
+        return result
     }
 
     private fun authorityOf(url: HttpUrl): String = buildString {

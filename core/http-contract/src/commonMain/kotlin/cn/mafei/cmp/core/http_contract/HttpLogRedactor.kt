@@ -18,22 +18,13 @@ interface HttpLogRedactor {
 }
 
 /**
- * Default redactor: masks well-known credential headers and any query
- * parameter whose name hints at a token/key; everything else passes through.
+ * Default redactor: masks every header in [HttpCredentialHeaders.ALL] plus
+ * `Set-Cookie`, and any query parameter whose name hints at a token/key;
+ * everything else passes through.
  */
 data object DefaultHttpLogRedactor : HttpLogRedactor {
 
-    private val sensitiveHeaders = setOf(
-        HttpHeaders.AUTHORIZATION.lowercase(),
-        "proxy-authorization",
-        HttpHeaders.COOKIE.lowercase(),
-        HttpHeaders.SET_COOKIE.lowercase(),
-        "x-emby-token",
-        "x-emby-authorization", // Jellyfin client/device auth header carries the access token
-        "x-auth-token",
-        "x-access-token",
-        "trim-mc-token", // FNOS media token header
-    )
+    private val sensitiveHeaders = HttpCredentialHeaders.ALL + HttpHeaders.SET_COOKIE.lowercase()
 
     private val sensitiveQueryNames = setOf(
         "api_key",
