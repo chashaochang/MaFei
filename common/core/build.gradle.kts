@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
-
 dependencies {
     add("commonMainApi", project(":core:domain"))
+    add("commonMainApi", libs.kotlinx.coroutines.core)
 }
