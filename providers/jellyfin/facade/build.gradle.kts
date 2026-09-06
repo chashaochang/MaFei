@@ -19,3 +19,8 @@ dependencies {
     add("commonMainApi", project(":providers:jellyfin:livetv"))
     add("commonMainApi", project(":providers:jellyfin:management"))
 }
+
+dependencies {
+    add("commonTestImplementation", project(":providers:jellyfin:testkit"))
+    add("commonTestImplementation", project(":providers:jellyfin:transport"))
+}

@@ -8,4 +8,6 @@ plugins {
 dependencies {
     add("commonMainApi", project(":core:http-contract"))
     add("commonMainApi", project(":core:serialization"))
+    add("commonMainApi", project(":providers:jellyfin:wire"))
+    add("commonMainApi", libs.kotlinx.coroutines.core)
 }

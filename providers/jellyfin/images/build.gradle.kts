@@ -10,3 +10,7 @@ dependencies {
     add("commonMainImplementation", project(":providers:jellyfin:transport"))
     add("commonMainImplementation", project(":providers:jellyfin:wire"))
 }
+
+dependencies {
+    add("commonTestImplementation", project(":providers:jellyfin:testkit"))
+}
