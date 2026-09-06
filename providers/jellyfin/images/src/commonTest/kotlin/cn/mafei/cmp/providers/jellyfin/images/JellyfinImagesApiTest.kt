@@ -46,6 +46,6 @@ class JellyfinImagesApiTest {
     @Test
     fun userImageUrlCarriesTagAndToken() {
         val url = api(withSession = true).userImageUrl("u1", tag = "imgtag", appendApiKey = true)
-        assertEquals("https://jellyfin.test/Users/u1/Images/Primary?tag=imgtag&api_key=tok-1", url.toString())
+        assertEquals("https://jellyfin.test/UserImage?userId=u1&imageType=Primary&tag=imgtag&api_key=tok-1", url.toString())
     }
 }

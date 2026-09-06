@@ -15,8 +15,11 @@ interface JellyfinPlaybackApi {
 
     /**
      * Opens a playback session for [itemId] and returns the server's media
-     * sources (transcode/direct decisions live server-side). Errors surface
-     * as [cn.mafei.cmp.providers.jellyfin.core.JellyfinError]; a
+     * sources (transcode/direct decisions live server-side). [deviceProfile]
+     * describes what this client can decode (P0 subset of the OpenAPI
+     * DeviceProfile); it is a different mechanism from the
+     * Sessions/Capabilities/Full reporting, which stays out of P0. Errors
+     * surface as [cn.mafei.cmp.providers.jellyfin.core.JellyfinError]; a
      * [cn.mafei.cmp.providers.jellyfin.wire.PlaybackErrorCode] in a 200
      * response is reported inside the DTO, not thrown.
      */
@@ -28,7 +31,12 @@ interface JellyfinPlaybackApi {
         autoOpenLiveStream: Boolean = false,
         mediaSourceId: String? = null,
         startTimeTicks: Long? = null,
+        liveStreamId: String? = null,
+        deviceProfile: cn.mafei.cmp.providers.jellyfin.wire.DeviceProfileDto? = null,
     ): PlaybackInfoResponseDto
+
+    /** Absolutizes a track DeliveryUrl with the same same-origin rules as [transcodingUrl]. */
+    fun deliveryUrl(deliveryUrl: String): HttpUrl
 
     /** Direct/static stream URL (`/Videos/{id}/stream` or `/Audio/{id}/stream`). */
     fun directStreamUrl(
@@ -58,6 +66,8 @@ class DefaultJellyfinPlaybackApi(
         autoOpenLiveStream: Boolean,
         mediaSourceId: String?,
         startTimeTicks: Long?,
+        liveStreamId: String?,
+        deviceProfile: cn.mafei.cmp.providers.jellyfin.wire.DeviceProfileDto?,
     ): PlaybackInfoResponseDto {
         val body = PlaybackInfoRequestDto(
             userId = userId,
@@ -66,6 +76,8 @@ class DefaultJellyfinPlaybackApi(
             startTimeTicks = startTimeTicks,
             autoOpenLiveStream = autoOpenLiveStream,
             mediaSourceId = mediaSourceId,
+            liveStreamId = liveStreamId,
+            deviceProfile = deviceProfile,
         )
         return client.executeDecoding(
             JellyfinRequests.playbackInfo(client.config.baseUrl, userId, itemId, body),
@@ -94,6 +106,13 @@ class DefaultJellyfinPlaybackApi(
         JellyfinRequests.absolutizeTranscodingUrl(
             base = client.config.baseUrl,
             transcodingUrl = transcodingUrl,
+            token = client.sessionState.current.value?.accessToken,
+        )
+
+    override fun deliveryUrl(deliveryUrl: String): HttpUrl =
+        JellyfinRequests.absolutizeDeliveryUrl(
+            base = client.config.baseUrl,
+            deliveryUrl = deliveryUrl,
             token = client.sessionState.current.value?.accessToken,
         )
 }

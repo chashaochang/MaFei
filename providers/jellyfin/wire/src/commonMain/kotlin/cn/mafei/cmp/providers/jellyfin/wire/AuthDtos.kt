@@ -1,74 +1,80 @@
 package cn.mafei.cmp.providers.jellyfin.wire
 
-import cn.mafei.cmp.core.serialization.IsoInstantEpochMsSerializer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** GET /System/Info/Public — anonymous server identification. */
+/**
+ * GET /System/Info/Public — anonymous server identification.
+ * Serial names follow OpenAPI (Jellyfin 10.10.7) exactly.
+ */
 @Serializable
 data class PublicSystemInfoDto(
-    val localAddress: String? = null,
-    val serverName: String? = null,
-    val version: String? = null,
-    val productName: String? = null,
-    val id: String? = null,
-    val startupWizardCompleted: Boolean? = null,
+    @SerialName("LocalAddress") val localAddress: String? = null,
+    @SerialName("ServerName") val serverName: String? = null,
+    @SerialName("Version") val version: String? = null,
+    @SerialName("ProductName") val productName: String? = null,
+    @SerialName("Id") val id: String? = null,
+    @SerialName("StartupWizardCompleted") val startupWizardCompleted: Boolean? = null,
 )
 
 /** Entry of GET /Users/Public. */
 @Serializable
 data class PublicUserDto(
-    val name: String? = null,
-    val id: String,
-    val primaryImageTag: String? = null,
-    val hasPassword: Boolean? = null,
-    val hasConfiguredPassword: Boolean? = null,
+    @SerialName("Name") val name: String? = null,
+    @SerialName("Id") val id: String,
+    @SerialName("PrimaryImageTag") val primaryImageTag: String? = null,
+    @SerialName("HasPassword") val hasPassword: Boolean? = null,
+    @SerialName("HasConfiguredPassword") val hasConfiguredPassword: Boolean? = null,
 )
 
 /** Subset of the Jellyfin user DTO returned inside authentication results. */
 @Serializable
 data class UserDto(
-    val name: String? = null,
-    val id: String,
-    val serverId: String? = null,
-    val primaryImageTag: String? = null,
-    val hasPassword: Boolean? = null,
-    val hasConfiguredPassword: Boolean? = null,
+    @SerialName("Name") val name: String? = null,
+    @SerialName("ServerId") val serverId: String? = null,
+    @SerialName("Id") val id: String,
+    @SerialName("PrimaryImageTag") val primaryImageTag: String? = null,
+    @SerialName("HasPassword") val hasPassword: Boolean? = null,
+    @SerialName("HasConfiguredPassword") val hasConfiguredPassword: Boolean? = null,
 )
 
 /** POST /Users/AuthenticateByName response. */
 @Serializable
 data class AuthenticationResultDto(
-    val user: UserDto? = null,
-    val accessToken: String? = null,
-    val serverId: String? = null,
-    val sessionId: String? = null,
+    @SerialName("User") val user: UserDto? = null,
+    @SerialName("AccessToken") val accessToken: String? = null,
+    @SerialName("ServerId") val serverId: String? = null,
+    @SerialName("SessionId") val sessionId: String? = null,
 )
 
 /** Subset of GET /System/Info (authenticated) used for session validation. */
 @Serializable
 data class SystemInfoDto(
-    val localAddress: String? = null,
-    val serverName: String? = null,
-    val version: String? = null,
-    val productName: String? = null,
-    val id: String? = null,
-    val operatingSystem: String? = null,
+    @SerialName("LocalAddress") val localAddress: String? = null,
+    @SerialName("ServerName") val serverName: String? = null,
+    @SerialName("Version") val version: String? = null,
+    @SerialName("ProductName") val productName: String? = null,
+    @SerialName("Id") val id: String? = null,
+    @SerialName("OperatingSystem") val operatingSystem: String? = null,
 )
 
-/** Jellyfin `ProblemDetails` body used by several error responses. */
+/**
+ * Jellyfin `ProblemDetails` body. Its fields are lowerCamel on the wire —
+ * deliberately NOT PascalCase like the rest of the API (mainline-pinned).
+ */
 @Serializable
 data class ProblemDetailsDto(
-    val type: String? = null,
-    val title: String? = null,
-    val status: Int? = null,
-    val detail: String? = null,
-    val instance: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("title") val title: String? = null,
+    @SerialName("status") val status: Int? = null,
+    @SerialName("detail") val detail: String? = null,
+    @SerialName("instance") val instance: String? = null,
 )
 
-/** Generic Jellyfin query result envelope (`Items`/`TotalRecordCount`/`StartIndex`). */
+/** Generic Jellyfin query result envelope. */
 @Serializable
 data class QueryResultDto<T>(
-    val items: List<T> = emptyList(),
-    val totalRecordCount: Int = 0,
-    val startIndex: Int = 0,
+    @SerialName("Items") val items: List<T> = emptyList(),
+    @SerialName("TotalRecordCount") val totalRecordCount: Int = 0,
+    @SerialName("StartIndex") val startIndex: Int = 0,
 )

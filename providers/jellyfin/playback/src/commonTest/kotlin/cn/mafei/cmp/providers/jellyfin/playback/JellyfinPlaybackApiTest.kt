@@ -71,7 +71,7 @@ class JellyfinPlaybackApiTest {
 
         val body = (fixture.transport.requests.single().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
         assertNotNull(body)
-        assertEquals(true, body.contains("\"playSessionId\":\"session-0001\""))
+        assertEquals("""{"UserId":"u1","PlaySessionId":"session-0001","AutoOpenLiveStream":false}""", body)
     }
 
     private fun transcodingSubProtocol(source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto): String? = source.transcodingSubProtocol
@@ -90,7 +90,7 @@ class JellyfinPlaybackApiTest {
     fun directStreamUrlUsesSessionToken() {
         val fixture = Fixture()
         val url = fixture.api.directStreamUrl("m1", mediaSourceId = "ms1", playSessionId = "ps1")
-        assertEquals("https://jellyfin.test/Videos/m1/stream?Static=true&MediaSourceId=ms1&PlaySessionId=ps1&api_key=tok-1", url.toString())
+        assertEquals("https://jellyfin.test/Videos/m1/stream?static=true&mediaSourceId=ms1&playSessionId=ps1&api_key=tok-1", url.toString())
     }
 
     @Test

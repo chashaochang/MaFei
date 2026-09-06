@@ -72,15 +72,15 @@ class JellyfinPlayStateApiTest {
         assertEquals("https://jellyfin.test/Sessions/Playing/Stopped", stopped.url.toString())
 
         val startBody = (start.body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
-        assertTrue(startBody.contains("\"positionTicks\":15000000"), startBody)
-        assertTrue(startBody.contains("\"playMethod\":\"DirectPlay\""), startBody)
+        assertTrue(startBody.contains("\"PositionTicks\":15000000"), startBody)
+        assertTrue(startBody.contains("\"PlayMethod\":\"DirectPlay\""), startBody)
 
         val progressBody = (progress.body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
-        assertTrue(progressBody.contains("\"positionTicks\":600000000"), progressBody)
-        assertTrue(progressBody.contains("\"isPaused\":true"), progressBody)
+        assertTrue(progressBody.contains("\"PositionTicks\":600000000"), progressBody)
+        assertTrue(progressBody.contains("\"IsPaused\":true"), progressBody)
 
         val stoppedBody = (stopped.body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
-        assertTrue(stoppedBody.contains("\"positionTicks\":1200000000"), stoppedBody)
+        assertTrue(stoppedBody.contains("\"PositionTicks\":1200000000"), stoppedBody)
 
         // every report carried the session token in the authorization header
         start.headers.first("Authorization")!!.let { assertTrue(it.contains("Token=\"tok\"")) }

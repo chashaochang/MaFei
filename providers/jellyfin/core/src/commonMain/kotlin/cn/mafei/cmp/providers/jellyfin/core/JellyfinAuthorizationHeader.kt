@@ -3,9 +3,9 @@ package cn.mafei.cmp.providers.jellyfin.core
 /**
  * Formats the Jellyfin `Authorization: MediaBrowser ...` header.
  *
- * Format (frozen protocol shape):
- * `MediaBrowser Client="c", Device="d", DeviceId="id", Version="v"` and,
- * once authenticated, `, Token="t"`.
+ * Official frozen order: `Client`, `Version`, `DeviceId`, `Device`, and —
+ * once authenticated — `Token`:
+ * `MediaBrowser Client="c", Version="v", DeviceId="id", Device="d", Token="t"`.
  */
 data object JellyfinAuthorizationHeader {
 
@@ -18,9 +18,9 @@ data object JellyfinAuthorizationHeader {
     ): String = buildString {
         append("MediaBrowser ")
         append("Client=").append(escape(clientName)).append(", ")
-        append("Device=").append(escape(deviceName)).append(", ")
+        append("Version=").append(escape(appVersion)).append(", ")
         append("DeviceId=").append(escape(deviceId)).append(", ")
-        append("Version=").append(escape(appVersion))
+        append("Device=").append(escape(deviceName))
         if (!token.isNullOrBlank()) {
             append(", Token=").append(escape(token))
         }

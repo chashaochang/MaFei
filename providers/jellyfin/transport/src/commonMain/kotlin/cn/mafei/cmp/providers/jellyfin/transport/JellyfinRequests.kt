@@ -4,11 +4,11 @@ import cn.mafei.cmp.core.http_contract.HttpBody
 import cn.mafei.cmp.core.http_contract.HttpHeaders
 import cn.mafei.cmp.core.http_contract.HttpMethod
 import cn.mafei.cmp.core.http_contract.HttpRequest
-import cn.mafei.cmp.core.http_contract.HttpRedirects
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.serialization.MafeiJson
-import cn.mafei.cmp.providers.jellyfin.wire.ItemField
+import cn.mafei.cmp.providers.jellyfin.core.JellyfinRequestMode
 import cn.mafei.cmp.providers.jellyfin.wire.ImageType
+import cn.mafei.cmp.providers.jellyfin.wire.ItemField
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackInfoRequestDto
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackProgressInfoDto
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackStartInfoDto
@@ -16,118 +16,90 @@ import cn.mafei.cmp.providers.jellyfin.wire.PlaybackStopInfoDto
 import kotlinx.serialization.KSerializer
 
 /**
- * Endpoint bindings for the P0 Jellyfin surface: every function builds a
- * ready-to-execute [HttpRequest] (or a resource [HttpUrl]) against a base
- * URL. Authentication headers are NOT attached here — the client pipeline
- * injects them so device info and tokens stay in one place.
+ * Endpoint bindings for the P0 Jellyfin surface, modeled on the official
+ * jellyfin-sdk-kotlin v1.6.8 OpenAPI (Jellyfin 10.10.7).
+ *
+ * Query parameter names use the official lowerCamel spellings. Requests are
+ * tagged with [JellyfinRequestMode]: the three anonymous endpoints
+ * (`System/Info/Public`, `Users/Public`, `Users/AuthenticateByName`) must
+ * never carry a session token — the client pipeline enforces it.
  */
 data object JellyfinRequests {
 
     // ---------------------------------------------------------- system/auth
 
     fun publicSystemInfo(base: HttpUrl): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("System/Info/Public")
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+        get(base, "System/Info/Public", JellyfinRequestMode.ANONYMOUS)
 
-    fun systemInfo(base: HttpUrl): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("System/Info")
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+    fun systemInfo(base: HttpUrl): HttpRequest = get(base, "System/Info")
 
-    fun publicUsers(base: HttpUrl): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("Users/Public")
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+    fun publicUsers(base: HttpUrl): HttpRequest = get(base, "Users/Public", JellyfinRequestMode.ANONYMOUS)
 
     fun authenticateByName(base: HttpUrl, username: String, password: String): HttpRequest =
         base.newBuilder()
             .addPathSegments("Users/AuthenticateByName")
             .build()
             .let { url ->
-                HttpRequest.builder(HttpMethod.Post, url)
-                    .body(
-                        HttpBody.Text(
-                            MafeiJson.Default.encodeToString(AuthenticateByNameBody.serializer(), AuthenticateByNameBody(username, password)),
-                            contentType = HttpHeaders.CONTENT_TYPE_JSON,
-                        ),
-                    )
+                request(HttpMethod.Post, url, JellyfinRequestMode.ANONYMOUS)
+                    .body(textBody(AuthenticateByNameBody.serializer(), AuthenticateByNameBody(username, password)))
             }
             .build()
 
-    fun logout(base: HttpUrl): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("Sessions/Logout")
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Post, it) }
-            .build()
+    fun logout(base: HttpUrl): HttpRequest = post(base, "Sessions/Logout")
 
     // -------------------------------------------------------------- catalog
 
+    /** Official endpoint: GET /UserViews?userId=... */
     fun views(base: HttpUrl, userId: String): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("Shows")
-            .addPathSegment(userId)
-            .addPathSegments("Views")
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+        get(base, "UserViews") {
+            addQueryParameter("userId", userId)
+        }
 
+    /** Official endpoint: GET /Items with lowerCamel query parameters. */
     fun items(base: HttpUrl, query: JellyfinItemQuery): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("Items")
-            .apply {
-                addQueryParameter("UserId", query.userId)
-                query.parentId?.let { addQueryParameter("ParentId", it) }
-                addQueryParameter("StartIndex", query.startIndex.toString())
-                addQueryParameter("Limit", query.limit.toString())
-                addQueryParameterIfNotBlank("IncludeItemTypes", query.includeItemTypes.joinToString(",") { it.trim() })
-                if (query.fields.isNotEmpty()) addQueryParameter("Fields", query.fields.joinToString(",") { it.wireName })
-                if (query.sortBy.isNotEmpty()) addQueryParameter("SortBy", query.sortBy.joinToString(",") { it.wireName })
-                addQueryParameter("SortOrder", query.sortOrder.wireName)
-                query.recursive?.let { addQueryParameter("Recursive", it.toString()) }
-                addQueryParameterIfNotBlank("SearchTerm", query.searchTerm)
-                if (query.genres.isNotEmpty()) addQueryParameter("Genres", query.genres.joinToString("|"))
-                if (query.years.isNotEmpty()) addQueryParameter("Years", query.years.joinToString(","))
-                if (query.filters.isNotEmpty()) addQueryParameter("Filters", query.filters.joinToString(",") { it.wireName })
-                addQueryParameter("ImageTypeLimit", query.imageTypeLimit.toString())
-            }
-            .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+        get(base, "Items") {
+            addQueryParameter("userId", query.userId)
+            query.parentId?.let { addQueryParameter("parentId", it) }
+            addQueryParameter("startIndex", query.startIndex.toString())
+            addQueryParameter("limit", query.limit.toString())
+            addQueryParameterIfNotBlank("includeItemTypes", query.includeItemTypes.joinToString(",") { it.trim() })
+            if (query.fields.isNotEmpty()) addQueryParameter("fields", query.fields.joinToString(",") { it.wireName })
+            if (query.sortBy.isNotEmpty()) addQueryParameter("sortBy", query.sortBy.joinToString(",") { it.wireName })
+            addQueryParameter("sortOrder", query.sortOrder.wireName)
+            query.recursive?.let { addQueryParameter("recursive", it.toString()) }
+            addQueryParameterIfNotBlank("searchTerm", query.searchTerm)
+            if (query.genres.isNotEmpty()) addQueryParameter("genres", query.genres.joinToString("|"))
+            if (query.years.isNotEmpty()) addQueryParameter("years", query.years.joinToString(","))
+            if (query.filters.isNotEmpty()) addQueryParameter("filters", query.filters.joinToString(",") { it.wireName })
+            addQueryParameter("imageTypeLimit", query.imageTypeLimit.toString())
+        }
 
-    fun itemById(base: HttpUrl, userId: String, itemId: String, fields: List<ItemField> = emptyList()): HttpRequest =
+    /**
+     * Official endpoint: GET /Items/{itemId}?userId=... The OpenAPI operation
+     * has no `fields` parameter, so none is sent.
+     */
+    fun itemById(base: HttpUrl, userId: String, itemId: String): HttpRequest =
         base.newBuilder()
-            .addPathSegments("Users")
-            .addPathSegment(userId)
             .addPathSegments("Items")
             .addPathSegment(itemId)
-            .apply {
-                if (fields.isNotEmpty()) addQueryParameter("Fields", fields.joinToString(",") { it.wireName })
-            }
+            .apply { addQueryParameter("userId", userId) }
             .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
 
+    /** Official endpoint: GET /Shows/{seriesId}/Seasons?userId=... */
     fun seasons(base: HttpUrl, userId: String, seriesId: String, fields: List<ItemField> = emptyList()): HttpRequest =
         base.newBuilder()
             .addPathSegments("Shows")
             .addPathSegment(seriesId)
             .addPathSegments("Seasons")
             .apply {
-                addQueryParameter("UserId", userId)
-                if (fields.isNotEmpty()) addQueryParameter("Fields", fields.joinToString(",") { it.wireName })
+                addQueryParameter("userId", userId)
+                if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
             }
             .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
 
+    /** Official endpoint: GET /Shows/{seriesId}/Episodes?userId=...&seasonId=... */
     fun episodes(
         base: HttpUrl,
         userId: String,
@@ -142,15 +114,14 @@ data object JellyfinRequests {
             .addPathSegment(seriesId)
             .addPathSegments("Episodes")
             .apply {
-                addQueryParameter("UserId", userId)
-                seasonId?.let { addQueryParameter("SeasonId", it) }
-                addQueryParameter("StartIndex", startIndex.toString())
-                addQueryParameter("Limit", limit.toString())
-                if (fields.isNotEmpty()) addQueryParameter("Fields", fields.joinToString(",") { it.wireName })
+                addQueryParameter("userId", userId)
+                seasonId?.let { addQueryParameter("seasonId", it) }
+                addQueryParameter("startIndex", startIndex.toString())
+                addQueryParameter("limit", limit.toString())
+                if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
             }
             .build()
-            .let { HttpRequest.builder(HttpMethod.Get, it) }
-            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
 
     // ------------------------------------------------------------- playback
 
@@ -165,51 +136,25 @@ data object JellyfinRequests {
             .addPathSegment(itemId)
             .addPathSegments("PlaybackInfo")
             .apply {
-                addQueryParameter("UserId", userId)
-                addQueryParameter("AutoOpenLiveStream", (body.autoOpenLiveStream ?: false).toString())
-                body.maxStreamingBitrate?.let { addQueryParameter("MaxStreamingBitrate", it.toString()) }
+                addQueryParameter("userId", userId)
+                addQueryParameter("autoOpenLiveStream", (body.autoOpenLiveStream ?: false).toString())
+                body.maxStreamingBitrate?.let { addQueryParameter("maxStreamingBitrate", it.toString()) }
             }
             .build()
             .let { url ->
-                HttpRequest.builder(HttpMethod.Post, url)
-                    .body(
-                        HttpBody.Text(
-                            MafeiJson.Default.encodeToString(PlaybackInfoRequestDto.serializer(), body),
-                            contentType = HttpHeaders.CONTENT_TYPE_JSON,
-                        ),
-                    )
+                request(HttpMethod.Post, url)
+                    .body(textBody(PlaybackInfoRequestDto.serializer(), body))
             }
             .build()
 
     fun playingStart(base: HttpUrl, info: PlaybackStartInfoDto): HttpRequest =
-        postSessionsPlaying(base, "Playing", PlaybackStartInfoDto.serializer(), info)
+        post(base, "Sessions/Playing") { body(textBody(PlaybackStartInfoDto.serializer(), info)) }
 
     fun playingProgress(base: HttpUrl, info: PlaybackProgressInfoDto): HttpRequest =
-        postSessionsPlaying(base, "Playing/Progress", PlaybackProgressInfoDto.serializer(), info)
+        post(base, "Sessions/Playing/Progress") { body(textBody(PlaybackProgressInfoDto.serializer(), info)) }
 
     fun playingStopped(base: HttpUrl, info: PlaybackStopInfoDto): HttpRequest =
-        postSessionsPlaying(base, "Playing/Stopped", PlaybackStopInfoDto.serializer(), info)
-
-    private fun <T> postSessionsPlaying(
-        base: HttpUrl,
-        path: String,
-        serializer: KSerializer<T>,
-        body: T,
-    ): HttpRequest =
-        base.newBuilder()
-            .addPathSegments("Sessions")
-            .addPathSegments(path)
-            .build()
-            .let { url ->
-                HttpRequest.builder(HttpMethod.Post, url)
-                    .body(
-                        HttpBody.Text(
-                            MafeiJson.Default.encodeToString(serializer, body),
-                            contentType = HttpHeaders.CONTENT_TYPE_JSON,
-                        ),
-                    )
-            }
-            .build()
+        post(base, "Sessions/Playing/Stopped") { body(textBody(PlaybackStopInfoDto.serializer(), info)) }
 
     // ------------------------------------------------------- resource URLs
 
@@ -237,22 +182,51 @@ data object JellyfinRequests {
                 }
             }
             .apply {
-                addQueryParameter("Static", "true")
-                mediaSourceId?.let { addQueryParameter("MediaSourceId", it) }
-                playSessionId?.let { addQueryParameter("PlaySessionId", it) }
+                addQueryParameter("static", "true")
+                mediaSourceId?.let { addQueryParameter("mediaSourceId", it) }
+                playSessionId?.let { addQueryParameter("playSessionId", it) }
                 if (!token.isNullOrBlank()) addQueryParameter("api_key", token)
             }
             .build()
 
     /**
-     * Absolutizes a server-provided relative transcoding URL (usually HLS)
-     * and appends the `api_key` parameter when absent.
+     * Absolutizes a server-provided relative or absolute transcoding URL
+     * against the configured base (including any server base path such as
+     * `/stable` — the API subpath is never dropped), enforces same-origin,
+     * and appends `api_key` when absent.
      */
     fun absolutizeTranscodingUrl(base: HttpUrl, transcodingUrl: String, token: String? = null): HttpUrl {
-        // RFC-style resolution through the frozen GLM-01 contract; the core
-        // HttpUrl itself has no resolve() to keep that API minimal.
-        val resolved = HttpRedirects.resolveLocation(base, transcodingUrl)
-            ?: throw IllegalArgumentException("Unresolvable transcoding URL: $transcodingUrl")
+        val trimmed = transcodingUrl.trim()
+        require(trimmed.isNotEmpty()) { "TranscodingUrl must not be empty" }
+
+        val resolved: HttpUrl = when {
+            trimmed.contains("://") -> HttpUrl.parseOrNull(trimmed)
+                ?: throw IllegalArgumentException("Unparseable transcoding URL: $transcodingUrl")
+            trimmed.startsWith("//") -> HttpUrl.parseOrNull(base.scheme + ":" + trimmed)
+                ?: throw IllegalArgumentException("Unparseable protocol-relative transcoding URL: $transcodingUrl")
+            else -> {
+                // Join with the server base path so reverse-proxy subpaths survive.
+                val origin = base.scheme + "://" + hostWithPort(base)
+                val basePath = base.encodedPath.trimEnd('/') // "" or "/stable"
+                val candidate = if (trimmed.startsWith("/")) {
+                    if (basePath.isNotEmpty() && (trimmed == basePath || trimmed.startsWith("$basePath/"))) {
+                        trimmed // server already included the base path
+                    } else {
+                        basePath + trimmed
+                    }
+                } else {
+                    val directory = base.encodedPath.substringBeforeLast('/')
+                    if (directory.isEmpty()) "/" + trimmed else "$directory/$trimmed"
+                }
+                HttpUrl.parseOrNull("$origin$candidate")
+                    ?: throw IllegalArgumentException("Unresolvable transcoding URL: $transcodingUrl")
+            }
+        }
+
+        require(sameOrigin(base, resolved)) {
+            "Refusing cross-origin TranscodingUrl: ${resolved.toEncodedString()} (base $base)"
+        }
+
         if (token.isNullOrBlank() || resolved.queryParameters.contains("api_key")) return resolved
         return resolved.newBuilder().addQueryParameter("api_key", token).build()
     }
@@ -281,6 +255,7 @@ data object JellyfinRequests {
             }
             .build()
 
+    /** Official endpoint: GET /UserImage?userId=...&imageType=...&tag=... */
     fun userImageUrl(
         base: HttpUrl,
         userId: String,
@@ -289,18 +264,52 @@ data object JellyfinRequests {
         token: String? = null,
     ): HttpUrl =
         base.newBuilder()
-            .addPathSegments("Users")
-            .addPathSegment(userId)
-            .addPathSegments("Images")
-            .addPathSegment(imageType.name)
+            .addPathSegments("UserImage")
             .apply {
+                addQueryParameter("userId", userId)
+                addQueryParameter("imageType", imageType.name)
                 tag?.let { addQueryParameter("tag", it) }
                 if (!token.isNullOrBlank()) addQueryParameter("api_key", token)
             }
             .build()
+
+    /** Absolutizes a server-provided track DeliveryUrl with the same rules as [absolutizeTranscodingUrl]. */
+    fun absolutizeDeliveryUrl(base: HttpUrl, deliveryUrl: String, token: String? = null): HttpUrl =
+        absolutizeTranscodingUrl(base, deliveryUrl, token)
+
+    // -------------------------------------------------------------- helpers
+
+    private fun get(base: HttpUrl, path: String, mode: String = JellyfinRequestMode.AUTHENTICATED, query: cn.mafei.cmp.core.http_contract.HttpUrl.Builder.() -> Unit = {}): HttpRequest =
+        base.newBuilder()
+            .addPathSegments(path)
+            .apply(query)
+            .build()
+            .let { url -> request(HttpMethod.Get, url, mode) }
+            .build()
+
+    private fun post(base: HttpUrl, path: String, mode: String = JellyfinRequestMode.AUTHENTICATED, configure: cn.mafei.cmp.core.http_contract.HttpRequest.Builder.() -> Unit = {}): HttpRequest =
+        base.newBuilder()
+            .addPathSegments(path)
+            .build()
+            .let { url -> request(HttpMethod.Post, url, mode).apply(configure) }
+            .build()
+
+    private fun request(method: HttpMethod, url: HttpUrl, mode: String = JellyfinRequestMode.AUTHENTICATED): cn.mafei.cmp.core.http_contract.HttpRequest.Builder =
+        HttpRequest.builder(method, url).attribute(JellyfinRequestMode.ATTRIBUTE, mode)
+
+    private fun <T> textBody(serializer: KSerializer<T>, value: T): HttpBody.Text =
+        HttpBody.Text(MafeiJson.Default.encodeToString(serializer, value), contentType = HttpHeaders.CONTENT_TYPE_JSON)
+
+    private fun hostWithPort(url: HttpUrl): String = buildString {
+        if (url.host.contains(':')) append('[').append(url.host).append(']') else append(url.host)
+        if (url.port != HttpUrl.defaultPort(url.scheme)) append(':').append(url.port)
+    }
+
+    private fun sameOrigin(a: HttpUrl, b: HttpUrl): Boolean =
+        a.scheme == b.scheme && a.host == b.host && a.port == b.port
 }
 
-/** Body of POST /Users/AuthenticateByName (Jellyfin field name `Pw` is protocol-frozen). */
+/** Body of POST /Users/AuthenticateByName (field names are protocol-frozen, camelCase per OpenAPI). */
 @kotlinx.serialization.Serializable
 private data class AuthenticateByNameBody(
     val Username: String,

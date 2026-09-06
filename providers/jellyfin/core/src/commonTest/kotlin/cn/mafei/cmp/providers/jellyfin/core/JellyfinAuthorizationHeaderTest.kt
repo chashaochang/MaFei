@@ -6,17 +6,18 @@ import kotlin.test.assertEquals
 class JellyfinAuthorizationHeaderTest {
 
     @Test
-    fun formatsMediaBrowserHeaderWithEscaping() {
+    fun usesTheOfficialParameterOrder() {
         assertEquals(
-            "MediaBrowser Client=\"MaFei\", Device=\"Test \\\"Device\\\"\", DeviceId=\"id-1\", Version=\"2.0.0\"",
+            "MediaBrowser Client=\"MaFei\", Version=\"2.0.0\", DeviceId=\"id-1\", Device=\"Test \\\"Device\\\"\"",
             JellyfinAuthorizationHeader.format("MaFei", "Test \"Device\"", "id-1", "2.0.0"),
         )
         assertEquals(
-            "MediaBrowser Client=\"MaFei\", Device=\"d\", DeviceId=\"id\", Version=\"1.0\", Token=\"tk\"",
+            "MediaBrowser Client=\"MaFei\", Version=\"1.0\", DeviceId=\"id\", Device=\"d\", Token=\"tk\"",
             JellyfinAuthorizationHeader.format("MaFei", "d", "id", "1.0", token = "tk"),
         )
+        // blank token omits the Token part entirely
         assertEquals(
-            "MediaBrowser Client=\"M\", Device=\"d\", DeviceId=\"i\", Version=\"1\"",
+            "MediaBrowser Client=\"M\", Version=\"1\", DeviceId=\"i\", Device=\"d\"",
             JellyfinAuthorizationHeader.format("M", "d", "i", "1", token = "  "),
         )
     }
@@ -24,7 +25,7 @@ class JellyfinAuthorizationHeaderTest {
     @Test
     fun backslashesEscapeBeforeQuotes() {
         assertEquals(
-            "MediaBrowser Client=\"a\\\\b\", Device=\"d\", DeviceId=\"i\", Version=\"1\"",
+            "MediaBrowser Client=\"a\\\\b\", Version=\"1\", DeviceId=\"i\", Device=\"d\"",
             JellyfinAuthorizationHeader.format("a\\b", "d", "i", "1"),
         )
     }

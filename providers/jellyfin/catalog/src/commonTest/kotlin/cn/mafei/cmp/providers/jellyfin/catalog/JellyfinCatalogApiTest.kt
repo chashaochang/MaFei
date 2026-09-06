@@ -78,9 +78,9 @@ class JellyfinCatalogApiTest {
 
         val sent = fixture.transport.requests.single()
         val query = sent.url.queryParameters
-        assertEquals("20", query.first("StartIndex"))
-        assertEquals("30", query.first("Limit"))
-        assertEquals("v1", query.first("ParentId"))
+        assertEquals("20", query.first("startIndex"))
+        assertEquals("30", query.first("limit"))
+        assertEquals("v1", query.first("parentId"))
     }
 
     @Test
@@ -88,7 +88,7 @@ class JellyfinCatalogApiTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, JellyfinFixtures.SERIES_DETAIL, base)
 
-        val item = fixture.api.item("u1", "s0102030405060708", fields = listOf(ItemField.People))
+        val item = fixture.api.item("u1", "s0102030405060708")
         assertEquals("Fixture Series", item.name)
         // 2023-04-01T20:00:00-05:00 == 2023-04-02T01:00:00Z
         assertEquals(1_680_397_200_000L, item.premiereDate)
@@ -112,7 +112,7 @@ class JellyfinCatalogApiTest {
         assertEquals(15_000L, episodes.items[0].runTimeTicks?.let { it / 1_000_000L }) // 1.5min in ticks sanity
 
         val episodeRequest = fixture.transport.requests[1]
-        assertEquals("se1", episodeRequest.url.queryParameters.first("SeasonId"))
+        assertEquals("se1", episodeRequest.url.queryParameters.first("seasonId"))
         assertTrue(episodeRequest.url.encodedPath.contains("/Shows/s1/Episodes"))
     }
 }

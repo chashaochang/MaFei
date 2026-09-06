@@ -21,8 +21,11 @@ interface JellyfinCatalogApi {
     /** Offset-paged item query; cursor synthesis is the data adapter's job. */
     suspend fun items(query: JellyfinItemQuery): QueryResultDto<BaseItemDto>
 
-    /** Full detail for one item (fields control payload richness). */
-    suspend fun item(userId: String, itemId: String, fields: List<ItemField> = emptyList()): BaseItemDto
+    /**
+     * Full detail for one item via the official GET /Items/{itemId}?userId=
+     * operation (the OpenAPI operation carries no `fields` parameter).
+     */
+    suspend fun item(userId: String, itemId: String): BaseItemDto
 
     suspend fun seasons(userId: String, seriesId: String, fields: List<ItemField> = emptyList()): QueryResultDto<BaseItemDto>
 
@@ -48,9 +51,9 @@ class DefaultJellyfinCatalogApi(
     override suspend fun items(query: JellyfinItemQuery): QueryResultDto<BaseItemDto> =
         client.executeDecoding(JellyfinRequests.items(client.config.baseUrl, query), queryResultSerializer)
 
-    override suspend fun item(userId: String, itemId: String, fields: List<ItemField>): BaseItemDto =
+    override suspend fun item(userId: String, itemId: String): BaseItemDto =
         client.executeDecoding(
-            JellyfinRequests.itemById(client.config.baseUrl, userId, itemId, fields),
+            JellyfinRequests.itemById(client.config.baseUrl, userId, itemId),
             BaseItemDto.serializer(),
         )
 

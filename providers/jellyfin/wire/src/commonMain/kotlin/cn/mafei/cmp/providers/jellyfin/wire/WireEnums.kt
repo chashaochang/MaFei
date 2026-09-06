@@ -4,9 +4,9 @@ import cn.mafei.cmp.core.serialization.UnknownTolerantEnumSerializer
 import kotlinx.serialization.Serializable
 
 /**
- * Jellyfin wire enums for the P0 surface. Every enum tolerates unknown
- * server-side additions by falling back to an `Unknown` constant so a newer
- * server can never break an older client (see the frozen GLM-01 contract).
+ * Jellyfin wire enums for the P0 surface, modeled on the official
+ * jellyfin-sdk-kotlin v1.6.8 OpenAPI (Jellyfin 10.10.7). Every enum tolerates
+ * unknown server-side additions by falling back to an `Unknown` constant.
  */
 @Serializable(with = ItemKindSerializer::class)
 enum class ItemKind {
@@ -35,7 +35,7 @@ data object ItemKindSerializer : UnknownTolerantEnumSerializer<ItemKind>(
     values = ItemKind.entries.toTypedArray(),
     unknownValue = ItemKind.Unknown,
 ) {
-    override val serialName: String = "ItemKind"
+    override val serialName: String = "BaseItemKind"
 }
 
 @Serializable(with = WirePersonKindSerializer::class)
@@ -139,7 +139,7 @@ enum class ImageType {
     Screenshot,
 }
 
-/** Item fields requested via the `Fields` query parameter. */
+/** Item fields requested via the official `fields` query parameter. */
 enum class ItemField(val wireName: String) {
     Overview("Overview"),
     Genres("Genres"),
@@ -151,4 +151,70 @@ enum class ItemField(val wireName: String) {
     DateCreated("DateCreated"),
     Runtime("Runtime"),
     ChildCount("ChildCount"),
+}
+
+// ---------------------------------------------------------------------------
+// DeviceProfile support enums (P0 subset)
+// ---------------------------------------------------------------------------
+
+@Serializable(with = DlnaProfileTypeSerializer::class)
+enum class DlnaProfileType {
+    Audio,
+    Video,
+    Photo,
+    Unknown,
+}
+
+data object DlnaProfileTypeSerializer : UnknownTolerantEnumSerializer<DlnaProfileType>(
+    values = DlnaProfileType.entries.toTypedArray(),
+    unknownValue = DlnaProfileType.Unknown,
+) {
+    override val serialName: String = "DlnaProfileType"
+}
+
+@Serializable(with = CodecTypeSerializer::class)
+enum class CodecType {
+    Video,
+    VideoAudio,
+    Audio,
+    Subtitle,
+    EmbeddedImage,
+    Unknown,
+}
+
+data object CodecTypeSerializer : UnknownTolerantEnumSerializer<CodecType>(
+    values = CodecType.entries.toTypedArray(),
+    unknownValue = CodecType.Unknown,
+) {
+    override val serialName: String = "CodecType"
+}
+
+@Serializable(with = SubtitleDeliveryMethodSerializer::class)
+enum class SubtitleDeliveryMethod {
+    Encode,
+    Embed,
+    External,
+    Hls,
+    Unknown,
+}
+
+data object SubtitleDeliveryMethodSerializer : UnknownTolerantEnumSerializer<SubtitleDeliveryMethod>(
+    values = SubtitleDeliveryMethod.entries.toTypedArray(),
+    unknownValue = SubtitleDeliveryMethod.Unknown,
+) {
+    override val serialName: String = "SubtitleDeliveryMethod"
+}
+
+@Serializable(with = EncodingContextSerializer::class)
+enum class EncodingContext {
+    Streaming,
+    Static,
+    Unknown,
+}
+
+data object EncodingContextSerializer : UnknownTolerantEnumSerializer<EncodingContext>(
+    values = EncodingContext.entries.toTypedArray(),
+    unknownValue = EncodingContext.Unknown,
+) {
+    override val serialName: String = "EncodingContext"
 }
