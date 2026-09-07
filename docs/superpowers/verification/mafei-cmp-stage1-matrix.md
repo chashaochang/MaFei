@@ -8,6 +8,8 @@
 
 同日后续：[公共组件与 Mac 首帧](2026-09-07-glass-components.md)。
 
+同日后续：[特效熔断与 Mac 分项交互](2026-09-07-glass-fallback.md)。
+
 ## 1. 证据等级
 
 | 等级 | 含义 |
@@ -47,11 +49,11 @@
 
 | 场景 | Android | iOS | Mac ARM | HarmonyOS ARM |
 | --- | --- | --- | --- | --- |
-| Compose 首帧 | Pending | Pending | E：800dp 首帧已观察，交互待验 | Pending |
-| FullGlass Probe | Pending | Pending | Pending | Pending |
-| Reduced/Opaque 回退 | Pending | Pending | Pending | Pending |
-| 返回和生命周期 | Pending | Pending | Pending | Pending |
-| 窗口/方向变化 | Pending | Pending | Pending | Pending |
+| Compose 首帧 | Pending | Pending | E：新包 800dp 首帧已观察 | Pending |
+| FullGlass Probe | Pending | Pending | E：1100dp 同屏三档视觉已观察，性能待验 | Pending |
+| Reduced/Opaque 回退 | Pending | Pending | E：模拟故障实体回退、主题切换保留；真实 GPU 故障待验 | Pending |
+| 返回和生命周期 | Pending | Pending | E：弹层 Escape 关闭；完整生命周期待验 | Pending |
+| 窗口/方向变化 | Pending | Pending | E：800dp 单栏 → 1100dp 双栏；全范围待验 | Pending |
 | 长列表滚动 | Pending | Pending | Pending | Pending |
 | 底部栏动画 | Pending | Pending | Pending | Pending |
 | 最小 Player Surface probe | Pending | Pending | Pending | Pending |
