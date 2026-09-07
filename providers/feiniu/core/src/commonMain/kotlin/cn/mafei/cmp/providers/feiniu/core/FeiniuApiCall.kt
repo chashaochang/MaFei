@@ -25,3 +25,9 @@ data class FeiniuApiCall(
      */
     enum class AuthRequirement { None, Token, Cookie }
 }
+
+/** Result of one executed call together with the candidate that served it. */
+class FeiniuExecuted<T>(
+    val value: T,
+    val candidate: FeiniuHostCandidate,
+)

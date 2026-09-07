@@ -57,9 +57,9 @@ class FeiniuSignerTest {
     }
 
     @Test
-    fun nonceFromRandomMatchesLegacyFormula() {
-        assertEquals("450000", FeiniuSigner.nonceFrom(0.5))
-        assertEquals("0", FeiniuSigner.nonceFrom(0.0))
+    fun nonceMatchesLegacySixDigitFormula() {
+        assertEquals("550000", FeiniuSigner.nonceFrom(0.5))
+        assertEquals("100000", FeiniuSigner.nonceFrom(0.0))
     }
 }
 

@@ -18,7 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-private fun runSuspendTest(block: suspend () -> Unit) {
+internal fun runSuspendTest(block: suspend () -> Unit) {
     val result = block.startCoroutineUninterceptedOrReturn(NoopContinuation)
     check(result !== COROUTINE_SUSPENDED) { "test body suspended unexpectedly" }
 }
@@ -114,7 +114,7 @@ class FeiniuFacadeChainTest {
         val playInfo = fixture.facade.playback.playInfo(resolution, itemGuid = "it-0001")
         assertEquals("md-0001", playInfo.mediaGuid)
 
-        val play = fixture.facade.playback.play(
+        val session = fixture.facade.playback.play(
             resolution,
             FeiniuPlayPlayRequest(
                 mediaGuid = "md-0001",
@@ -130,19 +130,19 @@ class FeiniuFacadeChainTest {
                 forcedSdr = 0,
             ),
         )
-        assertEquals("/v/api/v1/stream/fixture?sign=abc", play.playLink)
+        assertEquals("/v/api/v1/stream/fixture?sign=abc", session.data.playLink)
+        // R10: the session carries the actual serving host for link resolution
+        assertEquals(FeiniuFixtures.BASE_URL, session.baseUrl)
+        assertEquals(FeiniuRoute.Direct, session.route)
 
         // asset helpers resolve the (expiring) relative link and subtitles
         assertEquals(
             "https://feiniu.test/v/api/v1/stream/fixture?sign=abc",
-            fixture.facade.playback.directRangeUrl(FeiniuFixtures.BASE_URL, play.playLink!!.substringAfterLast('/')).let {
-                // direct range is for media_guid; play_link is used as-is (relative -> absolutized)
-                play.playLink!!.let { link -> if (link.startsWith("/")) FeiniuFixtures.BASE_URL + link else link }
-            },
+            session.resolvePlayLink(baseUrlFallback = FeiniuFixtures.BASE_URL),
         )
         assertEquals(
             "https://feiniu.test/v/api/v1/subtitle/dl/sb-0001",
-            fixture.facade.assets.subtitleDownloadUrl(FeiniuFixtures.BASE_URL, "sb-0001"),
+            session.resolveSubtitleLink(baseUrlFallback = FeiniuFixtures.BASE_URL),
         )
         val headers = fixture.facade.assets.playbackHeaders(FeiniuCredentials("tok-1", "Trim-MC-token=tok-1"), relayRoute = false)
         assertEquals("tok-1", headers["Authorization"])
@@ -163,7 +163,7 @@ class FeiniuFacadeChainTest {
                 bitrate = 8_000_000,
                 timestampSeconds = 1_700_000_000,
                 durationSeconds = 7_200,
-                playLink = play.playLink,
+                playLink = session.data.playLink,
             ),
         )
         val recordBody = (fixture.transport.requests.last().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text

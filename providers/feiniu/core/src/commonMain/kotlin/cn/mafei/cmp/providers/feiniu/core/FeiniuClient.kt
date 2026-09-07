@@ -63,7 +63,21 @@ class FeiniuClient(
         resolution: FeiniuHostResolution,
         call: FeiniuApiCall,
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
-    ): T = executeWithFallback(resolution, call, decode).value
+    ): T = executeWithResult(resolution, call, decode).value
+
+    /**
+     * Like [execute] but keeps the candidate that actually served the call —
+     * required to resolve relative play_link/subtitle URLs against the right
+     * origin and to know whether relay headers are needed (R10).
+     */
+    suspend fun <T> executeWithResult(
+        resolution: FeiniuHostResolution,
+        call: FeiniuApiCall,
+        decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
+    ): FeiniuExecuted<T> {
+        val result = executeWithFallback(resolution, call, decode)
+        return FeiniuExecuted(value = result.value, candidate = result.candidate)
+    }
 
     suspend fun <T> executeOnCandidate(
         candidate: FeiniuHostCandidate,
@@ -72,6 +86,7 @@ class FeiniuClient(
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
         val credentials = sessionState.current.value
+        val sessionGeneration = sessionState.generation()
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && !credentials.hasToken) {
             throw FeiniuAuthenticationError("Feiniu media session is not authorized")
         }
@@ -122,9 +137,12 @@ class FeiniuClient(
                         FeiniuAuthenticationError("Feiniu request rejected with HTTP ${response.statusCode}")
                     }
                 }
-                throw FeiniuConnectionError(
-                    FeiniuConnectionKind.Unknown,
-                    "Feiniu request returned HTTP ${response.statusCode}",
+                // An HTTP response is authoritative: it must never be treated as a
+                // connection failure, so executeWithFallback neither switches hosts
+                // nor silently replays mutations (frozen provider design rule).
+                throw FeiniuBusinessError(
+                    code = response.statusCode,
+                    message = "Feiniu request returned HTTP ${response.statusCode}",
                 )
             }
 
@@ -143,7 +161,6 @@ class FeiniuClient(
             requireEnvelopeCode(envelope, call)
 
             val updatedCredentials = credentialsFromResponse(transientCookie, call, credentials)
-            sessionState.update { updatedCredentials }
             val value = try {
                 decode(envelope, updatedCredentials)
             } catch (e: SerializationException) {
@@ -151,13 +168,19 @@ class FeiniuClient(
             } catch (e: IllegalArgumentException) {
                 throw FeiniuDecodeError("Feiniu response data does not match the expected shape", e)
             }
-            // A decode that produced fresh credentials (login/auth family) wins
-            // over the generic merge so the session reflects the server token.
-            val finalCredentials = (value as? FeiniuCredentials) ?: updatedCredentials
-            if (finalCredentials !== updatedCredentials) {
-                sessionState.set(finalCredentials)
+            // Stale-response protection: a logout/account switch during the
+            // request bumps the generation, so the old response must not write
+            // its credentials back (R2).
+            if (sessionState.generation() == sessionGeneration) {
+                sessionState.update { updatedCredentials }
+                // A decode that produced fresh credentials (login/auth family) wins
+                // over the generic merge so the session reflects the server token.
+                val decodedCredentials = value as? FeiniuCredentials
+                if (decodedCredentials != null && decodedCredentials != updatedCredentials) {
+                    sessionState.set(decodedCredentials)
+                }
             }
-            return FeiniuCallResult(value, activeCandidate, finalCredentials)
+            return FeiniuCallResult(value, activeCandidate, sessionState.current.value)
         }
         throw FeiniuRedirectRejectedError("Feiniu request exceeded the redirect limit of ${FeiniuIdentity.MAX_REDIRECTS}")
     }
@@ -189,6 +212,11 @@ class FeiniuClient(
         transientCookie: String,
         candidate: FeiniuHostCandidate,
     ): HttpRequest {
+        // Authx must sign THIS hop's actual query — a redirect that rewrites
+        // the Location query changes what goes on the wire (R5).
+        val actualQuery = url.queryParameters.toMap().flatMap { (name, values) ->
+            values.map { name to it }
+        }
         val builder = HttpRequest.builder(method, url)
             .setHeader(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8")
             .setHeader(HttpHeaders.ACCEPT, "application/json")
@@ -202,10 +230,12 @@ class FeiniuClient(
                     nonce = FeiniuSigner.nonceFrom(runtime.random()),
                     timestamp = runtime.nowEpochMs().toString(),
                     bodyText = bodyText,
-                    queryParameters = call.queryParameters,
+                    queryParameters = actualQuery,
                 ),
             )
-        var cookie = credentials.cookie
+        // Anonymous calls (login/auth family) never carry stored cookies —
+        // an old account's cookie must not ride along with a new login (R1).
+        var cookie = if (call.authRequirement == FeiniuApiCall.AuthRequirement.None) "" else credentials.cookie
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && credentials.hasToken) {
             builder.setHeader(HttpHeaders.AUTHORIZATION, credentials.token)
             cookie = FeiniuCookieJar.mergeToken(cookie, credentials.token)
@@ -295,12 +325,17 @@ class FeiniuClient(
             return if (parts.isEmpty()) "" else "?$parts"
         }
 
+        /**
+         * RFC 3986 unreserved set, decided per UTF-8 BYTE (never per Char):
+         * multibyte characters such as CJK must be escaped, not misread.
+         */
         fun percentEncode(value: String): String = buildString {
             for (byte in value.encodeToByteArray()) {
                 val b = byte.toInt() and 0xFF
-                val c = b.toChar()
-                if (c.isLetterOrDigit() || c == '-' || c == '.' || c == '_' || c == '~') {
-                    append(c)
+                val unreserved = (b in 0x41..0x5A) || (b in 0x61..0x7A) || (b in 0x30..0x39) ||
+                    b == 0x2D || b == 0x2E || b == 0x5F || b == 0x7E
+                if (unreserved) {
+                    append(b.toChar())
                 } else {
                     append('%')
                     append("0123456789ABCDEF"[b ushr 4])

@@ -48,8 +48,11 @@ data object FeiniuSigner {
         return "nonce=$nonce&timestamp=$timestamp&sign=${FeiniuDigest.md5(signText)}"
     }
 
-    /** Deterministic random-compatible nonce generation used by the client. */
-    fun nonceFrom(random: Double): String = (random * 900000.0).toInt().toString()
+    /**
+     * Legacy six-digit nonce formula: floor(random * 900000) + 100000.
+     * Frozen to match the reference implementation exactly.
+     */
+    fun nonceFrom(random: Double): String = ((random * 900000.0).toInt() + 100000).toString()
 
     enum class Variant { Connect, Media }
 }

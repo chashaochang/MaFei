@@ -6,12 +6,11 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationError
 import cn.mafei.cmp.providers.feiniu.core.FeiniuClient
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCookieJar
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
+import cn.mafei.cmp.providers.feiniu.core.FeiniuTokenData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuEnvelope
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
 import cn.mafei.cmp.providers.feiniu.core.FeiniuLoginRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuUserInfo
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerializationException
 
 /**
  * Feiniu authentication: username/password login, session restore from
@@ -38,6 +37,10 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                 appName = "trimemedia-web",
             ),
         )
+        // R1: the login token must come from THIS response only —
+        // `envelope.token` (top level) or `data.token` (legacy nested shape).
+        // Falling back to pre-login credentials would resurrect another
+        // account's session.
         return client.execute(
             resolution,
             FeiniuApiCall(
@@ -47,22 +50,35 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                 authRequirement = FeiniuApiCall.AuthRequirement.None,
             ),
         ) { envelope, credentials ->
-            val token = envelope.token ?: credentials.token
-            if (token.isBlank()) {
+            val nestedToken = envelope.data
+                ?.let { element ->
+                    runCatching {
+                        MafeiJson.Default.decodeFromJsonElement(FeiniuTokenData.serializer(), element)
+                    }.getOrNull()?.token
+                }
+            val token = envelope.token ?: nestedToken
+            if (token.isNullOrBlank()) {
                 throw FeiniuAuthenticationError("Feiniu login response did not contain a token")
             }
+            // `credentials` here are already transient-only (anonymous calls
+            // drop stored cookies), so only THIS response's cookies merge in.
             FeiniuCookieJar.mergeToken(credentials.cookie, token).let { FeiniuCredentials(token, it) }.normalized()
         }
     }
 
-    /** Validates and installs stored credentials via the authenticated user/info probe. */
+    /**
+     * Validates and installs stored credentials via the authenticated
+     * user/info probe. Only an explicit authentication rejection clears the
+     * session; a decode failure (malformed payload) must NOT log the user
+     * out (R3).
+     */
     suspend fun restore(resolution: FeiniuHostResolution, credentials: FeiniuCredentials): FeiniuUserInfo {
         client.sessionState.set(credentials)
         return try {
             userInfo(resolution)
-        } catch (e: FeiniuAuthenticationError) {
+        } catch (e: cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationExpiredError) {
             client.sessionState.clear()
-            throw cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationExpiredError("Feiniu session expired", e)
+            throw e
         }
     }
 
@@ -75,8 +91,11 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
             ),
         ) { envelope, _ ->
-            decodeData(envelope, FeiniuUserInfo.serializer())
-                ?: throw FeiniuAuthenticationError("Feiniu user info is empty")
+            // R3: decode failures propagate as FeiniuDecodeError from the
+            // client wrapper — they must never become authentication errors.
+            val data = envelope.data
+                ?: throw cn.mafei.cmp.providers.feiniu.core.FeiniuDecodeError("Feiniu user info is empty")
+            MafeiJson.Default.decodeFromJsonElement(FeiniuUserInfo.serializer(), data)
         }
 
     /** Logs out server-side (best effort) and always clears the local session. */
@@ -95,16 +114,6 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
         }
     }
 
-    private fun decodeData(envelope: FeiniuEnvelope, serializer: KSerializer<FeiniuUserInfo>): FeiniuUserInfo? {
-        val data = envelope.data ?: return null
-        return try {
-            MafeiJson.Default.decodeFromJsonElement(serializer, data)
-        } catch (e: SerializationException) {
-            null
-        } catch (e: IllegalArgumentException) {
-            null
-        }
-    }
 }
 
 

@@ -78,10 +78,18 @@ class FeiniuConnectionApi(
         probes: List<FeiniuProbeResult>,
         preference: FeiniuRoutePreference,
     ): FeiniuHostResolution {
-        val reachable = probes.filter { it.reachable }.sortedWith(
-            compareBy<FeiniuProbeResult> { FeiniuCandidateBuilder.routePriority(it.candidate.route, preference) }
-                .thenBy { it.elapsedMs },
-        )
+        // R9: Speed preference ranks reachable probes purely by elapsed time
+        // (legacy behavior), ignoring route priority entirely.
+        val reachable = probes.filter { it.reachable }.let { reachableProbes ->
+            if (preference == FeiniuRoutePreference.Speed) {
+                reachableProbes.sortedWith(compareBy<FeiniuProbeResult> { it.elapsedMs })
+            } else {
+                reachableProbes.sortedWith(
+                    compareBy<FeiniuProbeResult> { FeiniuCandidateBuilder.routePriority(it.candidate.route, preference) }
+                        .thenBy { it.elapsedMs },
+                )
+            }
+        }
         val preferred = reachable.firstOrNull()?.candidate
             ?: probes.minByOrNull {
                 FeiniuCandidateBuilder.unreachableRoutePriority(it.candidate.route, preference) * 1_000_000L + it.elapsedMs
@@ -161,6 +169,9 @@ class FeiniuConnectionApi(
         val reachable = try {
             val response = transport.execute(request)
             response.statusCode in 200..499
+        } catch (e: CancellationException) {
+            // R7: cancellation is never a probe result
+            throw e
         } catch (_: Throwable) {
             false
         }

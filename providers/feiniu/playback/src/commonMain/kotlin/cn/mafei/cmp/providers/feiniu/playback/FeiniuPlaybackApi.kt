@@ -8,12 +8,42 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayInfoData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayRecordRequest
+import cn.mafei.cmp.providers.feiniu.core.FeiniuRoute
+import cn.mafei.cmp.providers.feiniu.core.FeiniuStreamListData
+
+/**
+ * A successful play/play negotiation together with the host context that
+ * served it (R10): relative `play_link`/`subtitle_link` values must resolve
+ * against [baseUrl] — the candidate that ACTUALLY answered, which can differ
+ * from the preferred host after fallback — and relay routes require the
+ * `mode=relay` cookie on the player request.
+ */
+data class FeiniuPlaybackSession(
+    val data: FeiniuPlayPlayData,
+    val baseUrl: String,
+    val route: FeiniuRoute,
+    val requiresRelayCookie: Boolean,
+) {
+    /** Absolute [FeiniuPlayPlayData.playLink]; play links expire, never persist. */
+    fun resolvePlayLink(baseUrlFallback: String): String? =
+        data.playLink?.let { absolutize(it, baseUrlFallback) }
+
+    /** Absolute [FeiniuPlayPlayData.subtitleLink]. */
+    fun resolveSubtitleLink(baseUrlFallback: String): String? =
+        data.subtitleLink?.let { absolutize(it, baseUrlFallback) }
+
+    private fun absolutize(link: String, baseUrlFallback: String): String {
+        if (link.contains("://")) return link
+        val base = baseUrl.trimEnd('/').ifEmpty { baseUrlFallback.trimEnd('/') }
+        return if (link.startsWith("/")) base + link else "$base/$link"
+    }
+}
 
 /**
  * Feiniu playback surface: play info (resume/current-track negotiation),
- * play/play (stream link with server-side expiry), progress recording and
- * the direct-range URL for the player. Actual playback belongs to the
- * player runtimes (GLM-05).
+ * play/play (stream link with server-side expiry), progress recording, the
+ * direct-range URL for the player and the stream/list track catalog.
+ * Actual playback belongs to the player runtimes (GLM-05).
  */
 class FeiniuPlaybackApi(private val client: FeiniuClient) {
 
@@ -50,14 +80,15 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
     }
 
     /**
-     * Opens the actual stream. The returned [FeiniuPlayPlayData.playLink] is
-     * a server-issued, EXPIRING URL — never persist it; re-open when stale.
+     * Opens the actual stream and returns the session context (R10). The
+     * returned [FeiniuPlaybackSession.data.playLink] is a server-issued,
+     * EXPIRING URL — never persist it; re-open when stale.
      */
     suspend fun play(
         resolution: FeiniuHostResolution,
         request: FeiniuPlayPlayRequest,
-    ): FeiniuPlayPlayData =
-        client.execute(
+    ): FeiniuPlaybackSession {
+        val executed = client.executeWithResult(
             resolution,
             FeiniuApiCall(
                 path = "/v/api/v1/play/play",
@@ -71,6 +102,13 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 MafeiJson.Default.decodeFromJsonElement(FeiniuPlayPlayData.serializer(), it)
             } ?: FeiniuPlayPlayData()
         }
+        return FeiniuPlaybackSession(
+            data = executed.value,
+            baseUrl = executed.candidate.baseUrl,
+            route = executed.candidate.route,
+            requiresRelayCookie = executed.candidate.requiresRelayCookie,
+        )
+    }
 
     /** Records playback progress (position/duration in seconds per protocol). */
     suspend fun record(resolution: FeiniuHostResolution, request: FeiniuPlayRecordRequest) {
@@ -84,6 +122,31 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
             ),
         ) { _, _ -> true }
     }
+
+    /**
+     * GET /v/api/v1/stream/list/{guid} — the track catalog (files, video/
+     * audio/subtitle streams) used to prepare playback (P0 per design §6.6).
+     * Track fields stay as raw JSON elements until real-device fixtures
+     * justify typing them.
+     */
+    suspend fun streamList(
+        resolution: FeiniuHostResolution,
+        guid: String,
+        beforePlay: Int? = null,
+    ): FeiniuStreamListData =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                path = "/v/api/v1/stream/list/${guid.trim()}",
+                method = FeiniuApiCall.FeiniuMethod.Get,
+                queryParameters = beforePlay?.let { listOf("before_play" to it.toString()) }.orEmpty(),
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ ->
+            envelope.data?.let {
+                MafeiJson.Default.decodeFromJsonElement(FeiniuStreamListData.serializer(), it)
+            } ?: FeiniuStreamListData()
+        }
 
     /** Absolute direct-range stream URL (`/v/api/v1/media/range/{mediaGuid}`). */
     fun directRangeUrl(baseUrl: String, mediaGuid: String, byteOffset: Long = -1): String {

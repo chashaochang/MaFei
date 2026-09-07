@@ -62,7 +62,7 @@ class FeiniuPlaybackApiTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_PLAY)
 
-        val play = fixture.api.play(
+        val session = fixture.api.play(
             fixture.resolution,
             FeiniuPlayPlayRequest(
                 mediaGuid = "md-0001",
@@ -78,9 +78,13 @@ class FeiniuPlaybackApiTest {
                 forcedSdr = 0,
             ),
         )
-        assertEquals("/v/api/v1/stream/fixture?sign=abc", play.playLink)
-        assertEquals("/v/api/v1/subtitle/dl/sb-0001", play.subtitleLink)
-        assertEquals(1, play.isSubtitleExternal)
+        assertEquals("/v/api/v1/stream/fixture?sign=abc", session.data.playLink)
+        assertEquals("/v/api/v1/subtitle/dl/sb-0001", session.data.subtitleLink)
+        assertEquals(1, session.data.isSubtitleExternal)
+        // R10: session context carries the serving host/route
+        assertEquals("https://feiniu.test", session.baseUrl)
+        assertEquals(FeiniuRoute.Direct, session.route)
+        assertEquals(false, session.requiresRelayCookie)
 
         val body = (fixture.transport.requests.single().body as HttpBody.Text).text
         assertTrue(body.contains("\"media_guid\":\"md-0001\""), body)
