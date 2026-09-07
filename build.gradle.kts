@@ -273,10 +273,10 @@ check(missingRequiredModules.isEmpty()) {
     "Missing CMP module directories: " + missingRequiredModules.joinToString()
 }
 
-tasks.register("verifyArchitecture") {
+tasks.register<Exec>("verifyArchitecture") {
     group = "verification"
-    description = "Checks that the frozen CMP module directories are present."
-
+    description = "Checks module build files, frozen CPF versions and ARM-only host configuration."
+    commandLine("node", rootProject.file("scripts/verify-cmp-foundation.mjs").absolutePath)
 }
 
 tasks.named("check") {

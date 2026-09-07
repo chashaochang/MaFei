@@ -2,6 +2,9 @@ package cn.mafei.cmp
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
@@ -18,18 +21,24 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
+import org.jetbrains.compose.resources.stringResource
+import mafei.composeapp.generated.resources.Res
+import mafei.composeapp.generated.resources.probe_resource_status
 
 /** Stage 1 development entry, not a production Home or runtime acceptance claim. */
 @Composable
-fun FoundationProbeScreen() {
+fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}) {
     var dark by rememberSaveable { mutableStateOf(true) }
     var level by rememberSaveable { mutableStateOf(GlassLevel.Full.name) }
     var dialog by rememberSaveable { mutableStateOf(false) }
     var reduceTransparency by rememberSaveable { mutableStateOf(false) }
     var taps by rememberSaveable { mutableStateOf(0) }
+    var barExpanded by rememberSaveable { mutableStateOf(true) }
+    SideEffect { onThemeChanged(dark) }
     val renderHealth = rememberGlassRenderHealth()
     // Layout branches must not own separate reading positions. Stable item keys
     // also preserve the sample anchor when controls move out into the side pane.
@@ -38,7 +47,9 @@ fun FoundationProbeScreen() {
       GlassRenderingEnvironment(renderHealth) {
       MaFeiGlassPreferences(reduceTransparency) {
         Surface(color = MaterialTheme.colorScheme.background) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
+            // One shared inset owner: UIKit/Activity fill the window; the
+            // probe protects controls without asking each child to pad again.
+            BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
                 val wide = maxWidth >= 840.dp
                 val widthLabel = "${maxWidth.value.toInt()} dp · ${if (wide) "双栏" else "单栏"}"
                 Column(Modifier.fillMaxSize().padding(horizontal = if (wide) 32.dp else 16.dp)) {
@@ -56,13 +67,15 @@ fun FoundationProbeScreen() {
                                 item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
                                     reduceTransparency, { reduceTransparency = it }, renderHealth) }
                             }
-                            ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState) {
+                            ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState,
+                                barExpanded, { barExpanded = !barExpanded }) {
                                 item(key = "material-comparison") { ProbeGlassComparison(reduceTransparency) }
                                 items(12, key = { "material-sample-$it" }) { ProbeSample(it) }
                             }
                         }
                     } else {
-                        ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState) {
+                        ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState,
+                            barExpanded, { barExpanded = !barExpanded }) {
                             item(key = "material-controls") { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
                                 reduceTransparency, { reduceTransparency = it }, renderHealth) }
                             item(key = "material-comparison") { ProbeGlassComparison(reduceTransparency) }
@@ -93,6 +106,7 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("窗口与材质", style = MaterialTheme.typography.titleLarge)
             Text(width, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.probe_resource_status), style = MaterialTheme.typography.labelSmall)
             GlassLevel.entries.forEach { option ->
                 FilterChip(selected = level == option.name, onClick = { onLevel(option.name) },
                     label = { Text(when (option) {
@@ -151,7 +165,8 @@ private fun ProbePattern(modifier: Modifier, index: Int = 0) {
 
 @Composable
 private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps: Int, onTap: () -> Unit,
-                               modifier: Modifier, scrollState: LazyListState, content: LazyListScope.() -> Unit) {
+                               modifier: Modifier, scrollState: LazyListState,
+                               barExpanded: Boolean, onToggleBar: () -> Unit, content: LazyListScope.() -> Unit) {
     val backdrop = rememberGlassBackdrop()
     val requested = GlassLevel.valueOf(level)
     val spec = MaFeiGlassDefaults.spec(GlassRole.Navigation, requested, reduceTransparency)
@@ -173,9 +188,11 @@ private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps:
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .onSizeChanged { barHeight = with(density) { it.height.toDp() } }.padding(vertical = 12.dp),
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("液态玻璃 · 滚动探针", style = MaterialTheme.typography.titleMedium)
-                Text("请求 $requested → 能力档位 $resolved", style = MaterialTheme.typography.labelMedium)
+            Column(Modifier.weight(1f).animateContentSize(animationSpec = tween(220))
+                .clickable(role = Role.Button, onClickLabel = if (barExpanded) "收起说明" else "展开说明",
+                    onClick = onToggleBar), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (barExpanded) "液态玻璃 · 收起说明" else "液态玻璃 · 展开说明", style = MaterialTheme.typography.titleMedium)
+                if (barExpanded) Text("请求 $requested → 能力档位 $resolved", style = MaterialTheme.typography.labelMedium)
             }
             TextButton(onClick = onTap) { Text("命中 · $taps") }
         }

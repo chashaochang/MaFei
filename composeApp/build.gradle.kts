@@ -224,6 +224,14 @@ dependencies {
     debugImplementation(libs.compose.ui)
 }
 
+compose.resources {
+    // Resources are consumed from sharedUiMain via two UI dependency trees.
+    // Explicit generation avoids auto-detection requiring commonMain Compose.
+    publicResClass = true
+    packageOfResClass = "mafei.composeapp.generated.resources"
+    generateResClass = always
+}
+
 compose.desktop {
     application {
         mainClass = "cn.mafei.cmp.MainKt"

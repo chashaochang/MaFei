@@ -3,6 +3,6 @@ package cn.mafei.cmp
 import androidx.compose.runtime.Composable
 
 @Composable
-fun App() {
-    FoundationProbeScreen()
+fun App(onThemeChanged: (Boolean) -> Unit = {}) {
+    FoundationProbeScreen(onThemeChanged)
 }
