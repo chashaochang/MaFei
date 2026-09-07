@@ -12,6 +12,9 @@ dependencies {
     add("commonMainApi", project(":providers:feiniu:catalog"))
     add("commonMainApi", project(":providers:feiniu:playback"))
     add("commonMainApi", project(":providers:feiniu:assets"))
-    add("commonMainApi", project(":providers:feiniu:account"))
-    add("commonMainApi", project(":providers:feiniu:management"))
+    add("commonMainApi", libs.kotlinx.coroutines.core)
+}
+
+dependencies {
+    add("commonTestImplementation", project(":providers:feiniu:testkit"))
 }

@@ -8,4 +8,5 @@ plugins {
 dependencies {
     add("commonMainApi", project(":core:http-contract"))
     add("commonMainApi", project(":core:serialization"))
+    add("commonMainImplementation", project(":common:core"))
 }
