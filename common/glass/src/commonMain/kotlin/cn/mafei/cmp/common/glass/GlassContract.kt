@@ -28,6 +28,7 @@ data class GlassSurfaceSpec(
     val level: GlassLevel,
     val tintAlpha: Float = 0.72f,
     val intensity: Float = 1f,
+    val cornerRadiusDp: Float = 24f,
 )
 
 /**

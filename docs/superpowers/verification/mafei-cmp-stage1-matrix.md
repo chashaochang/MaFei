@@ -6,6 +6,8 @@
 2026-09-07 构建实测见 [玻璃接入记录](2026-09-07-glass-integration.md)。
 下表只标记该记录中已验证的分项，不代表 Stage 1 整体通过。
 
+同日后续：[公共组件与 Mac 首帧](2026-09-07-glass-components.md)。
+
 ## 1. 证据等级
 
 | 等级 | 含义 |
@@ -45,7 +47,7 @@
 
 | 场景 | Android | iOS | Mac ARM | HarmonyOS ARM |
 | --- | --- | --- | --- | --- |
-| Compose 首帧 | Pending | Pending | Pending | Pending |
+| Compose 首帧 | Pending | Pending | E：800dp 首帧已观察，交互待验 | Pending |
 | FullGlass Probe | Pending | Pending | Pending | Pending |
 | Reduced/Opaque 回退 | Pending | Pending | Pending | Pending |
 | 返回和生命周期 | Pending | Pending | Pending | Pending |

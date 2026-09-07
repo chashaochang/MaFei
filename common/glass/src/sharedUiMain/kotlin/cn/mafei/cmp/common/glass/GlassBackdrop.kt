@@ -50,7 +50,7 @@ fun GlassSurface(
     content: @Composable () -> Unit,
 ) {
     val level = resolveGlassLevel(spec.level, currentGlassCapability(), backdrop != null)
-    val shape = RoundedCornerShape(24.dp)
+    val shape = RoundedCornerShape(spec.cornerRadiusDp.coerceAtLeast(0f).dp)
     val material = if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
     } else {

@@ -12,10 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import cn.mafei.cmp.common.design_system.MaFeiTheme
-import cn.mafei.cmp.common.design_system.MaFeiPanel
-import cn.mafei.cmp.common.design_system.MaFeiSurface
+import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
 
 /** Stage 1 development entry, not a production Home or runtime acceptance claim. */
@@ -24,7 +26,10 @@ fun FoundationProbeScreen() {
     var dark by rememberSaveable { mutableStateOf(true) }
     var level by rememberSaveable { mutableStateOf(GlassLevel.Full.name) }
     var dialog by rememberSaveable { mutableStateOf(false) }
+    var reduceTransparency by rememberSaveable { mutableStateOf(false) }
+    var taps by rememberSaveable { mutableStateOf(0) }
     MaFeiTheme(darkTheme = dark) {
+      MaFeiGlassPreferences(reduceTransparency) {
         Surface(color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= 840.dp
@@ -41,32 +46,40 @@ fun FoundationProbeScreen() {
                     if (wide) {
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                             LazyColumn(Modifier.width(280.dp)) {
-                                item { ProbeControls(level, widthLabel, { level = it }, { dialog = true }) }
+                                item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
+                                    reduceTransparency, { reduceTransparency = it }) }
                             }
-                            ProbeGlassViewport(level, Modifier.weight(1f)) {
+                            ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
+                                item { ProbeGlassComparison(reduceTransparency) }
                                 items(12) { ProbeSample(it) }
                             }
                         }
                     } else {
-                        ProbeGlassViewport(level, Modifier.weight(1f)) {
-                            item { ProbeControls(level, widthLabel, { level = it }, { dialog = true }) }
+                        ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
+                            item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
+                                reduceTransparency, { reduceTransparency = it }) }
+                            item { ProbeGlassComparison(reduceTransparency) }
                             items(12) { ProbeSample(it) }
                         }
                     }
                 }
             }
         }
-        if (dialog) AlertDialog(
+        if (dialog) AppGlassDialog(
             onDismissRequest = { dialog = false },
-            title = { Text("弹层可读性检查") },
-            text = { Text("检查文字、背景、焦点与关闭操作。调整窗口后，弹层应保持可读、可操作。") },
+            title = "弹层可读性检查",
+            level = GlassLevel.valueOf(level),
             confirmButton = { TextButton(onClick = { dialog = false }) { Text("关闭") } },
-        )
+        ) {
+            Text("检查文字、焦点、返回与关闭操作。弹层是独立窗口，未共享页面背景，当前实际材质为实体回退。")
+        }
+      }
     }
 }
 
 @Composable
-private fun ProbeControls(level: String, width: String, onLevel: (String) -> Unit, onDialog: () -> Unit) {
+private fun ProbeControls(level: String, width: String, onLevel: (String) -> Unit, onDialog: () -> Unit,
+                          reduceTransparency: Boolean, onReduceTransparency: (Boolean) -> Unit) {
     MaFeiPanel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("窗口与材质", style = MaterialTheme.typography.titleLarge)
@@ -81,6 +94,11 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
             }
             Text("滚动彩色样本，观察底部浮层的模糊与折射。简化档关闭折射，实体档完全不透明；能力不足时自动降级。",
                 style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("减少透明度", Modifier.weight(1f))
+                Switch(checked = reduceTransparency, onCheckedChange = onReduceTransparency,
+                    modifier = Modifier.semantics { contentDescription = "减少透明度" })
+            }
             OutlinedButton(onClick = onDialog, modifier = Modifier.fillMaxWidth()) { Text("检查弹层") }
         }
     }
@@ -89,16 +107,7 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
 @Composable
 private fun ProbeSample(index: Int) {
     MaFeiPanel(Modifier.fillMaxWidth()) {
-        Canvas(Modifier.fillMaxWidth().height(120.dp)) {
-            val colors = if (index % 2 == 0) listOf(Color(0xFF4357AD), Color(0xFFDA8C63))
-                else listOf(Color(0xFF247D83), Color(0xFFA074C4))
-            drawRect(Brush.linearGradient(colors))
-            repeat(12) { stripe ->
-                val x = size.width * stripe / 11f
-                drawLine(Color.White.copy(alpha = 0.5f), Offset(x, 0f),
-                    Offset(x + 48.dp.toPx(), size.height), strokeWidth = 8.dp.toPx())
-            }
-        }
+        ProbePattern(Modifier.fillMaxWidth().height(120.dp), index)
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("${index + 1} / 材质样本", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
@@ -110,29 +119,84 @@ private fun ProbeSample(index: Int) {
 }
 
 @Composable
-private fun ProbeGlassViewport(level: String, modifier: Modifier, content: LazyListScope.() -> Unit) {
+private fun ProbePattern(modifier: Modifier, index: Int = 0) {
+        Canvas(modifier) {
+            val colors = if (index % 2 == 0) listOf(Color(0xFF4357AD), Color(0xFFDA8C63))
+                else listOf(Color(0xFF247D83), Color(0xFFA074C4))
+            drawRect(Brush.linearGradient(colors))
+            repeat(12) { stripe ->
+                val x = size.width * stripe / 11f
+                drawLine(Color.White.copy(alpha = 0.5f), Offset(x, 0f),
+                    Offset(x + 48.dp.toPx(), size.height), strokeWidth = 8.dp.toPx())
+            }
+        }
+}
+
+@Composable
+private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps: Int, onTap: () -> Unit,
+                               modifier: Modifier, content: LazyListScope.() -> Unit) {
     val backdrop = rememberGlassBackdrop()
     val requested = GlassLevel.valueOf(level)
-    val resolved = resolveGlassLevel(requested, currentGlassCapability(), hasBackdrop = true)
-    var taps by rememberSaveable { mutableStateOf(0) }
+    val spec = MaFeiGlassDefaults.spec(GlassRole.Navigation, requested, reduceTransparency)
+    val resolved = resolveGlassLevel(spec.level, currentGlassCapability(), hasBackdrop = true)
+    val density = LocalDensity.current
+    var barHeight by remember { mutableStateOf(0.dp) }
     Box(modifier.fillMaxSize()) {
         // Only the scrolling source is recorded, never the consuming overlay.
         LazyColumn(
             Modifier.fillMaxSize().captureGlassBackdrop(backdrop),
-            contentPadding = PaddingValues(bottom = 180.dp),
+            contentPadding = PaddingValues(bottom = barHeight + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )
-        MaFeiSurface(
-            spec = GlassSurfaceSpec(GlassRole.Overlay, requested, tintAlpha = 0.45f),
+        AppGlassBar(
+            level = requested,
             backdrop = backdrop,
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(vertical = 12.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .onSizeChanged { barHeight = with(density) { it.height.toDp() } }.padding(vertical = 12.dp),
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("液态玻璃 · 滚动探针", style = MaterialTheme.typography.titleMedium)
                 Text("请求 $requested → 能力档位 $resolved", style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = { taps++ }) { Text("命中检查 · $taps") }
+            }
+            TextButton(onClick = onTap) { Text("命中 · $taps") }
+        }
+    }
+}
+
+@Composable
+private fun ProbeGlassComparison(reduceTransparency: Boolean) {
+    val backdrop = rememberGlassBackdrop()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("同屏材质对照", style = MaterialTheme.typography.titleLarge)
+        Text("以下卡片独立展示三档；底部浮层由控制区切换。", style = MaterialTheme.typography.bodyMedium)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            ProbePattern(Modifier.matchParentSize().captureGlassBackdrop(backdrop))
+            if (maxWidth >= 600.dp) {
+                Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlassLevel.entries.forEach { level ->
+                        ProbeMaterialCard(backdrop, level, reduceTransparency, Modifier.weight(1f))
+                    }
+                }
+            } else {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlassLevel.entries.forEach { level ->
+                        ProbeMaterialCard(backdrop, level, reduceTransparency, Modifier.fillMaxWidth())
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ProbeMaterialCard(backdrop: GlassBackdrop, level: GlassLevel, reduceTransparency: Boolean,
+                              modifier: Modifier) {
+    val spec = MaFeiGlassDefaults.spec(GlassRole.Card, level, reduceTransparency)
+    val resolved = resolveGlassLevel(spec.level, currentGlassCapability(), hasBackdrop = true)
+    AppGlassCard(backdrop, modifier, level) {
+        Text(level.name, style = MaterialTheme.typography.titleMedium)
+        Text("能力档位：$resolved", style = MaterialTheme.typography.labelMedium)
+        Text("相同文字与留白，比较背景纹理和边缘。", style = MaterialTheme.typography.bodyMedium)
     }
 }

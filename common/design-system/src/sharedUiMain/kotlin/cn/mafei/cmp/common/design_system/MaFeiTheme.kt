@@ -3,9 +3,11 @@ package cn.mafei.cmp.common.design_system
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -50,5 +52,7 @@ fun MaFeiSurface(
     backdrop: GlassBackdrop? = null,
     content: @Composable () -> Unit,
 ) {
-    GlassSurface(backdrop, spec, MaterialTheme.colorScheme.surface, modifier, content)
+    GlassSurface(backdrop, spec, MaterialTheme.colorScheme.surface, modifier) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, content = content)
+    }
 }
