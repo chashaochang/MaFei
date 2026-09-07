@@ -1,7 +1,5 @@
 package cn.mafei.cmp.common.design_system
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.MaterialTheme
@@ -11,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
+import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassSurface
 
 @Composable
 fun MaFeiTheme(
@@ -47,16 +47,8 @@ fun MaFeiPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
 fun MaFeiSurface(
     spec: GlassSurfaceSpec,
     modifier: Modifier = Modifier,
+    backdrop: GlassBackdrop? = null,
     content: @Composable () -> Unit,
 ) {
-    // Requested levels must remain opaque until the Backdrop adapter is wired.
-    val fallbackColor = MaterialTheme.colorScheme.surface
-
-    Box(
-        modifier = modifier.background(
-            color = if (fallbackColor.alpha > 0f) fallbackColor else Color.Black,
-        ),
-    ) {
-        content()
-    }
+    GlassSurface(backdrop, spec, MaterialTheme.colorScheme.surface, modifier, content)
 }

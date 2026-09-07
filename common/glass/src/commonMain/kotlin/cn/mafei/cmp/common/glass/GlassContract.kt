@@ -34,9 +34,19 @@ data class GlassSurfaceSpec(
  * Stable MaFei-facing glass contract.
  *
  * CMPLiquidGlass types stay behind this module and must never leak into a
- * feature module. The first bootstrap implementation deliberately uses the
- * opaque fallback until the locked CMPLiquidGlass source dependency is wired.
+ * feature module. Missing capture or unsupported blur resolves to an opaque
+ * surface; missing shader support disables refraction but retains blur.
  */
 interface GlassCapabilityProvider {
     val capability: GlassCapability
+}
+
+fun resolveGlassLevel(
+    requested: GlassLevel,
+    capability: GlassCapability,
+    hasBackdrop: Boolean,
+): GlassLevel = when {
+    requested == GlassLevel.Opaque || !hasBackdrop || !capability.backdrop || !capability.blur -> GlassLevel.Opaque
+    requested == GlassLevel.Full && capability.lens && capability.runtimeShader -> GlassLevel.Full
+    else -> GlassLevel.Reduced
 }
