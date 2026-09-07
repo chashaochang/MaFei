@@ -28,7 +28,9 @@ fun FoundationProbeScreen() {
     var dialog by rememberSaveable { mutableStateOf(false) }
     var reduceTransparency by rememberSaveable { mutableStateOf(false) }
     var taps by rememberSaveable { mutableStateOf(0) }
+    val renderHealth = rememberGlassRenderHealth()
     MaFeiTheme(darkTheme = dark) {
+      GlassRenderingEnvironment(renderHealth) {
       MaFeiGlassPreferences(reduceTransparency) {
         Surface(color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -47,7 +49,7 @@ fun FoundationProbeScreen() {
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                             LazyColumn(Modifier.width(280.dp)) {
                                 item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
-                                    reduceTransparency, { reduceTransparency = it }) }
+                                    reduceTransparency, { reduceTransparency = it }, renderHealth) }
                             }
                             ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
                                 item { ProbeGlassComparison(reduceTransparency) }
@@ -57,7 +59,7 @@ fun FoundationProbeScreen() {
                     } else {
                         ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
                             item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
-                                reduceTransparency, { reduceTransparency = it }) }
+                                reduceTransparency, { reduceTransparency = it }, renderHealth) }
                             item { ProbeGlassComparison(reduceTransparency) }
                             items(12) { ProbeSample(it) }
                         }
@@ -74,12 +76,14 @@ fun FoundationProbeScreen() {
             Text("检查文字、焦点、返回与关闭操作。弹层是独立窗口，未共享页面背景，当前实际材质为实体回退。")
         }
       }
+      }
     }
 }
 
 @Composable
 private fun ProbeControls(level: String, width: String, onLevel: (String) -> Unit, onDialog: () -> Unit,
-                          reduceTransparency: Boolean, onReduceTransparency: (Boolean) -> Unit) {
+                          reduceTransparency: Boolean, onReduceTransparency: (Boolean) -> Unit,
+                          renderHealth: GlassRenderHealth) {
     MaFeiPanel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("窗口与材质", style = MaterialTheme.typography.titleLarge)
@@ -100,6 +104,14 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
                     modifier = Modifier.semantics { contentDescription = "减少透明度" })
             }
             OutlinedButton(onClick = onDialog, modifier = Modifier.fillMaxWidth()) { Text("检查弹层") }
+            OutlinedButton(onClick = renderHealth::reportEffectFailure,
+                enabled = !renderHealth.effectFailed, modifier = Modifier.fillMaxWidth()) {
+                Text(if (renderHealth.effectFailed) "已熔断 · 实体回退" else "模拟特效熔断")
+            }
+            Text(if (renderHealth.effectFailed)
+                "本窗口已停用玻璃特效，重开页面前不重试。请继续检查命中、滚动和弹层；切换主题或档位不会恢复特效。"
+                else "模拟按钮只验证故障后的回退策略，不代表已验证真实 GPU 故障恢复。",
+                style = MaterialTheme.typography.bodySmall)
         }
     }
 }

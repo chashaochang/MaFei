@@ -32,13 +32,18 @@ fun rememberGlassBackdrop(): GlassBackdrop {
 /** Capture background siblings only; never record a consumer into its own source. */
 fun Modifier.captureGlassBackdrop(backdrop: GlassBackdrop): Modifier = layerBackdrop(backdrop.layer)
 
-fun currentGlassCapability(): GlassCapability = GlassCapability(
-    backdrop = true,
-    blur = isRenderEffectSupported(),
-    lens = isRuntimeShaderSupported(),
-    highlight = isRenderEffectSupported(),
-    runtimeShader = isRuntimeShaderSupported(),
-)
+/** Effective capability, including the shell's latched effect failure. */
+@Composable
+fun currentGlassCapability(): GlassCapability {
+    val failed = LocalGlassRenderHealth.current?.effectFailed == true
+    return GlassCapability(
+        backdrop = true,
+        blur = !failed && isRenderEffectSupported(),
+        lens = !failed && isRuntimeShaderSupported(),
+        highlight = !failed && isRenderEffectSupported(),
+        runtimeShader = !failed && isRuntimeShaderSupported(),
+    )
+}
 
 /** The same layout and hit area are retained for every resolved level. */
 @Composable
@@ -49,7 +54,10 @@ fun GlassSurface(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val level = resolveGlassLevel(spec.level, currentGlassCapability(), backdrop != null)
+    // Standalone components also fail closed when no shell environment is installed.
+    val health = LocalGlassRenderHealth.current ?: rememberGlassRenderHealth()
+    val level = if (health.effectFailed) GlassLevel.Opaque
+        else resolveGlassLevel(spec.level, currentGlassCapability(), backdrop != null)
     val shape = RoundedCornerShape(spec.cornerRadiusDp.coerceAtLeast(0f).dp)
     val material = if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
@@ -58,13 +66,23 @@ fun GlassSurface(
             backdrop = backdrop.layer,
             shape = { shape },
             effects = {
-                blur(12.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
-                if (level == GlassLevel.Full) {
-                    lens(16.dp.toPx(), 8.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
+                val applied = health.guard.run {
+                    blur(12.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
+                    if (level == GlassLevel.Full) {
+                        lens(16.dp.toPx(), 8.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
+                    }
+                }
+                if (!applied) {
+                    // Remove even partially constructed effects in this draw.
+                    renderEffect = null
+                    padding = 0f
                 }
             },
             shadow = null,
-            onDrawSurface = { drawRect(tint.copy(alpha = spec.tintAlpha.coerceIn(0f, 1f))) },
+            onDrawSurface = {
+                // Do not wait for recomposition to make the failed frame readable.
+                drawRect(tint.copy(alpha = if (health.effectFailed) 1f else spec.tintAlpha.coerceIn(0f, 1f)))
+            },
         )
     }
     Box(modifier.clip(shape).then(material)) { content() }
