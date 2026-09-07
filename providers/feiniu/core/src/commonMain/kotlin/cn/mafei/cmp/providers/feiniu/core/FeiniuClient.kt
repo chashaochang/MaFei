@@ -86,7 +86,7 @@ class FeiniuClient(
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
         val credentials = sessionState.current.value
-        val sessionGeneration = sessionState.generation()
+        val identity = sessionState.identityGeneration()
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && !credentials.hasToken) {
             throw FeiniuAuthenticationError("Feiniu media session is not authorized")
         }
@@ -168,16 +168,29 @@ class FeiniuClient(
             } catch (e: IllegalArgumentException) {
                 throw FeiniuDecodeError("Feiniu response data does not match the expected shape", e)
             }
-            // Stale-response protection: a logout/account switch during the
-            // request bumps the generation, so the old response must not write
-            // its credentials back (R2).
-            if (sessionState.generation() == sessionGeneration) {
-                sessionState.update { updatedCredentials }
-                // A decode that produced fresh credentials (login/auth family) wins
-                // over the generic merge so the session reflects the server token.
-                val decodedCredentials = value as? FeiniuCredentials
-                if (decodedCredentials != null && decodedCredentials != updatedCredentials) {
-                    sessionState.set(decodedCredentials)
+            // Stale-response protection (F1): compare IDENTITY generations.
+            // A logout/account switch during the request moves the identity,
+            // so this response is dropped entirely. A same-identity response
+            // (e.g. an in-flight poll) must NOT invalidate an in-flight login.
+            val decodedCredentials = value as? FeiniuCredentials
+            if (decodedCredentials != null) {
+                // Login/auth family: install the fresh credentials in ONE
+                // atomic step — no intermediate write of stale/merged state.
+                val snapshot = sessionState.snapshot()
+                if (snapshot.identityGeneration == identity) {
+                    sessionState.installIdentityIfUnchanged(snapshot.identityGeneration, decodedCredentials)
+                }
+            } else if (sessionState.snapshot().identityGeneration == identity) {
+                // Same-identity cookie merge: re-base on the CURRENT snapshot
+                // each attempt so a concurrent response's Set-Cookie is not
+                // lost; commit is a single atomic compare-and-commit.
+                var basis = sessionState.snapshot()
+                while (basis.identityGeneration == identity) {
+                    val merged = sessionState.commitIfUnchanged(basis) { basisCredentials ->
+                        credentialsFromResponse(transientCookie, call, basisCredentials)
+                    }
+                    if (merged != null) break
+                    basis = sessionState.snapshot()
                 }
             }
             return FeiniuCallResult(value, activeCandidate, sessionState.current.value)
@@ -295,16 +308,17 @@ class FeiniuClient(
         call: FeiniuApiCall,
         previous: FeiniuCredentials,
     ): FeiniuCredentials {
+        // F2: anonymous calls (login/auth family) start from a CLEAN cookie
+        // basis — without a Set-Cookie response the new session must not
+        // inherit the previous account's cookies ("existing-token wins"
+        // applies only to same-session response merges).
         val normalized = transientCookie.trim()
-        if (normalized.isEmpty()) return previous
-        val replaceExisting = call.authRequirement == FeiniuApiCall.AuthRequirement.None
-        val baseCookie = if (replaceExisting) "" else previous.cookie
-        val merged = FeiniuCookieJar.merge(baseCookie, normalized)
-        val token = if (replaceExisting) {
-            FeiniuCookieJar.extractToken(merged).orEmpty()
-        } else {
-            previous.token.ifEmpty { FeiniuCookieJar.extractToken(merged).orEmpty() }
+        if (call.authRequirement == FeiniuApiCall.AuthRequirement.None) {
+            return FeiniuCredentials(token = FeiniuCookieJar.extractToken(normalized).orEmpty(), cookie = normalized).normalized()
         }
+        if (normalized.isEmpty()) return previous
+        val merged = FeiniuCookieJar.merge(previous.cookie, normalized)
+        val token = previous.token.ifEmpty { FeiniuCookieJar.extractToken(merged).orEmpty() }
         return FeiniuCredentials(token = token, cookie = merged).normalized()
     }
 

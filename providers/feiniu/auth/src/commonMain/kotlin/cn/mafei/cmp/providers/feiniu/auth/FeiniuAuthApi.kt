@@ -74,10 +74,14 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
      */
     suspend fun restore(resolution: FeiniuHostResolution, credentials: FeiniuCredentials): FeiniuUserInfo {
         client.sessionState.set(credentials)
+        // F1: the expired-session cleanup only applies to the identity this
+        // restore started with — a stale 401 arriving after an account switch
+        // must not log the new account out.
+        val identity = client.sessionState.identityGeneration()
         return try {
             userInfo(resolution)
         } catch (e: cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationExpiredError) {
-            client.sessionState.clear()
+            client.sessionState.clearIfIdentityUnchanged(identity)
             throw e
         }
     }
@@ -98,8 +102,9 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
             MafeiJson.Default.decodeFromJsonElement(FeiniuUserInfo.serializer(), data)
         }
 
-    /** Logs out server-side (best effort) and always clears the local session. */
+    /** Logs out server-side (best effort); the local clear is identity-guarded. */
     suspend fun logout(resolution: FeiniuHostResolution) {
+        val identity = client.sessionState.identityGeneration()
         try {
             client.execute(
                 resolution,
@@ -110,7 +115,8 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                 ),
             ) { _, _ -> true }
         } finally {
-            client.sessionState.clear()
+            // A login/account switch during the logout request must survive.
+            client.sessionState.clearIfIdentityUnchanged(identity)
         }
     }
 

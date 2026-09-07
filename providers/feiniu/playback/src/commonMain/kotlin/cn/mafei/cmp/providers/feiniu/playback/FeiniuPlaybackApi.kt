@@ -1,5 +1,7 @@
 package cn.mafei.cmp.providers.feiniu.playback
 
+import cn.mafei.cmp.core.http_contract.HttpRedirects
+import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.serialization.MafeiJson
 import cn.mafei.cmp.providers.feiniu.core.FeiniuApiCall
 import cn.mafei.cmp.providers.feiniu.core.FeiniuClient
@@ -24,18 +26,33 @@ data class FeiniuPlaybackSession(
     val route: FeiniuRoute,
     val requiresRelayCookie: Boolean,
 ) {
-    /** Absolute [FeiniuPlayPlayData.playLink]; play links expire, never persist. */
+    /**
+     * Absolute [FeiniuPlayPlayData.playLink]; play links expire, never
+     * persist. Resolved with the frozen RFC 3986 reference resolution against
+     * the ACTUAL serving origin ([baseUrl]); unparseable, non-HTTP(S),
+     * user-info-bearing or cross-origin targets are rejected (`null`) rather
+     * than returned as wrong success URLs (F4).
+     */
     fun resolvePlayLink(baseUrlFallback: String): String? =
         data.playLink?.let { absolutize(it, baseUrlFallback) }
 
-    /** Absolute [FeiniuPlayPlayData.subtitleLink]. */
+    /** Absolute [FeiniuPlayPlayData.subtitleLink], same rules as [resolvePlayLink]. */
     fun resolveSubtitleLink(baseUrlFallback: String): String? =
         data.subtitleLink?.let { absolutize(it, baseUrlFallback) }
 
-    private fun absolutize(link: String, baseUrlFallback: String): String {
-        if (link.contains("://")) return link
-        val base = baseUrl.trimEnd('/').ifEmpty { baseUrlFallback.trimEnd('/') }
-        return if (link.startsWith("/")) base + link else "$base/$link"
+    private fun absolutize(link: String, baseUrlFallback: String): String? {
+        val trimmed = link.trim()
+        if (trimmed.isEmpty()) return null
+        val primary = baseUrl.trimEnd('/')
+        val base = HttpUrl.parseOrNull(primary)
+            ?: HttpUrl.parseOrNull(baseUrlFallback.trimEnd('/'))
+            ?: return null
+        val resolved = HttpRedirects.resolveLocation(base, trimmed) ?: return null
+        // P0 contract: resources are served by the negotiated server origin;
+        // cross-origin targets are refused instead of silently trusted.
+        val sameOrigin = resolved.scheme == base.scheme && resolved.host == base.host && resolved.port == base.port
+        if (!sameOrigin) return null
+        return resolved.toEncodedString()
     }
 }
 
@@ -73,9 +90,11 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
             ),
         ) { envelope, _ ->
-            envelope.data?.let {
-                MafeiJson.Default.decodeFromJsonElement(FeiniuPlayInfoData.serializer(), it)
-            } ?: FeiniuPlayInfoData()
+            // F3: play negotiation endpoints require `data` (design §6.7) —
+            // a missing payload is a decode failure, not an empty success.
+            val data = envelope.data
+                ?: throw cn.mafei.cmp.providers.feiniu.core.FeiniuDecodeError("Feiniu play info is missing data")
+            MafeiJson.Default.decodeFromJsonElement(FeiniuPlayInfoData.serializer(), data)
         }
     }
 
@@ -98,9 +117,9 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 readTimeoutMs = 60_000,
             ),
         ) { envelope, _ ->
-            envelope.data?.let {
-                MafeiJson.Default.decodeFromJsonElement(FeiniuPlayPlayData.serializer(), it)
-            } ?: FeiniuPlayPlayData()
+            val data = envelope.data
+                ?: throw cn.mafei.cmp.providers.feiniu.core.FeiniuDecodeError("Feiniu play negotiation is missing data")
+            MafeiJson.Default.decodeFromJsonElement(FeiniuPlayPlayData.serializer(), data)
         }
         return FeiniuPlaybackSession(
             data = executed.value,
@@ -143,6 +162,8 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
             ),
         ) { envelope, _ ->
+            // stream/list tolerates a missing payload with an empty catalog
+            // (legacy getStreamList behavior); an object payload must decode.
             envelope.data?.let {
                 MafeiJson.Default.decodeFromJsonElement(FeiniuStreamListData.serializer(), it)
             } ?: FeiniuStreamListData()
