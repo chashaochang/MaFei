@@ -74,14 +74,18 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
      */
     suspend fun restore(resolution: FeiniuHostResolution, credentials: FeiniuCredentials): FeiniuUserInfo {
         client.sessionState.set(credentials)
-        // F1: the expired-session cleanup only applies to the identity this
+        // F1/G3: the expired-session cleanup only applies to the identity this
         // restore started with — a stale 401 arriving after an account switch
-        // must not log the new account out.
+        // must not log the new account out. Retries on transient contention;
+        // the definitive identity check terminates the loop.
         val identity = client.sessionState.identityGeneration()
         return try {
             userInfo(resolution)
         } catch (e: cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationExpiredError) {
-            client.sessionState.clearIfIdentityUnchanged(identity)
+            while (true) {
+                if (client.sessionState.identityGeneration() != identity) break // new identity wins
+                if (client.sessionState.clearIfIdentityUnchanged(identity) != null) break
+            }
             throw e
         }
     }
@@ -115,8 +119,13 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                 ),
             ) { _, _ -> true }
         } finally {
-            // A login/account switch during the logout request must survive.
-            client.sessionState.clearIfIdentityUnchanged(identity)
+            // G3: a matching-identity clear must not be silently lost to
+            // contention — retry until committed or the identity moves on
+            // (a login/account switch during logout then survives).
+            while (true) {
+                if (client.sessionState.identityGeneration() != identity) break
+                if (client.sessionState.clearIfIdentityUnchanged(identity) != null) break
+            }
         }
     }
 

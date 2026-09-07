@@ -85,8 +85,12 @@ class FeiniuClient(
         call: FeiniuApiCall,
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
-        val credentials = sessionState.current.value
-        val identity = sessionState.identityGeneration()
+        // G2: credentials and identity MUST come from ONE atomic snapshot
+        // read — separate reads let an account switch interleave and stamp
+        // the old request with the new account's identity generation.
+        val start = sessionState.snapshot()
+        val credentials = start.credentials
+        val identity = start.identityGeneration
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && !credentials.hasToken) {
             throw FeiniuAuthenticationError("Feiniu media session is not authorized")
         }
@@ -174,23 +178,33 @@ class FeiniuClient(
             // (e.g. an in-flight poll) must NOT invalidate an in-flight login.
             val decodedCredentials = value as? FeiniuCredentials
             if (decodedCredentials != null) {
-                // Login/auth family: install the fresh credentials in ONE
-                // atomic step — no intermediate write of stale/merged state.
-                val snapshot = sessionState.snapshot()
-                if (snapshot.identityGeneration == identity) {
-                    sessionState.installIdentityIfUnchanged(snapshot.identityGeneration, decodedCredentials)
+                // Login/auth family: the fresh credentials become persistent
+                // ONLY if this identity install commits (G3). An identity that
+                // moved on during the request means the login is discarded —
+                // fail WITHOUT returning (or logging) any credentials.
+                var installed: FeiniuCredentials? = null
+                while (installed == null) {
+                    if (sessionState.identityGeneration() != identity) {
+                        throw FeiniuAuthenticationError(
+                            "Feiniu login was discarded because the session identity changed during login",
+                        )
+                    }
+                    installed = sessionState.installIdentityIfUnchanged(
+                        sessionState.identityGeneration(),
+                        decodedCredentials,
+                    )
+                    // null here = transient contention (same identity) → retry;
+                    // identity mismatch is re-checked at loop top (definitive).
                 }
-            } else if (sessionState.snapshot().identityGeneration == identity) {
+            } else if (sessionState.identityGeneration() == identity) {
                 // Same-identity cookie merge: re-base on the CURRENT snapshot
                 // each attempt so a concurrent response's Set-Cookie is not
-                // lost; commit is a single atomic compare-and-commit.
-                var basis = sessionState.snapshot()
-                while (basis.identityGeneration == identity) {
-                    val merged = sessionState.commitIfUnchanged(basis) { basisCredentials ->
+                // lost; the merge must never touch a switched identity.
+                while (sessionState.identityGeneration() == identity) {
+                    val merged = sessionState.commitIfUnchanged(sessionState.snapshot()) { basisCredentials ->
                         credentialsFromResponse(transientCookie, call, basisCredentials)
                     }
                     if (merged != null) break
-                    basis = sessionState.snapshot()
                 }
             }
             return FeiniuCallResult(value, activeCandidate, sessionState.current.value)

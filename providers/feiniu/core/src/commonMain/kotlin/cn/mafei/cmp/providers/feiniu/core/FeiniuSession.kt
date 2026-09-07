@@ -1,7 +1,6 @@
 package cn.mafei.cmp.providers.feiniu.core
 
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.sync.Mutex
 
 /** Feiniu media credentials: the bearer token plus its mirrored cookie set. */
 data class FeiniuCredentials(
@@ -110,55 +109,51 @@ interface FeiniuSessionState {
 
 class InMemoryFeiniuSessionState(initial: FeiniuCredentials = FeiniuCredentials()) : FeiniuSessionState {
 
-    private class Snapshot(
-        val credentials: FeiniuCredentials,
-        val identityGeneration: Long,
-        val revision: Long,
-    )
-
-    // tryLock-based critical sections keep check+commit atomic without
-    // suspending callers (the review's latch regression drives this from a
-    // plain thread). Contended committers re-base instead of blocking.
-    private val mutex = Mutex()
-    private var credentials = initial.normalized()
-    private var identityGenerationCounter = 0L
-    private var revisionCounter = 0L
-    private val flow = kotlinx.coroutines.flow.MutableStateFlow(credentials)
+    // G1: credentials + identity generation + revision live in ONE atomic
+    // snapshot cell; every derive-and-commit happens inside the cell's
+    // atomic swap, so concurrent installs never reuse a generation.
+    private val cell = FeiniuSnapshotCell(FeiniuSessionSnapshot(initial.normalized(), 0L, 0L))
+    private val flow = kotlinx.coroutines.flow.MutableStateFlow(initial.normalized())
 
     override val current: StateFlow<FeiniuCredentials> = flow
 
-    override fun generation(): Long = readSnapshot().revision
+    private fun mirror(snapshot: FeiniuSessionSnapshot): FeiniuCredentials {
+        flow.value = snapshot.credentials
+        return snapshot.credentials
+    }
 
-    override fun identityGeneration(): Long = readSnapshot().identityGeneration
+    override fun generation(): Long = cell.read().revision
 
-    override fun snapshot(): FeiniuSessionSnapshot = readSnapshot().toPublicSnapshot()
+    override fun identityGeneration(): Long = cell.read().identityGeneration
 
-    override fun set(credentials: FeiniuCredentials): FeiniuCredentials = writeAndMirror(
-        Snapshot(credentials.normalized(), readSnapshot().identityGeneration + 1, readSnapshot().revision + 1),
-    )
+    override fun snapshot(): FeiniuSessionSnapshot = cell.read()
+
+    override fun set(credentials: FeiniuCredentials): FeiniuCredentials {
+        // G1: derive the next generations INSIDE the atomic commit.
+        while (true) {
+            val observed = cell.read()
+            val next = FeiniuSessionSnapshot(credentials.normalized(), observed.identityGeneration + 1, observed.revision + 1)
+            if (cell.compareAndCommit(observed, next)) return mirror(next)
+        }
+    }
 
     override fun installIdentityIfUnchanged(
         expectedIdentity: Long,
         credentials: FeiniuCredentials,
     ): FeiniuCredentials? {
-        if (!mutex.tryLock()) return null
-        try {
-            if (identityGenerationCounter != expectedIdentity) return null
-            val normalized = credentials.normalized()
-            identityGenerationCounter += 1
-            revisionCounter += 1
-            this.credentials = normalized
-            flow.value = normalized
-            return normalized
-        } finally {
-            mutex.unlock()
-        }
+        val observed = cell.read()
+        if (observed.identityGeneration != expectedIdentity) return null // identity stale (definitive)
+        val next = FeiniuSessionSnapshot(credentials.normalized(), observed.identityGeneration + 1, observed.revision + 1)
+        // Blocking compare-and-commit: contention never drops a
+        // matching-identity install (G3); staleness is the only `null`.
+        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
     }
 
     override fun update(mutate: (FeiniuCredentials) -> FeiniuCredentials): FeiniuCredentials {
         while (true) {
-            val committed = commitIfUnchanged(readSnapshot().toPublicSnapshot(), mutate)
-            if (committed != null) return committed
+            val observed = cell.read()
+            val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
+            if (cell.compareAndCommit(observed, next)) return mirror(next)
         }
     }
 
@@ -166,84 +161,31 @@ class InMemoryFeiniuSessionState(initial: FeiniuCredentials = FeiniuCredentials(
         expected: FeiniuSessionSnapshot,
         mutate: (FeiniuCredentials) -> FeiniuCredentials,
     ): FeiniuCredentials? {
-        if (!mutex.tryLock()) return null
-        try {
-            if (credentials != expected.credentials ||
-                identityGenerationCounter != expected.identityGeneration ||
-                revisionCounter != expected.revision
-            ) {
-                return null
-            }
-            val normalized = mutate(credentials).normalized()
-            revisionCounter += 1
-            this.credentials = normalized
-            flow.value = normalized
-            return normalized
-        } finally {
-            mutex.unlock()
-        }
+        val observed = cell.read()
+        if (observed != expected) return null // stale (identity or revision moved) → caller re-bases
+        val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
+        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
     }
 
     override fun updateIfUnchanged(
         expectedRevision: Long,
         mutate: (FeiniuCredentials) -> FeiniuCredentials,
     ): FeiniuCredentials? {
-        // The mutation runs OUTSIDE the lock (it may be slow or blocking);
-        // the commit re-validates the revision under the lock, so any
-        // intervening logout/account switch drops this update (F1).
-        val observed = readSnapshot()
+        val observed = cell.read()
         if (observed.revision != expectedRevision) return null
-        val normalized = mutate(observed.credentials).normalized()
-        if (!mutex.tryLock()) return null
-        try {
-            if (revisionCounter != expectedRevision) return null
-            this.credentials = normalized
-            revisionCounter += 1
-            flow.value = normalized
-            return normalized
-        } finally {
-            mutex.unlock()
-        }
+        // The mutation runs OUTSIDE the atomic commit (it may be slow or
+        // blocking); the compare-and-commit re-validates the revision, so an
+        // intervening logout/account switch drops this update (F1).
+        val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
+        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
     }
 
     override fun clear(): FeiniuCredentials = set(FeiniuCredentials())
 
     override fun clearIfIdentityUnchanged(expectedIdentity: Long): FeiniuCredentials? {
-        if (!mutex.tryLock()) return null
-        try {
-            if (identityGenerationCounter != expectedIdentity) return null
-            identityGenerationCounter += 1
-            revisionCounter += 1
-            this.credentials = FeiniuCredentials()
-            flow.value = this.credentials
-            return this.credentials
-        } finally {
-            mutex.unlock()
-        }
+        val observed = cell.read()
+        if (observed.identityGeneration != expectedIdentity) return null // identity stale (definitive)
+        val next = FeiniuSessionSnapshot(FeiniuCredentials(), observed.identityGeneration + 1, observed.revision + 1)
+        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
     }
-
-    private fun writeAndMirror(next: Snapshot): FeiniuCredentials {
-        while (!mutex.tryLock()) { /* brief spin: critical sections are tiny */ }
-        try {
-            credentials = next.credentials
-            identityGenerationCounter = next.identityGeneration
-            revisionCounter = next.revision
-            flow.value = next.credentials
-            return next.credentials
-        } finally {
-            mutex.unlock()
-        }
-    }
-
-    private fun readSnapshot(): Snapshot {
-        while (!mutex.tryLock()) { /* spin */ }
-        try {
-            return Snapshot(credentials, identityGenerationCounter, revisionCounter)
-        } finally {
-            mutex.unlock()
-        }
-    }
-
-    private fun Snapshot.toPublicSnapshot(): FeiniuSessionSnapshot =
-        FeiniuSessionSnapshot(credentials, identityGeneration, revision)
 }
