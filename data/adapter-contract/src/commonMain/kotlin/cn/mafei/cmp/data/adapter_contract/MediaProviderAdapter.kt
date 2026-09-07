@@ -88,8 +88,13 @@ interface MediaProviderAdapter {
 
     /**
      * Reports progress for a stream previously returned by [preparePlayback];
-     * capability [AdapterCapability.PlaybackReporting]. Reporting for a stream
-     * this adapter did not prepare is rejected.
+     * capability [AdapterCapability.PlaybackReporting]. Adapters must verify
+     * the stream was prepared by THIS adapter instance and reject foreign or
+     * hand-built [PlaybackPreparation.Ready] values with
+     * [cn.mafei.cmp.core.domain.ClientConfigError]. The stream's opaque
+     * [PlaybackPreparation.Ready.reportingContext] carries whatever the
+     * provider needs for reports (either provider may require it); it is
+     * never persisted and never derived by re-parsing stream URLs.
      */
     suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent)
 }

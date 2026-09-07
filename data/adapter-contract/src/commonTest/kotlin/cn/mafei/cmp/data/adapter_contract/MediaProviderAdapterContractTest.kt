@@ -6,13 +6,18 @@ import cn.mafei.cmp.core.domain.AuthFailureKind
 import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.CollectionId
 import cn.mafei.cmp.core.domain.MediaCollection
+import cn.mafei.cmp.core.domain.MediaFilter
 import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaSort
+import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.core.domain.MediaUserData
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.Page
 import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ServerId
+import cn.mafei.cmp.core.domain.SortDirection
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -214,6 +219,111 @@ class MediaProviderAdapterContractTest {
     }
 
     @Test
+    fun collectionsRejectNonNullCursor() {
+        val adapter = FakeMediaProviderAdapter(collectionsSource = emptyList())
+        runSuspendTest {
+            // Single-chunk listing: a cursor can never re-serve page one.
+            assertFailsWith<ClientConfigError> {
+                adapter.collections(PageRequest(cursor = OffsetPageCursorCodec.encode(0)))
+            }
+        }
+    }
+
+    // -------------------------------------------------- filter/capability gates
+
+    @Test
+    fun userStateFiltersRequireCapabilities() {
+        val adapter = FakeMediaProviderAdapter(itemsSource = listOf(mediaItem(0)))
+        runSuspendTest {
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true)))
+            }
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(playedOnly = true)))
+            }
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(unplayedOnly = true)))
+            }
+        }
+        assertEquals(emptyList(), adapter.favoriteToggles)
+    }
+
+    @Test
+    fun userStateFiltersNarrowForReal() {
+        val favorite = mediaItem(0).copy(userData = MediaUserData(isFavorite = true))
+        val played = mediaItem(1).copy(userData = MediaUserData(isPlayed = true))
+        val plain = mediaItem(2)
+        val adapter = FakeMediaProviderAdapter(
+            capabilities = AdapterCapabilities(favoritesRead = true, watchedFilter = true),
+            itemsSource = listOf(favorite, played, plain),
+        )
+        runSuspendTest {
+            val favorites = adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true)))
+            assertEquals(listOf(MediaId("item-0")), favorites.items.map { it.id })
+            val playedOnly = adapter.items(null, PageRequest(filter = MediaFilter(playedOnly = true)))
+            assertEquals(listOf(MediaId("item-1")), playedOnly.items.map { it.id })
+            val unplayedOnly = adapter.items(null, PageRequest(filter = MediaFilter(unplayedOnly = true)))
+            assertEquals(
+                listOf(MediaId("item-0"), MediaId("item-2")),
+                unplayedOnly.items.map { it.id },
+            )
+        }
+    }
+
+    @Test
+    fun combinedFavoriteConstraintsNeedFavoritesFilterCapability() {
+        val favorite = mediaItem(0, mediaType = MediaType.Movie)
+            .copy(userData = MediaUserData(isFavorite = true))
+        val adapter = FakeMediaProviderAdapter(
+            capabilities = AdapterCapabilities(favoritesRead = true, favoritesFilter = false),
+            itemsSource = listOf(favorite, mediaItem(1)),
+        )
+        runSuspendTest {
+            // Feiniu-shaped: dedicated favorites endpoint cannot combine tags.
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true, mediaTypes = setOf(MediaType.Movie))))
+            }
+            // Plain favorites-only listing still works.
+            val page = adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true)))
+            assertEquals(listOf(MediaId("item-0")), page.items.map { it.id })
+        }
+    }
+
+    @Test
+    fun itemsRejectFreeTextSearchTerm() {
+        val adapter = FakeMediaProviderAdapter(
+            capabilities = AdapterCapabilities(search = true, favoritesRead = true),
+            itemsSource = listOf(mediaItem(0)),
+        )
+        runSuspendTest {
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(searchTerm = "kung fu")))
+            }
+        }
+    }
+
+    @Test
+    fun sortIsAppliedDeterministically() {
+        val items = listOf(
+            mediaItem(2).copy(title = "Charlied"),
+            mediaItem(0).copy(title = "Alpha"),
+            mediaItem(1).copy(title = "Bravo"),
+        )
+        val adapter = FakeMediaProviderAdapter(itemsSource = items)
+        runSuspendTest {
+            val ascending = adapter.items(null, PageRequest(sort = MediaSort(MediaSortField.Title)))
+            assertEquals(listOf("Alpha", "Bravo", "Charlied"), ascending.items.map { it.title })
+            val descending = adapter.items(
+                null,
+                PageRequest(sort = MediaSort(MediaSortField.Title, direction = SortDirection.Descending)),
+            )
+            assertEquals(listOf("Charlied", "Bravo", "Alpha"), descending.items.map { it.title })
+        }
+    }
+
+    // ------------------------------------------------------- report ownership
+
+    @Test
     fun collectionsAreASingleChunk() {
         val collections = listOf(
             MediaCollection(
@@ -332,6 +442,24 @@ class MediaProviderAdapterContractTest {
         assertEquals("tok", outcome.headers["Authorization"])
         // A blank stream URL can never become a Ready outcome.
         assertFailsWith<IllegalArgumentException> { PlaybackPreparation.Ready(streamUrl = " ") }
+    }
+
+    @Test
+    fun reportPlaybackRejectsStreamNotPreparedByInstance() {
+        val adapter = FakeMediaProviderAdapter(capabilities = AdapterCapabilities(playbackReporting = true))
+        runSuspendTest {
+            // Hand-built Ready never passes the ownership check, even with the
+            // reporting capability enabled.
+            val foreign = PlaybackPreparation.Ready(streamUrl = "https://fake-server/stream/foreign")
+            assertFailsWith<ClientConfigError> {
+                adapter.reportPlayback(foreign, PlaybackEvent(PlaybackEventKind.Start))
+            }
+            // A stream returned by THIS instance's preparePlayback is accepted.
+            adapter.playbackOutcome = foreign
+            val prepared = assertIs<PlaybackPreparation.Ready>(adapter.preparePlayback(MediaId("item-0")))
+            adapter.reportPlayback(prepared, PlaybackEvent(PlaybackEventKind.Start))
+            assertEquals(1, adapter.reportedEvents.size)
+        }
     }
 
     @Test

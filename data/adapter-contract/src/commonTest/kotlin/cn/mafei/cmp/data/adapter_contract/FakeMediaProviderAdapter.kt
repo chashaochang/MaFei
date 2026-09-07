@@ -5,25 +5,42 @@ import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.CollectionId
 import cn.mafei.cmp.core.domain.DomainError
 import cn.mafei.cmp.core.domain.MediaCollection
+import cn.mafei.cmp.core.domain.MediaFilter
 import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaSort
+import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.Page
+import cn.mafei.cmp.core.domain.PageCursor
 import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ResourceNotFoundError
 import cn.mafei.cmp.core.domain.ServerId
+import cn.mafei.cmp.core.domain.SortDirection
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Provider-neutral fake implementing [MediaProviderAdapter] for contract
  * boundary tests and (after promotion to a testkit) later data-layer tests.
  *
- * Browsing is a deterministic offset-paged slice of [itemsSource]/[collectionsSource]
- * using [OffsetPageCursorCodec], so the cursor round-trip is exercised end to
- * end. Gated methods enforce their capability through the shared
- * [requireCapability] gate — an unsupported capability throws
- * [ClientConfigError] and never fakes success.
+ * It enforces the declared contract, not just a happy path — downstream
+ * repository tests must not pass against a looser fake than real adapters:
+ * - `collections` rejects non-null cursors (single-chunk providers never
+ *   restart from page one).
+ * - `items` enforces the filter capabilities ([AdapterCapability.favoritesRead]/
+ *   [AdapterCapability.watchedFilter]/[AdapterCapability.favoritesFilter]),
+ *   honors [MediaFilter] user-state flags for real, and rejects free-text
+ *   search terms (that is [MediaProviderAdapter.search]'s job).
+ * - `reportPlayback` rejects any [PlaybackPreparation.Ready] this instance
+ *   did not return from [preparePlayback] (instance-ownership check).
+ * - [MediaSort] is applied deterministically over domain fields (nulls last
+ *   per direction) so ordering assertions cannot pass by accident.
+ *
+ * Browsing slices [itemsSource]/[collectionsSource] via [OffsetPageCursorCodec],
+ * exercising the cursor round-trip end to end. Gated methods call the shared
+ * [requireCapability] gate before any state changes — unsupported
+ * capabilities throw [ClientConfigError] and never fake success.
  *
  * Configurable outcomes:
  * - [failure] makes every call throw the given [DomainError] as-is.
@@ -47,6 +64,9 @@ class FakeMediaProviderAdapter(
     private val collectionsSource: List<MediaCollection> = collectionsSource
     private val itemsSource: List<MediaItem> = itemsSource
 
+    /** Streams this instance handed out via [preparePlayback]; reportPlayback accepts only these. */
+    private val preparedStreams: MutableList<PlaybackPreparation.Ready> = mutableListOf()
+
     /** Call log, one entry per contract method, for ordering assertions. */
     val calls: MutableList<String> = mutableListOf()
     val searchTerms: MutableList<String> = mutableListOf()
@@ -61,6 +81,9 @@ class FakeMediaProviderAdapter(
 
     override suspend fun collections(request: PageRequest): Page<MediaCollection> {
         calls += "collections"
+        // Single-chunk surface: a non-null cursor is a caller bug, never a
+        // license to re-serve page one.
+        request.cursor?.let { rejectCursorNotHonored(it, "collections") }
         throwIfConfigured()
         return Page.of(collectionsSource, nextCursor = null, totalEstimate = collectionsSource.size)
     }
@@ -68,7 +91,12 @@ class FakeMediaProviderAdapter(
     override suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem> {
         calls += "items"
         throwIfConfigured()
-        return slice(itemsSource.filter { collectionId == null || it.collectionId == collectionId }, request)
+        val filtered = applyFilter(
+            itemsSource.filter { collectionId == null || it.collectionId == collectionId },
+            request.filter,
+        )
+        val sorted = applySort(filtered, request.sort)
+        return slice(sorted, request)
     }
 
     override suspend fun search(term: String, request: PageRequest): Page<MediaItem> {
@@ -120,14 +148,86 @@ class FakeMediaProviderAdapter(
     override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
         calls += "preparePlayback"
         throwIfConfigured()
+        (playbackOutcome as? PlaybackPreparation.Ready)?.let(preparedStreams::add)
         return playbackOutcome
     }
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
         calls += "reportPlayback"
         requireCapability(capabilities, AdapterCapability.PlaybackReporting)
+        if (preparedStreams.none { it === stream }) {
+            throw ClientConfigError(
+                "reportPlayback rejected a stream not prepared by this adapter instance",
+            )
+        }
         throwIfConfigured()
         reportedEvents += stream to event
+    }
+
+    // ------------------------------------------------------------------ internals
+
+    /**
+     * Reference filter semantics over [MediaFilter]: user-state flags map to
+     * item user data, capability-gated before touching state.
+     */
+    private fun applyFilter(source: List<MediaItem>, filter: MediaFilter): List<MediaItem> {
+        if (filter.isEmpty) return source
+        val favoritesOnly = filter.favoritesOnly
+        val watchedOnly = filter.playedOnly || filter.unplayedOnly
+        val otherConstraints = filter.mediaTypes.isNotEmpty() || filter.genres.isNotEmpty() ||
+            filter.years.isNotEmpty() || !filter.searchTerm.isNullOrBlank()
+
+        if (favoritesOnly && !capabilities.favoritesRead && !capabilities.favoritesFilter) {
+            throw ClientConfigError("Adapter cannot answer a favorites-only listing (favoritesRead/favoritesFilter unsupported)")
+        }
+        if (watchedOnly && !capabilities.watchedFilter) {
+            throw ClientConfigError("Adapter cannot answer played/unplayed-filtered listings (watchedFilter unsupported)")
+        }
+        if (favoritesOnly && otherConstraints && !capabilities.favoritesFilter) {
+            throw ClientConfigError("Adapter cannot combine favorites-only with further filters (favoritesFilter unsupported)")
+        }
+        if (!filter.searchTerm.isNullOrBlank()) {
+            throw ClientConfigError("items() does not free-text search; use search()")
+        }
+        return source.filter { item ->
+            (!favoritesOnly || item.userData.isFavorite) &&
+                (!filter.playedOnly || item.userData.isPlayed) &&
+                (!filter.unplayedOnly || !item.userData.isPlayed) &&
+                (filter.mediaTypes.isEmpty() || item.mediaType in filter.mediaTypes) &&
+                (filter.genres.isEmpty() || item.genres.any { it in filter.genres }) &&
+                (filter.years.isEmpty() || item.year in filter.years)
+        }
+    }
+
+    /** Deterministic reference ordering: field comparator with nulls last, id as tiebreak. */
+    private fun applySort(source: List<MediaItem>, sort: MediaSort?): List<MediaItem> {
+        if (sort == null) return source
+        val comparator = when (sort.field) {
+            MediaSortField.Title -> nullableCompare({ it.title }) { a, b -> a.compareTo(b) }
+            MediaSortField.DateAdded -> nullableCompare({ it.dateAddedEpochMs }, Long::compareTo)
+            MediaSortField.PremiereDate -> nullableCompare({ it.premiereEpochMs }, Long::compareTo)
+            MediaSortField.CommunityRating -> nullableCompare({ it.communityRating }, Double::compareTo)
+            MediaSortField.Runtime -> nullableCompare({ it.runtimeMs }, Long::compareTo)
+            MediaSortField.SeasonNumber -> nullableCompare({ it.seasonNumber }, Int::compareTo)
+            MediaSortField.EpisodeNumber -> nullableCompare({ it.episodeNumber }, Int::compareTo)
+        }.thenBy { it.id.value }
+        return source.sortedWith(
+            if (sort.direction == SortDirection.Descending) comparator.reversed() else comparator,
+        )
+    }
+
+    private fun <K : Any> nullableCompare(
+        selector: (MediaItem) -> K?,
+        compare: (K, K) -> Int,
+    ): Comparator<MediaItem> = Comparator { a, b ->
+        val av = selector(a)
+        val bv = selector(b)
+        when {
+            av == null && bv == null -> 0
+            av == null -> 1
+            bv == null -> -1
+            else -> compare(av, bv)
+        }
     }
 
     /** Offset slicing identical to what real adapters build on [OffsetPageCursorCodec]. */
@@ -142,4 +242,7 @@ class FakeMediaProviderAdapter(
         }
         return Page.of(slice, nextCursor = nextCursor, totalEstimate = source.size)
     }
+
+    private fun rejectCursorNotHonored(cursor: PageCursor, method: String): Nothing =
+        throw ClientConfigError("$method cannot honor cursor '$cursor' (single-chunk listing)")
 }

@@ -24,9 +24,16 @@ sealed interface PlaybackPreparation {
          * Jellyfin: empty — its stream URLs carry access in the URL itself).
          */
         val headers: Map<String, String> = emptyMap(),
-        /** Provider play session id for progress reporting, when the provider issues one. */
+        /** Provider play session id for progress reporting, when the provider issues one. Never sufficient alone: see [reportingContext]. */
         val playSessionId: PlaybackSessionId? = null,
-        /** Opaque provider token required by [MediaProviderAdapter.reportPlayback]; never persisted. */
+        /**
+         * Opaque provider context required by [MediaProviderAdapter.reportPlayback].
+         * Either provider may need it (Jellyfin: negotiated item/media source;
+         * Feiniu: guid set/resolution/bitrate/play link) — a possibly-null
+         * playSessionId is never sufficient on its own. Adapters validate
+         * instance ownership at report time. Never persisted, and never
+         * derived by re-parsing stream URLs.
+         */
         val reportingContext: String? = null,
     ) : PlaybackPreparation {
         init {
