@@ -12,6 +12,8 @@ import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.http_contract.TransportFailureKind
 import cn.mafei.cmp.core.serialization.MafeiJson
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.SerializationException
 
 /** Outcome of one candidate execution: decoded envelope plus credential updates. */
@@ -91,10 +93,12 @@ class FeiniuClient(
         call: FeiniuApiCall,
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
-        // H2: the operation's own credentials — never a fresh read, which
-        // would attribute an old operation to whichever account is current.
-        val credentials = call.pinnedCredentials ?: operation.credentials
-        val identity = operation.identityGeneration
+        // H2/J1: a pinned operation context (auth receipts) fully replaces
+        // the captured snapshot — request headers, response commit identity
+        // and the reported result all belong to the SAME account.
+        val effective = call.pinnedOperation ?: operation
+        val credentials = effective.credentials
+        val identity = effective.identityGeneration
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && !credentials.hasToken) {
             throw FeiniuAuthenticationError("Feiniu media session is not authorized")
         }
@@ -176,25 +180,34 @@ class FeiniuClient(
             } catch (e: IllegalArgumentException) {
                 throw FeiniuDecodeError("Feiniu response data does not match the expected shape", e)
             }
-            // H1/G3: every write-back commits against THIS REQUEST's identity
-            // (captured atomically at start) — never a freshly-read one.
+            // H1/G3/J2: every write-back commits against THIS REQUEST's
+            // identity (captured atomically at start) — never a freshly-read
+            // one. A same-identity revision move (concurrent cookie refresh)
+            // only re-bases the retry; a REAL identity switch discards the
+            // login with a credentials-free failure.
             val decodedCredentials = value as? FeiniuCredentials
             if (decodedCredentials != null) {
-                // Login/auth family: fresh credentials become persistent ONLY
-                // if the identity install commits against the request identity.
-                // An identity that moved on means the login is discarded —
-                // fail WITHOUT returning (or logging) any credentials.
-                if (sessionState.installIdentityIfUnchanged(identity, decodedCredentials) == null) {
-                    throw FeiniuAuthenticationError(
-                        "Feiniu login was discarded because the session identity changed during login",
-                    )
+                var installed: FeiniuCredentials? = null
+                while (installed == null) {
+                    coroutineContext.ensureActive() // bounded by cancellation
+                    if (sessionState.identityGeneration() != identity) {
+                        throw FeiniuAuthenticationError(
+                            "Feiniu login was discarded because the session identity changed during login",
+                        )
+                    }
+                    // re-bases on the current revision; only an identity
+                    // switch makes it return null (checked above)
+                    installed = sessionState.installIdentityIfUnchanged(identity, decodedCredentials)
                 }
             } else if (sessionState.identityGeneration() == identity) {
-                // Same-identity cookie merge: every basis is verified to carry
-                // the operation's identity BEFORE the commit; the CAS re-bases
-                // on same-identity updates without losing their cookies, and
-                // drops the merge the moment the identity moved on (H1).
+                // Same-identity cookie merge (H1): every basis is verified to
+                // carry the operation's identity BEFORE the commit. Merge
+                // policy: bounded by the operation's cancellation — each
+                // losing CAS re-bases on the current same-identity snapshot
+                // (never losing a concurrent response's cookies) and the loop
+                // exits the moment the identity moves on.
                 while (true) {
+                    coroutineContext.ensureActive() // cancellation semantics
                     val basis = sessionState.snapshot()
                     if (basis.identityGeneration != identity) break
                     val merged = sessionState.commitIfUnchanged(basis) { basisCredentials ->
@@ -203,7 +216,9 @@ class FeiniuClient(
                     if (merged != null) break
                 }
             }
-            return FeiniuCallResult(value, activeCandidate, sessionState.snapshot().credentials)
+            // J3: the reported result is bound to THIS operation's context —
+            // never spliced with whichever account is current.
+            return FeiniuCallResult(value, activeCandidate, effective.credentials)
         }
         throw FeiniuRedirectRejectedError("Feiniu request exceeded the redirect limit of ${FeiniuIdentity.MAX_REDIRECTS}")
     }
@@ -259,7 +274,7 @@ class FeiniuClient(
         // H2: pinned credentials (logout/restore operation receipts) win over
         // the operation snapshot; anonymous calls never carry stored cookies
         // — an old account's cookie must not ride along with a new login (R1).
-        val requestCredentials = call.pinnedCredentials ?: credentials
+        val requestCredentials = call.pinnedOperation?.credentials ?: credentials
         var cookie = if (call.authRequirement == FeiniuApiCall.AuthRequirement.None) "" else requestCredentials.cookie
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && requestCredentials.hasToken) {
             builder.setHeader(HttpHeaders.AUTHORIZATION, requestCredentials.token)

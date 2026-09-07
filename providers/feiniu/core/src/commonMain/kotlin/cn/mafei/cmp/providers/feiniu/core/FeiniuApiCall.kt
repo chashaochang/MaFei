@@ -12,12 +12,14 @@ data class FeiniuApiCall(
     val authRequirement: AuthRequirement = AuthRequirement.Cookie,
     val readTimeoutMs: Long = 15_000,
     /**
-     * H2: operation receipt for auth operations (logout/restore) — pins the
-     * exact credentials the operation started with, so a mid-flight account
-     * switch cannot be attributed to (or logged out by) the old operation.
-     * When set, the client uses these credentials for this call's headers.
+     * H2/J1: full operation context for auth operations (logout/restore) —
+     * pins the EXACT snapshot (credentials AND identity generation) the
+     * operation started with. When set, the client builds request headers
+     * from, commits responses against, and reports this snapshot's identity,
+     * so a mid-flight account switch can neither be logged out by nor
+     * polluted with the old operation's response.
      */
-    val pinnedCredentials: FeiniuCredentials? = null,
+    val pinnedOperation: FeiniuSessionSnapshot? = null,
 ) {
     init {
         require(path.startsWith("/")) { "Feiniu request path must start with / but was '$path'" }

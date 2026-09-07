@@ -68,12 +68,6 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
 
     /**
      * Validates and installs stored credentials via the authenticated
-     * user/info probe. Only an explicit authentication rejection clears the
-     * session; a decode failure (malformed payload) must NOT log the user
-     * out (R3).
-     */
-    /**
-     * Validates and installs stored credentials via the authenticated
      * user/info probe. The install returns an exact identity RECEIPT which
      * binds the validation call and the expired-cleanup to THIS operation
      * (H2): a stale 401 arriving after an account switch cannot clear the
@@ -85,7 +79,7 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
             path = "/v/api/v1/user/info",
             method = FeiniuApiCall.FeiniuMethod.Get,
             authRequirement = FeiniuApiCall.AuthRequirement.Token,
-            pinnedCredentials = installed.credentials,
+            pinnedOperation = installed,
         )
         return try {
             client.execute(resolution, context) { envelope, _ ->
@@ -133,7 +127,7 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                     path = "/v/api/v1/user/logout",
                     method = FeiniuApiCall.FeiniuMethod.Post,
                     authRequirement = FeiniuApiCall.AuthRequirement.Token,
-                    pinnedCredentials = context.credentials,
+                    pinnedOperation = context,
                 ),
             ) { _, _ -> true }
         } finally {
