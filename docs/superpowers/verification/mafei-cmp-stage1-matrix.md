@@ -10,6 +10,8 @@
 
 同日后续：[特效熔断与 Mac 分项交互](2026-09-07-glass-fallback.md)。
 
+同日后续：[窗口滚动锚点与原生鼠标](2026-09-07-window-anchor.md)。
+
 ## 1. 证据等级
 
 | 等级 | 含义 |
@@ -53,8 +55,9 @@
 | FullGlass Probe | Pending | Pending | E：1100dp 同屏三档视觉已观察，性能待验 | Pending |
 | Reduced/Opaque 回退 | Pending | Pending | E：模拟故障实体回退、主题切换保留；真实 GPU 故障待验 | Pending |
 | 返回和生命周期 | Pending | Pending | E：弹层 Escape 关闭；完整生命周期待验 | Pending |
-| 窗口/方向变化 | Pending | Pending | E：800dp 单栏 → 1100dp 双栏；全范围待验 | Pending |
-| 长列表滚动 | Pending | Pending | Pending | Pending |
+| 窗口/方向变化 | Pending | Pending | E：430dp ↔ 1100dp 修复并验证滚动锚点、材质和计数保持；全范围待验 | Pending |
+| 长列表滚动 | Pending | Pending | E：原生滚轮可达末尾，调整窗口保留样本位置；性能待验 | Pending |
+| 底栏真实鼠标命中 | Pending | Pending | E：Full/Reduced 窄屏、Opaque 宽屏原生鼠标计数通过；旧熔断包宽窄屏补验通过 | Pending |
 | 底部栏动画 | Pending | Pending | Pending | Pending |
 | 最小 Player Surface probe | Pending | Pending | Pending | Pending |
 

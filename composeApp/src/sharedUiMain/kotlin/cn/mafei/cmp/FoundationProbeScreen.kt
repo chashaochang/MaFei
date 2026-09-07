@@ -3,7 +3,9 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,6 +31,9 @@ fun FoundationProbeScreen() {
     var reduceTransparency by rememberSaveable { mutableStateOf(false) }
     var taps by rememberSaveable { mutableStateOf(0) }
     val renderHealth = rememberGlassRenderHealth()
+    // Layout branches must not own separate reading positions. Stable item keys
+    // also preserve the sample anchor when controls move out into the side pane.
+    val contentScrollState = rememberLazyListState()
     MaFeiTheme(darkTheme = dark) {
       GlassRenderingEnvironment(renderHealth) {
       MaFeiGlassPreferences(reduceTransparency) {
@@ -51,17 +56,17 @@ fun FoundationProbeScreen() {
                                 item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
                                     reduceTransparency, { reduceTransparency = it }, renderHealth) }
                             }
-                            ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
-                                item { ProbeGlassComparison(reduceTransparency) }
-                                items(12) { ProbeSample(it) }
+                            ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState) {
+                                item(key = "material-comparison") { ProbeGlassComparison(reduceTransparency) }
+                                items(12, key = { "material-sample-$it" }) { ProbeSample(it) }
                             }
                         }
                     } else {
-                        ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f)) {
-                            item { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
+                        ProbeGlassViewport(level, reduceTransparency, taps, { taps++ }, Modifier.weight(1f), contentScrollState) {
+                            item(key = "material-controls") { ProbeControls(level, widthLabel, { level = it }, { dialog = true },
                                 reduceTransparency, { reduceTransparency = it }, renderHealth) }
-                            item { ProbeGlassComparison(reduceTransparency) }
-                            items(12) { ProbeSample(it) }
+                            item(key = "material-comparison") { ProbeGlassComparison(reduceTransparency) }
+                            items(12, key = { "material-sample-$it" }) { ProbeSample(it) }
                         }
                     }
                 }
@@ -146,7 +151,7 @@ private fun ProbePattern(modifier: Modifier, index: Int = 0) {
 
 @Composable
 private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps: Int, onTap: () -> Unit,
-                               modifier: Modifier, content: LazyListScope.() -> Unit) {
+                               modifier: Modifier, scrollState: LazyListState, content: LazyListScope.() -> Unit) {
     val backdrop = rememberGlassBackdrop()
     val requested = GlassLevel.valueOf(level)
     val spec = MaFeiGlassDefaults.spec(GlassRole.Navigation, requested, reduceTransparency)
@@ -157,6 +162,7 @@ private fun ProbeGlassViewport(level: String, reduceTransparency: Boolean, taps:
         // Only the scrolling source is recorded, never the consuming overlay.
         LazyColumn(
             Modifier.fillMaxSize().captureGlassBackdrop(backdrop),
+            state = scrollState,
             contentPadding = PaddingValues(bottom = barHeight + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
