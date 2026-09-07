@@ -52,7 +52,7 @@ class JellyfinPlaybackApiTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, JellyfinFixtures.PLAYBACK_INFO, base)
 
-        val info = fixture.api.playbackInfo("u1", "m1", playSessionId = "session-0001")
+        val info = fixture.api.playbackInfo("u1", "m1")
         assertEquals(2, info.mediaSources.size)
         assertEquals("session-0001", info.playSessionId)
 
@@ -71,7 +71,7 @@ class JellyfinPlaybackApiTest {
 
         val body = (fixture.transport.requests.single().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
         assertNotNull(body)
-        assertEquals("""{"UserId":"u1","PlaySessionId":"session-0001","AutoOpenLiveStream":false}""", body)
+        assertEquals("""{"UserId":"u1","AutoOpenLiveStream":false}""", body)
     }
 
     private fun transcodingSubProtocol(source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto): String? = source.transcodingSubProtocol

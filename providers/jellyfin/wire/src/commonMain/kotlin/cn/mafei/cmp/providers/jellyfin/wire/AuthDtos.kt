@@ -42,9 +42,26 @@ data class UserDto(
 @Serializable
 data class AuthenticationResultDto(
     @SerialName("User") val user: UserDto? = null,
+    @SerialName("SessionInfo") val sessionInfo: SessionInfoDto? = null,
     @SerialName("AccessToken") val accessToken: String? = null,
     @SerialName("ServerId") val serverId: String? = null,
-    @SerialName("SessionId") val sessionId: String? = null,
+)
+
+/**
+ * P0 subset of the official `SessionInfoDto` nested in an authentication
+ * result. Jellyfin exposes the server session identifier as `SessionInfo.Id`;
+ * there is no top-level `SessionId` field in `AuthenticationResult`.
+ */
+@Serializable
+data class SessionInfoDto(
+    @SerialName("Id") val id: String? = null,
+    @SerialName("UserId") val userId: String? = null,
+    @SerialName("UserName") val userName: String? = null,
+    @SerialName("Client") val client: String? = null,
+    @SerialName("DeviceId") val deviceId: String? = null,
+    @SerialName("DeviceName") val deviceName: String? = null,
+    @SerialName("ApplicationVersion") val applicationVersion: String? = null,
+    @SerialName("ServerId") val serverId: String? = null,
 )
 
 /** Subset of GET /System/Info (authenticated) used for session validation. */

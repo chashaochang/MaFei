@@ -215,8 +215,12 @@ data object JellyfinRequests {
                         basePath + trimmed
                     }
                 } else {
-                    val directory = base.encodedPath.substringBeforeLast('/')
-                    if (directory.isEmpty()) "/" + trimmed else "$directory/$trimmed"
+                    // The configured base URL is the server API root. Treat it
+                    // as a directory even when it has no trailing slash, so
+                    // a reverse-proxy prefix such as `/stable` is retained
+                    // for plain relative targets (`videos/master.m3u8`).
+                    val baseDirectory = base.encodedPath.trimEnd('/')
+                    if (baseDirectory.isEmpty()) "/$trimmed" else "$baseDirectory/$trimmed"
                 }
                 HttpUrl.parseOrNull("$origin$candidate")
                     ?: throw IllegalArgumentException("Unresolvable transcoding URL: $transcodingUrl")

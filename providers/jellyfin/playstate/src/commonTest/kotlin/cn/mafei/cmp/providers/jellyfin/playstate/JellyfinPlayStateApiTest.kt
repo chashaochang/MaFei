@@ -8,6 +8,8 @@ import cn.mafei.cmp.providers.jellyfin.core.JellyfinSession
 import cn.mafei.cmp.providers.jellyfin.testkit.FakeJellyfinTransport
 import cn.mafei.cmp.providers.jellyfin.testkit.JellyfinFixtures
 import cn.mafei.cmp.providers.jellyfin.wire.WirePlayMethod
+import cn.mafei.cmp.providers.jellyfin.wire.WirePlaybackOrder
+import cn.mafei.cmp.providers.jellyfin.wire.WireRepeatMode
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
@@ -74,6 +76,20 @@ class JellyfinPlayStateApiTest {
         val startBody = (start.body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
         assertTrue(startBody.contains("\"PositionTicks\":15000000"), startBody)
         assertTrue(startBody.contains("\"PlayMethod\":\"DirectPlay\""), startBody)
+
+        fixture.transport.enqueue(FakeJellyfinTransport.noContent(base))
+        fixture.api.reportStart(
+            cn.mafei.cmp.providers.jellyfin.wire.PlaybackStartInfoDto(
+                itemId = "m2",
+                sessionId = "session-1",
+                repeatMode = WireRepeatMode.RepeatAll,
+                playbackOrder = WirePlaybackOrder.Shuffle,
+            ),
+        )
+        val typedBody = (fixture.transport.requests.last().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(typedBody.contains("\"SessionId\":\"session-1\""), typedBody)
+        assertTrue(typedBody.contains("\"RepeatMode\":\"RepeatAll\""), typedBody)
+        assertTrue(typedBody.contains("\"PlaybackOrder\":\"Shuffle\""), typedBody)
 
         val progressBody = (progress.body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
         assertTrue(progressBody.contains("\"PositionTicks\":600000000"), progressBody)

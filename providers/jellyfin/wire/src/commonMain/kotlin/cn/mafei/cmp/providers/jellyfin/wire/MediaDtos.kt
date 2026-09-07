@@ -53,7 +53,6 @@ data class MediaSourceInfoDto(
     @SerialName("DefaultAudioStreamIndex") val defaultAudioStreamIndex: Int? = null,
     @SerialName("DefaultSubtitleStreamIndex") val defaultSubtitleStreamIndex: Int? = null,
     @SerialName("MediaStreams") val mediaStreams: List<MediaStreamDto> = emptyList(),
-    @SerialName("DirectStreamUrl") val directStreamUrl: String? = null,
     @SerialName("TranscodingUrl") val transcodingUrl: String? = null,
     @SerialName("TranscodingSubProtocol") val transcodingSubProtocol: String? = null,
     @SerialName("TranscodingContainer") val transcodingContainer: String? = null,
@@ -113,16 +112,21 @@ data class ProfileConditionDto(
 @Serializable
 data class PlaybackInfoRequestDto(
     @SerialName("UserId") val userId: String? = null,
-    @SerialName("PlaySessionId") val playSessionId: String? = null,
-    @SerialName("MaxStreamingBitrate") val maxStreamingBitrate: Long? = null,
+    @SerialName("MaxStreamingBitrate") val maxStreamingBitrate: Int? = null,
     @SerialName("StartTimeTicks") val startTimeTicks: Long? = null,
     @SerialName("AudioStreamIndex") val audioStreamIndex: Int? = null,
     @SerialName("SubtitleStreamIndex") val subtitleStreamIndex: Int? = null,
-    @SerialName("AutoOpenLiveStream") val autoOpenLiveStream: Boolean? = null,
+    @SerialName("MaxAudioChannels") val maxAudioChannels: Int? = null,
     @SerialName("MediaSourceId") val mediaSourceId: String? = null,
     @SerialName("LiveStreamId") val liveStreamId: String? = null,
-    @SerialName("IsPlayback") val isPlayback: Boolean? = null,
     @SerialName("DeviceProfile") val deviceProfile: DeviceProfileDto? = null,
+    @SerialName("EnableDirectPlay") val enableDirectPlay: Boolean? = null,
+    @SerialName("EnableDirectStream") val enableDirectStream: Boolean? = null,
+    @SerialName("EnableTranscoding") val enableTranscoding: Boolean? = null,
+    @SerialName("AllowVideoStreamCopy") val allowVideoStreamCopy: Boolean? = null,
+    @SerialName("AllowAudioStreamCopy") val allowAudioStreamCopy: Boolean? = null,
+    @SerialName("AutoOpenLiveStream") val autoOpenLiveStream: Boolean? = null,
+    @SerialName("AlwaysBurnInSubtitleWhenTranscoding") val alwaysBurnInSubtitleWhenTranscoding: Boolean? = null,
 )
 
 /** POST /Items/{itemId}/PlaybackInfo response. */
@@ -133,10 +137,15 @@ data class PlaybackInfoResponseDto(
     @SerialName("ErrorCode") val errorCode: PlaybackErrorCode? = null,
 )
 
-/** POST /Sessions/Playing (start) body. */
+/**
+ * POST /Sessions/Playing body. This is intentionally the subset currently
+ * produced by MaFei; nullable/defaulted fields keep incremental player reports
+ * possible while their wire names and enum types follow OpenAPI 10.10.7.
+ */
 @Serializable
 data class PlaybackStartInfoDto(
     @SerialName("ItemId") val itemId: String,
+    @SerialName("SessionId") val sessionId: String? = null,
     @SerialName("PlaySessionId") val playSessionId: String? = null,
     @SerialName("MediaSourceId") val mediaSourceId: String? = null,
     @SerialName("PositionTicks") val positionTicks: Long? = null,
@@ -146,13 +155,15 @@ data class PlaybackStartInfoDto(
     @SerialName("IsMuted") val isMuted: Boolean? = null,
     @SerialName("IsPaused") val isPaused: Boolean? = null,
     @SerialName("PlayMethod") val playMethod: WirePlayMethod? = null,
-    @SerialName("RepeatMode") val repeatMode: String? = null,
+    @SerialName("RepeatMode") val repeatMode: WireRepeatMode? = null,
+    @SerialName("PlaybackOrder") val playbackOrder: WirePlaybackOrder? = null,
 )
 
-/** POST /Sessions/Playing/Progress body. */
+/** P0 subset of POST /Sessions/Playing/Progress, aligned with OpenAPI 10.10.7. */
 @Serializable
 data class PlaybackProgressInfoDto(
     @SerialName("ItemId") val itemId: String,
+    @SerialName("SessionId") val sessionId: String? = null,
     @SerialName("PlaySessionId") val playSessionId: String? = null,
     @SerialName("MediaSourceId") val mediaSourceId: String? = null,
     @SerialName("PositionTicks") val positionTicks: Long? = null,
@@ -161,15 +172,15 @@ data class PlaybackProgressInfoDto(
     @SerialName("IsPaused") val isPaused: Boolean? = null,
     @SerialName("IsMuted") val isMuted: Boolean? = null,
     @SerialName("PlayMethod") val playMethod: WirePlayMethod? = null,
-    @SerialName("RepeatMode") val repeatMode: String? = null,
-    @SerialName("EventName") val eventName: String? = null,
-    @SerialName("SeekOffsetTicks") val seekOffsetTicks: Long? = null,
+    @SerialName("RepeatMode") val repeatMode: WireRepeatMode? = null,
+    @SerialName("PlaybackOrder") val playbackOrder: WirePlaybackOrder? = null,
 )
 
 /** POST /Sessions/Playing/Stopped body. */
 @Serializable
 data class PlaybackStopInfoDto(
     @SerialName("ItemId") val itemId: String,
+    @SerialName("SessionId") val sessionId: String? = null,
     @SerialName("PlaySessionId") val playSessionId: String? = null,
     @SerialName("MediaSourceId") val mediaSourceId: String? = null,
     @SerialName("PositionTicks") val positionTicks: Long? = null,

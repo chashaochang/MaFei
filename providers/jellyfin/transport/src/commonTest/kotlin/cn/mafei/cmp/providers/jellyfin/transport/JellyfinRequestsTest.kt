@@ -131,13 +131,13 @@ class JellyfinRequestsTest {
             base,
             userId = "u1",
             itemId = "m1",
-            body = PlaybackInfoRequestDto(userId = "u1", playSessionId = "ps1", autoOpenLiveStream = false),
+            body = PlaybackInfoRequestDto(userId = "u1", autoOpenLiveStream = false),
         )
         val url = urlOf(request)
         assertEquals("https://jellyfin.test/Items/m1/PlaybackInfo", url.toEncodedString().substringBefore('?'))
         assertEquals("u1", url.queryParameters.first("userId"))
         assertEquals("false", url.queryParameters.first("autoOpenLiveStream"))
-        assertEquals("""{"UserId":"u1","PlaySessionId":"ps1","AutoOpenLiveStream":false}""", (request.body as HttpBody.Text).text)
+        assertEquals("""{"UserId":"u1","AutoOpenLiveStream":false}""", (request.body as HttpBody.Text).text)
     }
 
     @Test
@@ -148,7 +148,6 @@ class JellyfinRequestsTest {
             itemId = "m1",
             body = PlaybackInfoRequestDto(
                 userId = "u1",
-                playSessionId = "ps1",
                 deviceProfile = DeviceProfileDto(
                     name = "MaFei Test",
                     maxStreamingBitrate = 120_000_000,
@@ -222,6 +221,11 @@ class JellyfinRequestsTest {
         assertEquals(
             "https://jellyfin.test/stable/videos/m1/master.m3u8",
             JellyfinRequests.absolutizeTranscodingUrl(basePath, "/stable/videos/m1/master.m3u8").toString(),
+        )
+        // plain relative targets are rooted at the configured API prefix too
+        assertEquals(
+            "https://jellyfin.test/stable/videos/m1/master.m3u8",
+            JellyfinRequests.absolutizeTranscodingUrl(basePath, "videos/m1/master.m3u8").toString(),
         )
         // plain requests and stream URLs keep the base path too
         assertEquals("https://jellyfin.test/stable/System/Info/Public", urlOf(JellyfinRequests.publicSystemInfo(basePath)).toString())

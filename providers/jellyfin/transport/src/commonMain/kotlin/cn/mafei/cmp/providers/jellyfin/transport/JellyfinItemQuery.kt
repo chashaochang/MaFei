@@ -19,11 +19,15 @@ enum class JellyfinSortOrder(val wireName: String) {
 }
 
 enum class JellyfinItemFilter(val wireName: String) {
+    IsFolder("IsFolder"),
+    IsNotFolder("IsNotFolder"),
     IsPlayed("IsPlayed"),
     IsUnplayed("IsUnplayed"),
     IsFavorite("IsFavorite"),
-    IsNotFavorite("IsNotFavorite"),
     IsResumable("IsResumable"),
+    Likes("Likes"),
+    Dislikes("Dislikes"),
+    IsFavoriteOrLikes("IsFavoriteOrLikes"),
 }
 
 /**

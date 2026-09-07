@@ -83,7 +83,7 @@ class JellyfinFacadeChainTest {
         val userId = login.session.userId
 
         // negotiate playback
-        val info = fixture.facade.playback.playbackInfo(userId, "m0102030405060708", playSessionId = "session-0001")
+        val info = fixture.facade.playback.playbackInfo(userId, "m0102030405060708")
         val directSource = info.mediaSources.first { it.supportsDirectPlay == true }
         assertNotNull(directSource)
 

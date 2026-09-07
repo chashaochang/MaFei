@@ -40,9 +40,15 @@ data object JellyfinFixtures {
             "HasPassword": true,
             "PrimaryImageTag": "1112131415161718"
         },
+        "SessionInfo": {
+            "Id": "session-0001",
+            "UserId": "a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8",
+            "UserName": "demo",
+            "Client": "MaFei",
+            "DeviceId": "device-1"
+        },
         "AccessToken": "fixture-access-token-0123456789abcdef",
-        "ServerId": "0123456789abcdef0123456789abcdef",
-        "SessionId": "session-0001"
+        "ServerId": "0123456789abcdef0123456789abcdef"
     }"""
 
     /** Views with an unknown future CollectionType that must be tolerated. */

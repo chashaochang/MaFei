@@ -70,6 +70,7 @@ class JellyfinAuthApiTest {
         val result = fixture.api.authenticateByName("demo", "correct-horse")
         assertEquals("a1b2c3d4e5f6a7b8a1b2c3d4e5f6a7b8", result.session.userId)
         assertEquals("0123456789abcdef0123456789abcdef", fixture.sessionState.current.value?.serverId)
+        assertEquals("session-0001", result.raw.sessionInfo?.id)
 
         val sent = fixture.transport.requests.single()
         val header = sent.headers.first("Authorization")!!

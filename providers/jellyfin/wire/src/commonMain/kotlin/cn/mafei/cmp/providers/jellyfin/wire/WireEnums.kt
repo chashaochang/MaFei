@@ -10,24 +10,43 @@ import kotlinx.serialization.Serializable
  */
 @Serializable(with = ItemKindSerializer::class)
 enum class ItemKind {
+    AggregateFolder,
     Movie,
+    AudioBook,
+    BasePluginFolder,
+    Book,
     Series,
     Season,
     Episode,
     BoxSet,
+    Channel,
+    ChannelFolderItem,
     CollectionFolder,
     Folder,
+    Genre,
+    ManualPlaylistsFolder,
+    LiveTvChannel,
+    LiveTvProgram,
     UserView,
     MusicArtist,
     MusicAlbum,
+    MusicGenre,
     Audio,
     MusicVideo,
+    Person,
     PhotoAlbum,
     Photo,
     Video,
     Playlist,
+    PlaylistsFolder,
     Program,
-    Channel,
+    Recording,
+    Studio,
+    Trailer,
+    TvChannel,
+    TvProgram,
+    UserRootFolder,
+    Year,
     Unknown,
 }
 
@@ -40,6 +59,7 @@ data object ItemKindSerializer : UnknownTolerantEnumSerializer<ItemKind>(
 
 @Serializable(with = WirePersonKindSerializer::class)
 enum class WirePersonKind {
+    Unknown,
     Actor,
     Director,
     Writer,
@@ -49,7 +69,21 @@ enum class WirePersonKind {
     Conductor,
     Lyricist,
     Arranger,
-    Unknown,
+    Engineer,
+    Mixer,
+    Remixer,
+    Creator,
+    Artist,
+    AlbumArtist,
+    Author,
+    Illustrator,
+    Penciller,
+    Inker,
+    Colorist,
+    Letterer,
+    CoverArtist,
+    Editor,
+    Translator,
 }
 
 data object WirePersonKindSerializer : UnknownTolerantEnumSerializer<WirePersonKind>(
@@ -82,9 +116,10 @@ enum class MediaProtocol {
     File,
     Http,
     Rtmp,
+    Rtsp,
+    Udp,
     Rtp,
     Ftp,
-    Rtsp,
     Unknown,
 }
 
@@ -109,6 +144,35 @@ data object WirePlayMethodSerializer : UnknownTolerantEnumSerializer<WirePlayMet
     unknownValue = WirePlayMethod.Unknown,
 ) {
     override val serialName: String = "PlayMethod"
+}
+
+@Serializable(with = WireRepeatModeSerializer::class)
+enum class WireRepeatMode {
+    RepeatNone,
+    RepeatAll,
+    RepeatOne,
+    Unknown,
+}
+
+data object WireRepeatModeSerializer : UnknownTolerantEnumSerializer<WireRepeatMode>(
+    values = WireRepeatMode.entries.toTypedArray(),
+    unknownValue = WireRepeatMode.Unknown,
+) {
+    override val serialName: String = "RepeatMode"
+}
+
+@Serializable(with = WirePlaybackOrderSerializer::class)
+enum class WirePlaybackOrder {
+    Default,
+    Shuffle,
+    Unknown,
+}
+
+data object WirePlaybackOrderSerializer : UnknownTolerantEnumSerializer<WirePlaybackOrder>(
+    values = WirePlaybackOrder.entries.toTypedArray(),
+    unknownValue = WirePlaybackOrder.Unknown,
+) {
+    override val serialName: String = "PlaybackOrder"
 }
 
 @Serializable(with = PlaybackErrorCodeSerializer::class)
@@ -137,6 +201,10 @@ enum class ImageType {
     Disc,
     Box,
     Screenshot,
+    Menu,
+    Chapter,
+    BoxRear,
+    Profile,
 }
 
 /** Item fields requested via the official `fields` query parameter. */
@@ -162,6 +230,8 @@ enum class DlnaProfileType {
     Audio,
     Video,
     Photo,
+    Subtitle,
+    Lyric,
     Unknown,
 }
 
@@ -195,6 +265,7 @@ enum class SubtitleDeliveryMethod {
     Embed,
     External,
     Hls,
+    Drop,
     Unknown,
 }
 
