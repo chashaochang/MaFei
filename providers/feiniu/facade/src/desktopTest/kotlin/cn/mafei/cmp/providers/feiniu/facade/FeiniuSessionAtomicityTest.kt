@@ -38,7 +38,7 @@ class FeiniuSessionAtomicityTest {
             state.clear() // another thread logs out between check and commit
             resumeMutation.countDown()
             pending.get(5, TimeUnit.SECONDS)
-            assertFalse(state.current.value.hasToken, "Atomic conditional write must not resurrect logout")
+            assertFalse(state.snapshot().credentials.hasToken, "Atomic conditional write must not resurrect logout")
         } finally {
             resumeMutation.countDown()
             executor.shutdownNow()
@@ -89,7 +89,7 @@ class FeiniuSessionAtomicityTest {
             assertTrue(entered.await(5, TimeUnit.SECONDS))
             val committed = state.installIdentityIfUnchanged(snapshot.identityGeneration, FeiniuCredentials("new"))
             assertNotNull(committed, "Matching-identity login was silently dropped on lock contention")
-            assertEquals("new", state.current.value.token)
+            assertEquals("new", state.snapshot().credentials.token)
         } finally {
             release.countDown()
             pending.get(5, TimeUnit.SECONDS)
@@ -116,7 +116,7 @@ class FeiniuSessionAtomicityTest {
             assertTrue(entered.await(5, TimeUnit.SECONDS))
             val committed = state.clearIfIdentityUnchanged(snapshot.identityGeneration)
             assertNotNull(committed, "Matching-identity logout was silently dropped on lock contention")
-            assertFalse(state.current.value.hasToken)
+            assertFalse(state.snapshot().credentials.hasToken)
         } finally {
             release.countDown()
             pending.get(5, TimeUnit.SECONDS)

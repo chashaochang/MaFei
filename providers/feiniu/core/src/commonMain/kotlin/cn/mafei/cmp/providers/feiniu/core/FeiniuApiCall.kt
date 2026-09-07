@@ -11,6 +11,13 @@ data class FeiniuApiCall(
     val queryParameters: List<Pair<String, String>> = emptyList(),
     val authRequirement: AuthRequirement = AuthRequirement.Cookie,
     val readTimeoutMs: Long = 15_000,
+    /**
+     * H2: operation receipt for auth operations (logout/restore) — pins the
+     * exact credentials the operation started with, so a mid-flight account
+     * switch cannot be attributed to (or logged out by) the old operation.
+     * When set, the client uses these credentials for this call's headers.
+     */
+    val pinnedCredentials: FeiniuCredentials? = null,
 ) {
     init {
         require(path.startsWith("/")) { "Feiniu request path must start with / but was '$path'" }

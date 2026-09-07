@@ -106,12 +106,12 @@ class FeiniuSessionTest {
     @Test
     fun sessionStateTransitions() {
         val state = InMemoryFeiniuSessionState()
-        assertEquals(false, state.current.value.hasToken)
+        assertEquals(false, state.snapshot().credentials.hasToken)
         state.set(FeiniuCredentials(token = "t1"))
-        assertEquals("t1", state.current.value.token)
+        assertEquals("t1", state.snapshot().credentials.token)
         state.update { FeiniuCookieJar.mergeToken(it.cookie, "t2").let { c -> FeiniuCredentials("t2", c) } }
-        assertEquals("t2", state.current.value.token)
+        assertEquals("t2", state.snapshot().credentials.token)
         state.clear()
-        assertEquals(false, state.current.value.hasToken)
+        assertEquals(false, state.snapshot().credentials.hasToken)
     }
 }

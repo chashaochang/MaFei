@@ -1,5 +1,6 @@
 package cn.mafei.cmp.providers.feiniu.core
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** Feiniu media credentials: the bearer token plus its mirrored cookie set. */
@@ -21,16 +22,16 @@ data class FeiniuCredentials(
 }
 
 /**
- * Immutable session snapshot: credentials plus the two counters that make
- * concurrent updates verifiable.
+ * Immutable, versioned session snapshot — the SINGLE authoritative session
+ * state. `MutableStateFlow.compareAndSet` both validates and PUBLISHES in
+ * one atomic step, so the observable value can never lag or regress behind
+ * the committed state (H3): there is no secondary mirror.
  *
- * - [identityGeneration] changes ONLY on identity switches (login install,
- *   restore install, account switch, logout/clear). Stale-response guards
- *   compare this value: a response that started under one identity must not
- *   write back after the identity moved on.
- * - [revision] changes on EVERY commit, including same-identity cookie
- *   merges, so concurrent same-account responses can merge without losing
- *   each other's cookies.
+ * - [identityGeneration] changes ONLY on identity switches (login/restore
+ *   install, account switch, logout/clear) and guards stale responses.
+ * - [revision] changes on every commit, including same-identity cookie
+ *   merges, so concurrent same-account responses re-base instead of
+ *   dropping each other's cookies.
  */
 class FeiniuSessionSnapshot(
     val credentials: FeiniuCredentials,
@@ -55,19 +56,14 @@ class FeiniuSessionSnapshot(
 }
 
 /**
- * Holds the current credentials for one client (no globals).
- *
- * Commit rules (single-process concurrency contract, frozen by review):
- * - credentials + counters form one atomically swapped snapshot;
- * - conditional merges commit via compare-and-swap on the whole snapshot;
- *   when another response committed first, the merge re-bases on the new
- *   snapshot instead of dropping its cookies;
- * - identity installs/clears are guarded by the identity generation only —
- *   an ordinary cookie merge must never invalidate an in-flight login;
- * - responses whose identity moved on are dropped entirely (no write-back).
+ * Holds the current credentials for one client (no globals). The published
+ * [snapshots] flow is the authoritative state: every commit is an atomic
+ * compare-and-set ON the flow itself.
  */
 interface FeiniuSessionState {
-    val current: StateFlow<FeiniuCredentials>
+    val snapshots: StateFlow<FeiniuSessionSnapshot>
+
+    fun snapshot(): FeiniuSessionSnapshot
 
     /** Every-commit counter; kept for compatibility with older guards. */
     fun generation(): Long
@@ -75,9 +71,14 @@ interface FeiniuSessionState {
     /** Identity-switch counter; the stale-response guard. */
     fun identityGeneration(): Long
 
-    fun snapshot(): FeiniuSessionSnapshot
+    /**
+     * Installs [credentials] as an identity switch and returns the exact
+     * post-install snapshot receipt (G3/H2: the caller binds follow-up
+     * validation and cleanup to THIS identity, never a re-read).
+     */
+    fun install(credentials: FeiniuCredentials): FeiniuSessionSnapshot
 
-    /** Unconditional identity install (login/restore success). */
+    /** Compatibility view of [install]. */
     fun set(credentials: FeiniuCredentials): FeiniuCredentials
 
     /** Installs [credentials] only if the identity is still [expectedIdentity]. */
@@ -109,51 +110,44 @@ interface FeiniuSessionState {
 
 class InMemoryFeiniuSessionState(initial: FeiniuCredentials = FeiniuCredentials()) : FeiniuSessionState {
 
-    // G1: credentials + identity generation + revision live in ONE atomic
-    // snapshot cell; every derive-and-commit happens inside the cell's
-    // atomic swap, so concurrent installs never reuse a generation.
-    private val cell = FeiniuSnapshotCell(FeiniuSessionSnapshot(initial.normalized(), 0L, 0L))
-    private val flow = kotlinx.coroutines.flow.MutableStateFlow(initial.normalized())
+    // The flow IS the authoritative state: compareAndSet validates AND
+    // publishes in one atomic step (H3 — no secondary mirror to diverge).
+    private val state = MutableStateFlow(FeiniuSessionSnapshot(initial.normalized(), 0L, 0L))
 
-    override val current: StateFlow<FeiniuCredentials> = flow
+    override val snapshots: StateFlow<FeiniuSessionSnapshot> = state
 
-    private fun mirror(snapshot: FeiniuSessionSnapshot): FeiniuCredentials {
-        flow.value = snapshot.credentials
-        return snapshot.credentials
-    }
+    override fun snapshot(): FeiniuSessionSnapshot = state.value
 
-    override fun generation(): Long = cell.read().revision
+    override fun generation(): Long = state.value.revision
 
-    override fun identityGeneration(): Long = cell.read().identityGeneration
+    override fun identityGeneration(): Long = state.value.identityGeneration
 
-    override fun snapshot(): FeiniuSessionSnapshot = cell.read()
-
-    override fun set(credentials: FeiniuCredentials): FeiniuCredentials {
-        // G1: derive the next generations INSIDE the atomic commit.
+    override fun install(credentials: FeiniuCredentials): FeiniuSessionSnapshot {
         while (true) {
-            val observed = cell.read()
+            val observed = state.value
             val next = FeiniuSessionSnapshot(credentials.normalized(), observed.identityGeneration + 1, observed.revision + 1)
-            if (cell.compareAndCommit(observed, next)) return mirror(next)
+            if (state.compareAndSet(observed, next)) return next
         }
     }
+
+    override fun set(credentials: FeiniuCredentials): FeiniuCredentials = install(credentials).credentials
 
     override fun installIdentityIfUnchanged(
         expectedIdentity: Long,
         credentials: FeiniuCredentials,
     ): FeiniuCredentials? {
-        val observed = cell.read()
+        val observed = state.value
         if (observed.identityGeneration != expectedIdentity) return null // identity stale (definitive)
         val next = FeiniuSessionSnapshot(credentials.normalized(), observed.identityGeneration + 1, observed.revision + 1)
-        // Blocking compare-and-commit: contention never drops a
-        // matching-identity install (G3); staleness is the only `null`.
-        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
+        // compareAndSet validates AND publishes atomically (H3)
+        return if (state.compareAndSet(observed, next)) next.credentials else null
     }
 
     override fun update(mutate: (FeiniuCredentials) -> FeiniuCredentials): FeiniuCredentials {
         while (true) {
-            val observed = cell.read()
+            val observed = state.value
             val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
-            if (cell.compareAndCommit(observed, next)) return mirror(next)
+            if (state.compareAndSet(observed, next)) return next.credentials
         }
     }
 
@@ -161,31 +155,31 @@ class InMemoryFeiniuSessionState(initial: FeiniuCredentials = FeiniuCredentials(
         expected: FeiniuSessionSnapshot,
         mutate: (FeiniuCredentials) -> FeiniuCredentials,
     ): FeiniuCredentials? {
-        val observed = cell.read()
+        val observed = state.value
         if (observed != expected) return null // stale (identity or revision moved) → caller re-bases
         val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
-        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
+        return if (state.compareAndSet(observed, next)) next.credentials else null
     }
 
     override fun updateIfUnchanged(
         expectedRevision: Long,
         mutate: (FeiniuCredentials) -> FeiniuCredentials,
     ): FeiniuCredentials? {
-        val observed = cell.read()
+        val observed = state.value
         if (observed.revision != expectedRevision) return null
-        // The mutation runs OUTSIDE the atomic commit (it may be slow or
+        // The mutation runs outside the atomic commit (it may be slow or
         // blocking); the compare-and-commit re-validates the revision, so an
         // intervening logout/account switch drops this update (F1).
         val next = FeiniuSessionSnapshot(mutate(observed.credentials).normalized(), observed.identityGeneration, observed.revision + 1)
-        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
+        return if (state.compareAndSet(observed, next)) next.credentials else null
     }
 
-    override fun clear(): FeiniuCredentials = set(FeiniuCredentials())
+    override fun clear(): FeiniuCredentials = install(FeiniuCredentials()).credentials
 
     override fun clearIfIdentityUnchanged(expectedIdentity: Long): FeiniuCredentials? {
-        val observed = cell.read()
+        val observed = state.value
         if (observed.identityGeneration != expectedIdentity) return null // identity stale (definitive)
         val next = FeiniuSessionSnapshot(FeiniuCredentials(), observed.identityGeneration + 1, observed.revision + 1)
-        return if (cell.compareAndCommit(observed, next)) mirror(next) else null
+        return if (state.compareAndSet(observed, next)) next.credentials else null
     }
 }

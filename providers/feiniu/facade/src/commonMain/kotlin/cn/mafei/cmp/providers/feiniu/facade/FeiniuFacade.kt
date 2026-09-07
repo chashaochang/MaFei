@@ -8,6 +8,7 @@ import cn.mafei.cmp.providers.feiniu.catalog.FeiniuCatalogApi
 import cn.mafei.cmp.providers.feiniu.connection.FeiniuConnectionApi
 import cn.mafei.cmp.providers.feiniu.core.FeiniuClient
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
+import cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot
 import cn.mafei.cmp.providers.feiniu.core.InMemoryFeiniuSessionState
 import cn.mafei.cmp.providers.feiniu.core.FeiniuSessionState
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +21,12 @@ import kotlinx.coroutines.flow.StateFlow
 interface FeiniuFacade {
     val client: FeiniuClient
 
-    /** Current media credentials (token + cookie); never log the token. */
-    val credentials: StateFlow<FeiniuCredentials>
+    /**
+     * Authoritative versioned session snapshots (credentials + identity
+     * generation + revision). H3: this IS the committed state — consumers
+     * must read credentials from here, never cache them across operations.
+     */
+    val credentials: StateFlow<FeiniuSessionSnapshot>
 
     val connection: FeiniuConnectionApi
     val auth: FeiniuAuthApi
@@ -37,7 +42,7 @@ class DefaultFeiniuFacade(
 
     override val client: FeiniuClient = FeiniuClient(transport = transport, sessionState = sessionState)
 
-    override val credentials: StateFlow<FeiniuCredentials> = client.sessionState.current
+    override val credentials: StateFlow<FeiniuSessionSnapshot> = client.sessionState.snapshots
 
     override val connection: FeiniuConnectionApi by lazy { FeiniuConnectionApi(transport) }
     override val auth: FeiniuAuthApi by lazy { FeiniuAuthApi(client) }

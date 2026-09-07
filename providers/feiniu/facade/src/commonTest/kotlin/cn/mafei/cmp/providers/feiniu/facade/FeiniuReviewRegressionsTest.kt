@@ -75,7 +75,7 @@ class FeiniuReviewRegressionsTest {
         transport.enqueueJson(200, """{"code":0,"data":{"is_admin":[]}}""")
         val client = FeiniuClient(transport = transport)
         assertFailsWith<FeiniuDecodeError> { FeiniuAuthApi(client).restore(resolution, FeiniuCredentials("valid-token")) }
-        assertEquals("valid-token", client.sessionState.current.value.token)
+        assertEquals("valid-token", client.sessionState.snapshot().credentials.token)
     }
 
     // R7
@@ -99,7 +99,7 @@ class FeiniuReviewRegressionsTest {
         }
         val client = FeiniuClient(transport = transport, sessionState = state)
         FeiniuCatalogApi(client).search(resolution, "fixture")
-        assertFalse(state.current.value.hasToken, "Late response must not restore old credentials")
+        assertFalse(state.snapshot().credentials.hasToken, "Late response must not restore old credentials")
     }
 
     // R4

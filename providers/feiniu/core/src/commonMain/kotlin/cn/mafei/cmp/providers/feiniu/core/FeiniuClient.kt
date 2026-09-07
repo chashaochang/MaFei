@@ -45,10 +45,15 @@ class FeiniuClient(
         call: FeiniuApiCall,
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
+        // H2: the operation context (credentials + identity) is captured ONCE
+        // from one atomic snapshot and threaded through request construction,
+        // every candidate, response commit and the returned result — a host
+        // fallback never re-reads (and thereby re-attributes) credentials.
+        val operation = sessionState.snapshot()
         var lastError: Throwable? = null
         for (candidate in resolution.orderedCandidates) {
             try {
-                return executeOnCandidate(candidate, resolution, call, decode)
+                return executeOnCandidate(candidate, resolution, operation, call, decode)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FeiniuConnectionError) {
@@ -82,15 +87,14 @@ class FeiniuClient(
     suspend fun <T> executeOnCandidate(
         candidate: FeiniuHostCandidate,
         resolution: FeiniuHostResolution,
+        operation: FeiniuSessionSnapshot,
         call: FeiniuApiCall,
         decode: (envelope: FeiniuEnvelope, credentials: FeiniuCredentials) -> T,
     ): FeiniuCallResult<T> {
-        // G2: credentials and identity MUST come from ONE atomic snapshot
-        // read — separate reads let an account switch interleave and stamp
-        // the old request with the new account's identity generation.
-        val start = sessionState.snapshot()
-        val credentials = start.credentials
-        val identity = start.identityGeneration
+        // H2: the operation's own credentials — never a fresh read, which
+        // would attribute an old operation to whichever account is current.
+        val credentials = call.pinnedCredentials ?: operation.credentials
+        val identity = operation.identityGeneration
         if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && !credentials.hasToken) {
             throw FeiniuAuthenticationError("Feiniu media session is not authorized")
         }
@@ -172,42 +176,34 @@ class FeiniuClient(
             } catch (e: IllegalArgumentException) {
                 throw FeiniuDecodeError("Feiniu response data does not match the expected shape", e)
             }
-            // Stale-response protection (F1): compare IDENTITY generations.
-            // A logout/account switch during the request moves the identity,
-            // so this response is dropped entirely. A same-identity response
-            // (e.g. an in-flight poll) must NOT invalidate an in-flight login.
+            // H1/G3: every write-back commits against THIS REQUEST's identity
+            // (captured atomically at start) — never a freshly-read one.
             val decodedCredentials = value as? FeiniuCredentials
             if (decodedCredentials != null) {
-                // Login/auth family: the fresh credentials become persistent
-                // ONLY if this identity install commits (G3). An identity that
-                // moved on during the request means the login is discarded —
+                // Login/auth family: fresh credentials become persistent ONLY
+                // if the identity install commits against the request identity.
+                // An identity that moved on means the login is discarded —
                 // fail WITHOUT returning (or logging) any credentials.
-                var installed: FeiniuCredentials? = null
-                while (installed == null) {
-                    if (sessionState.identityGeneration() != identity) {
-                        throw FeiniuAuthenticationError(
-                            "Feiniu login was discarded because the session identity changed during login",
-                        )
-                    }
-                    installed = sessionState.installIdentityIfUnchanged(
-                        sessionState.identityGeneration(),
-                        decodedCredentials,
+                if (sessionState.installIdentityIfUnchanged(identity, decodedCredentials) == null) {
+                    throw FeiniuAuthenticationError(
+                        "Feiniu login was discarded because the session identity changed during login",
                     )
-                    // null here = transient contention (same identity) → retry;
-                    // identity mismatch is re-checked at loop top (definitive).
                 }
             } else if (sessionState.identityGeneration() == identity) {
-                // Same-identity cookie merge: re-base on the CURRENT snapshot
-                // each attempt so a concurrent response's Set-Cookie is not
-                // lost; the merge must never touch a switched identity.
-                while (sessionState.identityGeneration() == identity) {
-                    val merged = sessionState.commitIfUnchanged(sessionState.snapshot()) { basisCredentials ->
+                // Same-identity cookie merge: every basis is verified to carry
+                // the operation's identity BEFORE the commit; the CAS re-bases
+                // on same-identity updates without losing their cookies, and
+                // drops the merge the moment the identity moved on (H1).
+                while (true) {
+                    val basis = sessionState.snapshot()
+                    if (basis.identityGeneration != identity) break
+                    val merged = sessionState.commitIfUnchanged(basis) { basisCredentials ->
                         credentialsFromResponse(transientCookie, call, basisCredentials)
                     }
                     if (merged != null) break
                 }
             }
-            return FeiniuCallResult(value, activeCandidate, sessionState.current.value)
+            return FeiniuCallResult(value, activeCandidate, sessionState.snapshot().credentials)
         }
         throw FeiniuRedirectRejectedError("Feiniu request exceeded the redirect limit of ${FeiniuIdentity.MAX_REDIRECTS}")
     }
@@ -260,12 +256,14 @@ class FeiniuClient(
                     queryParameters = actualQuery,
                 ),
             )
-        // Anonymous calls (login/auth family) never carry stored cookies —
-        // an old account's cookie must not ride along with a new login (R1).
-        var cookie = if (call.authRequirement == FeiniuApiCall.AuthRequirement.None) "" else credentials.cookie
-        if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && credentials.hasToken) {
-            builder.setHeader(HttpHeaders.AUTHORIZATION, credentials.token)
-            cookie = FeiniuCookieJar.mergeToken(cookie, credentials.token)
+        // H2: pinned credentials (logout/restore operation receipts) win over
+        // the operation snapshot; anonymous calls never carry stored cookies
+        // — an old account's cookie must not ride along with a new login (R1).
+        val requestCredentials = call.pinnedCredentials ?: credentials
+        var cookie = if (call.authRequirement == FeiniuApiCall.AuthRequirement.None) "" else requestCredentials.cookie
+        if (call.authRequirement == FeiniuApiCall.AuthRequirement.Token && requestCredentials.hasToken) {
+            builder.setHeader(HttpHeaders.AUTHORIZATION, requestCredentials.token)
+            cookie = FeiniuCookieJar.mergeToken(cookie, requestCredentials.token)
         }
         if (transientCookie.isNotEmpty()) {
             cookie = FeiniuCookieJar.merge(cookie, transientCookie)

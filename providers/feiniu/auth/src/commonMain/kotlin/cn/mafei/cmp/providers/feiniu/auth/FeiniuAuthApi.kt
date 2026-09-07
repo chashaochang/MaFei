@@ -72,19 +72,31 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
      * session; a decode failure (malformed payload) must NOT log the user
      * out (R3).
      */
+    /**
+     * Validates and installs stored credentials via the authenticated
+     * user/info probe. The install returns an exact identity RECEIPT which
+     * binds the validation call and the expired-cleanup to THIS operation
+     * (H2): a stale 401 arriving after an account switch cannot clear the
+     * new account, and decode failures never log anyone out (R3).
+     */
     suspend fun restore(resolution: FeiniuHostResolution, credentials: FeiniuCredentials): FeiniuUserInfo {
-        client.sessionState.set(credentials)
-        // F1/G3: the expired-session cleanup only applies to the identity this
-        // restore started with — a stale 401 arriving after an account switch
-        // must not log the new account out. Retries on transient contention;
-        // the definitive identity check terminates the loop.
-        val identity = client.sessionState.identityGeneration()
+        val installed = client.sessionState.install(credentials)
+        val context = FeiniuApiCall(
+            path = "/v/api/v1/user/info",
+            method = FeiniuApiCall.FeiniuMethod.Get,
+            authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            pinnedCredentials = installed.credentials,
+        )
         return try {
-            userInfo(resolution)
+            client.execute(resolution, context) { envelope, _ ->
+                val data = envelope.data
+                    ?: throw cn.mafei.cmp.providers.feiniu.core.FeiniuDecodeError("Feiniu user info is empty")
+                MafeiJson.Default.decodeFromJsonElement(FeiniuUserInfo.serializer(), data)
+            }
         } catch (e: cn.mafei.cmp.providers.feiniu.core.FeiniuAuthenticationExpiredError) {
             while (true) {
-                if (client.sessionState.identityGeneration() != identity) break // new identity wins
-                if (client.sessionState.clearIfIdentityUnchanged(identity) != null) break
+                if (client.sessionState.identityGeneration() != installed.identityGeneration) break // new identity wins
+                if (client.sessionState.clearIfIdentityUnchanged(installed.identityGeneration) != null) break
             }
             throw e
         }
@@ -106,9 +118,14 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
             MafeiJson.Default.decodeFromJsonElement(FeiniuUserInfo.serializer(), data)
         }
 
-    /** Logs out server-side (best effort); the local clear is identity-guarded. */
+    /**
+     * Logs out the account captured in the operation context (H2): the
+     * request pins THIS account's token, and the local clear is bound to the
+     * same identity — a login/account switch during the logout request
+     * survives both the pinned server call and the local cleanup (G3).
+     */
     suspend fun logout(resolution: FeiniuHostResolution) {
-        val identity = client.sessionState.identityGeneration()
+        val context = client.sessionState.snapshot()
         try {
             client.execute(
                 resolution,
@@ -116,15 +133,13 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
                     path = "/v/api/v1/user/logout",
                     method = FeiniuApiCall.FeiniuMethod.Post,
                     authRequirement = FeiniuApiCall.AuthRequirement.Token,
+                    pinnedCredentials = context.credentials,
                 ),
             ) { _, _ -> true }
         } finally {
-            // G3: a matching-identity clear must not be silently lost to
-            // contention — retry until committed or the identity moves on
-            // (a login/account switch during logout then survives).
             while (true) {
-                if (client.sessionState.identityGeneration() != identity) break
-                if (client.sessionState.clearIfIdentityUnchanged(identity) != null) break
+                if (client.sessionState.identityGeneration() != context.identityGeneration) break // new identity wins
+                if (client.sessionState.clearIfIdentityUnchanged(context.identityGeneration) != null) break
             }
         }
     }

@@ -62,7 +62,7 @@ class FeiniuFacadeChainTest {
 
         val credentials = fixture.facade.auth.login(resolution, "demo", "pw")
         assertEquals("fixture-token-0000000000000001", credentials.token)
-        assertEquals(credentials.token, fixture.facade.credentials.value.token)
+        assertEquals(credentials.token, fixture.facade.credentials.value.credentials.token)
 
         // the login request must have gone to the preferred (LAN) host
         assertEquals(

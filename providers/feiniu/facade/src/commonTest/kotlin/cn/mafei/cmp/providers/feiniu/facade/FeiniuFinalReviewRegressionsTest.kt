@@ -56,7 +56,7 @@ class FeiniuFinalReviewRegressionsTest {
         client = FeiniuClient(transport = transport, sessionState = state)
         val loggedIn = FeiniuAuthApi(client).login(resolution, "new-user", "pw")
         assertEquals("new-account", loggedIn.token)
-        assertEquals("new-account", state.current.value.token,
+        assertEquals("new-account", state.snapshot().credentials.token,
             "Successful login must agree with facade credential state")
     }
 
@@ -74,7 +74,7 @@ class FeiniuFinalReviewRegressionsTest {
         assertFailsWith<FeiniuAuthenticationExpiredError> {
             FeiniuAuthApi(client).restore(resolution, FeiniuCredentials("old-account"))
         }
-        assertEquals("new-account", state.current.value.token)
+        assertEquals("new-account", state.snapshot().credentials.token)
     }
 
     // F2
@@ -139,7 +139,7 @@ class FeiniuFinalReviewRegressionsTest {
         FeiniuCatalogApi(client).search(resolution, "a")
         FeiniuCatalogApi(client).search(resolution, "b")
 
-        val cookie = state.current.value.cookie
+        val cookie = state.snapshot().credentials.cookie
         assertTrue(cookie.contains("Trim-MC-token=t"), cookie)
         assertTrue(cookie.contains("sid=one"), "first response cookie must survive: $cookie")
         assertTrue(cookie.contains("theme=dark"), "second response cookie must survive: $cookie")
@@ -159,6 +159,6 @@ class FeiniuFinalReviewRegressionsTest {
             sessionState = state,
         )
         FeiniuAuthApi(client).logout(resolution)
-        assertEquals("new-account", state.current.value.token)
+        assertEquals("new-account", state.snapshot().credentials.token)
     }
 }

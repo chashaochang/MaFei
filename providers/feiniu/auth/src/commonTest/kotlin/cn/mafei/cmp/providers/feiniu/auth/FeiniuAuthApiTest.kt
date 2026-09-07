@@ -94,7 +94,7 @@ class FeiniuAuthApiTest {
         )
         assertEquals("demo", info.username)
         // legacy semantics: on cookie-carried calls the STORED token wins over Set-Cookie
-        assertEquals("stored-token", fixture.client.sessionState.current.value.token)
+        assertEquals("stored-token", fixture.client.sessionState.snapshot().credentials.token)
         val sent = fixture.transport.requests.single()
         assertEquals("stored-token", sent.headers.first("Authorization"))
         assertTrue(sent.headers.first("Cookie")!!.contains("Trim-MC-token=stored-token"))
@@ -108,7 +108,7 @@ class FeiniuAuthApiTest {
         assertFailsWith<FeiniuAuthenticationExpiredError> {
             fixture.api.restore(fixture.resolution, FeiniuCredentials(token = "stale"))
         }
-        assertTrue(fixture.client.sessionState.current.value.token.isEmpty())
+        assertTrue(fixture.client.sessionState.snapshot().credentials.token.isEmpty())
     }
 
     @Test
@@ -118,6 +118,6 @@ class FeiniuAuthApiTest {
         fixture.transport.enqueueNoContent()
 
         fixture.api.logout(fixture.resolution)
-        assertTrue(fixture.client.sessionState.current.value.token.isEmpty())
+        assertTrue(fixture.client.sessionState.snapshot().credentials.token.isEmpty())
     }
 }
