@@ -1,0 +1,95 @@
+package cn.mafei.cmp.data.adapter_contract
+
+import cn.mafei.cmp.core.domain.AccountId
+import cn.mafei.cmp.core.domain.CollectionId
+import cn.mafei.cmp.core.domain.MediaCollection
+import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaItem
+import cn.mafei.cmp.core.domain.Page
+import cn.mafei.cmp.core.domain.PageRequest
+import cn.mafei.cmp.core.domain.ProviderKind
+import cn.mafei.cmp.core.domain.ResourceNotFoundError
+import cn.mafei.cmp.core.domain.ServerId
+
+/**
+ * Provider-neutral adapter contract consumed by the data layer (GLM-04D).
+ *
+ * One implementation per [ProviderKind] (04B Jellyfin, 04C Feiniu). The
+ * contract speaks only `core:domain` types — never provider wire DTOs — and
+ * knows nothing about Provider SDKs, Compose, the player runtime or platform
+ * storage. An adapter instance is bound to one server + account at
+ * construction; every result it returns is stamped with that identity.
+ *
+ * Error contract (frozen):
+ * - Failures surface as the applicable `DomainError` subclass, translated
+ *   from the provider SDK taxonomy by the adapter.
+ * - `CancellationException` always propagates untouched: a cancelled call is
+ *   never reported as an "empty page success".
+ * - Calling a method whose [AdapterCapabilities] flag is `false` throws
+ *   [cn.mafei.cmp.core.domain.ClientConfigError] via [requireCapability] —
+ *   unimplemented SDK write endpoints never fake success.
+ *
+ * Pagination contract (frozen):
+ * - `PageRequest.cursor == null` requests the first page.
+ * - Offsets travel inside opaque [cn.mafei.cmp.core.domain.PageCursor]s the
+ *   adapter produced ([OffsetPageCursorCodec] for offset-paging providers).
+ * - Adapters must reject cursors they did not issue instead of restarting
+ *   from the first page, and return `nextCursor = null` on the last page.
+ */
+interface MediaProviderAdapter {
+
+    val provider: ProviderKind
+    val serverId: ServerId
+    val accountId: AccountId
+    val capabilities: AdapterCapabilities
+
+    /**
+     * Server libraries ("views") for the home screen. Current providers serve
+     * this as one chunk: `nextCursor` is always `null`, and a non-null cursor
+     * is rejected rather than re-served as page one.
+     */
+    suspend fun collections(request: PageRequest): Page<MediaCollection>
+
+    /**
+     * One page of catalog items, narrowed to [collectionId] when given
+     * (`null` = server-wide). [PageRequest.filter] carries the user-state
+     * flags: `favoritesOnly` routes to the favorites listing the provider
+     * supports (see [AdapterCapabilities.favoritesRead]/[AdapterCapabilities.favoritesFilter]),
+     * `playedOnly`/`unplayedOnly` to the watched filters. Unsupported filter
+     * combinations throw [cn.mafei.cmp.core.domain.ClientConfigError] instead
+     * of being silently dropped.
+     */
+    suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem>
+
+    /** Free-text search; capability [AdapterCapability.Search]. */
+    suspend fun search(term: String, request: PageRequest): Page<MediaItem>
+
+    /** Full detail for one item, including user state. Missing ids throw [ResourceNotFoundError]. */
+    suspend fun item(id: MediaId): MediaItem
+
+    /** Seasons of one series (single server call, `nextCursor` always `null`). */
+    suspend fun seasons(seriesId: MediaId): Page<MediaItem>
+
+    /** Episodes of one series, optionally narrowed to [seasonId]. */
+    suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem>
+
+    /** Toggles favorite state; capability [AdapterCapability.FavoritesEdit]. */
+    suspend fun setFavorite(id: MediaId, favorite: Boolean)
+
+    /** Toggles watched state; capability [AdapterCapability.WatchedEdit]. */
+    suspend fun setWatched(id: MediaId, watched: Boolean)
+
+    /**
+     * Prepares playback for [item]. Returns [PlaybackPreparation.Ready] with
+     * adapter-validated absolute URLs, or an explicit [PlaybackPreparation.Refused];
+     * transport/protocol failures still throw the mapped [cn.mafei.cmp.core.domain.DomainError].
+     */
+    suspend fun preparePlayback(item: MediaId): PlaybackPreparation
+
+    /**
+     * Reports progress for a stream previously returned by [preparePlayback];
+     * capability [AdapterCapability.PlaybackReporting]. Reporting for a stream
+     * this adapter did not prepare is rejected.
+     */
+    suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent)
+}
