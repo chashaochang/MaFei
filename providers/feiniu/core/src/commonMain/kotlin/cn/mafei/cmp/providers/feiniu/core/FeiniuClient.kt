@@ -13,10 +13,19 @@ import cn.mafei.cmp.core.http_contract.TransportFailureKind
 import cn.mafei.cmp.core.serialization.MafeiJson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.yield
 import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.SerializationException
 
-/** Outcome of one candidate execution: decoded envelope plus credential updates. */
+/**
+ * Outcome of one candidate execution.
+ *
+ * [credentials] is the OPERATION-START credential context (what the request
+ * was authenticated with) — NOT necessarily the latest persisted state.
+ * Token/cookie rotations are published on the authoritative
+ * `FeiniuSessionState.snapshots` flow; persistence (GLM-04) must key off
+ * that flow and its identity/revision, never off this field.
+ */
 class FeiniuCallResult<T>(
     val value: T,
     val candidate: FeiniuHostCandidate,
@@ -189,7 +198,7 @@ class FeiniuClient(
             if (decodedCredentials != null) {
                 var installed: FeiniuCredentials? = null
                 while (installed == null) {
-                    coroutineContext.ensureActive() // bounded by cancellation
+                    coroutineContext.ensureActive()
                     if (sessionState.identityGeneration() != identity) {
                         throw FeiniuAuthenticationError(
                             "Feiniu login was discarded because the session identity changed during login",
@@ -198,6 +207,10 @@ class FeiniuClient(
                     // re-bases on the current revision; only an identity
                     // switch makes it return null (checked above)
                     installed = sessionState.installIdentityIfUnchanged(identity, decodedCredentials)
+                    // K1: a losing CAS yields the thread so queued
+                    // same-dispatcher cancellation can run; after resuming,
+                    // ensureActive/identity re-check run first.
+                    if (installed == null) yield()
                 }
             } else if (sessionState.identityGeneration() == identity) {
                 // Same-identity cookie merge (H1): every basis is verified to
@@ -214,6 +227,10 @@ class FeiniuClient(
                         credentialsFromResponse(transientCookie, call, basisCredentials)
                     }
                     if (merged != null) break
+                    // K1: a losing CAS yields the thread so queued
+                    // same-dispatcher cancellation can run; after resuming,
+                    // ensureActive and the identity check run first.
+                    yield()
                 }
             }
             // J3: the reported result is bound to THIS operation's context —
