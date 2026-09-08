@@ -82,6 +82,7 @@ include(
     ":platform:http-ios",
     ":platform:http-ohos",
     ":platform:http-macos",
+    ":platform:secure-storage-core",
     ":platform:secure-storage-android",
     ":platform:secure-storage-ios",
     ":platform:secure-storage-ohos",

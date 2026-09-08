@@ -13,6 +13,9 @@ package cn.mafei.cmp.core.http_contract
  *
  * Cancellation is not part of this hierarchy: cancelled calls throw
  * `CancellationException` so structured concurrency works unchanged.
+ * Built-in diagnostic messages omit URLs, which may carry credentials even in
+ * their paths. Structured URL/response properties are sensitive: use the log
+ * redactor when explicitly rendering them. Custom messages/causes must be safe.
  */
 sealed class HttpException(
     message: String,
@@ -42,7 +45,7 @@ class HttpTimeoutException(
     val timeoutMillis: Long,
     cause: Throwable? = null,
 ) : HttpException(
-        message = "Request to $url timed out after ${timeoutMillis}ms",
+        message = "HTTP request timed out after ${timeoutMillis}ms",
         cause = cause,
     )
 
@@ -50,7 +53,7 @@ class HttpTimeoutException(
 class HttpStatusCodeException(
     val response: HttpResponse,
 ) : HttpException(
-        message = "HTTP ${response.statusCode} for ${response.effectiveUrl}",
+        message = "HTTP ${response.statusCode}",
     )
 
 /** The response was received but its body cannot be decoded. */
@@ -67,7 +70,7 @@ class HttpRedirectLimitExceededException(
     val maxRedirects: Int,
     val lastStatusCode: Int,
 ) : HttpException(
-        message = "Exceeded the redirect limit of $maxRedirects for $url (last status $lastStatusCode)",
+        message = "Exceeded the redirect limit of $maxRedirects (last status $lastStatusCode)",
     )
 
 /** A redirect tried to downgrade from HTTPS to a non-HTTPS URL. */
@@ -75,7 +78,7 @@ class HttpInsecureRedirectException(
     val from: HttpUrl,
     val to: HttpUrl,
 ) : HttpException(
-        message = "Refusing insecure redirect from $from to $to",
+        message = "Refusing insecure HTTP redirect",
     )
 
 /** The body exceeded the limit configured via [BodyReadPolicy.BufferedAtMost]. */
@@ -87,8 +90,7 @@ class HttpBodyLimitExceededException(
         message = buildString {
             append("Response body exceeded the ")
             append(maxBytes)
-            append(" byte limit for ")
-            append(url)
+            append(" byte limit")
             if (actualBytes != null) {
                 append(" (received at least ")
                 append(actualBytes)

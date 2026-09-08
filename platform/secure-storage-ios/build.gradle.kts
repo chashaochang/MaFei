@@ -5,5 +5,8 @@ plugins {
 
 
 dependencies {
+    add("commonMainImplementation", project(":platform:secure-storage-core"))
+    add("commonMainImplementation", libs.kotlinx.coroutines.core)
+    add("commonTestImplementation", libs.kotlinx.coroutines.core)
     add("commonMainApi", project(":core:secure-credential-api"))
 }
