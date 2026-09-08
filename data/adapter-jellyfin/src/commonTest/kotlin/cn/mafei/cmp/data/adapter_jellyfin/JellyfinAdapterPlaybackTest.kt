@@ -33,6 +33,18 @@ private const val PLAYBACK_INFO_CROSS_ORIGIN =
 private const val PLAYBACK_INFO_NO_SOURCES =
     """{"MediaSources":[],"PlaySessionId":"session-0001"}"""
 
+/** Server negotiated remux: DirectPlay refused, DirectStream offered. */
+private const val PLAYBACK_INFO_DIRECT_STREAM_ONLY =
+    """{"MediaSources":[{"Id":"msRemux0102030405060708","Protocol":"File","Container":"mkv","SupportsDirectPlay":false,"SupportsDirectStream":true,"SupportsTranscoding":false,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc"},{"Index":1,"Type":"Audio","Codec":"aac"}]}],"PlaySessionId":"session-0001"}"""
+
+/** Pure audio source: no video stream, one audio stream. */
+private const val PLAYBACK_INFO_AUDIO_ONLY =
+    """{"MediaSources":[{"Id":"msAudio0102030405060708","Protocol":"File","Container":"flac","SupportsDirectPlay":true,"MediaStreams":[{"Index":0,"Type":"Audio","Codec":"flac"}]}],"PlaySessionId":"session-0002"}"""
+
+/** Two versions: the playable remux source carries its own default subtitle. */
+private const val PLAYBACK_INFO_MULTI_SOURCE_SUBTITLES =
+    """{"MediaSources":[{"Id":"msVersionA","Protocol":"File","Container":"mkv","SupportsDirectPlay":false,"SupportsDirectStream":false,"SupportsTranscoding":false,"MediaStreams":[{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m9/Subtitles/2/0/Stream.srt"}]},{"Id":"msVersionB","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":1,"Type":"Audio","Codec":"aac"},{"Index":3,"Type":"Subtitle","Codec":"ass","IsExternal":true,"IsDefault":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m9/Subtitles/3/0/Stream.ass"}]}],"PlaySessionId":"session-0003"}"""
+
 class JellyfinAdapterPlaybackTest {
 
     private fun runTest(block: suspend () -> Unit) = runSuspendTest(block)
@@ -128,6 +140,66 @@ class JellyfinAdapterPlaybackTest {
     }
 
     @Test
+    fun directStreamOnlySourceRemuxesWithoutStatic() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_DIRECT_STREAM_ONLY)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m0102030405060708")),
+        )
+        val stream = ready.streamUrl
+        // Remux keeps the stream endpoint and container but never forces the
+        // original file out (no static=true).
+        assertTrue(stream.startsWith("https://jellyfin.test/Videos/m0102030405060708/stream.mkv"), stream)
+        assertTrue(!stream.contains("static=true"), stream)
+        assertTrue(stream.contains("mediaSourceId=msRemux0102030405060708"), stream)
+        assertTrue(stream.contains("playSessionId=session-0001"), stream)
+    }
+
+    @Test
+    fun audioOnlySourceUsesTheAudioRoute() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_AUDIO_ONLY)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("song")),
+        )
+        val stream = ready.streamUrl
+        assertTrue(stream.startsWith("https://jellyfin.test/Audio/song/stream.flac"), stream)
+        assertTrue(stream.contains("static=true"), stream) // direct play of the audio file
+        assertTrue(stream.contains("mediaSourceId=msAudio0102030405060708"), stream)
+        assertTrue(!stream.contains("/Videos/"), stream)
+    }
+
+    @Test
+    fun unknownErrorCodeAlsoRefuses() = runTest {
+        val fixture = Fixture()
+        // A future server error code survives SDK tolerance as Unknown — the
+        // adapter must refuse, never read "unrecognized" as "no error".
+        fixture.transport.enqueueJson(200, """{"MediaSources":[{"Id":"ms1","SupportsDirectPlay":true}],"PlaySessionId":"p","ErrorCode":"SomethingNew"}""")
+        val refused = assertIs<PlaybackPreparation.Refused>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m1")),
+        )
+        assertEquals(RefusalReason.ServerRefused, refused.reason)
+        // The SDK tolerates the unknown string into Unknown; the adapter must
+        // still refuse instead of reading it as "no error".
+        assertEquals(true, refused.detail?.contains("Unknown"))
+    }
+
+    @Test
+    fun subtitleComesFromSelectedSourceOnly() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_MULTI_SOURCE_SUBTITLES)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m9")),
+        )
+        // Version B is the playable source; its default ASS track wins, the
+        // dead version A's SRT never leaks in.
+        assertEquals(
+            "https://jellyfin.test/Videos/m9/Subtitles/3/0/Stream.ass?api_key=fixture-token",
+            ready.subtitleUrl,
+        )
+    }
+
+    @Test
     fun crossOriginTranscodingUrlIsRejectedNotTrusted() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, PLAYBACK_INFO_CROSS_ORIGIN)
@@ -176,7 +248,8 @@ class JellyfinAdapterPlaybackTest {
         assertTrue(startBody.contains("\"ItemId\":\"m0102030405060708\""), startBody)
         assertTrue(startBody.contains("\"PlaySessionId\":\"session-0001\""), startBody)
         assertTrue(startBody.contains("\"MediaSourceId\":\"ms0102030405060708\""), startBody)
-        assertTrue(!startBody.contains("\"PositionTicks\""), startBody) // position 0 -> omitted
+        // Position 0 is a legal, load-bearing value (seek back to start).
+        assertTrue(startBody.contains("\"PositionTicks\":0"), startBody)
 
         val progressBody = bodyOf(progress)
         assertTrue(progressBody.contains("\"PositionTicks\":15000000"), progressBody) // 1_500ms * 10_000
@@ -184,6 +257,20 @@ class JellyfinAdapterPlaybackTest {
 
         val stoppedBody = bodyOf(stopped)
         assertTrue(stoppedBody.contains("\"PositionTicks\":1200000000"), stoppedBody)
+    }
+
+    @Test
+    fun zeroPositionProgressIsReportedNotDropped() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.PLAYBACK_INFO)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m0102030405060708")),
+        )
+        fixture.transport.enqueue(FakeJellyfinTransport.noContent(HttpUrl.parse(JellyfinFixtures.BASE_URL)))
+        // User seeks back to the very beginning: the server must receive 0.
+        fixture.adapter.reportPlayback(ready, PlaybackEvent(PlaybackEventKind.Progress, positionMs = 0L, isPaused = false))
+        val body = (fixture.transport.requests.last().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(body.contains("\"PositionTicks\":0"), body)
     }
 
     @Test

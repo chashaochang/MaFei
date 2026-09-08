@@ -23,7 +23,6 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.jellyfin.facade.JellyfinFacade
-import cn.mafei.cmp.providers.jellyfin.wire.PlaybackErrorCode
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.coroutines.cancellation.CancellationException
@@ -106,11 +105,16 @@ class JellyfinMediaProviderAdapter(
             years = filter.years.toList(),
             filters = filter.toQueryFilters(),
         )
-        return translate { facade.catalog.items(query) }.let { toPage(it, request, offset) }
+        return translate { facade.catalog.items(query) }.let { toPage(it, request, offset, collectionId) }
     }
 
     override suspend fun search(term: String, request: PageRequest): Page<MediaItem> {
         requireCapability(capabilities, AdapterCapability.Search)
+        // Search shares the /Items pipeline, so every expressible filter and
+        // the sort travel along — dropping them silently would fake results.
+        val filter = request.filter
+        if (filter.favoritesOnly) requireCapability(capabilities, AdapterCapability.FavoritesRead)
+        if (filter.playedOnly || filter.unplayedOnly) requireCapability(capabilities, AdapterCapability.WatchedFilter)
         val offset = decodeOffset(request.cursor)
         val (sortBy, sortOrder) = request.sort.toQuerySort()
         val query = JellyfinItemQueryFor(
@@ -119,13 +123,13 @@ class JellyfinMediaProviderAdapter(
             limit = request.pageSize,
             sortBy = sortBy,
             sortOrder = sortOrder,
-            includeItemTypes = emptyList(),
+            includeItemTypes = filter.mediaTypes.map { it.toIncludeItemTypes() },
             searchTerm = term.trim(),
-            genres = emptyList(),
-            years = emptyList(),
-            filters = emptyList(),
+            genres = filter.genres.toList(),
+            years = filter.years.toList(),
+            filters = filter.toQueryFilters(),
         )
-        return translate { facade.catalog.items(query) }.let { toPage(it, request, offset) }
+        return translate { facade.catalog.items(query) }.let { toPage(it, request, offset, collectionId = null) }
     }
 
     override suspend fun item(id: MediaId): MediaItem =
@@ -139,6 +143,15 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem> {
+        // The frozen /Shows/{id}/Episodes binding exposes no filter or sort
+        // parameters (episodes follow natural season/episode order). Silent
+        // drops would fake "unplayed-only" results, so expressible-nowhere
+        // constraints are rejected instead.
+        if (!request.filter.isEmpty || request.sort != null) {
+            throw ClientConfigError(
+                "episodes() cannot express sort or user-state/type filters on the Jellyfin shows endpoint",
+            )
+        }
         val offset = decodeOffset(request.cursor)
         val result = translate {
             facade.catalog.episodes(
@@ -150,7 +163,7 @@ class JellyfinMediaProviderAdapter(
                 fields = JELLYFIN_LIST_FIELDS,
             )
         }
-        return toPage(result, request, offset)
+        return toPage(result, request, offset, collectionId = null)
     }
 
     /**
@@ -168,37 +181,43 @@ class JellyfinMediaProviderAdapter(
 
     override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
         val info = translate { facade.playback.playbackInfo(userId = jellyfinUserId, itemId = item.value) }
-        info.errorCode?.takeIf { it != PlaybackErrorCode.Unknown }?.let { code ->
+        // Any non-null error code refuses — including the SDK's Unknown
+        // fallback: an unrecognized server refusal must never be read as
+        // "no error".
+        info.errorCode?.let { code ->
             return PlaybackPreparation.Refused(RefusalReason.ServerRefused, detail = "Jellyfin playback error code ${code.name}")
         }
-        val direct = info.mediaSources.firstOrNull { it.supportsDirectPlay == true || it.supportsDirectStream == true }
-        val source = direct
-            ?: info.mediaSources.firstOrNull { !it.transcodingUrl.isNullOrBlank() }
+        // Source selection honors the server's negotiation in strict order —
+        // direct play of the original file, then direct stream (remux, which
+        // must NOT be forced static=true), then transcoding. A static URL is
+        // never used to bypass the negotiated decision.
+        val directPlay = info.mediaSources.firstOrNull { it.supportsDirectPlay == true }
+        val directStream = info.mediaSources.firstOrNull { it.supportsDirectStream == true }
+        val transcode = info.mediaSources.firstOrNull { !it.transcodingUrl.isNullOrBlank() }
+        val source = directPlay ?: directStream ?: transcode
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.NoPlayableSource,
                 detail = "PlaybackInfo offered ${info.mediaSources.size} media source(s) with no usable stream",
             )
-        val streamUrl = try {
-            if (direct != null) {
-                facade.playback.directStreamUrl(
-                    itemId = item.value,
-                    mediaSourceId = source.id,
-                    container = source.container,
-                    playSessionId = info.playSessionId,
-                ).toEncodedString()
-            } else {
+        val streamUrl = when {
+            directPlay != null -> buildStreamUrl(item.value, source, static = true, playSessionId = info.playSessionId)
+            directStream != null -> buildStreamUrl(item.value, source, static = false, playSessionId = info.playSessionId)
+            else -> try {
                 facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
+            } catch (e: IllegalArgumentException) {
+                // Unparseable or cross-origin link: rejected instead of trusted.
+                return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
             }
-        } catch (e: IllegalArgumentException) {
-            // Unparseable or cross-origin link: rejected instead of trusted.
-            return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
         }
-        // External text subtitles ride their own validated URL; a broken
-        // subtitle link drops the subtitle, never the stream.
-        val subtitleUrl = info.mediaSources
-            .asSequence()
-            .flatMap { it.mediaStreams.asSequence() }
-            .firstOrNull { it.deliveryUrl != null && it.deliveryMethod == cn.mafei.cmp.providers.jellyfin.wire.SubtitleDeliveryMethod.External }
+        // External text subtitles ride their own validated URL and MUST come
+        // from the selected source only — another media version's tracks stay
+        // out; the default track wins when the source offers several. A
+        // broken subtitle link drops the subtitle, never the stream.
+        val externalSubtitles = source.mediaStreams.filter {
+            it.deliveryUrl != null &&
+                it.deliveryMethod == cn.mafei.cmp.providers.jellyfin.wire.SubtitleDeliveryMethod.External
+        }
+        val subtitleUrl = (externalSubtitles.firstOrNull { it.isDefault == true } ?: externalSubtitles.firstOrNull())
             ?.deliveryUrl
             ?.let { raw ->
                 try {
@@ -226,7 +245,9 @@ class JellyfinMediaProviderAdapter(
         val context = JellyfinReportingContext.decode(stream.reportingContext)
             ?: throw ClientConfigError("Jellyfin reporting context is missing or malformed")
         val playSessionId = stream.playSessionId?.value
-        val positionMs = event.positionMs.takeIf { it > 0L }
+        // Position 0 is legal and load-bearing: it is how a user seek back to
+        // the start clears a stale resume point on the server.
+        val positionMs = event.positionMs
         translate {
             when (event.kind) {
                 PlaybackEventKind.Start -> facade.playstate.reportStartMs(
@@ -255,23 +276,62 @@ class JellyfinMediaProviderAdapter(
     // ---------------------------------------------------------------- internals
 
     /**
+     * Builds the `/Videos|Audio/{id}/stream[.container]` URL against the
+     * configured base (same-origin by construction; server-provided file
+     * paths never participate). [static] = true only for direct play of the
+     * original file; a direct-stream (remux) decision keeps the parameter off
+     * so the server re-muxes as negotiated. Audio selection follows the
+     * source's stream layout: no video stream plus an audio stream means the
+     * `/Audio/` route.
+     */
+    private fun buildStreamUrl(
+        itemId: String,
+        source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto,
+        static: Boolean,
+        playSessionId: String?,
+    ): String {
+        val audio = source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
+            source.mediaStreams.any { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio }
+        val token = facade.client.sessionState.current.value?.accessToken
+        val url = facade.client.config.baseUrl.newBuilder()
+            .addPathSegment(if (audio) "Audio" else "Videos")
+            .addPathSegment(itemId)
+            .addPathSegments(source.container?.takeIf { it.isNotBlank() }?.let { "stream.$it" } ?: "stream")
+            .apply {
+                if (static) addQueryParameter("static", "true")
+                source.id?.let { addQueryParameter("mediaSourceId", it) }
+                playSessionId?.let { addQueryParameter("playSessionId", it) }
+                token?.let { addQueryParameter("api_key", it) }
+            }
+        return url.build().toEncodedString()
+    }
+
+    /**
      * Page assembly with the frozen total semantics: `totalRecordCount == 0`
-     * is "unknown" (the wire type cannot distinguish it), so paging advances
-     * purely on returned items — a short page ends the walk; an aligned full
-     * page earns a cursor and the (rare) empty follow-up page terminates it.
+     * is "unknown" (the wire type cannot distinguish it). With a positive
+     * total, the cursor keeps advancing while the offset is short of the
+     * total — servers that clamp the page size still complete the walk; an
+     * empty page (or a claimed-exhausted total) terminates it, so paging
+     * always ends. [collectionId] is the query context stamped onto the
+     * returned items, not a wire field.
      */
     private fun toPage(
         result: cn.mafei.cmp.providers.jellyfin.wire.QueryResultDto<cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto>,
         request: PageRequest,
         offset: Int,
+        collectionId: CollectionId?,
     ): Page<MediaItem> {
-        val items = result.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
-        val nextCursor: PageCursor? = if (result.items.size >= request.pageSize && result.items.isNotEmpty()) {
-            OffsetPageCursorCodec.encode(offset + result.items.size)
-        } else {
-            null
+        val items = result.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl, collectionId) }
+        val total = result.totalRecordCount
+        val nextOffset = offset + result.items.size
+        val nextCursor: PageCursor? = when {
+            result.items.isEmpty() -> null // terminal empty page, regardless of totals
+            total > 0 && nextOffset >= total -> null // server declares the end
+            result.items.size >= request.pageSize -> OffsetPageCursorCodec.encode(nextOffset)
+            total > 0 -> OffsetPageCursorCodec.encode(nextOffset) // clamped page, but the total says there is more
+            else -> null // no total information: a short page is the last one
         }
-        return Page.of(items, nextCursor = nextCursor, totalEstimate = result.totalRecordCount.takeIf { it > 0 })
+        return Page.of(items, nextCursor = nextCursor, totalEstimate = total.takeIf { it > 0 })
     }
 
     private fun decodeOffset(cursor: PageCursor?): Int = cursor?.let(OffsetPageCursorCodec::decode) ?: 0

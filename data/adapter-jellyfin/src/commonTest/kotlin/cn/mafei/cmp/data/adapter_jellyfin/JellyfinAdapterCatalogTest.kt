@@ -261,7 +261,7 @@ class JellyfinAdapterCatalogTest {
     // --------------------------------------------------------------- paging
 
     @Test
-    fun firstPageUsesNullCursorAndShortPageEndsTheWalk() = runTest {
+    fun firstPageUsesNullCursorAndWalkContinuesWhileTotalAllows() = runTest {
         val fixture = Fixture()
         fixture.transport.handler = { request ->
             val url = request.url.toString()
@@ -271,9 +271,14 @@ class JellyfinAdapterCatalogTest {
                     queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 5),
                     request.url,
                 )
-                else -> FakeJellyfinTransport.jsonResponse(
+                url.contains("startIndex=2") -> FakeJellyfinTransport.jsonResponse(
                     200,
                     queryResult(listOf(MOVIE_JSON.replace("m0102030405060708", "m2")), total = 5, startIndex = 2),
+                    request.url,
+                )
+                else -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(emptyList(), total = 5, startIndex = 3),
                     request.url,
                 )
             }
@@ -283,10 +288,28 @@ class JellyfinAdapterCatalogTest {
         assertEquals(OffsetPageCursorCodec.encode(2), first.nextCursor)
         assertEquals(5, first.totalEstimate)
         assertTrue(fixture.transport.requests.first().url.toString().contains("startIndex=0"))
-        // Short second page ends the walk.
+        // Clamped second page: 1 item, but the total says 5 — keep walking.
         val second = fixture.adapter.items(null, PageRequest(cursor = first.nextCursor, pageSize = 2))
         assertEquals(1, second.items.size)
-        assertNull(second.nextCursor)
+        assertEquals(OffsetPageCursorCodec.encode(3), second.nextCursor)
+        // Terminal empty page ends the walk.
+        val tail = fixture.adapter.items(null, PageRequest(cursor = second.nextCursor, pageSize = 2))
+        assertTrue(tail.isEmpty)
+        assertNull(tail.nextCursor)
+    }
+
+    @Test
+    fun alignedPageWithKnownTotalTerminatesWithoutAnExtraProbe() = runTest {
+        val fixture = Fixture()
+        // total=2, full page of 2: the server already declared the end.
+        fixture.transport.enqueueJson(
+            200,
+            queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 2),
+        )
+        val page = fixture.adapter.items(null, PageRequest(pageSize = 2))
+        assertEquals(2, page.items.size)
+        assertNull(page.nextCursor)
+        assertEquals(1, fixture.transport.requests.size)
     }
 
     @Test
@@ -302,32 +325,33 @@ class JellyfinAdapterCatalogTest {
     }
 
     @Test
-    fun alignedFullPageAsksOnceMoreThenStopsOnEmptyPage() = runTest {
+    fun alignedPageWithUnknownTotalStillProbesThenStopsOnEmptyPage() = runTest {
         val fixture = Fixture()
         fixture.transport.handler = { request ->
             val url = request.url.toString()
             when {
                 url.contains("startIndex=0") -> FakeJellyfinTransport.jsonResponse(
                     200,
-                    queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 2),
+                    queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 0),
                     request.url,
                 )
                 url.contains("startIndex=2") -> FakeJellyfinTransport.jsonResponse(
                     200,
-                    queryResult(emptyList(), total = 2, startIndex = 2),
+                    queryResult(emptyList(), total = 0, startIndex = 2),
                     request.url,
                 )
                 else -> throw IllegalStateException("unexpected paging request $url")
             }
         }
+        // Total unknown (0): the aligned full page still earns a probe.
         val first = fixture.adapter.items(null, PageRequest(pageSize = 2))
         assertEquals(2, first.items.size)
         assertEquals(OffsetPageCursorCodec.encode(2), first.nextCursor)
+        assertNull(first.totalEstimate)
         val tail = fixture.adapter.items(null, PageRequest(cursor = first.nextCursor, pageSize = 2))
         assertTrue(tail.isEmpty)
         assertNull(tail.nextCursor)
-        // The terminal page still reports the server's (positive) total.
-        assertEquals(2, tail.totalEstimate)
+        assertNull(tail.totalEstimate)
     }
 
     @Test
@@ -427,6 +451,94 @@ class JellyfinAdapterCatalogTest {
         assertTrue(url.contains("/Items"), url)
         assertTrue(url.contains("recursive=true"), url)
         assertFalse(url.contains("parentId="), url)
+    }
+
+    @Test
+    fun searchCarriesExpressibleConstraintsAndStampsNoCollection() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+        val page = fixture.adapter.search(
+            "fixture",
+            PageRequest(
+                filter = MediaFilter(
+                    mediaTypes = setOf(MediaType.Movie),
+                    years = setOf(2024),
+                    unplayedOnly = true,
+                ),
+            ),
+        )
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("searchTerm=fixture"), url)
+        assertTrue(url.contains("includeItemTypes=Movie"), url)
+        assertTrue(url.contains("years=2024"), url)
+        assertTrue(url.contains("filters=IsUnplayed"), url)
+        // Search results have no collection context to stamp.
+        assertNull(page.items.single().collectionId)
+    }
+
+    @Test
+    fun itemsStampTheQueriedCollectionOntoEntries() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+        val page = fixture.adapter.items(CollectionId("library-1"), PageRequest())
+        assertEquals(CollectionId("library-1"), page.items.single().collectionId)
+        assertTrue(fixture.transport.requests.single().url.toString().contains("parentId=library-1"))
+    }
+
+    @Test
+    fun episodesRejectFiltersAndSortTheShowsEndpointCannotExpress() = runTest {
+        val fixture = Fixture()
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.episodes(
+                MediaId("s1"),
+                seasonId = null,
+                request = PageRequest(filter = MediaFilter(unplayedOnly = true)),
+            )
+        }
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.episodes(
+                MediaId("s1"),
+                seasonId = null,
+                request = PageRequest(sort = MediaSort(MediaSortField.Title)),
+            )
+        }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    @Test
+    fun clampedShortPageWithKnownTotalKeepsWalkingUntilExhausted() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            val url = request.url.toString()
+            when {
+                // Server clamps the requested page of 50 down to one item,
+                // but the total says three exist.
+                url.contains("startIndex=0") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON), total = 3),
+                    request.url,
+                )
+                url.contains("startIndex=1") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON.replace("m0102030405060708", "m2")), total = 3, startIndex = 1),
+                    request.url,
+                )
+                url.contains("startIndex=2") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON.replace("m0102030405060708", "m3")), total = 3, startIndex = 2),
+                    request.url,
+                )
+                else -> throw IllegalStateException("unexpected paging request $url")
+            }
+        }
+        var cursor: PageCursor? = null
+        val seen = mutableListOf<String>()
+        do {
+            val page = fixture.adapter.items(null, PageRequest(cursor = cursor, pageSize = 50))
+            seen += page.items.map { it.id.value }
+            cursor = page.nextCursor
+        } while (cursor != null)
+        assertEquals(listOf("m0102030405060708", "m2", "m3"), seen)
     }
 
     // ------------------------------------------------------------- failures
