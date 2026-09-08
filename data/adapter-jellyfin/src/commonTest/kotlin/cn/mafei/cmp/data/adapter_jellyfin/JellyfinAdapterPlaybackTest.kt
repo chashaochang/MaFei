@@ -45,6 +45,18 @@ private const val PLAYBACK_INFO_AUDIO_ONLY =
 private const val PLAYBACK_INFO_MULTI_SOURCE_SUBTITLES =
     """{"MediaSources":[{"Id":"msVersionA","Protocol":"File","Container":"mkv","SupportsDirectPlay":false,"SupportsDirectStream":false,"SupportsTranscoding":false,"MediaStreams":[{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m9/Subtitles/2/0/Stream.srt"}]},{"Id":"msVersionB","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":1,"Type":"Audio","Codec":"aac"},{"Index":3,"Type":"Subtitle","Codec":"ass","IsExternal":true,"IsDefault":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m9/Subtitles/3/0/Stream.ass"}]}],"PlaySessionId":"session-0003"}"""
 
+/** Server mandates subtitle track 3 while track 2 carries the default flag. */
+private const val PLAYBACK_INFO_MANDATED_SUBTITLE =
+    """{"MediaSources":[{"Id":"msMandated","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":3,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"IsDefault":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m8/Subtitles/2/0/Stream.srt"},{"Index":3,"Type":"Subtitle","Codec":"ass","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m8/Subtitles/3/0/Stream.ass"}]}],"PlaySessionId":"session-0004"}"""
+
+/** Server turns subtitles off (-1) despite a default external track. */
+private const val PLAYBACK_INFO_SUBTITLES_OFF =
+    """{"MediaSources":[{"Id":"msOff","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":-1,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"IsDefault":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m7/Subtitles/2/0/Stream.srt"}]}],"PlaySessionId":"session-0005"}"""
+
+/** Server mandates an embedded (no DeliveryUrl) track: no external fallback. */
+private const val PLAYBACK_INFO_MANDATED_EMBEDDED =
+    """{"MediaSources":[{"Id":"msEmbedded","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":1,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":1,"Type":"Subtitle","Codec":"subrip","IsExternal":false},{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m6/Subtitles/2/0/Stream.srt"}]}],"PlaySessionId":"session-0006"}"""
+
 class JellyfinAdapterPlaybackTest {
 
     private fun runTest(block: suspend () -> Unit) = runSuspendTest(block)
@@ -140,19 +152,20 @@ class JellyfinAdapterPlaybackTest {
     }
 
     @Test
-    fun directStreamOnlySourceRemuxesWithoutStatic() = runTest {
+    fun directStreamOnlySourceServesStaticallyLikeDirectPlay() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, PLAYBACK_INFO_DIRECT_STREAM_ONLY)
         val ready = assertIs<PlaybackPreparation.Ready>(
             fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m0102030405060708")),
         )
         val stream = ready.streamUrl
-        // Remux keeps the stream endpoint and container but never forces the
-        // original file out (no static=true).
+        // Official Jellyfin 10.10.7 semantics: direct stream also serves with
+        // Static=true; the source stays the negotiated remux candidate.
         assertTrue(stream.startsWith("https://jellyfin.test/Videos/m0102030405060708/stream.mkv"), stream)
-        assertTrue(!stream.contains("static=true"), stream)
+        assertTrue(stream.contains("static=true"), stream)
         assertTrue(stream.contains("mediaSourceId=msRemux0102030405060708"), stream)
         assertTrue(stream.contains("playSessionId=session-0001"), stream)
+        assertTrue(stream.contains("api_key=fixture-token"), stream)
     }
 
     @Test
@@ -197,6 +210,44 @@ class JellyfinAdapterPlaybackTest {
             "https://jellyfin.test/Videos/m9/Subtitles/3/0/Stream.ass?api_key=fixture-token",
             ready.subtitleUrl,
         )
+    }
+
+    @Test
+    fun mandatedSubtitleIndexWinsOverSourceDefault() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_MANDATED_SUBTITLE)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m8")),
+        )
+        // The server picked track 3; the source-default flag on track 2 and
+        // "first external track" heuristics must not override it.
+        assertEquals(
+            "https://jellyfin.test/Videos/m8/Subtitles/3/0/Stream.ass?api_key=fixture-token",
+            ready.subtitleUrl,
+        )
+    }
+
+    @Test
+    fun mandatedNegativeSubtitleIndexTurnsSubtitlesOff() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_SUBTITLES_OFF)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m7")),
+        )
+        // -1 means subtitles off: no track is mounted, default flag or not.
+        assertEquals(null, ready.subtitleUrl)
+    }
+
+    @Test
+    fun mandatedEmbeddedSubtitleNeverFallsBackToAnotherExternalTrack() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_MANDATED_EMBEDDED)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m6")),
+        )
+        // The mandate names an embedded track without a delivery URL; the
+        // player renders it in-stream, so no external URL is attached.
+        assertEquals(null, ready.subtitleUrl)
     }
 
     @Test

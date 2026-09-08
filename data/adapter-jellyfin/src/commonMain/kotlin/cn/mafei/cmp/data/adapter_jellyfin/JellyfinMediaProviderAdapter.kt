@@ -37,8 +37,9 @@ import kotlin.coroutines.cancellation.CancellationException
  * - `totalRecordCount = 0` is "unknown", never "no media": paging advances on
  *   returned items, and [Page.totalEstimate] is null for 0.
  * - Identity-less wire items are dropped from listings, not failed.
- * - Stream URLs are only ever built by the facade's URL builders (same-origin
- *   validated); server-provided `Path` file locations never enter a Ready.
+ * - Stream URLs are built by the adapter from the configured base (or by
+ *   facade builders for transcode/subtitle links) — same-origin by
+ *   construction; server-provided `Path` file locations never enter a Ready.
  */
 class JellyfinMediaProviderAdapter(
     private val facade: JellyfinFacade,
@@ -188,9 +189,10 @@ class JellyfinMediaProviderAdapter(
             return PlaybackPreparation.Refused(RefusalReason.ServerRefused, detail = "Jellyfin playback error code ${code.name}")
         }
         // Source selection honors the server's negotiation in strict order —
-        // direct play of the original file, then direct stream (remux, which
-        // must NOT be forced static=true), then transcoding. A static URL is
-        // never used to bypass the negotiated decision.
+        // direct play of the original file, then direct stream, then
+        // transcoding. Per official Jellyfin 10.10.7 semantics BOTH direct
+        // play and direct stream serve with Static=true; the negotiation
+        // decides WHICH source streams statically, it is never stripped.
         val directPlay = info.mediaSources.firstOrNull { it.supportsDirectPlay == true }
         val directStream = info.mediaSources.firstOrNull { it.supportsDirectStream == true }
         val transcode = info.mediaSources.firstOrNull { !it.transcodingUrl.isNullOrBlank() }
@@ -200,8 +202,8 @@ class JellyfinMediaProviderAdapter(
                 detail = "PlaybackInfo offered ${info.mediaSources.size} media source(s) with no usable stream",
             )
         val streamUrl = when {
-            directPlay != null -> buildStreamUrl(item.value, source, static = true, playSessionId = info.playSessionId)
-            directStream != null -> buildStreamUrl(item.value, source, static = false, playSessionId = info.playSessionId)
+            directPlay != null || directStream != null ->
+                buildStreamUrl(item.value, source, playSessionId = info.playSessionId)
             else -> try {
                 facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
             } catch (e: IllegalArgumentException) {
@@ -211,13 +213,10 @@ class JellyfinMediaProviderAdapter(
         }
         // External text subtitles ride their own validated URL and MUST come
         // from the selected source only — another media version's tracks stay
-        // out; the default track wins when the source offers several. A
-        // broken subtitle link drops the subtitle, never the stream.
-        val externalSubtitles = source.mediaStreams.filter {
-            it.deliveryUrl != null &&
-                it.deliveryMethod == cn.mafei.cmp.providers.jellyfin.wire.SubtitleDeliveryMethod.External
-        }
-        val subtitleUrl = (externalSubtitles.firstOrNull { it.isDefault == true } ?: externalSubtitles.firstOrNull())
+        // out. The server's DefaultSubtitleStreamIndex wins when present
+        // (-1 = subtitles off); otherwise the source's default external track.
+        // A broken subtitle link drops the subtitle, never the stream.
+        val subtitleUrl = selectSubtitleStream(source)
             ?.deliveryUrl
             ?.let { raw ->
                 try {
@@ -276,18 +275,16 @@ class JellyfinMediaProviderAdapter(
     // ---------------------------------------------------------------- internals
 
     /**
-     * Builds the `/Videos|Audio/{id}/stream[.container]` URL against the
-     * configured base (same-origin by construction; server-provided file
-     * paths never participate). [static] = true only for direct play of the
-     * original file; a direct-stream (remux) decision keeps the parameter off
-     * so the server re-muxes as negotiated. Audio selection follows the
-     * source's stream layout: no video stream plus an audio stream means the
-     * `/Audio/` route.
+     * Builds the `/Videos|Audio/{id}/stream[.container]?static=true` URL
+     * against the configured base (same-origin by construction; server-provided
+     * file paths never participate). Static=true serves direct play AND
+     * direct stream alike, per official Jellyfin 10.10.7 semantics. Audio
+     * selection follows the source's stream layout: no video stream plus an
+     * audio stream means the `/Audio/` route.
      */
     private fun buildStreamUrl(
         itemId: String,
         source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto,
-        static: Boolean,
         playSessionId: String?,
     ): String {
         val audio = source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
@@ -298,12 +295,34 @@ class JellyfinMediaProviderAdapter(
             .addPathSegment(itemId)
             .addPathSegments(source.container?.takeIf { it.isNotBlank() }?.let { "stream.$it" } ?: "stream")
             .apply {
-                if (static) addQueryParameter("static", "true")
+                addQueryParameter("static", "true")
                 source.id?.let { addQueryParameter("mediaSourceId", it) }
                 playSessionId?.let { addQueryParameter("playSessionId", it) }
                 token?.let { addQueryParameter("api_key", it) }
             }
         return url.build().toEncodedString()
+    }
+
+    /**
+     * Picks the external subtitle track for the SELECTED source. The
+     * server-mandated [cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto.defaultSubtitleStreamIndex]
+     * wins when present: `-1` means subtitles are off (null), a track index
+     * resolves to that exact external track or none at all (a mandated
+     * embedded track never falls back to a different external one). Without
+     * a server mandate, the source's default external track wins, then the
+     * first external one.
+     */
+    private fun selectSubtitleStream(source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto): cn.mafei.cmp.providers.jellyfin.wire.MediaStreamDto? {
+        val external = source.mediaStreams.filter {
+            it.deliveryUrl != null &&
+                it.deliveryMethod == cn.mafei.cmp.providers.jellyfin.wire.SubtitleDeliveryMethod.External
+        }
+        val mandated = source.defaultSubtitleStreamIndex
+        if (mandated != null) {
+            if (mandated < 0) return null // server turned subtitles off
+            return external.firstOrNull { it.index == mandated }
+        }
+        return external.firstOrNull { it.isDefault == true } ?: external.firstOrNull()
     }
 
     /**
