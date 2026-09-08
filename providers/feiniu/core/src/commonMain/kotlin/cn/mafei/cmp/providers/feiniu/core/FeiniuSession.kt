@@ -8,6 +8,8 @@ data class FeiniuCredentials(
     val token: String = "",
     val cookie: String = "",
 ) {
+    override fun toString(): String = "FeiniuCredentials(token=██, cookie=██)"
+
     /** Normalizes: trims, derives the token from `Trim-MC-token`, re-merges. */
     fun normalized(): FeiniuCredentials {
         val trimmedCookie = cookie.trim()

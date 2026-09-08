@@ -136,7 +136,7 @@ class OhosAssetCredentialStoreTest {
     }
 }
 
-private class FakeAsset : AssetBackend {
+internal class FakeAsset : AssetBackend {
     val values = linkedMapOf<List<Byte>, ByteArray>()
     val addStatuses = mutableListOf<Int>()
     val updateStatuses = mutableListOf<Int>()

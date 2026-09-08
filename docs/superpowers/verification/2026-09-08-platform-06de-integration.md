@@ -1,5 +1,13 @@
 # 06D/06E Mac 与 OHOS 安全存储集成
 
+后续存储增量（2026-09-08）：OHOS 长凭证现已实现 Asset 密钥信封 + 系统 AES-GCM
+密文文件；宿主状态机测试 **28/28 实际执行**，OHOS **33 项仅编译/链接**，
+真实 Asset/GCM/文件锁/重启仍 Pending，见 [模块说明](../../../platform/secure-storage-ohos/README.md)。
+账号恢复 Pending/Committed 索引已接入 SessionRepository，双 JVM 各 **56/56**；
+SDK 与真实持久设置后端的应用接线未完成，见 [04E 增量](../plans/2026-09-08-codex04e-session.md)。
+另已修复飞牛凭证/会话字符串泄露 Token/Cookie：新增测试先红后绿，Feiniu core
+Desktop **15/15**、Android **14/14**，iOS/OHOS 编译通过。
+
 后续网络增量：iOS Darwin 薄绑定已在 iPhone ARM 模拟器通过 7 项实际 loopback 测试，
 共享 JVM 双目标各 32 项通过，见 [iOS HTTP](../../../platform/http-ios/README.md)。
 OHOS 后续已复用 CPF Curl 的 HTTP-only 源码修补版，保留原 cinterop/libcurl，

@@ -1,5 +1,17 @@
 # Codex 04E：会话与安全凭证写序
 
+## 后续增量：账号恢复索引（2026-09-08）
+
+`SessionRepository(store, settings)` 现在可使用现有 `SettingsStorage` 保存非敏感账号选择与凭证别名索引；原单参数构造继续保持进程内行为。新增 `savedAccounts()`、`restoreCurrent()` 和 `restoreAccount(selection)`，恢复结果只提供 SDK 安装材料，不发布 Ready，不复用旧进程的 SDK 代次。
+
+- 每组凭证写入前提交 Pending，全部安全存储写入成功后提交 Committed。中断的组不参与恢复，避免新 Token 与旧 Cookie 混用；不宣称跨存储事务。
+- 退出先撤销恢复资格再删除凭证，标记失败必须重试，不能宣称退出成功。不会自动恢复另一个保存的账号。
+- 别名跨账号冲突拒绝；缺少任一应有凭证则拒绝恢复整组；无 Cookie 的合法快照无需伪造值。索引损坏抛脱敏存储异常。
+- 主线回归发现无效投影校验被移出清理分支，导致旧租约未撤销；既有测试实际失败后已修复。日志 `/private/tmp/mafei-session-recovery-review.log`。
+- `/private/tmp/mafei-session-recovery-green.log`：Desktop/Android 各 **56/56** 实际通过（新增恢复测试 13 项）；iOS/OHOS commonMain 编译、架构门禁通过。Native 未运行。
+
+仍需应用启动层提供真实 `SettingsStorage`、服务器地址/用户信息、稳定别名并安装 SDK 会话，再调用 select/observe。索引依然要求单实例独占写入，Pending 组重新登录时清理，不提供跨进程写协调或自动修复受损凭证。下面保留原批次历史，旧文所列“恢复/journal 未实现”已由此增量替代，不代表应用集成或真机验收完成。
+
 主线终审（2026-09-08）：已逐项审读并修正排队取消与过早 Ready 发布；独立重跑 Repository Desktop/Android 各 43 项（04D 24 + 04E 19）全部通过，迁移联合回归各 30 项通过。日志 `/private/tmp/mafei-data-final-independent.log`；本轮 Native 编译门禁通过（缓存命中），不计 Native 运行。批准此批跨平台写序核心，不代表真实平台存储或应用登录接线完成。
 
 本包只修改 `data/repositories/**/session/`；没有改共享 Gradle、Provider、core、UI、宿主或 legacy，没有自行提交。基于工作区实际代码和冻结飞牛 `FeiniuFacade.credentials: StateFlow<FeiniuSessionSnapshot>` 编写，不消费 `FeiniuCallResult.credentials`。
