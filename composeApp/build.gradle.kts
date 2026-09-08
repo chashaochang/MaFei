@@ -137,6 +137,10 @@ kotlin {
                 // but no matching Desktop bundle exists. MaFei only targets ARM Macs,
                 // so use JetBrains' official macOS ARM64 Desktop artifact explicitly.
                 implementation(libs.compose.desktop)
+                // Compose's UI dispatcher does not install kotlinx.coroutines Dispatchers.Main.
+                // Swing's JVM-only 1.10.2 provider is binary-compatible with the CPF core;
+                // do not let its transitive graph replace our frozen multiplatform core.
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2") { isTransitive = false }
                 implementation(project(":player:runtime-macos"))
                 implementation(project(":platform:http-macos"))
                 implementation(project(":platform:secure-storage-macos"))
@@ -240,9 +244,22 @@ compose.resources {
     generateResClass = always
 }
 
+// Explicit opt-in for local Mac acceptance only. Default and release remain Keychain-backed.
+val desktopDevelopmentStorage = providers.gradleProperty("mafei.desktopDevelopmentStorage")
+    .map { it == "true" }.getOrElse(false)
+if (desktopDevelopmentStorage) {
+    gradle.taskGraph.whenReady {
+        check(allTasks.none { it.project == project &&
+            (it.name.contains("release", ignoreCase = true) || it.name.contains("Dmg") || it.name.contains("Pkg")) }) {
+            "Development credential storage is forbidden for release/installer packaging"
+        }
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "cn.mafei.cmp.MainKt"
+        if (desktopDevelopmentStorage) jvmArgs += "-Dmafei.desktop.developmentStorage=true"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg)

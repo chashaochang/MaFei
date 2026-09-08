@@ -54,6 +54,16 @@ class MediaBrowserTest {
         assertNull(b.state.value.error); assertFalse(b.state.value.loading)
     }
 
+    @Test fun libraryMediaKindsApplyToBothFirstAndFollowingPages() = runBlocking<Unit> {
+        val a = Adapter()
+        a.libraryList = listOf(a.libraryList.first().copy(mediaTypes = setOf(MediaType.Series)))
+        a.fetch = { _, request -> Page(listOf(a.media(if (request.cursor == null) "a" else "b")),
+            if (request.cursor == null) PageCursor("next") else null) }
+        val b = browser(a); b.start(); b.loadMore()
+        assertEquals(2, a.requests.size)
+        a.requests.forEach { assertEquals(setOf(MediaType.Series), it.filter.mediaTypes) }
+    }
+
     @Test fun opaquePagesMergeWithoutDuplicatesAndStopAtEnd() = runBlocking<Unit> {
         val a = Adapter(); a.fetch = { _, request ->
             if (request.cursor == null) Page(listOf(a.media("a"), a.media("b")), PageCursor("next"))

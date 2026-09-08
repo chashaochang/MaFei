@@ -24,6 +24,7 @@ fun DetailScreen(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     stale: Boolean = false,
+    artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -38,12 +39,14 @@ fun DetailScreen(
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     if (maxWidth >= 640.dp) {
                         Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                            TextPoster(item.title, Modifier.width(220.dp).aspectRatio(2f / 3f))
+                            if (artwork != null) artwork(item, Modifier.width(220.dp).aspectRatio(2f / 3f))
+                            else TextPoster(item.title, Modifier.width(220.dp).aspectRatio(2f / 3f))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { Summary(item) }
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            TextPoster(item.title, Modifier.width(156.dp).aspectRatio(2f / 3f))
+                            if (artwork != null) artwork(item, Modifier.width(156.dp).aspectRatio(2f / 3f))
+                            else TextPoster(item.title, Modifier.width(156.dp).aspectRatio(2f / 3f))
                             Summary(item)
                         }
                     }

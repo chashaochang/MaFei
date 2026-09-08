@@ -82,7 +82,7 @@ class MediaBrowser(private val repository: MediaRepository, private val session:
     }
 
     private suspend fun loadFirst(id: CollectionId, operation: Long, staleLibraries: Boolean) {
-        val loaded = repository.browse(session, MediaQuery.Items(id), refresh = true)
+        val loaded = repository.browse(session, MediaQuery.Items(id), libraryRequest(id), refresh = true)
         if (operation != ticket) return
         val freshPages = MediaPageAccumulator()
         val page = freshPages.append(null, loaded.value)
@@ -99,7 +99,7 @@ class MediaBrowser(private val repository: MediaRepository, private val session:
         val operation = ++ticket
         mutableState.value = before.copy(loading = true, error = null)
         try {
-            val loaded = repository.browse(session, MediaQuery.Items(id), PageRequest(cursor = cursor))
+            val loaded = repository.browse(session, MediaQuery.Items(id), libraryRequest(id, cursor))
             if (operation != ticket) return
             val page = pages.append(cursor, loaded.value)
             mutableState.value = state.value.copy(items = page.items, nextCursor = page.nextCursor, loading = false,
@@ -111,6 +111,11 @@ class MediaBrowser(private val repository: MediaRepository, private val session:
             if (operation == ticket) mutableState.value = state.value.copy(loading = false, error = browseError(failure))
         }
     }
+
+    private fun libraryRequest(id: CollectionId, cursor: PageCursor? = null): PageRequest = PageRequest(
+        cursor = cursor,
+        filter = MediaFilter(mediaTypes = state.value.collections.firstOrNull { it.id == id }?.mediaTypes.orEmpty()),
+    )
 
     suspend fun openDetail(id: MediaId) {
         val operation = ++detailTicket

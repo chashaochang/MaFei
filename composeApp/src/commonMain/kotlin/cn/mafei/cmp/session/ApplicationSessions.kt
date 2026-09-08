@@ -22,6 +22,7 @@ class ApplicationSession internal constructor(
     val media: MediaSession,
     internal val credentials: SessionHandle,
     internal val binding: ProviderSessionBinding,
+    val connection: SavedConnection,
 ) {
     internal var observation: Job? = null
 }
@@ -132,7 +133,7 @@ class ApplicationSessions(
             var lease: SessionHandle? = null
             try {
                 lease = credentials.select(connection.selection, binding.aliases, binding.source)
-                val session = ApplicationSession(connection.selection, media.open(binding.adapter), lease, binding)
+                val session = ApplicationSession(connection.selection, media.open(binding.adapter), lease, binding, connection)
                 active = session
                 mutableState.value = ApplicationSessionState(ApplicationSessionStatus.Ready, session.selection, session)
                 session.observation = scope.launch { observe(session) }

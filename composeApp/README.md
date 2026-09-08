@@ -1,5 +1,76 @@
 # Application runtime / login and browsing
 
+## Login/home completed increment — 2026-09-09
+
+The packaged Mac application now completes **form login → real library/artwork →
+restart restore → local logout**. The remaining runtime failure after the Keychain
+change was **missing `Dispatchers.Main`**, not another proven Keychain failure.
+Compose's own UI dispatcher did not install a kotlinx-coroutines Main provider;
+starting the session observer failed. Desktop now explicitly includes the Swing
+provider, with an actual AWT-thread regression test (red before dependency, green
+after). This corrects the earlier incomplete diagnosis below.
+
+### Temporary Mac credential policy (explicit user approval)
+
+For local development only, build/run with:
+
+```bash
+./gradlew :composeApp:createDistributable -Pmafei.desktopDevelopmentStorage=true
+```
+
+The resulting `.app` carries `-Dmafei.desktop.developmentStorage=true` and a
+development title. Token/Cookie values are **unencrypted**, under the Mac user's
+`Library/Application Support/cn.mafei.cmp/credentials-development-v1/sessions.json`,
+with owner-only directory/file permissions (0700/0600) and atomic replacement.
+Passwords and arbitrary raw secrets are rejected. This is not a secure-storage
+claim or implicit Keychain fallback. Default builds keep Keychain; DMG/PKG/release
+packaging is blocked with this flag. Other platforms are unchanged. The backend is
+single-process only; do not run two writers against the same profile.
+
+### UI and media behavior
+
+- Compact glass navigation, account/server context, and secondary laboratory menu.
+- Wide login uses a two-column welcome/form layout; narrow windows use a scrollable
+  single column. Password visibility, keyboard focus/Return submit, loading/error and
+  HTTP warning are present; submitted passwords are cleared from composition.
+- Home has adaptive poster grids, horizontally scrolling library selection,
+  progress/played/favorite markers, retry/loading/skeleton/empty/stale states and
+  opaque cursor pagination. Library type filters now apply on **all pages**, so
+  Series libraries do not mix in Seasons/Episodes (a real-server finding with a
+  regression test that failed before the fix). There are no invented recommendation
+  or continue-watching feeds.
+- Artwork uses existing platform transport, same-origin configured-server checks,
+  header credentials (never token query synthesis), same-origin redirects, 4 MiB
+  response cap and 12s deadline. Images decode off the UI thread; four concurrent
+  loads and a 24 MiB account/screen-scoped decoded memory cache. Invalid images show
+  a placeholder. No disk image cache, third-party image SDK or new module.
+- Detail receives the same artwork renderer. Playback remains out of this increment.
+
+### Actual acceptance
+
+- Packaged SDK/ApplicationRuntime against the user's Jellyfin **10.11.11**: login,
+  all **10** libraries, sampled artwork in each library, and new-runtime restoration
+  passed. The primary movie library contains **9** movies after type filtering.
+- Actual Mac window: restored normal profile into home; isolated clean profile
+  completed keyboard form entry/Return submit into home; subsequent process restart
+  restored it; keyboard logout returned to login and left **0** credential entries
+  in that isolated profile. The normal profile is retained for the user.
+- Actual dark/light desktop home and wide login inspected; **390dp** home and login
+  inspected (two-column posters, one-column form with scrolling). No coordinate
+  clicks were guessed: the form/theme/logout acceptance used keyboard focus.
+- Desktop **68/68**, Android JVM **60/60** tests passed. iOS ARM64/OHOS source
+  compilation and `verifyArchitecture` passed; these are not device acceptance.
+- Logs: `/private/tmp/mafei-login-home-final.log`,
+  `/private/tmp/mafei-library-types-red.log`, `/private/tmp/mafei-main-dispatcher-red.log`,
+  `/private/tmp/mafei-main-dispatcher-green.log`, `/private/tmp/mafei-login-home-fixed-runtime.log`.
+  No server passwords or tokens belong in this repository or logs.
+
+For window-size checks the Desktop entry honors bounded optional JVM properties
+`mafei.desktop.windowWidth` / `mafei.desktop.windowHeight` (dp); defaults 1180×780.
+These are Mac layout checks, not iOS/Android/OHOS keyboard, inset or device acceptance.
+The Native migration bridge, player, series/episode drilldown, account management,
+and secure Mac distribution/signing remain separate pending work.
+
 ## Mac login failure follow-up (2026-09-09)
 
 **Latest: explicit file-based Keychain selection.** User approved using the working

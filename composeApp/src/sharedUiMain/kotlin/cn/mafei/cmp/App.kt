@@ -9,6 +9,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import cn.mafei.cmp.common.media.ArtworkMemoryCache
+import cn.mafei.cmp.common.media.MediaArtwork
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
@@ -49,10 +54,31 @@ fun App(runtime: ApplicationRuntime, onThemeChanged: (Boolean) -> Unit = {}) {
                             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop).background(Brush.verticalGradient(
                                 listOf(MaterialTheme.colorScheme.primary.copy(alpha = .12f), MaterialTheme.colorScheme.background))))
                             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                                AppGlassBar(backdrop, Modifier.fillMaxWidth()) {
-                                    Text("MaFei", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                                    TextButton(onClick = { dark = !dark }) { Text(if (dark) "浅色" else "深色") }
-                                    TextButton(onClick = { probe = true }, enabled = !busy) { Text("实验室") }
+                                MaFeiSurface(GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Reduced,
+                                    tintAlpha = .88f, cornerRadiusDp = 0f), Modifier.fillMaxWidth(), backdrop) {
+                                    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 24.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(color = MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(10.dp)) {
+                                            Text("M", Modifier.padding(horizontal = 11.dp, vertical = 6.dp), fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                        Column(Modifier.weight(1f)) {
+                                            Text("MaFei", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            sessionState.session?.connection?.let { saved ->
+                                                Text("${saved.account.displayName} · ${saved.server.name}", maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        TextButton(onClick = { dark = !dark }) { Text(if (dark) "浅色" else "深色") }
+                                        var menu by remember { mutableStateOf(false) }
+                                        Box {
+                                            TextButton(onClick = { menu = true }, enabled = !busy) { Text("更多") }
+                                            DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                                DropdownMenuItem(text = { Text("实验室") }, onClick = { menu = false; probe = true })
+                                            }
+                                        }
+                                    }
                                 }
                                 Box(Modifier.weight(1f)) {
                                     when (sessionState.status) {
@@ -117,17 +143,23 @@ private fun BrowseContent(runtime: ApplicationRuntime, session: ApplicationSessi
     val state by browser.state.collectAsState()
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
+    val artworkCache = remember(session) { ArtworkMemoryCache() }
+    val fetchArtwork: suspend (cn.mafei.cmp.core.domain.MediaImage) -> ByteArray? = remember(session) {
+        { image -> runtime.loadArtwork(session, image) }
+    }
     LaunchedEffect(state.selectedCollection) { gridState.scrollToItem(0) }
     LaunchedEffect(browser) { browser.start() }
     if (state.detailId != null) {
         DetailScreen(state.detail, state.detailLoading, state.detailError, browser::back,
-            onRetry = { state.detailId?.let { id -> scope.launch { browser.openDetail(id) } } })
+            onRetry = { state.detailId?.let { id -> scope.launch { browser.openDetail(id) } } },
+            artwork = { item, modifier -> MediaArtwork(item.primaryImage, item.title, artworkCache, fetchArtwork, modifier) })
     } else HomeScreen(state.collections, state.items, state.selectedCollection, state.loading,
         state.error, state.stale, state.nextCursor != null,
         onCollection = { collection -> scope.launch { browser.select(collection.id) } },
         onItem = { item -> scope.launch { browser.openDetail(item.id) } },
         onRetry = { scope.launch { browser.refresh() } },
-        onLoadMore = { scope.launch { browser.loadMore() } }, onLogout = onLogout, gridState = gridState)
+        onLoadMore = { scope.launch { browser.loadMore() } }, onLogout = onLogout, gridState = gridState,
+        artwork = { item, modifier -> MediaArtwork(item.primaryImage, item.title, artworkCache, fetchArtwork, modifier) })
 }
 
 @Composable

@@ -1,6 +1,7 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -8,12 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Provider-neutral card. Remote artwork is deliberately not claimed to be loaded. */
+/** Provider-neutral card. The caller owns authenticated artwork fetching and lifecycle. */
 @Composable
 fun MediaCard(
     title: String,
@@ -21,13 +25,30 @@ fun MediaCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     status: String? = null,
+    poster: (@Composable (Modifier) -> Unit)? = null,
+    progress: Float? = null,
 ) {
-    OutlinedCard(onClick = onClick, modifier = modifier) {
-        TextPoster(title, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(16.dp))) {
+            if (poster != null) poster(Modifier.fillMaxSize()) else TextPoster(title, Modifier.fillMaxSize())
+            status?.let {
+                Surface(Modifier.align(Alignment.TopStart).padding(8.dp), color = Color(0xDD151921),
+                    contentColor = Color.White, shape = RoundedCornerShape(6.dp)) {
+                    Text(it, Modifier.padding(horizontal = 7.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            progress?.takeIf { it > 0f }?.let {
+                LinearProgressIndicator(progress = { it.coerceIn(0f, 1f) }, modifier = Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth().height(3.dp), color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.Black.copy(alpha = .5f))
+            }
+        }
+        Column(Modifier.padding(horizontal = 2.dp).padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium,
+                maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -35,14 +56,17 @@ fun MediaCard(
 @Composable
 fun TextPoster(title: String, modifier: Modifier = Modifier) {
     Box(
-        modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier.clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(listOf(
+            MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.surface,
+        ))),
         contentAlignment = Alignment.Center,
     ) {
         Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title.take(1).ifEmpty { "影" }, style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
-            Text("文字封面", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("暂无封面", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

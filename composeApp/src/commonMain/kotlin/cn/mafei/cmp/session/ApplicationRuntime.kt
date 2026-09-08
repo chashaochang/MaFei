@@ -28,6 +28,12 @@ class ApplicationRuntime(
         ConnectionCatalog(settings), DefaultProviderSessionFactory(transport), scope,
     )
     private val login = ProviderLogin(transport)
+    private val artwork = SessionArtwork(transport)
+
+    suspend fun loadArtwork(session: ApplicationSession, image: cn.mafei.cmp.core.domain.MediaImage): ByteArray? {
+        if (isClosed || sessions.state.value.session !== session) return null
+        return artwork.load(session.connection, session.binding, image).takeIf { sessions.state.value.session === session }
+    }
 
     /** Fresh login; ownership transfers to sessions only after admission. */
     suspend fun connect(provider: ProviderKind, baseUrl: String, username: String, password: String): ApplicationSession {
