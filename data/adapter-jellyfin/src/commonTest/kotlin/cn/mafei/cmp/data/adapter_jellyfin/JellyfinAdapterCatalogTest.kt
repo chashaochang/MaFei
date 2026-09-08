@@ -1,0 +1,523 @@
+package cn.mafei.cmp.data.adapter_jellyfin
+
+import cn.mafei.cmp.core.domain.AccountId
+import cn.mafei.cmp.core.domain.AuthenticationError
+import cn.mafei.cmp.core.domain.AuthFailureKind
+import cn.mafei.cmp.core.domain.AuthorizationError
+import cn.mafei.cmp.core.domain.ClientConfigError
+import cn.mafei.cmp.core.domain.CollectionId
+import cn.mafei.cmp.core.domain.ImageKind
+import cn.mafei.cmp.core.domain.MediaFilter
+import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaSort
+import cn.mafei.cmp.core.domain.MediaSortField
+import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.core.domain.NetworkUnreachableError
+import cn.mafei.cmp.core.domain.PageCursor
+import cn.mafei.cmp.core.domain.PageRequest
+import cn.mafei.cmp.core.domain.PersonKind
+import cn.mafei.cmp.core.domain.ProtocolDecodingError
+import cn.mafei.cmp.core.domain.ProviderKind
+import cn.mafei.cmp.core.domain.RateLimitedError
+import cn.mafei.cmp.core.domain.ResourceNotFoundError
+import cn.mafei.cmp.core.domain.ServerError
+import cn.mafei.cmp.core.domain.ServerId
+import cn.mafei.cmp.core.domain.SortDirection
+import cn.mafei.cmp.core.domain.TimeoutError
+import cn.mafei.cmp.core.http_contract.HttpTimeoutException
+import cn.mafei.cmp.core.http_contract.HttpTransportException
+import cn.mafei.cmp.core.http_contract.HttpUrl
+import cn.mafei.cmp.core.http_contract.TransportFailureKind
+import cn.mafei.cmp.data.adapter_contract.AdapterCapability
+import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
+import cn.mafei.cmp.providers.jellyfin.core.InMemoryJellyfinSessionState
+import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
+import cn.mafei.cmp.providers.jellyfin.core.JellyfinSession
+import cn.mafei.cmp.providers.jellyfin.testkit.FakeJellyfinTransport
+import cn.mafei.cmp.providers.jellyfin.testkit.JellyfinFixtures
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Local PascalCase item fixtures beyond the shared testkit set. */
+private const val EPISODE_JSON = """{"Name":"Pilot","Id":"e0102030405060708","Type":"Episode","SeriesId":"s0102030405060708","SeasonId":"se01020304050607","IndexNumber":2,"ParentIndexNumber":1,"RunTimeTicks":15000000000,"PremiereDate":"2023-04-01T20:00:00Z","UserData":{"IsFavorite":true,"Played":true,"PlayCount":2,"PlaybackPositionTicks":123450000,"PlayedPercentage":41.2,"LastPlayedDate":"2023-05-01T00:00:00Z"}}"""
+
+private const val MOVIE_JSON =
+    """{"Name":"Fixture Movie","OriginalTitle":"Original Movie","Id":"m0102030405060708","Type":"Movie","Overview":"Overview text","ProductionYear":2024,"CommunityRating":8.1,"OfficialRating":"PG-13","Genres":["Drama"],"PremiereDate":"2024-01-01T00:00:00Z","DateCreated":"2024-02-01T00:00:00Z","RunTimeTicks":72000000000,"People":[{"Name":"Ada Director","Role":"Director","Type":"Director"},{"Name":"Bob Actor","Role":"Lead","Type":"Actor"}],"ImageTags":{"Primary":"1111111122222222","Thumb":"3333333344444444","ScreenGrab":"ignored"},"BackdropImageTags":["bd00000000000001"],"UserData":{"IsFavorite":false}}"""
+
+private const val SEASON_JSON = """{"Name":"Season 1","Id":"se01020304050607","Type":"Season","IndexNumber":2,"SeriesId":"s0102030405060708"}"""
+
+private const val UNKNOWN_TYPE_JSON = """{"Name":"Hologram Show","Id":"h0102030405060708","Type":"Hologram"}"""
+
+private const val NO_ID_JSON = """{"Name":"No identity","Type":"Movie"}"""
+
+private const val VIEWS_JSON = """{"Items":[{"Name":"Movies","Id":"v0102030405060708","Type":"CollectionFolder","CollectionType":"movies","ImageTags":{"Primary":"1111111122222222"}},{"Name":"TV","Id":"v0908070605040302","Type":"CollectionFolder","CollectionType":"tvshows"},{"Name":"Mixed","Id":"v11011121314151617","Type":"UserView","CollectionType":"HolographicLibrary"}],"TotalRecordCount":3,"StartIndex":0}"""
+
+private fun queryResult(itemsJson: List<String>, total: Int, startIndex: Int = 0): String =
+    """{"Items": [${itemsJson.joinToString(",")}], "TotalRecordCount": $total, "StartIndex": $startIndex}"""
+
+class JellyfinAdapterCatalogTest {
+
+    private fun runTest(block: suspend () -> Unit) = runSuspendTest(block)
+
+    private class Fixture(session: JellyfinSession? = JellyfinSession("u1", "fixture-token")) {
+        val transport = FakeJellyfinTransport()
+        val adapter = JellyfinMediaProviderAdapter(
+            facade = cn.mafei.cmp.providers.jellyfin.facade.DefaultJellyfinFacade(
+                config = JellyfinServerConfig(
+                    baseUrl = HttpUrl.parse(JellyfinFixtures.BASE_URL),
+                    clientName = "MaFei",
+                    deviceName = "Test",
+                    deviceId = "device-1",
+                    appVersion = "2.0.0",
+                ),
+                transport = transport,
+                sessionState = InMemoryJellyfinSessionState(session),
+            ),
+            serverId = ServerId("js-1"),
+            accountId = AccountId("acc-1"),
+            jellyfinUserId = "u1",
+        )
+    }
+
+    // ------------------------------------------------------------ identity
+
+    @Test
+    fun exposesIdentityAndFrozenCapabilities() {
+        val fixture = Fixture()
+        assertEquals(ProviderKind.Jellyfin, fixture.adapter.provider)
+        assertEquals(ServerId("js-1"), fixture.adapter.serverId)
+        assertEquals(AccountId("acc-1"), fixture.adapter.accountId)
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.Search))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesRead))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesFilter))
+        assertFalse(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesEdit))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.WatchedFilter))
+        assertFalse(fixture.adapter.capabilities.supports(AdapterCapability.WatchedEdit))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.PlaybackReporting))
+    }
+
+    @Test
+    fun userDataWritesAreRejectedNeverFaked() = runTest {
+        val fixture = Fixture()
+        // P0 SDK has no user-data write endpoints; both edits must refuse.
+        assertFailsWith<ClientConfigError> { fixture.adapter.setFavorite(MediaId("m1"), favorite = true) }
+        assertFailsWith<ClientConfigError> { fixture.adapter.setWatched(MediaId("m1"), watched = true) }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    // ---------------------------------------------------------- collections
+
+    @Test
+    fun viewsMapToCollectionsWithCollectionTypesAndImages() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, VIEWS_JSON)
+        val page = fixture.adapter.collections(PageRequest())
+        assertEquals(listOf("Movies", "TV", "Mixed"), page.items.map { it.name })
+        assertEquals(ProviderKind.Jellyfin, page.items.first().provider)
+        assertEquals(setOf(MediaType.Movie), page.items[0].mediaTypes)
+        assertEquals(setOf(MediaType.Series), page.items[1].mediaTypes)
+        // Unknown future CollectionType is tolerated as an empty set.
+        assertEquals(emptySet(), page.items[2].mediaTypes)
+        assertTrue(page.items[0].primaryImage!!.url.contains("/Items/v0102030405060708/Images/Primary"), page.items[0].primaryImage!!.url)
+        assertTrue(page.items[0].primaryImage!!.url.contains("tag=1111111122222222"))
+        assertNull(page.nextCursor)
+        assertEquals(3, page.totalEstimate)
+    }
+
+    @Test
+    fun collectionsRejectNonNullCursor() = runTest {
+        val fixture = Fixture()
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.collections(PageRequest(cursor = OffsetPageCursorCodec.encode(0)))
+        }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    // ---------------------------------------------------------- item mapping
+
+    @Test
+    fun itemsMapEpisodeHierarchyAndTicks() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(EPISODE_JSON), total = 7))
+        val episode = fixture.adapter.items(null, PageRequest()).items.single()
+        assertEquals(MediaId("e0102030405060708"), episode.id)
+        assertEquals(MediaType.Episode, episode.mediaType)
+        assertEquals(MediaId("s0102030405060708"), episode.seriesId)
+        assertEquals(MediaId("se01020304050607"), episode.seasonId)
+        // Jellyfin expresses the season of an episode via ParentIndexNumber.
+        assertEquals(1, episode.seasonNumber)
+        assertEquals(2, episode.episodeNumber)
+        assertEquals(1_500_000L, episode.runtimeMs) // 15_000_000_000 ticks / 10_000
+        assertTrue(episode.premiereEpochMs != null)
+        assertTrue(episode.canPlay)
+    }
+
+    @Test
+    fun itemsMapUserStateFields() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(EPISODE_JSON), total = 7))
+        val userData = fixture.adapter.items(null, PageRequest()).items.single().userData
+        assertEquals(true, userData.isFavorite)
+        assertEquals(true, userData.isPlayed)
+        assertEquals(2, userData.playCount)
+        assertEquals(12_345L, userData.playbackPositionMs) // 123_450_000 ticks / 10_000
+        assertEquals(41.2, userData.playedPercentage)
+        assertTrue(userData.hasProgress)
+        assertTrue(userData.lastPlayedEpochMs != null)
+    }
+
+    @Test
+    fun itemsMapMovieFieldsImagesAndPeople() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+        val movie = fixture.adapter.items(null, PageRequest()).items.single()
+        assertEquals("Fixture Movie", movie.title)
+        assertEquals("Original Movie", movie.originalTitle)
+        assertEquals(MediaType.Movie, movie.mediaType)
+        assertEquals(2024, movie.year)
+        assertEquals(8.1, movie.communityRating)
+        assertEquals("PG-13", movie.officialRating)
+        assertEquals(listOf("Drama"), movie.genres)
+        assertEquals(7_200_000L, movie.runtimeMs) // 72_000_000_000 ticks / 10_000 = 2h
+        assertTrue(movie.canPlay)
+        assertEquals(2024, movie.premiereEpochMs?.let(::yearOfEpochMs))
+        assertEquals(2024, movie.dateAddedEpochMs?.let(::yearOfEpochMs))
+        assertEquals(listOf("Ada Director", "Bob Actor"), movie.people.map { it.name })
+        assertEquals(PersonKind.Director, movie.people[0].personType)
+        // Primary first, thumb kept, non-contract image kinds dropped, backdrops appended.
+        assertEquals(
+            listOf(ImageKind.Primary, ImageKind.Thumb, ImageKind.Backdrop),
+            movie.images.map { it.kind },
+        )
+        assertTrue(movie.images[0].url.contains("/Items/m0102030405060708/Images/Primary?tag=1111111122222222"), movie.images[0].url)
+    }
+
+    @Test
+    fun itemsMapSeasonNumberUnknownTypesAndDropNullIds() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            queryResult(listOf(SEASON_JSON, UNKNOWN_TYPE_JSON, NO_ID_JSON), total = 2),
+        )
+        val page = fixture.adapter.items(null, PageRequest())
+        // The id-less item is dropped instead of failing the page.
+        assertEquals(2, page.items.size)
+        val season = page.items[0]
+        assertEquals(MediaType.Season, season.mediaType)
+        assertEquals(2, season.seasonNumber)
+        assertEquals(MediaId("s0102030405060708"), season.seriesId)
+        assertFalse(season.canPlay)
+        val unknown = page.items[1]
+        assertEquals(MediaType.Unknown, unknown.mediaType)
+        assertFalse(unknown.canPlay)
+    }
+
+    @Test
+    fun itemDetailMapsSeriesWithPeople() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.SERIES_DETAIL)
+        val series = fixture.adapter.item(MediaId("s0102030405060708"))
+        assertEquals("Fixture Series", series.title)
+        assertEquals(MediaType.Series, series.mediaType)
+        assertEquals(2023, series.year)
+        assertEquals("A fixture series used in protocol tests.", series.overview)
+        assertEquals(listOf("Drama"), series.genres)
+        assertEquals(2, series.people.size)
+        assertEquals(PersonKind.Director, series.people[0].personType)
+        assertEquals(PersonKind.Actor, series.people[1].personType)
+        assertTrue(series.premiereEpochMs != null)
+        assertTrue(series.primaryImage != null)
+    }
+
+    @Test
+    fun missingDetailBecomesResourceNotFound() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(404, """{"title":"Not Found"}""")
+        assertFailsWith<ResourceNotFoundError> {
+            fixture.adapter.item(MediaId("gone"))
+        }
+    }
+
+    // -------------------------------------------------------------- seasons
+
+    @Test
+    fun seasonsAreASingleChunkWithSeasonNumbers() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.SEASONS)
+        val page = fixture.adapter.seasons(MediaId("s0102030405060708"))
+        assertEquals(listOf("Season 1", "Season 2"), page.items.map { it.title })
+        assertEquals(listOf(1, 2), page.items.map { it.seasonNumber })
+        assertNull(page.nextCursor)
+        assertEquals(2, page.totalEstimate)
+        val request = fixture.transport.requests.single()
+        assertTrue(request.url.toString().contains("/Shows/s0102030405060708/Seasons"), request.url.toString())
+    }
+
+    // --------------------------------------------------------------- paging
+
+    @Test
+    fun firstPageUsesNullCursorAndShortPageEndsTheWalk() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("startIndex=0") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 5),
+                    request.url,
+                )
+                else -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON.replace("m0102030405060708", "m2")), total = 5, startIndex = 2),
+                    request.url,
+                )
+            }
+        }
+        val first = fixture.adapter.items(null, PageRequest(pageSize = 2))
+        assertEquals(2, first.items.size)
+        assertEquals(OffsetPageCursorCodec.encode(2), first.nextCursor)
+        assertEquals(5, first.totalEstimate)
+        assertTrue(fixture.transport.requests.first().url.toString().contains("startIndex=0"))
+        // Short second page ends the walk.
+        val second = fixture.adapter.items(null, PageRequest(cursor = first.nextCursor, pageSize = 2))
+        assertEquals(1, second.items.size)
+        assertNull(second.nextCursor)
+    }
+
+    @Test
+    fun totalRecordCountZeroIsNotNoMedia() = runTest {
+        val fixture = Fixture()
+        // Server answered 0 for the unknown total yet returned items.
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON, MOVIE_JSON), total = 0))
+        val page = fixture.adapter.items(null, PageRequest(pageSize = 2))
+        assertEquals(2, page.items.size)
+        assertNull(page.totalEstimate) // 0 is "unknown", never reported as an estimate
+        assertEquals(OffsetPageCursorCodec.encode(2), page.nextCursor) // paging continues
+        assertTrue(page.hasMore)
+    }
+
+    @Test
+    fun alignedFullPageAsksOnceMoreThenStopsOnEmptyPage() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("startIndex=0") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(listOf(MOVIE_JSON, MOVIE_JSON.replace("m0102030405060708", "m0102030405060709")), total = 2),
+                    request.url,
+                )
+                url.contains("startIndex=2") -> FakeJellyfinTransport.jsonResponse(
+                    200,
+                    queryResult(emptyList(), total = 2, startIndex = 2),
+                    request.url,
+                )
+                else -> throw IllegalStateException("unexpected paging request $url")
+            }
+        }
+        val first = fixture.adapter.items(null, PageRequest(pageSize = 2))
+        assertEquals(2, first.items.size)
+        assertEquals(OffsetPageCursorCodec.encode(2), first.nextCursor)
+        val tail = fixture.adapter.items(null, PageRequest(cursor = first.nextCursor, pageSize = 2))
+        assertTrue(tail.isEmpty)
+        assertNull(tail.nextCursor)
+        // The terminal page still reports the server's (positive) total.
+        assertEquals(2, tail.totalEstimate)
+    }
+
+    @Test
+    fun invalidCursorIsRejectedWithoutIssuingARequest() = runTest {
+        val fixture = Fixture()
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.items(null, PageRequest(cursor = PageCursor("v2:off:0")))
+        }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    @Test
+    fun episodesOffsetPageThroughTheShowsEndpoint() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.EPISODES)
+        val page = fixture.adapter.episodes(
+            seriesId = MediaId("s0102030405060708"),
+            seasonId = MediaId("se01020304050607"),
+            request = PageRequest(pageSize = 200),
+        )
+        assertEquals(2, page.items.size)
+        // Fixture "Pilot" is episode 1 of season 1.
+        assertEquals(1, page.items[0].episodeNumber)
+        assertEquals(1, page.items[0].seasonNumber)
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("/Shows/s0102030405060708/Episodes"), url)
+        assertTrue(url.contains("seasonId=se01020304050607"), url)
+        assertTrue(url.contains("startIndex=0"), url)
+        assertTrue(url.contains("limit=200"), url)
+    }
+
+    // -------------------------------------------------------- query mapping
+
+    @Test
+    fun filtersMapOntoJellyfinQueryParameters() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(emptyList(), total = 0))
+        fixture.adapter.items(
+            CollectionId("v0102030405060708"),
+            PageRequest(
+                filter = MediaFilter(
+                    mediaTypes = setOf(MediaType.Movie, MediaType.Series),
+                    genres = setOf("Drama"),
+                    years = setOf(2024),
+                    favoritesOnly = true,
+                    playedOnly = true,
+                ),
+                sort = MediaSort(MediaSortField.SeasonNumber, SortDirection.Descending),
+            ),
+        )
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("parentId=v0102030405060708"), url)
+        assertTrue(url.contains("recursive=true"), url)
+        assertTrue(url.contains("includeItemTypes=Movie%2CSeries") || url.contains("includeItemTypes=Movie,Series"), url)
+        assertTrue(url.contains("filters=IsFavorite%2CIsPlayed") || url.contains("filters=IsFavorite,IsPlayed"), url)
+        assertTrue(url.contains("genres=Drama"), url)
+        assertTrue(url.contains("years=2024"), url)
+        assertTrue(url.contains("sortBy=ParentIndexNumber"), url)
+        assertTrue(url.contains("sortOrder=Descending"), url)
+        assertFalse(url.contains("searchTerm"), url)
+    }
+
+    @Test
+    fun unplayedOnlyMapsToIsUnplayed() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(emptyList(), total = 0))
+        fixture.adapter.items(null, PageRequest(filter = MediaFilter(unplayedOnly = true)))
+        assertTrue(fixture.transport.requests.single().url.toString().contains("filters=IsUnplayed"))
+    }
+
+    @Test
+    fun unknownMediaTypeFilterIsRejected() = runTest {
+        val fixture = Fixture()
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.items(null, PageRequest(filter = MediaFilter(mediaTypes = setOf(MediaType.Unknown))))
+        }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    @Test
+    fun itemsRejectFreeTextSearchTerm() = runTest {
+        val fixture = Fixture()
+        assertFailsWith<ClientConfigError> {
+            fixture.adapter.items(null, PageRequest(filter = MediaFilter(searchTerm = "kung fu")))
+        }
+        assertEquals(0, fixture.transport.requests.size)
+    }
+
+    @Test
+    fun searchRoutesSearchTermThroughItems() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+        val page = fixture.adapter.search("fixture", PageRequest())
+        assertEquals(1, page.items.size)
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("searchTerm=fixture"), url)
+        assertTrue(url.contains("/Items"), url)
+        assertTrue(url.contains("recursive=true"), url)
+        assertFalse(url.contains("parentId="), url)
+    }
+
+    // ------------------------------------------------------------- failures
+
+    @Test
+    fun providerErrorsTranslateToDomainErrors() = runTest {
+        // 401 with a live session -> expired token.
+        run {
+            val fixture = Fixture()
+            fixture.transport.enqueueJson(401, JellyfinFixtures.PROBLEM_DETAILS_401)
+            val error = assertFailsWith<AuthenticationError> { fixture.adapter.collections(PageRequest()) }
+            assertEquals(AuthFailureKind.TokenExpired, error.kind)
+        }
+        // 401 without a session -> bad credentials.
+        run {
+            val fixture = Fixture(session = null)
+            fixture.transport.enqueueJson(401, JellyfinFixtures.PROBLEM_DETAILS_401)
+            val error = assertFailsWith<AuthenticationError> { fixture.adapter.collections(PageRequest()) }
+            assertEquals(AuthFailureKind.InvalidCredentials, error.kind)
+        }
+        // 403 -> authorization.
+        run {
+            val fixture = Fixture()
+            fixture.transport.enqueueJson(403, """{"title":"Forbidden"}""")
+            assertFailsWith<AuthorizationError> { fixture.adapter.collections(PageRequest()) }
+        }
+        // 429 -> rate limited.
+        run {
+            val fixture = Fixture()
+            fixture.transport.enqueueJson(429, """{"title":"Slow down"}""")
+            assertFailsWith<RateLimitedError> { fixture.adapter.collections(PageRequest()) }
+        }
+        // 5xx and other 4xx surface as server errors with status preserved.
+        run {
+            val fixture = Fixture()
+            fixture.transport.enqueueJson(500, """{"title":"Boom"}""")
+            assertEquals(500, assertFailsWith<ServerError> { fixture.adapter.collections(PageRequest()) }.statusCode)
+        }
+        run {
+            val fixture = Fixture()
+            fixture.transport.enqueueJson(400, """{"title":"Bad request"}""")
+            assertEquals(400, assertFailsWith<ServerError> { fixture.adapter.collections(PageRequest()) }.statusCode)
+        }
+    }
+
+    @Test
+    fun garbagePayloadTranslatesToProtocolDecodingError() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, """{"Items": "not-a-list"}""")
+        assertFailsWith<ProtocolDecodingError> { fixture.adapter.collections(PageRequest()) }
+    }
+
+    @Test
+    fun connectionFailuresTranslateToNetworkErrors() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { throw HttpTimeoutException(it.url, timeoutMillis = 5_000L) }
+        assertFailsWith<TimeoutError> { fixture.adapter.collections(PageRequest()) }
+    }
+
+    @Test
+    fun transportOutageTranslatesToNetworkUnreachable() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = {
+            throw HttpTransportException(it.url, TransportFailureKind.Connect, "connection refused")
+        }
+        assertFailsWith<NetworkUnreachableError> { fixture.adapter.collections(PageRequest()) }
+    }
+
+    @Test
+    fun cancellationPropagatesUntouched() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { throw CancellationException("scope cancelled") }
+        val thrown = assertFailsWith<CancellationException> { fixture.adapter.collections(PageRequest()) }
+        assertEquals("scope cancelled", thrown.message)
+    }
+
+    // -------------------------------------------------------------- helpers
+
+    /** 2024-01-01T00:00:00Z / 2024-02-01T00:00:00Z both belong to year 2024. */
+    private fun yearOfEpochMs(epochMs: Long): Int {
+        // Pure Kotlin epoch math to avoid platform date APIs in common tests.
+        val days = epochMs / 86_400_000L
+        var year = 1970L
+        var remaining = days
+        while (remaining >= if (isLeap(year)) 366 else 365) {
+            remaining -= if (isLeap(year)) 366 else 365
+            year += 1
+        }
+        return year.toInt()
+    }
+
+    private fun isLeap(year: Long): Boolean =
+        (year % 4 == 0L && year % 100 != 0L) || year % 400 == 0L
+}
