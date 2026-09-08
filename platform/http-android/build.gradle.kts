@@ -6,5 +6,6 @@ plugins {
 
 
 dependencies {
+    add("commonMainApi", project(":platform:http-ktor"))
     add("commonMainApi", project(":core:http-contract"))
 }

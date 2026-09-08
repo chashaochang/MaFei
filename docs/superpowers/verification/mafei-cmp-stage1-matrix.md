@@ -14,6 +14,8 @@
 
 同日后续：[主线宿主、资源与移动端回归](2026-09-07-mainline-hosts.md)。
 
+2026-09-08 后续：[Codex 并行核心集成与 Android 探针回归](2026-09-08-parallel-integration.md)。本轮 Android 现有场景复验通过，不新增 HarmonyOS/iOS/Mac 运行验收，Stage 1 仍未整体通过。
+
 ## 1. 证据等级
 
 | 等级 | 含义 |
