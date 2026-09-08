@@ -1,7 +1,8 @@
 # iPhone / iPad thin host
 
 Open `MaFei.xcodeproj`, scheme **MaFei**. This is a UIKit scene/window host;
-the screen is the shared Compose Probe, not a Swift rewrite. Each scene owns
+the default screen is shared Compose login/browsing, not a Swift rewrite. The
+foundation probe remains under **实验室**. Each scene owns
 its own Compose controller. Both device and simulator targets are ARM64 only.
 The development bundle is `cn.xiaobai.mafei.cmp.dev`, separate from legacy.
 

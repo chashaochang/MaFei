@@ -12,6 +12,8 @@ enum class ApplicationSessionStatus { NotStarted, Restoring, SignedOut, Ready, N
 data class ApplicationSessionState(
     val status: ApplicationSessionStatus = ApplicationSessionStatus.NotStarted,
     val selection: SessionSelection? = null,
+    /** Runtime-only handle; changes even when the same saved account is reopened. */
+    val session: ApplicationSession? = null,
 )
 
 /** An in-memory, reference-owned handle. Never persist this object. */
@@ -132,7 +134,7 @@ class ApplicationSessions(
                 lease = credentials.select(connection.selection, binding.aliases, binding.source)
                 val session = ApplicationSession(connection.selection, media.open(binding.adapter), lease, binding)
                 active = session
-                mutableState.value = ApplicationSessionState(ApplicationSessionStatus.Ready, session.selection)
+                mutableState.value = ApplicationSessionState(ApplicationSessionStatus.Ready, session.selection, session)
                 session.observation = scope.launch { observe(session) }
                 session
             } catch (failure: Throwable) {

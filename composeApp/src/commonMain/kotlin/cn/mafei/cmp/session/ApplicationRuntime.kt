@@ -1,6 +1,7 @@
 package cn.mafei.cmp.session
 
 import cn.mafei.cmp.common.core.SystemEpochClock
+import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.http_contract.HttpTransport
 import cn.mafei.cmp.core.secure_credential_api.SecureCredentialStore
 import cn.mafei.cmp.core.storage_api.SettingsStorage
@@ -25,6 +26,20 @@ class ApplicationRuntime(
         SessionRepository(secureStore, settings), MediaRepository(SystemEpochClock),
         ConnectionCatalog(settings), DefaultProviderSessionFactory(transport), scope,
     )
+    private val login = ProviderLogin(transport)
+
+    /** Fresh login; ownership transfers to sessions only after admission. */
+    suspend fun connect(provider: ProviderKind, baseUrl: String, username: String, password: String): ApplicationSession {
+        check(!isClosed) { "Application is closed" }
+        val authenticated = login.authenticate(provider, baseUrl, username, password)
+        try {
+            return sessions.activate(authenticated.connection, authenticated.binding)
+        } catch (failure: Throwable) {
+            // Admitted cancellation may already have committed. Never clear that SDK.
+            if (sessions.state.value.session?.binding !== authenticated.binding) authenticated.binding.clear()
+            throw failure
+        }
+    }
 
     suspend fun close() = withContext(NonCancellable) {
         closeMutex.withLock {

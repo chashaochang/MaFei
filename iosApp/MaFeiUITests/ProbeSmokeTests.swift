@@ -26,6 +26,7 @@ final class ProbeSmokeTests: XCTestCase {
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
         app.launch()
+        tap("实验室", in: app)
         XCTAssertTrue(target("Compose 资源已加载", in: app).waitForExistence(timeout: 15), app.debugDescription)
         tap("液态玻璃 · 收起说明", in: app)
         XCTAssertTrue(target("液态玻璃 · 展开说明", in: app).exists)

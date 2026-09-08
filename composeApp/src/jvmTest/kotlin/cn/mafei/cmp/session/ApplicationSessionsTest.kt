@@ -32,9 +32,10 @@ class ApplicationSessionsTest {
         val requests = mutableListOf<HttpRequest>()
         var closes = 0
         var beforeResponse: suspend () -> Unit = {}
+        var response: (HttpRequest) -> String = { """{"Items":[],"TotalRecordCount":0}""" }
         override suspend fun execute(request: HttpRequest): HttpResponse {
             requests += request; beforeResponse()
-            return HttpResponse(200, HttpHeaders.EMPTY, """{"Items":[],"TotalRecordCount":0}""".encodeToByteArray(), request.url, request.url)
+            return HttpResponse(200, HttpHeaders.EMPTY, response(request).encodeToByteArray(), request.url, request.url)
         }
         override fun close() { closes++ }
     }
@@ -203,6 +204,55 @@ class ApplicationSessionsTest {
             catalog.save(c.copy(account = runtimeAccount.copy(avatarImage = null)))
             assertFalse(h.doc.bytes!!.decodeToString().contains("private-avatar-token"))
             assertNull(catalog.find(c.selection)!!.account.avatarImage)
+        } finally { h.close() }
+    }
+
+    @Test fun loginThroughApplicationRootPersistsThenBrowsesAndRestores() = runBlocking<Unit> {
+        val h = Harness()
+        h.transport.response = { request ->
+            when {
+                request.url.encodedPath.endsWith("/AuthenticateByName") ->
+                    """{"User":{"Id":"remote-a","Name":"Demo"},"AccessToken":"secret-access-token"}"""
+                request.url.encodedPath.endsWith("/UserViews") ->
+                    """{"Items":[{"Id":"library","Name":"Movies","Type":"CollectionFolder","CollectionType":"movies"}],"TotalRecordCount":1}"""
+                request.url.encodedPath.endsWith("/Items/movie") ->
+                    """{"Id":"movie","Name":"Fixture movie","Type":"Movie","Overview":"A story"}"""
+                else -> """{"Items":[{"Id":"movie","Name":"Fixture movie","Type":"Movie"}],"TotalRecordCount":1}"""
+            }
+        }
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            root.sessions.start()
+            val session = root.connect(ProviderKind.Jellyfin, "https://media.test/base", "Demo", "never-store-password")
+            assertSame(session, root.sessions.state.value.session)
+            val browser = cn.mafei.cmp.feature.home.MediaBrowser(root.sessions.media, session.media)
+            browser.start()
+            assertEquals(listOf("Fixture movie"), browser.state.value.items.map { it.title })
+            browser.openDetail(MediaId("movie"))
+            assertEquals("A story", browser.state.value.detail?.overview)
+            assertTrue(h.transport.requests.drop(1).all { it.headers.first("Authorization")!!.contains("secret-access-token") })
+            assertTrue(h.secrets.values.values.any { it == SecureSecret.AuthToken("MediaBrowser", "secret-access-token") })
+            assertFalse(h.doc.bytes!!.decodeToString().contains("secret-access-token"))
+            assertFalse(h.doc.bytes!!.decodeToString().contains("never-store-password"))
+            root.close()
+            val restored = Harness(h.doc, h.secrets)
+            try {
+                val next = assertNotNull(restored.sessions.start())
+                assertEquals(session.selection, next.selection)
+                assertTrue(restored.sessions.logout(next)); assertNull(restored.sessions.state.value.session)
+            } finally { restored.close() }
+        } finally { root.close(); h.close() }
+    }
+
+    @Test fun reopeningSameSelectionPublishesNewRuntimeHandle() = runBlocking<Unit> {
+        val h = Harness(); val c = connection()
+        try {
+            val first = h.sessions.activate(c, h.binding(c))
+            val firstState = h.sessions.state.value
+            val second = h.sessions.switchAccount(c.selection)
+            assertNotEquals(firstState, h.sessions.state.value)
+            assertSame(second, h.sessions.state.value.session)
+            assertNotSame(first, second)
         } finally { h.close() }
     }
 }

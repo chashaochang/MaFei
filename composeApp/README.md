@@ -1,4 +1,61 @@
-# Application runtime / session startup
+# Application runtime / login and browsing
+
+## Login and browse increment (2026-09-08)
+
+The default shared Compose entry is now Connect → library grid → read-only detail,
+not the foundation probe. The probe remains under **实验室**; native smoke scripts
+enter it explicitly. Login/home/detail live in their existing Feature modules;
+reusable cards and feedback live in `common:ui`. No module/dependency was added.
+
+- `ProviderLogin` authenticates with a fresh real SDK. Jellyfin keeps its device ID
+  through binding admission. Feiniu uses an explicit Direct HTTP(S) address, login
+  followed by authenticated user/info, then the latest authoritative Token/Cookie.
+  No OAuth, FNID resolution, discovery, relay or login retry was invented.
+- `ApplicationRuntime.connect()` admits that fresh binding and protects it against
+  post-admission cancellation. State includes the actual runtime session handle, so
+  reopening the same saved identity still replaces the screen/cache generation.
+- Each new connection currently gets a fresh local namespace. Existing-account
+  reauthentication/deduplication and saved-account management UI remain pending.
+- The feature browser uses the existing MediaRepository and page accumulator:
+  opaque cursor append/deduplication, cache warnings, safe error messages, empty
+  states, retry, library switching and stale-completion rejection. List scroll is
+  retained when returning from detail; a library switch resets it.
+- Password is composition-only and cleared after submit. Settings contain no
+  passwords or access tokens. Android cleartext and iOS ATS policy explicitly
+  permit user-supplied HTTP-only NAS addresses; the form warns HTTP sends login
+  data unencrypted and recommends HTTPS. No TLS certificate checks were disabled.
+  iOS local-network usage text is declared; runtime permission remains unverified.
+- Uses stable adaptive grid/bounded layouts supported by the frozen CPF toolchain,
+  not newer experimental Android-only adaptive APIs. The shell owns safe insets;
+  connect additionally handles IME. The glass bar only captures a background sibling.
+
+Current limitations: text-only poster placeholders, read-only metadata (no season/
+episode drilldown yet), no player, explicit in-page back only (system-back/gesture
+navigation remains pending), no real server/device acceptance. This is a functional
+code path, not final visual design or a completed 2.0 product.
+
+Verification for this increment: Desktop **52/52** and Android JVM **50/50** actually
+executed. Includes 8 real-SDK/fake-HTTP login tests, 10 browse tests and 2 new root
+integration/session-handle tests. The library-removal regression was reproduced as
+one failing test, then fixed. iOS device/simulator and OHOS application compilation
+passed. Final Android Debug APK assembly/signature verification and fresh OHOS
+so/header publication → unsigned ARM64 HAP → artifact consistency gate passed.
+Node foundation tests **7/7**, plist validation and script syntax checks passed.
+`hdc list targets` was `[Empty]`; no install, visual check or server/device login
+was performed. iOS plist host changes were linted, not built through Xcode in this
+increment. Existing CPF linkage/generated-C warnings are not runtime acceptance.
+
+Artifacts:
+
+- `composeApp/build/outputs/apk/debug/composeApp-debug.apk` (Android Debug signed)
+- `harmonyApp/entry/build/default/outputs/default/entry-default-unsigned.hap`
+
+Logs: `/private/tmp/mafei-browse-red.log`, `/private/tmp/mafei-login-browse-gates.log`,
+`/private/tmp/mafei-login-browse-final.log`, `/private/tmp/mafei-login-browse-delivery.log`,
+`/private/tmp/mafei-login-browse-hap.log`. The final delivery run includes all latest
+source changes; JNI/Asset/Keychain hardware behavior remains unverified here.
+
+## Previous startup increment
 
 The four platform entry points now create one process-scoped `ApplicationRuntime`:
 real platform HTTP, `SecureCredentialStore`, ordinary `SettingsStorage`, SDK factory,
@@ -8,8 +65,8 @@ reuses that root; there is not a second writer per screen. Platform entry points
 mobile roots live with their application process (page hide/rotation is not logout).
 
 `App` starts recovery and provides `LocalApplicationRuntime` to shared Compose content.
-The existing interface-laboratory page shows the startup status; this is **not** the finished
-connect/home UI and an installed SDK session is **not** verified authentication with a server.
+An installed/restored SDK session is **not** verified authentication with a server;
+the first browse request can still expose expired credentials or connectivity failure.
 
 ## Recovery and logout
 
@@ -20,7 +77,7 @@ connect/home UI and an installed SDK session is **not** verified authentication 
 - `switchAccount()` cancels and joins the old observer before clearing its SDK and media
   cache. The prior account's saved credentials remain available. Old adapters and handles
   cannot send/publish late responses or log out a new account.
-- `activate(connection, binding)` is the future connect/login flow's admission point.
+- `activate(connection, binding)` is the connect/login flow's admission point.
   It consumes a successfully authenticated SDK binding, not an unverified server-response
   snapshot. `DefaultProviderSessionFactory.restore` also supports constructing a new
   isolated binding from already persisted credentials; it does not perform login itself.
@@ -75,7 +132,7 @@ No ArkUI business screen and no new Gradle module were introduced.
   was corrected to a nullable pointer. The avatar negative test confirmed pre-write rejection,
   not a reproduced plaintext leak.
 
-Remaining: connect/login UI and actual authentication flow; migration Reader/Sink must
+Remaining: migration Reader/Sink must
 populate this catalog/index before startup; actual player runtime/Surface and account-change
 player teardown; signed Mac Keychain host; real-device/server/upgrade acceptance. There is
 no OAuth integration and no claim that Stage 1 or the product is fully accepted.

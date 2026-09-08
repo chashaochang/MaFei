@@ -30,6 +30,7 @@ function tap(text) {
 // Intentional cold launch of the *dev* package only. Does not clear app data.
 adb('shell', 'am', 'force-stop', packageName);
 adb('shell', 'am', 'start', '-W', '-n', `${packageName}/cn.mafei.cmp.MainActivity`);
+tap('实验室');
 requireText('Compose 资源已加载');
 tap('浅色');
 requireText('深色');
