@@ -1,0 +1,85 @@
+/*
+ * Copyright 2014-2019 JetBrains s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license.
+ */
+
+// Modified for MaFei (2026-09-08): relocated, HTTP-only; see third-party/NOTICE.md.
+package cn.mafei.cmp.platform.http_ohos.curl
+
+import io.ktor.client.engine.*
+import cn.mafei.cmp.platform.http_ohos.curl.internal.*
+import io.ktor.client.plugins.*
+import io.ktor.client.request.*
+import io.ktor.client.utils.dropCompressionHeaders
+import io.ktor.http.*
+import io.ktor.http.cio.*
+import io.ktor.util.date.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.*
+
+internal class CurlClientEngine(
+    override val config: CurlClientEngineConfig
+) : HttpClientEngineBase("ktor-curl") {
+    override val dispatcher = Dispatchers.Unconfined
+
+    override val supportedCapabilities = setOf(HttpTimeoutCapability)
+
+    private val curlProcessor = CurlProcessor(coroutineContext)
+
+    @OptIn(InternalAPI::class)
+    override suspend fun execute(data: HttpRequestData): HttpResponseData {
+        require(data.url.protocol == URLProtocol.HTTP || data.url.protocol == URLProtocol.HTTPS) {
+            "Only HTTP and HTTPS are supported"
+        }
+        require(!data.isUpgradeRequest()) { "Protocol upgrade is unsupported" }
+        val callContext = callContext()
+
+        val requestTime = GMTDate()
+
+        // The response context is a child of data.executionContext. Closing a response (e.g.
+        // redirect or Discarded) must cancel native I/O without waiting for the parent request.
+        val curlRequest = data.toCurlRequest(config, callContext.job)
+        val responseData = curlProcessor.executeRequest(curlRequest)
+
+        return with(responseData) {
+            val headerBytes = ByteReadChannel(headersBytes).apply {
+                readUTF8Line()
+            }
+            val rawHeaders = parseHeaders(headerBytes)
+            val headers = rawHeaders
+                .toBuilder().apply {
+                    dropCompressionHeaders(data.method, data.attributes)
+                }.build()
+
+            rawHeaders.release()
+
+            val status = HttpStatusCode.fromValue(status)
+
+            val responseBody: Any = run {
+                val httpResponse = responseBody as CurlHttpResponseBody
+                data.attributes.getOrNull(ResponseAdapterAttributeKey)
+                    ?.adapt(data, status, headers, httpResponse.bodyChannel, data.body, callContext)
+                    ?: httpResponse.bodyChannel
+            }
+
+            HttpResponseData(
+                status,
+                requestTime,
+                headers,
+                version.fromCurl(),
+                responseBody,
+                callContext
+            )
+        }
+    }
+
+    override fun close() {
+        super.close()
+        curlProcessor.close()
+    }
+}
+
+@Deprecated("This exception will be removed in a future release in favor of a better error handling.")
+public class CurlIllegalStateException(cause: String) : IllegalStateException(cause)
+
+@Deprecated("This exception will be removed in a future release in favor of a better error handling.")
+public class CurlRuntimeException(cause: String) : RuntimeException(cause)

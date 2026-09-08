@@ -1,36 +1,62 @@
-# OHOS HTTP binding
+# OHOS HTTP：复用 CPF Curl 的 HTTP-only 修补版
 
-状态：**阻塞，未接入生产工厂**。本轮尝试复用 RaidMate 的 CPF Curl 引擎，
-通过共享 `createKtorHttpTransport(Curl, ...)` 固定 `sslVerify = true`。
-Kotlin 编译通过，但 Native 测试链接真实失败：`undefined symbol: curl_ws_send`
-和 `curl_ws_meta`。CPF 自带静态 libcurl 与绑定符号不匹配。
-日志 `/private/tmp/mafei-native-http-compile.log`。
+状态：**实现与 ARM64 Native/HAP 构建通过，设备运行 Pending**。入口
+`createOhosHttpTransport()` 返回冻结的 `HttpTransport`，重定向、总超时、
+读体上限继续复用 `platform:http-ktor`，没有新增模块、ArkTS 网络业务或更改最低 API 17。
 
-主线已撤去本轮试接的工厂、测试与依赖，模块保持原占位状态，不将无法链接的实现
-带入应用、不填假符号、不忽略 linker 错误，也不修改用户工具链缓存。
-试接代码仅是共享 transport 加 Curl 引擎的薄绑定，问题解决后不需要重新设计请求层。
+## 为什么是局部源码补丁
 
-## 已核对的 CPF Curl 行为
+- 原 CPF Curl Kotlin 引擎链接报 `curl_ws_send` / `curl_ws_meta` 缺失，而当前 API
+  本来就只提供 buffered HTTP。只消费同版本 `cinterop-libcurl` KLIB，沿用其中
+  libcurl/OpenSSL；不引用原 Kotlin 引擎，不添加假符号，不重编工具链或覆盖缓存。
+- 复用其 HTTP 引擎源码，移除 WebSocket/SSE 代码和自动全局引擎注册。源码、许可和
+  修改说明见 [third-party/NOTICE.md](third-party/NOTICE.md)。
+- 已检查备选 CIO：匹配版本 Native `openTLSSession` 明确抛出
+  `TLS sessions are not supported on Native platform.`，不能作为 HTTPS 替代方案。
+  系统 RCP 未在本批另起实现。
 
-依据本机 `ktor-client-curl-ohosarm64:3.3.3-1.0.0` sources.jar（SHA 路径 `3c21a7202fcbac997b5ce0f349b1d307f5a93027`），其源码位于 jar 内 `desktopMain/io/ktor/client/engine/curl/`，不代表使用 JVM：
+## 修补范围
 
-- TLS：`CurlClientEngineConfig.sslVerify` 默认 true；`CurlMultiApiHandler.scheduleRequest` 只有 false 时才把 `CURLOPT_SSL_VERIFYPEER/VERIFYHOST` 清零。本工厂固定 true，不覆盖 CA 或代理。实际系统根证书可用性仍需真机 HTTPS 验收。
-- Redirect/Cookie/retry：每次 `curl_easy_init()`；未设置 `CURLOPT_FOLLOWLOCATION`，未启用 Cookie engine/jar，源码没有自动请求重试循环。共享层关闭 Ktor 自动重定向/插件 Cookie/重试，重定向唯一入口保持 `HttpRedirects.nextRequest`。
-- **自动解压差异**：底层固定 `CURLOPT_ACCEPT_ENCODING = ""`，Curl 自动协商/解压；`CurlClientEngine` 调用 `dropCompressionHeaders` 移除压缩和 Content-Length 元数据。共享字节上限作用于解压后数据；不能沿用 CIO 的“绝不主动解压”描述。不是新增的业务解压代码。
-- Streaming：`CurlHttpResponseBody.bodyChannel` 提供响应分块，绑定 executionContext；写 callback 内部用了 `runBlocking`（上游 TODO KTOR-6030）。本模块仍只暴露共享 buffered API，未提供 WebSocket/SSE 会话。
-- **取消/清理待核风险**：`CurlProcessor` 监听 request executionContext completion 并调用 `cancelRequest`；但收到响应头、completionHandler 完成后会 dispose 该监听。`CurlMultiApiHandler.cancelRequest` 当前直接 remove/reset/cleanup easy handle，原 `cancelledHandles += ...` 被注释，且未同步移除 `activeHandles`/dispose holder。`close()` 又遍历 activeHandles 清理。这是源码可见的取消遗漏/重复释放风险，不能仅凭 factory 编译宣称取消安全；请主线优先运行真机取消/超时/Discarded/连续 close 用例。
-- **部分读失败与错误类别**：`collectFailedResponse` 在已有非零 HTTP status 时直接返回 null；应靠共享 Content-Length/通道错误检查兜住，但 chunked/压缩流截断需真机 fixture。TLS/DNS/连接失败多以 `IllegalStateException` 文本返回，现共享分类可能保守归 Unknown，不能把这些类型的精确 Native 映射当已验。
+- native easy handle 单一清理归属，取消监听一直保留至 body 完成；延迟取消和 unpause
+  核对请求实例，防止地址重用误伤新请求。
+- 原生轮询显式 yield 让取消任务有机会执行；关闭先清理活动/排队请求，再退出线程。
+- 原生配置失败释放已分配的 handle、StableRef、请求头链表和上传通道。
+- 绑定实际 response call job：Discarded、重定向和提前终止读体能触发 native 取消，
+  不依赖仍在运行的父 request job。
+- 已收到 HTTP status 的截断/传输错误也传给读体 channel，不能当作完整成功响应。
+  失败保留 DNS/连接/TLS 等类型，不导出原始 URL/错误链。
+- 跳过 100 等临时响应，保留最终响应头；不提供媒体流/WebSocket/SSE。
+- TLS 证书及主机名验证固定开启；无自签名绕过、Cookie jar、自动重定向或业务重试。
+  原 libcurl 的内置 CA 路径为 `/etc/ssl/certs/cacert.pem`，与本地 SDK
+  `@ohos.net.http.d.ts` 的预置 CA 文档一致，但尚未在设备内实际验证。
+- Curl 自动解压且 Ktor 移除压缩/长度头；读体上限约束解压后内容。
 
-## 编译 / 验收
+## 本轮实际证据
 
-主线已实际执行以下试接验证，Kotlin 编译通过，测试 ELF 链接失败；没有 OHOS 运行通过证据。
+- Android 宿主编译通过；共享 Desktop / Android JVM HTTP 各 **32/32 实际通过**。
+- **12 项 OHOS 测试编译、ELF 链接通过，0 项设备执行**：
+  7 项真实 loopback 夹具、3 项原生 handle 所有权、2 项工厂/关闭。
+- 应用 `libkn.so` 链接通过；与 `libkn_api.h` 同轮发布到 harmonyApp。
+- Hvigor unsigned ARM64 HAP 构建通过；`verify-harmony-artifacts.mjs` 核对
+  库/头文件、strip 前后 build ID、打包字节和资源通过。
+- 架构门禁、Node 架构回归 **7/7**、diff-check 通过。
+- 原有 fusionRenderer 的 ExternalRenderNode/Typeface partial-linkage 警告仍保留；
+  没有通过网络模块的构建宣称 UI runtime 安全。
 
-由主线统一执行：
+构建命令：
 
 ```bash
-./gradlew :platform:http-ohos:linkDebugTestOhosArm64
+./gradlew :platform:http-ohos:linkDebugTestOhosArm64 :composeApp:publishDebugBinariesToHarmonyApp
+# harmonyApp 中使用已有 DevEco Hvigor assembleHap
+node scripts/verify-harmony-artifacts.mjs
 ```
 
-下一步先取得与绑定匹配且修复取消清理的现成 Curl 产物，或复用已有系统网络桥接；
-之后再做真实 HAP/设备 strict HTTPS、跨源重定向剥凭证、取消/超时 socket 回收验收。
-本模块仍为 **未实现**，不是“工厂完成只差真机”。
+日志：`/private/tmp/mafei-ohos-http-mainline-regression.log`、
+`/private/tmp/mafei-ohos-http-jvm-rerun.log`（64 项强制实际重跑）、
+`/private/tmp/mafei-ohos-http-publish.log`、`/private/tmp/mafei-ohos-http-hap.log`。
+
+## 仍需设备确认
+
+当前 `hdc list targets` 为 Empty，HAP 未签名、未安装。待真实 OHOS 执行上述测试，
+再验证受信 HTTPS、自签名/主机名不匹配拒绝、代理 CONNECT、取消/超时/关闭和截断读体；
+之后接生产账号/SDK。这里的构建成功不代表真实服务器登录或 Stage 1 整体完成。
