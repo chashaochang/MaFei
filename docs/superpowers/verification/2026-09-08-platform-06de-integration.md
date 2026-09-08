@@ -1,5 +1,11 @@
 # 06D/06E Mac 与 OHOS 安全存储集成
 
+后续网络增量：iOS Darwin 薄绑定已在 iPhone ARM 模拟器通过 7 项实际 loopback 测试，
+共享 JVM 双目标各 32 项通过，见 [iOS HTTP](../../../platform/http-ios/README.md)。
+OHOS Curl 试接因 `curl_ws_send`/`curl_ws_meta` 未定义链接失败且存在取消清理风险，
+已撤去试接代码，未计为完成，见 [OHOS 阻塞证据](../../../platform/http-ohos/README.md)。
+下文保留安全存储批次当时的历史状态。
+
 本轮并行分工：子 Agent 实现 Mac JVM/JNI Keychain；主线实现 OHOS AssetStore、补 Mac 独立隐私回归、审查与集成。没有进入业务 UI 重写，也没有更改旧鸿蒙参考目录。
 
 ## Mac：Implemented，系统正向验收 Pending

@@ -2,6 +2,8 @@ package cn.mafei.cmp.platform.http_ktor
 
 import cn.mafei.cmp.core.http_contract.*
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngineConfig
+import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.engine.cio.endpoint
 import io.ktor.client.plugins.HttpTimeout
@@ -20,11 +22,24 @@ import kotlinx.coroutines.*
  * Actual OS trust-store/proxy behavior requires platform verification, not a compilation claim.
  * Native compilation does not certify CIO networking/TLS on iOS or OHOS.
  */
-class CioHttpTransport(private val defaultTimeoutMillis: Long = 30_000) : HttpTransport {
-    init { require(defaultTimeoutMillis > 0) { "Default timeout must be positive" } }
+class CioHttpTransport(defaultTimeoutMillis: Long = 30_000) : HttpTransport by
+    createKtorHttpTransport(CIO, defaultTimeoutMillis, {
+        requestTimeout = 0
+        endpoint { connectAttempts = 1 }
+    })
 
-    private val lifetime = SupervisorJob()
-    private val client = HttpClient(CIO) {
+/** Platform factories select an engine; all platforms share redirect, timeout and read policies.
+ * The returned transport owns its client/engine. Engine configuration must retain TLS verification
+ * and disable native automatic redirects, credential storage and automatic request replay.
+ */
+fun <T : HttpClientEngineConfig> createKtorHttpTransport(
+    engineFactory: HttpClientEngineFactory<T>,
+    defaultTimeoutMillis: Long = 30_000,
+    configureEngine: T.() -> Unit = {},
+): HttpTransport {
+    require(defaultTimeoutMillis > 0) { "Default timeout must be positive" }
+    val client = HttpClient(engineFactory) {
+        engine(configureEngine)
         expectSuccess = false
         followRedirects = false
         // The outer timeout is the only deadline. The plugin disables endpoint connection and
@@ -34,11 +49,15 @@ class CioHttpTransport(private val defaultTimeoutMillis: Long = 30_000) : HttpTr
             connectTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
             socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
         }
-        engine {
-            requestTimeout = 0
-            endpoint { connectAttempts = 1 }
-        }
     }
+    return KtorHttpTransport(client, defaultTimeoutMillis)
+}
+
+private class KtorHttpTransport(
+    private val client: HttpClient,
+    private val defaultTimeoutMillis: Long,
+) : HttpTransport {
+    private val lifetime = SupervisorJob()
 
     override suspend fun execute(request: HttpRequest): HttpResponse {
         if (!lifetime.isActive) throw HttpTransportException(request.url, TransportFailureKind.Unknown,
