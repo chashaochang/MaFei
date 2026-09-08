@@ -1,5 +1,12 @@
 # MaFei 2.0 开发约束
 
+## Git Agent 独立署名
+
+1. 用户要求今后 Codex 与 GLM 分开署名；Author 和 Committer 都必须明确设置，不能只写 Co-authored-by：Codex 使用 `Codex <codex@mafei.invalid>`，GLM 使用 `GLM <glm@mafei.invalid>`。这些是项目内身份，不是官方 GitHub bot 账号。
+2. 多 Agent 共享工作区，禁止为切换身份修改全局或仓库共享 `user.name` / `user.email`。每次提交使用命令级 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`、`GIT_COMMITTER_NAME`、`GIT_COMMITTER_EMAIL`，并显式传 `git commit --author='对应名称 <对应邮箱>'`，避免 amend 继承错误作者。
+3. 只暂存自己负责的明确路径，保留他人改动；提交前重读 HEAD/status，提交后检查 `git log -1 --format='%h Author: %an <%ae> Committer: %cn <%ce>'`。
+4. 已确认 CMP 历史已按用户授权改写，原历史有备份；旧冻结 SHA 使用 `docs/agent-git-identities-2026-09-08.md` 映射，不得恢复旧提交链或推送备份分支。进一步改写历史、删除备份或强推必须另获用户授权。
+
 ## CMP 与 HarmonyOS 边界
 
 1. 活动应用以根目录 Kotlin Multiplatform / Compose Multiplatform 工程为准。
