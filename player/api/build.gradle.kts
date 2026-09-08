@@ -6,5 +6,6 @@ plugins {
 
 
 dependencies {
+    add("commonMainApi", libs.kotlinx.coroutines.core)
     add("commonMainApi", project(":core:domain"))
 }

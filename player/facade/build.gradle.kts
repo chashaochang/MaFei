@@ -8,4 +8,5 @@ plugins {
 dependencies {
     add("commonMainApi", project(":player:api"))
     add("commonMainApi", project(":player:core"))
+    add("commonTestImplementation", project(":player:testkit"))
 }
