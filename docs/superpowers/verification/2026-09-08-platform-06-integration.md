@@ -1,5 +1,7 @@
 # 2026-09-08 平台 06 小批集成
 
+最新增量见 [06D/06E 集成](2026-09-08-platform-06de-integration.md)：Mac JNI Keychain 已实现、主线 10 项测试通过但签名宿主正向存储 Pending；OHOS 短凭证 AssetStore 已编译/链接、18 项测试未运行，长凭证未覆盖。
+
 后续增量：iOS Keychain 已实现，iPhone/iPad ARM64 模拟器各 19 项通过（含 4 项真实 Keychain 集成），详见 [06C 验收](2026-09-08-ios-keychain-06c.md)。以下为此前 HTTP/Android 小批的历史快照，iOS 未实现的描述已被该增量更新；macOS/OHOS 安全存储仍 Pending。
 
 本轮子 Agent 分别实现 HTTP 与 Android 安全存储，主线实现共享编码、审查错误隐私、独立复验并分批提交。不是 GLM-06 全平台完成；iOS Keychain 本轮只有依赖准备，没有实现或运行证据。
