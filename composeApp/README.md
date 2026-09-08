@@ -2,15 +2,28 @@
 
 ## Mac login failure follow-up (2026-09-09)
 
+**Latest: explicit file-based Keychain selection.** User approved using the working
+system backend. Mac now uses the system default file-based Keychain (normally login),
+with normal per-host ACL/prompts and no plaintext fallback. Its real synthetic
+add/read/duplicate/update/list/delete test passed and cleaned its test entry;
+macOS storage module **11/11**, application Desktop **56/56**, architecture gate
+and fresh Mac packaging passed. The newly built application was launched.
+Automated AX value-setting was rejected as not settable, so actual UI login and
+restart restoration still need manual acceptance; do not equate synthetic Gradle
+JVM acceptance with packaged-host ACL acceptance. Signing remains a distribution
+concern, not a prerequisite for the selected development backend.
+Log: `/private/tmp/mafei-login-keychain-green.log`.
+
+### Previous diagnosis and error-stage correction
+
 The live test server (Jellyfin 10.11.11) accepted authentication using the packaged
 Mac SDK; library enumeration and sampled directory detail worked. Its diagnostic
 session was logged out. No server credentials belong in this repository.
 
-The Mac package remains ad-hoc signed; the machine has **0 valid code-signing
+The Mac package was ad-hoc signed; the machine had **0 valid code-signing
 identities**. Data Protection Keychain synthetic writes returned **-34018**.
-Do not claim application login/persistence acceptance or silently switch stores.
-Apple signing/provisioning or an explicitly approved macOS login-Keychain backend
-is still required; this increment does not change that security decision.
+This required Apple signing/provisioning or an explicitly approved login-Keychain
+backend change, now made above. The error-stage correction alone did not fix storage.
 
 `ConnectionSaveException` now distinguishes failed post-authentication admission
 from rejected authentication. UI text identifies denied/unavailable secure storage,

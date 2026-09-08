@@ -1,7 +1,6 @@
 #define __STDC_WANT_LIB_EXT1__ 1
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
-#import <LocalAuthentication/LocalAuthentication.h>
 #include <jni.h>
 #include <string.h>
 
@@ -13,7 +12,9 @@ static void clearData(NSMutableData *data) {
     if (data != nil && data.length > 0) (void)memset_s(data.mutableBytes, data.length, 0, data.length);
 }
 
-// All JNI entrypoints are scoped, non-interactive SecItem operations. No access
+// All JNI entrypoints are scoped SecItem operations on the macOS file-based
+// Keychain (normally login). Keep the system's default per-application ACL and
+// authentication prompts; never install an all-applications trusted ACL. No access
 // to unrelated services, default-keychain mutation, search-list changes, CLI,
 // plaintext files, or native raw-pointer handles are exposed.
 static NSString *fromJava(JNIEnv *env, jstring value, jsize maximum) {
@@ -33,14 +34,10 @@ static NSMutableDictionary *query(JNIEnv *env, jstring serviceValue, jstring acc
     if (service == nil || ![service hasPrefix:servicePrefix] || service.length <= servicePrefix.length) return nil;
     NSString *account = fromJava(env, accountValue, MAX_ALIAS_CHARS);
     if (accountRequired && account == nil) return nil;
-    LAContext *authentication = [[LAContext alloc] init];
-    authentication.interactionNotAllowed = YES;
     NSMutableDictionary *result = [@{
         (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
         (__bridge id)kSecAttrService: service,
-        (__bridge id)kSecAttrSynchronizable: @NO,
-        (__bridge id)kSecUseDataProtectionKeychain: @YES,
-        (__bridge id)kSecUseAuthenticationContext: authentication,
+        (__bridge id)kSecUseDataProtectionKeychain: @NO,
     } mutableCopy];
     if (account != nil) result[(__bridge id)kSecAttrAccount] = account;
     return result;
@@ -120,7 +117,8 @@ JNIEXPORT jint JNICALL JNI_METHOD(add)(JNIEnv *env, jobject receiver, jstring se
         NSMutableData *data = fromJavaData(env, input);
         if (attributes == nil || data == nil) { clearData(data); return errSecParam; }
         attributes[(__bridge id)kSecValueData] = data;
-        attributes[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+        // Do not attach Data Protection-only accessibility/synchronization keys.
+        // SecItemAdd uses the user's default Keychain and its standard host ACL.
         OSStatus status = SecItemAdd((__bridge CFDictionaryRef)attributes, NULL);
         clearData(data);
         return status;

@@ -8,10 +8,11 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Security.framework Data Protection Keychain for Apple Silicon JVM Desktop.
- * The signed application/JVM host must possess valid Keychain entitlements.
- * Missing entitlements/locked Keychain are errors, never plaintext or legacy
- * keychain fallbacks. Namespace must be stable across updates; queries always
+ * Security.framework file-based Keychain for Apple Silicon JVM Desktop.
+ * Writes use the user's default Keychain (normally login); reads use the system
+ * search list with exact service/account scope. System ACL/unlock prompts are
+ * allowed, including after ad-hoc rebuilds. No Data Protection or plaintext fallback.
+ * Namespace must be stable across updates; queries always
  * specify the full service, not a prefix/search of unrelated credentials.
  *
  * Native calls run on Dispatchers.IO. Their synchronous OS commit cannot be

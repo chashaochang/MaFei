@@ -18,16 +18,20 @@ No external dependency, `security` CLI, JNA or JDK preview/FFM API is required.
 
 ## Production decisions
 
-1. Only modern **Data Protection Keychain**, `kSecClassGenericPassword`, exact
+1. **macOS file-based Keychain** (user default, normally login), explicitly
+   selected with `kSecUseDataProtectionKeychain=false`, `kSecClassGenericPassword`, exact
    service `cn.mafei.credentials.v1/<namespace>` and exact account/alias. Native
    code independently rejects foreign services. No global Keychain enumeration,
    search-list edits, default-keychain changes or broad native delete endpoint.
-2. `kSecAttrSynchronizable=false`; added values use
-   `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Native LAContext sets
-   `interactionNotAllowed=true` — no implicit unlock/authentication dialog.
-3. **Signed host and correct Keychain entitlements are required.** Missing
-   entitlement is an error, not a reason to silently choose legacy Keychain,
-   shell commands or plaintext. A final app with hardened runtime also needs the
+2. No iCloud synchronization or Data Protection-only accessibility attributes.
+   Writes use the system default Keychain; reads use its search list with the exact
+   service/account filter. The system's default per-application ACL is retained;
+   no all-applications trusted ACL is installed. Normal unlock/access prompts are
+   permitted. Denial is an error, never an empty successful read or plaintext fallback.
+3. This is an **explicit user-approved backend change (2026-09-09)**, not runtime
+   fallback on entitlement errors. Ad-hoc JVM hosts can use this backend; rebuilds
+   or a changed host identity may trigger system access prompts. Stable signing
+   remains recommended for distribution. A final app with hardened runtime needs the
    native library signed appropriately for its host/library-validation policy.
 4. `overwrite=false` invokes atomic `SecItemAdd`, never read-then-add as a
    correctness guarantee. Upsert uses Update → Add on missing → Update on a racing
@@ -68,7 +72,7 @@ JDK path is hardcoded in this module.
 ```
 
 `compileKeychainNative` invokes clang for **arm64 only**, minimum macOS 11, with
-Foundation/Security/LocalAuthentication frameworks, ARC, `-Wall -Wextra -Werror`.
+Foundation/Security frameworks, ARC, `-Wall -Wextra -Werror`.
 The resulting dylib is included in the Desktop JAR. Configuration cache works;
 native builds track source/JDK location and require no root script mutation.
 
@@ -91,7 +95,7 @@ native builds track source/JDK location and require no root script mutation.
   causes while preserving classification; final rerun **10/10 passed**, including
   that mainline test. The mainline-authored test was preserved, not edited.
 
-### Real Keychain probe: explicitly NOT accepted yet
+### Historical Data Protection probe (superseded by explicit backend change)
 
 The separately enabled probe targeted only fresh synthetic namespace
 `integration.ec878408-3dde-461e-81b7-f08010fa3639` and alias `synthetic/token`.
@@ -102,7 +106,7 @@ or modified. No unlock/signing/security-setting workaround was attempted.
 
 Log: `/private/tmp/mafei-06d-macos-native.log`.
 
-Once running inside a correctly signed/entitled host, rerun:
+Run the opt-in synthetic round-trip on the selected file-based backend:
 
 ```bash
 ./gradlew :platform:secure-storage-macos:desktopTest \
@@ -111,14 +115,22 @@ Once running inside a correctly signed/entitled host, rerun:
 
 Each invocation generates its own new synthetic namespace. It adds, reads,
 atomically checks duplicate, updates, lists and deletes only the exact test alias.
-The normal test task excludes this probe. Merely using Gradle's stock test JVM does
-not supply entitlements; mainline must validate with its signed application host.
+The normal test task excludes this probe. Gradle JVM acceptance does not replace
+packaged application login/restart acceptance because Keychain ACLs bind to hosts.
+
+### File-based Keychain verification — 2026-09-09
+
+User authorized choosing the working system backend. The existing real synthetic
+round-trip now **passes**, including add/read/duplicate/update/list/delete and
+cleanup; all **11/11** module tests and **56/56** application Desktop tests passed.
+Mac packaging and architecture verification passed. No real account password/token
+was used by the synthetic test. Log: `/private/tmp/mafei-login-keychain-green.log`.
+Application login/restart acceptance is tracked in `composeApp/README.md`.
 
 ## Remaining integration gates
 
-- Mainline DI/app composition and signed Apple Silicon Desktop package, including
-  native dylib signing/library validation and host Keychain entitlements.
-- Successful real Keychain round-trip under that host; locked/login-after-reboot,
+- Distribution signing/library-validation acceptance for the Apple Silicon host.
+- Packaged-host login/restart; locked/login-after-reboot,
   access-denied and update/restore acceptance. Locking the user's real Keychain was
   intentionally not used for testing; locked/error behavior has fake-backed tests.
 - No architecture expansion to Intel, Windows/Linux, iOS or HarmonyOS; no claims

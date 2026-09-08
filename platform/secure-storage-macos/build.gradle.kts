@@ -44,7 +44,7 @@ val compileKeychainNative by tasks.registering(Exec::class) {
         "-Wall", "-Wextra", "-Werror", "-O2", "-mmacosx-version-min=11.0",
         "-I$jniJavaHome/include", "-I$jniJavaHome/include/darwin",
         keychainNativeSource.asFile.absolutePath,
-        "-framework", "Foundation", "-framework", "Security", "-framework", "LocalAuthentication",
+        "-framework", "Foundation", "-framework", "Security",
         "-Wl,-install_name,@rpath/libmafei_keychain.dylib",
         "-o", nativeOutputFile.absolutePath)
 }
