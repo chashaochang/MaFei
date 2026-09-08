@@ -80,6 +80,13 @@ internal fun feiniuDateToEpochMsAndYear(value: String?): Pair<Long, Int>? {
     val month = match.groupValues[2].toInt()
     val day = match.groupValues[3].toInt()
     if (month !in 1..12 || day !in 1..31) return null
+    val leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    val daysInMonth = when (month) {
+        2 -> if (leap) 29 else 28
+        4, 6, 9, 11 -> 30
+        else -> 31
+    }
+    if (day > daysInMonth) return null
     // Howard Hinnant's days_from_civil — pure Kotlin, no platform date APIs.
     val yy = if (month <= 2) year - 1 else year
     val era = (if (yy >= 0) yy else yy - 399) / 400

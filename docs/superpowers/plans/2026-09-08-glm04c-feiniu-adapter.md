@@ -17,7 +17,17 @@
 - 同理 **genres（Int tag）与 decade（string tag）**：`items()` 携带非空 genres/years 即拒绝（`throwUnsupportedFeiniuFilter`），`search()` 携带任何 filter/sort 也拒绝。
 - `episodes(seasonId=null)`、`items()` 内 `searchTerm` 等 04A Pending 项已按"显式拒绝"落地。
 
-## 落地决策（04C 冻结）
+## 主线修订（2026-09-08，优先于下方原稿）
+
+- GLM 原提交 `82b3a9d` 不能直接冻结：主线新增六个独立边界用例全部失败，已按原契约接手修正。
+- 飞牛使用私有 `v1:fnpage:页号:请求页大小:已返回条数` 游标，不复用 offset/pageSize 换算；服务器限页时页号照常递增，已返回条数只用于 total 终止判断。变更 pageSize、错误格式及溢出均拒绝；原 offset 游标不再接受。Repository 不解析此格式。
+- 收藏列表只接受缺省或显式 DateAdded/Descending 排序，其他排序零请求拒绝。
+- 日期校验包含月天数和闰年，非法日期不会被归一成另一个日期。
+- Adapter 在登录/恢复后创建并绑定身份代次，身份切换即取消旧操作；playInfo/play/record 通过 SDK 新增的可选 pinnedOperation 参数使用同一身份的快照。读取播放器 headers 前也验证身份，旧 Ready 不能使用新身份上报。此主线 SDK 扩展保持旧调用源码兼容，不变更 core 或共享 Gradle。
+- 同身份 Cookie 更新仍消费最新权威快照；这不是跨存储事务、Native 真并发或进程级一致性的验收，后续 04E 仍必须为不同账号创建独立客户端并处理迟到结果。
+- 拒绝链接的 detail 不携带原始签名 URL。
+
+## GLM 原稿决策（以上主线修订覆盖对应条目）
 
 1. **能力声明**：search/favoritesRead/favoritesEdit/watchedEdit/playbackReporting = true；favoritesFilter = false（`/favorite/list` 无 tags，组合即拒）；watchedFilter = false（证据修订，见上）。
 2. **collections**：`mediaLibraries` 单页，非空 cursor 拒绝；category→mediaTypes（movie/tv 已知，未知→空集容忍）；posters 首个非空→Primary 图。
@@ -39,5 +49,7 @@
 5. 中继/回退路由下的图片 origin：当前用 `resolution.preferred.baseUrl` 拼接，实际应答源不同 origin 的场景留集成窗口。
 
 ## 验证
+
+主线接手复审：Adapter Desktop/Android JVM 各 **44/44**（原 36 + 主线 8），播放 SDK 两端各 **4/4**；Adapter iOS/OHOS 编译强制执行通过，verifyArchitecture、git diff --check 通过。前六个新增用例已先验证红灯再转绿。仅编译不代表 Native 运行，真实 fnOS 服务端仍 Pending。日志目录 `/private/tmp/mafei-04c-review.ihiDVf/`。
 
 `:data:adapter-feiniu:desktopTest` 与 `:data:adapter-feiniu:testDebugUnitTest` 各 36/36（目录侧 26 + 播放侧 10），`compileKotlinIosArm64`/`compileKotlinOhosArm64` 仅编译，`verifyArchitecture`、`git diff --check` 通过。测试走 FakeFeiniuTransport + DefaultFeiniuFacade 全链路（envelope code/HTTP 状态/解码错误/连接与超时/取消、POST body 断言、PUT/DELETE 写语义），非手写 stub 接口。

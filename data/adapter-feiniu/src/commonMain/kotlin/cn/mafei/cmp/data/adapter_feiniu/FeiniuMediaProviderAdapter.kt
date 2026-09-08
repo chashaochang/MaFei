@@ -18,7 +18,6 @@ import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
-import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
@@ -71,13 +70,25 @@ class FeiniuMediaProviderAdapter(
 
     /** Streams this instance prepared; reportPlayback accepts only these. */
     private val preparedStreams = mutableListOf<PlaybackPreparation.Ready>()
+    // Construct after login/restore. A different identity needs a new adapter;
+    // cookie revisions within the same identity remain usable.
+    private val boundIdentity = facade.credentials.value.identityGeneration
+
+    private fun currentOperation(): cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot {
+        val snapshot = facade.credentials.value
+        if (snapshot.identityGeneration != boundIdentity) {
+            throw CancellationException("Feiniu adapter identity was replaced")
+        }
+        return snapshot
+    }
 
     private fun imageUrl(imagePath: String): String =
         facade.assets.imageUrl(resolution.preferred.baseUrl, imagePath)
 
     private suspend fun <T> translate(block: suspend () -> T): T =
         try {
-            block()
+            currentOperation()
+            block().also { currentOperation() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: cn.mafei.cmp.providers.feiniu.core.FeiniuError) {
@@ -98,9 +109,14 @@ class FeiniuMediaProviderAdapter(
         if (!filter.searchTerm.isNullOrBlank()) {
             throw ClientConfigError("items() does not free-text search; use search()")
         }
-        val (page, pageSize, offset) = decodePage(request)
+        val position = FeiniuPagePosition.decode(request)
+        val page = position.page
+        val pageSize = request.pageSize
         if (filter.favoritesOnly) {
             requireCapability(capabilities, AdapterCapability.FavoritesRead)
+            if (request.sort != null && request.sort != MediaSort(MediaSortField.DateAdded, SortDirection.Descending)) {
+                throw ClientConfigError("Feiniu favorites endpoint only supports its default DateAdded descending sort")
+            }
             // The dedicated endpoint carries no tags: combined constraints
             // would be silently dropped, so they refuse (favoritesFilter=false).
             if (filter.mediaTypes.isNotEmpty() || filter.genres.isNotEmpty() || filter.years.isNotEmpty() ||
@@ -117,7 +133,7 @@ class FeiniuMediaProviderAdapter(
                     pageSize = pageSize,
                 )
             }
-            return toPage(data, request, offset, collectionId)
+            return toPage(data, request, position, collectionId)
         }
         if (filter.playedOnly || filter.unplayedOnly) requireCapability(capabilities, AdapterCapability.WatchedFilter)
         if (filter.genres.isNotEmpty()) throwUnsupportedFeiniuFilter("genres")
@@ -139,7 +155,7 @@ class FeiniuMediaProviderAdapter(
                 sortType = sortType,
             )
         }
-        return toPage(data, request, offset, collectionId)
+        return toPage(data, request, position, collectionId)
     }
 
     override suspend fun search(term: String, request: PageRequest): Page<MediaItem> {
@@ -208,7 +224,7 @@ class FeiniuMediaProviderAdapter(
     }
 
     override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
-        val info = translate { facade.playback.playInfo(resolution, itemGuid = item.value) }
+        val info = translate { facade.playback.playInfo(resolution, itemGuid = item.value, pinnedOperation = currentOperation()) }
         val mediaGuid = info.mediaGuid?.takeIf { it.isNotBlank() }
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.NoPlayableSource,
@@ -232,7 +248,7 @@ class FeiniuMediaProviderAdapter(
             channels = 2,
             forcedSdr = 0,
         )
-        val session = translate { facade.playback.play(resolution, playRequest) }
+        val session = translate { facade.playback.play(resolution, playRequest, pinnedOperation = currentOperation()) }
         val playLink = session.data.playLink
         if (playLink.isNullOrBlank()) {
             return PlaybackPreparation.Refused(RefusalReason.LinkMissing, detail = "play/play returned no play_link")
@@ -242,7 +258,7 @@ class FeiniuMediaProviderAdapter(
         val streamUrl = session.resolvePlayLink(resolution.preferred.baseUrl)
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.LinkRejected,
-                detail = "play_link failed same-origin validation: $playLink",
+                detail = "play_link failed same-origin validation",
             )
         // A rejected subtitle link drops the subtitle, never the stream.
         val subtitleUrl = session.resolveSubtitleLink(resolution.preferred.baseUrl)
@@ -250,7 +266,7 @@ class FeiniuMediaProviderAdapter(
             streamUrl = streamUrl,
             subtitleUrl = subtitleUrl,
             // Authorization + token cookie (and mode=relay on relay routes).
-            headers = facade.assets.playbackHeaders(facade.credentials.value.credentials, session.requiresRelayCookie),
+            headers = facade.assets.playbackHeaders(currentOperation().credentials, session.requiresRelayCookie),
             playSessionId = null, // Feiniu issues no play session id
             reportingContext = FeiniuReportingContext(
                 itemGuid = info.guid?.takeIf { it.isNotBlank() } ?: item.value,
@@ -269,6 +285,7 @@ class FeiniuMediaProviderAdapter(
     }
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
+        currentOperation()
         requireCapability(capabilities, AdapterCapability.PlaybackReporting)
         if (preparedStreams.none { it === stream }) {
             throw ClientConfigError("reportPlayback rejected a stream not prepared by this adapter instance")
@@ -295,22 +312,12 @@ class FeiniuMediaProviderAdapter(
                     durationSeconds = durationSeconds,
                     playLink = context.playLink,
                 ),
+                pinnedOperation = currentOperation(),
             )
         }
     }
 
     // ---------------------------------------------------------------- internals
-
-    /** 1-based wire pages addressed through our own page-aligned cursors. */
-    private fun decodePage(request: PageRequest): Triple<Int, Int, Int> {
-        val offset = request.cursor?.let(OffsetPageCursorCodec::decode) ?: 0
-        if (offset % request.pageSize != 0) {
-            throw ClientConfigError(
-                "Feiniu paging cursor offset ${request.cursor} is not page-aligned with pageSize ${request.pageSize}",
-            )
-        }
-        return Triple(offset / request.pageSize + 1, request.pageSize, offset)
-    }
 
     /**
      * Page assembly with the frozen total semantics (same as the Jellyfin
@@ -320,17 +327,18 @@ class FeiniuMediaProviderAdapter(
     private fun toPage(
         data: FeiniuItemListData,
         request: PageRequest,
-        offset: Int,
+        position: FeiniuPagePosition,
         collectionId: CollectionId?,
     ): Page<MediaItem> {
         val items = data.list.mapNotNull { it.toMediaItem(serverId, ::imageUrl, collectionId) }
         val total = data.total
-        val nextOffset = offset + data.list.size
+        val nextOffset = position.seen + data.list.size
+        fun next(): PageCursor = position.next(request.pageSize, data.list.size)
         val nextCursor: PageCursor? = when {
             data.list.isEmpty() -> null // terminal empty page, regardless of totals
             total != null && total > 0 && nextOffset >= total -> null // declared end
-            data.list.size >= request.pageSize -> OffsetPageCursorCodec.encode(nextOffset)
-            total != null && total > 0 -> OffsetPageCursorCodec.encode(nextOffset) // clamped page, total says more
+            data.list.size >= request.pageSize -> next()
+            total != null && total > 0 -> next() // clamped page, total says more
             else -> null // no total information: a short page is the last one
         }
         return Page.of(items, nextCursor = nextCursor, totalEstimate = total?.takeIf { it > 0 })

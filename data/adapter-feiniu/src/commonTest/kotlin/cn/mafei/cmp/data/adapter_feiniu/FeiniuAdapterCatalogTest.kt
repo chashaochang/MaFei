@@ -44,6 +44,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private fun envelope(dataJson: String): String = """{"code":0,"msg":"","data":$dataJson}"""
@@ -172,11 +173,13 @@ class FeiniuAdapterCatalogTest {
     // --------------------------------------------------------------- paging
 
     @Test
-    fun offsetPagingTranslatesToOneBasedPages() = runTest {
+    fun issuedCursorTranslatesToOneBasedPages() = runTest {
         val fixture = Fixture()
+        fixture.transport.enqueueJson(200, envelope("""{"list":[{"guid":"first","title":"First"}],"total":2}"""))
+        val first = fixture.adapter.items(null, PageRequest(pageSize = 36))
         fixture.transport.enqueueJson(200, LIST_PAGE_ONE)
-        fixture.adapter.items(null, PageRequest(cursor = OffsetPageCursorCodec.encode(36), pageSize = 36))
-        val body = bodyOf(fixture.transport.requests.single())
+        fixture.adapter.items(null, PageRequest(cursor = first.nextCursor, pageSize = 36))
+        val body = bodyOf(fixture.transport.requests.last())
         assertTrue(body.contains("\"page\":2"), body)
         assertTrue(body.contains("\"page_size\":36"), body)
     }
@@ -212,7 +215,7 @@ class FeiniuAdapterCatalogTest {
         val page = fixture.adapter.items(null, PageRequest(pageSize = 4))
         assertEquals(4, page.items.size)
         assertNull(page.totalEstimate)
-        assertEquals(OffsetPageCursorCodec.encode(4), page.nextCursor)
+        assertNotNull(page.nextCursor)
         // Terminal empty page stops the walk.
         fixture.transport.enqueueJson(200, envelope("""{"list":[],"total":0}"""))
         val tail = fixture.adapter.items(null, PageRequest(cursor = page.nextCursor, pageSize = 4))

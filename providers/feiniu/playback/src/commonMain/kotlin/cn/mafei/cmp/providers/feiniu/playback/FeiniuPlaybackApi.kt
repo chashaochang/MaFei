@@ -11,6 +11,7 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayRecordRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoute
+import cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot
 import cn.mafei.cmp.providers.feiniu.core.FeiniuStreamListData
 
 /**
@@ -61,6 +62,10 @@ data class FeiniuPlaybackSession(
  * play/play (stream link with server-side expiry), progress recording, the
  * direct-range URL for the player and the stream/list track catalog.
  * Actual playback belongs to the player runtimes (GLM-05).
+ * The optional pinnedOperation on info/play/record binds a multi-step
+ * adapter operation to its captured identity. Callers still reject stale
+ * results against the authoritative state; a pinned receipt is not a
+ * credential persistence source. Omission preserves existing SDK behavior.
  */
 class FeiniuPlaybackApi(private val client: FeiniuClient) {
 
@@ -69,6 +74,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
         resolution: FeiniuHostResolution,
         itemGuid: String,
         mediaGuid: String? = null,
+        pinnedOperation: FeiniuSessionSnapshot? = null,
     ): FeiniuPlayInfoData {
         val body = buildString {
             append("{\"item_guid\":\"")
@@ -88,6 +94,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 method = FeiniuApiCall.FeiniuMethod.Post,
                 bodyText = body,
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
+                pinnedOperation = pinnedOperation,
             ),
         ) { envelope, _ ->
             // F3: play negotiation endpoints require `data` (design §6.7) —
@@ -106,6 +113,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
     suspend fun play(
         resolution: FeiniuHostResolution,
         request: FeiniuPlayPlayRequest,
+        pinnedOperation: FeiniuSessionSnapshot? = null,
     ): FeiniuPlaybackSession {
         val executed = client.executeWithResult(
             resolution,
@@ -115,6 +123,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 bodyText = MafeiJson.Default.encodeToString(FeiniuPlayPlayRequest.serializer(), request),
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
                 readTimeoutMs = 60_000,
+                pinnedOperation = pinnedOperation,
             ),
         ) { envelope, _ ->
             val data = envelope.data
@@ -130,7 +139,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
     }
 
     /** Records playback progress (position/duration in seconds per protocol). */
-    suspend fun record(resolution: FeiniuHostResolution, request: FeiniuPlayRecordRequest) {
+    suspend fun record(resolution: FeiniuHostResolution, request: FeiniuPlayRecordRequest, pinnedOperation: FeiniuSessionSnapshot? = null) {
         client.execute(
             resolution,
             FeiniuApiCall(
@@ -138,6 +147,7 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
                 method = FeiniuApiCall.FeiniuMethod.Post,
                 bodyText = MafeiJson.Default.encodeToString(FeiniuPlayRecordRequest.serializer(), request),
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
+                pinnedOperation = pinnedOperation,
             ),
         ) { _, _ -> true }
     }
