@@ -1,5 +1,25 @@
 # Application runtime / login and browsing
 
+## Mac login failure follow-up (2026-09-09)
+
+The live test server (Jellyfin 10.11.11) accepted authentication using the packaged
+Mac SDK; library enumeration and sampled directory detail worked. Its diagnostic
+session was logged out. No server credentials belong in this repository.
+
+The Mac package remains ad-hoc signed; the machine has **0 valid code-signing
+identities**. Data Protection Keychain synthetic writes returned **-34018**.
+Do not claim application login/persistence acceptance or silently switch stores.
+Apple signing/provisioning or an explicitly approved macOS login-Keychain backend
+is still required; this increment does not change that security decision.
+
+`ConnectionSaveException` now distinguishes failed post-authentication admission
+from rejected authentication. UI text identifies denied/unavailable secure storage,
+without retaining backend messages/causes. Admitted cancellation still keeps the
+committed SDK. Two new regression cases failed before the fix; final Desktop
+**56/56**, Android JVM **54/54**, iOS ARM64/OHOS compilation, architecture gate and
+Mac packaging passed. No new runtime/Keychain round-trip acceptance is claimed.
+Logs: `/private/tmp/mafei-connect-stage-red.log`, `/private/tmp/mafei-connect-stage-green.log`.
+
 ## Login and browse increment (2026-09-08)
 
 The default shared Compose entry is now Connect → library grid → read-only detail,

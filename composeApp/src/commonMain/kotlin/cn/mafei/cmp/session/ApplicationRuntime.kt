@@ -4,6 +4,7 @@ import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.http_contract.HttpTransport
 import cn.mafei.cmp.core.secure_credential_api.SecureCredentialStore
+import cn.mafei.cmp.core.secure_credential_api.CredentialAccessException
 import cn.mafei.cmp.core.storage_api.SettingsStorage
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.session.SessionRepository
@@ -37,6 +38,11 @@ class ApplicationRuntime(
         } catch (failure: Throwable) {
             // Admitted cancellation may already have committed. Never clear that SDK.
             if (sessions.state.value.session?.binding !== authenticated.binding) authenticated.binding.clear()
+            // Authentication errors occurred before this block. A backend's cause/message
+            // can contain sensitive data; retain only the stable, non-secret category.
+            if (failure is Exception && failure !is CancellationException) {
+                throw ConnectionSaveException((failure as? CredentialAccessException)?.kind)
+            }
             throw failure
         }
     }

@@ -15,8 +15,9 @@ import kotlin.test.*
 class ApplicationSessionsTest {
     private class Document : SettingsDocumentBackend {
         var bytes: ByteArray? = null
+        var failure: Exception? = null
         override fun read() = bytes?.copyOf()
-        override fun replace(document: ByteArray) { bytes = document.copyOf() }
+        override fun replace(document: ByteArray) { failure?.let { throw it }; bytes = document.copyOf() }
     }
     private class Secrets : SecureCredentialStore {
         val values = mutableMapOf<CredentialAlias, SecureSecret>()
@@ -31,11 +32,12 @@ class ApplicationSessionsTest {
     private class Transport : HttpTransport {
         val requests = mutableListOf<HttpRequest>()
         var closes = 0
+        var statusCode = 200
         var beforeResponse: suspend () -> Unit = {}
         var response: (HttpRequest) -> String = { """{"Items":[],"TotalRecordCount":0}""" }
         override suspend fun execute(request: HttpRequest): HttpResponse {
             requests += request; beforeResponse()
-            return HttpResponse(200, HttpHeaders.EMPTY, response(request).encodeToByteArray(), request.url, request.url)
+            return HttpResponse(statusCode, HttpHeaders.EMPTY, response(request).encodeToByteArray(), request.url, request.url)
         }
         override fun close() { closes++ }
     }
@@ -254,5 +256,75 @@ class ApplicationSessionsTest {
             assertSame(second, h.sessions.state.value.session)
             assertNotSame(first, second)
         } finally { h.close() }
+    }
+
+    @Test fun authenticatedButKeychainDeniedIsNotReportedAsWrongPassword() = runBlocking<Unit> {
+        val h = Harness()
+        h.transport.response = { """{"User":{"Id":"u","Name":"Demo"},"AccessToken":"fixture-token"}""" }
+        h.secrets.beforeSave = { throw CredentialAccessException(CredentialFailureKind.AccessDenied, "private-token") }
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            root.sessions.start()
+            val error = assertFailsWith<ConnectionSaveException> {
+                root.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "private-password")
+            }
+            assertEquals(CredentialFailureKind.AccessDenied, error.credentialFailure)
+            assertTrue(connectFailureMessage(error).contains("服务器认证已通过"))
+            assertTrue(connectFailureMessage(error).contains("应用签名"))
+            assertFalse(connectFailureMessage(error).contains("private-"))
+            assertNull(error.cause)
+            assertEquals(ApplicationSessionStatus.NeedsAttention, root.sessions.state.value.status)
+            assertTrue(h.secrets.values.isEmpty())
+        } finally { root.close(); h.close() }
+    }
+
+    @Test fun authenticatedButSettingsWriteFailedKeepsThePersistenceStage() = runBlocking<Unit> {
+        val h = Harness()
+        h.transport.response = { """{"User":{"Id":"u"},"AccessToken":"fixture-token"}""" }
+        h.doc.failure = IllegalStateException("private-backend-details")
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            root.sessions.start()
+            val error = assertFailsWith<ConnectionSaveException> {
+                root.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
+            }
+            assertNull(error.credentialFailure); assertNull(error.cause)
+            assertTrue(connectFailureMessage(error).contains("无法保存登录状态"))
+            assertTrue(h.secrets.values.isEmpty())
+        } finally { root.close(); h.close() }
+    }
+
+    @Test fun rejectedAuthenticationStillRemainsAuthenticationFailure() = runBlocking<Unit> {
+        val h = Harness(); h.transport.statusCode = 401
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            root.sessions.start()
+            val error = assertFailsWith<AuthenticationError> {
+                root.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
+            }
+            assertEquals("登录未通过，请检查账号和密码", connectFailureMessage(error))
+            assertEquals(ApplicationSessionStatus.SignedOut, root.sessions.state.value.status)
+            assertNull(h.doc.bytes); assertTrue(h.secrets.values.isEmpty())
+        } finally { root.close(); h.close() }
+    }
+
+    @Test fun cancellingRootConnectAfterAdmissionDoesNotReportSaveFailureOrClearCommittedSdk() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val h = Harness()
+            h.transport.response = { """{"User":{"Id":"u"},"AccessToken":"fixture-token"}""" }
+            val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+            val entered = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()
+            h.secrets.beforeSave = { entered.complete(Unit); release.await() }
+            try {
+                root.sessions.start()
+                val pending = async { root.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw") }
+                entered.await(); pending.cancel(); release.complete(Unit)
+                assertFailsWith<CancellationException> { pending.await() }
+                val session = assertNotNull(root.sessions.state.value.session)
+                assertEquals(ApplicationSessionStatus.Ready, root.sessions.state.value.status)
+                h.transport.response = { """{"Items":[],"TotalRecordCount":0}""" }
+                session.binding.adapter.collections(PageRequest())
+            } finally { release.complete(Unit); root.close(); h.close() }
+        }
     }
 }

@@ -12,7 +12,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
-import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.feature.connect.ConnectScreen
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
@@ -65,7 +64,7 @@ fun App(runtime: ApplicationRuntime, onThemeChanged: (Boolean) -> Unit = {}) {
                                                 scope.launch {
                                                     try { runtime.connect(provider, address, name, password) }
                                                     catch (cancelled: CancellationException) { throw cancelled }
-                                                    catch (failure: Exception) { error = connectError(failure) }
+                                                    catch (failure: Exception) { error = connectFailureMessage(failure) }
                                                     finally { busy = false }
                                                 }
                                             }
@@ -141,14 +140,4 @@ private fun SessionMessage(message: String, busy: Boolean = false, onRetry: (() 
             onCleanup?.let { TextButton(it, enabled = !busy) { Text("完成退出，重新登录") } }
         }
     }
-}
-
-// All network/storage diagnostics are deliberately replaced, not interpolated.
-private fun connectError(error: Exception): String = when (error) {
-    is AuthenticationError -> "登录未通过，请检查账号和密码"
-    is AuthorizationError -> "此账号没有访问权限"
-    is ClientConfigError -> "请检查服务器地址和用户名；地址须包含 http:// 或 https://"
-    is NetworkUnreachableError, is TimeoutError -> "无法连接服务器，请检查地址和网络"
-    is ProtocolDecodingError -> "服务器登录响应不完整或不受支持"
-    else -> "登录或安全保存失败，请检查服务器和存储后重试"
 }
