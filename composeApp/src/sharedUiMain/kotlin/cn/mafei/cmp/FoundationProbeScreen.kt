@@ -31,7 +31,7 @@ import mafei.composeapp.generated.resources.probe_resource_status
 
 /** Stage 1 development entry, not a production Home or runtime acceptance claim. */
 @Composable
-fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}) {
+fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}, sessionStatus: String = "") {
     var dark by rememberSaveable { mutableStateOf(true) }
     var level by rememberSaveable { mutableStateOf(GlassLevel.Full.name) }
     var dialog by rememberSaveable { mutableStateOf(false) }
@@ -58,6 +58,7 @@ fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}) {
                         Column(Modifier.weight(1f)) {
                             Text("MaFei", style = MaterialTheme.typography.headlineMedium)
                             Text("2.0 · 界面实验室", style = MaterialTheme.typography.labelLarge)
+                            if (sessionStatus.isNotEmpty()) Text(sessionStatus, style = MaterialTheme.typography.labelMedium)
                         }
                         TextButton(onClick = { dark = !dark }) { Text(if (dark) "浅色" else "深色") }
                     }

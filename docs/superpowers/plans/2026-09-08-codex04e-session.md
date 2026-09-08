@@ -1,5 +1,12 @@
 # Codex 04E：会话与安全凭证写序
 
+后续启动接线（2026-09-08）：四端入口现已提供真实 SettingsStorage/HTTP/SecureStore，
+共用进程级 ApplicationRuntime；已保存的连接和凭证可以装回真实 Jellyfin/飞牛 SDK，
+并接入媒体缓存、观察任务、切号/退出/关闭。应用 Desktop 32 项、Android 30 项实际通过，
+Native 编译和 unsigned HAP 打包通过，真机/服务器未验收。登录 UI、迁移 Reader/Sink
+及播放器实际 teardown 仍 Pending。最新范围与运行证据见 [应用说明](../../../composeApp/README.md)，
+下文为仓库层历史，不再把启动接线整体列为未实现。
+
 ## 后续增量：账号恢复索引（2026-09-08）
 
 `SessionRepository(store, settings)` 现在可使用现有 `SettingsStorage` 保存非敏感账号选择与凭证别名索引；原单参数构造继续保持进程内行为。新增 `savedAccounts()`、`restoreCurrent()` 和 `restoreAccount(selection)`，恢复结果只提供 SDK 安装材料，不发布 Ready，不复用旧进程的 SDK 代次。

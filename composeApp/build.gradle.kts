@@ -61,6 +61,12 @@ kotlin {
             dependencies {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.koin.core)
+                implementation(libs.kotlinx.serialization.json)
+                implementation(project(":data:repositories"))
+                implementation(project(":data:adapter-jellyfin"))
+                implementation(project(":data:adapter-feiniu"))
+                implementation(project(":providers:jellyfin:facade"))
+                implementation(project(":providers:feiniu:facade"))
 
                 implementation(project(":common:core"))
                 implementation(project(":common:glass"))
@@ -115,6 +121,7 @@ kotlin {
         }
         val androidUnitTest by getting {
             dependsOn(commonTest)
+            kotlin.srcDir("src/jvmTest/kotlin")
         }
 
         val desktopMain by getting {
@@ -137,6 +144,7 @@ kotlin {
         }
         val desktopTest by getting {
             dependsOn(commonTest)
+            kotlin.srcDir("src/jvmTest/kotlin")
         }
 
         val iosMain by creating {

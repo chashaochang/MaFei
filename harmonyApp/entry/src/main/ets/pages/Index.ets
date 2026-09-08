@@ -19,7 +19,12 @@ struct Index {
     }
 
     try {
-      this.controller = nativeApi.MainArkUIViewController();
+      const context = this.getUIContext().getHostContext();
+      if (!context) {
+        this.errorMessage = 'Application context is unavailable';
+        return;
+      }
+      this.controller = nativeApi.MainArkUIViewController(context.filesDir);
       if (!this.controller) {
         this.errorMessage = 'Compose controller creation failed';
       }

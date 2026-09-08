@@ -6,13 +6,21 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import android.graphics.Color
+import cn.mafei.cmp.session.ApplicationRuntime
+import cn.mafei.cmp.session.ProcessApplication
+import cn.mafei.cmp.storage.createAndroidSettings
+import cn.mafei.cmp.platform.secure_storage_android.AndroidSecureCredentialStore
+import cn.mafei.cmp.platform.http_android.createAndroidHttpTransport
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        val runtime = ProcessApplication.getOrCreate {
+            ApplicationRuntime(createAndroidSettings(applicationContext), AndroidSecureCredentialStore(applicationContext), createAndroidHttpTransport())
+        }
         setContent {
-            App(onThemeChanged = { dark ->
+            App(runtime, onThemeChanged = { dark ->
                 // Probe theme can differ from the system theme. Let Activity's
                 // edge-to-edge API select readable system icons for that theme.
                 val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
