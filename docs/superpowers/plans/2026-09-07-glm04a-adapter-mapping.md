@@ -29,7 +29,7 @@
 | `favoritesRead`（能应答 favoritesOnly 列表） | true | true | Jellyfin：`IsFavorite` filter + parentId 缺省递归；飞牛：`/favorite/list` 专用端点 |
 | `favoritesFilter`（与其它筛选组合） | true | **false** | 飞牛 `/favorite/list` 请求体仅 `FeiniuItemListTags.type`（FeiniuModels.kt:143），无 genres/watched 组合 |
 | `favoritesEdit` | **false** | true | Jellyfin P0 SDK 无 user-data 写端点；飞牛 PUT/DELETE `/item/favorite` |
-| `watchedFilter` | true | true | Jellyfin `IsPlayed`/`IsUnplayed`；飞牛 `watchedTag`（FeiniuCatalogApi.kt:45）。两家均无独立"已看列表"端点，"读取"经筛选实现 |
+| `watchedFilter` | true | **false（04C 勘误）** | Jellyfin `IsPlayed`/`IsUnplayed`；飞牛 `watchedTag` 参数虽存在（FeiniuCatalogApi.kt:45）但 wire 字面量无任何使用证据（legacy 仅透传，无赋值点）——04C 拒绝 playedOnly/unplayedOnly 并降声明，待真机 fixture。两家均无独立"已看列表"端点，Jellyfin 的"读取"经筛选实现 |
 | `watchedEdit` | **false** | true | 同 favoritesEdit 依据 |
 | `playbackReporting` | true | true | `/Sessions/Playing*`；`/play/record` |
 
@@ -63,9 +63,11 @@
 
 ## 5. 已知缺口 / Pending（不编造）
 
-1. **飞牛 search 分页语义**：端点不分页；切片还是拒绝越界 offset，由 04C 定并测试。
-2. **飞牛 `episodes(seasonId=null)`**：无整季遍历语义，04C 需显式拒绝或派生。
-3. **Jellyfin `totalRecordCount=0` 与"未知"不可区分**：04B 决定 `totalEstimate` 何时置 null。
-4. **飞牛年份/首播日期字符串格式**：P0 wire 未定形，需真实 fixture（04C）确认解析规则；在此之前解析失败一律 null。
-5. **`MediaSortField` 在飞牛的覆盖面**（`create_time`↔`DateAdded` 之外）：04C 决定降级或拒绝。
+> 04C 状态更新：第 2 条（飞牛 episodes seasonId=null）、第 5 条（MediaSortField 飞牛覆盖面）已按"显式拒绝"落地并测试；watchedTag/genres/decade 字面量、search 分页语义等仍为 Pending，详见 2026-09-08-glm04c-feiniu-adapter.md。
+
+1. **飞牛 search 分页语义**：端点不分页；04C 落地为整表单页（非空 cursor 拒绝——无状态 adapter 下 cursor 意味着重查询而非翻页）。
+2. ~~飞牛 `episodes(seasonId=null)`~~：已落地——必须 seasonId（端点取季 guid），null 显式拒绝。
+3. **Jellyfin `totalRecordCount=0` 与"未知"不可区分**：04B 已落地——0 → `totalEstimate=null`，分页推进只看条目与正数 total。
+4. **飞牛年份/首播日期字符串格式**：04C 按 `yyyy-MM-dd` 前缀解析（legacy 一致），失败一律 null；完整格式化规则留真机 fixture。
+5. **`MediaSortField` 在飞牛的覆盖面**：已落地——仅 `DateAdded→create_time`（provider 默认列），其余字段拒绝。
 6. FakeMediaProviderAdapter 目前在本模块 commonTest；04B-D 需要复用时再提升为 testkit（涉及 settings.gradle.kts 共享变更，届时先报告）。

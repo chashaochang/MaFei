@@ -10,3 +10,7 @@ dependencies {
     add("commonMainApi", project(":core:domain"))
     add("commonMainImplementation", project(":providers:feiniu:facade"))
 }
+
+dependencies {
+    add("commonTestImplementation", project(":providers:feiniu:testkit"))
+}
