@@ -183,7 +183,9 @@ class FakeMediaProviderAdapter(
         if (watchedOnly && !capabilities.watchedFilter) {
             throw ClientConfigError("Adapter cannot answer played/unplayed-filtered listings (watchedFilter unsupported)")
         }
-        if (favoritesOnly && otherConstraints && !capabilities.favoritesFilter) {
+        // Watched flags count as constraints too: a favorites listing that
+        // cannot combine tags cannot carry played/unplayed either.
+        if (favoritesOnly && (otherConstraints || watchedOnly) && !capabilities.favoritesFilter) {
             throw ClientConfigError("Adapter cannot combine favorites-only with further filters (favoritesFilter unsupported)")
         }
         if (!filter.searchTerm.isNullOrBlank()) {
@@ -199,24 +201,24 @@ class FakeMediaProviderAdapter(
         }
     }
 
-    /** Deterministic reference ordering: field comparator with nulls last, id as tiebreak. */
+    /** Reference ordering: direction flips only the non-null comparison; nulls stay last, id is the ascending tiebreak. */
     private fun applySort(source: List<MediaItem>, sort: MediaSort?): List<MediaItem> {
         if (sort == null) return source
+        val descending = sort.direction == SortDirection.Descending
         val comparator = when (sort.field) {
-            MediaSortField.Title -> nullableCompare({ it.title }) { a, b -> a.compareTo(b) }
-            MediaSortField.DateAdded -> nullableCompare({ it.dateAddedEpochMs }, Long::compareTo)
-            MediaSortField.PremiereDate -> nullableCompare({ it.premiereEpochMs }, Long::compareTo)
-            MediaSortField.CommunityRating -> nullableCompare({ it.communityRating }, Double::compareTo)
-            MediaSortField.Runtime -> nullableCompare({ it.runtimeMs }, Long::compareTo)
-            MediaSortField.SeasonNumber -> nullableCompare({ it.seasonNumber }, Int::compareTo)
-            MediaSortField.EpisodeNumber -> nullableCompare({ it.episodeNumber }, Int::compareTo)
+            MediaSortField.Title -> nullableCompare(descending, { it.title }, String::compareTo)
+            MediaSortField.DateAdded -> nullableCompare(descending, { it.dateAddedEpochMs }, Long::compareTo)
+            MediaSortField.PremiereDate -> nullableCompare(descending, { it.premiereEpochMs }, Long::compareTo)
+            MediaSortField.CommunityRating -> nullableCompare(descending, { it.communityRating }, Double::compareTo)
+            MediaSortField.Runtime -> nullableCompare(descending, { it.runtimeMs }, Long::compareTo)
+            MediaSortField.SeasonNumber -> nullableCompare(descending, { it.seasonNumber }, Int::compareTo)
+            MediaSortField.EpisodeNumber -> nullableCompare(descending, { it.episodeNumber }, Int::compareTo)
         }.thenBy { it.id.value }
-        return source.sortedWith(
-            if (sort.direction == SortDirection.Descending) comparator.reversed() else comparator,
-        )
+        return source.sortedWith(comparator)
     }
 
     private fun <K : Any> nullableCompare(
+        descending: Boolean,
         selector: (MediaItem) -> K?,
         compare: (K, K) -> Int,
     ): Comparator<MediaItem> = Comparator { a, b ->
@@ -224,9 +226,12 @@ class FakeMediaProviderAdapter(
         val bv = selector(b)
         when {
             av == null && bv == null -> 0
-            av == null -> 1
+            av == null -> 1 // nulls last in both directions
             bv == null -> -1
-            else -> compare(av, bv)
+            else -> {
+                val order = compare(av, bv)
+                if (descending) -order else order
+            }
         }
     }
 

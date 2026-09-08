@@ -290,6 +290,23 @@ class MediaProviderAdapterContractTest {
     }
 
     @Test
+    fun combinedFavoriteWatchedConstraintsNeedFavoritesFilterCapability() {
+        val adapter = FakeMediaProviderAdapter(
+            capabilities = AdapterCapabilities(favoritesRead = true, watchedFilter = true, favoritesFilter = false),
+            itemsSource = listOf(mediaItem(0)),
+        )
+        runSuspendTest {
+            // Feiniu-shaped: /favorite/list cannot carry watched tags either.
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true, playedOnly = true)))
+            }
+            assertFailsWith<ClientConfigError> {
+                adapter.items(null, PageRequest(filter = MediaFilter(favoritesOnly = true, unplayedOnly = true)))
+            }
+        }
+    }
+
+    @Test
     fun itemsRejectFreeTextSearchTerm() {
         val adapter = FakeMediaProviderAdapter(
             capabilities = AdapterCapabilities(search = true, favoritesRead = true),
@@ -318,6 +335,24 @@ class MediaProviderAdapterContractTest {
                 PageRequest(sort = MediaSort(MediaSortField.Title, direction = SortDirection.Descending)),
             )
             assertEquals(listOf("Charlied", "Bravo", "Alpha"), descending.items.map { it.title })
+        }
+    }
+
+    @Test
+    fun sortKeepsNullsLastInBothDirections() {
+        val long = mediaItem(0).copy(title = "Long", runtimeMs = 7_200_000L)
+        val short = mediaItem(1).copy(title = "Short", runtimeMs = 600_000L)
+        val missing = mediaItem(2).copy(title = "Missing")
+        val adapter = FakeMediaProviderAdapter(itemsSource = listOf(long, short, missing))
+        runSuspendTest {
+            val ascending = adapter.items(null, PageRequest(sort = MediaSort(MediaSortField.Runtime)))
+            assertEquals(listOf("Short", "Long", "Missing"), ascending.items.map { it.title })
+            // Direction flips only non-null comparison; nulls stay last.
+            val descending = adapter.items(
+                null,
+                PageRequest(sort = MediaSort(MediaSortField.Runtime, direction = SortDirection.Descending)),
+            )
+            assertEquals(listOf("Long", "Short", "Missing"), descending.items.map { it.title })
         }
     }
 
