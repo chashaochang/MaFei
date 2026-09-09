@@ -149,6 +149,11 @@ kotlin {
         val desktopTest by getting {
             dependsOn(commonTest)
             kotlin.srcDir("src/jvmTest/kotlin")
+            dependencies {
+                api(project(":core:domain"))
+                api(project(":data:adapter-contract"))
+                api(project(":player:api"))
+            }
         }
 
         val iosMain by creating {
