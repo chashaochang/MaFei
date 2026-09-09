@@ -48,6 +48,7 @@ fun MediaArtwork(
     cache: ArtworkMemoryCache,
     fetch: suspend (MediaImage) -> ByteArray?,
     modifier: Modifier = Modifier,
+    fallback: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val bitmap by produceState<ImageBitmap?>(null, image, cache) {
         value = null
@@ -58,6 +59,8 @@ fun MediaArtwork(
         }
     }
     val loaded = bitmap
-    if (loaded == null) TextPoster(title, modifier)
+    if (loaded == null) {
+        if (fallback == null) TextPoster(title, modifier) else fallback(modifier)
+    }
     else Image(loaded, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
 }

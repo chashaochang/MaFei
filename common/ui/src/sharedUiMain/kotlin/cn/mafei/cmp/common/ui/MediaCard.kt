@@ -1,7 +1,6 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -16,6 +15,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import cn.mafei.cmp.common.design_system.MaFeiShape
 
 /** Provider-neutral card. The caller owns authenticated artwork fetching and lifecycle. */
 @Composable
@@ -28,8 +28,8 @@ fun MediaCard(
     poster: (@Composable (Modifier) -> Unit)? = null,
     progress: Float? = null,
 ) {
-    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(16.dp))) {
+    Column(modifier.clip(MaFeiShape.poster).mafeiInteractive(onClick, label = "查看$title"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(MaFeiShape.poster)) {
             if (poster != null) poster(Modifier.fillMaxSize()) else TextPoster(title, Modifier.fillMaxSize())
             status?.let {
                 Surface(Modifier.align(Alignment.TopStart).padding(8.dp), color = Color(0xDD151921),
@@ -56,7 +56,7 @@ fun MediaCard(
 @Composable
 fun TextPoster(title: String, modifier: Modifier = Modifier) {
     Box(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(listOf(
+        modifier.clip(MaFeiShape.poster).background(Brush.linearGradient(listOf(
             MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.surface,
         ))),
