@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | Android | http-android | `CioHttpTransport` 直用 | Implemented and runtime-tested（JVM 单测） |
 | Apple Silicon macOS | http-macos | `CioHttpTransport` 直用 | Implemented and runtime-tested |
-| iOS ARM64 | http-ios | Ktor Darwin 引擎 + `DarwinCookieTransport`（cookie 镜像） | Implemented but compile-only（Loopback 测试需模拟器） |
+| iOS ARM64 | http-ios | Ktor Darwin 引擎 + `DarwinCookieTransport`（cookie 镜像） | Implemented and runtime-tested（iosSimulatorArm64Test 7/7 真实模拟器执行） |
 | OHOS ARM64 | http-ohos | Native curl 处理器 + Ktor 组合 | Implemented but compile-only（Loopback/Native 集成测试需设备） |
 
 共享策略（http-ktor 统一注入，各平台不重复实现）：单一外层超时（默认 30s，引擎内部超时禁用避免双重计时）；**关闭原生自动重定向与凭据存储、禁用自动重放**（重定向策略归 core:http-contract）；错误按 core:http-contract 分类（`HttpTimeoutException`/`HttpTransportException(kind)`）。已知限制：**响应体大小上限未在传输层统一强制**（各 Provider 端依赖 JSON 解码与固定 URL 信任面，P1 补齐点已记录）。
