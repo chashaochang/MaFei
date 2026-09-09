@@ -229,8 +229,7 @@ private fun Hero(
     glassBackdrop: GlassBackdrop?,
 ) {
     Box(
-        Modifier.fillMaxWidth().height(layout.heroHeightDp.dp).clip(MaFeiShape.panel)
-            .border(1.dp, Color.White.copy(alpha = .12f), MaFeiShape.panel),
+        Modifier.fillMaxWidth().height(layout.heroHeightDp.dp).clip(MaFeiShape.panel),
     ) {
         if (artwork != null) artwork(item, Modifier.fillMaxSize()) else TextPoster(item.title, Modifier.fillMaxSize())
         Box(
@@ -253,18 +252,11 @@ private fun Hero(
                 ),
             ),
         )
-        Box(
-            Modifier.fillMaxWidth().height(1.dp).background(
-                Brush.horizontalGradient(
-                    listOf(Color.Transparent, Color.White.copy(alpha = .38f), Color.Transparent),
-                ),
-            ),
-        )
         Column(
             Modifier.align(if (layout.horizontalHero) Alignment.CenterStart else Alignment.BottomStart)
                 .widthIn(max = if (layout.horizontalHero) 540.dp else 680.dp)
                 .padding(if (layout.horizontalHero) 34.dp else 22.dp),
-            verticalArrangement = Arrangement.spacedBy(if (layout.horizontalHero) 12.dp else 9.dp),
+            verticalArrangement = Arrangement.spacedBy(if (layout.horizontalHero) 12.dp else 8.dp),
         ) {
             Text(
                 if (item.userData.hasProgress) "继续观看" else "最近加入",
@@ -272,7 +264,7 @@ private fun Hero(
                 style = MaterialTheme.typography.labelMedium,
             )
             Text(item.title, color = Color.White,
-                style = if (layout.horizontalHero) MaterialTheme.typography.displayMedium else MaterialTheme.typography.headlineLarge,
+                style = if (layout.horizontalHero) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(metadata(item), color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.bodyLarge)
             if (layout.horizontalHero) item.overview?.takeIf { it.isNotBlank() }?.let {
@@ -280,9 +272,10 @@ private fun Hero(
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             MaFeiSurface(
-                MaFeiGlassDefaults.spec(GlassRole.Overlay, GlassLevel.Reduced).copy(
-                    tintAlpha = .26f,
-                    cornerRadiusDp = 28f,
+                MaFeiGlassDefaults.spec(GlassRole.Overlay, GlassLevel.Full).copy(
+                    tintAlpha = .18f,
+                    intensity = .85f,
+                    cornerRadiusDp = 22f,
                 ),
                 Modifier.heightIn(min = 52.dp)
                     .mafeiInteractive({ onItem(item) }, radiusDp = 28f, label = "查看${item.title}"),

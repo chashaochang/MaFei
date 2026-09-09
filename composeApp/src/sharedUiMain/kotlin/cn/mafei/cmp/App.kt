@@ -407,8 +407,8 @@ private fun AmbientBackground(
                 modifier = Modifier.fillMaxSize().graphicsLayer {
                     scaleX = 1.12f
                     scaleY = 1.12f
-                    alpha = .46f
-                }.blur(48.dp),
+                    alpha = .68f
+                }.blur(40.dp),
                 fallback = { fallback ->
                     Box(fallback.background(MaterialTheme.colorScheme.background))
                 },
@@ -418,9 +418,9 @@ private fun AmbientBackground(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
                     listOf(
-                        MaterialTheme.colorScheme.background.copy(alpha = .34f),
-                        MaterialTheme.colorScheme.background.copy(alpha = .78f),
-                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.background.copy(alpha = .18f),
+                        MaterialTheme.colorScheme.background.copy(alpha = .56f),
+                        MaterialTheme.colorScheme.background.copy(alpha = .94f),
                     ),
                 ),
             ),

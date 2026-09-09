@@ -8,7 +8,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -62,7 +65,12 @@ fun GlassSurface(
     val material = if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
     } else {
-        Modifier.drawBackdrop(
+        Modifier.shadow(
+            elevation = if (spec.role == GlassRole.Navigation || spec.role == GlassRole.Overlay) 14.dp else 8.dp,
+            shape = shape,
+            ambientColor = Color.Black.copy(alpha = .28f),
+            spotColor = Color.Black.copy(alpha = .34f),
+        ).drawBackdrop(
             backdrop = backdrop.layer,
             shape = { shape },
             effects = {
@@ -82,6 +90,14 @@ fun GlassSurface(
             onDrawSurface = {
                 // Do not wait for recomposition to make the failed frame readable.
                 drawRect(tint.copy(alpha = if (health.effectFailed) 1f else spec.tintAlpha.coerceIn(0f, 1f)))
+                if (!health.effectFailed && level != GlassLevel.Opaque) {
+                    val radius = spec.cornerRadiusDp.coerceAtLeast(0f).dp.toPx()
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = if (level == GlassLevel.Full) .22f else .14f),
+                        cornerRadius = CornerRadius(radius, radius),
+                        style = Stroke(width = 1.dp.toPx()),
+                    )
+                }
             },
         )
     }

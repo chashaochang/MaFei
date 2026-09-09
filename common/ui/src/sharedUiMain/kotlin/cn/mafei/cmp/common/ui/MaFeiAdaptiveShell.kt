@@ -49,7 +49,7 @@ fun MaFeiAdaptiveShell(
         Row(Modifier.fillMaxSize()) {
             if (layout.navigation != NavigationPlacement.Bottom) {
                 MaFeiSurface(
-                    GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Reduced, tintAlpha = .34f, cornerRadiusDp = 0f),
+                    GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Full, tintAlpha = .24f, intensity = .9f, cornerRadiusDp = 0f),
                     Modifier.width(layout.navigationWidthDp.dp).fillMaxHeight(), backdrop,
                 ) {
                     Column(
@@ -125,23 +125,15 @@ fun MaFeiAdaptiveShell(
         }
         if (bottomNavigationVisible) {
             MaFeiSurface(
-                MaFeiGlassDefaults.spec(GlassRole.Navigation).copy(tintAlpha = .34f, cornerRadiusDp = 34f),
+                MaFeiGlassDefaults.spec(GlassRole.Navigation, GlassLevel.Full).copy(tintAlpha = .22f, intensity = .9f, cornerRadiusDp = 28f),
                 Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp)
                     .widthIn(max = 430.dp).fillMaxWidth(), backdrop,
             ) {
-                Box(
-                    Modifier.fillMaxWidth().border(
-                        1.dp,
-                        Color.White.copy(alpha = .22f),
-                        RoundedCornerShape(34.dp),
-                    ),
-                ) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        destinations.forEach { item ->
-                            Box(Modifier.weight(1f)) {
-                                NavigationEntry(item, selectedDestination == item.key, true) { onDestination(item.key) }
-                            }
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    destinations.forEach { item ->
+                        Box(Modifier.weight(1f)) {
+                            NavigationEntry(item, selectedDestination == item.key, true) { onDestination(item.key) }
                         }
                     }
                 }

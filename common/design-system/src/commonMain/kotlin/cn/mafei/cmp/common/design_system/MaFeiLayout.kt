@@ -39,7 +39,11 @@ fun mafeiLayout(widthDp: Float, heightDp: Float, fontScale: Float = 1f): MaFeiLa
     return MaFeiLayout(
         navigation, navWidth, padding, gridWidth,
         floor((gridWidth + gap) / (minPoster + gap)).toInt().coerceAtLeast(1), gap,
-        heroHeightDp = (height * .42f).coerceIn(180f, 380f),
+        heroHeightDp = when {
+            width < 600f -> (height * .34f).coerceIn(220f, 320f)
+            height < 520f -> (height * .34f).coerceIn(180f, 280f)
+            else -> (height * .40f).coerceIn(220f, 360f)
+        },
         horizontalHero = gridWidth >= 720f * scale,
     )
 }
