@@ -8,7 +8,9 @@ import cn.mafei.cmp.core.secure_credential_api.CredentialAccessException
 import cn.mafei.cmp.core.storage_api.SettingsStorage
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.session.SessionRepository
+import cn.mafei.cmp.player.api.PlayerRuntime
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -18,11 +20,22 @@ class ApplicationRuntime(
     secureStore: SecureCredentialStore,
     private val transport: HttpTransport,
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    /**
+     * Platform player engine factory (Android/iOS/macOS/OHOS runtime). When
+     * absent, [playback] returns null and the player UI cannot start — an
+     * explicit configuration gap, never a faked player.
+     */
+    private val playerRuntimeFactory: ((ProviderKind) -> PlayerRuntime)? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val closeMutex = Mutex()
     var isClosed: Boolean = false
         private set
+
+    /** Copy-on-write session playback map; guarded by [playbackMutex] + CAS. */
+    private val playbackMutex = Mutex()
+    private val playbacks = MutableStateFlow(emptyMap<ApplicationSession, SessionPlaybackRuntime>())
+    private var playbackObserver: Job? = null
     val sessions = ApplicationSessions(
         SessionRepository(secureStore, settings), MediaRepository(SystemEpochClock),
         ConnectionCatalog(settings), DefaultProviderSessionFactory(transport), scope,
@@ -53,11 +66,66 @@ class ApplicationRuntime(
         }
     }
 
+    /**
+     * Player entry for an ACTIVE session. The same session reuses the same
+     * runtime; logout/account-switch releases the retired instance through
+     * the session-state observer, and [close] releases everything. Returns
+     * null when no platform engine factory was configured.
+     */
+    fun playback(session: ApplicationSession): SessionPlaybackRuntime? {
+        check(!isClosed) { "Application is closed" }
+        val factory = playerRuntimeFactory ?: return null
+        while (true) {
+            val current = playbacks.value
+            current[session]?.let { return it }
+            val created = SessionPlaybackRuntime.create(
+                provider = session.selection.provider,
+                adapter = session.binding.adapter,
+                runtime = factory(session.selection.provider),
+                scope = scope,
+                nowMs = { cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs() },
+            )
+            if (playbacks.compareAndSet(current, current + (session to created))) {
+                ensurePlaybackObserver()
+                return created
+            }
+        }
+    }
+
+    private fun ensurePlaybackObserver() {
+        if (playbackObserver != null) return
+        playbackObserver = scope.launch {
+            sessions.state.collect { state ->
+                playbackMutex.withLock {
+                    for ((session, runtime) in playbacks.value) {
+                        if (session !== state.session) {
+                            playbacks.value -= session
+                            runtime.release()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun releaseAllPlaybacks() {
+        playbackMutex.withLock {
+            for ((_, runtime) in playbacks.value) runtime.release()
+            playbacks.value = emptyMap()
+        }
+    }
+
     suspend fun close() = withContext(NonCancellable) {
         closeMutex.withLock {
             if (isClosed) return@withLock
-            try { sessions.close() }
-            finally { isClosed = true; transport.close(); scope.cancel() }
+            try {
+                releaseAllPlaybacks()
+                playbackObserver?.cancel()
+                playbackObserver = null
+                sessions.close()
+            } finally {
+                isClosed = true; transport.close(); scope.cancel()
+            }
         }
     }
 
