@@ -2,7 +2,6 @@ package cn.mafei.cmp.session
 
 import cn.mafei.cmp.core.domain.Account
 import cn.mafei.cmp.core.domain.AccountId
-import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.Server
@@ -15,6 +14,7 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.data.migration.MigratedAccount
+import cn.mafei.cmp.data.migration.MigratedServerConnection
 import cn.mafei.cmp.data.migration.MigrationRecords
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerCapabilities
@@ -24,67 +24,89 @@ import cn.mafei.cmp.player.api.RuntimeEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
+private val jellyfinServer = Server(ServerId("srv-1"), ProviderKind.Jellyfin, "Legacy Jellyfin", "http://192.0.2.10:8096")
+private val feiniuServer = Server(ServerId("srv-fn"), ProviderKind.Feiniu, "Legacy NAS", "http://192.0.2.20:5667")
+
+private fun jellyfinAccount() = MigratedAccount(
+    account = Account(AccountId("acc-1"), ServerId("srv-1"), ProviderKind.Jellyfin, "demo"),
+    remoteUserId = "remote-1",
+    tokenAlias = "mafei/session/${"a".repeat(32)}/token",
+    credentialKey = "a".repeat(32),
+)
+
+private fun feiniuAccount() = MigratedAccount(
+    account = Account(AccountId("acc-fn"), ServerId("srv-fn"), ProviderKind.Feiniu, "NAS User"),
+    remoteUserId = "remote-fn",
+    tokenAlias = "mafei/session/${"b".repeat(32)}/token",
+    cookieAlias = "mafei/session/${"b".repeat(32)}/cookie",
+    credentialKey = "b".repeat(32),
+)
+
 class MigrationCompositionTest {
 
-    private val records = MigrationRecords(
-        servers = listOf(Server(ServerId("srv-1"), ProviderKind.Jellyfin, "Legacy Jellyfin", "http://192.0.2.10:8096")),
-        accounts = listOf(
-            MigratedAccount(
-                account = Account(
-                    AccountId("acc-1"),
-                    ServerId("srv-1"),
-                    ProviderKind.Jellyfin,
-                    "demo",
-                ),
-                remoteUserId = "remote-1",
-                tokenAlias = "acc-1/token",
-            ),
-        ),
+    private fun records(vararg extras: MigratedAccount, feiniuConnection: MigratedServerConnection? = null) = MigrationRecords(
+        servers = listOf(jellyfinServer, feiniuServer),
+        accounts = listOf(jellyfinAccount()) + extras,
         playback = cn.mafei.cmp.data.migration.MigratedPlaybackPreferences(null, null, null, emptyList()),
         chasing = emptyList(),
         home = null,
         selectedAccountId = null,
-        connections = emptyList(),
+        connections = listOfNotNull(feiniuConnection),
     )
 
     @Test
-    fun mappingProducesJellyfinConnectionsWithStableCredentialKeys() {
-        val mapping = records.toSavedConnections(credentialKeyFor = { "a".repeat(32) })
+    fun mappingUsesTheMigratedCredentialNamespace() {
+        val mapping = records().toSavedConnections()
         val connection = mapping.connections.single()
-        assertEquals(ProviderKind.Jellyfin, connection.server.provider)
-        assertEquals("remote-1", connection.remoteUserId)
         assertEquals("a".repeat(32), connection.credentialKey)
+        // SavedConnection derives its token alias from the SAME namespace, so
+        // the migrated secret stays readable after restore.
+        assertEquals("mafei/session/${"a".repeat(32)}/token", connection.tokenAlias.value)
         assertEquals(0, mapping.skipped.size)
     }
 
     @Test
-    fun unknownServerAccountsAreSkippedObservably() {
-        val broken = records.copy(
-            accounts = records.accounts + MigratedAccount(
-                account = Account(
-                    AccountId("acc-orphan"),
-                    ServerId("srv-missing"),
-                    ProviderKind.Jellyfin,
-                    "Orphan",
-                ),
-                remoteUserId = "remote-2",
-                tokenAlias = "acc-orphan/token",
+    fun feiniuRoutesAreRebuiltFromTheConnectionRecord() {
+        val mapping = records(
+            feiniuAccount(),
+            feiniuConnection = MigratedServerConnection(
+                serverId = ServerId("srv-fn"),
+                originalAddress = "fnid://legacy",
+                connectionRoute = "Relay",
+                fallbackBaseUrls = listOf("http://192.0.2.99:5667"),
             ),
+        ).toSavedConnections()
+        val feiniu = mapping.connections.single { it.server.provider == ProviderKind.Feiniu }
+        assertEquals(
+            listOf(
+                cn.mafei.cmp.session.SavedFeiniuRoute("http://192.0.2.20:5667", "Relay"),
+                cn.mafei.cmp.session.SavedFeiniuRoute("http://192.0.2.99:5667", "Relay"),
+            ),
+            feiniu.feiniuRoutes,
         )
-        val mapping = broken.toSavedConnections(credentialKeyFor = { "a".repeat(32) })
-        // The known account maps; the orphan is skipped with a reason, never dropped silently.
+        assertEquals("mafei/session/${"b".repeat(32)}/token", feiniu.tokenAlias.value)
+    }
+
+    @Test
+    fun unknownServerAccountsAreSkippedObservably() {
+        val orphan = MigratedAccount(
+            account = Account(AccountId("acc-orphan"), ServerId("srv-missing"), ProviderKind.Jellyfin, "Orphan"),
+            remoteUserId = "remote-2",
+            tokenAlias = "mafei/session/${"c".repeat(32)}/token",
+            credentialKey = "c".repeat(32),
+        )
+        val mapping = records(orphan).toSavedConnections()
         assertEquals(listOf("acc-1"), mapping.connections.map { it.account.id.value })
         assertEquals(1, mapping.skipped.size)
         assertEquals("acc-orphan", mapping.skipped.single().account.account.id.value)
     }
 
     @Test
-    fun sessionPlaybackBindsAdapterReportsThroughTheComposition() = runBlocking {
+    fun sessionPlaybackBindsAdapterReportsThroughTheComposition() = runBlocking<Unit> {
         val adapter = RecordingAdapter()
         val runtime = CountingRuntime()
         val playback = SessionPlaybackRuntime.create(

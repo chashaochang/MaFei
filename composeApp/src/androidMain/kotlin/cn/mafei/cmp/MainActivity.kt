@@ -11,13 +11,19 @@ import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.createAndroidSettings
 import cn.mafei.cmp.platform.secure_storage_android.AndroidSecureCredentialStore
 import cn.mafei.cmp.platform.http_android.createAndroidHttpTransport
+import cn.mafei.cmp.player.runtime_android.createAndroidPlayerRuntime
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val runtime = ProcessApplication.getOrCreate {
-            ApplicationRuntime(createAndroidSettings(applicationContext), AndroidSecureCredentialStore(applicationContext), createAndroidHttpTransport())
+            ApplicationRuntime(
+                createAndroidSettings(applicationContext),
+                AndroidSecureCredentialStore(applicationContext),
+                createAndroidHttpTransport(),
+                playerRuntimeFactory = { createAndroidPlayerRuntime(applicationContext) },
+            )
         }
         setContent {
             App(runtime, onThemeChanged = { dark ->

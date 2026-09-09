@@ -55,7 +55,10 @@ class LegacyMigrationPlanner {
             rejectUnless(old.lastActiveEpochMs == null || old.lastActiveEpochMs >= 0, MigrationProblem.InvalidField)
             val id = accountId(old.key)
             fun alias(kind: String, secret: SecureSecret?): String? = secret?.let {
-                val alias = CredentialAlias("${id.value}/$kind")
+                // Session-shaped namespace: SavedConnection derives its aliases
+                // as "mafei/session/<credentialKey>/<kind>", so the migrated
+                // secrets must land exactly there to be readable after restore.
+                val alias = CredentialAlias("mafei/session/${legacyCredentialKey(old.key)}/$kind")
                 secrets += alias to secret
                 alias.value
             }
@@ -63,7 +66,8 @@ class LegacyMigrationPlanner {
             old.cookie?.let { field(it.value) }
             MigratedAccount(Account(id, serverIds.getValue(old.serverKey), server.provider,
                 old.userName, isCurrent = id == selected, lastActiveEpochMs = old.lastActiveEpochMs),
-                old.remoteUserId, alias("token", old.token), alias("cookie", old.cookie))
+                old.remoteUserId, alias("token", old.token), alias("cookie", old.cookie),
+                legacyCredentialKey(old.key))
         }
         val playback = snapshot.playback
         rejectUnless(playback.engine == null || playback.engine in setOf("auto", "av", "mpv"), MigrationProblem.InvalidField)
@@ -114,6 +118,35 @@ class LegacyMigrationPlanner {
 
 /** Collision-free fixed-width encoding, not a hash; inputs are explicitly non-secret IDs. */
 private fun part(value: String): String = value.map { it.code.toString(16).padStart(4, '0') }.joinToString("")
+
+/**
+ * Stable 32-hex credential namespace for one migrated account, derived from
+ * the legacy account key. Deterministic across processes so the stored
+ * secrets stay readable by SavedConnection on every subsequent start.
+ * FNV-1a in two independent 64-bit lanes; this is an ADDRESS, not a secret.
+ */
+fun legacyCredentialKey(oldKey: String): String {
+    // FNV-1a 64 offset basis (two's-complement literal) and a second
+    // multiply-xor lane seeded with the golden-ratio constant.
+    var laneA = -3750763034362895579L
+    var laneB = -7046029288634856825L
+    for (element in oldKey.encodeToByteArray()) {
+        laneA = (laneA xor element.toLong()) * 0x100000001b3L
+        laneB = (laneB + element.toLong()) * -7046029288634856825L
+        laneB = laneB xor (laneB ushr 29)
+    }
+    return toHex16(laneA, laneB) + toHex16(laneA + laneB, laneA * 31 + laneB)
+}
+
+private fun toHex16(high: Long, low: Long): String {
+    val chars = "0123456789abcdef"
+    val out = CharArray(16)
+    for (index in 0 until 8) {
+        out[index] = chars[((high ushr ((7 - index) * 4)) and 0xfL).toInt()]
+        out[8 + index] = chars[((low ushr ((7 - index) * 4)) and 0xfL).toInt()]
+    }
+    return out.concatToString()
+}
 private fun identity(value: String) {
     rejectUnless(value.isNotBlank() && value == value.trim() && value.length <= 2048 &&
         value.none { it.code < 32 || it.code == 127 }, MigrationProblem.InvalidIdentity)

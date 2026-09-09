@@ -10,11 +10,13 @@ import cn.mafei.cmp.storage.createDesktopSettings
 import cn.mafei.cmp.storage.createDesktopCredentialStore
 import cn.mafei.cmp.storage.usesDesktopDevelopmentStorage
 import cn.mafei.cmp.platform.http_macos.createMacOsHttpTransport
+import cn.mafei.cmp.player.runtime_macos.createMacOsPlayerRuntime
 
 fun main() = application {
     val runtime = ProcessApplication.getOrCreate {
         ApplicationRuntime(createDesktopSettings(),
-            createDesktopCredentialStore(), createMacOsHttpTransport())
+            createDesktopCredentialStore(), createMacOsHttpTransport(),
+            playerRuntimeFactory = { createMacOsPlayerRuntime() })
     }
     Window(
         state = rememberWindowState(

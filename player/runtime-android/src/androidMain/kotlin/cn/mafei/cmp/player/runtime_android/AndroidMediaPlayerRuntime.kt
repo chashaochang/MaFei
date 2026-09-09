@@ -1,5 +1,6 @@
 package cn.mafei.cmp.player.runtime_android
 
+import android.content.Context
 import cn.mafei.cmp.player.api.*
 
 /**
@@ -179,3 +180,19 @@ class AndroidMediaPlayerRuntime(
         }
     }
 }
+
+/**
+ * Production entry point for the platform player engine. The capabilities
+ * declare only what `android.media.MediaPlayer` genuinely supports; device
+ * decode/render verification remains a Pending real-device item.
+ */
+fun createAndroidPlayerRuntime(context: Context): PlayerRuntime = AndroidMediaPlayerRuntime(
+    capabilities = cn.mafei.cmp.player.api.PlayerCapabilities(
+        seek = true,
+        speed = true, // API 23+, minSdk 24
+        trackSelection = false, // device-dependent; refused rather than faked
+        backgroundPlayback = false,
+    ),
+    engine = SystemMediaPlayerEngine(context),
+    pollScheduler = MainThreadPollScheduler(),
+)

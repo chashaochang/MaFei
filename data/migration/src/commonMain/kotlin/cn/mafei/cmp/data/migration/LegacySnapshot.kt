@@ -91,6 +91,8 @@ fun interface LegacySnapshotReader { suspend fun read(): LegacyReadResult }
 data class MigratedAccount(
     val account: Account, val remoteUserId: String,
     val tokenAlias: String? = null, val cookieAlias: String? = null,
+    /** Stable session credential namespace; secrets live under these aliases. */
+    val credentialKey: String? = null,
 )
 @Serializable
 data class MigratedChasing(val accountId: AccountId, val seriesIds: List<String>)

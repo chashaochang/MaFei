@@ -303,3 +303,19 @@ class MacOsAvPlayerRuntime(
         const val ERROR_DECODE = 2
     }
 }
+
+/**
+ * Production entry point for the macOS AVPlayer engine. Video output needs an
+ * AVPlayerLayer composed by the UI layer (register via MacSurfaceRegistry);
+ * audio works without a layer. JNI link verification: JniAvPlayerBridgeTest.
+ */
+fun createMacOsPlayerRuntime(): PlayerRuntime = MacOsAvPlayerRuntime(
+    capabilities = cn.mafei.cmp.player.api.PlayerCapabilities(
+        seek = true,
+        speed = true,
+        trackSelection = false, // no AVMediaSelectionGroup negotiation in P0
+        backgroundPlayback = false,
+    ),
+    bridge = JniAvPlayerBridge(),
+    surfaces = MacSurfaceRegistry(),
+)

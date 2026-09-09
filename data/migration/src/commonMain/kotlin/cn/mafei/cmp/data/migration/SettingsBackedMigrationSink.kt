@@ -74,8 +74,8 @@ class SettingsBackedMigrationSink(
     }
 }
 
-/** Minimal in-memory [SettingsStorage] for tests and host bring-up before the real backend lands. */
-class InMemorySettingsStorage : SettingsStorage {
+/** Minimal in-memory [VersionedStorage] for tests and host bring-up before the real backend lands. */
+class InMemorySettingsStorage : cn.mafei.cmp.core.storage_api.VersionedStorage {
     private val values = linkedMapOf<String, String>()
 
     override suspend fun getString(key: String): String? = values[key]

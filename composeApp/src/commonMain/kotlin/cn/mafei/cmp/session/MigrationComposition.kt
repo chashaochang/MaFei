@@ -6,6 +6,7 @@ import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.Server
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.migration.MigratedAccount
+import cn.mafei.cmp.data.migration.MigratedServerConnection
 import cn.mafei.cmp.data.migration.MigrationRecords
 import cn.mafei.cmp.player.api.PlayerRuntime
 import kotlinx.coroutines.CoroutineScope
@@ -33,17 +34,21 @@ fun ApplicationSession.createPlayback(
 /**
  * Turns migrated business records into host-ready [SavedConnection]s.
  *
- * [credentialKeyFor] is supplied by the host (stable 32-hex namespace per
- * migrated account) because the credential-key derivation policy belongs to
- * the session layer. Feiniu connections are skipped with an explicit reason:
- * their saved route set has no wire-format evidence in the migration records,
- * and SavedConnection requires non-empty routes for Feiniu. Skipping is
- * observable and never silently degrades into a half-usable connection.
+ * The credentialKey comes from the migrated account itself
+ * (`MigratedAccount.credentialKey`): the engine stored the secrets under the
+ * SESSION-shaped aliases derived from exactly that key, so a restored
+ * SavedConnection reads its token/cookie back from the same aliases.
+ * Hosts must NOT substitute their own key for migrated accounts.
+ *
+ * Feiniu routes are rebuilt from the persisted connection record: the legacy
+ * route is normalized onto the provider's route set (blank defaults to
+ * Local, the provider default) and applied to the primary base URL and every
+ * fallback. An unrecognized route name skips the connection with an
+ * observable reason instead of shipping a half-usable login.
  */
-fun MigrationRecords.toSavedConnections(
-    credentialKeyFor: (MigratedAccount) -> String,
-): MigratedConnectionMapping {
+fun MigrationRecords.toSavedConnections(): MigratedConnectionMapping {
     val serversById = servers.associateBy { it.id }
+    val connectionsByServer = connections.associateBy { it.serverId }
     val connections = mutableListOf<SavedConnection>()
     val skipped = mutableListOf<SkippedMigrationConnection>()
     for (migrated in accounts) {
@@ -52,14 +57,18 @@ fun MigrationRecords.toSavedConnections(
             skipped += SkippedMigrationConnection(migrated, "unknown server")
             continue
         }
-        val connection = runCatching {
-            buildSavedConnection(server, migrated, credentialKeyFor(migrated))
-        }.getOrNull()
-        if (connection == null) {
-            skipped += SkippedMigrationConnection(migrated, "connection metadata rejected by validation")
-        } else {
-            connections += connection
+        val key = migrated.credentialKey
+        if (key == null) {
+            skipped += SkippedMigrationConnection(migrated, "migrated account has no credential namespace")
+            continue
         }
+        val connection = runCatching {
+            buildSavedConnection(server, migrated, connectionsByServer[server.id], key)
+        }.getOrElse { failure ->
+            skipped += SkippedMigrationConnection(migrated, "connection rejected: ${failure.message}")
+            null
+        }
+        if (connection != null) connections += connection
     }
     return MigratedConnectionMapping(connections, skipped)
 }
@@ -74,11 +83,41 @@ data class SkippedMigrationConnection(val account: MigratedAccount, val reason: 
 private fun buildSavedConnection(
     server: Server,
     migrated: MigratedAccount,
+    connectionRecord: MigratedServerConnection?,
     credentialKey: String,
-): SavedConnection = SavedConnection(
-    server = server,
-    account = migrated.account,
-    remoteUserId = migrated.remoteUserId,
-    credentialKey = credentialKey,
-    feiniuRoutes = emptyList(), // Feiniu route reconstruction needs fixture evidence (Pending)
-)
+): SavedConnection {
+    // Feiniu requires an explicit route set: the legacy record's route is
+    // normalized and applied to the primary base URL and every fallback.
+    val feiniuRoutes = if (server.provider == ProviderKind.Feiniu) {
+        val route = normalizeLegacyRoute(connectionRecord?.connectionRoute)
+            ?: throw IllegalArgumentException("unrecognized legacy Feiniu route '${connectionRecord?.connectionRoute}'")
+        buildList {
+            add(SavedFeiniuRoute(server.baseUrl, route))
+            connectionRecord?.fallbackBaseUrls?.forEach { url ->
+                add(SavedFeiniuRoute(url, route))
+            }
+        }
+    } else {
+        emptyList()
+    }
+    return SavedConnection(
+        server = server,
+        account = migrated.account,
+        remoteUserId = migrated.remoteUserId,
+        credentialKey = credentialKey,
+        feiniuRoutes = feiniuRoutes,
+    )
+}
+
+/** Legacy route strings normalize case-insensitively onto the provider's route set. */
+private fun normalizeLegacyRoute(raw: String?): String? {
+    val trimmed = raw?.trim()
+    if (trimmed.isNullOrEmpty()) return "Local" // provider default when legacy stored no route
+    return when (trimmed.lowercase()) {
+        "local" -> "Local"
+        "public" -> "Public"
+        "relay" -> "Relay"
+        "direct" -> "Direct"
+        else -> null
+    }
+}
