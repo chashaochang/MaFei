@@ -20,4 +20,9 @@ dependencies {
     add("commonMainApi", project(":data:adapter-contract"))
     add("commonMainImplementation", project(":data:adapter-jellyfin"))
     add("commonMainImplementation", project(":data:adapter-feiniu"))
+    // Provider->player closure: the coordinator translates PlayerReports into
+    // adapter.reportPlayback calls through the frozen player:api surface only.
+    add("commonMainImplementation", project(":player:api"))
+    add("commonTestImplementation", project(":player:testkit"))
+    add("commonTestImplementation", project(":player:facade"))
 }
