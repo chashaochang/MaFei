@@ -96,12 +96,15 @@ class AndroidMediaPlayerRuntime(
     }
 
     private fun load(command: RuntimeCommand.Load) {
-        session++
+        // engine.reset() bumps the engine session; adopting it here keeps the
+        // runtime's expected session in lockstep even after Stop (otherwise
+        // every Stop desynced the counters and the NEXT load was dropped).
+        engine.reset()
+        session = engine.session
         generation = command.generation
         preparedEmitted = false
         ended = false
         lastPhase = null
-        engine.reset()
         engine.setDataSource(command.resource.url, command.resource.headers)
         pendingSurface?.let { surface ->
             engine.setSurface(surface)
@@ -141,6 +144,16 @@ class AndroidMediaPlayerRuntime(
         sink?.invoke(event)
     }
 
+    /** MediaPlayer `what` codes mapped onto the frozen failure taxonomy. */
+    private fun failureFor(what: Int): PlayerFailure = when (what) {
+        100 -> PlayerFailure.Engine // MEDIA_ERROR_SERVER_DIED
+        -1004 -> PlayerFailure.Network // MEDIA_ERROR_IO
+        -110 -> PlayerFailure.Network // MEDIA_ERROR_TIMED_OUT
+        -1007 -> PlayerFailure.Decode // MEDIA_ERROR_MALFORMED
+        -1010 -> PlayerFailure.UnsupportedMedia // MEDIA_ERROR_UNSUPPORTED
+        else -> PlayerFailure.Engine
+    }
+
     private inner class EngineListener : AndroidPlayerEngineListener {
         override fun onPrepared(session: Int, durationMs: Long) {
             if (released || session != this@AndroidMediaPlayerRuntime.session || preparedEmitted) return
@@ -156,7 +169,7 @@ class AndroidMediaPlayerRuntime(
         override fun onError(session: Int, what: Int, extra: Int) {
             if (released || session != this@AndroidMediaPlayerRuntime.session) return
             ended = true
-            emit(RuntimeEvent.Failed(checkNotNull(generation), PlayerFailure.Decode))
+            emit(RuntimeEvent.Failed(checkNotNull(generation), failureFor(what)))
         }
 
         override fun onBuffering(session: Int, buffering: Boolean) {

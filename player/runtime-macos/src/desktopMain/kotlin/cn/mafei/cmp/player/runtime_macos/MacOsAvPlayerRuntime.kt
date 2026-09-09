@@ -142,7 +142,7 @@ class MacOsAvPlayerRuntime(
     private var generation: PlaybackGeneration? = null
     private var readyEmitted = false
     private var ended = false
-    private var released = false
+    private val released = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastPhase: PlayerPhase? = null
     private var attachedLayer: Long = 0
     private var pollTicket: AutoCloseable? = null
@@ -154,11 +154,20 @@ class MacOsAvPlayerRuntime(
     }
 
     override fun execute(command: RuntimeCommand) {
+        // Release claims idempotence BEFORE enqueueing: after the dispatcher
+        // is shut down, enqueueing would throw RejectedExecutionException and
+        // a second release() would not be a no-op.
+        if (command is RuntimeCommand.Release) {
+            if (!released.compareAndSet(false, true)) return
+            dispatcher.execute { releaseOnQueue() }
+            return
+        }
+        if (released.get()) return
         dispatcher.execute { executeOnQueue(command) }
     }
 
     private fun executeOnQueue(command: RuntimeCommand) {
-        if (released) return
+        if (released.get()) return
         when (command) {
             is RuntimeCommand.Load -> load(command)
             is RuntimeCommand.Play -> if (owns(command.generation)) bridge.play(player)
@@ -178,13 +187,15 @@ class MacOsAvPlayerRuntime(
                 if (player != 0L) bridge.detachLayer(player, attachedLayer)
                 attachedLayer = 0
             }
-            RuntimeCommand.Release -> release()
+            // Release is claimed in execute() and runs via releaseOnQueue();
+            // this branch is unreachable but keeps the sealed when exhaustive.
+            RuntimeCommand.Release -> Unit
         }
     }
 
     /** One engine poll; derives events only from live bridge state. */
     fun poll() {
-        if (released || generation == null || sink == null) return
+        if (released.get() || generation == null || sink == null) return
         if (ended) return
         when (bridge.itemStatus(player)) {
             ITEM_FAILED -> {
@@ -265,9 +276,7 @@ class MacOsAvPlayerRuntime(
         lastPhase = null
     }
 
-    private fun release() {
-        if (released) return
-        released = true
+    private fun releaseOnQueue() {
         pollTicket?.close()
         pollTicket = null
         if (player != 0L) bridge.releasePlayer(player)

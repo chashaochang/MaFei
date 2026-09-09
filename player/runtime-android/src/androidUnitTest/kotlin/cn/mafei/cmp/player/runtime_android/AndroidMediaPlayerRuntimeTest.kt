@@ -32,7 +32,7 @@ private class FakeAndroidEngine : AndroidPlayerEngine {
 
     fun emitPrepared(duration: Long, session: Int = this.session) = listenerRef?.onPrepared(session, duration)
     fun emitEnded(session: Int = this.session) = listenerRef?.onCompletion(session)
-    fun emitError(session: Int = this.session) = listenerRef?.onError(session, 1, 0)
+    fun emitError(what: Int = 1, session: Int = this.session) = listenerRef?.onError(session, what, 0)
     fun emitBuffering(buffering: Boolean, session: Int = this.session) = listenerRef?.onBuffering(session, buffering)
 }
 
@@ -121,12 +121,27 @@ class AndroidMediaPlayerRuntimeTest {
     }
 
     @Test
-    fun engineErrorSurfacesAsFailedDecode() {
+    fun engineErrorsAreClassifiedNotLumpedAsDecode() {
         val generation = loadAndPrepare()
-        engine.emitError()
+        engine.emitError(what = 1) // unknown code -> engine
         val failed = events.filterIsInstance<RuntimeEvent.Failed>().single()
         assertTrue(failed.generation === generation)
-        assertEquals(PlayerFailure.Decode, failed.failure)
+        assertEquals(PlayerFailure.Engine, failed.failure)
+
+        // Reload and exercise the mapped code families.
+        fun failureAfterReload(what: Int): PlayerFailure {
+            events.clear()
+            engine.surfaces.clear()
+            runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-x", "https://stream.test/x.mp4")))
+            engine.emitPrepared(60_000)
+            engine.emitError(what = what)
+            return events.filterIsInstance<RuntimeEvent.Failed>().single().failure
+        }
+        assertEquals(PlayerFailure.Network, failureAfterReload(-1004)) // MEDIA_ERROR_IO
+        assertEquals(PlayerFailure.Network, failureAfterReload(-110)) // MEDIA_ERROR_TIMED_OUT
+        assertEquals(PlayerFailure.Decode, failureAfterReload(-1007)) // MEDIA_ERROR_MALFORMED
+        assertEquals(PlayerFailure.UnsupportedMedia, failureAfterReload(-1010)) // MEDIA_ERROR_UNSUPPORTED
+        assertEquals(PlayerFailure.Engine, failureAfterReload(100)) // MEDIA_ERROR_SERVER_DIED
     }
 
     @Test
@@ -193,6 +208,21 @@ class AndroidMediaPlayerRuntimeTest {
         runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-1", "https://stream.test/a.m3u8")))
         // attach + load replay, both carrying the exact registered object.
         assertEquals(listOf<Any?>(surface, surface), engine.surfaces)
+    }
+
+    @Test
+    fun stopThenReloadKeepsEngineAndRuntimeSessionsInLockstep() {
+        // Pre-fix: runtime bumped its own counter on load while engine.reset()
+        // bumped the engine counter on Stop too - every Stop desynced them and
+        // the NEXT load's prepared callback was wrongly dropped.
+        runtime.bind { events += it }
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-1", "https://stream.test/a.m3u8")))
+        engine.emitPrepared(60_000)
+        runtime.execute(RuntimeCommand.Stop(events.filterIsInstance<RuntimeEvent.Ready>().single().generation))
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-2", "https://stream.test/b.m3u8")))
+        engine.emitPrepared(30_000) // current engine session callback
+        val ready = events.filterIsInstance<RuntimeEvent.Ready>().last()
+        assertEquals(30_000L, ready.durationMs) // delivered, not dropped
     }
 
     @Test

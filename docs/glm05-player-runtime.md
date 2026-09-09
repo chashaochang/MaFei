@@ -34,6 +34,12 @@ Kotlin 发行版 `2.2.21-1.0.0` 的 ios_arm64 `platform.AVFoundation` klib 导�
 6. **macOS 数据竞争**：命令与轮询全部串行到 runtime 内部单线程 dispatcher，普通字段无需同步；测试注入同步 dispatcher 保持确定性。
 7. **Android Surface 测试假阳性**：测试与 runtime 使用同一 registry，断言精确对象引用（非前缀字符串）；补“加载中途挂载”与“attach 先于 load（load 路径重放 pending surface）”两条真实路径。
 
+## 二次复审修正
+
+1. **Android session 失配**：engine.reset() 自增引擎会话、runtime 又在 load 自增自身计数——每次 Stop 后两者永久错位，下一个 load 的回调被整体误丢。改为 load 时采用 engine 复位后的会话为唯一真源（`session = engine.session`），Stop→Reload 的回调匹配有回归测试。
+2. **Android 错误分类**：onError 不再一律报 Decode，按 `what` 码映射（IO/TIMED_OUT→Network、MALFORMED→Decode、UNSUPPORTED→UnsupportedMedia、SERVER_DIED/未知→Engine），五类各一断言。
+3. **macOS Release 幂等**：原路径把 Release 入队，dispatcher 关闭后第二次 release() 抛 RejectedExecutionException。改为 CAS 先占（`AtomicBoolean.compareAndSet`）再入队，败者立即返回；真实 dispatcher 下连发两次 Release 的回归测试验证不抛。
+
 ## 决策记录
 
 1. **轮询驱动而非回调驱动**：四端统一从引擎真实状态推导事件，规避各引擎回调线程差异；状态机（common）天然过滤重复/过期事件。

@@ -265,6 +265,22 @@ class MacOsAvPlayerRuntimeTest {
     }
 
     @Test
+    fun doubleReleaseWithTheRealDispatcherDoesNotThrow() {
+        // Production dispatcher (real executor): the pre-fix path enqueued
+        // Release and a SECOND release() threw RejectedExecutionException on
+        // the shut-down queue instead of being a no-op.
+        val runtime2 = MacOsAvPlayerRuntime(
+            capabilities = PlayerCapabilities(trackSelection = false),
+            bridge = bridge,
+            surfaces = MacSurfaceRegistry(),
+        ) // default dispatcher + default poll scheduler (both really shut down)
+        runtime2.bind { }
+        runtime2.execute(RuntimeCommand.Release)
+        runtime2.execute(RuntimeCommand.Release) // must be a no-op, never throw
+        runtime2.execute(RuntimeCommand.Play(PlaybackGeneration())) // no enqueue either
+    }
+
+    @Test
     fun noEventsBeforeLoad() {
         runtime.bind { events += it }
         runtime.poll()
