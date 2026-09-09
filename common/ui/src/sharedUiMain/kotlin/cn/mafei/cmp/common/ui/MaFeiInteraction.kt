@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -44,8 +45,15 @@ fun Modifier.mafeiInteractive(
         if (!active) 0f else if (pressed) .12f else if (hovered) .045f else 0f,
         tween(100), label = "card feedback",
     )
+    val scale by animateFloatAsState(
+        if (!active) 1f else if (pressed) .985f else if (hovered) 1.012f else 1f,
+        tween(if (pressed) 80 else 140), label = "card scale",
+    )
     val accent = MaterialTheme.colorScheme.primary
-    this.clickable(source, LocalIndication.current, enabled, label, role, onClick)
+    this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }.clickable(source, LocalIndication.current, enabled, label, role, onClick)
         .drawWithContent {
             drawContent()
             val corner = CornerRadius(radiusDp * density)

@@ -13,7 +13,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.mafeiLayout
@@ -292,8 +294,21 @@ private fun BrowseContent(
                         onRetry = { scope.launch { browser.refresh() } },
                         onLoadMore = { scope.launch { browser.loadMore() } },
                         onOpenLibrary = { destination = LibraryDestination },
+                        accountActions = {
+                            AccountMenu(
+                                expanded = false,
+                                dark = dark,
+                                busy = busy,
+                                onToggleTheme = onToggleTheme,
+                                onOpenProbe = onOpenProbe,
+                                onLogout = onLogout,
+                            )
+                        },
+                        brandTitle = "马飞",
+                        brandSubtitle = "我的影院",
                         modifier = Modifier.fillMaxSize(),
                         gridState = if (destination == HomeDestination) homeGridState else libraryGridState,
+                        glassBackdrop = it,
                         artwork = { item, modifier ->
                             MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
                         },
@@ -320,13 +335,17 @@ private fun AccountMenu(
     Box {
         if (expanded) {
             TextButton(onClick = { menu = true }, enabled = !busy) {
-                MaFeiIcon(MaFeiGlyph.Account, Modifier.size(20.dp))
+                AccountAvatar(32.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("账号与设置")
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp), horizontalAlignment = Alignment.Start) {
+                    Text("账号与设置", style = MaterialTheme.typography.labelLarge)
+                    Text("外观、实验与退出", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         } else {
-            IconButton(onClick = { menu = true }, enabled = !busy) {
-                MaFeiIcon(MaFeiGlyph.Account)
+            IconButton(onClick = { menu = true }, enabled = !busy, modifier = Modifier.size(48.dp)) {
+                AccountAvatar(32.dp)
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -353,6 +372,20 @@ private fun AccountMenu(
                     onLogout()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun AccountAvatar(size: Dp) {
+    Surface(
+        modifier = Modifier.size(size),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = .18f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .42f)),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            MaFeiIcon(MaFeiGlyph.Account, Modifier.size(size * .58f), MaterialTheme.colorScheme.primary)
         }
     }
 }

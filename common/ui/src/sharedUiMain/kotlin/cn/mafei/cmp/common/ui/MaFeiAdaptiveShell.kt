@@ -1,14 +1,18 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,13 +49,38 @@ fun MaFeiAdaptiveShell(
         Row(Modifier.fillMaxSize()) {
             if (layout.navigation != NavigationPlacement.Bottom) {
                 MaFeiSurface(
-                    GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Reduced, tintAlpha = .54f, cornerRadiusDp = 0f),
+                    GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Reduced, tintAlpha = .34f, cornerRadiusDp = 0f),
                     Modifier.width(layout.navigationWidthDp.dp).fillMaxHeight(), backdrop,
                 ) {
-                    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(if (sidebar) "马飞" else "马飞", Modifier.padding(horizontal = if (sidebar) 8.dp else 0.dp),
-                            style = if (sidebar) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
+                    Column(
+                        Modifier.fillMaxSize().padding(
+                            horizontal = if (sidebar) 16.dp else 10.dp,
+                            vertical = 20.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(if (sidebar) 58.dp else 50.dp),
+                            contentAlignment = if (sidebar) Alignment.CenterStart else Alignment.Center,
+                        ) {
+                            Text(
+                                "马飞",
+                                Modifier.padding(horizontal = if (sidebar) 8.dp else 0.dp),
+                                style = if (sidebar) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Box(
+                            Modifier.fillMaxWidth().height(1.dp).background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = .28f),
+                                        Color.Transparent,
+                                    ),
+                                ),
+                            ),
+                        )
                         Column(Modifier.weight(1f).verticalScroll(sideScroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             destinations.forEach { item ->
                                 NavigationEntry(item, selectedDestination == item.key, !sidebar) { onDestination(item.key) }
@@ -64,10 +93,29 @@ fun MaFeiAdaptiveShell(
                                 }
                             }
                         }
-                        if (sidebar) Text(accountLabel, Modifier.padding(horizontal = 8.dp), maxLines = 2,
-                            overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Box(Modifier.fillMaxWidth(), contentAlignment = if (sidebar) Alignment.CenterStart else Alignment.Center) { accountActions() }
+                        if (sidebar) {
+                            Column(
+                                Modifier.fillMaxWidth().clip(MaFeiShape.field)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .22f))
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = .20f),
+                                        MaFeiShape.field,
+                                    ).padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    accountLabel,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) { accountActions() }
+                            }
+                        } else {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { accountActions() }
+                        }
                     }
                 }
             }
@@ -77,15 +125,25 @@ fun MaFeiAdaptiveShell(
         }
         if (bottomNavigationVisible) {
             MaFeiSurface(
-                MaFeiGlassDefaults.spec(GlassRole.Navigation).copy(tintAlpha = .54f),
-                Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 12.dp)
-                    .widthIn(max = 460.dp).fillMaxWidth(), backdrop,
+                MaFeiGlassDefaults.spec(GlassRole.Navigation).copy(tintAlpha = .34f, cornerRadiusDp = 34f),
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp)
+                    .widthIn(max = 430.dp).fillMaxWidth(), backdrop,
             ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    destinations.forEach { item ->
-                        Box(Modifier.weight(1f)) { NavigationEntry(item, selectedDestination == item.key, true) { onDestination(item.key) } }
+                Box(
+                    Modifier.fillMaxWidth().border(
+                        1.dp,
+                        Color.White.copy(alpha = .22f),
+                        RoundedCornerShape(34.dp),
+                    ),
+                ) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        destinations.forEach { item ->
+                            Box(Modifier.weight(1f)) {
+                                NavigationEntry(item, selectedDestination == item.key, true) { onDestination(item.key) }
+                            }
+                        }
                     }
-                    Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { accountActions() }
                 }
             }
         }
@@ -96,11 +154,24 @@ fun MaFeiAdaptiveShell(
 private fun NavigationEntry(item: MaFeiNavItem, isSelected: Boolean, compact: Boolean, onClick: () -> Unit) {
     val color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaFeiShape.field)
-        .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else androidx.compose.ui.graphics.Color.Transparent)
+        .background(if (isSelected && !compact) MaterialTheme.colorScheme.primary.copy(alpha = .14f) else Color.Transparent)
+        .then(
+            if (isSelected && !compact) Modifier.border(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = .20f),
+                MaFeiShape.field,
+            ) else Modifier,
+        )
         .semantics { selected = isSelected }.mafeiInteractive(onClick, radiusDp = 16f, label = item.label)
         .padding(horizontal = if (compact) 2.dp else 10.dp, vertical = 8.dp)
     if (compact) Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        MaFeiIcon(item.glyph, color = color)
+        Box(
+            Modifier.size(width = 40.dp, height = 28.dp).clip(MaFeiShape.capsule)
+                .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = .16f) else Color.Transparent),
+            contentAlignment = Alignment.Center,
+        ) {
+            MaFeiIcon(item.glyph, Modifier.size(22.dp), color)
+        }
         Text(item.label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     } else Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         MaFeiIcon(item.glyph, color = color)
