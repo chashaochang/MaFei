@@ -1,0 +1,264 @@
+package cn.mafei.cmp.player.runtime_macos
+
+import cn.mafei.cmp.player.api.PlayerCapabilities
+import cn.mafei.cmp.player.api.PlayerFailure
+import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.player.api.PlayerSurfaceHandle
+import cn.mafei.cmp.player.api.PlayableResource
+import cn.mafei.cmp.player.api.PlaybackGeneration
+import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.RuntimeCommand
+import cn.mafei.cmp.player.api.RuntimeEvent
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Engine abstraction over AVFoundation so the command translation is
+ * testable with a fake; production wiring is [JniAvPlayerBridge]. All values
+ * are live engine queries — the runtime derives every event from them.
+ */
+interface AvPlayerBridge {
+    fun create(): Long
+    fun loadUrl(handle: Long, url: String)
+    fun play(handle: Long)
+    fun pause(handle: Long)
+    fun stop(handle: Long)
+    fun seek(handle: Long, positionMs: Long)
+    fun setSpeed(handle: Long, speed: Float)
+    fun attachLayer(handle: Long, layerPointer: Long)
+    fun detachLayer(handle: Long)
+    fun positionMs(handle: Long): Long
+    fun durationMs(handle: Long): Long
+    fun bufferedMs(handle: Long): Long
+
+    /** 0 paused, 1 waiting/buffering, 2 playing (AVPlayerTimeControlStatus). */
+    fun timeControl(handle: Long): Int
+
+    /** 0 unknown, 1 readyToPlay, 2 failed (AVPlayerItemStatus). */
+    fun itemStatus(handle: Long): Int
+
+    /** 0 none, 1 network, 2 decode. */
+    fun errorKind(handle: Long): Int
+    fun releasePlayer(handle: Long)
+}
+
+/** JNI wiring of [AvPlayerBridge]. Loads the bundled dylib on first use. */
+class JniAvPlayerBridge : AvPlayerBridge {
+    override fun create(): Long = NativeAvPlayer.let { it.ensureLoaded(); it.create() }
+    override fun loadUrl(handle: Long, url: String) = NativeAvPlayer.loadUrl(handle, url)
+    override fun play(handle: Long) = NativeAvPlayer.play(handle)
+    override fun pause(handle: Long) = NativeAvPlayer.pause(handle)
+    override fun stop(handle: Long) = NativeAvPlayer.stop(handle)
+    override fun seek(handle: Long, positionMs: Long) = NativeAvPlayer.seek(handle, positionMs)
+    override fun setSpeed(handle: Long, speed: Float) = NativeAvPlayer.setSpeed(handle, speed)
+    override fun attachLayer(handle: Long, layerPointer: Long) = NativeAvPlayer.attachLayer(handle, layerPointer)
+    override fun detachLayer(handle: Long) = NativeAvPlayer.detachLayer(handle)
+    override fun positionMs(handle: Long): Long = NativeAvPlayer.positionMs(handle)
+    override fun durationMs(handle: Long): Long = NativeAvPlayer.durationMs(handle)
+    override fun bufferedMs(handle: Long): Long = NativeAvPlayer.bufferedMs(handle)
+    override fun timeControl(handle: Long): Int = NativeAvPlayer.timeControl(handle)
+    override fun itemStatus(handle: Long): Int = NativeAvPlayer.itemStatus(handle)
+    override fun errorKind(handle: Long): Int = NativeAvPlayer.errorKind(handle)
+    override fun releasePlayer(handle: Long) = NativeAvPlayer.releasePlayer(handle)
+}
+
+/**
+ * macOS video surface registry. `PlayerSurfaceHandle` is opaque (frozen API);
+ * this registry maps handles to native `AVPlayerLayer*` pointers owned by the
+ * UI layer. Video compositing itself is a UI concern (Pending); audio needs
+ * no layer.
+ */
+class MacSurfaceRegistry {
+    private val nextId = AtomicInteger(1)
+    private val layers = HashMap<PlayerSurfaceHandle, Long>()
+
+    /** Registers a native AVPlayerLayer pointer (0 rejects). */
+    fun register(layerPointer: Long): PlayerSurfaceHandle {
+        require(layerPointer != 0L) { "layerPointer must be a live AVPlayerLayer*" }
+        val handle = PlayerSurfaceHandle()
+        synchronized(layers) { layers[handle] = layerPointer }
+        return handle
+    }
+
+    fun layerOf(handle: PlayerSurfaceHandle): Long = synchronized(layers) { layers[handle] ?: 0L }
+
+    fun unregister(handle: PlayerSurfaceHandle): Boolean = synchronized(layers) { layers.remove(handle) != null }
+}
+
+/**
+ * macOS runtime over AVFoundation through [AvPlayerBridge]. Poll-driven:
+ * every RuntimeEvent is derived from live bridge queries, never fabricated.
+ * Single-threaded contract like the other runtimes — [execute] and [poll]
+ * must run on one thread (the facade serializes).
+ */
+/** Periodic engine polling scheduler; production wiring uses a background executor. */
+interface MacPollScheduler {
+    fun schedule(periodMs: Long, tick: () -> Unit): AutoCloseable
+}
+
+/** Default JVM scheduler; single-threaded so polls stay ordered. */
+class ScheduledPollScheduler : MacPollScheduler {
+    override fun schedule(periodMs: Long, tick: () -> Unit): AutoCloseable {
+        val executor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "macos-avplayer-poll").apply { isDaemon = true }
+        }
+        val future = executor.scheduleAtFixedRate({
+            try { tick() } catch (_: Throwable) {}
+        }, periodMs, periodMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        return AutoCloseable { future.cancel(false); executor.shutdown() }
+    }
+}
+
+class MacOsAvPlayerRuntime(
+    override val capabilities: PlayerCapabilities,
+    private val bridge: AvPlayerBridge,
+    private val surfaces: MacSurfaceRegistry = MacSurfaceRegistry(),
+    private val pollScheduler: MacPollScheduler = ScheduledPollScheduler(),
+    private val pollPeriodMs: Long = 250L,
+) : PlayerRuntime {
+
+    private var sink: ((RuntimeEvent) -> Unit)? = null
+    private var player: Long = 0
+    private var generation: PlaybackGeneration? = null
+    private var readyEmitted = false
+    private var ended = false
+    private var released = false
+    private var lastPhase: PlayerPhase? = null
+    private var attachedLayer: Long = 0
+    private var pollTicket: AutoCloseable? = null
+
+    override fun bind(eventSink: (RuntimeEvent) -> Unit) {
+        check(sink == null) { "Runtime already bound" }
+        sink = eventSink
+        pollTicket = pollScheduler.schedule(pollPeriodMs, ::poll)
+    }
+
+    override fun execute(command: RuntimeCommand) {
+        if (released) return
+        when (command) {
+            is RuntimeCommand.Load -> load(command)
+            is RuntimeCommand.Play -> if (owns(command.generation)) bridge.play(player)
+            is RuntimeCommand.Pause -> if (owns(command.generation)) bridge.pause(player)
+            is RuntimeCommand.Seek -> if (owns(command.generation)) bridge.seek(player, command.positionMs)
+            is RuntimeCommand.Stop -> stop(command.generation)
+            is RuntimeCommand.Speed -> if (owns(command.generation)) bridge.setSpeed(player, command.value)
+            is RuntimeCommand.SelectTrack ->
+                // No AVFoundation track negotiation in P0; refuse honestly.
+                throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("trackSelection")
+            is RuntimeCommand.AttachSurface -> {
+                val layer = surfaces.layerOf(command.handle)
+                if (player != 0L && layer != 0L) bridge.attachLayer(player, layer)
+                attachedLayer = layer
+            }
+            is RuntimeCommand.DetachSurface -> {
+                if (player != 0L) bridge.detachLayer(player)
+                attachedLayer = 0
+            }
+            RuntimeCommand.Release -> release()
+        }
+    }
+
+    /** One engine poll; derives events only from live bridge state. */
+    fun poll() {
+        if (released || generation == null || sink == null) return
+        if (ended) return
+        when (bridge.itemStatus(player)) {
+            ITEM_FAILED -> {
+                ended = true
+                val failure = when (bridge.errorKind(player)) {
+                    ERROR_NETWORK -> PlayerFailure.Network
+                    ERROR_DECODE -> PlayerFailure.Decode
+                    else -> PlayerFailure.Engine
+                }
+                emit(RuntimeEvent.Failed(checkNotNull(generation), failure))
+                return
+            }
+            ITEM_READY -> {
+                val duration = bridge.durationMs(player)
+                if (!readyEmitted && duration > 0) {
+                    readyEmitted = true
+                    emit(RuntimeEvent.Ready(checkNotNull(generation), duration))
+                }
+                if (!readyEmitted) return
+                val phase = when (bridge.timeControl(player)) {
+                    TIME_PLAYING -> PlayerPhase.Playing
+                    TIME_BUFFERING -> PlayerPhase.Buffering
+                    else -> {
+                        // Playing may have finished silently; detect that from
+                        // position vs duration instead of trusting timeControl.
+                        val position = bridge.positionMs(player)
+                        val total = bridge.durationMs(player)
+                        if (total > 0 && position >= total - 250) PlayerPhase.Ended else PlayerPhase.Paused
+                    }
+                }
+                if (phase != lastPhase) {
+                    lastPhase = phase
+                    when (phase) {
+                        PlayerPhase.Playing -> emit(RuntimeEvent.Playing(checkNotNull(generation)))
+                        PlayerPhase.Buffering -> emit(RuntimeEvent.Buffering(checkNotNull(generation)))
+                        PlayerPhase.Ended -> {
+                            ended = true
+                            emit(RuntimeEvent.Ended(checkNotNull(generation)))
+                            return
+                        }
+                        else -> emit(RuntimeEvent.Paused(checkNotNull(generation)))
+                    }
+                }
+                emit(
+                    RuntimeEvent.Progress(
+                        checkNotNull(generation),
+                        bridge.positionMs(player).coerceAtLeast(0),
+                        bridge.bufferedMs(player).coerceAtLeast(0),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun load(command: RuntimeCommand.Load) {
+        if (player == 0L) player = bridge.create()
+        bridge.stop(player) // stop the previous resource before loading the next
+        bridge.loadUrl(player, command.resource.url)
+        if (attachedLayer != 0L) bridge.attachLayer(player, attachedLayer)
+        generation = command.generation
+        readyEmitted = false
+        ended = false
+        lastPhase = null
+    }
+
+    private fun stop(generation: PlaybackGeneration?) {
+        if (!owns(generation)) return
+        bridge.stop(player)
+        this.generation = null
+        readyEmitted = false
+        ended = false
+        lastPhase = null
+    }
+
+    private fun release() {
+        if (released) return
+        released = true
+        pollTicket?.close()
+        pollTicket = null
+        if (player != 0L) bridge.releasePlayer(player)
+        generation = null
+        sink = null // contract: sink must not be retained after Release
+    }
+
+    private fun owns(generation: PlaybackGeneration?): Boolean = generation != null && generation === this.generation
+
+    private fun emit(event: RuntimeEvent) {
+        sink?.invoke(event)
+    }
+
+    internal companion object {
+        const val TIME_PAUSED = 0
+        const val TIME_BUFFERING = 1
+        const val TIME_PLAYING = 2
+        const val ITEM_UNKNOWN = 0
+        const val ITEM_READY = 1
+        const val ITEM_FAILED = 2
+        const val ERROR_NONE = 0
+        const val ERROR_NETWORK = 1
+        const val ERROR_DECODE = 2
+    }
+}

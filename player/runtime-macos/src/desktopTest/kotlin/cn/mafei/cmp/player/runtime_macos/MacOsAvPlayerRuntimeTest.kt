@@ -1,0 +1,202 @@
+package cn.mafei.cmp.player.runtime_macos
+
+import cn.mafei.cmp.player.api.*
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.ERROR_DECODE
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.ERROR_NETWORK
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.ITEM_FAILED
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.ITEM_READY
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.TIME_BUFFERING
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.TIME_PAUSED
+import cn.mafei.cmp.player.runtime_macos.MacOsAvPlayerRuntime.Companion.TIME_PLAYING
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.*
+
+private class FakeAvPlayerBridge : AvPlayerBridge {
+    val log = mutableListOf<String>()
+    private val handles = AtomicInteger(0)
+    private val players = HashMap<Long, PlayerModel>()
+    var nextHandle = 1L
+
+    class PlayerModel {
+        var url: String? = null
+        var itemStatus = 0
+        var timeControl = 0
+        var errorKind = 0
+        var positionMs = 0L
+        var durationMs = 0L
+        var bufferedMs = 0L
+        var speed = 1.0f
+        var layerPointer = 0L
+        var stopped = false
+        var released = false
+    }
+
+    val current: PlayerModel get() = players.getValue(1L)
+    fun reset() { handles.set(0) }
+
+    override fun create(): Long = nextHandle.also { players[it] = PlayerModel() }
+    override fun loadUrl(handle: Long, url: String) { players.getValue(handle).url = url }
+    override fun play(handle: Long) { players.getValue(handle).timeControl = TIME_PLAYING }
+    override fun pause(handle: Long) { players.getValue(handle).timeControl = TIME_PAUSED }
+    override fun stop(handle: Long) { players.getValue(handle).stopped = true; players.getValue(handle).timeControl = TIME_PAUSED }
+    override fun seek(handle: Long, positionMs: Long) { log += "seek($positionMs)" }
+    override fun setSpeed(handle: Long, speed: Float) { players.getValue(handle).speed = speed }
+    override fun attachLayer(handle: Long, layerPointer: Long) { players.getValue(handle).layerPointer = layerPointer }
+    override fun detachLayer(handle: Long) { players.getValue(handle).layerPointer = 0 }
+    override fun positionMs(handle: Long): Long = players.getValue(handle).positionMs
+    override fun durationMs(handle: Long): Long = players.getValue(handle).durationMs
+    override fun bufferedMs(handle: Long): Long = players.getValue(handle).bufferedMs
+    override fun timeControl(handle: Long): Int = players.getValue(handle).timeControl
+    override fun itemStatus(handle: Long): Int = players.getValue(handle).itemStatus
+    override fun errorKind(handle: Long): Int = players.getValue(handle).errorKind
+    override fun releasePlayer(handle: Long) { players.getValue(handle).released = true }
+}
+
+class MacOsAvPlayerRuntimeTest {
+
+    private val bridge = FakeAvPlayerBridge()
+    private val surfaces = MacSurfaceRegistry()
+    private val events = mutableListOf<RuntimeEvent>()
+    private val manualScheduler = object : MacPollScheduler {
+        val ticks = mutableListOf<() -> Unit>()
+        override fun schedule(periodMs: Long, tick: () -> Unit): AutoCloseable {
+            ticks += tick
+            return AutoCloseable { }
+        }
+    }
+    private val runtime = MacOsAvPlayerRuntime(
+        capabilities = PlayerCapabilities(trackSelection = false),
+        bridge = bridge,
+        surfaces = surfaces,
+        pollScheduler = manualScheduler,
+    )
+
+    private fun loadAndPrepare(url: String = "https://stream.test/a.m3u8"): PlaybackGeneration {
+        runtime.bind { events += it }
+        val generation = PlaybackGeneration()
+        runtime.execute(RuntimeCommand.Load(generation, PlayableResource("res-1", url)))
+        bridge.current.itemStatus = ITEM_READY
+        bridge.current.durationMs = 60_000
+        runtime.poll()
+        return generation
+    }
+
+    private fun eventKinds() = events.map { it::class.simpleName }
+
+    @Test
+    fun loadCreatesPlayerThenReadyCarriesDuration() {
+        val generation = loadAndPrepare()
+        assertEquals("https://stream.test/a.m3u8", bridge.current.url)
+        val ready = events.filterIsInstance<RuntimeEvent.Ready>().single()
+        assertTrue(ready.generation === generation)
+        assertEquals(60_000L, ready.durationMs)
+    }
+
+    @Test
+    fun loadStopsThePreviousResourceBeforeReplacing() {
+        loadAndPrepare()
+        val firstModel = bridge.current
+        assertTrue(firstModel.stopped)
+    }
+
+    @Test
+    fun pollDerivesPlayingBufferingPausedAndProgressFromQueriesOnly() {
+        loadAndPrepare()
+        bridge.current.timeControl = TIME_PLAYING
+        runtime.poll()
+        assertTrue(eventKinds().takeLast(2) == listOf("Playing", "Progress"), eventKinds().toString())
+
+        bridge.current.timeControl = TIME_BUFFERING
+        runtime.poll()
+        assertEquals(listOf("Buffering", "Progress"), eventKinds().takeLast(2))
+
+        bridge.current.timeControl = TIME_PAUSED
+        bridge.current.positionMs = 1_500
+        bridge.current.bufferedMs = 30_000
+        runtime.poll()
+        assertEquals(listOf("Paused", "Progress"), eventKinds().takeLast(2))
+        val progress = events.filterIsInstance<RuntimeEvent.Progress>().last()
+        assertEquals(1_500L, progress.positionMs)
+        assertEquals(30_000L, progress.bufferedPositionMs)
+    }
+
+    @Test
+    fun reachingTheEndWhilePausedEmitsEndedOnce() {
+        loadAndPrepare()
+        bridge.current.durationMs = 60_000
+        bridge.current.positionMs = 60_000
+        runtime.poll()
+        assertEquals("Ended", eventKinds().last())
+        val countAfterFirst = events.size
+        runtime.poll()
+        assertEquals(countAfterFirst, events.size) // terminal: no repeat events
+    }
+
+    @Test
+    fun failedItemMapsNetworkAndDecodeErrors() {
+        loadAndPrepare()
+        bridge.current.itemStatus = ITEM_FAILED
+        bridge.current.errorKind = ERROR_NETWORK
+        runtime.poll()
+        assertEquals(PlayerFailure.Network, events.filterIsInstance<RuntimeEvent.Failed>().single().failure)
+
+        val events2 = mutableListOf<RuntimeEvent>()
+        val runtime2 = MacOsAvPlayerRuntime(PlayerCapabilities(trackSelection = false), bridge, MacSurfaceRegistry())
+        runtime2.bind { events2 += it }
+        val gen2 = PlaybackGeneration()
+        runtime2.execute(RuntimeCommand.Load(gen2, PlayableResource("res-2", "https://stream.test/b.mp3")))
+        bridge.current.itemStatus = ITEM_FAILED
+        bridge.current.errorKind = ERROR_DECODE
+        runtime2.poll()
+        assertEquals(PlayerFailure.Decode, events2.filterIsInstance<RuntimeEvent.Failed>().single().failure)
+    }
+
+    @Test
+    fun foreignGenerationCommandsAreIgnored() {
+        val generation = loadAndPrepare()
+        bridge.log.clear()
+        runtime.execute(RuntimeCommand.Play(PlaybackGeneration()))
+        runtime.execute(RuntimeCommand.Seek(PlaybackGeneration(), 1_000))
+        assertEquals(emptyList(), bridge.log)
+        runtime.execute(RuntimeCommand.Seek(generation, 5_000))
+        assertTrue(bridge.log.contains("seek(5000)"))
+    }
+
+    @Test
+    fun surfaceAttachUsesRegistryAndDetachClears() {
+        loadAndPrepare()
+        val layer = surfaces.register(4242L)
+        runtime.execute(RuntimeCommand.AttachSurface(layer))
+        assertEquals(4242L, bridge.current.layerPointer)
+        runtime.execute(RuntimeCommand.DetachSurface(layer))
+        assertEquals(0L, bridge.current.layerPointer)
+    }
+
+    @Test
+    fun unsupportedTrackSelectionThrows() {
+        loadAndPrepare()
+        assertFailsWith<UnsupportedPlayerCapability> {
+            runtime.execute(RuntimeCommand.SelectTrack(PlaybackGeneration(), TrackKind.Audio, "a1"))
+        }
+    }
+
+    @Test
+    fun releaseIsIdempotentStopsTheEngineAndDetachesSink() {
+        loadAndPrepare()
+        runtime.execute(RuntimeCommand.Release)
+        assertTrue(bridge.current.released)
+        val eventsBefore = events.size
+        runtime.execute(RuntimeCommand.Release)
+        runtime.execute(RuntimeCommand.Play(PlaybackGeneration()))
+        assertEquals(eventsBefore, events.size)
+        runtime.poll() // no-op after release
+        assertEquals(eventsBefore, events.size)
+    }
+
+    @Test
+    fun noEventsBeforeLoad() {
+        runtime.bind { events += it }
+        runtime.poll()
+        assertEquals(emptyList(), events)
+    }
+}
