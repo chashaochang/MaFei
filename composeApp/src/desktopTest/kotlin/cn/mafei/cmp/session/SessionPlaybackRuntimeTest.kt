@@ -54,16 +54,6 @@ private class StubAdapter : MediaProviderAdapter {
     override suspend fun setWatched(id: MediaId, watched: Boolean) = throw ClientConfigError("unused")
 }
 
-private class CountingRuntime : PlayerRuntime {
-    val commands = mutableListOf<RuntimeCommand>()
-    private var sink: ((RuntimeEvent) -> Unit)? = null
-    override val capabilities = PlayerCapabilities()
-    override fun bind(eventSink: (RuntimeEvent) -> Unit) { sink = eventSink }
-    override fun execute(command: RuntimeCommand) { commands += command }
-    fun emitReady(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Ready(generation, 60_000)) }
-    fun emitPlaying(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Playing(generation)) }
-}
-
 class SessionPlaybackRuntimeTest {
 
     @Test

@@ -63,6 +63,7 @@ kotlin {
                 implementation(libs.koin.core)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(project(":data:repositories"))
+                implementation(project(":data:migration"))
                 implementation(project(":data:adapter-jellyfin"))
                 implementation(project(":data:adapter-feiniu"))
                 implementation(project(":providers:jellyfin:facade"))
@@ -149,11 +150,6 @@ kotlin {
         val desktopTest by getting {
             dependsOn(commonTest)
             kotlin.srcDir("src/jvmTest/kotlin")
-            dependencies {
-                api(project(":core:domain"))
-                api(project(":data:adapter-contract"))
-                api(project(":player:api"))
-            }
         }
 
         val iosMain by creating {
