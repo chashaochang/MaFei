@@ -1,7 +1,5 @@
 package cn.mafei.cmp.feature.connect
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,8 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
@@ -25,6 +21,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.ui.InlineProblem
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.ProviderKind
 
 /** Shell owns system insets. Password is composition-only and cleared after submission. */
@@ -57,12 +54,18 @@ fun ConnectScreen(
         val inset = if (maxWidth < 600.dp) 20.dp else 40.dp
         val form: @Composable () -> Unit = {
             Surface(
-                modifier = Modifier.widthIn(max = 460.dp).fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(28.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
+                modifier = Modifier.widthIn(max = 500.dp).fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
+                shape = RoundedCornerShape(if (expanded) 28.dp else 24.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f),
+                ),
             ) {
-                Column(Modifier.padding(if (expanded) 28.dp else 22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(
+                    Modifier.padding(if (expanded) 28.dp else 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (expanded) 16.dp else 14.dp),
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("连接媒体服务器", Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold)
@@ -102,8 +105,8 @@ fun ConnectScreen(
                         keyboardActions = KeyboardActions(onDone = { submit() }),
                     )
                     error?.let { InlineProblem(it) }
-                    Button(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                        shape = RoundedCornerShape(14.dp)) {
+                    Button(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(16.dp)) {
                         if (busy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
                             Spacer(Modifier.width(10.dp))
@@ -117,8 +120,8 @@ fun ConnectScreen(
         }
         Column(
             Modifier.widthIn(max = 1120.dp).fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = inset, vertical = if (expanded) 48.dp else 24.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp),
+                .padding(horizontal = inset, vertical = if (expanded) 48.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (expanded) 28.dp else 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (expanded) {
@@ -136,47 +139,62 @@ fun ConnectScreen(
 
 @Composable
 private fun ProviderOption(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected, onClick = onClick, enabled = enabled,
-        label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Surface(
+        modifier = modifier.heightIn(min = 48.dp).mafeiInteractive(
+            onClick = onClick,
+            enabled = enabled,
+            radiusDp = 14f,
+            label = label,
+        ),
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .18f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .46f),
+        contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .42f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f),
+        ),
+    ) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
             Text(label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        } }, modifier = modifier.heightIn(min = 46.dp), shape = RoundedCornerShape(12.dp),
-    )
-}
-
-@Composable
-private fun WelcomePanel(modifier: Modifier, expanded: Boolean) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (expanded) 24.dp else 12.dp)) {
-        Text("YOUR PRIVATE CINEMA", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-        Text(if (expanded) "好故事，\n都在这里。" else "好故事，都在这里。",
-            style = if (expanded) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold)
-        Text("把自己的电影与剧集，\n放进一个熟悉的地方。", style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (expanded) {
-            Box(
-                Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(24.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF343667), Color(0xFF222940), Color(0xFF162F39))))
-                    .border(1.dp, Color.White.copy(alpha = .12f), RoundedCornerShape(24.dp)),
-            ) {
-                Row(Modifier.align(Alignment.Center).padding(24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    CinemaTile("M", Color(0xFF7C78B7), Modifier.weight(1f).height(112.dp))
-                    CinemaTile("A", Color(0xFF537F8B), Modifier.weight(1f).height(140.dp))
-                    CinemaTile("F", Color(0xFF94736F), Modifier.weight(1f).height(112.dp))
-                }
-            }
-            Text("Jellyfin  /  飞牛影视", style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** Brand illustration, deliberately not presented as real server artwork. */
 @Composable
-private fun CinemaTile(letter: String, tint: Color, modifier: Modifier) {
-    Box(modifier.clip(RoundedCornerShape(14.dp)).background(Brush.verticalGradient(listOf(tint, tint.copy(alpha = .2f))))
-        .border(1.dp, Color.White.copy(alpha = .14f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-        Text(letter, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Light, color = Color.White.copy(alpha = .8f))
+private fun WelcomePanel(modifier: Modifier, expanded: Boolean) {
+    if (expanded) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("马飞", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "把 Jellyfin 与飞牛影视放进同一个私人影院。",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            HorizontalDivider(
+                Modifier.width(72.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = .65f),
+                thickness = 2.dp,
+            )
+            Text(
+                "连接后将直接进入你的真实媒体库。账号密码只用于本次认证。",
+                Modifier.widthIn(max = 420.dp),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text("JELLYFIN  ·  飞牛影视", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary)
+        }
+    } else {
+        Row(modifier.heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("马飞", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+                Text("连接你的私人媒体库", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("M", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary.copy(alpha = .34f),
+                fontWeight = FontWeight.Light)
+        }
     }
 }
