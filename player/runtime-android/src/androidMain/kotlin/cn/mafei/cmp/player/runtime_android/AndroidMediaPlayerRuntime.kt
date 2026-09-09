@@ -58,11 +58,11 @@ class AndroidMediaPlayerRuntime(
                 // honesty first: unsupported instead of a silently ignored command.
                 throw UnsupportedPlayerCapability("trackSelection")
             is RuntimeCommand.AttachSurface -> {
+                // Always forwarded immediately: attaching before preparation is
+                // legal for MediaPlayer and must not silently wait.
                 pendingSurface = surfaces.surfaceOf(command.handle)
-                if (preparedEmitted || attachedSurface != null) {
-                    engine.setSurface(pendingSurface)
-                    attachedSurface = pendingSurface
-                }
+                engine.setSurface(pendingSurface)
+                attachedSurface = pendingSurface
             }
             is RuntimeCommand.DetachSurface -> {
                 pendingSurface = null

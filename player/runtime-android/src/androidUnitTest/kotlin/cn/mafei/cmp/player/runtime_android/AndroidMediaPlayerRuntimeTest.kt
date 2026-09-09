@@ -6,6 +6,7 @@ import kotlin.test.*
 
 private class FakeAndroidEngine : AndroidPlayerEngine {
     val log = mutableListOf<String>()
+    val surfaces = mutableListOf<Any?>()
     var listenerRef: AndroidPlayerEngineListener? = null
     private val sessions = AtomicInteger(0)
     override val session: Int get() = sessionValue
@@ -19,7 +20,7 @@ private class FakeAndroidEngine : AndroidPlayerEngine {
     override val bufferedPositionMs: Long get() = bufferedMs
 
     override fun setListener(listener: AndroidPlayerEngineListener?) { listenerRef = listener }
-    override fun setSurface(surface: Any?) { log += "setSurface($surface)" }
+    override fun setSurface(surface: Any?) { log += "setSurface"; surfaces += surface }
     override fun setDataSource(url: String, headers: Map<String, String>) { log += "dataSource($url,${headers.keys.sorted()})" }
     override fun prepareAsync() { log += "prepareAsync" }
     override fun start() { log += "start" }
@@ -49,11 +50,13 @@ class AndroidMediaPlayerRuntimeTest {
 
     private val engine = FakeAndroidEngine()
     private val scheduler = ManualPollScheduler()
+    private val registry = AndroidSurfaceRegistry()
     private val events = mutableListOf<RuntimeEvent>()
     private val runtime = AndroidMediaPlayerRuntime(
         capabilities = PlayerCapabilities(trackSelection = false),
         engine = engine,
         pollScheduler = scheduler,
+        surfaces = registry,
         pollPeriodMs = 500L,
     )
 
@@ -148,21 +151,48 @@ class AndroidMediaPlayerRuntimeTest {
     }
 
     @Test
-    fun surfaceAttachWaitsForPrepareThenReattachesAndDetachClears() {
-        loadAndPrepare()
-        val registry = AndroidSurfaceRegistry()
-        val first = registry.register(Any())
-        val second = registry.register(Any())
-        engine.log.clear()
-        runtime.execute(RuntimeCommand.AttachSurface(first))
-        assertTrue(engine.log.last()!!.startsWith("setSurface("), engine.log.toString())
-        engine.log.clear()
-        runtime.execute(RuntimeCommand.AttachSurface(second))
-        assertTrue(engine.log.last()!!.startsWith("setSurface("), engine.log.toString())
-        engine.log.clear()
-        runtime.execute(RuntimeCommand.DetachSurface(second))
-        assertTrue(engine.log.contains("setSurface(null)"))
-        registry.unregister(second)
+    fun surfaceAttachIsForwardedImmediatelyWithTheRegisteredObject() {
+        // Mid-load attach: the command arrives BEFORE preparation completes.
+        runtime.bind { events += it }
+        val generation = PlaybackGeneration()
+        runtime.execute(RuntimeCommand.Load(generation, PlayableResource("res-1", "https://stream.test/a.m3u8")))
+        assertTrue(!events.any { it is RuntimeEvent.Ready }) // not prepared yet
+
+        val midLoadSurface = Any()
+        val midLoadHandle = registry.register(midLoadSurface)
+        engine.surfaces.clear()
+        runtime.execute(RuntimeCommand.AttachSurface(midLoadHandle))
+        assertTrue(engine.log.contains("setSurface"), engine.log.toString())
+        assertEquals(listOf<Any?>(midLoadSurface), engine.surfaces) // the registered object itself
+
+        engine.emitPrepared(60_000)
+        // No duplicate surface call on preparation.
+        assertEquals(1, engine.surfaces.size)
+
+        // Re-attach replaces the surface with the newly registered object.
+        val replacement = Any()
+        engine.surfaces.clear()
+        runtime.execute(RuntimeCommand.AttachSurface(registry.register(replacement)))
+        assertEquals(listOf<Any?>(replacement), engine.surfaces)
+
+        // Detach forwards an explicit null.
+        engine.surfaces.clear()
+        runtime.execute(RuntimeCommand.DetachSurface(midLoadHandle))
+        assertEquals(listOf<Any?>(null), engine.surfaces)
+    }
+
+    @Test
+    fun surfaceAttachedBeforeLoadIsAppliedDuringLoad() {
+        val surface = Any()
+        val handle = registry.register(surface)
+        runtime.bind { events += it }
+        engine.surfaces.clear()
+        // Attach arrives before any load: remembered as pending…
+        runtime.execute(RuntimeCommand.AttachSurface(handle))
+        // …and the load path RE-applies the pending surface before prepareAsync.
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-1", "https://stream.test/a.m3u8")))
+        // attach + load replay, both carrying the exact registered object.
+        assertEquals(listOf<Any?>(surface, surface), engine.surfaces)
     }
 
     @Test

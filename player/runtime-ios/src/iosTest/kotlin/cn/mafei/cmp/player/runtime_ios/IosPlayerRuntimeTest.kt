@@ -36,7 +36,11 @@ class IosPlayerRuntimeTest {
         val current: PlayerModel get() = players.getValue(1L)
 
         override fun create(): Long = nextHandle.also { players[it] = PlayerModel() }
-        override fun loadUrl(handle: Long, url: String) { players.getValue(handle).url = url }
+        var rejectHeaders = false
+        override fun loadUrl(handle: Long, url: String, headers: Map<String, String>) {
+            if (rejectHeaders && headers.isNotEmpty()) throw UnsupportedOperationException("headers unsupported")
+            players.getValue(handle).url = url
+        }
         override fun play(handle: Long) { players.getValue(handle).timeControl = TIME_PLAYING }
         override fun pause(handle: Long) { players.getValue(handle).timeControl = TIME_PAUSED }
         override fun stop(handle: Long) { players.getValue(handle).stopped = true }
@@ -88,6 +92,47 @@ class IosPlayerRuntimeTest {
         val before = events.size
         runtime.poll()
         assertEquals(before, events.size)
+    }
+
+    @Test
+    fun unknownDurationMediaBecomesReadyWithNullDuration() {
+        runtime.bind { events += it }
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-live", "https://stream.test/live.m3u8")))
+        bridge.current.itemStatus = ITEM_READY
+        bridge.current.durationMs = 0
+        runtime.poll()
+        // Live/unknown-duration media must not stay in Loading forever.
+        val ready = events.filterIsInstance<RuntimeEvent.Ready>().single()
+        assertNull(ready.durationMs)
+    }
+
+    @Test
+    fun headerIncapableEngineFailsAsUnsupportedMedia() {
+        bridge.rejectHeaders = true
+        runtime.bind { events += it }
+        runtime.execute(
+            RuntimeCommand.Load(
+                PlaybackGeneration(),
+                PlayableResource("res-1", "https://stream.test/a.m3u8", mapOf("Authorization" to "tok")),
+            ),
+        )
+        assertEquals(PlayerFailure.UnsupportedMedia, events.filterIsInstance<RuntimeEvent.Failed>().single().failure)
+        assertEquals(null, bridge.current.url)
+    }
+
+    @Test
+    fun releaseClosesThePollTicket() {
+        var closed = false
+        val runtime2 = IosPlayerRuntime(
+            capabilities = PlayerCapabilities(),
+            bridge = bridge,
+            pollScheduler = object : IosPollScheduler {
+                override fun schedule(periodMs: Long, tick: () -> Unit): AutoCloseable = AutoCloseable { closed = true }
+            },
+        )
+        runtime2.bind { }
+        runtime2.execute(RuntimeCommand.Release)
+        assertTrue(closed) // the timer is released, it cannot retain the runtime
     }
 
     @Test

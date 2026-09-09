@@ -14,7 +14,7 @@ import kotlin.test.*
 private class FakeAvPlayerBridge : AvPlayerBridge {
     val log = mutableListOf<String>()
     private val handles = AtomicInteger(0)
-    private val players = HashMap<Long, PlayerModel>()
+    val players = HashMap<Long, PlayerModel>()
     var nextHandle = 1L
 
     class PlayerModel {
@@ -34,15 +34,23 @@ private class FakeAvPlayerBridge : AvPlayerBridge {
     val current: PlayerModel get() = players.getValue(1L)
     fun reset() { handles.set(0) }
 
-    override fun create(): Long = nextHandle.also { players[it] = PlayerModel() }
-    override fun loadUrl(handle: Long, url: String) { players.getValue(handle).url = url }
+    override fun create(): Long = nextHandle.also { players[it] = PlayerModel() }.also { nextHandle += 1 }
+    var rejectHeaders = false
+    val lastHeaders = mutableListOf<Map<String, String>>()
+    override fun loadUrl(handle: Long, url: String, headers: Map<String, String>) {
+        if (rejectHeaders && headers.isNotEmpty()) {
+            throw UnsupportedOperationException("headers unsupported")
+        }
+        lastHeaders += headers
+        players.getValue(handle).url = url
+    }
     override fun play(handle: Long) { players.getValue(handle).timeControl = TIME_PLAYING }
     override fun pause(handle: Long) { players.getValue(handle).timeControl = TIME_PAUSED }
     override fun stop(handle: Long) { players.getValue(handle).stopped = true; players.getValue(handle).timeControl = TIME_PAUSED }
     override fun seek(handle: Long, positionMs: Long) { log += "seek($positionMs)" }
     override fun setSpeed(handle: Long, speed: Float) { players.getValue(handle).speed = speed }
     override fun attachLayer(handle: Long, layerPointer: Long) { players.getValue(handle).layerPointer = layerPointer }
-    override fun detachLayer(handle: Long) { players.getValue(handle).layerPointer = 0 }
+    override fun detachLayer(handle: Long, layerPointer: Long) { players.getValue(handle).layerPointer = 0 }
     override fun positionMs(handle: Long): Long = players.getValue(handle).positionMs
     override fun durationMs(handle: Long): Long = players.getValue(handle).durationMs
     override fun bufferedMs(handle: Long): Long = players.getValue(handle).bufferedMs
@@ -69,6 +77,7 @@ class MacOsAvPlayerRuntimeTest {
         bridge = bridge,
         surfaces = surfaces,
         pollScheduler = manualScheduler,
+        dispatcher = Runnable::run,
     )
 
     private fun loadAndPrepare(url: String = "https://stream.test/a.m3u8"): PlaybackGeneration {
@@ -141,12 +150,18 @@ class MacOsAvPlayerRuntimeTest {
         assertEquals(PlayerFailure.Network, events.filterIsInstance<RuntimeEvent.Failed>().single().failure)
 
         val events2 = mutableListOf<RuntimeEvent>()
-        val runtime2 = MacOsAvPlayerRuntime(PlayerCapabilities(trackSelection = false), bridge, MacSurfaceRegistry())
+        val runtime2 = MacOsAvPlayerRuntime(
+            capabilities = PlayerCapabilities(trackSelection = false),
+            bridge = bridge,
+            surfaces = MacSurfaceRegistry(),
+            dispatcher = Runnable::run,
+        )
         runtime2.bind { events2 += it }
         val gen2 = PlaybackGeneration()
         runtime2.execute(RuntimeCommand.Load(gen2, PlayableResource("res-2", "https://stream.test/b.mp3")))
-        bridge.current.itemStatus = ITEM_FAILED
-        bridge.current.errorKind = ERROR_DECODE
+        val secondPlayer = bridge.nextHandle - 1 // handle created for runtime2
+        bridge.players.getValue(secondPlayer).itemStatus = ITEM_FAILED
+        bridge.players.getValue(secondPlayer).errorKind = ERROR_DECODE
         runtime2.poll()
         assertEquals(PlayerFailure.Decode, events2.filterIsInstance<RuntimeEvent.Failed>().single().failure)
     }
@@ -191,6 +206,62 @@ class MacOsAvPlayerRuntimeTest {
         assertEquals(eventsBefore, events.size)
         runtime.poll() // no-op after release
         assertEquals(eventsBefore, events.size)
+    }
+
+    @Test
+    fun unknownDurationMediaStillBecomesReadyWithNullDuration() {
+        runtime.bind { events += it }
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("res-live", "https://stream.test/live.m3u8")))
+        bridge.current.itemStatus = ITEM_READY
+        bridge.current.durationMs = 0 // live / unknown duration
+        runtime.poll()
+        // itemStatus READY alone means prepared: live media must NOT stay in
+        // Loading forever, and the API allows Ready(durationMs = null).
+        val ready = events.filterIsInstance<RuntimeEvent.Ready>().single()
+        assertNull(ready.durationMs)
+        // Normal paused/progress reporting continues afterwards.
+        assertEquals("Paused", eventKinds().takeLast(2).first())
+        assertEquals("Progress", eventKinds().last())
+    }
+
+    @Test
+    fun headersAreForwardedToTheBridge() {
+        runtime.bind { events += it }
+        runtime.execute(
+            RuntimeCommand.Load(
+                PlaybackGeneration(),
+                PlayableResource("res-1", "https://stream.test/a.m3u8", mapOf("Authorization" to "tok", "Cookie" to "Trim-MC-token=tok")),
+            ),
+        )
+        assertEquals(
+            listOf(mapOf("Authorization" to "tok", "Cookie" to "Trim-MC-token=tok")),
+            bridge.lastHeaders,
+        )
+    }
+
+    @Test
+    fun headerIncapableEngineFailsLoudlyAsUnsupportedMedia() {
+        bridge.rejectHeaders = true
+        runtime.bind { events += it }
+        runtime.execute(
+            RuntimeCommand.Load(
+                PlaybackGeneration(),
+                PlayableResource("res-1", "https://stream.test/a.m3u8", mapOf("Authorization" to "tok")),
+            ),
+        )
+        val failed = events.filterIsInstance<RuntimeEvent.Failed>().single()
+        assertEquals(PlayerFailure.UnsupportedMedia, failed.failure)
+        assertEquals(null, bridge.current.url) // nothing was loaded behind the refusal
+    }
+
+    @Test
+    fun detachUnbindsTheExactLayerOnTheEngine() {
+        loadAndPrepare()
+        val layer = surfaces.register(4242L)
+        runtime.execute(RuntimeCommand.AttachSurface(layer))
+        bridge.current.layerPointer = 4242L
+        runtime.execute(RuntimeCommand.DetachSurface(layer))
+        assertEquals(0L, bridge.current.layerPointer) // engine unbinds the layer
     }
 
     @Test

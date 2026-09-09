@@ -14,8 +14,11 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * MediaPlayer requires all calls on the thread that owns its event looper, so
  * every call is posted to the main looper via [Handler]; callbacks also arrive
- * there. Sessions guard against callbacks of a retired player: reset/release
- * bump the session and drop the listener reference first.
+ * there. Session discipline: each load runs on a fresh MediaPlayer instance —
+ * [reset] (and [release]) RELEASE the previous native player instead of merely
+ * resetting it, and every listener closure captures the session id from its
+ * creation, so a late callback from a retired player can never be mistaken
+ * for the new session.
  *
  * The context is required because HTTP-header streams go through
  * `setDataSource(context, uri, headers)`.
@@ -70,37 +73,40 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
 
     override fun setDataSource(url: String, headers: Map<String, String>) {
         onLooper {
-            val current = player
-            val target = if (current == null) {
-                val created = MediaPlayer()
-                created.setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                        .build(),
-                )
-                created.setOnPreparedListener { mp -> listener?.onPrepared(sessionValue, mp.duration.toLong()) }
-                created.setOnCompletionListener { listener?.onCompletion(sessionValue) }
-                created.setOnErrorListener { _, what, extra ->
-                    listener?.onError(sessionValue, what, extra)
-                    true
-                }
-                created.setOnInfoListener { _, what, _ ->
-                    when (what) {
-                        MediaPlayer.MEDIA_INFO_BUFFERING_START -> listener?.onBuffering(sessionValue, true)
-                        MediaPlayer.MEDIA_INFO_BUFFERING_END -> listener?.onBuffering(sessionValue, false)
-                    }
-                    true
-                }
-                created.setOnBufferingUpdateListener { _, percent ->
-                    bufferedPercent = percent
-                }
-                player = created
-                created
-            } else {
-                current
+            // Every load runs on a FRESH player: the retired one was already
+            // release()d by reset(), so there is never a reused instance.
+            check(player == null) { "setDataSource requires a reset engine" }
+            val created = MediaPlayer()
+            val sessionAtCreation = sessionValue
+            created.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build(),
+            )
+            created.setOnPreparedListener { mp ->
+                // The CAPTURED session id, never the current field: a late
+                // prepared from a retired player keeps its old identity and
+                // the runtime drops it.
+                listener?.onPrepared(sessionAtCreation, mp.duration.toLong())
             }
-            target.setDataSource(context, Uri.parse(url), headers.takeIf { it.isNotEmpty() })
+            created.setOnCompletionListener { listener?.onCompletion(sessionAtCreation) }
+            created.setOnErrorListener { _, what, extra ->
+                listener?.onError(sessionAtCreation, what, extra)
+                true
+            }
+            created.setOnInfoListener { _, what, _ ->
+                when (what) {
+                    MediaPlayer.MEDIA_INFO_BUFFERING_START -> listener?.onBuffering(sessionAtCreation, true)
+                    MediaPlayer.MEDIA_INFO_BUFFERING_END -> listener?.onBuffering(sessionAtCreation, false)
+                }
+                true
+            }
+            created.setOnBufferingUpdateListener { _, percent ->
+                bufferedPercent = percent
+            }
+            player = created
+            created.setDataSource(context, Uri.parse(url), headers.takeIf { it.isNotEmpty() })
         }
     }
 
@@ -139,7 +145,9 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
     override fun reset() {
         sessionValue = sessions.incrementAndGet()
         onLooper {
-            player?.reset()
+            // RELEASE (not reset): native decoders and surfaces must be
+            // relinquished; a fresh instance is created for the next load.
+            player?.release()
             player = null
         }
     }

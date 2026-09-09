@@ -24,6 +24,16 @@ Kotlin 发行版 `2.2.21-1.0.0` 的 ios_arm64 `platform.AVFoundation` klib 导�
 3. 宿主以主循环定时器实现 `*PollScheduler`（250ms 建议），驱动 `runtime.poll()`。
 4. 事件经 `runtime.bind { }` 回调进 `DefaultPlayerController`（common 层负责 generation 过滤与播放上报编排）。
 
+## 复审修正（GLM-05 review）
+
+1. **Android 泄漏与会话标记**：`reset` 改为 RELEASE 旧 MediaPlayer（native 解码器/surface 即时回收），每次 load 全新实例；listener 闭包捕获**创建时**的 session id——旧 player 的迟到回调保持旧身份被 runtime 丢弃，绝不会被误标成新会话。
+2. **未知时长/直播**：macOS/iOS/OHOS 以 `itemStatus == READY/prepared` 为准发 `Ready(durationMs=null)`，不再要求 duration > 0；Android onPrepared 路径本就如此。三端各补测试。
+3. **headers 不再静默丢弃**：bridge `loadUrl` 增加 headers 参数；无法应用自定义 header 的引擎（macOS AVURLAsset）必须抛 `UnsupportedOperationException` → runtime 转为 `Failed(UnsupportedMedia)` 明确失败，绝不发货注定 401 的播放（飞牛 Token/Cookie 依赖）。OHOS 原生 AVPlayer 支持 headers，宿主桥实现即可用。
+4. **iOS/OHOS 轮询任务泄漏**：`pollTicket` 保存并在 Release 关闭，定时器不再永久持有 Runtime。
+5. **macOS detachLayer**：桥带 layer 指针，解绑时把 `AVPlayerLayer.player = nil`——Surface 销毁不再残留末帧与 Player 引用。
+6. **macOS 数据竞争**：命令与轮询全部串行到 runtime 内部单线程 dispatcher，普通字段无需同步；测试注入同步 dispatcher 保持确定性。
+7. **Android Surface 测试假阳性**：测试与 runtime 使用同一 registry，断言精确对象引用（非前缀字符串）；补“加载中途挂载”与“attach 先于 load（load 路径重放 pending surface）”两条真实路径。
+
 ## 决策记录
 
 1. **轮询驱动而非回调驱动**：四端统一从引擎真实状态推导事件，规避各引擎回调线程差异；状态机（common）天然过滤重复/过期事件。

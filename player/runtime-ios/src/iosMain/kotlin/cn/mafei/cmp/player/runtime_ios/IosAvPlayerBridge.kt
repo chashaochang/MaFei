@@ -18,7 +18,14 @@ import kotlin.concurrent.AtomicReference
  */
 interface IosAvPlayerBridge {
     fun create(): Long
-    fun loadUrl(handle: Long, url: String)
+
+    /**
+     * Loads [url] with [headers]. Feiniu playback REQUIRES token/cookie
+     * headers, so implementations unable to apply them MUST throw
+     * (the runtime turns that into Failed(UnsupportedMedia)) — silently
+     * dropping headers would ship a doomed 401 playback.
+     */
+    fun loadUrl(handle: Long, url: String, headers: Map<String, String>)
     fun play(handle: Long)
     fun pause(handle: Long)
     fun stop(handle: Long)

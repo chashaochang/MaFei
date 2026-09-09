@@ -33,11 +33,14 @@ class IosPlayerRuntime(
     private val sink = AtomicReference<((RuntimeEvent) -> Unit)?>(null)
     private val generation = AtomicReference<PlaybackGeneration?>(null)
     private val state = AtomicReference(RuntimeSnapshot())
+    private val pollTicket = AtomicReference<AutoCloseable?>(null)
 
     override fun bind(eventSink: (RuntimeEvent) -> Unit) {
         check(sink.value == null) { "Runtime already bound" }
         sink.value = eventSink
-        pollScheduler.schedule(pollPeriodMs, ::poll)
+        // Kept and closed on Release: an unclosed timer would retain the
+        // runtime forever after the player is gone.
+        pollTicket.value = pollScheduler.schedule(pollPeriodMs, ::poll)
     }
 
     override fun execute(command: RuntimeCommand) {
@@ -95,12 +98,13 @@ class IosPlayerRuntime(
                 eventSink(RuntimeEvent.Failed(checkNotNull(snapshot.generation), failure))
             }
             ITEM_READY -> {
-                val duration = bridge.durationMs(snapshot.player)
+                // itemStatus READY alone means prepared: live and
+                // unknown-duration media carry duration 0 -> Ready(null).
                 var updated = snapshot
-                if (!snapshot.readyEmitted && duration > 0) {
+                if (!snapshot.readyEmitted) {
                     updated = snapshot.copy(readyEmitted = true)
                     state.compareAndSet(snapshot, updated)
-                    eventSink(RuntimeEvent.Ready(checkNotNull(updated.generation), duration))
+                    eventSink(RuntimeEvent.Ready(checkNotNull(updated.generation), bridge.durationMs(updated.player).takeIf { it > 0 }))
                 }
                 if (!updated.readyEmitted) return
                 val phase = when (bridge.timeControl(updated.player)) {
@@ -142,8 +146,7 @@ class IosPlayerRuntime(
         val snapshot = state.value
         val player = if (snapshot.player == 0L) bridge.create() else snapshot.player
         bridge.stop(player) // stop the previous resource before loading the next
-        bridge.loadUrl(player, command.resource.url)
-        snapshot.attachedLayer?.let { bridge.attachLayer(player, it) }
+        generation.value = command.generation
         state.compareAndSet(
             snapshot,
             RuntimeSnapshot(
@@ -152,6 +155,12 @@ class IosPlayerRuntime(
                 attachedLayer = snapshot.attachedLayer,
             ),
         )
+        try {
+            bridge.loadUrl(player, command.resource.url, command.resource.headers)
+        } catch (failure: UnsupportedOperationException) {
+            markEnded()
+            sink.value?.invoke(RuntimeEvent.Failed(command.generation, PlayerFailure.UnsupportedMedia))
+        }
     }
 
     private fun stop(generation: PlaybackGeneration?) {
@@ -168,12 +177,15 @@ class IosPlayerRuntime(
         val snapshot = state.value
         if (snapshot.released) return
         state.compareAndSet(snapshot, RuntimeSnapshot(released = true))
+        pollTicket.value?.close()
+        pollTicket.value = null
         if (snapshot.player != 0L) bridge.releasePlayer(snapshot.player)
         sink.value = null // contract: sink must not be retained after Release
     }
 
-    private fun markEnded(snapshot: RuntimeSnapshot) {
-        state.compareAndSet(snapshot, snapshot.copy(ended = true))
+    private fun markEnded(snapshot: RuntimeSnapshot? = null) {
+        val current = snapshot ?: state.value
+        state.compareAndSet(current, current.copy(ended = true))
     }
 
     private data class RuntimeSnapshot(

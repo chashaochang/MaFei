@@ -87,10 +87,16 @@ Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_attachLayer(JNIEnv *env, 
     ((AVPlayerLayer *)layer).player = playerFor(handle);
 }
 
+// Unbinds the layer: a destroyed surface must not keep rendering the last
+// frame nor hold the player reference.
 JNIEXPORT void JNICALL
-Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_detachLayer(JNIEnv *env, jclass clazz, jlong handle) {
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_detachLayer(JNIEnv *env, jclass clazz, jlong handle, jlong layerPointer) {
     (void)env; (void)clazz; (void)handle;
-    // The layer keeps rendering its last frame; ownership stays with the UI.
+    if (layerPointer == 0) return;
+    CALayer *layer = (__bridge CALayer *)(void *)(intptr_t)layerPointer;
+    if ([layer isKindOfClass:[AVPlayerLayer class]]) {
+        ((AVPlayerLayer *)layer).player = nil;
+    }
 }
 
 JNIEXPORT jlong JNICALL

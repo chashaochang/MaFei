@@ -18,14 +18,22 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 interface AvPlayerBridge {
     fun create(): Long
-    fun loadUrl(handle: Long, url: String)
+
+    /**
+     * Loads [url] with [headers]. Engines that cannot apply custom HTTP
+     * headers MUST throw (the runtime turns that into Failed(UnsupportedMedia))
+     * instead of silently playing an unauthenticated stream.
+     */
+    fun loadUrl(handle: Long, url: String, headers: Map<String, String>)
     fun play(handle: Long)
     fun pause(handle: Long)
     fun stop(handle: Long)
     fun seek(handle: Long, positionMs: Long)
     fun setSpeed(handle: Long, speed: Float)
     fun attachLayer(handle: Long, layerPointer: Long)
-    fun detachLayer(handle: Long)
+
+    /** Unbinds [layerPointer]; a destroyed surface must not keep the last frame or the player. */
+    fun detachLayer(handle: Long, layerPointer: Long)
     fun positionMs(handle: Long): Long
     fun durationMs(handle: Long): Long
     fun bufferedMs(handle: Long): Long
@@ -44,14 +52,21 @@ interface AvPlayerBridge {
 /** JNI wiring of [AvPlayerBridge]. Loads the bundled dylib on first use. */
 class JniAvPlayerBridge : AvPlayerBridge {
     override fun create(): Long = NativeAvPlayer.let { it.ensureLoaded(); it.create() }
-    override fun loadUrl(handle: Long, url: String) = NativeAvPlayer.loadUrl(handle, url)
+    override fun loadUrl(handle: Long, url: String, headers: Map<String, String>) {
+        // AVURLAsset has no public custom-header API (needs a resource-loader
+        // delegate, Pending). Refusing loudly beats a doomed 401 playback.
+        if (headers.isNotEmpty()) {
+            throw UnsupportedOperationException("macOS AVPlayer bridge cannot apply custom HTTP headers")
+        }
+        NativeAvPlayer.loadUrl(handle, url)
+    }
     override fun play(handle: Long) = NativeAvPlayer.play(handle)
     override fun pause(handle: Long) = NativeAvPlayer.pause(handle)
     override fun stop(handle: Long) = NativeAvPlayer.stop(handle)
     override fun seek(handle: Long, positionMs: Long) = NativeAvPlayer.seek(handle, positionMs)
     override fun setSpeed(handle: Long, speed: Float) = NativeAvPlayer.setSpeed(handle, speed)
     override fun attachLayer(handle: Long, layerPointer: Long) = NativeAvPlayer.attachLayer(handle, layerPointer)
-    override fun detachLayer(handle: Long) = NativeAvPlayer.detachLayer(handle)
+    override fun detachLayer(handle: Long, layerPointer: Long) = NativeAvPlayer.detachLayer(handle, layerPointer)
     override fun positionMs(handle: Long): Long = NativeAvPlayer.positionMs(handle)
     override fun durationMs(handle: Long): Long = NativeAvPlayer.durationMs(handle)
     override fun bufferedMs(handle: Long): Long = NativeAvPlayer.bufferedMs(handle)
@@ -87,8 +102,9 @@ class MacSurfaceRegistry {
 /**
  * macOS runtime over AVFoundation through [AvPlayerBridge]. Poll-driven:
  * every RuntimeEvent is derived from live bridge queries, never fabricated.
- * Single-threaded contract like the other runtimes — [execute] and [poll]
- * must run on one thread (the facade serializes).
+ * Commands AND polls are serialized onto one internal [dispatcher] thread, so
+ * state fields need no synchronization and the facade's calling thread never
+ * races the poll loop.
  */
 /** Periodic engine polling scheduler; production wiring uses a background executor. */
 interface MacPollScheduler {
@@ -114,8 +130,13 @@ class MacOsAvPlayerRuntime(
     private val surfaces: MacSurfaceRegistry = MacSurfaceRegistry(),
     private val pollScheduler: MacPollScheduler = ScheduledPollScheduler(),
     private val pollPeriodMs: Long = 250L,
+    private val dispatcher: java.util.concurrent.Executor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "macos-avplayer-runtime").apply { isDaemon = true }
+    },
 ) : PlayerRuntime {
 
+    // All state below is confined to [dispatcher]: commands AND polls are
+    // serialized onto one queue, so no field needs volatile/synchronized.
     private var sink: ((RuntimeEvent) -> Unit)? = null
     private var player: Long = 0
     private var generation: PlaybackGeneration? = null
@@ -129,10 +150,14 @@ class MacOsAvPlayerRuntime(
     override fun bind(eventSink: (RuntimeEvent) -> Unit) {
         check(sink == null) { "Runtime already bound" }
         sink = eventSink
-        pollTicket = pollScheduler.schedule(pollPeriodMs, ::poll)
+        pollTicket = pollScheduler.schedule(pollPeriodMs) { dispatcher.execute(::poll) }
     }
 
     override fun execute(command: RuntimeCommand) {
+        dispatcher.execute { executeOnQueue(command) }
+    }
+
+    private fun executeOnQueue(command: RuntimeCommand) {
         if (released) return
         when (command) {
             is RuntimeCommand.Load -> load(command)
@@ -150,7 +175,7 @@ class MacOsAvPlayerRuntime(
                 attachedLayer = layer
             }
             is RuntimeCommand.DetachSurface -> {
-                if (player != 0L) bridge.detachLayer(player)
+                if (player != 0L) bridge.detachLayer(player, attachedLayer)
                 attachedLayer = 0
             }
             RuntimeCommand.Release -> release()
@@ -173,12 +198,12 @@ class MacOsAvPlayerRuntime(
                 return
             }
             ITEM_READY -> {
-                val duration = bridge.durationMs(player)
-                if (!readyEmitted && duration > 0) {
+                // itemStatus READY alone means prepared: live and
+                // unknown-duration media carry duration 0 -> Ready(null).
+                if (!readyEmitted) {
                     readyEmitted = true
-                    emit(RuntimeEvent.Ready(checkNotNull(generation), duration))
+                    emit(RuntimeEvent.Ready(checkNotNull(generation), bridge.durationMs(player).takeIf { it > 0 }))
                 }
-                if (!readyEmitted) return
                 val phase = when (bridge.timeControl(player)) {
                     TIME_PLAYING -> PlayerPhase.Playing
                     TIME_BUFFERING -> PlayerPhase.Buffering
@@ -217,12 +242,18 @@ class MacOsAvPlayerRuntime(
     private fun load(command: RuntimeCommand.Load) {
         if (player == 0L) player = bridge.create()
         bridge.stop(player) // stop the previous resource before loading the next
-        bridge.loadUrl(player, command.resource.url)
-        if (attachedLayer != 0L) bridge.attachLayer(player, attachedLayer)
         generation = command.generation
         readyEmitted = false
         ended = false
         lastPhase = null
+        try {
+            bridge.loadUrl(player, command.resource.url, command.resource.headers)
+        } catch (failure: UnsupportedOperationException) {
+            ended = true
+            emit(RuntimeEvent.Failed(checkNotNull(generation), PlayerFailure.UnsupportedMedia))
+            return
+        }
+        if (attachedLayer != 0L) bridge.attachLayer(player, attachedLayer)
     }
 
     private fun stop(generation: PlaybackGeneration?) {
@@ -242,6 +273,7 @@ class MacOsAvPlayerRuntime(
         if (player != 0L) bridge.releasePlayer(player)
         generation = null
         sink = null // contract: sink must not be retained after Release
+        (dispatcher as? java.util.concurrent.ExecutorService)?.shutdown()
     }
 
     private fun owns(generation: PlaybackGeneration?): Boolean = generation != null && generation === this.generation

@@ -16,7 +16,7 @@ internal object NativeAvPlayer {
     external fun seek(handle: Long, positionMs: Long)
     external fun setSpeed(handle: Long, speed: Float)
     external fun attachLayer(handle: Long, layerPointer: Long)
-    external fun detachLayer(handle: Long)
+    external fun detachLayer(handle: Long, layerPointer: Long)
     external fun positionMs(handle: Long): Long
     external fun durationMs(handle: Long): Long
     external fun bufferedMs(handle: Long): Long

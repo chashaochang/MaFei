@@ -22,7 +22,7 @@ class JniAvPlayerBridgeTest {
             assertEquals(0, bridge.durationMs(handle))
             assertEquals(0, bridge.timeControl(handle))
             // A relative URL without a scheme must not crash the query surface.
-            bridge.loadUrl(handle, "not-a-valid-url")
+            bridge.loadUrl(handle, "not-a-valid-url", headers = emptyMap())
             bridge.releasePlayer(handle)
         } finally {
             bridge.releasePlayer(handle)
