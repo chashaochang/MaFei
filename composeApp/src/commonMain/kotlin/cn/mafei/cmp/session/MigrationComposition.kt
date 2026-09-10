@@ -93,8 +93,11 @@ private fun buildSavedConnection(
             ?: throw IllegalArgumentException("unrecognized legacy Feiniu route '${connectionRecord?.connectionRoute}'")
         buildList {
             add(SavedFeiniuRoute(server.baseUrl, route))
-            connectionRecord?.fallbackBaseUrls?.forEach { url ->
-                add(SavedFeiniuRoute(url, route))
+            connectionRecord?.fallbackBaseUrls
+                ?.filter { it != server.baseUrl }
+                ?.distinct()
+                ?.forEach { url ->
+                    add(SavedFeiniuRoute(url, route))
             }
         }
     } else {

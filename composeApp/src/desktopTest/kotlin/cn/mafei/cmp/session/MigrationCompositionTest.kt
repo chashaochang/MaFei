@@ -92,6 +92,32 @@ class MigrationCompositionTest {
     }
 
     @Test
+    fun feiniuFallbacksAreDeduplicatedAgainstThePrimaryAndEachOther() {
+        val mapping = records(
+            feiniuAccount(),
+            feiniuConnection = MigratedServerConnection(
+                serverId = ServerId("srv-fn"),
+                originalAddress = null,
+                connectionRoute = "Local",
+                fallbackBaseUrls = listOf(
+                    "http://192.0.2.20:5667",
+                    "http://192.0.2.99:5667",
+                    "http://192.0.2.99:5667",
+                ),
+            ),
+        ).toSavedConnections()
+
+        val feiniu = mapping.connections.single { it.server.provider == ProviderKind.Feiniu }
+        assertEquals(
+            listOf(
+                SavedFeiniuRoute("http://192.0.2.20:5667", "Local"),
+                SavedFeiniuRoute("http://192.0.2.99:5667", "Local"),
+            ),
+            feiniu.feiniuRoutes,
+        )
+    }
+
+    @Test
     fun unknownServerAccountsAreSkippedObservably() {
         val orphan = MigratedAccount(
             account = Account(AccountId("acc-orphan"), ServerId("srv-missing"), ProviderKind.Jellyfin, "Orphan"),

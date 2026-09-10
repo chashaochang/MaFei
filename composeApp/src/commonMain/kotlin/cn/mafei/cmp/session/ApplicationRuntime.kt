@@ -104,7 +104,7 @@ class ApplicationRuntime(
             }
             // CAS lost to a concurrent lifecycle change: release the loser
             // asynchronously so engines, timers and workers never leak.
-            scope.launch {
+            scope.launch(NonCancellable) {
                 try { created.release() }
                 catch (e: CancellationException) { throw e }
                 catch (_: Exception) { } // best-effort cleanup of a discarded instance
@@ -155,7 +155,7 @@ class ApplicationRuntime(
             nowEpochMs = { SystemEpochClock.nowEpochMs() },
         )
         val result = engine.migrate()
-        if (result is cn.mafei.cmp.data.migration.MigrationResult.Completed && !result.alreadyCompleted) {
+        if (result is cn.mafei.cmp.data.migration.MigrationResult.Completed) {
             val records = sink.storedRecords(result.migrationId)
                 ?: return result
             // Persist every mappable connection, then admit the migrated
@@ -166,14 +166,19 @@ class ApplicationRuntime(
             for (connection in mapping.connections) {
                 connectionCatalog.save(connection)
             }
-            val selected = records.selectedAccountId ?: return result
-            val connection = mapping.connections.firstOrNull { it.account.id == selected }
-                ?: return result
-            val secrets = connection.aliases.mapNotNull { alias ->
-                secureStore.read(alias)?.let { alias to it }
-            }.toMap()
-            if (secrets.isEmpty()) return result
-            sessions.activate(connection, cn.mafei.cmp.session.DefaultProviderSessionFactory(transport).restore(connection, secrets))
+            // A first activation may have failed after the migration receipt
+            // was committed. Re-read the receipt on later starts and retry the
+            // same activation until the normal session index is durable.
+            if (sessions.state.value.session == null) {
+                val selected = records.selectedAccountId ?: return result
+                val connection = mapping.connections.firstOrNull { it.account.id == selected }
+                    ?: return result
+                val secrets = connection.aliases.mapNotNull { alias ->
+                    secureStore.read(alias)?.let { alias to it }
+                }.toMap()
+                if (secrets.isEmpty()) return result
+                sessions.activate(connection, cn.mafei.cmp.session.DefaultProviderSessionFactory(transport).restore(connection, secrets))
+            }
         }
         return result
     }
