@@ -59,25 +59,21 @@ fun HomeScreen(
     val recentItems = items.sortedWith(compareByDescending<MediaItem> { it.dateAddedEpochMs ?: Long.MIN_VALUE }
         .thenBy { it.title })
     val progressItems = items.filter { it.userData.hasProgress && !it.userData.isPlayed }.take(8)
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(layout.posterColumns),
-        state = gridState,
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = layout.pagePaddingDp.dp,
-            end = layout.pagePaddingDp.dp,
-            top = if (layout.navigation == NavigationPlacement.Bottom) 12.dp else MaFeiSpace.section,
-            bottom = if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(layout.gapDp.dp),
-        verticalArrangement = Arrangement.spacedBy(MaFeiSpace.section),
-    ) {
-        if (overview && items.isNotEmpty()) {
-            val hero = recentItems.firstOrNull() ?: items.first()
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Hero(hero, layout, onItem, backdropArtwork)
-            }
-        }
+    val showStatus = stale || error != null || loading || collections.isEmpty() || items.isEmpty()
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(layout.posterColumns),
+            state = gridState,
+            modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
+            contentPadding = PaddingValues(
+                start = layout.pagePaddingDp.dp,
+                end = layout.pagePaddingDp.dp,
+                top = if (layout.navigation == NavigationPlacement.Bottom) 12.dp else MaFeiSpace.section,
+                bottom = if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(layout.gapDp.dp),
+            verticalArrangement = Arrangement.spacedBy(MaFeiSpace.section),
+        ) {
         if (layout.navigation == NavigationPlacement.Bottom) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 BrandHeader(brandTitle, brandSubtitle, loading, onRetry, accountActions)
@@ -88,8 +84,16 @@ fun HomeScreen(
                 TopLine(if (overview) "首页" else selected?.name ?: "媒体库", loading, onRetry)
             }
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            StatusContent(collections, items, selectedCollection, loading, error, stale, overview, onRetry)
+        if (overview && items.isNotEmpty()) {
+            val hero = recentItems.firstOrNull() ?: items.first()
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Hero(hero, layout, onItem, backdropArtwork)
+            }
+        }
+        if (showStatus) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                StatusContent(collections, items, selectedCollection, loading, error, stale, overview, onRetry)
+            }
         }
 
         if (overview && items.isNotEmpty()) {
@@ -142,6 +146,7 @@ fun HomeScreen(
                     Text(if (loading) "正在加载…" else "加载更多内容")
                 }
             }
+        }
         }
     }
 }

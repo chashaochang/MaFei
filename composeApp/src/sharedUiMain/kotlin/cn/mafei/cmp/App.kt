@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.NavigationPlacement
+import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
+import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
+import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
@@ -255,8 +258,20 @@ private fun BrowseContent(
 
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
         val fontScale = LocalDensity.current.fontScale
-        val layout = remember(maxWidth, maxHeight, fontScale) {
-            mafeiLayout(maxWidth.value, maxHeight.value, fontScale)
+        val windowFeatures = LocalMaFeiWindowFeatures.current
+        val layout = remember(maxWidth, maxHeight, fontScale, windowFeatures) {
+            mafeiLayout(
+                mafeiAdaptiveWindow(
+                    MaFeiWindowEnvironment(
+                        widthDp = maxWidth.value,
+                        heightDp = maxHeight.value,
+                        fontScale = fontScale,
+                        occlusions = windowFeatures.occlusions,
+                        foldPosture = windowFeatures.foldPosture,
+                        displayRole = windowFeatures.displayRole,
+                    ),
+                ),
+            )
         }
         val showingDetail = state.detailId != null
         val ambientItem = state.detail

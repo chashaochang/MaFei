@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiTheme
+import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
+import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
+import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
@@ -73,8 +76,20 @@ internal fun DesktopVisualShowcase() {
             Surface(color = MaterialTheme.colorScheme.background) {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val density = LocalDensity.current
-                    val layout = remember(maxWidth, maxHeight, density.fontScale) {
-                        mafeiLayout(maxWidth.value, maxHeight.value, density.fontScale)
+                    val windowFeatures = LocalMaFeiWindowFeatures.current
+                    val layout = remember(maxWidth, maxHeight, density.fontScale, windowFeatures) {
+                        mafeiLayout(
+                            mafeiAdaptiveWindow(
+                                MaFeiWindowEnvironment(
+                                    widthDp = maxWidth.value,
+                                    heightDp = maxHeight.value,
+                                    fontScale = density.fontScale,
+                                    occlusions = windowFeatures.occlusions,
+                                    foldPosture = windowFeatures.foldPosture,
+                                    displayRole = windowFeatures.displayRole,
+                                ),
+                            ),
+                        )
                     }
                     val destinations = remember {
                         listOf(
