@@ -43,9 +43,12 @@ import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.ui.LiquidMiniPlayer
 import cn.mafei.cmp.player.ui.MiniPlayerMedia
+import cn.mafei.cmp.player.ui.NowPlayingMedia
+import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 
 /** Deterministic Desktop-only entry used for visual acceptance without a server session. */
@@ -56,6 +59,10 @@ internal fun DesktopVisualShowcase() {
     }
     var destination by remember { mutableStateOf("home") }
     var playing by remember { mutableStateOf(true) }
+    var playerExpanded by remember {
+        mutableStateOf(System.getProperty("mafei.desktop.showcasePlayer") == "true")
+    }
+    var playerPositionMs by remember { mutableStateOf(37L * 60_000L) }
     val health = rememberGlassRenderHealth()
     val gridState = rememberLazyGridState()
     val collections = remember { showcaseCollections() }
@@ -75,7 +82,32 @@ internal fun DesktopVisualShowcase() {
                             MaFeiNavItem("library", "媒体库", MaFeiGlyph.Library),
                         )
                     }
-                    MaFeiAdaptiveShell(
+                    val playerState = PlayerState(
+                        phase = if (playing) PlayerPhase.Playing else PlayerPhase.Paused,
+                        resourceId = items.first().id.value,
+                        positionMs = playerPositionMs,
+                        bufferedPositionMs = playerPositionMs + 8L * 60_000L,
+                        durationMs = items.first().runtimeMs,
+                    )
+                    if (playerExpanded) {
+                        NowPlayingScreen(
+                            media = NowPlayingMedia(
+                                id = items.first().id.value,
+                                title = items.first().title,
+                                subtitle = "2026 · 电影 · 视觉验收",
+                                description = items.first().overview,
+                            ),
+                            state = playerState,
+                            capabilities = PlayerCapabilities(),
+                            onBack = { playerExpanded = false },
+                            onTogglePlay = { playing = !playing },
+                            onRetry = { playing = true },
+                            onSeek = { playerPositionMs = it },
+                            artwork = { modifier -> ShowcaseArtwork(items.first(), modifier, false) },
+                            backdropArtwork = { modifier -> ShowcaseArtwork(items.first(), modifier, true) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else MaFeiAdaptiveShell(
                         layout = layout,
                         destinations = destinations,
                         selectedDestination = destination,
@@ -120,12 +152,6 @@ internal fun DesktopVisualShowcase() {
                             )
                         },
                         overlay = { backdrop ->
-                            val playerState = PlayerState(
-                                phase = if (playing) PlayerPhase.Playing else PlayerPhase.Paused,
-                                resourceId = items.first().id.value,
-                                positionMs = 37L * 60_000L,
-                                durationMs = items.first().runtimeMs,
-                            )
                             LiquidMiniPlayer(
                                 media = MiniPlayerMedia(
                                     id = items.first().id.value,
@@ -134,7 +160,7 @@ internal fun DesktopVisualShowcase() {
                                 ),
                                 presentation = playerState.toMiniPlayerPresentation(),
                                 backdrop = backdrop,
-                                onOpen = {},
+                                onOpen = { playerExpanded = true },
                                 onTogglePlay = { playing = !playing },
                                 artwork = { modifier -> ShowcaseArtwork(items.first(), modifier, false) },
                                 modifier = Modifier

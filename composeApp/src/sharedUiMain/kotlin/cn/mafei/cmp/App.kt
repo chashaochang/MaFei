@@ -38,9 +38,12 @@ import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.ui.LiquidMiniPlayer
 import cn.mafei.cmp.player.ui.MiniPlayerMedia
+import cn.mafei.cmp.player.ui.NowPlayingMedia
+import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 val LocalApplicationRuntime = staticCompositionLocalOf<ApplicationRuntime> {
@@ -214,6 +217,11 @@ private fun BrowseContent(
     var playingMedia by remember(session) { mutableStateOf<MediaItem?>(null) }
     var playbackBusy by remember(session) { mutableStateOf(false) }
     var playbackError by remember(session) { mutableStateOf<String?>(null) }
+    var playerExpanded by rememberSaveable(
+        session.selection.serverId.value,
+        session.selection.accountId.value,
+    ) { mutableStateOf(false) }
+    var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
     var destination by rememberSaveable(
         session.selection.serverId.value,
         session.selection.accountId.value,
@@ -227,6 +235,22 @@ private fun BrowseContent(
     LaunchedEffect(state.detailId) { playbackError = null }
     LaunchedEffect(playerState.phase) {
         if (playerState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
+        if (playerState.phase == PlayerPhase.Idle || playerState.phase == PlayerPhase.Released) {
+            playerExpanded = false
+        }
+    }
+    LaunchedEffect(pendingSeekPosition, playback) {
+        val target = pendingSeekPosition ?: return@LaunchedEffect
+        delay(90)
+        try {
+            playback?.controller?.seek(target)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            playbackError = "跳转播放位置失败，请重试"
+        } finally {
+            if (pendingSeekPosition == target) pendingSeekPosition = null
+        }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -267,6 +291,7 @@ private fun BrowseContent(
                             playbackError = "当前媒体暂时无法播放"
                         } else {
                             playingMedia = item
+                            playerExpanded = true
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -278,8 +303,59 @@ private fun BrowseContent(
                 }
             }
         }
+        val togglePlayback: () -> Unit = {
+            scope.launch {
+                try {
+                    when (playerState.phase) {
+                        PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
+                        PlayerPhase.Ended, PlayerPhase.Error -> playingMedia?.let(startPlayback)
+                        PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
+                        PlayerPhase.Idle, PlayerPhase.Loading, PlayerPhase.Released -> Unit
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    playbackError = "播放器操作失败，请重试"
+                }
+            }
+        }
+        val activeMedia = playingMedia?.takeIf { it.id.value == playerState.resourceId }
 
-        MaFeiAdaptiveShell(
+        if (playerExpanded && activeMedia != null && playback != null) {
+            NowPlayingScreen(
+                media = NowPlayingMedia(
+                    id = activeMedia.id.value,
+                    title = activeMedia.title,
+                    subtitle = activeMedia.miniPlayerSubtitle(),
+                    description = activeMedia.overview,
+                ),
+                state = playerState,
+                capabilities = playback.controller.capabilities,
+                onBack = { playerExpanded = false },
+                onTogglePlay = togglePlayback,
+                onRetry = { startPlayback(activeMedia) },
+                onSeek = { pendingSeekPosition = it },
+                artwork = { modifier ->
+                    MediaArtwork(
+                        activeMedia.preferredPoster(),
+                        activeMedia.title,
+                        artworkCache,
+                        fetchArtwork,
+                        modifier,
+                    )
+                },
+                backdropArtwork = { modifier ->
+                    MediaArtwork(
+                        activeMedia.preferredLandscape(),
+                        activeMedia.title,
+                        artworkCache,
+                        fetchArtwork,
+                        modifier,
+                    )
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else MaFeiAdaptiveShell(
             layout = layout,
             destinations = destinations,
             selectedDestination = destination,
@@ -374,7 +450,7 @@ private fun BrowseContent(
                 }
             },
             overlay = { backdrop ->
-                val media = playingMedia?.takeIf { it.id.value == playerState.resourceId }
+                val media = activeMedia
                 if (media != null) {
                     LiquidMiniPlayer(
                         media = MiniPlayerMedia(
@@ -384,25 +460,8 @@ private fun BrowseContent(
                         ),
                         presentation = playerState.toMiniPlayerPresentation(),
                         backdrop = backdrop,
-                        onOpen = {
-                            if (state.detailId != media.id) scope.launch { browser.openDetail(media.id) }
-                        },
-                        onTogglePlay = {
-                            scope.launch {
-                                try {
-                                    when (playerState.phase) {
-                                        PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
-                                        PlayerPhase.Ended, PlayerPhase.Error -> startPlayback(media)
-                                        PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
-                                        PlayerPhase.Idle, PlayerPhase.Loading, PlayerPhase.Released -> Unit
-                                    }
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (_: Exception) {
-                                    playbackError = "播放器操作失败，请重试"
-                                }
-                            }
-                        },
+                        onOpen = { playerExpanded = true },
+                        onTogglePlay = togglePlayback,
                         artwork = { modifier ->
                             MediaArtwork(media.preferredPoster(), media.title, artworkCache, fetchArtwork, modifier)
                         },
