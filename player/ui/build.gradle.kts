@@ -11,4 +11,5 @@ dependencies {
     add("commonMainApi", project(":player:api"))
     add("commonMainApi", project(":player:core"))
     add("commonMainApi", project(":common:ui"))
+    add("commonMainApi", project(":common:glass"))
 }

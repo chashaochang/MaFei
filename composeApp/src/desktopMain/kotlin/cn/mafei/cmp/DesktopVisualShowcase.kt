@@ -5,7 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -38,6 +42,11 @@ import cn.mafei.cmp.core.domain.MediaUserData
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.feature.home.HomeScreen
+import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.player.api.PlayerState
+import cn.mafei.cmp.player.ui.LiquidMiniPlayer
+import cn.mafei.cmp.player.ui.MiniPlayerMedia
+import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 
 /** Deterministic Desktop-only entry used for visual acceptance without a server session. */
 @Composable
@@ -46,6 +55,7 @@ internal fun DesktopVisualShowcase() {
         mutableStateOf(System.getProperty("mafei.desktop.showcaseDark") != "false")
     }
     var destination by remember { mutableStateOf("home") }
+    var playing by remember { mutableStateOf(true) }
     val health = rememberGlassRenderHealth()
     val gridState = rememberLazyGridState()
     val collections = remember { showcaseCollections() }
@@ -109,7 +119,41 @@ internal fun DesktopVisualShowcase() {
                                 backdropArtwork = { item, modifier -> ShowcaseArtwork(item, modifier, true) },
                             )
                         },
-                        overlay = {},
+                        overlay = { backdrop ->
+                            val playerState = PlayerState(
+                                phase = if (playing) PlayerPhase.Playing else PlayerPhase.Paused,
+                                resourceId = items.first().id.value,
+                                positionMs = 37L * 60_000L,
+                                durationMs = items.first().runtimeMs,
+                            )
+                            LiquidMiniPlayer(
+                                media = MiniPlayerMedia(
+                                    id = items.first().id.value,
+                                    title = items.first().title,
+                                    subtitle = "正在播放 · 视觉验收",
+                                ),
+                                presentation = playerState.toMiniPlayerPresentation(),
+                                backdrop = backdrop,
+                                onOpen = {},
+                                onTogglePlay = { playing = !playing },
+                                artwork = { modifier -> ShowcaseArtwork(items.first(), modifier, false) },
+                                modifier = Modifier
+                                    .align(
+                                        if (layout.navigation == cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom) {
+                                            Alignment.BottomCenter
+                                        } else {
+                                            Alignment.BottomEnd
+                                        },
+                                    )
+                                    .padding(
+                                        start = if (layout.navigation == cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom) 16.dp else 24.dp,
+                                        end = 16.dp,
+                                        bottom = if (layout.navigation == cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom) 88.dp else 24.dp,
+                                    )
+                                    .widthIn(max = 430.dp)
+                                    .fillMaxWidth(),
+                            )
+                        },
                     )
                 }
             }
