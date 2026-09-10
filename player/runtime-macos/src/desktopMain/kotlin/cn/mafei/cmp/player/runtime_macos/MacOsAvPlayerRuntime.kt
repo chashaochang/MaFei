@@ -163,7 +163,20 @@ class MacOsAvPlayerRuntime(
             return
         }
         if (released.get()) return
-        dispatcher.execute { executeOnQueue(command) }
+        // Keep capability failures synchronous and consistent with the other
+        // runtimes. The remaining commands are dispatched asynchronously and
+        // therefore cannot surface an exception to the caller.
+        if (command is RuntimeCommand.SelectTrack) {
+            throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("trackSelection")
+        }
+        try {
+            dispatcher.execute { executeOnQueue(command) }
+        } catch (rejected: java.util.concurrent.RejectedExecutionException) {
+            // Release may win the race between the flag check above and
+            // enqueueing. Once released, dropping a late command is the
+            // contract; it must not escape as a lifecycle error.
+            if (!released.get()) throw rejected
+        }
     }
 
     private fun executeOnQueue(command: RuntimeCommand) {
@@ -175,9 +188,7 @@ class MacOsAvPlayerRuntime(
             is RuntimeCommand.Seek -> if (owns(command.generation)) bridge.seek(player, command.positionMs)
             is RuntimeCommand.Stop -> stop(command.generation)
             is RuntimeCommand.Speed -> if (owns(command.generation)) bridge.setSpeed(player, command.value)
-            is RuntimeCommand.SelectTrack ->
-                // No AVFoundation track negotiation in P0; refuse honestly.
-                throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("trackSelection")
+            is RuntimeCommand.SelectTrack -> Unit // rejected synchronously in execute()
             is RuntimeCommand.AttachSurface -> {
                 val layer = surfaces.layerOf(command.handle)
                 if (player != 0L && layer != 0L) bridge.attachLayer(player, layer)
