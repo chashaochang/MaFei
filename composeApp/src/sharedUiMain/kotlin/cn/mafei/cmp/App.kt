@@ -229,6 +229,13 @@ private fun BrowseContent(
         session.selection.serverId.value,
         session.selection.accountId.value,
     ) { mutableStateOf(HomeDestination) }
+    val chromeCompactProgress by remember(destination, homeGridState, libraryGridState) {
+        derivedStateOf {
+            val activeGrid = if (destination == HomeDestination) homeGridState else libraryGridState
+            if (activeGrid.firstVisibleItemIndex > 0) 1f
+            else (activeGrid.firstVisibleItemScrollOffset / 160f).coerceIn(0f, 1f)
+        }
+    }
 
     LaunchedEffect(browser) { browser.start() }
     LaunchedEffect(state.selectedCollection) {
@@ -388,6 +395,7 @@ private fun BrowseContent(
             },
             accountLabel = "${session.connection.account.displayName}\n${session.connection.server.name}",
             showBottomNavigation = !showingDetail,
+            bottomNavigationCompactProgress = { chromeCompactProgress },
             background = {
                 AmbientBackground(
                     item = ambientItem,
@@ -478,6 +486,7 @@ private fun BrowseContent(
                         backdrop = backdrop,
                         onOpen = { playerExpanded = true },
                         onTogglePlay = togglePlayback,
+                        compactProgress = { chromeCompactProgress },
                         artwork = { modifier ->
                             MediaArtwork(media.preferredPoster(), media.title, artworkCache, fetchArtwork, modifier)
                         },

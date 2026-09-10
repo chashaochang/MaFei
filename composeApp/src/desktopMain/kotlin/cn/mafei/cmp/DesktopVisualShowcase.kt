@@ -14,6 +14,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,12 @@ internal fun DesktopVisualShowcase() {
     var playerPositionMs by remember { mutableStateOf(37L * 60_000L) }
     val health = rememberGlassRenderHealth()
     val gridState = rememberLazyGridState()
+    val chromeCompactProgress by remember(gridState) {
+        derivedStateOf {
+            if (gridState.firstVisibleItemIndex > 0) 1f
+            else (gridState.firstVisibleItemScrollOffset / 160f).coerceIn(0f, 1f)
+        }
+    }
     val collections = remember { showcaseCollections() }
     val items = remember { showcaseItems() }
 
@@ -132,6 +139,7 @@ internal fun DesktopVisualShowcase() {
                         },
                         selectedLibrary = collections.first().id.value,
                         onLibrary = { destination = "library" },
+                        bottomNavigationCompactProgress = { chromeCompactProgress },
                         accountLabel = "视觉验收账号\n本地固定数据",
                         background = { ShowcaseAmbientBackground() },
                         accountActions = {
@@ -182,6 +190,7 @@ internal fun DesktopVisualShowcase() {
                                 backdrop = backdrop,
                                 onOpen = { playerExpanded = true },
                                 onTogglePlay = { playing = !playing },
+                                compactProgress = { chromeCompactProgress },
                                 artwork = { modifier -> ShowcaseArtwork(items.first(), modifier, false) },
                                 modifier = Modifier
                                     .align(

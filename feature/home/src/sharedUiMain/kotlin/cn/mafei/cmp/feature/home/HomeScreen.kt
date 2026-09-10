@@ -70,6 +70,11 @@ fun HomeScreen(
         it.mediaType == MediaType.Episode && !it.userData.isPlayed && !it.userData.hasProgress
     }.take(8)
     var selectedFeedKey by rememberSaveable { mutableStateOf(RecentFeedKey) }
+    LaunchedEffect(collections) {
+        if (selectedFeedKey != RecentFeedKey && collections.none { it.id.value == selectedFeedKey }) {
+            selectedFeedKey = RecentFeedKey
+        }
+    }
     val latestItems = if (selectedFeedKey == RecentFeedKey) recentItems else {
         items.filter { it.collectionId?.value == selectedFeedKey }
     }
@@ -116,6 +121,11 @@ fun HomeScreen(
                     accountActions = accountActions,
                     autoplay = heroAutoplay,
                 )
+            }
+        }
+        if (overview && loading && items.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                HomeHeroPlaceholder(layout)
             }
         }
         if (showStatus) {
@@ -216,6 +226,46 @@ private fun TopLine(title: String, loading: Boolean, onRetry: () -> Unit) {
         Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineMedium)
         IconButton(onClick = onRetry, enabled = !loading, modifier = Modifier.size(MaFeiSpace.touchTarget)) {
             MaFeiIcon(MaFeiGlyph.Refresh, Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeHeroPlaceholder(layout: MaFeiLayout) {
+    Box(
+        Modifier
+            .then(
+                if (layout.navigation == NavigationPlacement.Bottom) {
+                    Modifier.requiredWidth((layout.gridWidthDp + layout.pagePaddingDp * 2f).dp)
+                } else Modifier.fillMaxWidth()
+            )
+            .height(layout.heroHeightDp.dp)
+            .clip(
+                if (layout.navigation == NavigationPlacement.Bottom) {
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+                } else RoundedCornerShape(26.dp)
+            )
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .82f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = .45f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .62f),
+                    ),
+                ),
+            ),
+    ) {
+        Column(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth(.72f)
+                .padding(start = if (layout.horizontalHero) 36.dp else 18.dp, bottom = 38.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.fillMaxWidth(.62f).height(30.dp).clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .12f)))
+            Box(Modifier.fillMaxWidth(.42f).height(14.dp).clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .08f)))
+            Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .07f)))
         }
     }
 }
