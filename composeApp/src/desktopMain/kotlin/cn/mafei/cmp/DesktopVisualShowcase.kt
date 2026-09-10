@@ -152,9 +152,14 @@ internal fun DesktopVisualShowcase() {
                                 layout = layout,
                                 onCollection = {},
                                 onItem = {},
+                                onPlay = {
+                                    playing = true
+                                    playerExpanded = true
+                                },
                                 onRetry = {},
                                 onLoadMore = {},
                                 onOpenLibrary = { destination = "library" },
+                                heroAutoplay = false,
                                 accountActions = {
                                     IconButton(onClick = { dark = !dark }) {
                                         MaFeiIcon(MaFeiGlyph.Account, Modifier.size(20.dp))
@@ -273,7 +278,11 @@ private fun showcaseItems(): List<MediaItem> {
             serverId = server,
             provider = ProviderKind.Jellyfin,
             title = title,
-            mediaType = if (index % 3 == 1) MediaType.Series else MediaType.Movie,
+            mediaType = when {
+                index in 3..5 -> MediaType.Episode
+                index % 3 == 1 -> MediaType.Series
+                else -> MediaType.Movie
+            },
             overview = "在熟悉与未知之间，一段关于选择、陪伴和远方的故事缓缓展开。",
             collectionId = CollectionId(if (index % 3 == 1) "series" else "movies"),
             year = 2026 - index,
@@ -282,6 +291,7 @@ private fun showcaseItems(): List<MediaItem> {
             genres = listOf("剧情", if (index % 2 == 0) "科幻" else "悬疑"),
             userData = when (index) {
                 0 -> MediaUserData(playbackPositionMs = 37L * 60_000L)
+                1 -> MediaUserData(playbackPositionMs = 18L * 60_000L)
                 2 -> MediaUserData(isFavorite = true)
                 4 -> MediaUserData(isPlayed = true)
                 else -> MediaUserData()

@@ -64,9 +64,9 @@ fun mafeiLayout(widthDp: Float, heightDp: Float, fontScale: Float = 1f): MaFeiLa
         family, navigation, navWidth, padding, contentMaxWidth, gridWidth,
         columns, gap,
         heroHeightDp = when {
-            width < 600f -> (height * .34f).coerceIn(220f, 320f)
-            height < 520f -> (height * .34f).coerceIn(180f, 280f)
-            else -> (height * .40f).coerceIn(220f, 360f)
+            height < 480f -> (height * .58f).coerceIn(210f, 280f)
+            family == MaFeiLayoutFamily.Phone -> (height * .51f).coerceIn(360f, 460f)
+            else -> (height * .46f).coerceIn(320f, 440f)
         },
         horizontalHero = gridWidth >= 720f * scale,
     )

@@ -1,19 +1,24 @@
 package cn.mafei.cmp.feature.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,11 +29,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.*
-import cn.mafei.cmp.common.glass.captureGlassBackdrop
-import cn.mafei.cmp.common.glass.components.LiquidButton
-import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.*
+
+private const val RecentFeedKey = "__home_recent__"
+private const val HeroAutoplayMillis = 6_500
 
 /** Stateless responsive browser. Session, insets and destination state stay in the shell. */
 @Composable
@@ -44,12 +49,14 @@ fun HomeScreen(
     layout: MaFeiLayout,
     onCollection: (MediaCollection) -> Unit,
     onItem: (MediaItem) -> Unit,
+    onPlay: ((MediaItem) -> Unit)? = null,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onOpenLibrary: () -> Unit,
     accountActions: (@Composable () -> Unit)? = null,
     brandTitle: String = "马飞",
     brandSubtitle: String = "我的影院",
+    heroAutoplay: Boolean = true,
     modifier: Modifier = Modifier,
     gridState: LazyGridState,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
@@ -59,35 +66,56 @@ fun HomeScreen(
     val recentItems = items.sortedWith(compareByDescending<MediaItem> { it.dateAddedEpochMs ?: Long.MIN_VALUE }
         .thenBy { it.title })
     val progressItems = items.filter { it.userData.hasProgress && !it.userData.isPlayed }.take(8)
+    val nextUpItems = items.filter {
+        it.mediaType == MediaType.Episode && !it.userData.isPlayed && !it.userData.hasProgress
+    }.take(8)
+    var selectedFeedKey by rememberSaveable { mutableStateOf(RecentFeedKey) }
+    val latestItems = if (selectedFeedKey == RecentFeedKey) recentItems else {
+        items.filter { it.collectionId?.value == selectedFeedKey }
+    }
+    val latestColumns = when (layout.family) {
+        MaFeiLayoutFamily.Phone -> 3
+        MaFeiLayoutFamily.Tablet -> if (layout.gridWidthDp < 760f) 3 else 4
+        MaFeiLayoutFamily.Desktop -> 5
+    }
     val showStatus = stale || error != null || loading || collections.isEmpty() || items.isEmpty()
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(layout.posterColumns),
+            columns = GridCells.Fixed(if (overview) latestColumns else layout.posterColumns),
             state = gridState,
             modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
             contentPadding = PaddingValues(
                 start = layout.pagePaddingDp.dp,
                 end = layout.pagePaddingDp.dp,
-                top = if (layout.navigation == NavigationPlacement.Bottom) 12.dp else MaFeiSpace.section,
+                top = when {
+                    layout.navigation != NavigationPlacement.Bottom -> MaFeiSpace.section
+                    overview -> 0.dp
+                    else -> 12.dp
+                },
                 bottom = if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(layout.gapDp.dp),
             verticalArrangement = Arrangement.spacedBy(MaFeiSpace.section),
         ) {
-        if (layout.navigation == NavigationPlacement.Bottom) {
+        if (!overview) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                BrandHeader(brandTitle, brandSubtitle, loading, onRetry, accountActions)
-            }
-        }
-        if (!overview || layout.navigation != NavigationPlacement.Bottom) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                TopLine(if (overview) "首页" else selected?.name ?: "媒体库", loading, onRetry)
+                TopLine(selected?.name ?: "媒体库", loading, onRetry)
             }
         }
         if (overview && items.isNotEmpty()) {
-            val hero = recentItems.firstOrNull() ?: items.first()
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Hero(hero, layout, onItem, backdropArtwork)
+                RecommendationHero(
+                    items = recentItems.take(6),
+                    layout = layout,
+                    onItem = onItem,
+                    artwork = backdropArtwork,
+                    brandTitle = brandTitle,
+                    brandSubtitle = brandSubtitle,
+                    loading = loading,
+                    onRetry = onRetry,
+                    accountActions = accountActions,
+                    autoplay = heroAutoplay,
+                )
             }
         }
         if (showStatus) {
@@ -99,11 +127,38 @@ fun HomeScreen(
         if (overview && items.isNotEmpty()) {
             if (progressItems.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    MediaShelf("继续观看", progressItems, onItem, backdropArtwork, onOpenLibrary, layout)
+                    HomeMediaShelf(
+                        title = "继续观看",
+                        items = progressItems,
+                        onItem = onPlay ?: onItem,
+                        artwork = backdropArtwork,
+                        showProgress = true,
+                        layout = layout,
+                    )
+                }
+            }
+            if (nextUpItems.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    HomeMediaShelf(
+                        title = "接下来",
+                        items = nextUpItems,
+                        onItem = onPlay ?: onItem,
+                        artwork = backdropArtwork,
+                        showProgress = false,
+                        layout = layout,
+                    )
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHeading("最近加入", selected?.name, onOpenLibrary)
+                LatestFeedSelector(
+                    collections = collections,
+                    selectedKey = selectedFeedKey,
+                    onSelected = { key ->
+                        selectedFeedKey = key
+                        collections.firstOrNull { it.id.value == key }?.let(onCollection)
+                    },
+                    onOpenLibrary = onOpenLibrary,
+                )
             }
         } else if (!overview) {
             if (collections.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -130,7 +185,7 @@ fun HomeScreen(
         }
 
         if (loading && items.isEmpty()) items(6) { MediaPlaceholder() }
-        val displayed = if (overview) recentItems.take((layout.posterColumns * 2).coerceAtLeast(6)) else items
+        val displayed = if (overview) latestItems else items
         items(displayed, key = { it.id.value }) { item ->
             MediaCard(
                 item.title, metadata(item), onClick = { onItem(item) },
@@ -148,31 +203,6 @@ fun HomeScreen(
             }
         }
         }
-    }
-}
-
-@Composable
-private fun BrandHeader(
-    title: String,
-    subtitle: String,
-    loading: Boolean,
-    onRetry: () -> Unit,
-    accountActions: (@Composable () -> Unit)?,
-) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium)
-            Text(subtitle.uppercase(), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onRetry, enabled = !loading, modifier = Modifier.size(MaFeiSpace.touchTarget)) {
-            MaFeiIcon(MaFeiGlyph.Refresh, Modifier.size(20.dp))
-        }
-        accountActions?.invoke()
     }
 }
 
@@ -213,141 +243,254 @@ private fun StatusContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Hero(
-    item: MediaItem,
+private fun RecommendationHero(
+    items: List<MediaItem>,
     layout: MaFeiLayout,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    brandTitle: String,
+    brandSubtitle: String,
+    loading: Boolean,
+    onRetry: () -> Unit,
+    accountActions: (@Composable () -> Unit)?,
+    autoplay: Boolean,
 ) {
-    val backdrop = rememberGlassBackdrop()
+    val pagerState = rememberPagerState(pageCount = { items.size })
+    val autoplayProgress = remember { Animatable(0f) }
+    LaunchedEffect(pagerState.currentPage, items.size) {
+        autoplayProgress.snapTo(0f)
+        if (autoplay && items.size > 1) {
+            autoplayProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
+            )
+            pagerState.animateScrollToPage((pagerState.currentPage + 1) % items.size)
+        }
+    }
     Box(
         Modifier
             .then(
                 if (layout.navigation == NavigationPlacement.Bottom) {
-                    Modifier.offset(x = (-layout.pagePaddingDp).dp)
-                        .requiredWidth((layout.gridWidthDp + layout.pagePaddingDp * 2f).dp)
+                    // The grid centres a child that is wider than its padded content area.
+                    // Requiring the full viewport width is therefore enough to bleed the
+                    // hero to both edges; an extra negative offset clips narrow windows.
+                    Modifier.requiredWidth((layout.gridWidthDp + layout.pagePaddingDp * 2f).dp)
                 } else Modifier.fillMaxWidth()
             )
             .height(layout.heroHeightDp.dp)
             .clip(
                 if (layout.navigation == NavigationPlacement.Bottom) {
-                    RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp)
-                } else MaFeiShape.panel
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
+                } else RoundedCornerShape(26.dp)
             ),
     ) {
-        Box(
-            Modifier.fillMaxSize().captureGlassBackdrop(backdrop),
-        ) {
-            if (artwork != null) artwork(item, Modifier.fillMaxSize()) else TextPoster(item.title, Modifier.fillMaxSize())
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            val item = items[page]
             Box(
-                Modifier.fillMaxSize().background(
-                    if (layout.horizontalHero) {
-                        Brush.horizontalGradient(
-                            listOf(Color(0xD40A141D), Color(0x740A141D), Color(0x120A141D), Color.Transparent),
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            listOf(Color(0x080A141D), Color(0x140A141D), Color(0xC80A141D)),
-                        )
-                    },
+                Modifier.fillMaxSize().mafeiInteractive(
+                    onClick = { onItem(item) },
+                    radiusDp = if (layout.navigation == NavigationPlacement.Bottom) 0f else 26f,
+                    label = "查看${item.title}",
                 ),
-            )
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Transparent, Color(0x700A141D)),
-                    ),
-                ),
-            )
-        }
-        Column(
-            Modifier.align(if (layout.horizontalHero) Alignment.CenterStart else Alignment.BottomStart)
-                .widthIn(max = if (layout.horizontalHero) 540.dp else 680.dp)
-                .padding(if (layout.horizontalHero) 34.dp else 22.dp),
-            verticalArrangement = Arrangement.spacedBy(if (layout.horizontalHero) 12.dp else 8.dp),
-        ) {
-            Text(
-                if (item.userData.hasProgress) "继续观看" else "最近加入",
-                color = Color.White.copy(alpha = .72f),
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(item.title, color = Color.White,
-                style = if (layout.horizontalHero) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(metadata(item), color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.bodyLarge)
-            if (layout.horizontalHero) item.overview?.takeIf { it.isNotBlank() }?.let {
-                Text(it, color = Color.White.copy(alpha = .88f), style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            LiquidButton(
-                onClick = { onItem(item) },
-                backdrop = backdrop,
             ) {
-                Text("查看详情", color = Color.White, style = MaterialTheme.typography.labelLarge)
-                MaFeiIcon(MaFeiGlyph.Arrow, Modifier.size(18.dp), Color.White)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MediaShelf(
-    title: String,
-    items: List<MediaItem>,
-    onItem: (MediaItem) -> Unit,
-    artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
-    onAll: () -> Unit,
-    layout: MaFeiLayout,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeading(title, null, onAll)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            itemsIndexed(items, key = { _, item -> item.id.value }) { index, item ->
-                val width = when {
-                    layout.horizontalHero -> 276.dp
-                    index == 0 -> 292.dp
-                    else -> 224.dp
-                }
+                if (artwork != null) artwork(item, Modifier.fillMaxSize())
+                else TextPoster(item.title, Modifier.fillMaxSize())
+                Box(
+                    Modifier.fillMaxSize().background(
+                        if (layout.horizontalHero) {
+                            Brush.horizontalGradient(
+                                listOf(Color(0xDA071019), Color(0x8F071019), Color(0x16071019), Color.Transparent),
+                            )
+                        } else {
+                            Brush.verticalGradient(
+                                listOf(Color(0x16071019), Color(0x16071019), Color(0xE3071019)),
+                            )
+                        },
+                    ),
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, Color(0x8F071019))),
+                    ),
+                )
                 Column(
-                    Modifier.width(width).mafeiInteractive({ onItem(item) }, label = "查看${item.title}"),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    Modifier.align(if (layout.horizontalHero) Alignment.CenterStart else Alignment.BottomStart)
+                        .widthIn(max = if (layout.horizontalHero) 560.dp else 680.dp)
+                        .padding(
+                            start = if (layout.horizontalHero) 36.dp else 18.dp,
+                            end = 20.dp,
+                            bottom = if (items.size > 1) 38.dp else 24.dp,
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(if (layout.horizontalHero) 9.dp else 6.dp),
                 ) {
-                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaFeiShape.poster)) {
-                        if (artwork != null) artwork(item, Modifier.fillMaxSize()) else TextPoster(item.title, Modifier.fillMaxSize())
-                        Box(Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(listOf(Color.Transparent, Color(0xC90A141D)))
-                        ))
-                        progress(item)?.let { value ->
-                            LinearProgressIndicator({ value }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
-                                color = MaterialTheme.colorScheme.primary, trackColor = Color.Black.copy(alpha = .45f))
-                        }
-                        Column(
-                            Modifier.align(Alignment.BottomStart).padding(12.dp).padding(bottom = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(item.title, color = Color.White, style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(progressLabel(item), color = Color.White.copy(alpha = .78f),
-                                style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+                    Text(
+                        item.title,
+                        color = Color.White,
+                        style = if (layout.horizontalHero) {
+                            MaterialTheme.typography.displaySmall
+                        } else {
+                            MaterialTheme.typography.headlineLarge
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        metadata(item),
+                        color = Color.White.copy(alpha = .82f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    item.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                        Text(
+                            overview,
+                            color = Color.White.copy(alpha = .78f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
         }
+        if (layout.family == MaFeiLayoutFamily.Phone) {
+            Row(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(brandTitle, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        brandSubtitle,
+                        color = Color.White.copy(alpha = .72f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                IconButton(
+                    onClick = onRetry,
+                    enabled = !loading,
+                    modifier = Modifier.size(MaFeiSpace.touchTarget),
+                ) {
+                    MaFeiIcon(MaFeiGlyph.Refresh, Modifier.size(20.dp), Color.White)
+                }
+                if (accountActions != null) {
+                    CompositionLocalProvider(LocalContentColor provides Color.White) { accountActions() }
+                }
+            }
+        }
+        if (items.size > 1) {
+            Row(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .padding(horizontal = if (layout.horizontalHero) 36.dp else 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items.indices.forEach { index ->
+                    LinearProgressIndicator(
+                        progress = {
+                            when {
+                                index < pagerState.currentPage -> 1f
+                                index == pagerState.currentPage -> autoplayProgress.value
+                                else -> 0f
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = .22f),
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun SectionHeading(title: String, subtitle: String?, onAll: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+private fun HomeMediaShelf(
+    title: String,
+    items: List<MediaItem>,
+    onItem: (MediaItem) -> Unit,
+    artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    showProgress: Boolean,
+    layout: MaFeiLayout,
+) {
+    val width = if (layout.family == MaFeiLayoutFamily.Phone) 160.dp else 240.dp
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-        subtitle?.let { Text(" · $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = onAll, modifier = Modifier.heightIn(min = MaFeiSpace.touchTarget)) {
-            Text("查看全部")
-            MaFeiIcon(MaFeiGlyph.Arrow, Modifier.size(16.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp)) {
+            items(items, key = { it.id.value }) { item ->
+                Column(
+                    Modifier.width(width).mafeiInteractive({ onItem(item) }, label = "查看${item.title}"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaFeiShape.poster)) {
+                        if (artwork != null) artwork(item, Modifier.fillMaxSize()) else TextPoster(item.title, Modifier.fillMaxSize())
+                        if (showProgress) progress(item)?.let { value ->
+                            LinearProgressIndicator({ value }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
+                                color = MaterialTheme.colorScheme.primary, trackColor = Color.Black.copy(alpha = .36f))
+                        }
+                    }
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        if (showProgress) progressLabel(item) else metadata(item),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun LatestFeedSelector(
+    collections: List<MediaCollection>,
+    selectedKey: String,
+    onSelected: (String) -> Unit,
+    onOpenLibrary: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            item(key = RecentFeedKey) {
+                FeedTab("最近添加", selectedKey == RecentFeedKey) { onSelected(RecentFeedKey) }
+            }
+            items(collections, key = { it.id.value }) { collection ->
+                FeedTab(collection.name, selectedKey == collection.id.value) { onSelected(collection.id.value) }
+            }
+        }
+        IconButton(onClick = onOpenLibrary, modifier = Modifier.size(MaFeiSpace.touchTarget)) {
+            MaFeiIcon(MaFeiGlyph.Arrow, Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun FeedTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.height(40.dp).mafeiInteractive(onClick, radiusDp = 8f, label = label)
+            .padding(horizontal = 2.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label,
+            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (selected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Box(
+            Modifier.width(if (selected) 22.dp else 0.dp).height(3.dp).clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
     }
 }
 

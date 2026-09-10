@@ -438,6 +438,7 @@ private fun BrowseContent(
                         layout = layout,
                         onCollection = { collection -> scope.launch { browser.select(collection.id) } },
                         onItem = { item -> scope.launch { browser.openDetail(item.id) } },
+                        onPlay = startPlayback,
                         onRetry = { scope.launch { browser.refresh() } },
                         onLoadMore = { scope.launch { browser.loadMore() } },
                         onOpenLibrary = { destination = LibraryDestination },
