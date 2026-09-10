@@ -14,7 +14,7 @@ import cn.mafei.cmp.common.ui.ScreenHeading
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.core.domain.MediaItem
 
-/** Read-only detail; never offers a playback action before an actual player is wired. */
+/** Media detail; playback is exposed only when the composition root supplies a real player action. */
 @Composable
 fun DetailScreen(
     item: MediaItem?,
@@ -22,6 +22,9 @@ fun DetailScreen(
     error: String?,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onPlay: (() -> Unit)? = null,
+    playbackBusy: Boolean = false,
+    playbackError: String? = null,
     modifier: Modifier = Modifier,
     stale: Boolean = false,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
@@ -41,13 +44,15 @@ fun DetailScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                             if (artwork != null) artwork(item, Modifier.width(220.dp).aspectRatio(2f / 3f))
                             else TextPoster(item.title, Modifier.width(220.dp).aspectRatio(2f / 3f))
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { Summary(item) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Summary(item, onPlay, playbackBusy, playbackError)
+                            }
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                             if (artwork != null) artwork(item, Modifier.width(156.dp).aspectRatio(2f / 3f))
                             else TextPoster(item.title, Modifier.width(156.dp).aspectRatio(2f / 3f))
-                            Summary(item)
+                            Summary(item, onPlay, playbackBusy, playbackError)
                         }
                     }
                 }
@@ -72,7 +77,12 @@ fun DetailScreen(
 }
 
 @Composable
-private fun Summary(item: MediaItem) {
+private fun Summary(
+    item: MediaItem,
+    onPlay: (() -> Unit)?,
+    playbackBusy: Boolean,
+    playbackError: String?,
+) {
     ScreenHeading(item.title, item.originalTitle?.takeIf { it != item.title })
     val metadata = listOfNotNull(
         item.year?.toString(),
@@ -83,6 +93,28 @@ private fun Summary(item: MediaItem) {
     if (item.genres.isNotEmpty()) Text(item.genres.joinToString(" / "), style = MaterialTheme.typography.bodyMedium)
     if (item.userData.isFavorite) Text("已收藏", color = MaterialTheme.colorScheme.primary)
     if (item.userData.isPlayed) Text("已看", color = MaterialTheme.colorScheme.primary)
-    Text("播放器尚未接入，本轮可浏览媒体信息。", style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (item.canPlay) {
+        if (onPlay != null) {
+            Button(onClick = onPlay, enabled = !playbackBusy, modifier = Modifier.heightIn(min = 48.dp)) {
+                if (playbackBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (item.userData.playbackPositionMs > 0L) "继续播放" else "播放")
+            }
+        } else {
+            Text(
+                "此设备暂时无法播放",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    playbackError?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
 }

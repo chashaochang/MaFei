@@ -34,6 +34,11 @@ import cn.mafei.cmp.feature.connect.ConnectScreen
 import cn.mafei.cmp.feature.detail.DetailScreen
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
+import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.player.api.PlayerState
+import cn.mafei.cmp.player.ui.LiquidMiniPlayer
+import cn.mafei.cmp.player.ui.MiniPlayerMedia
+import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -204,6 +209,11 @@ private fun BrowseContent(
     val fetchArtwork: suspend (MediaImage) -> ByteArray? = remember(session) {
         { image -> runtime.loadArtwork(session, image) }
     }
+    val playback = remember(session) { runtime.playback(session) }
+    val playerState = if (playback == null) PlayerState() else playback.controller.state.collectAsState().value
+    var playingMedia by remember(session) { mutableStateOf<MediaItem?>(null) }
+    var playbackBusy by remember(session) { mutableStateOf(false) }
+    var playbackError by remember(session) { mutableStateOf<String?>(null) }
     var destination by rememberSaveable(
         session.selection.serverId.value,
         session.selection.accountId.value,
@@ -213,6 +223,10 @@ private fun BrowseContent(
     LaunchedEffect(state.selectedCollection) {
         homeGridState.scrollToItem(0)
         libraryGridState.scrollToItem(0)
+    }
+    LaunchedEffect(state.detailId) { playbackError = null }
+    LaunchedEffect(playerState.phase) {
+        if (playerState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -238,6 +252,31 @@ private fun BrowseContent(
         val selectDestination: (String) -> Unit = { next ->
             if (showingDetail) browser.back()
             destination = next
+        }
+        val startPlayback: (MediaItem) -> Unit = { item ->
+            if (playback != null && !playbackBusy) {
+                playbackBusy = true
+                playbackError = null
+                scope.launch {
+                    try {
+                        val generation = playback.play(
+                            itemId = item.id,
+                            resumePositionMs = item.playbackResumePositionMs(),
+                        )
+                        if (generation == null) {
+                            playbackError = "当前媒体暂时无法播放"
+                        } else {
+                            playingMedia = item
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        playbackError = "播放准备失败，请重试"
+                    } finally {
+                        playbackBusy = false
+                    }
+                }
+            }
         }
 
         MaFeiAdaptiveShell(
@@ -285,6 +324,11 @@ private fun BrowseContent(
                         onRetry = {
                             state.detailId?.let { id -> scope.launch { browser.openDetail(id) } }
                         },
+                        onPlay = state.detail?.takeIf { it.canPlay && playback != null }?.let { item ->
+                            { startPlayback(item) }
+                        },
+                        playbackBusy = playbackBusy,
+                        playbackError = playbackError,
                         modifier = Modifier.fillMaxSize(),
                         artwork = { item, modifier ->
                             MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
@@ -329,7 +373,54 @@ private fun BrowseContent(
                     )
                 }
             },
-            overlay = {},
+            overlay = { backdrop ->
+                val media = playingMedia?.takeIf { it.id.value == playerState.resourceId }
+                if (media != null) {
+                    LiquidMiniPlayer(
+                        media = MiniPlayerMedia(
+                            id = media.id.value,
+                            title = media.title,
+                            subtitle = media.miniPlayerSubtitle(),
+                        ),
+                        presentation = playerState.toMiniPlayerPresentation(),
+                        backdrop = backdrop,
+                        onOpen = {
+                            if (state.detailId != media.id) scope.launch { browser.openDetail(media.id) }
+                        },
+                        onTogglePlay = {
+                            scope.launch {
+                                try {
+                                    when (playerState.phase) {
+                                        PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
+                                        PlayerPhase.Ended, PlayerPhase.Error -> startPlayback(media)
+                                        PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
+                                        PlayerPhase.Idle, PlayerPhase.Loading, PlayerPhase.Released -> Unit
+                                    }
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    playbackError = "播放器操作失败，请重试"
+                                }
+                            }
+                        },
+                        artwork = { modifier ->
+                            MediaArtwork(media.preferredPoster(), media.title, artworkCache, fetchArtwork, modifier)
+                        },
+                        modifier = Modifier
+                            .align(
+                                if (layout.navigation == NavigationPlacement.Bottom) Alignment.BottomCenter
+                                else Alignment.BottomEnd,
+                            )
+                            .padding(
+                                start = if (layout.navigation == NavigationPlacement.Bottom) 16.dp else 24.dp,
+                                end = 16.dp,
+                                bottom = if (layout.navigation == NavigationPlacement.Bottom && !showingDetail) 88.dp else 24.dp,
+                            )
+                            .widthIn(max = 430.dp)
+                            .fillMaxWidth(),
+                    )
+                }
+            },
         )
     }
 }
@@ -493,6 +584,23 @@ private fun MediaItem.preferredLandscape(): MediaImage? =
     images.firstOrNull { it.kind == ImageKind.Backdrop }
         ?: images.firstOrNull { it.kind == ImageKind.Thumb }
         ?: preferredPoster()
+
+private fun MediaItem.playbackResumePositionMs(): Long {
+    val saved = userData.playbackPositionMs.coerceAtLeast(0L)
+    val duration = runtimeMs?.takeIf { it > 0L } ?: return saved
+    return saved.takeIf { it < (duration - 10_000L).coerceAtLeast(0L) } ?: 0L
+}
+
+private fun MediaItem.miniPlayerSubtitle(): String = listOfNotNull(
+    year?.toString(),
+    when (mediaType) {
+        cn.mafei.cmp.core.domain.MediaType.Movie -> "电影"
+        cn.mafei.cmp.core.domain.MediaType.Series -> "剧集"
+        cn.mafei.cmp.core.domain.MediaType.Episode -> "单集"
+        cn.mafei.cmp.core.domain.MediaType.Audio -> "音乐"
+        else -> null
+    },
+).joinToString(" · ")
 
 private const val HomeDestination = "home"
 private const val LibraryDestination = "library"
