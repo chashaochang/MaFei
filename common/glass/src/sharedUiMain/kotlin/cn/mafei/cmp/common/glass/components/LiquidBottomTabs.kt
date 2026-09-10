@@ -20,8 +20,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -51,7 +51,6 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -141,12 +140,12 @@ fun LiquidBottomTabs(
                 }
             )
         }
-        LaunchedEffect(tabsCount) {
-            snapshotFlow { selectedTabIndex() }
-                .distinctUntilChanged()
-                .collectLatest { index ->
-                    currentIndex = index.fastCoerceIn(0, tabsCount - 1)
-                }
+        // Read the resolved value as a Compose state, not as a remembered
+        // callback key. Callers commonly pass `{ selectedIndex }`, which is a
+        // new lambda on every recomposition; keying the effect by that lambda
+        // can either restart too often or capture an obsolete index.
+        LaunchedEffect(requestedIndex, tabsCount) {
+            currentIndex = requestedIndex
         }
         LaunchedEffect(dampedDragAnimation) {
             snapshotFlow { currentIndex }
