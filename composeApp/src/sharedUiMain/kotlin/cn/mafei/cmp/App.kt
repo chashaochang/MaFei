@@ -51,7 +51,19 @@ fun App(runtime: ApplicationRuntime, onThemeChanged: (Boolean) -> Unit = {}) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(runtime) { runtime.sessions.start() }
+    LaunchedEffect(runtime) {
+        try {
+            // Legacy readers are optional per platform. When a platform reader
+            // is supplied, migration must precede normal session restoration so
+            // the imported current account enters the same activation path.
+            runtime.migrateLegacyData()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            error = "旧版本数据迁移未完成，请稍后重试"
+        }
+        runtime.sessions.start()
+    }
     CompositionLocalProvider(LocalApplicationRuntime provides runtime) {
         if (probe) {
             Column(Modifier.fillMaxSize()) {
