@@ -13,19 +13,30 @@ import cn.mafei.cmp.platform.http_macos.createMacOsHttpTransport
 import cn.mafei.cmp.player.runtime_macos.createMacOsPlayerRuntime
 
 fun main() = application {
-    val runtime = ProcessApplication.getOrCreate {
-        ApplicationRuntime(createDesktopSettings(),
-            createDesktopCredentialStore(), createMacOsHttpTransport(),
-            playerRuntimeFactory = { createMacOsPlayerRuntime() })
+    val visualShowcase = System.getProperty("mafei.desktop.visualShowcase") == "true"
+    val runtime = if (visualShowcase) null else ProcessApplication.getOrCreate {
+        ApplicationRuntime(
+            createDesktopSettings(),
+            createDesktopCredentialStore(),
+            createMacOsHttpTransport(),
+            playerRuntimeFactory = { createMacOsPlayerRuntime() },
+        )
     }
     Window(
         state = rememberWindowState(
             width = (System.getProperty("mafei.desktop.windowWidth")?.toIntOrNull()?.coerceIn(320, 2400) ?: 1180).dp,
             height = (System.getProperty("mafei.desktop.windowHeight")?.toIntOrNull()?.coerceIn(400, 1600) ?: 780).dp,
         ),
-        onCloseRequest = { runtime.requestClose { exitApplication() } },
-        title = if (usesDesktopDevelopmentStorage()) "MaFei · 开发测试（本地登录态）" else "MaFei",
+        onCloseRequest = {
+            if (runtime == null) exitApplication()
+            else runtime.requestClose { exitApplication() }
+        },
+        title = when {
+            visualShowcase -> "MaFei · 视觉验收"
+            usesDesktopDevelopmentStorage() -> "MaFei · 开发测试（本地登录态）"
+            else -> "MaFei"
+        },
     ) {
-        App(runtime)
+        if (runtime == null) DesktopVisualShowcase() else App(runtime)
     }
 }

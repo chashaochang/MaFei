@@ -248,6 +248,9 @@ compose.resources {
 // Explicit opt-in for local Mac acceptance only. Default and release remain Keychain-backed.
 val desktopDevelopmentStorage = providers.gradleProperty("mafei.desktopDevelopmentStorage")
     .map { it == "true" }.getOrElse(false)
+val desktopVisualShowcase = providers.gradleProperty("mafei.desktop.visualShowcase")
+    .map { it == "true" }.getOrElse(false)
+val desktopShowcaseDark = providers.gradleProperty("mafei.desktop.showcaseDark").orNull
 val desktopWindowWidth = providers.gradleProperty("mafei.desktop.windowWidth").orNull
 val desktopWindowHeight = providers.gradleProperty("mafei.desktop.windowHeight").orNull
 if (desktopDevelopmentStorage) {
@@ -263,6 +266,10 @@ compose.desktop {
     application {
         mainClass = "cn.mafei.cmp.MainKt"
         if (desktopDevelopmentStorage) jvmArgs += "-Dmafei.desktop.developmentStorage=true"
+        if (desktopVisualShowcase) jvmArgs += "-Dmafei.desktop.visualShowcase=true"
+        desktopShowcaseDark?.let { value ->
+            if (value == "true" || value == "false") jvmArgs += "-Dmafei.desktop.showcaseDark=$value"
+        }
         desktopWindowWidth?.toIntOrNull()?.let { value ->
             if (value in 320..2400) jvmArgs += "-Dmafei.desktop.windowWidth=$value"
         }

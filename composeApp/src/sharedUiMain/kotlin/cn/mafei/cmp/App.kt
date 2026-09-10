@@ -275,7 +275,7 @@ private fun BrowseContent(
                     onLogout = onLogout,
                 )
             },
-            content = {
+            scene = {
                 if (showingDetail) {
                     DetailScreen(
                         item = state.detail,
@@ -320,7 +320,6 @@ private fun BrowseContent(
                         brandSubtitle = "我的影院",
                         modifier = Modifier.fillMaxSize(),
                         gridState = if (destination == HomeDestination) homeGridState else libraryGridState,
-                        glassBackdrop = it,
                         artwork = { item, modifier ->
                             MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
                         },
@@ -330,6 +329,7 @@ private fun BrowseContent(
                     )
                 }
             },
+            overlay = {},
         )
     }
 }

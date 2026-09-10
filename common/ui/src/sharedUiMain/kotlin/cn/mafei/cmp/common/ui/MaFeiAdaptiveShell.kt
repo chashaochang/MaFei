@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,6 +18,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
+import cn.mafei.cmp.common.glass.components.LiquidBottomTab
+import cn.mafei.cmp.common.glass.components.LiquidBottomTabs
 
 data class MaFeiNavItem(val key: String, val label: String, val glyph: MaFeiGlyph)
 
@@ -36,105 +37,134 @@ fun MaFeiAdaptiveShell(
     onLibrary: (String) -> Unit,
     accountLabel: String,
     showBottomNavigation: Boolean = true,
+    bottomNavigationCompactProgress: () -> Float = { 0f },
     background: @Composable () -> Unit,
     accountActions: @Composable () -> Unit,
-    content: @Composable (GlassBackdrop) -> Unit,
+    scene: @Composable () -> Unit,
+    overlay: @Composable (GlassBackdrop) -> Unit,
 ) {
     val backdrop = rememberGlassBackdrop()
     val sideScroll = rememberScrollState()
     val sidebar = layout.navigation == NavigationPlacement.Sidebar
     val bottomNavigationVisible = layout.navigation == NavigationPlacement.Bottom && showBottomNavigation
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) { background() }
-        Row(Modifier.fillMaxSize()) {
-            if (layout.navigation != NavigationPlacement.Bottom) {
-                MaFeiSurface(
-                    GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Full, tintAlpha = .24f, intensity = .9f, cornerRadiusDp = 0f),
-                    Modifier.width(layout.navigationWidthDp.dp).fillMaxHeight(), backdrop,
+        // The page background and the real scrolling route are recorded together.
+        // Navigation remains a sibling consumer, so content moving beneath it is
+        // sampled every frame without recursively recording the glass itself.
+        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
+            background()
+            Box(
+                Modifier.fillMaxSize().padding(
+                    start = if (layout.navigation == NavigationPlacement.Bottom) 0.dp
+                    else layout.navigationWidthDp.dp,
+                ),
+            ) {
+                scene()
+            }
+        }
+
+        overlay(backdrop)
+
+        if (layout.navigation != NavigationPlacement.Bottom) {
+            MaFeiSurface(
+                GlassSurfaceSpec(GlassRole.Navigation, GlassLevel.Full, tintAlpha = .16f, intensity = .9f, cornerRadiusDp = 0f),
+                Modifier.width(layout.navigationWidthDp.dp).fillMaxHeight(), backdrop,
+            ) {
+                Column(
+                    Modifier.fillMaxSize().padding(
+                        horizontal = if (sidebar) 16.dp else 10.dp,
+                        vertical = 20.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Column(
-                        Modifier.fillMaxSize().padding(
-                            horizontal = if (sidebar) 16.dp else 10.dp,
-                            vertical = 20.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    Box(
+                        Modifier.fillMaxWidth().height(if (sidebar) 58.dp else 50.dp),
+                        contentAlignment = if (sidebar) Alignment.CenterStart else Alignment.Center,
                     ) {
-                        Box(
-                            Modifier.fillMaxWidth().height(if (sidebar) 58.dp else 50.dp),
-                            contentAlignment = if (sidebar) Alignment.CenterStart else Alignment.Center,
-                        ) {
-                            Text(
-                                "马飞",
-                                Modifier.padding(horizontal = if (sidebar) 8.dp else 0.dp),
-                                style = if (sidebar) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        Box(
-                            Modifier.fillMaxWidth().height(1.dp).background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = .28f),
-                                        Color.Transparent,
-                                    ),
+                        Text(
+                            "马飞",
+                            Modifier.padding(horizontal = if (sidebar) 8.dp else 0.dp),
+                            style = if (sidebar) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().height(1.dp).background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = .28f),
+                                    Color.Transparent,
                                 ),
                             ),
-                        )
-                        Column(Modifier.weight(1f).verticalScroll(sideScroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            destinations.forEach { item ->
-                                NavigationEntry(item, selectedDestination == item.key, !sidebar) { onDestination(item.key) }
-                            }
-                            if (sidebar && libraries.isNotEmpty()) {
-                                Text("我的媒体库", Modifier.padding(top = 24.dp, bottom = 8.dp, start = 8.dp),
-                                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                libraries.forEach { item ->
-                                    NavigationEntry(item, selectedDestination == "library" && selectedLibrary == item.key, false) { onLibrary(item.key) }
-                                }
+                        ),
+                    )
+                    Column(Modifier.weight(1f).verticalScroll(sideScroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        destinations.forEach { item ->
+                            NavigationEntry(item, selectedDestination == item.key, !sidebar) { onDestination(item.key) }
+                        }
+                        if (sidebar && libraries.isNotEmpty()) {
+                            Text("我的媒体库", Modifier.padding(top = 24.dp, bottom = 8.dp, start = 8.dp),
+                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            libraries.forEach { item ->
+                                NavigationEntry(item, selectedDestination == "library" && selectedLibrary == item.key, false) { onLibrary(item.key) }
                             }
                         }
-                        if (sidebar) {
-                            Column(
-                                Modifier.fillMaxWidth().clip(MaFeiShape.field)
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .22f))
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = .20f),
-                                        MaFeiShape.field,
-                                    ).padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    accountLabel,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) { accountActions() }
-                            }
-                        } else {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { accountActions() }
+                    }
+                    if (sidebar) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                accountLabel,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) { accountActions() }
                         }
+                    } else {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { accountActions() }
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxHeight().padding(bottom = if (bottomNavigationVisible) 88.dp else 0.dp)) {
-                content(backdrop)
-            }
         }
         if (bottomNavigationVisible) {
-            MaFeiSurface(
-                MaFeiGlassDefaults.spec(GlassRole.Navigation, GlassLevel.Full).copy(tintAlpha = .22f, intensity = .9f, cornerRadiusDp = 28f),
-                Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp)
-                    .widthIn(max = 430.dp).fillMaxWidth(), backdrop,
+            val selectedIndex = destinations.indexOfFirst { it.key == selectedDestination }.coerceAtLeast(0)
+            val compactProgress = bottomNavigationCompactProgress().coerceIn(0f, 1f)
+            LiquidBottomTabs(
+                selectedTabIndex = { selectedIndex },
+                onTabSelected = { index -> destinations.getOrNull(index)?.let { onDestination(it.key) } },
+                backdrop = backdrop,
+                tabsCount = destinations.size,
+                compactProgress = { compactProgress },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 14.dp)
+                    .widthIn(max = 430.dp).fillMaxWidth(),
             ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    destinations.forEach { item ->
-                        Box(Modifier.weight(1f)) {
-                            NavigationEntry(item, selectedDestination == item.key, true) { onDestination(item.key) }
-                        }
+                destinations.forEachIndexed { index, item ->
+                    val selected = selectedDestination == item.key
+                    LiquidBottomTab(
+                        onClick = { onDestination(item.key) },
+                        index = index,
+                        isSelected = selected,
+                        collapseProgress = compactProgress,
+                    ) {
+                        MaFeiIcon(
+                            item.glyph,
+                            Modifier.size(22.dp),
+                            if (selected) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            item.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
