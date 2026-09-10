@@ -74,7 +74,8 @@ sealed interface RuntimeCommand {
  * Preserve command order, ignore commands for retired generations and stop the previous
  * resource on Load. Event sink is thread-safe, may be invoked synchronously, and must not
  * be retained after Release. Release must be idempotent even after an engine failure.
- * No runtime implementation exists in this first core batch.
+ * Platform implementations live in the corresponding `player:runtime-*`
+ * modules; this API intentionally stays free of native engine and UI types.
  */
 interface PlayerRuntime {
     val capabilities: PlayerCapabilities
