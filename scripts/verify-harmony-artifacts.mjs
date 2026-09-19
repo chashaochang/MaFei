@@ -61,5 +61,12 @@ check(entries.includes(resource), 'Missing or misplaced Compose resource probe')
 const packaged = execFileSync('unzip', ['-p', hap, resource]);
 const prepared = readFileSync(resolve(root, 'composeApp/build/generated/compose/resourceGenerator/preparedResources/commonMain/composeResources/values/strings.commonMain.cvr'));
 check(packaged.equals(prepared), 'Packaged Compose resource differs from prepared resource');
-console.log('PASS: matched libkn/header and Hvigor copy-in; same-build stripped/package libkn; HAP ARM64 libraries; byte-identical Compose resource');
+const connectBackground = 'resources/rawfile/composeResources/cn.mafei.cmp.feature.connect.generated.resources/drawable/mafei_login_background.png';
+check(entries.includes(connectBackground), 'Missing feature:connect login background');
+const preparedBackground = readFileSync(resolve(root, 'feature/connect/build/generated/compose/resourceGenerator/preparedResources/commonMain/composeResources/drawable/mafei_login_background.png'));
+const packagedBackground = execFileSync('unzip', ['-p', hap, connectBackground], {
+  maxBuffer: preparedBackground.length + 1024,
+});
+check(packagedBackground.equals(preparedBackground), 'Packaged login background differs from prepared resource');
+console.log('PASS: matched libkn/header and Hvigor copy-in; same-build stripped/package libkn; HAP ARM64 libraries; byte-identical Compose resources');
 console.log('Signing, installation and runtime are separate checks.');

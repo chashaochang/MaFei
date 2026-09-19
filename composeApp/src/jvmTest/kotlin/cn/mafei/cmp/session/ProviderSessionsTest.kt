@@ -28,6 +28,7 @@ class ProviderSessionsTest {
     private fun connection(provider: ProviderKind = ProviderKind.Jellyfin, key: String = "a".repeat(32), user: String = "remote-a", route: String = "Local"): SavedConnection {
         val server = Server(ServerId("server"), provider, "Fixture", "https://media.test/base")
         return SavedConnection(server, Account(AccountId(user), server.id, provider, user), user, key,
+            key,
             if (provider == ProviderKind.Feiniu) listOf(SavedFeiniuRoute(server.baseUrl, route)) else emptyList())
     }
 

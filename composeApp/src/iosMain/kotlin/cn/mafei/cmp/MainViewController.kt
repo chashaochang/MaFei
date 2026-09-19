@@ -1,6 +1,9 @@
 package cn.mafei.cmp
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.window.ComposeUIViewController
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import cn.mafei.cmp.session.ApplicationRuntime
 import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.createIosSettings
@@ -11,5 +14,8 @@ fun MainViewController() = ComposeUIViewController {
     val runtime = ProcessApplication.getOrCreate {
         ApplicationRuntime(createIosSettings(), IosKeychainCredentialStore("cn.mafei.credentials.v1"), createIosHttpTransport())
     }
-    App(runtime)
+    val navigationOwner = rememberNavigationEventDispatcherOwner(parent = null)
+    CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navigationOwner) {
+        App(runtime)
+    }
 }

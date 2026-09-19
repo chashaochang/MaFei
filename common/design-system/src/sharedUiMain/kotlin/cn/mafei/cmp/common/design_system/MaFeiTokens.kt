@@ -16,7 +16,7 @@ object MaFeiSpace {
     val page = 20.dp
     val section = 24.dp
     val wide = 32.dp
-    val touchTarget = 48.dp
+    val touchTarget = 44.dp
 }
 
 object MaFeiShape {

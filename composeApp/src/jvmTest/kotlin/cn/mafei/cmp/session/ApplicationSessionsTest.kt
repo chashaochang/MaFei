@@ -21,8 +21,8 @@ class ApplicationSessionsTest {
     }
     private class Secrets : SecureCredentialStore {
         val values = mutableMapOf<CredentialAlias, SecureSecret>()
-        var beforeSave: suspend () -> Unit = {}
-        override suspend fun save(alias: CredentialAlias, secret: SecureSecret, overwrite: Boolean) { beforeSave(); values[alias] = secret }
+        var beforeSave: suspend (CredentialAlias) -> Unit = {}
+        override suspend fun save(alias: CredentialAlias, secret: SecureSecret, overwrite: Boolean) { beforeSave(alias); values[alias] = secret }
         override suspend fun read(alias: CredentialAlias) = values[alias]
         override suspend fun exists(alias: CredentialAlias) = alias in values
         override suspend fun delete(alias: CredentialAlias) = values.remove(alias) != null
@@ -64,7 +64,7 @@ class ApplicationSessionsTest {
         } finally { h.close() }
     }
 
-    @Test fun newRootRestoresRealSdkAndLogoutPreventsFurtherRestartRecovery() = runBlocking<Unit> {
+    @Test fun newRootRestoresRealSdkAndSignOutRequiresExplicitHistorySelection() = runBlocking<Unit> {
         val first = Harness(); val c = connection()
         val originalBinding = first.binding(c)
         first.sessions.activate(c, originalBinding); first.close()
@@ -76,11 +76,30 @@ class ApplicationSessionsTest {
             assertTrue(restarted.transport.requests.single().headers.first("Authorization")!!.contains("fixture-a"))
             assertEquals(c.selection, restored.selection)
             assertTrue(restarted.sessions.logout(restored))
-            assertTrue(first.secrets.values.isEmpty())
+            assertTrue(first.secrets.values.isNotEmpty())
             assertFalse(first.doc.bytes!!.decodeToString().contains("fixture-a"))
         } finally { restarted.close() }
         val signedOut = Harness(first.doc, first.secrets)
-        try { assertNull(signedOut.sessions.start()) } finally { signedOut.close() }
+        try {
+            assertNull(signedOut.sessions.start())
+            assertEquals(
+                listOf(c.selection),
+                signedOut.sessions.savedConnections().map { it.selection },
+            )
+            assertEquals(c.selection, signedOut.sessions.switchAccount(c.selection).selection)
+        } finally { signedOut.close() }
+    }
+
+    @Test fun accountWithoutRememberPasswordIsKeptInHistoryButRequiresLogin() = runBlocking<Unit> {
+        val h = Harness(); val c = connection().copy(rememberLogin = false)
+        try {
+            val session = h.sessions.activate(c, h.binding(c))
+            assertTrue(h.sessions.logout(session))
+            assertTrue(h.secrets.values.isEmpty())
+            assertNull(h.sessions.start())
+            assertEquals(listOf(c.selection), h.sessions.savedConnections().map { it.selection })
+            assertFailsWith<IllegalStateException> { h.sessions.switchAccount(c.selection) }
+        } finally { h.close() }
     }
 
     @Test fun switchingPreservesSavedAccountsButRevokesOldSdkCacheAndLogoutHandle() = runBlocking<Unit> {
@@ -96,8 +115,42 @@ class ApplicationSessionsTest {
             h.sessions.media.collections(fresh.media)
             assertTrue(h.transport.requests.last().headers.first("Authorization")!!.contains("fixture-b"))
             assertEquals(setOf(a.selection, b.selection), h.repository.savedAccounts().toSet())
+            assertEquals(setOf(a.selection, b.selection), h.sessions.savedConnections().map { it.selection }.toSet())
             assertEquals(a.selection, h.sessions.switchAccount(a.selection).selection)
         } finally { h.close() }
+    }
+
+    @Test fun deletingInactiveAccountRemovesHistoryCredentialsAndRememberedPasswordOnlyForThatAccount() = runBlocking<Unit> {
+        val h = Harness(); val a = connection(); val b = connection("b")
+        try {
+            h.sessions.activate(a, h.binding(a))
+            val current = h.sessions.activate(b, h.binding(b))
+            h.secrets.save(a.passwordAlias, SecureSecret.Password("remember-a"))
+            h.secrets.save(b.passwordAlias, SecureSecret.Password("remember-b"))
+
+            assertFalse(h.sessions.deleteSavedConnection(b) { h.secrets.delete(b.passwordAlias) })
+            assertTrue(h.sessions.deleteSavedConnection(a) { h.secrets.delete(a.passwordAlias) })
+
+            assertEquals(listOf(b.selection), h.sessions.savedConnections().map { it.selection })
+            assertNull(h.repository.restoreAccount(a.selection))
+            assertNotNull(h.repository.restoreAccount(b.selection))
+            assertFalse(a.tokenAlias in h.secrets.values)
+            assertFalse(a.passwordAlias in h.secrets.values)
+            assertTrue(b.tokenAlias in h.secrets.values)
+            assertEquals(SecureSecret.Password("remember-b"), h.secrets.values[b.passwordAlias])
+            assertSame(current, h.sessions.state.value.session)
+        } finally { h.close() }
+    }
+
+    @Test fun appearanceModeUsesOrdinarySettingsAndRejectsUnknownValues() = runBlocking<Unit> {
+        val h = Harness()
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            assertNull(root.loadAppearanceMode())
+            root.saveAppearanceMode("dark")
+            assertEquals("dark", root.loadAppearanceMode())
+            assertFailsWith<IllegalArgumentException> { root.saveAppearanceMode("sepia") }
+        } finally { root.close(); h.close() }
     }
 
     @Test fun lateOldResponseCannotPublishAfterAccountSwitch() = runBlocking<Unit> {
@@ -227,6 +280,8 @@ class ApplicationSessionsTest {
             root.sessions.start()
             val session = root.connect(ProviderKind.Jellyfin, "https://media.test/base", "Demo", "never-store-password")
             assertSame(session, root.sessions.state.value.session)
+            assertEquals("never-store-password", root.savedPassword(session.connection))
+            assertTrue(root.hasSavedPassword(session.connection))
             val browser = cn.mafei.cmp.feature.home.MediaBrowser(root.sessions.media, session.media)
             browser.start()
             assertEquals(listOf("Fixture movie"), browser.state.value.items.map { it.title })
@@ -273,7 +328,7 @@ class ApplicationSessionsTest {
             assertTrue(connectFailureMessage(error).contains("应用签名"))
             assertFalse(connectFailureMessage(error).contains("private-"))
             assertNull(error.cause)
-            assertEquals(ApplicationSessionStatus.NeedsAttention, root.sessions.state.value.status)
+            assertEquals(ApplicationSessionStatus.SignedOut, root.sessions.state.value.status)
             assertTrue(h.secrets.values.isEmpty())
         } finally { root.close(); h.close() }
     }
@@ -314,7 +369,12 @@ class ApplicationSessionsTest {
             h.transport.response = { """{"User":{"Id":"u"},"AccessToken":"fixture-token"}""" }
             val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
             val entered = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()
-            h.secrets.beforeSave = { entered.complete(Unit); release.await() }
+            h.secrets.beforeSave = { alias ->
+                if (alias.value.endsWith("/token")) {
+                    entered.complete(Unit)
+                    release.await()
+                }
+            }
             try {
                 root.sessions.start()
                 val pending = async { root.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw") }
@@ -326,5 +386,35 @@ class ApplicationSessionsTest {
                 session.binding.adapter.collections(PageRequest())
             } finally { release.complete(Unit); root.close(); h.close() }
         }
+    }
+
+    @Test fun rememberPasswordFalseDeletesPasswordAndEmptyPasswordStillCountsAsSaved() = runBlocking<Unit> {
+        val h = Harness()
+        h.transport.response = { """{"User":{"Id":"u","Name":"Demo"},"AccessToken":"fixture-token"}""" }
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            root.sessions.start()
+            val emptyPassword = root.connect(
+                ProviderKind.Jellyfin,
+                "https://media.test",
+                "Demo",
+                "",
+                rememberPassword = true,
+            )
+            assertEquals("", root.savedPassword(emptyPassword.connection))
+            assertTrue(root.hasSavedPassword(emptyPassword.connection))
+
+            h.transport.response = { """{"User":{"Id":"u2","Name":"Demo 2"},"AccessToken":"fixture-token-2"}""" }
+            val notRemembered = root.connect(
+                ProviderKind.Jellyfin,
+                "https://media.test",
+                "Demo",
+                "do-not-store",
+                rememberPassword = false,
+            )
+            assertNull(root.savedPassword(notRemembered.connection))
+            assertFalse(root.hasSavedPassword(notRemembered.connection))
+            assertTrue(h.secrets.values.values.none { it == SecureSecret.Password("do-not-store") })
+        } finally { root.close(); h.close() }
     }
 }

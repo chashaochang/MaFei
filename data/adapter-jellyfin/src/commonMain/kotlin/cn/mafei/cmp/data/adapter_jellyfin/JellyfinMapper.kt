@@ -11,6 +11,10 @@ import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.core.domain.MediaUserData
 import cn.mafei.cmp.core.domain.MediaItem
+import cn.mafei.cmp.core.domain.MediaPerson
+import cn.mafei.cmp.core.domain.MediaSourceInfo
+import cn.mafei.cmp.core.domain.MediaStreamInfo
+import cn.mafei.cmp.core.domain.MediaStreamKind
 import cn.mafei.cmp.core.domain.NetworkUnreachableError
 import cn.mafei.cmp.core.domain.PersonKind
 import cn.mafei.cmp.core.domain.PersonRef
@@ -45,6 +49,9 @@ import cn.mafei.cmp.providers.jellyfin.transport.JellyfinSortOrder
 import cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto
 import cn.mafei.cmp.providers.jellyfin.wire.ImageType
 import cn.mafei.cmp.providers.jellyfin.wire.ItemKind
+import cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto
+import cn.mafei.cmp.providers.jellyfin.wire.MediaStreamDto
+import cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType
 import cn.mafei.cmp.providers.jellyfin.wire.WirePersonKind
 
 /**
@@ -57,6 +64,7 @@ internal val JELLYFIN_LIST_FIELDS = listOf(
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.Overview,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.Genres,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.People,
+    cn.mafei.cmp.providers.jellyfin.wire.ItemField.MediaStreams,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.ProductionYear,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.PremiereDate,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.DateCreated,
@@ -149,6 +157,7 @@ internal fun MediaSort?.toQuerySort(): Pair<List<JellyfinSortBy>, JellyfinSortOr
                 // mirroring Jellyfin season/episode numbering semantics.
                 cn.mafei.cmp.core.domain.MediaSortField.Title -> JellyfinSortBy.SortName
                 cn.mafei.cmp.core.domain.MediaSortField.DateAdded -> JellyfinSortBy.DateCreated
+                cn.mafei.cmp.core.domain.MediaSortField.DatePlayed -> JellyfinSortBy.DatePlayed
                 cn.mafei.cmp.core.domain.MediaSortField.PremiereDate -> JellyfinSortBy.PremiereDate
                 cn.mafei.cmp.core.domain.MediaSortField.CommunityRating -> JellyfinSortBy.CommunityRating
                 cn.mafei.cmp.core.domain.MediaSortField.Runtime -> JellyfinSortBy.Runtime
@@ -228,7 +237,7 @@ internal fun WirePersonKind.toPersonKind(): PersonKind = when (this) {
  */
 internal fun BaseItemDto.toMediaItem(
     serverId: ServerId,
-    imageUrl: (itemId: String, imageType: ImageType, tag: String) -> String,
+    imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
     collectionId: CollectionId? = null,
 ): MediaItem? {
     val id = id?.takeIf { it.isNotBlank() } ?: return null
@@ -243,7 +252,9 @@ internal fun BaseItemDto.toMediaItem(
         overview = overview,
         collectionId = collectionId,
         seriesId = seriesId?.let(::MediaId),
+        seriesTitle = seriesName,
         seasonId = seasonId?.let(::MediaId),
+        seasonTitle = seasonName,
         seasonNumber = when (mediaType) {
             MediaType.Episode -> parentIndexNumber
             MediaType.Season -> indexNumber
@@ -259,15 +270,19 @@ internal fun BaseItemDto.toMediaItem(
         communityRating = communityRating,
         officialRating = officialRating,
         genres = genres,
+        tags = resolutionTags(),
         people = people.mapNotNull { person ->
-            person.name?.let { name ->
-                PersonRef(
-                    name = name,
-                    role = person.role,
-                    personType = (person.type ?: WirePersonKind.Unknown).toPersonKind(),
-                    image = null, // person images would need a per-person URL call; P0 omits them
-                )
-            }
+            val personId = person.id?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            PersonRef(
+                id = MediaId(personId),
+                name = person.name.orEmpty(),
+                role = person.role,
+                personType = (person.type ?: WirePersonKind.Unknown).toPersonKind(),
+                image = cn.mafei.cmp.core.domain.MediaImage(
+                    ImageKind.Primary,
+                    imageUrl(personId, ImageType.Primary, person.primaryImageTag),
+                ),
+            )
         },
         images = buildImages(id, imageUrl),
         userData = userData.let { data ->
@@ -281,26 +296,197 @@ internal fun BaseItemDto.toMediaItem(
             )
         },
         canPlay = mediaType.toPlayable(),
+        mediaSources = this.mediaSources.map { it.toMediaSourceInfo() },
+        externalUrls = externalUrls.mapNotNull { link ->
+            val url = link.url?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            cn.mafei.cmp.core.domain.MediaExternalUrl(
+                name = link.name?.trim().takeUnless { it.isNullOrEmpty() } ?: url,
+                url = url,
+            )
+        },
     )
+}
+
+/**
+ * Maps one Jellyfin media source (a playable file / version) and its elementary
+ * streams. The wire DTO already carried this for every item; only the poster
+ * resolution tags consumed the video stream before, so the legacy
+ * 「文件媒体信息」 block had nothing to render.
+ */
+internal fun MediaSourceInfoDto.toMediaSourceInfo(): MediaSourceInfo = MediaSourceInfo(
+    id = id?.takeIf { it.isNotBlank() },
+    name = name?.takeIf { it.isNotBlank() },
+    path = path?.takeIf { it.isNotBlank() },
+    container = container?.takeIf { it.isNotBlank() },
+    sizeBytes = size,
+    runTimeMs = runTimeTicks?.let(JellyfinTicks::toMilliseconds),
+    isRemote = isRemote ?: false,
+    defaultAudioIndex = defaultAudioStreamIndex,
+    defaultSubtitleIndex = defaultSubtitleStreamIndex,
+    streams = mediaStreams.map { it.toMediaStreamInfo() },
+)
+
+internal fun MediaStreamDto.toMediaStreamInfo(): MediaStreamInfo = MediaStreamInfo(
+    index = index,
+    kind = when (type) {
+        MediaStreamType.Video -> MediaStreamKind.Video
+        MediaStreamType.Audio -> MediaStreamKind.Audio
+        MediaStreamType.Subtitle -> MediaStreamKind.Subtitle
+        else -> MediaStreamKind.Other
+    },
+    codec = codec?.takeIf { it.isNotBlank() },
+    language = language?.takeIf { it.isNotBlank() },
+    title = (displayTitle ?: title)?.takeIf { it.isNotBlank() },
+    isDefault = isDefault ?: false,
+    isForced = isForced ?: false,
+    isExternal = isExternal ?: false,
+    channels = channels,
+    channelLayout = channelLayout?.takeIf { it.isNotBlank() },
+    sampleRateHz = sampleRate,
+    bitRate = bitRate,
+    widthPx = width,
+    heightPx = height,
+)
+
+/** Mechanical mapping of the legacy Jellyfin person detail contract. */
+internal fun BaseItemDto.toMediaPerson(
+    serverId: ServerId,
+    imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
+): MediaPerson? {
+    val personId = id?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val displayName = name.orEmpty()
+    return MediaPerson(
+        id = MediaId(personId),
+        serverId = serverId,
+        provider = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
+        name = displayName,
+        sortName = sortName?.takeIf { it.isNotBlank() } ?: displayName,
+        overview = overview,
+        image = cn.mafei.cmp.core.domain.MediaImage(
+            ImageKind.Primary,
+            imageUrl(personId, ImageType.Primary, imageTags[ImageType.Primary.name]),
+        ),
+        isFavorite = userData?.isFavorite ?: false,
+        movieCount = movieCount?.takeIf { it >= 0 },
+        seriesCount = seriesCount?.takeIf { it >= 0 },
+        episodeCount = episodeCount?.takeIf { it >= 0 },
+    )
+}
+
+/** Exact thresholds and two-badge cap used by the HarmonyOS catalog mapper. */
+private fun BaseItemDto.resolutionTags(): List<String> {
+    val streams = if (mediaStreams.isNotEmpty()) mediaStreams else mediaSources.flatMap { it.mediaStreams }
+    return buildList {
+        streams.forEach { stream ->
+            val width = stream.width ?: 0
+            val height = stream.height ?: 0
+            val tag = when {
+                width >= 3800 || height >= 2000 -> "4K"
+                width >= 2500 || height >= 1400 -> "1440"
+                width >= 1800 || height >= 1000 -> "1080"
+                width >= 1200 || height >= 700 -> "720"
+                width >= 700 || height >= 400 -> "480"
+                else -> null
+            }
+            if (tag != null && tag !in this && size < 2) add(tag)
+        }
+    }
 }
 
 private fun BaseItemDto.buildImages(
     itemId: String,
-    imageUrl: (itemId: String, imageType: ImageType, tag: String) -> String,
-): List<cn.mafei.cmp.core.domain.MediaImage> = buildList {
-    imageTags.forEach { (key, tag) ->
-        val type = ImageType.entries.firstOrNull { it.name == key } ?: return@forEach
-        type.toImageKind()?.let { kind -> add(cn.mafei.cmp.core.domain.MediaImage(kind, imageUrl(itemId, type, tag))) }
+    imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
+): List<cn.mafei.cmp.core.domain.MediaImage> {
+    val images = buildList {
+        fun addImage(kind: ImageKind, ownerId: String?, imageType: ImageType, tag: String?) {
+            val normalizedId = ownerId?.takeIf { it.isNotBlank() } ?: return
+            add(cn.mafei.cmp.core.domain.MediaImage(kind, imageUrl(normalizedId, imageType, tag)))
+        }
+
+        // HarmonyOS did not assume that an Episode owns display-ready art.
+        // Posters use the series image; landscape shelves prefer parent Thumb,
+        // then parent Backdrop, then the series Primary image.
+        if (type == ItemKind.Episode) {
+            addImage(ImageKind.Primary, seriesId, ImageType.Primary, seriesPrimaryImageTag)
+            when {
+                !parentThumbItemId.isNullOrBlank() -> addImage(
+                    ImageKind.Backdrop,
+                    parentThumbItemId,
+                    ImageType.Thumb,
+                    parentThumbImageTag,
+                )
+                !parentBackdropItemId.isNullOrBlank() -> addImage(
+                    ImageKind.Backdrop,
+                    parentBackdropItemId,
+                    ImageType.Backdrop,
+                    parentBackdropImageTags.firstOrNull(),
+                )
+                !seriesId.isNullOrBlank() -> addImage(
+                    ImageKind.Backdrop,
+                    seriesId,
+                    ImageType.Primary,
+                    seriesPrimaryImageTag,
+                )
+            }
+        } else {
+            // Match the original HarmonyOS mapper: every identified
+            // non-episode first uses its own Primary route, even when
+            // /Items/Latest omits ImageTags. The tag is a cache revision, not
+            // proof that the image exists. Runtime fallback handles a real
+            // 404 by trying the remaining inherited/thumbnail candidates.
+            addImage(
+                ImageKind.Primary,
+                itemId,
+                ImageType.Primary,
+                imageTags[ImageType.Primary.name],
+            )
+            if (!parentPrimaryImageItemId.isNullOrBlank()) {
+                addImage(
+                    ImageKind.Primary,
+                    parentPrimaryImageItemId,
+                    ImageType.Primary,
+                    parentPrimaryImageTag,
+                )
+            }
+        }
+
+        // The legacy mapper treats ParentThumbItemId as the preferred
+        // thumbnail for every summary type, not only Episode. /Items/Latest
+        // frequently uses that inherited image for grouped videos.
+        if (type != ItemKind.Episode) {
+            if (!parentThumbItemId.isNullOrBlank()) {
+                addImage(ImageKind.Thumb, parentThumbItemId, ImageType.Thumb, parentThumbImageTag)
+            }
+            imageTags[ImageType.Thumb.name]?.let { tag ->
+                addImage(ImageKind.Thumb, itemId, ImageType.Thumb, tag)
+            }
+        }
+
+        listOf(
+            ImageType.Banner,
+            ImageType.Logo,
+            ImageType.Art,
+        ).forEach { imageType ->
+            imageTags[imageType.name]?.let { tag ->
+                imageType.toImageKind()?.let { kind -> addImage(kind, itemId, imageType, tag) }
+            }
+        }
+        backdropImageTags.forEach { tag ->
+            addImage(ImageKind.Backdrop, itemId, ImageType.Backdrop, tag)
+        }
+        if (type != ItemKind.Episode && !parentBackdropItemId.isNullOrBlank()) {
+            parentBackdropImageTags.forEach { tag ->
+                addImage(ImageKind.Backdrop, parentBackdropItemId, ImageType.Backdrop, tag)
+            }
+        }
     }
-    backdropImageTags.forEach { tag ->
-        add(cn.mafei.cmp.core.domain.MediaImage(ImageKind.Backdrop, imageUrl(itemId, ImageType.Backdrop, tag)))
-    }
+    return images.distinctBy { it.kind to it.url }
 }
 
 /** Maps one view item to a [MediaCollection]; identity-less entries are dropped. */
 internal fun BaseItemDto.toMediaCollection(
     serverId: ServerId,
-    imageUrl: (itemId: String, imageType: ImageType, tag: String) -> String,
+    imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
 ): MediaCollection? {
     val id = id?.takeIf { it.isNotBlank() } ?: return null
     return MediaCollection(
@@ -312,6 +498,7 @@ internal fun BaseItemDto.toMediaCollection(
         primaryImage = imageTags[ImageType.Primary.name]?.let { tag ->
             cn.mafei.cmp.core.domain.MediaImage(ImageKind.Primary, imageUrl(id, ImageType.Primary, tag))
         },
+        itemCount = childCount?.takeIf { it >= 0 },
     )
 }
 

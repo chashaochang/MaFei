@@ -32,18 +32,18 @@ import mafei.composeapp.generated.resources.probe_resource_status
 /** Stage 1 development entry, not a production Home or runtime acceptance claim. */
 @Composable
 fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}, sessionStatus: String = "") {
-    var dark by rememberSaveable { mutableStateOf(true) }
     var level by rememberSaveable { mutableStateOf(GlassLevel.Full.name) }
     var dialog by rememberSaveable { mutableStateOf(false) }
     var reduceTransparency by rememberSaveable { mutableStateOf(false) }
     var taps by rememberSaveable { mutableStateOf(0) }
     var barExpanded by rememberSaveable { mutableStateOf(true) }
-    SideEffect { onThemeChanged(dark) }
+    // 只有深色一套配色（浅色主题已砍），系统 chrome 也照深色画。
+    SideEffect { onThemeChanged(true) }
     val renderHealth = rememberGlassRenderHealth()
     // Layout branches must not own separate reading positions. Stable item keys
     // also preserve the sample anchor when controls move out into the side pane.
     val contentScrollState = rememberLazyListState()
-    MaFeiTheme(darkTheme = dark) {
+    MaFeiTheme {
       GlassRenderingEnvironment(renderHealth) {
       MaFeiGlassPreferences(reduceTransparency) {
         Surface(color = MaterialTheme.colorScheme.background) {
@@ -60,7 +60,6 @@ fun FoundationProbeScreen(onThemeChanged: (Boolean) -> Unit = {}, sessionStatus:
                             Text("2.0 · 界面实验室", style = MaterialTheme.typography.labelLarge)
                             if (sessionStatus.isNotEmpty()) Text(sessionStatus, style = MaterialTheme.typography.labelMedium)
                         }
-                        TextButton(onClick = { dark = !dark }) { Text(if (dark) "浅色" else "深色") }
                     }
                     if (wide) {
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(24.dp)) {

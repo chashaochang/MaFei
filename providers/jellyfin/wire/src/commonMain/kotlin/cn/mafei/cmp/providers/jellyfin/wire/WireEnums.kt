@@ -212,6 +212,7 @@ enum class ItemField(val wireName: String) {
     Overview("Overview"),
     Genres("Genres"),
     People("People"),
+    MediaStreams("MediaStreams"),
     MediaSources("MediaSources"),
     PrimaryImageAspectRatio("PrimaryImageAspectRatio"),
     ProductionYear("ProductionYear"),

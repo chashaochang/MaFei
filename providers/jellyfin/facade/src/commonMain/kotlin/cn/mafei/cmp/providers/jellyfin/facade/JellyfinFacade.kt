@@ -11,6 +11,7 @@ import cn.mafei.cmp.providers.jellyfin.discovery.JellyfinDiscoveryApi
 import cn.mafei.cmp.providers.jellyfin.images.JellyfinImagesApi
 import cn.mafei.cmp.providers.jellyfin.playback.JellyfinPlaybackApi
 import cn.mafei.cmp.providers.jellyfin.playstate.JellyfinPlayStateApi
+import cn.mafei.cmp.providers.jellyfin.userdata.JellyfinUserDataApi
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -30,6 +31,7 @@ interface JellyfinFacade {
     val catalog: JellyfinCatalogApi
     val playback: JellyfinPlaybackApi
     val playstate: JellyfinPlayStateApi
+    val userdata: JellyfinUserDataApi
     val images: JellyfinImagesApi
 }
 
@@ -49,5 +51,6 @@ class DefaultJellyfinFacade(
     override val catalog: JellyfinCatalogApi by lazy { cn.mafei.cmp.providers.jellyfin.catalog.DefaultJellyfinCatalogApi(client) }
     override val playback: JellyfinPlaybackApi by lazy { cn.mafei.cmp.providers.jellyfin.playback.DefaultJellyfinPlaybackApi(client) }
     override val playstate: JellyfinPlayStateApi by lazy { cn.mafei.cmp.providers.jellyfin.playstate.DefaultJellyfinPlayStateApi(client) }
+    override val userdata: JellyfinUserDataApi by lazy { cn.mafei.cmp.providers.jellyfin.userdata.DefaultJellyfinUserDataApi(client) }
     override val images: JellyfinImagesApi by lazy { cn.mafei.cmp.providers.jellyfin.images.DefaultJellyfinImagesApi(client) }
 }

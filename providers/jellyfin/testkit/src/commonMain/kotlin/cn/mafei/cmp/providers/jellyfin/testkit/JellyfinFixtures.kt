@@ -83,8 +83,8 @@ data object JellyfinFixtures {
         "ProductionYear": 2023,
         "Genres": ["Drama"],
         "People": [
-            {"Name": "Ada Director", "Role": "Director", "Type": "Director"},
-            {"Name": "Bob Actor", "Role": "Protagonist", "Type": "Actor", "PrimaryImageTag": "abcd000000000000"}
+            {"Id": "person-director", "Name": "Ada Director", "Role": "Director", "Type": "Director"},
+            {"Id": "person-actor", "Name": "Bob Actor", "Role": "Protagonist", "Type": "Actor", "PrimaryImageTag": "abcd000000000000"}
         ],
         "ImageTags": {"Primary": "1111111122222222"}
     }"""

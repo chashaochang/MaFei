@@ -8,6 +8,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * immediately without rebuilding application state.
  */
 data class MaFeiWindowFeatures(
+    val safeInsets: MaFeiInsetsDp = MaFeiInsetsDp(),
     val occlusions: List<MaFeiRectDp> = emptyList(),
     val foldPosture: MaFeiFoldPosture = MaFeiFoldPosture.Unknown,
     val displayRole: MaFeiDisplayRole = MaFeiDisplayRole.Default,

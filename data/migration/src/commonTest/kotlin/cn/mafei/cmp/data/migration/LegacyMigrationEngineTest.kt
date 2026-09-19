@@ -69,9 +69,11 @@ class LegacyMigrationEngineTest {
         assertEquals(MigrationResult.Pending(ReadFailure.PendingIntegration), f.run())
         assertTrue(f.journal.values.isEmpty())
     }
-    @Test fun confirmedEmptyInstallationCompletes() = sync {
+    @Test fun confirmedEmptyInstallationDoesNotCreateMigrationState() = sync {
         val f = Fixture(); f.snapshot = LegacySnapshot(1, "empty", absent())
-        assertIs<MigrationResult.Completed>(f.run()); assertTrue(f.sink.records!!.accounts.isEmpty())
+        assertEquals(MigrationResult.NotNeeded, f.run())
+        assertNull(f.sink.records)
+        assertTrue(f.journal.values.isEmpty())
     }
     @Test fun unsupportedSnapshotVersionIsRejected() = sync {
         val f = Fixture(); f.snapshot = LegacySnapshot(2, "old", absent())

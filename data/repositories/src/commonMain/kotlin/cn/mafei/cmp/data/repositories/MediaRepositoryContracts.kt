@@ -8,6 +8,11 @@ sealed interface MediaQuery {
     data class Search(val term: String) : MediaQuery
     data class Seasons(val seriesId: MediaId) : MediaQuery
     data class Episodes(val seriesId: MediaId, val seasonId: MediaId? = null) : MediaQuery
+    data class PersonItems(val personId: MediaId) : MediaQuery
+    /** One account-scoped page of resumable (in-progress) items — watch history source. */
+    data object Resume : MediaQuery
+    /** "More like this" for one item (detail page). Single chunk, cursor ignored. */
+    data class Similar(val itemId: MediaId) : MediaQuery
 }
 
 /** Runtime handle, not a persisted login record. Even reopening the same account creates a new generation. */

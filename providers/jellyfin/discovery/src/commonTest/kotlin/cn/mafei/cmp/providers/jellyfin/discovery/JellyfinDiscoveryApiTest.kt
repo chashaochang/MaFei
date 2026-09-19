@@ -45,6 +45,36 @@ class JellyfinDiscoveryApiTest {
     }
 
     @Test
+    fun schemeLessAddressWithPortTriesHttpsAndHttpOnThatPort() {
+        assertEquals(
+            listOf("https://192.168.31.96:8096/", "http://192.168.31.96:8096/"),
+            JellyfinAddressCandidates.fromInput("192.168.31.96:8096").map(HttpUrl::toEncodedString),
+        )
+    }
+
+    @Test
+    fun schemeLessHostAddsProtocolAndJellyfinDefaultPorts() {
+        assertEquals(
+            listOf(
+                "https://jellyfin.local/",
+                "https://jellyfin.local:8096/",
+                "https://jellyfin.local:8920/",
+                "http://jellyfin.local/",
+                "http://jellyfin.local:8096/",
+            ),
+            JellyfinAddressCandidates.fromInput("jellyfin.local").map(HttpUrl::toEncodedString),
+        )
+    }
+
+    @Test
+    fun explicitSchemeAndPortRemainsExact() {
+        assertEquals(
+            listOf("http://jellyfin.local:8096/base"),
+            JellyfinAddressCandidates.fromInput("http://jellyfin.local:8096/base").map(HttpUrl::toEncodedString),
+        )
+    }
+
+    @Test
     fun publicServerInfoDecodesFixture() = runTest {
         val (api, transport) = newApi(200 to JellyfinFixtures.PUBLIC_SYSTEM_INFO_10_9)
         val info = api.publicServerInfo(base)

@@ -14,44 +14,35 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassSurface
 
+/**
+ * 全应用只有**深色**一套配色。
+ *
+ * 这里原来还带一个 `darkTheme: Boolean` 与整套浅色 `lightColorScheme`，那套值逐条对应旧版鸿蒙
+ * 的**浅色主题调色板**（`native_navigation_accent #0A59F7` → primary、`native_canvas_background
+ * #F1F2F4` → background、`text_primary #121212` → onBackground、`bg_1 #FFFFFF` → surface…）。
+ * 那个主题（旧版的"飞牛/原生浅色"）已定下暂时不做，深色是唯一形态，所以整套浅色方案连同它的
+ * 服务对象（各处 `if (luminance >= .5f)` 的浅色分支）一起移除 —— 留着只会让旧调色板以
+ * "反正用不到"的名义继续被引用。
+ */
 @Composable
-fun MaFeiTheme(
-    darkTheme: Boolean = true,
-    content: @Composable () -> Unit,
-) {
+fun MaFeiTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (darkTheme) darkColorScheme(
-            primary = Color(0xFF82BFFF),
-            onPrimary = Color(0xFF05284C),
+        colorScheme = darkColorScheme(
+            primary = Color(0xFF5291FF),
+            onPrimary = Color.White,
             primaryContainer = Color(0xFF173C60),
             onPrimaryContainer = Color(0xFFDAEBFF),
-            secondary = Color(0xFFBACBDB),
+            secondary = Color(0xFFBFCBD6),
             secondaryContainer = Color(0xFF293A49),
             onSecondaryContainer = Color(0xFFE1EBF3),
-            background = Color(0xFF101820),
-            onBackground = Color(0xFFF5F6F8),
-            surface = Color(0xFF1B2732),
-            surfaceVariant = Color(0xFF2C3A46),
-            onSurface = Color(0xFFF5F6F8),
-            onSurfaceVariant = Color(0xFFBFCBD6),
-            outline = Color(0xFF8899A8),
-            outlineVariant = Color(0xFF40505D),
-        ) else lightColorScheme(
-            primary = Color(0xFF1461B5),
-            onPrimary = Color.White,
-            primaryContainer = Color(0xFFDCEBFA),
-            onPrimaryContainer = Color(0xFF14334F),
-            secondary = Color(0xFF476278),
-            secondaryContainer = Color(0xFFE3EAF0),
-            onSecondaryContainer = Color(0xFF243E51),
-            background = Color(0xFFF5F4F1),
-            onBackground = Color(0xFF19252E),
-            surface = Color(0xFFFAFAF8),
-            surfaceVariant = Color(0xFFE7EBEE),
-            onSurface = Color(0xFF19252E),
-            onSurfaceVariant = Color(0xFF52616D),
-            outline = Color(0xFF778792),
-            outlineVariant = Color(0xFFCFD7DD),
+            background = Color(0xFF161618),
+            onBackground = Color.White,
+            surface = Color(0xFF262629),
+            surfaceVariant = Color(0xFF303034),
+            onSurface = Color.White,
+            onSurfaceVariant = Color(0x99FFFFFF),
+            outline = Color(0x33FFFFFF),
+            outlineVariant = Color(0x1FFFFFFF),
         ),
         typography = MaFeiTypography,
         content = content,
@@ -69,9 +60,14 @@ fun MaFeiSurface(
     spec: GlassSurfaceSpec,
     modifier: Modifier = Modifier,
     backdrop: GlassBackdrop? = null,
+    /**
+     * Records this surface's material into that layer, so glass children inside it
+     * can sample page + surface instead of the page alone.
+     */
+    exportedBackdrop: GlassBackdrop? = null,
     content: @Composable () -> Unit,
 ) {
-    GlassSurface(backdrop, spec, MaterialTheme.colorScheme.surface, modifier) {
+    GlassSurface(backdrop, spec, MaterialTheme.colorScheme.surface, modifier, exportedBackdrop) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, content = content)
     }
 }

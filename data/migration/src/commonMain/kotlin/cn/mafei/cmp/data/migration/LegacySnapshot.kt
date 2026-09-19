@@ -42,6 +42,7 @@ data class LegacyServer(
 class LegacyAccount(
     val key: String, val serverKey: String, val remoteUserId: String, val userName: String,
     val token: SecureSecret.AuthToken? = null, val cookie: SecureSecret.CookieText? = null,
+    val password: SecureSecret.Password? = null,
     val lastActiveEpochMs: Long? = null,
 ) {
     override fun toString(): String = "LegacyAccount(redacted)"
@@ -135,6 +136,7 @@ class MigrationValidationException(val problem: MigrationProblem) :
 
 sealed interface MigrationResult {
     data class Pending(val reason: ReadFailure) : MigrationResult
+    data object NotNeeded : MigrationResult
     data class Completed(val migrationId: String, val alreadyCompleted: Boolean,
         val warnings: Set<MigrationWarning>) : MigrationResult
 }

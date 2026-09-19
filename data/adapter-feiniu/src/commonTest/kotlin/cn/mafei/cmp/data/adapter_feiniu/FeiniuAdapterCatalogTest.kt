@@ -29,6 +29,7 @@ import cn.mafei.cmp.core.http_contract.HttpTransportException
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.http_contract.TransportFailureKind
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
+import cn.mafei.cmp.data.adapter_contract.HomeFeedRequest
 import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostCandidate
@@ -56,7 +57,7 @@ private val LIST_PAGE_ONE =
              "watched":1,"is_favorite":1,"vote_average":"8.1","duration":7200,
              "release_date":"2024-01-01","ancestor_guid":"lib-0001","epoch":"ts",
              "ts":1700000000,"overview":"Overview text","official_rating_unused":"x",
-             "media_stream":{"progress":50.0,"current_time":3600.0}},
+             "media_stream":{"resolutions":["4k","1080p"],"audio_type":"DTS","color_range_type":"HDR","progress":50.0,"current_time":3600.0}},
             {"guid":"it-0002","title":"Fixture Show","type":"TV","poster":"/p/s.jpg","season_number":1},
             {"guid":"it-0003","title":"Hologram","type":"LiveChannel"}
         ]}""",
@@ -128,6 +129,50 @@ class FeiniuAdapterCatalogTest {
         assertEquals(0, fixture.transport.requests.size)
     }
 
+    @Test
+    fun homeUsesRankedCatalogAndAuthoritativePlayHistory() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            envelope("""{"list":[{"guid":"latest","title":"Latest","type":"Movie","poster":"/latest.jpg","vote_average":"7.0"}],"total":1}"""),
+        )
+        fixture.transport.enqueueJson(
+            200,
+            envelope("""{"list":[{"guid":"rated","title":"Rated","type":"TV","poster":"/rated.jpg","vote_average":"9.0"}],"total":1}"""),
+        )
+        fixture.transport.enqueueJson(
+            200,
+            envelope("""[{"guid":"resume","title":"Resume","type":"Movie","poster":"/resume.jpg","duration":7200,"media_stream":{"progress":50.0,"current_time":3600.0}}]"""),
+        )
+        fixture.transport.enqueueJson(
+            200,
+            envelope("""{"guid":"rated","title":"Rated","type":"TV","backdrops":"/rated-backdrop.jpg","release_date":"2023-01-01"}"""),
+        )
+        fixture.transport.enqueueJson(
+            200,
+            envelope("""{"guid":"latest","title":"Latest","type":"Movie","backdrops":"/latest-backdrop.jpg","release_date":"2024-01-01"}"""),
+        )
+
+        val home = fixture.adapter.home(HomeFeedRequest())
+        assertEquals(listOf("Rated", "Latest"), home.recommendations.map { it.title })
+        assertEquals(listOf(2023, 2024), home.recommendations.map { it.year })
+        assertTrue(home.recommendations[0].images.first { it.kind == ImageKind.Backdrop }.url.contains("/rated-backdrop.jpg"))
+        assertEquals(listOf("Resume"), home.resume.map { it.title })
+        assertEquals(3_600_000L, home.resume.single().userData.playbackPositionMs)
+        assertTrue(home.nextUp.isEmpty())
+        assertEquals(listOf("Latest"), home.latest.map { it.title })
+        assertEquals(
+            listOf(
+                "/v/api/v1/item/list",
+                "/v/api/v1/item/list",
+                "/v/api/v1/play/list",
+                "/v/api/v1/item/rated",
+                "/v/api/v1/item/latest",
+            ),
+            fixture.transport.requests.map { it.url.encodedPath },
+        )
+    }
+
     // ---------------------------------------------------------- item mapping
 
     @Test
@@ -151,6 +196,7 @@ class FeiniuAdapterCatalogTest {
         assertEquals(1_700_000_000_000L, movie.dateAddedEpochMs) // ts seconds -> ms
         assertEquals("Overview text", movie.overview)
         assertEquals(8.1, movie.communityRating)
+        assertEquals(listOf("4K", "1080P", "DTS", "HDR"), movie.tags)
         // Show: season number mapped, no play flag.
         val show = page.items[1]
         assertEquals(MediaType.Series, show.mediaType)

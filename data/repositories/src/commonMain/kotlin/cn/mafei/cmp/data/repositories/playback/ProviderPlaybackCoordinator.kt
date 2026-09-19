@@ -8,6 +8,7 @@ import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.player.api.PlayableResource
 import cn.mafei.cmp.player.api.PlayerController
@@ -106,6 +107,7 @@ class ProviderPlaybackCoordinator(
         val adapter: MediaProviderAdapter? = null,
         val ready: PlaybackPreparation.Ready? = null,
         val itemId: MediaId? = null,
+        val options: PlaybackOptions = PlaybackOptions(),
         val renegotiations: Int = 0,
     ) {
         fun handles(candidate: PlaybackGeneration?): Boolean = candidate != null && candidate === generation
@@ -143,15 +145,16 @@ class ProviderPlaybackCoordinator(
     }
 
     /**
-     * Prepares via the provider adapter and loads the resulting resource.
-     * Returns the accepted generation, or null when the request was refused
-     * or superseded before loading.
+     * Prepares via the provider adapter (honoring user-directed [options])
+     * and loads the resulting resource. Returns the accepted generation, or
+     * null when the request was refused or superseded before loading.
      */
     suspend fun play(
         provider: ProviderKind,
         itemId: MediaId,
         resumePositionMs: Long = 0,
         autoplay: Boolean = true,
+        options: PlaybackOptions = PlaybackOptions(),
     ): PlaybackGeneration? = mutex.withLock {
         val target = checkNotNull(controller) { "attachController before play" }
         check(!released) { "Playback coordinator released" }
@@ -159,7 +162,7 @@ class ProviderPlaybackCoordinator(
         binding = Binding()
         val adapter = adapterFor(provider)
         // CancellationException propagates untouched (adapter contract).
-        val outcome = adapter.preparePlayback(itemId)
+        val outcome = adapter.preparePlayback(itemId, options)
         if (seq != requestSeq || released) return@withLock null // superseded while preparing
         val ready = outcome as? PlaybackPreparation.Ready
         if (ready == null) {
@@ -188,6 +191,7 @@ class ProviderPlaybackCoordinator(
             adapter = adapter,
             ready = ready,
             itemId = itemId,
+            options = options,
             renegotiations = 0,
         )
         generation
@@ -265,7 +269,7 @@ class ProviderPlaybackCoordinator(
         val adapter = snapshot.adapter ?: return
         val itemId = snapshot.itemId ?: return
         val outcome = try {
-            adapter.preparePlayback(itemId)
+            adapter.preparePlayback(itemId, snapshot.options)
         } catch (e: CancellationException) {
             throw e
         } catch (failure: DomainError) {
@@ -314,6 +318,7 @@ class ProviderPlaybackCoordinator(
             adapter = adapter,
             ready = outcome,
             itemId = itemId,
+            options = snapshot.options,
             renegotiations = snapshot.renegotiations + 1,
         )
         renegotiationsFlow.value += 1

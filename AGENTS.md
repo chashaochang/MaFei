@@ -1,5 +1,14 @@
 # MaFei 2.0 开发约束
 
+## 液态玻璃 UI 前置门禁
+
+1. 修改 `common/ui`、`common/design-system`、`common/glass`、`feature/**` 或 `composeApp` 中任何可见界面前，必须先阅读根目录 [`SKILL.md`](SKILL.md)。
+2. 液态玻璃不是“低透明度 Surface + 圆角 + 描边”。需要同时满足实时背景采样、光学材质、组件角色、交互形变和内容可读性。缺少任一项时不得在说明或提交中称为液态玻璃。
+3. 禁止把页面 section、列表、海报网格、状态提示和普通内容容器全部改成玻璃卡片。玻璃只用于导航、浮层、播放器、焦点控制和确有层级意义的悬浮表面。
+4. 禁止用 `AppGlassCard`、`MaFeiSurface` 或 Material3 `Surface` 批量包裹页面来代替产品设计。先确定信息层级、媒体主视觉、滚动节奏和交互，再选择材质。
+5. 新增或重做交互玻璃组件时，优先复用已验证的 Liquid Button、Toggle、Slider、Bottom Tabs 和 Mini Player 模式；不得自行用静态透明背景仿制。
+6. UI 完成声明必须包含手机和宽屏截图、浅色和深色、静止和按压/拖动状态。仅编译通过不算视觉验收。
+
 ## Git Agent 独立署名
 
 1. 用户要求今后 Codex、GLM 与 Pony Ma 分开署名；Author 和 Committer 都必须明确设置，不能只写 Co-authored-by：Codex 使用 `Codex <codex@mafei.invalid>`，GLM 使用 `GLM <glm@mafei.invalid>`，Pony Ma 使用 `Pony Ma <ponyma@mafei.invalid>`。这些是项目内身份，不是官方 GitHub bot 账号。

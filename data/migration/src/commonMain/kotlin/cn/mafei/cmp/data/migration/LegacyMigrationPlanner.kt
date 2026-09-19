@@ -64,6 +64,8 @@ class LegacyMigrationPlanner {
             }
             old.token?.let { field(it.scheme); field(it.token) }
             old.cookie?.let { field(it.value) }
+            old.password?.let { field(it.value) }
+            alias("password", old.password)
             MigratedAccount(Account(id, serverIds.getValue(old.serverKey), server.provider,
                 old.userName, isCurrent = id == selected, lastActiveEpochMs = old.lastActiveEpochMs),
                 old.remoteUserId, alias("token", old.token), alias("cookie", old.cookie),

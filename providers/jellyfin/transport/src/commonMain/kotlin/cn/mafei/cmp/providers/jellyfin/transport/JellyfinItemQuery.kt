@@ -6,6 +6,7 @@ import cn.mafei.cmp.providers.jellyfin.wire.ItemField
 enum class JellyfinSortBy(val wireName: String) {
     SortName("SortName"),
     DateCreated("DateCreated"),
+    DatePlayed("DatePlayed"),
     PremiereDate("PremiereDate"),
     CommunityRating("CommunityRating"),
     Runtime("Runtime"),
@@ -37,6 +38,7 @@ enum class JellyfinItemFilter(val wireName: String) {
 data class JellyfinItemQuery(
     val userId: String,
     val parentId: String? = null,
+    val personIds: List<String> = emptyList(),
     val startIndex: Int = 0,
     val limit: Int = 50,
     val includeItemTypes: List<String> = emptyList(),

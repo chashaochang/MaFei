@@ -39,6 +39,8 @@ class ApplicationSessions(
     private val catalog: ConnectionCatalog,
     private val factory: ProviderSessionFactory,
     private val scope: CoroutineScope,
+    private val reportFailure: (stage: String, failure: Throwable) -> Unit = { _, _ -> },
+    private val beforeExplicitLogout: suspend () -> Unit = {},
 ) {
     private val mutex = Mutex()
     private var active: ApplicationSession? = null
@@ -59,7 +61,8 @@ class ApplicationSessions(
         } catch (cancelled: CancellationException) {
             if (active == null) mutableState.value = ApplicationSessionState()
             throw cancelled
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            reportFailure("startup-restore", failure)
             mutableState.value = ApplicationSessionState(ApplicationSessionStatus.NeedsAttention)
             null
         }
@@ -71,13 +74,54 @@ class ApplicationSessions(
         restore(restored)
     }
 
+    /** Non-secret account history; individual entries may require re-authentication. */
+    suspend fun savedConnections(): List<SavedConnection> = mutex.withLock {
+        checkOpen()
+        // History is non-secret connection metadata. Explicit logout revokes
+        // automatic restoration, but must not erase the account from the
+        // user's history screen.
+        catalog.all().sortedWith(
+            compareByDescending<SavedConnection> { it.account.lastActiveEpochMs ?: Long.MIN_VALUE }
+                .thenBy { it.account.displayName }
+                .thenBy { it.server.name },
+        )
+    }
+
+    /** Deletes an inactive account from both the restorable index and history. */
+    suspend fun deleteSavedConnection(
+        connection: SavedConnection,
+        deleteRememberedPassword: suspend () -> Unit,
+    ): Boolean = withContext(NonCancellable) {
+        mutex.withLock {
+            checkOpen()
+            if (active?.selection == connection.selection) return@withLock false
+            val stored = catalog.find(connection.selection) ?: return@withLock false
+            require(stored.credentialKey == connection.credentialKey) {
+                "Saved account credential namespace does not match"
+            }
+            deleteRememberedPassword()
+            credentials.removeSavedAccount(stored.selection)
+            catalog.remove(stored)
+        }
+    }
+
     /** Called after a connect/login flow has built an authoritative SDK binding. */
     suspend fun activate(connection: SavedConnection, binding: ProviderSessionBinding): ApplicationSession = mutex.withLock {
         checkOpen()
         validate(connection, binding)
         try {
-            catalog.save(connection)
-            attach(connection, binding)
+            try {
+                catalog.save(connection)
+            } catch (failure: Throwable) {
+                reportFailure("login-catalog-save", failure)
+                throw failure
+            }
+            try {
+                attach(connection, binding)
+            } catch (failure: Throwable) {
+                reportFailure("login-session-save", failure)
+                throw failure
+            }
         } catch (failure: Throwable) {
             if (active?.binding !== binding) binding.clear()
             throw failure
@@ -88,11 +132,19 @@ class ApplicationSessions(
     suspend fun logout(session: ApplicationSession): Boolean = withContext(NonCancellable) {
         mutex.withLock {
             if (active !== session) return@withLock false
+            // Persist the user's intent before clearing automatic restoration.
+            // The saved credential remains available only through an explicit
+            // account-history selection.
+            beforeExplicitLogout()
             detach(session)
             try {
-                val removed = credentials.logout(session.credentials)
+                val signedOut = if (session.connection.rememberLogin) {
+                    credentials.signOut(session.credentials)
+                } else {
+                    credentials.logout(session.credentials)
+                }
                 mutableState.value = ApplicationSessionState(ApplicationSessionStatus.SignedOut)
-                removed
+                signedOut
             } catch (failure: Throwable) {
                 mutableState.value = ApplicationSessionState(ApplicationSessionStatus.NeedsAttention)
                 throw failure

@@ -29,6 +29,7 @@ import cn.mafei.cmp.core.http_contract.HttpTransportException
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.http_contract.TransportFailureKind
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
+import cn.mafei.cmp.data.adapter_contract.HomeFeedRequest
 import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
 import cn.mafei.cmp.providers.jellyfin.core.InMemoryJellyfinSessionState
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
@@ -44,10 +45,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Local PascalCase item fixtures beyond the shared testkit set. */
-private const val EPISODE_JSON = """{"Name":"Pilot","Id":"e0102030405060708","Type":"Episode","SeriesId":"s0102030405060708","SeasonId":"se01020304050607","IndexNumber":2,"ParentIndexNumber":1,"RunTimeTicks":15000000000,"PremiereDate":"2023-04-01T20:00:00Z","UserData":{"IsFavorite":true,"Played":true,"PlayCount":2,"PlaybackPositionTicks":123450000,"PlayedPercentage":41.2,"LastPlayedDate":"2023-05-01T00:00:00Z"}}"""
+private const val EPISODE_JSON = """{"Name":"Pilot","Id":"e0102030405060708","Type":"Episode","SeriesId":"s0102030405060708","SeriesName":"Fixture Series","SeriesPrimaryImageTag":"series-primary-tag","SeasonId":"se01020304050607","SeasonName":"Season 1","ParentThumbItemId":"thumb-parent-id","ParentThumbImageTag":"parent-thumb-tag","ParentBackdropItemId":"backdrop-parent-id","ParentBackdropImageTags":["parent-backdrop-tag"],"IndexNumber":2,"ParentIndexNumber":1,"RunTimeTicks":15000000000,"PremiereDate":"2023-04-01T20:00:00Z","UserData":{"IsFavorite":true,"Played":true,"PlayCount":2,"PlaybackPositionTicks":123450000,"PlayedPercentage":41.2,"LastPlayedDate":"2023-05-01T00:00:00Z"}}"""
 
 private const val MOVIE_JSON =
-    """{"Name":"Fixture Movie","OriginalTitle":"Original Movie","Id":"m0102030405060708","Type":"Movie","Overview":"Overview text","ProductionYear":2024,"CommunityRating":8.1,"OfficialRating":"PG-13","Genres":["Drama"],"PremiereDate":"2024-01-01T00:00:00Z","DateCreated":"2024-02-01T00:00:00Z","RunTimeTicks":72000000000,"People":[{"Name":"Ada Director","Role":"Director","Type":"Director"},{"Name":"Bob Actor","Role":"Lead","Type":"Actor"}],"ImageTags":{"Primary":"1111111122222222","Thumb":"3333333344444444","ScreenGrab":"ignored"},"BackdropImageTags":["bd00000000000001"],"UserData":{"IsFavorite":false}}"""
+    """{"Name":"Fixture Movie","OriginalTitle":"Original Movie","Id":"m0102030405060708","Type":"Movie","Overview":"Overview text","ProductionYear":2024,"CommunityRating":8.1,"OfficialRating":"PG-13","Genres":["Drama"],"PremiereDate":"2024-01-01T00:00:00Z","DateCreated":"2024-02-01T00:00:00Z","RunTimeTicks":72000000000,"People":[{"Id":"person-director","Name":"Ada Director","Role":"Director","Type":"Director","PrimaryImageTag":"director-tag"},{"Id":"person-actor","Name":"Bob Actor","Role":"Lead","Type":"Actor","PrimaryImageTag":"actor-tag"}],"MediaStreams":[{"Type":"Video","Width":3840,"Height":2160},{"Type":"Video","Width":1920,"Height":1080},{"Type":"Audio","Codec":"aac"}],"ImageTags":{"Primary":"1111111122222222","Thumb":"3333333344444444","ScreenGrab":"ignored"},"BackdropImageTags":["bd00000000000001"],"UserData":{"IsFavorite":false}}"""
+
+private const val PERSON_JSON =
+    """{"Name":"Bob Actor","SortName":"Actor, Bob","Id":"person-actor","Type":"Person","Overview":"Person biography","MovieCount":3,"SeriesCount":2,"EpisodeCount":4,"ImageTags":{"Primary":"actor-tag"},"UserData":{"IsFavorite":true}}"""
 
 private const val SEASON_JSON = """{"Name":"Season 1","Id":"se01020304050607","Type":"Season","IndexNumber":2,"SeriesId":"s0102030405060708"}"""
 
@@ -55,7 +59,7 @@ private const val UNKNOWN_TYPE_JSON = """{"Name":"Hologram Show","Id":"h01020304
 
 private const val NO_ID_JSON = """{"Name":"No identity","Type":"Movie"}"""
 
-private const val VIEWS_JSON = """{"Items":[{"Name":"Movies","Id":"v0102030405060708","Type":"CollectionFolder","CollectionType":"movies","ImageTags":{"Primary":"1111111122222222"}},{"Name":"TV","Id":"v0908070605040302","Type":"CollectionFolder","CollectionType":"tvshows"},{"Name":"Mixed","Id":"v11011121314151617","Type":"UserView","CollectionType":"HolographicLibrary"}],"TotalRecordCount":3,"StartIndex":0}"""
+private const val VIEWS_JSON = """{"Items":[{"Name":"Movies","Id":"v0102030405060708","Type":"CollectionFolder","CollectionType":"movies","ChildCount":42,"ImageTags":{"Primary":"1111111122222222"}},{"Name":"TV","Id":"v0908070605040302","Type":"CollectionFolder","CollectionType":"tvshows"},{"Name":"Mixed","Id":"v11011121314151617","Type":"UserView","CollectionType":"HolographicLibrary"}],"TotalRecordCount":3,"StartIndex":0}"""
 
 private fun queryResult(itemsJson: List<String>, total: Int, startIndex: Int = 0): String =
     """{"Items": [${itemsJson.joinToString(",")}], "TotalRecordCount": $total, "StartIndex": $startIndex}"""
@@ -95,19 +99,36 @@ class JellyfinAdapterCatalogTest {
         assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.Search))
         assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesRead))
         assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesFilter))
-        assertFalse(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesEdit))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.FavoritesEdit))
         assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.WatchedFilter))
-        assertFalse(fixture.adapter.capabilities.supports(AdapterCapability.WatchedEdit))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.WatchedEdit))
         assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.PlaybackReporting))
+        assertTrue(fixture.adapter.capabilities.supports(AdapterCapability.MediaDelete))
     }
 
     @Test
-    fun userDataWritesAreRejectedNeverFaked() = runTest {
+    fun userDataWritesHitOfficialEndpoints() = runTest {
         val fixture = Fixture()
-        // P0 SDK has no user-data write endpoints; both edits must refuse.
-        assertFailsWith<ClientConfigError> { fixture.adapter.setFavorite(MediaId("m1"), favorite = true) }
-        assertFailsWith<ClientConfigError> { fixture.adapter.setWatched(MediaId("m1"), watched = true) }
-        assertEquals(0, fixture.transport.requests.size)
+        fixture.transport.enqueueJson(200, "{}")
+        fixture.transport.enqueueJson(200, "{}")
+        fixture.transport.enqueueJson(200, "{}")
+        fixture.transport.enqueueJson(200, "{}")
+        fixture.adapter.setFavorite(MediaId("m1"), favorite = true)
+        fixture.adapter.setFavorite(MediaId("m1"), favorite = false)
+        fixture.adapter.setWatched(MediaId("m1"), watched = true)
+        fixture.adapter.setWatched(MediaId("m1"), watched = false)
+        val paths = fixture.transport.requests.map { it.url.encodedPath }
+        assertEquals(
+            listOf(
+                "/Users/u1/FavoriteItems/m1",
+                "/Users/u1/FavoriteItems/m1",
+                "/Users/u1/PlayedItems/m1",
+                "/Users/u1/PlayedItems/m1",
+            ),
+            paths,
+        )
+        val methods = fixture.transport.requests.map { it.method.name }
+        assertEquals(listOf("Post", "Delete", "Post", "Delete"), methods)
     }
 
     // ---------------------------------------------------------- collections
@@ -121,6 +142,7 @@ class JellyfinAdapterCatalogTest {
         assertEquals(ProviderKind.Jellyfin, page.items.first().provider)
         assertEquals(setOf(MediaType.Movie), page.items[0].mediaTypes)
         assertEquals(setOf(MediaType.Series), page.items[1].mediaTypes)
+        assertEquals(42, page.items[0].itemCount)
         // Unknown future CollectionType is tolerated as an empty set.
         assertEquals(emptySet(), page.items[2].mediaTypes)
         assertTrue(page.items[0].primaryImage!!.url.contains("/Items/v0102030405060708/Images/Primary"), page.items[0].primaryImage!!.url)
@@ -138,6 +160,130 @@ class JellyfinAdapterCatalogTest {
         assertEquals(0, fixture.transport.requests.size)
     }
 
+    @Test
+    fun homeUsesDedicatedJellyfinSections() = runTest {
+        val fixture = Fixture()
+        val series = MOVIE_JSON
+            .replace("Fixture Movie", "Fixture Series")
+            .replace("m0102030405060708", "s0102030405060708")
+            .replace("\"Type\":\"Movie\"", "\"Type\":\"Series\"")
+        val secondMovie = MOVIE_JSON
+            .replace("Fixture Movie", "Second Movie")
+            .replace("m0102030405060708", "second-movie")
+        val tvEpisode = EPISODE_JSON.replace("e0102030405060708", "tv-episode")
+        fixture.transport.handler = { request ->
+            val body = when (request.url.encodedPath.substringAfter("/jellyfin")) {
+                "/Movies/Recommendations" ->
+                    """[{"Items":[$series,$MOVIE_JSON],"RecommendationType":"SimilarToRecentlyPlayed"}]"""
+                "/UserItems/Resume" -> queryResult(listOf(EPISODE_JSON), total = 1)
+                "/Shows/NextUp" ->
+                    queryResult(listOf(EPISODE_JSON.replace("e0102030405060708", "next-episode")), total = 1)
+                "/UserViews" -> VIEWS_JSON
+                "/Items/Latest" -> when (request.url.queryParameters.first("parentId")) {
+                    "v0102030405060708" -> """[$MOVIE_JSON,$secondMovie]"""
+                    "v0908070605040302" -> """[$tvEpisode]"""
+                    else -> "[]"
+                }
+                else -> error("Unexpected home request ${request.url}")
+            }
+            FakeJellyfinTransport.jsonResponse(200, body, request.url)
+        }
+
+        val home = fixture.adapter.home(HomeFeedRequest())
+        assertEquals(listOf("Fixture Movie"), home.recommendations.map { it.title })
+        assertEquals(MediaType.Movie, home.recommendations.single().mediaType)
+        assertEquals(listOf("Pilot"), home.resume.map { it.title })
+        assertEquals(listOf(MediaId("next-episode")), home.nextUp.map { it.id })
+        assertEquals(
+            listOf(MediaId("m0102030405060708"), MediaId("tv-episode"), MediaId("second-movie")),
+            home.latest.map { it.id },
+        )
+        assertEquals(
+            listOf(CollectionId("v0102030405060708"), CollectionId("v0908070605040302"), CollectionId("v0102030405060708")),
+            home.latest.map { it.collectionId },
+        )
+        assertEquals(
+            listOf(
+                "/Movies/Recommendations",
+                "/UserItems/Resume",
+                "/Shows/NextUp",
+                "/UserViews",
+                "/Items/Latest",
+                "/Items/Latest",
+                "/Items/Latest",
+            ),
+            fixture.transport.requests.map { request -> request.url.encodedPath.substringAfter("/jellyfin") },
+        )
+    }
+
+    @Test
+    fun identifiedItemKeepsCanonicalPrimaryArtworkWithoutImageTag() = runTest {
+        val fixture = Fixture()
+        val noTagMovie = MOVIE_JSON.replace(
+            "\"ImageTags\":{\"Primary\":\"1111111122222222\",\"Thumb\":\"3333333344444444\",\"ScreenGrab\":\"ignored\"},",
+            "\"ImageTags\":{},",
+        ).replace("\"BackdropImageTags\":[\"bd00000000000001\"],", "\"BackdropImageTags\":[],")
+        fixture.transport.enqueueJson(200, queryResult(listOf(noTagMovie), total = 1))
+
+        val movie = fixture.adapter.items(null, PageRequest()).items.single()
+
+        assertEquals(listOf("4K", "1080"), movie.tags)
+
+        assertTrue(movie.primaryImage!!.url.contains("/Items/m0102030405060708/Images/Primary"))
+        assertFalse(movie.primaryImage!!.url.contains("tag="), movie.primaryImage!!.url)
+    }
+
+    @Test
+    fun canonicalPrimaryKeepsTaggedThumbAsRuntimeFallback() = runTest {
+        val fixture = Fixture()
+        val thumbOnlyMovie = MOVIE_JSON.replace(
+            "\"ImageTags\":{\"Primary\":\"1111111122222222\",\"Thumb\":\"3333333344444444\",\"ScreenGrab\":\"ignored\"},",
+            "\"ImageTags\":{\"Thumb\":\"3333333344444444\"},",
+        )
+        fixture.transport.enqueueJson(200, queryResult(listOf(thumbOnlyMovie), total = 1))
+
+        val movie = fixture.adapter.items(null, PageRequest()).items.single()
+
+        assertEquals(
+            listOf(ImageKind.Primary, ImageKind.Thumb, ImageKind.Backdrop),
+            movie.images.map { it.kind },
+        )
+        assertTrue(movie.images[0].url.contains("/Items/m0102030405060708/Images/Primary"))
+        assertTrue(movie.images[1].url.contains("/Items/m0102030405060708/Images/Thumb?tag=3333333344444444"))
+    }
+
+    @Test
+    fun inheritedPrimaryImageFollowsCanonicalPrimaryAsFallback() = runTest {
+        val fixture = Fixture()
+        val inheritedMovie = MOVIE_JSON.replace(
+            "\"ImageTags\":{\"Primary\":\"1111111122222222\",\"Thumb\":\"3333333344444444\",\"ScreenGrab\":\"ignored\"},",
+            "\"ParentPrimaryImageItemId\":\"parent-primary-id\",\"ParentPrimaryImageTag\":\"parent-primary-tag\",\"ImageTags\":{},",
+        )
+        fixture.transport.enqueueJson(200, queryResult(listOf(inheritedMovie), total = 1))
+
+        val movie = fixture.adapter.items(null, PageRequest()).items.single()
+
+        assertEquals(listOf(ImageKind.Primary, ImageKind.Primary, ImageKind.Backdrop), movie.images.map { it.kind })
+        assertTrue(movie.images[0].url.contains("/Items/m0102030405060708/Images/Primary"))
+        assertTrue(movie.images[1].url.contains("/Items/parent-primary-id/Images/Primary?tag=parent-primary-tag"))
+    }
+
+    @Test
+    fun inheritedThumbIsKeptAsPosterFallbackForGroupedLatestItem() = runTest {
+        val fixture = Fixture()
+        val inheritedThumbMovie = MOVIE_JSON.replace(
+            "\"ImageTags\":{\"Primary\":\"1111111122222222\",\"Thumb\":\"3333333344444444\",\"ScreenGrab\":\"ignored\"},",
+            "\"ParentThumbItemId\":\"parent-thumb-id\",\"ParentThumbImageTag\":\"parent-thumb-tag\",\"ImageTags\":{},",
+        ).replace("\"BackdropImageTags\":[\"bd00000000000001\"],", "\"BackdropImageTags\":[],")
+        fixture.transport.enqueueJson(200, queryResult(listOf(inheritedThumbMovie), total = 1))
+
+        val movie = fixture.adapter.items(null, PageRequest()).items.single()
+
+        assertEquals(listOf(ImageKind.Primary, ImageKind.Thumb), movie.images.map { it.kind })
+        assertTrue(movie.images[0].url.contains("/Items/m0102030405060708/Images/Primary"))
+        assertTrue(movie.images[1].url.contains("/Items/parent-thumb-id/Images/Thumb?tag=parent-thumb-tag"))
+    }
+
     // ---------------------------------------------------------- item mapping
 
     @Test
@@ -148,13 +294,31 @@ class JellyfinAdapterCatalogTest {
         assertEquals(MediaId("e0102030405060708"), episode.id)
         assertEquals(MediaType.Episode, episode.mediaType)
         assertEquals(MediaId("s0102030405060708"), episode.seriesId)
+        assertEquals("Fixture Series", episode.seriesTitle)
         assertEquals(MediaId("se01020304050607"), episode.seasonId)
+        assertEquals("Season 1", episode.seasonTitle)
         // Jellyfin expresses the season of an episode via ParentIndexNumber.
         assertEquals(1, episode.seasonNumber)
         assertEquals(2, episode.episodeNumber)
         assertEquals(1_500_000L, episode.runtimeMs) // 15_000_000_000 ticks / 10_000
         assertTrue(episode.premiereEpochMs != null)
         assertTrue(episode.canPlay)
+    }
+
+    @Test
+    fun episodeArtworkUsesLegacySeriesPosterAndParentLandscapeFallback() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(EPISODE_JSON), total = 1))
+        val images = fixture.adapter.items(null, PageRequest()).items.single().images
+        assertEquals(listOf(ImageKind.Primary, ImageKind.Backdrop), images.map { it.kind })
+        assertTrue(
+            images[0].url.contains("/Items/s0102030405060708/Images/Primary?tag=series-primary-tag"),
+            images[0].url,
+        )
+        assertTrue(
+            images[1].url.contains("/Items/thumb-parent-id/Images/Thumb?tag=parent-thumb-tag"),
+            images[1].url,
+        )
     }
 
     @Test
@@ -189,6 +353,8 @@ class JellyfinAdapterCatalogTest {
         assertEquals(2024, movie.dateAddedEpochMs?.let(::yearOfEpochMs))
         assertEquals(listOf("Ada Director", "Bob Actor"), movie.people.map { it.name })
         assertEquals(PersonKind.Director, movie.people[0].personType)
+        assertEquals(MediaId("person-actor"), movie.people[1].id)
+        assertTrue(movie.people[1].image!!.url.contains("/Items/person-actor/Images/Primary?tag=actor-tag"))
         // Primary first, thumb kept, non-contract image kinds dropped, backdrops appended.
         assertEquals(
             listOf(ImageKind.Primary, ImageKind.Thumb, ImageKind.Backdrop),
@@ -232,6 +398,46 @@ class JellyfinAdapterCatalogTest {
         assertEquals(PersonKind.Actor, series.people[1].personType)
         assertTrue(series.premiereEpochMs != null)
         assertTrue(series.primaryImage != null)
+    }
+
+    @Test
+    fun personDetailMapsLegacyPersonFieldsAndAvatar() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PERSON_JSON)
+
+        val person = fixture.adapter.person(MediaId("person-actor"))
+
+        assertEquals("Bob Actor", person.name)
+        assertEquals("Actor, Bob", person.sortName)
+        assertEquals("Person biography", person.overview)
+        assertEquals(3, person.movieCount)
+        assertEquals(2, person.seriesCount)
+        assertEquals(4, person.episodeCount)
+        assertTrue(person.isFavorite)
+        assertTrue(person.image!!.url.contains("/Items/person-actor/Images/Primary?tag=actor-tag"))
+    }
+
+    @Test
+    fun itemsByPersonCarriesPersonIdTypeAndLegacyTitleSort() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+
+        val page = fixture.adapter.itemsByPerson(
+            MediaId("person-actor"),
+            PageRequest(
+                pageSize = 10,
+                sort = MediaSort(MediaSortField.Title, SortDirection.Ascending),
+                filter = MediaFilter(mediaTypes = setOf(MediaType.Movie)),
+            ),
+        )
+
+        assertEquals(listOf("Fixture Movie"), page.items.map { it.title })
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("personIds=person-actor"), url)
+        assertTrue(url.contains("includeItemTypes=Movie"), url)
+        assertTrue(url.contains("sortBy=SortName"), url)
+        assertTrue(url.contains("sortOrder=Ascending"), url)
+        assertTrue(url.contains("limit=10"), url)
     }
 
     @Test

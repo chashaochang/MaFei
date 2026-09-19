@@ -37,6 +37,35 @@ data class PersonRef(
     val role: String? = null,
     val personType: PersonKind = PersonKind.Actor,
     val image: MediaImage? = null,
+    /** Stable provider person id. Null means the credit cannot open a person page. */
+    val id: MediaId? = null,
+)
+
+/** Provider-neutral person detail used by the legacy actor page. */
+@Serializable
+data class MediaPerson(
+    val id: MediaId,
+    val serverId: ServerId,
+    val provider: ProviderKind,
+    val name: String,
+    val sortName: String? = null,
+    val overview: String? = null,
+    val image: MediaImage? = null,
+    val isFavorite: Boolean = false,
+    val movieCount: Int? = null,
+    val seriesCount: Int? = null,
+    val episodeCount: Int? = null,
+)
+
+/**
+ * An external reference attached to an item (Jellyfin `ExternalUrls`: e.g.
+ * IMDb/TMDB/TheTVDB links). The url is opened by the platform browser; the
+ * label is the provider-provided site name.
+ */
+@Serializable
+data class MediaExternalUrl(
+    val name: String,
+    val url: String,
 )
 
 /**
@@ -60,7 +89,9 @@ data class MediaItem(
     val collectionId: CollectionId? = null,
     val parentId: MediaId? = null,
     val seriesId: MediaId? = null,
+    val seriesTitle: String? = null,
     val seasonId: MediaId? = null,
+    val seasonTitle: String? = null,
     val seasonNumber: Int? = null,
     val episodeNumber: Int? = null,
     val indexNumber: Int? = null,
@@ -72,13 +103,76 @@ data class MediaItem(
     val communityRating: Double? = null,
     val officialRating: String? = null,
     val genres: List<String> = emptyList(),
+    /** Provider-supplied media badges shown on legacy poster cards (for example 4K/HDR/DTS). */
+    val tags: List<String> = emptyList(),
     val people: List<PersonRef> = emptyList(),
     val images: List<MediaImage> = emptyList(),
     val userData: MediaUserData = MediaUserData(),
     val canPlay: Boolean = false,
+    /**
+     * Playable files for this item, each with its elementary streams. The legacy
+     * HarmonyOS detail page rendered this as 「文件媒体信息」; the wire DTO already
+     * carried it, but nothing mapped it into the domain before.
+     */
+    val mediaSources: List<MediaSourceInfo> = emptyList(),
+    /** Provider-supplied external reference links (IMDb/TMDB/...), detail pages only. */
+    val externalUrls: List<MediaExternalUrl> = emptyList(),
+    /**
+     * 本条数据的展示风格覆盖。适配器**只在**自身服务器的命名/排版与
+     * [MediaDisplayStyle.forProvider] 给出的默认风格不一致时才写入；为 `null` 时按
+     * [provider] 查默认表。展示字段（[heroSubtitle]、[episodeLabel]、[metaLine] 等）
+     * 的格式规则统一在 `MediaPresentation.kt` 定义，UI 不得自行格式化。
+     */
+    val displayStyleOverride: MediaDisplayStyle? = null,
 ) {
     val primaryImage: MediaImage? get() = images.firstOrNull { it.kind == ImageKind.Primary } ?: images.firstOrNull()
 }
+
+/** One playable file for an item — a Jellyfin "media source" / version. */
+@Serializable
+data class MediaSourceInfo(
+    val id: String? = null,
+    val name: String? = null,
+    val path: String? = null,
+    val container: String? = null,
+    val sizeBytes: Long? = null,
+    val runTimeMs: Long? = null,
+    val isRemote: Boolean = false,
+    val defaultAudioIndex: Int? = null,
+    val defaultSubtitleIndex: Int? = null,
+    val streams: List<MediaStreamInfo> = emptyList(),
+) {
+    val videoStream: MediaStreamInfo? get() = streams.firstOrNull { it.kind == MediaStreamKind.Video }
+    val audioStreams: List<MediaStreamInfo> get() = streams.filter { it.kind == MediaStreamKind.Audio }
+    val subtitleStreams: List<MediaStreamInfo> get() = streams.filter { it.kind == MediaStreamKind.Subtitle }
+}
+
+/** One elementary stream inside a [MediaSourceInfo]. */
+@Serializable
+data class MediaStreamInfo(
+    val index: Int? = null,
+    val kind: MediaStreamKind = MediaStreamKind.Other,
+    val codec: String? = null,
+    val language: String? = null,
+    val title: String? = null,
+    val isDefault: Boolean = false,
+    val isForced: Boolean = false,
+    val isExternal: Boolean = false,
+    val channels: Int? = null,
+    val channelLayout: String? = null,
+    val sampleRateHz: Int? = null,
+    val bitRate: Int? = null,
+    val widthPx: Int? = null,
+    val heightPx: Int? = null,
+) {
+    val resolutionLabel: String? get() = when {
+        widthPx != null && heightPx != null -> "${widthPx}×${heightPx}"
+        else -> null
+    }
+}
+
+@Serializable
+enum class MediaStreamKind { Video, Audio, Subtitle, Other }
 
 /**
  * A server-side library ("view") grouping media items, used for the home
@@ -92,4 +186,6 @@ data class MediaCollection(
     val name: String,
     val mediaTypes: Set<MediaType> = emptySet(),
     val primaryImage: MediaImage? = null,
+    /** Provider-reported direct child count when the library endpoint exposes it. */
+    val itemCount: Int? = null,
 )

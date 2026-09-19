@@ -58,6 +58,11 @@ import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sign
 
+enum class LiquidBottomTabsStyle {
+    Standard,
+    Compact,
+}
+
 @Composable
 fun LiquidBottomTabs(
     selectedTabIndex: () -> Int,
@@ -65,6 +70,7 @@ fun LiquidBottomTabs(
     backdrop: GlassBackdrop,
     tabsCount: Int,
     modifier: Modifier = Modifier,
+    style: LiquidBottomTabsStyle = LiquidBottomTabsStyle.Standard,
     compactProgress: () -> Float = { 0f },
     content: @Composable RowScope.() -> Unit
 ) {
@@ -77,9 +83,10 @@ fun LiquidBottomTabs(
     // MaFei supports an in-app theme override, so the system appearance is not
     // a reliable source of truth for glass tint and selection contrast.
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
+    val containerAlpha = .4f
     val containerColor =
-        if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
-        else Color(0xFF121212).copy(0.4f)
+        if (isLightTheme) Color(0xFFFAFAFA).copy(containerAlpha)
+        else Color(0xFF121212).copy(containerAlpha)
 
     val tabsBackdrop = rememberLayerBackdrop()
     val accentColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF)
@@ -93,10 +100,17 @@ fun LiquidBottomTabs(
         // slab. Keep a stable per-destination rhythm and only compress when the
         // available width cannot fit it. This is count-driven, not a per-screen
         // tuning table.
-        val expandedDockWidth = min(maxWidth.value, 8f + tabsCount * 72f).dp
+        val compactEffectInset = if (style == LiquidBottomTabsStyle.Compact) 24f else 0f
+        val availableDockWidth = (maxWidth.value - compactEffectInset * 2f).coerceAtLeast(1f)
+        val itemRhythm = if (style == LiquidBottomTabsStyle.Compact) 52f else 72f
+        val expandedDockWidth = min(availableDockWidth, 8f + tabsCount * itemRhythm).dp
         val dockWidth = expandedDockWidth + (58.dp - expandedDockWidth) * collapseProgress
-        val dockHeight = 64.dp + (58.dp - 64.dp) * collapseProgress
+        val expandedDockHeight = if (style == LiquidBottomTabsStyle.Compact) 52.dp else 64.dp
+        val dockHeight = expandedDockHeight + (58.dp - expandedDockHeight) * collapseProgress
         val dockWidthPx = with(density) { dockWidth.toPx() }
+        val compactPanelPressedScale = 1.025f
+        val panelEffectScale = if (style == LiquidBottomTabsStyle.Compact) 52f / 64f else 1f
+        val selectionEffectScale = if (style == LiquidBottomTabsStyle.Compact) 44f / 56f else 1f
         val tabWidth = with(density) {
             ((dockWidthPx - 8f.dp.toPx()) / tabsCount).coerceAtLeast(1f)
         }
@@ -124,7 +138,7 @@ fun LiquidBottomTabs(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 78f / 56f,
+                pressedScale = if (style == LiquidBottomTabsStyle.Compact) 81f / 56f else 78f / 56f,
                 onDragStarted = {},
                 onDragStopped = {
                     val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -191,12 +205,19 @@ fun LiquidBottomTabs(
                         shape = { Capsule() },
                         effects = {
                             vibrancy()
-                            blur(8f.dp.toPx())
-                            lens(24f.dp.toPx(), 24f.dp.toPx())
+                            blur((8f * panelEffectScale).dp.toPx())
+                            lens(
+                                (24f * panelEffectScale).dp.toPx(),
+                                (24f * panelEffectScale).dp.toPx(),
+                            )
                         },
                         layerBlock = {
                             val progress = dampedDragAnimation.pressProgress
-                            val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
+                            val scale = if (style == LiquidBottomTabsStyle.Compact) {
+                                lerp(1f, compactPanelPressedScale, progress)
+                            } else {
+                                lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
+                            }
                             scaleX = scale
                             scaleY = scale
                         },
@@ -229,10 +250,10 @@ fun LiquidBottomTabs(
                             effects = {
                                 val progress = dampedDragAnimation.pressProgress
                                 vibrancy()
-                                blur(8f.dp.toPx())
+                                blur((8f * panelEffectScale).dp.toPx())
                                 lens(
-                                    24f.dp.toPx() * progress,
-                                    24f.dp.toPx() * progress
+                                    (24f * panelEffectScale).dp.toPx() * progress,
+                                    (24f * panelEffectScale).dp.toPx() * progress
                                 )
                             },
                             highlight = {
@@ -271,8 +292,8 @@ fun LiquidBottomTabs(
                             val progress = dampedDragAnimation.pressProgress
                             val refractionProgress = progress.coerceAtLeast(0.001f)
                             lens(
-                                10f.dp.toPx() * refractionProgress,
-                                14f.dp.toPx() * refractionProgress,
+                                (10f * selectionEffectScale).dp.toPx() * refractionProgress,
+                                (14f * selectionEffectScale).dp.toPx() * refractionProgress,
                                 chromaticAberration = true
                             )
                         },
@@ -287,14 +308,14 @@ fun LiquidBottomTabs(
                         innerShadow = {
                             val progress = dampedDragAnimation.pressProgress
                             InnerShadow(
-                                radius = 8f.dp * progress,
+                                radius = (8f * selectionEffectScale).dp * progress,
                                 alpha = progress
                             )
                         },
                         layerBlock = {
+                            val velocity = dampedDragAnimation.velocity / 10f
                             scaleX = dampedDragAnimation.scaleX
                             scaleY = dampedDragAnimation.scaleY
-                            val velocity = dampedDragAnimation.velocity / 10f
                             scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
                             scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                         },

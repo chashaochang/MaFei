@@ -125,4 +125,17 @@ class FeiniuCatalogApiTest {
         assertEquals("bat man", sent.url.queryParameters.first("q"))
         assertTrue(sent.headers.first("Authx")!!.isNotEmpty())
     }
+
+    @Test
+    fun playHistoryUsesOfficialPlayListAndDecodesProgress() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"msg":"","data":[{"guid":"resume-1","title":"Resume","type":"Movie","duration":7200,"media_stream":{"progress":50.0,"current_time":3600.0}}]}""",
+        )
+        val history = fixture.api.playHistory(fixture.resolution)
+        assertEquals("resume-1", history.single().guid)
+        assertEquals(3600.0, history.single().mediaStream?.currentTimeSeconds)
+        assertTrue(fixture.transport.requests.single().url.encodedPath.endsWith("/v/api/v1/play/list"))
+    }
 }

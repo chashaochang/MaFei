@@ -3,29 +3,93 @@
 #include <vector>
 
 static napi_value CreateMainArkUIViewController(napi_env env, napi_callback_info info) {
-    size_t count = 1;
-    napi_value arguments[1];
-    size_t length = 0;
-    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 1 ||
-        napi_get_value_string_utf8(env, arguments[0], nullptr, 0, &length) != napi_ok || length == 0 || length > 4096) {
-        napi_throw_type_error(env, nullptr, "A private files directory is required");
+    size_t count = 4;
+    napi_value arguments[4];
+    size_t directoryLength = 0;
+    size_t bundleLength = 0;
+    size_t snapshotLength = 0;
+    size_t cmpSettingsLength = 0;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 4 ||
+        napi_get_value_string_utf8(env, arguments[0], nullptr, 0, &directoryLength) != napi_ok ||
+        directoryLength == 0 || directoryLength > 4096 ||
+        napi_get_value_string_utf8(env, arguments[1], nullptr, 0, &bundleLength) != napi_ok ||
+        bundleLength == 0 || bundleLength > 255 ||
+        napi_get_value_string_utf8(env, arguments[2], nullptr, 0, &snapshotLength) != napi_ok ||
+        snapshotLength == 0 || snapshotLength > 1024 * 1024 ||
+        napi_get_value_string_utf8(env, arguments[3], nullptr, 0, &cmpSettingsLength) != napi_ok ||
+        cmpSettingsLength == 0 || cmpSettingsLength > 4 * 1024 * 1024) {
+        napi_throw_type_error(env, nullptr, "A private files directory, bundle name and compatibility snapshots are required");
         return nullptr;
     }
-    std::vector<char> directory(length + 1);
-    size_t copied = 0;
-    if (napi_get_value_string_utf8(env, arguments[0], directory.data(), directory.size(), &copied) != napi_ok || copied != length || directory[0] != '/') {
-        napi_throw_type_error(env, nullptr, "Invalid private files directory");
+    std::vector<char> directory(directoryLength + 1);
+    std::vector<char> bundle(bundleLength + 1);
+    std::vector<char> snapshot(snapshotLength + 1);
+    std::vector<char> cmpSettings(cmpSettingsLength + 1);
+    size_t copiedDirectory = 0;
+    size_t copiedBundle = 0;
+    size_t copiedSnapshot = 0;
+    size_t copiedCmpSettings = 0;
+    if (napi_get_value_string_utf8(env, arguments[0], directory.data(), directory.size(), &copiedDirectory) != napi_ok ||
+        copiedDirectory != directoryLength || directory[0] != '/' ||
+        napi_get_value_string_utf8(env, arguments[1], bundle.data(), bundle.size(), &copiedBundle) != napi_ok ||
+        copiedBundle != bundleLength ||
+        napi_get_value_string_utf8(env, arguments[2], snapshot.data(), snapshot.size(), &copiedSnapshot) != napi_ok ||
+        copiedSnapshot != snapshotLength ||
+        napi_get_value_string_utf8(env, arguments[3], cmpSettings.data(), cmpSettings.size(), &copiedCmpSettings) != napi_ok ||
+        copiedCmpSettings != cmpSettingsLength) {
+        napi_throw_type_error(env, nullptr, "Invalid private files directory, bundle name or compatibility snapshot");
         return nullptr;
     }
-    for (size_t index = 0; index < copied; ++index) {
+    for (size_t index = 0; index < copiedDirectory; ++index) {
         if (directory[index] == '\0') {
             napi_throw_type_error(env, nullptr, "Invalid private files directory");
             return nullptr;
         }
     }
+    for (size_t index = 0; index < copiedBundle; ++index) {
+        if (bundle[index] == '\0') {
+            napi_throw_type_error(env, nullptr, "Invalid bundle name");
+            return nullptr;
+        }
+    }
+    for (size_t index = 0; index < copiedSnapshot; ++index) {
+        if (snapshot[index] == '\0') {
+            napi_throw_type_error(env, nullptr, "Invalid legacy snapshot");
+            return nullptr;
+        }
+    }
+    for (size_t index = 0; index < copiedCmpSettings; ++index) {
+        if (cmpSettings[index] == '\0') {
+            napi_throw_type_error(env, nullptr, "Invalid legacy CMP settings snapshot");
+            return nullptr;
+        }
+    }
     // Kotlin copies the string during this call; no temporary pointer or
     // N-API handle escapes to a background persistence worker.
-    return reinterpret_cast<napi_value>(MainArkUIViewController(env, directory.data()));
+    return reinterpret_cast<napi_value>(
+        MainArkUIViewController(env, directory.data(), bundle.data(), snapshot.data(), cmpSettings.data())
+    );
+}
+
+static napi_value UpdateWindowInsets(napi_env env, napi_callback_info info) {
+    size_t count = 4;
+    napi_value arguments[4];
+    double left = 0.0;
+    double top = 0.0;
+    double right = 0.0;
+    double bottom = 0.0;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 4 ||
+        napi_get_value_double(env, arguments[0], &left) != napi_ok ||
+        napi_get_value_double(env, arguments[1], &top) != napi_ok ||
+        napi_get_value_double(env, arguments[2], &right) != napi_ok ||
+        napi_get_value_double(env, arguments[3], &bottom) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "Four safe-area values are required");
+        return nullptr;
+    }
+    UpdateOhosWindowInsets(left, top, right, bottom);
+    napi_value result = nullptr;
+    napi_get_undefined(env, &result);
+    return result;
 }
 
 EXTERN_C_START
@@ -37,6 +101,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "MainArkUIViewController",
             nullptr,
             CreateMainArkUIViewController,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "UpdateOhosWindowInsets",
+            nullptr,
+            UpdateWindowInsets,
             nullptr,
             nullptr,
             nullptr,

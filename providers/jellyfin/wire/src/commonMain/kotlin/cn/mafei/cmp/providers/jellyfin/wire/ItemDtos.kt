@@ -20,6 +20,7 @@ data class UserItemDataDto(
 /** Subset of the Jellyfin person reference inside a base item. */
 @Serializable
 data class PersonDto(
+    @SerialName("Id") val id: String? = null,
     @SerialName("Name") val name: String? = null,
     @SerialName("Role") val role: String? = null,
     @SerialName("Type") val type: WirePersonKind? = null,
@@ -33,6 +34,13 @@ data class NameLongIdPairDto(
     @SerialName("Id") val id: String? = null,
 )
 
+/** Jellyfin `ExternalUrl` (site name + link, e.g. IMDb/TMDB). */
+@Serializable
+data class ExternalUrlDto(
+    @SerialName("Name") val name: String? = null,
+    @SerialName("Url") val url: String? = null,
+)
+
 /**
  * P0 subset of Jellyfin `BaseItemDto` (OpenAPI 10.10.7 names). Everything the
  * server adds beyond this subset is ignored on decode (frozen MafeiJson
@@ -42,6 +50,7 @@ data class NameLongIdPairDto(
 data class BaseItemDto(
     @SerialName("Id") val id: String? = null,
     @SerialName("Name") val name: String? = null,
+    @SerialName("SortName") val sortName: String? = null,
     @SerialName("OriginalTitle") val originalTitle: String? = null,
     @SerialName("Type") val type: ItemKind? = null,
     @SerialName("Overview") val overview: String? = null,
@@ -55,15 +64,36 @@ data class BaseItemDto(
     @SerialName("DateCreated") @Serializable(with = IsoInstantEpochMsSerializer::class) val dateCreated: Long? = null,
     @SerialName("RunTimeTicks") val runTimeTicks: Long? = null,
     @SerialName("ChildCount") val childCount: Int? = null,
+    @SerialName("MovieCount") val movieCount: Int? = null,
+    @SerialName("SeriesCount") val seriesCount: Int? = null,
+    @SerialName("EpisodeCount") val episodeCount: Int? = null,
     @SerialName("IndexNumber") val indexNumber: Int? = null,
     @SerialName("ParentIndexNumber") val parentIndexNumber: Int? = null,
     @SerialName("SeriesId") val seriesId: String? = null,
     @SerialName("SeriesName") val seriesName: String? = null,
+    @SerialName("SeriesPrimaryImageTag") val seriesPrimaryImageTag: String? = null,
     @SerialName("SeasonId") val seasonId: String? = null,
     @SerialName("SeasonName") val seasonName: String? = null,
+    @SerialName("ParentThumbItemId") val parentThumbItemId: String? = null,
+    @SerialName("ParentThumbImageTag") val parentThumbImageTag: String? = null,
+    @SerialName("ParentPrimaryImageItemId") val parentPrimaryImageItemId: String? = null,
+    @SerialName("ParentPrimaryImageTag") val parentPrimaryImageTag: String? = null,
+    @SerialName("ParentBackdropItemId") val parentBackdropItemId: String? = null,
+    @SerialName("ParentBackdropImageTags") val parentBackdropImageTags: List<String> = emptyList(),
     @SerialName("CollectionType") val collectionType: String? = null,
     @SerialName("ImageTags") val imageTags: Map<String, String> = emptyMap(),
     @SerialName("BackdropImageTags") val backdropImageTags: List<String> = emptyList(),
     @SerialName("UserData") val userData: UserItemDataDto? = null,
+    @SerialName("MediaStreams") val mediaStreams: List<MediaStreamDto> = emptyList(),
     @SerialName("MediaSources") val mediaSources: List<MediaSourceInfoDto> = emptyList(),
+    @SerialName("ExternalUrls") val externalUrls: List<ExternalUrlDto> = emptyList(),
+)
+
+/** One category returned by GET /Movies/Recommendations. */
+@Serializable
+data class RecommendationDto(
+    @SerialName("Items") val items: List<BaseItemDto> = emptyList(),
+    @SerialName("RecommendationType") val recommendationType: String? = null,
+    @SerialName("BaselineItemName") val baselineItemName: String? = null,
+    @SerialName("CategoryId") val categoryId: String? = null,
 )

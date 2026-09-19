@@ -1,17 +1,21 @@
 import { ArkUIViewController, Compose } from '@cpf-kmp-cmp/compose';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import nativeApi from 'libentry.so';
+import {
+  captureLegacyAccountSnapshot,
+  captureLegacyCmpSettings
+} from '../migration/LegacyAccountSnapshotBridge';
 
 const DOMAIN = 0x4D46;
 
 @Entry
 @Component
 struct Index {
-  private controller: ArkUIViewController | undefined = undefined;
+  @State controller: ArkUIViewController | undefined = undefined;
 
   @State errorMessage: string = 'Compose runtime is starting';
 
-  aboutToAppear(): void {
+  async aboutToAppear(): Promise<void> {
     if (nativeApi === undefined) {
       this.errorMessage = 'Native Compose module is unavailable';
       hilog.error(DOMAIN, 'MaFeiCMP', 'libentry.so was not loaded');
@@ -24,7 +28,17 @@ struct Index {
         this.errorMessage = 'Application context is unavailable';
         return;
       }
-      this.controller = nativeApi.MainArkUIViewController(context.filesDir);
+      const legacySnapshot = await captureLegacyAccountSnapshot(
+        context,
+        context.applicationInfo.name
+      );
+      const legacyCmpSettings = captureLegacyCmpSettings(context);
+      this.controller = nativeApi.MainArkUIViewController(
+        context.filesDir,
+        context.applicationInfo.name,
+        legacySnapshot,
+        legacyCmpSettings
+      );
       if (!this.controller) {
         this.errorMessage = 'Compose controller creation failed';
       }
@@ -42,6 +56,12 @@ struct Index {
           libraryName: 'entry',
           onBackPressed: () => this.controller!.onBackPress()
         })
+          .width('100%')
+          .height('100%')
+          .expandSafeArea(
+            [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
+            [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
+          )
       } else {
         Text(this.errorMessage)
       }
@@ -58,7 +78,7 @@ struct Index {
     this.controller?.onPageShow();
   }
 
-  onBackPressed(): boolean {
+  onBackPress(): boolean {
     return this.controller ? this.controller.onBackPress() : false;
   }
 }

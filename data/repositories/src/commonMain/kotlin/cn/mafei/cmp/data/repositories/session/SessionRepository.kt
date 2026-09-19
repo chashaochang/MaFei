@@ -112,7 +112,11 @@ class SessionHandle internal constructor(
  * cross-process locking: one repository must own both aliases and the index.
  * Without settings this retains its original process-local-only behavior.
  */
-class SessionRepository(private val store: SecureCredentialStore, settings: SettingsStorage? = null) {
+class SessionRepository(
+    private val store: SecureCredentialStore,
+    settings: SettingsStorage? = null,
+    private val reportStage: (String) -> Unit = {},
+) {
     private val mutex = Mutex()
     private val mutableState = MutableStateFlow(SessionRepositoryState())
     val state: StateFlow<SessionRepositoryState> = mutableState.asStateFlow()
@@ -134,6 +138,30 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
 
     suspend fun restoreAccount(selection: SessionSelection): RestoredSession? = mutex.withLock {
         restore(accountIndex?.read()?.accounts?.find { it.selection == selection })
+    }
+
+    /**
+     * Deletes the committed credential group for an inactive saved account.
+     * The durable index is removed only after every indexed secret is gone, so
+     * an interrupted deletion can be retried without losing ownership data.
+     */
+    suspend fun removeSavedAccount(selection: SessionSelection): Boolean = withContext(NonCancellable) {
+        mutex.withLock {
+            check(active?.selection != selection) { "Cannot remove the active account" }
+            val index = accountIndex ?: return@withLock false
+            val entry = index.read().accounts.firstOrNull { it.selection == selection } ?: return@withLock false
+            var failure: Throwable? = null
+            for (value in entry.aliases) {
+                try {
+                    store.delete(CredentialAlias(value))
+                } catch (error: Throwable) {
+                    if (failure == null) failure = error else failure.addSuppressed(error)
+                }
+            }
+            if (failure != null) throw failure
+            index.remove(selection)
+            true
+        }
     }
 
     private suspend fun restore(entry: SessionAccountIndex.Entry?): RestoredSession? {
@@ -163,12 +191,14 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
         return mutex.withLock {
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
+                reportStage("select-source")
                 val snapshot = source.current()
                 require(aliases.containsAll(snapshot.secrets.keys)) { "Snapshot uses unowned credential aliases" }
                 if (accountIndex != null) {
                     // Drain a previous failed cleanup, but do not revoke a healthy
                     // active account before durable admission/collision checks.
                     if (active == null && (ownedAliases.isNotEmpty() || cleanupSelection != null)) revokeAndClean()
+                    reportStage("index-begin")
                     val durableAliases = accountIndex.begin(selection, aliases, snapshot)
                     if (active?.selection != selection) ownedAliases.clear()
                     ownedAliases.addAll(durableAliases)
@@ -188,6 +218,7 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
                 active = handle
                 cleanupSelection = selection
                 // A concurrent SDK identity change cannot be silently rebound to this account.
+                reportStage("initial-write")
                 if (!write(handle, snapshot, alreadyPending = accountIndex != null)) {
                     throw IllegalStateException("Credential identity changed during selection")
                 }
@@ -217,6 +248,30 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
     /** Caller owns the collection Job; no hidden scope or fire-and-forget persistence. */
     suspend fun observe(handle: SessionHandle) {
         handle.source.updates.collect { persistLatest(handle) }
+    }
+
+    /**
+     * End the active lease and disable automatic startup restore, but retain
+     * the committed credential group for an explicit account-history login.
+     * Without a persistent account index there is no safe way to recover that
+     * group, so process-local repositories fall back to destructive logout.
+     */
+    suspend fun signOut(handle: SessionHandle): Boolean = withContext(NonCancellable) {
+        mutex.withLock {
+            if (active !== handle) return@withLock false
+            val index = accountIndex
+            if (index == null) {
+                revokeAndClean()
+            } else {
+                reportStage("index-clear-current")
+                index.clearCurrent(handle.selection)
+                active = null
+                ownedAliases.clear()
+                cleanupSelection = null
+                mutableState.value = SessionRepositoryState()
+            }
+            true
+        }
     }
 
     /** Stale/foreign handles cannot delete a new account, including alias reuse. */
@@ -250,6 +305,7 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
         if (!alreadyPending) accountIndex?.begin(handle.selection, handle.aliases, snapshot)
         try {
             mutableState.value = SessionRepositoryState(handle.selection, SessionPersistenceStatus.Writing, handle.persistedRevision.takeIf { it >= 0 })
+            reportStage("secret-save")
             for (alias in ownedAliases) {
                 val secret = snapshot.secrets[alias]
                 if (secret == null) store.delete(alias) else store.save(alias, secret)
@@ -257,19 +313,24 @@ class SessionRepository(private val store: SecureCredentialStore, settings: Sett
             // A save may suspend while the SDK logs out/switches identity. Do
             // not publish even a transient Ready for that revoked identity.
             if (handle.source.current().identityGeneration != handle.identityGeneration) {
+                reportStage("identity-changed-before-commit")
                 revokeAndClean()
                 return false
             }
+            reportStage("index-commit")
             accountIndex?.commit(handle.selection, handle.aliases, snapshot)
             if (handle.source.current().identityGeneration != handle.identityGeneration) {
+                reportStage("identity-changed-after-commit")
                 revokeAndClean()
                 return false
             }
             ownedAliases.retainAll(handle.aliases)
             handle.persistedRevision = snapshot.revision
             mutableState.value = SessionRepositoryState(handle.selection, SessionPersistenceStatus.Ready, snapshot.revision)
+            reportStage("ready")
             return true
         } catch (failure: Throwable) {
+            reportStage("write-failed-${failure::class.simpleName ?: "Exception"}")
             try { revokeAndClean() } catch (cleanupFailure: Throwable) { failure.addSuppressed(cleanupFailure) }
             throw failure
         }

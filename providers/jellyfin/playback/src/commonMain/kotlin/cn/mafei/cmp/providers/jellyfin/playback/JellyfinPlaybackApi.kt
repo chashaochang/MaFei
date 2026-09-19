@@ -39,6 +39,8 @@ interface JellyfinPlaybackApi {
         allowVideoStreamCopy: Boolean? = null,
         allowAudioStreamCopy: Boolean? = null,
         alwaysBurnInSubtitleWhenTranscoding: Boolean? = null,
+        audioStreamIndex: Int? = null,
+        subtitleStreamIndex: Int? = null,
     ): PlaybackInfoResponseDto
 
     /** Absolutizes a track DeliveryUrl with the same same-origin rules as [transcodingUrl]. */
@@ -80,6 +82,8 @@ class DefaultJellyfinPlaybackApi(
         allowVideoStreamCopy: Boolean?,
         allowAudioStreamCopy: Boolean?,
         alwaysBurnInSubtitleWhenTranscoding: Boolean?,
+        audioStreamIndex: Int?,
+        subtitleStreamIndex: Int?,
     ): PlaybackInfoResponseDto {
         val body = PlaybackInfoRequestDto(
             userId = userId,
@@ -96,6 +100,8 @@ class DefaultJellyfinPlaybackApi(
             allowVideoStreamCopy = allowVideoStreamCopy,
             allowAudioStreamCopy = allowAudioStreamCopy,
             alwaysBurnInSubtitleWhenTranscoding = alwaysBurnInSubtitleWhenTranscoding,
+            audioStreamIndex = audioStreamIndex,
+            subtitleStreamIndex = subtitleStreamIndex,
         )
         return client.executeDecoding(
             JellyfinRequests.playbackInfo(client.config.baseUrl, userId, itemId, body),

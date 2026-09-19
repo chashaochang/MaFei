@@ -11,5 +11,7 @@ dependencies {
     add("commonMainApi", project(":core:domain"))
     add("commonMainApi", project(":common:ui"))
     add("commonMainApi", project(":common:media"))
+    add("commonMainImplementation", project(":common:glass"))
+    add("commonMainImplementation", project(":common:design-system"))
     add("commonMainImplementation", project(":data:repositories"))
 }

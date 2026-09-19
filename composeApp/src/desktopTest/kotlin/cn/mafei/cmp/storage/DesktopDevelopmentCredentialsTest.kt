@@ -41,13 +41,15 @@ class DesktopDevelopmentCredentialsTest {
         assertEquals(listOf("sessions.json"), directory.list()!!.toList())
     }
 
-    @Test fun passwordsAndArbitraryBytesAreNeverWritten() = temporary { root ->
+    @Test fun rememberedPasswordsRoundTripButArbitraryBytesAreRejected() = temporary { root ->
         val store = DesktopDevelopmentCredentials(root)
-        for (secret in listOf(SecureSecret.Password("synthetic"), SecureSecret.RawBytes(byteArrayOf(1)))) {
-            assertEquals(CredentialFailureKind.Unsupported,
-                assertFailsWith<CredentialAccessException> { store.save(token, secret) }.kind)
-        }
-        assertTrue(root.list()!!.isEmpty())
+        val passwordAlias = CredentialAlias("account/fixture/password")
+        store.save(passwordAlias, SecureSecret.Password("synthetic"))
+        assertEquals(SecureSecret.Password("synthetic"), store.read(passwordAlias))
+        assertEquals(CredentialFailureKind.Unsupported,
+            assertFailsWith<CredentialAccessException> {
+                store.save(token, SecureSecret.RawBytes(byteArrayOf(1)))
+            }.kind)
     }
 
     @Test fun malformedDocumentFailsClosedAndCannotBeOverwritten() = temporary { root ->
@@ -55,7 +57,7 @@ class DesktopDevelopmentCredentialsTest {
         val store = DesktopDevelopmentCredentials(root)
         store.save(token, SecureSecret.AuthToken("Bearer", "synthetic"))
         val corruptions = listOf("broken", "{\"version\":2,\"entries\":[]}",
-            "{\"version\":1,\"entries\":[{\"alias\":\"a\",\"kind\":\"password\",\"scheme\":\"\",\"value\":\"bad\"}]}")
+            "{\"version\":1,\"entries\":[{\"alias\":\"a\",\"kind\":\"raw\",\"scheme\":\"\",\"value\":\"bad\"}]}")
         for (corruption in corruptions) {
             file.writeText(corruption)
             assertFailsWith<CredentialAccessException> { store.read(token) }
@@ -93,12 +95,17 @@ class DesktopDevelopmentCredentialsTest {
             DocumentSettingsStorage(DesktopSettingsDocument(File(root, "settings"))),
             DesktopDevelopmentCredentials(File(root, "credentials")), Transport(), Dispatchers.Default)
         val first = runtime()
-        val selection = try {
+        val (selection, passwordAlias) = try {
             assertNull(first.sessions.start())
-            first.connect(ProviderKind.Jellyfin, "https://fixture.test", "Fixture", "synthetic-password").selection
+            first.connect(ProviderKind.Jellyfin, "https://fixture.test", "Fixture", "synthetic-password")
+                .let { it.selection to it.connection.passwordAlias }
         } finally { first.close() }
         assertFalse(File(root, "settings/settings.json").readText().contains("synthetic-auth-token"))
-        assertFalse(File(root, "credentials/sessions.json").readText().contains("synthetic-password"))
+        assertEquals(
+            SecureSecret.Password("synthetic-password"),
+            DesktopDevelopmentCredentials(File(root, "credentials"))
+                .read(passwordAlias),
+        )
         val reopened = runtime()
         try {
             val session = assertNotNull(reopened.sessions.start())

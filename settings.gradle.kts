@@ -13,6 +13,7 @@ dependencyResolutionManagement {
         mavenLocal()
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-releases/")
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-public/")
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
         google()
         mavenCentral()
     }
@@ -36,6 +37,7 @@ include(
     ":providers:jellyfin:search",
     ":providers:jellyfin:playstate",
     ":providers:jellyfin:playback",
+    ":providers:jellyfin:userdata",
     ":providers:jellyfin:images",
     ":providers:jellyfin:music",
     ":providers:jellyfin:photos",

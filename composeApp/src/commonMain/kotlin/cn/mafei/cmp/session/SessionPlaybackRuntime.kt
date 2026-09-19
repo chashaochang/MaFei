@@ -3,6 +3,7 @@ package cn.mafei.cmp.session
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.repositories.playback.ProviderPlaybackCoordinator
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerController
@@ -35,12 +36,13 @@ class SessionPlaybackRuntime private constructor(
         get() = coordinator.onFailureObserved
         set(value) { coordinator.onFailureObserved = value }
 
-    /** Prepares via the session's adapter and loads the result into the player. */
+    /** Prepares via the session's adapter (with user-directed options) and loads the result into the player. */
     suspend fun play(
         itemId: MediaId,
         resumePositionMs: Long = 0,
         autoplay: Boolean = true,
-    ): PlaybackGeneration? = coordinator.play(provider, itemId, resumePositionMs, autoplay)
+        options: PlaybackOptions = PlaybackOptions(),
+    ): PlaybackGeneration? = coordinator.play(provider, itemId, resumePositionMs, autoplay, options)
 
     suspend fun stop() = coordinator.stop()
 

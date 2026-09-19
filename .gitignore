@@ -62,3 +62,6 @@ build-profile.private.json5
 *.p7b
 *.csr
 agconnect-services.json
+
+# Workspace-local assistant data (memory, session logs)
+.workbuddy/

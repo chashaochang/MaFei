@@ -31,8 +31,8 @@ fun createDesktopCredentialStore(): SecureCredentialStore = if (usesDesktopDevel
 /**
  * Explicit local-development exception, NOT a secure storage implementation for distribution.
  * The user requested a simple Mac test store to unblock login/home acceptance. Tokens/cookies
- * are stored UNENCRYPTED with owner-only permissions; passwords and arbitrary raw secrets are
- * rejected. This never activates as a fallback from a Keychain error. Shipping builds retain
+ * are stored UNENCRYPTED with owner-only permissions, including remembered passwords requested
+ * for local UI testing; arbitrary raw secrets are rejected. This never activates as a fallback from a Keychain error. Shipping builds retain
  * the platform store; packaging requires an explicit development flag and forbids DMG/release.
  *
  * One app process owns this document. Mutex serialization is not cross-process locking.
@@ -46,8 +46,9 @@ internal class DesktopDevelopmentCredentials(private val directory: File) : Secu
         val entry = when (secret) {
             is SecureSecret.AuthToken -> Entry(alias.value, "token", secret.scheme, secret.token)
             is SecureSecret.CookieText -> Entry(alias.value, "cookie", "", secret.value)
+            is SecureSecret.Password -> Entry(alias.value, "password", "", secret.value)
             else -> throw CredentialAccessException(CredentialFailureKind.Unsupported,
-                "Development storage accepts only session tokens and cookies")
+                "Development storage does not accept arbitrary binary secrets")
         }
         val entries = load().toMutableMap()
         if (!overwrite && alias.value in entries) throw CredentialAccessException(CredentialFailureKind.AlreadyExists)
@@ -59,6 +60,7 @@ internal class DesktopDevelopmentCredentials(private val directory: File) : Secu
         load()[alias.value]?.let { entry -> when (entry.kind) {
             "token" -> SecureSecret.AuthToken(entry.scheme, entry.value)
             "cookie" -> SecureSecret.CookieText(entry.value)
+            "password" -> SecureSecret.Password(entry.value)
             else -> credentialFailure()
         } }
     }
@@ -104,7 +106,8 @@ internal class DesktopDevelopmentCredentials(private val directory: File) : Secu
             document.entries.forEach {
                 CredentialAlias(it.alias)
                 if (it.alias.length > 1024 || it.alias in entries ||
-                    it.kind !in setOf("token", "cookie") || it.kind == "cookie" && it.scheme.isNotEmpty()) credentialFailure()
+                    it.kind !in setOf("token", "cookie", "password") ||
+                    it.kind != "token" && it.scheme.isNotEmpty()) credentialFailure()
                 entries[it.alias] = it
             }
             return entries

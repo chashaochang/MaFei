@@ -66,7 +66,7 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
         val installed = JellyfinSession(userId = connection.remoteUserId, accessToken = token.token)
         val state = SingleIdentityJellyfinState(installed)
         val facade = DefaultJellyfinFacade(
-            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei CMP", connection.credentialKey, "2.0.0"),
+            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei CMP", connection.deviceId, "2.0.0"),
             BorrowedSessionTransport(transport) { state.current.value != null },
             state,
         )

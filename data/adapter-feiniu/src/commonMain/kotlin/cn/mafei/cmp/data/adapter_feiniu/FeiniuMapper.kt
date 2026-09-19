@@ -148,6 +148,7 @@ internal fun FeiniuMediaItem.toMediaItem(
         runtimeMs = runtimeMs,
         communityRating = voteAverage?.trim()?.toDoubleOrNull(),
         genres = emptyList(), // wire carries genre tags only as an Int request filter
+        tags = feiniuMediaTags(stream),
         people = emptyList(), // wire carries no people list in P0
         images = listOfNotNull(
             poster?.takeIf { it.isNotBlank() }?.let { path ->
@@ -165,6 +166,42 @@ internal fun FeiniuMediaItem.toMediaItem(
         canPlay = (canPlay ?: 0) > 0,
     )
 }
+
+/** Mechanical translation of FeiniuVideoCatalogMapper.mediaTags(). */
+private fun feiniuMediaTags(stream: cn.mafei.cmp.providers.feiniu.core.FeiniuItemStream?): List<String> = buildList {
+    stream?.resolutions.orEmpty().forEach { value ->
+        val normalized = value.trim().uppercase()
+        if (normalized.isNotEmpty() && normalized !in this) add(normalized)
+    }
+    listOf(stream?.audioType, stream?.colorRangeType).forEach { value ->
+        value?.trim()?.takeIf { it.isNotEmpty() && it !in this }?.let(::add)
+    }
+}
+
+internal fun cn.mafei.cmp.providers.feiniu.core.FeiniuPlayItem.toMediaItem(
+    serverId: ServerId,
+    imageUrl: (imagePath: String) -> String,
+): MediaItem? = FeiniuMediaItem(
+    guid = guid,
+    title = title,
+    type = type,
+    poster = stillPath?.takeIf { it.isNotBlank() } ?: poster,
+    canPlay = canPlay ?: 1,
+    parentGuid = parentGuid,
+    parentTitle = parentTitle,
+    ancestorGuid = ancestorGuid,
+    ancestorName = ancestorName,
+    ancestorCategory = ancestorCategory,
+    tvTitle = tvTitle,
+    watched = watched,
+    watchedEpochSeconds = watchedEpochSeconds,
+    isFavorite = isFavorite,
+    epochSeconds = epochSeconds,
+    durationSeconds = durationSeconds,
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber,
+    mediaStream = mediaStream,
+).toMediaItem(serverId, imageUrl)
 
 /**
  * Maps the P0 detail payload. It carries no user state — the adapter never

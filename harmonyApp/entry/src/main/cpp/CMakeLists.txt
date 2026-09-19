@@ -25,6 +25,8 @@ target_link_libraries(
     PUBLIC
     libace_napi.z.so
     libhilog_ndk.z.so
+    libffrt.z.so
+    libohpreferences.so
     libdeviceinfo_ndk.z.so
     librawfile.z.so
     ${ENTRY_ROOT}/libs/arm64-v8a/libkn.so

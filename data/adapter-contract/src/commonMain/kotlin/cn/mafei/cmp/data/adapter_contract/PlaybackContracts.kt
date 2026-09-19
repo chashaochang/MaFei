@@ -3,6 +3,23 @@ package cn.mafei.cmp.data.adapter_contract
 import cn.mafei.cmp.core.domain.PlaybackSessionId
 
 /**
+ * User-directed stream selection handed to [MediaProviderAdapter.preparePlayback].
+ *
+ * All fields are optional: the adapter negotiates on its own when a field is
+ * null. Where the provider exposes multiple playable files/versions,
+ * [mediaSourceId] pins one (the id must be one the provider published, e.g.
+ * inside `MediaItem.mediaSources`). Track indexes follow the provider's own
+ * stream numbering; `subtitleStreamIndex = -1` (subtitles off) is also legal.
+ * A provider without multi-version/track selection ignores what it cannot
+ * express instead of failing.
+ */
+data class PlaybackOptions(
+    val mediaSourceId: String? = null,
+    val audioStreamIndex: Int? = null,
+    val subtitleStreamIndex: Int? = null,
+)
+
+/**
  * Outcome of provider-neutral playback preparation.
  *
  * The sealed hierarchy makes every non-success case an explicit value: a

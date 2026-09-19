@@ -108,6 +108,31 @@ data class FeiniuItemStream(
     @SerialName("current_time") val currentTimeSeconds: Double? = null,
 )
 
+/** GET /v/api/v1/play/list entry used by the home resume shelf. */
+@Serializable
+data class FeiniuPlayItem(
+    @SerialName("guid") val guid: String,
+    @SerialName("title") val title: String,
+    @SerialName("type") val type: String? = null,
+    @SerialName("poster") val poster: String? = null,
+    @SerialName("still_path") val stillPath: String? = null,
+    @SerialName("can_play") val canPlay: Int? = null,
+    @SerialName("parent_guid") val parentGuid: String? = null,
+    @SerialName("parent_title") val parentTitle: String? = null,
+    @SerialName("ancestor_guid") val ancestorGuid: String? = null,
+    @SerialName("ancestor_name") val ancestorName: String? = null,
+    @SerialName("ancestor_category") val ancestorCategory: String? = null,
+    @SerialName("tv_title") val tvTitle: String? = null,
+    @SerialName("season_number") val seasonNumber: Int? = null,
+    @SerialName("episode_number") val episodeNumber: Int? = null,
+    @SerialName("is_favorite") val isFavorite: Int? = null,
+    @SerialName("watched") val watched: Int? = null,
+    @SerialName("watched_ts") val watchedEpochSeconds: Long? = null,
+    @SerialName("ts") val epochSeconds: Long? = null,
+    @SerialName("duration") val durationSeconds: Long? = null,
+    @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
+)
+
 /** P0 subset of the item detail payload. */
 @Serializable
 data class FeiniuItemDetail(

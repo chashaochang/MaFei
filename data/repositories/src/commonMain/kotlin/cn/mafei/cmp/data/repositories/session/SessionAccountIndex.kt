@@ -76,6 +76,12 @@ internal class SessionAccountIndex(private val settings: SettingsStorage) {
         save(index.copy(accounts = index.accounts.filterNot { it.selection == selection }, current = index.current.takeUnless { it == selection }))
     }
 
+    /** Stop automatic startup restore while keeping the account restorable from history. */
+    suspend fun clearCurrent(selection: SessionSelection) {
+        val index = read()
+        if (index.current == selection) save(index.copy(current = null))
+    }
+
     private suspend fun save(index: Index) {
         // Check the outgoing bounds too, so a successful write never poisons restart.
         require(index.accounts.size <= 256 && index.accounts.all { it.aliases.size <= 64 })

@@ -1,6 +1,11 @@
 package cn.mafei.cmp
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.window.ComposeArkUIViewController
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.initMainHandler
 import kotlin.experimental.ExperimentalNativeApi
@@ -12,20 +17,129 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.toKString
 import cn.mafei.cmp.session.ApplicationRuntime
 import cn.mafei.cmp.session.ProcessApplication
+import cn.mafei.cmp.storage.OhosPrivateCredentialStore
+import cn.mafei.cmp.storage.CompatibleOhosCredentialStore
+import cn.mafei.cmp.storage.ImportingSettingsStorage
 import cn.mafei.cmp.storage.createOhosSettings
-import cn.mafei.cmp.platform.secure_storage_ohos.OhosAssetCredentialStore
+import cn.mafei.cmp.storage.legacyCmpSettings
 import cn.mafei.cmp.platform.http_ohos.createOhosHttpTransport
+import cn.mafei.cmp.platform.secure_storage_ohos.OhosAssetCredentialStore
+import cn.mafei.cmp.data.migration.LegacySnapshotPayloadReader
+import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
+import cn.mafei.cmp.common.design_system.MaFeiInsetsDp
+import cn.mafei.cmp.common.design_system.MaFeiWindowFeatures
+import platform.PerformanceAnalysisKit.HiLog.LOG_APP
+import platform.PerformanceAnalysisKit.HiLog.LOG_ERROR
+import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
+
+private val ohosWindowFeatures = mutableStateOf(MaFeiWindowFeatures())
+
+@OptIn(ExperimentalNativeApi::class)
+@CName("UpdateOhosWindowInsets")
+fun UpdateOhosWindowInsets(left: Double, top: Double, right: Double, bottom: Double) {
+    fun Double.safeInset(): Float = takeIf { it.isFinite() }?.coerceAtLeast(0.0)?.toFloat() ?: 0f
+    ohosWindowFeatures.value = ohosWindowFeatures.value.copy(
+        safeInsets = MaFeiInsetsDp(
+            left = left.safeInset(),
+            top = top.safeInset(),
+            right = right.safeInset(),
+            bottom = bottom.safeInset(),
+        ),
+    )
+}
 
 @OptIn(ExperimentalNativeApi::class, ExperimentalForeignApi::class)
 @CName("MainArkUIViewController")
-fun MainArkUIViewController(env: napi_env, filesDirectory: CPointer<ByteVar>?): napi_value? = try {
+fun MainArkUIViewController(
+    env: napi_env,
+    filesDirectory: CPointer<ByteVar>?,
+    bundleName: CPointer<ByteVar>?,
+    legacySnapshot: CPointer<ByteVar>?,
+    legacyCmpSettingsPayload: CPointer<ByteVar>?,
+): napi_value? = try {
     initMainHandler(env)
     val directory = requireNotNull(filesDirectory).toKString()
+    val applicationBundle = requireNotNull(bundleName).toKString()
+    val legacyPayload = requireNotNull(legacySnapshot).toKString()
+    val legacyCmpPayload = requireNotNull(legacyCmpSettingsPayload).toKString()
     val runtime = ProcessApplication.getOrCreate {
-        ApplicationRuntime(createOhosSettings(directory), OhosAssetCredentialStore(directory), createOhosHttpTransport())
+        val settings = ImportingSettingsStorage(
+            createOhosSettings(directory),
+            legacyCmpSettings(legacyCmpPayload),
+        )
+        ApplicationRuntime(
+            settings,
+            CompatibleOhosCredentialStore(
+                primary = OhosAssetCredentialStore(directory, "cn.mafei.credentials.v3"),
+                legacy = listOf(
+                    // Development builds temporarily used an owner-only private file while
+                    // AssetStore was not linked. Copy those credentials forward on first read.
+                    OhosPrivateCredentialStore(directory),
+                    OhosAssetCredentialStore(directory, "cn.mafei.credentials.v1"),
+                    OhosAssetCredentialStore(directory, "cn.mafei.credentials.v2"),
+                ),
+                settings = settings,
+            ),
+            createOhosHttpTransport(),
+            legacySnapshotReader = LegacySnapshotPayloadReader.create(legacyPayload),
+            failureReporter = { stage, failure ->
+                val diagnostic = if (failure is IllegalStateException) {
+                    when (failure.message) {
+                        "Nested credential transactions are unsupported" -> "nested-credential-transaction"
+                        "Credential transaction required" -> "credential-transaction-required"
+                        "Migration is already running" -> "migration-already-running"
+                        "Application is closed" -> "application-closed"
+                        "Application sessions are closed" -> "sessions-closed"
+                        else -> "unknown-illegal-state"
+                    }
+                } else null
+                OH_LOG_PrintMsg(
+                    LOG_APP,
+                    LOG_ERROR,
+                    0x4D46u,
+                    "MaFeiSession",
+                    buildString {
+                        append(stage)
+                        append(':')
+                        append(failure::class.simpleName ?: "Exception")
+                        if (diagnostic != null) {
+                            append(':')
+                            append(diagnostic)
+                        }
+                    },
+                )
+                if (failure is IllegalStateException && diagnostic == "unknown-illegal-state") {
+                    OH_LOG_PrintMsg(
+                        LOG_APP,
+                        LOG_ERROR,
+                        0x4D46u,
+                        "MaFeiSession",
+                        "migration-trace:" + failure.stackTraceToString().replace('\n', '|').take(768),
+                    )
+                }
+            },
+            persistenceStageReporter = { stage ->
+                OH_LOG_PrintMsg(
+                    LOG_APP,
+                    LOG_ERROR,
+                    0x4D46u,
+                    "MaFeiSession",
+                    "session-persistence:$stage",
+                )
+            },
+        )
     }
     ComposeArkUIViewController(env) {
-        App(runtime)
+        // ComposeArkUIViewController has no Android ViewTree owner. Install a
+        // platform-backed root so Navigation 3 receives HarmonyOS back events.
+        val navigationOwner = rememberNavigationEventDispatcherOwner(parent = null)
+        val windowFeatures by ohosWindowFeatures
+        CompositionLocalProvider(
+            LocalNavigationEventDispatcherOwner provides navigationOwner,
+            LocalMaFeiWindowFeatures provides windowFeatures,
+        ) {
+            App(runtime)
+        }
     }
 } catch (_: Exception) {
     // A Kotlin exception must not escape the C callback and terminate the process.

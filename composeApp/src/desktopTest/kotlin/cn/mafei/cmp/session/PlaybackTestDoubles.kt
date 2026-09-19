@@ -8,6 +8,7 @@ import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.core.domain.Page
 import cn.mafei.cmp.core.domain.PageRequest
@@ -21,7 +22,7 @@ import cn.mafei.cmp.player.api.RuntimeEvent
 /** Recording adapter for composition tests; all non-playback methods throw. */
 internal class RecordingAdapter : MediaProviderAdapter {
     val reports = mutableListOf<Pair<PlaybackPreparation.Ready, PlaybackEvent>>()
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation =
+    override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation =
         PlaybackPreparation.Ready(
             streamUrl = "https://stream.test/s",
             reportingContext = "{\"item\":\"${item.value}\"}",

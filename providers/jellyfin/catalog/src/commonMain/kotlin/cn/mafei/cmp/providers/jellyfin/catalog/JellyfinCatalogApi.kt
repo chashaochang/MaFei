@@ -6,7 +6,8 @@ import cn.mafei.cmp.providers.jellyfin.transport.JellyfinRequests
 import cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto
 import cn.mafei.cmp.providers.jellyfin.wire.ItemField
 import cn.mafei.cmp.providers.jellyfin.wire.QueryResultDto
-import kotlinx.serialization.builtins.serializer
+import cn.mafei.cmp.providers.jellyfin.wire.RecommendationDto
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Stable catalog surface: home views, item pages (with offset paging),
@@ -20,6 +21,42 @@ interface JellyfinCatalogApi {
 
     /** Offset-paged item query; cursor synthesis is the data adapter's job. */
     suspend fun items(query: JellyfinItemQuery): QueryResultDto<BaseItemDto>
+
+    suspend fun recommendations(
+        userId: String,
+        categoryLimit: Int = 4,
+        itemLimit: Int = 4,
+        fields: List<ItemField> = emptyList(),
+    ): List<RecommendationDto>
+
+    suspend fun resume(
+        userId: String,
+        startIndex: Int = 0,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField> = emptyList(),
+    ): QueryResultDto<BaseItemDto>
+
+    /**
+     * "More like this" for one item via GET /Items/{itemId}/Similar; the
+     * 10.10.7 operation answers a bare item array.
+     */
+    suspend fun similar(
+        userId: String,
+        itemId: String,
+        limit: Int,
+        fields: List<ItemField> = emptyList(),
+    ): List<BaseItemDto>
+
+    suspend fun nextUp(userId: String, limit: Int, fields: List<ItemField> = emptyList()): QueryResultDto<BaseItemDto>
+
+    suspend fun latest(
+        userId: String,
+        parentId: String? = null,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField> = emptyList(),
+    ): List<BaseItemDto>
 
     /**
      * Full detail for one item via the official GET /Items/{itemId}?userId=
@@ -44,12 +81,59 @@ class DefaultJellyfinCatalogApi(
 ) : JellyfinCatalogApi {
 
     private val queryResultSerializer = QueryResultDto.serializer(BaseItemDto.serializer())
+    private val recommendationListSerializer = ListSerializer(RecommendationDto.serializer())
+    private val itemListSerializer = ListSerializer(BaseItemDto.serializer())
 
     override suspend fun views(userId: String): QueryResultDto<BaseItemDto> =
         client.executeDecoding(JellyfinRequests.views(client.config.baseUrl, userId), queryResultSerializer)
 
     override suspend fun items(query: JellyfinItemQuery): QueryResultDto<BaseItemDto> =
         client.executeDecoding(JellyfinRequests.items(client.config.baseUrl, query), queryResultSerializer)
+
+    override suspend fun recommendations(
+        userId: String,
+        categoryLimit: Int,
+        itemLimit: Int,
+        fields: List<ItemField>,
+    ): List<RecommendationDto> = client.executeDecoding(
+        JellyfinRequests.recommendations(client.config.baseUrl, userId, categoryLimit, itemLimit, fields),
+        recommendationListSerializer,
+    )
+
+    override suspend fun resume(
+        userId: String,
+        startIndex: Int,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField>,
+    ): QueryResultDto<BaseItemDto> = client.executeDecoding(
+        JellyfinRequests.resume(client.config.baseUrl, userId, startIndex, limit, includeItemTypes, fields),
+        queryResultSerializer,
+    )
+
+    override suspend fun similar(
+        userId: String,
+        itemId: String,
+        limit: Int,
+        fields: List<ItemField>,
+    ): List<BaseItemDto> = client.executeDecoding(
+        JellyfinRequests.similar(client.config.baseUrl, userId, itemId, limit, fields),
+        itemListSerializer,
+    )
+
+    override suspend fun nextUp(userId: String, limit: Int, fields: List<ItemField>): QueryResultDto<BaseItemDto> =
+        client.executeDecoding(JellyfinRequests.nextUp(client.config.baseUrl, userId, limit, fields), queryResultSerializer)
+
+    override suspend fun latest(
+        userId: String,
+        parentId: String?,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField>,
+    ): List<BaseItemDto> = client.executeDecoding(
+        JellyfinRequests.latest(client.config.baseUrl, userId, parentId, limit, includeItemTypes, fields),
+        itemListSerializer,
+    )
 
     override suspend fun item(userId: String, itemId: String): BaseItemDto =
         client.executeDecoding(

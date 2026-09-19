@@ -9,6 +9,7 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListTags
 import cn.mafei.cmp.providers.feiniu.core.FeiniuMediaLibraryEntry
 import cn.mafei.cmp.providers.feiniu.core.FeiniuMediaItem
+import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayItem
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
@@ -94,6 +95,16 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
             ),
         ) { envelope, _ -> decodeList(envelope, FeiniuMediaItem.serializer()) }
+
+    suspend fun playHistory(resolution: FeiniuHostResolution): List<FeiniuPlayItem> =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                path = "/v/api/v1/play/list",
+                method = FeiniuApiCall.FeiniuMethod.Get,
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ -> decodeList(envelope, FeiniuPlayItem.serializer()) }
 
     suspend fun markFavorite(resolution: FeiniuHostResolution, guid: String) =
         guidCall(resolution, "/v/api/v1/item/favorite", FeiniuApiCall.FeiniuMethod.Put, guid)

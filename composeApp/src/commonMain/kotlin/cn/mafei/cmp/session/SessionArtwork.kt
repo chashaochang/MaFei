@@ -10,18 +10,33 @@ import kotlinx.coroutines.CancellationException
 
 /** Runtime-only artwork requests. Credentials never enter image URLs or a disk cache. */
 internal class SessionArtwork(private val transport: HttpTransport) {
-    suspend fun load(connection: SavedConnection, binding: ProviderSessionBinding, image: MediaImage): ByteArray? {
-        val url = HttpUrl.parseOrNull(image.url) ?: return null
+    suspend fun load(
+        connection: SavedConnection,
+        binding: ProviderSessionBinding,
+        image: MediaImage,
+        targetWidthPx: Int = 480,
+    ): ByteArray? {
+        val url = HttpUrl.parseOrNull(image.url) ?: run { artworkLog("reject: unparseable url"); return null }
         val base = validateSavedBaseUrl(connection.server.baseUrl)
         // Only an explicitly configured server route may receive this account's credentials.
         val route = connection.feiniuRoutes.firstOrNull { sameOrigin(validateSavedBaseUrl(it.baseUrl), url) }
-        if (!sameOrigin(base, url) && route == null) return null
+        if (!sameOrigin(base, url) && route == null) {
+            artworkLog("reject: origin mismatch ${url.host}:${url.port} (base=${base.host}:${base.port})")
+            return null
+        }
         val snapshot = binding.source.current()
-        val token = snapshot.secrets[connection.tokenAlias] as? SecureSecret.AuthToken ?: return null
+        val token = snapshot.secrets[connection.tokenAlias] as? SecureSecret.AuthToken
+        if (token == null) {
+            artworkLog("reject: no token for ${url.encodedPath}")
+            return null
+        }
         val target = when (connection.server.provider) {
-            ProviderKind.Jellyfin -> url.newBuilder().setQueryParameter("maxWidth", "480")
+            ProviderKind.Jellyfin -> url.newBuilder()
+                .setQueryParameter("maxWidth", targetWidthPx.coerceIn(96, 960).toString())
                 .setQueryParameter("quality", "85").build()
-            ProviderKind.Feiniu -> url
+            ProviderKind.Feiniu -> url.newBuilder()
+                .setQueryParameter("w", targetWidthPx.coerceIn(96, 960).toString())
+                .build()
         }
         val request = HttpRequest.builder(HttpMethod.Get, target)
             .redirectPolicy(RedirectPolicy.FollowSameOrigin)
@@ -35,15 +50,37 @@ internal class SessionArtwork(private val transport: HttpTransport) {
                     .filterKeys { it != "cookie" }.forEach { (name, value) -> request.header(name, value) }
             }
         }
-        val response = transport.execute(request.build())
+        val response = try {
+            transport.execute(request.build())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            artworkLog("network error ${failure::class.simpleName} ${url.host}${url.encodedPath}")
+            throw failure
+        }
         // An in-flight completion from an invalidated identity cannot populate a new screen.
         val latest = binding.source.current()
         if (latest.identityGeneration != snapshot.identityGeneration || latest.secrets[connection.tokenAlias] == null) {
             throw CancellationException("Artwork session changed")
         }
-        return response.bodyBytes.takeIf {
-            response.isSuccessful && response.contentType()?.substringBefore(';')?.startsWith("image/") == true && it.isNotEmpty()
+        val mediaType = response.contentType()?.substringBefore(';')?.trim()?.lowercase()
+        if (!response.isSuccessful || response.bodyBytes.isEmpty() ||
+            (mediaType != null && !mediaType.startsWith("image/") && mediaType != "application/octet-stream")
+        ) {
+            artworkLog(
+                "http ${response.statusCode} type=$mediaType bytes=${response.bodyBytes.size} ${url.host}${url.encodedPath}",
+            )
+            return null
         }
+        return response.bodyBytes.takeIf {
+            response.isSuccessful && it.isNotEmpty() &&
+                (mediaType == null || mediaType.startsWith("image/") || mediaType == "application/octet-stream")
+        }
+    }
+
+    /** 临时诊断打点：图片加载失败定位用，定位完成后整体删除。 */
+    private fun artworkLog(message: String) {
+        println("[MaFeiTiming] artwork $message")
     }
 
     private fun sameOrigin(a: HttpUrl, b: HttpUrl) = a.scheme == b.scheme && a.host == b.host && a.port == b.port

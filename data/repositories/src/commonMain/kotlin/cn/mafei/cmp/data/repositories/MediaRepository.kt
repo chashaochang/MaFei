@@ -2,7 +2,12 @@ package cn.mafei.cmp.data.repositories
 
 import cn.mafei.cmp.common.core.EpochClock
 import cn.mafei.cmp.core.domain.*
+import cn.mafei.cmp.core.storage_api.JsonSnapshotStorage
+import cn.mafei.cmp.data.adapter_contract.HomeFeed
+import cn.mafei.cmp.data.adapter_contract.HomeFeedRequest
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -10,6 +15,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
+
+/** 临时诊断打点：首页加载慢定位用，定位完成后可整体删除。 */
+internal fun timingLog(message: String) {
+    println("[MaFeiTiming] $message")
+}
 
 /**
  * In-memory media read repository (04D). Credentials and persistence are not
@@ -23,6 +34,19 @@ import kotlin.coroutines.cancellation.CancellationException
 class MediaRepository(
     private val clock: EpochClock,
     private val policy: MediaCachePolicy = MediaCachePolicy(),
+    /**
+     * Optional durable store for the last successfully fetched home feed
+     * (per account). When present, [homeSnapshot] lets the browser paint the
+     * previous session's home instantly on cold start while the network
+     * refresh runs; the old HarmonyOS client had the same cache-first open.
+     */
+    private val homeSnapshots: JsonSnapshotStorage? = null,
+    /**
+     * Where network + decode runs. Production keeps the UI thread free by
+     * dispatching to [Dispatchers.Default]; deterministic unit tests inject
+     * an unconfined dispatcher so manual continuations stay synchronous.
+     */
+    private val fetchDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val mutex = Mutex()
     private var generation = 0L
@@ -33,10 +57,14 @@ class MediaRepository(
     private sealed interface Key
     private data class BrowseKey(val session: MediaSession, val query: MediaQuery, val request: PageRequest) : Key
     private data class CollectionsKey(val session: MediaSession, val request: PageRequest) : Key
+    private data class HomeKey(val session: MediaSession, val request: HomeFeedRequest) : Key
     private data class ItemKey(val session: MediaSession, val id: MediaId) : Key
+    private data class PersonKey(val session: MediaSession, val id: MediaId) : Key
     private val pages = MediaCache<BrowseKey, Page<MediaItem>>(policy.maxEntries)
     private val libraries = MediaCache<CollectionsKey, Page<MediaCollection>>(policy.maxEntries)
+    private val homes = MediaCache<HomeKey, HomeFeed>(policy.maxEntries)
     private val details = MediaCache<ItemKey, MediaItem>(policy.maxEntries)
+    private val people = MediaCache<PersonKey, MediaPerson>(policy.maxEntries)
     private val listUserState = MediaCache<ItemKey, MediaUserData>(policy.maxEntries)
     private val latest = mutableMapOf<Key, Long>()
 
@@ -72,7 +100,7 @@ class MediaRepository(
         }
         val key = BrowseKey(session, normalized, frozen)
         return load(session, key, pages, refresh, store = { page ->
-            if (normalized is MediaQuery.Items || normalized is MediaQuery.Search) {
+            if (normalized is MediaQuery.Items || normalized is MediaQuery.Search || normalized is MediaQuery.PersonItems) {
                 for (item in page.items) {
                     val itemKey = ItemKey(session, item.id)
                     listUserState.put(itemKey, item.userData, clock.nowEpochMs())
@@ -87,6 +115,9 @@ class MediaRepository(
                 is MediaQuery.Search -> adapter.search(normalized.term, frozen)
                 is MediaQuery.Seasons -> adapter.seasons(normalized.seriesId)
                 is MediaQuery.Episodes -> adapter.episodes(normalized.seriesId, normalized.seasonId, frozen)
+                is MediaQuery.PersonItems -> adapter.itemsByPerson(normalized.personId, frozen)
+                is MediaQuery.Resume -> adapter.resumeItems(frozen)
+                is MediaQuery.Similar -> Page.of(adapter.similar(normalized.itemId), nextCursor = null)
             }
             page.items.forEach { validateItem(session, it) }
             page.copy(items = page.items.toList())
@@ -104,6 +135,72 @@ class MediaRepository(
             }.let { it.copy(items = it.items.toList()) }
         }
     }
+
+    suspend fun home(
+        session: MediaSession,
+        request: HomeFeedRequest = HomeFeedRequest(),
+        refresh: Boolean = false,
+    ): MediaLoad<HomeFeed> {
+        val result = load(session, HomeKey(session, request), homes, refresh, store = { feed ->
+            val observedAt = clock.nowEpochMs()
+            feed.allItems().forEach { item ->
+                val key = ItemKey(session, item.id)
+                listUserState.put(key, item.userData, observedAt)
+                details.remove(key)
+            }
+            feed.copy(
+                recommendations = feed.recommendations.toList(),
+                resume = feed.resume.toList(),
+                nextUp = feed.nextUp.toList(),
+                latest = feed.latest.toList(),
+            )
+        }) { adapter ->
+            adapter.home(request).also { feed -> feed.allItems().forEach { validateItem(session, it) } }
+        }
+        // Refresh succeeded: replace the durable snapshot so the NEXT cold
+        // start paints this content. A failed save only costs one cold-start
+        // of freshness and must never fail the request.
+        if (result.origin == MediaLoadOrigin.Network) persistHomeSnapshot(session, result.value)
+        return result
+    }
+
+    /**
+     * The last durably persisted home feed for [session]'s account, or null.
+     * Read-only: never touches the network or the in-memory cache. Corrupt
+     * snapshots are dropped so the next successful refresh rewrites them.
+     */
+    suspend fun homeSnapshot(session: MediaSession): HomeFeed? {
+        val snapshots = homeSnapshots ?: return null
+        val key = homeSnapshotKey(session)
+        return try {
+            snapshots.load(key, HomeFeed.serializer())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            timingLog("home-snapshot load failed (${failure::class.simpleName})")
+            runCatching { snapshots.delete(key) }
+            null
+        }
+    }
+
+    private suspend fun persistHomeSnapshot(session: MediaSession, feed: HomeFeed) {
+        val snapshots = homeSnapshots ?: return
+        try {
+            snapshots.save(
+                homeSnapshotKey(session),
+                feed,
+                HomeFeed.serializer(),
+                schemaVersion = HomeSnapshotSchemaVersion,
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            timingLog("home-snapshot save failed (${failure::class.simpleName})")
+        }
+    }
+
+    private fun homeSnapshotKey(session: MediaSession): String =
+        "$HomeSnapshotKeyPrefix/${session.provider.name}/${session.serverId.value}/${session.accountId.value}"
 
     suspend fun item(session: MediaSession, id: MediaId, refresh: Boolean = false): MediaLoad<MediaItem> {
         val key = ItemKey(session, id)
@@ -123,6 +220,52 @@ class MediaRepository(
         }
     }
 
+    suspend fun person(session: MediaSession, id: MediaId, refresh: Boolean = false): MediaLoad<MediaPerson> {
+        val key = PersonKey(session, id)
+        return load(session, key, people, refresh) { adapter ->
+            adapter.person(id).also {
+                if (it.id != id) throw ProtocolDecodingError("Person detail returned a different identity")
+                if (it.serverId != session.serverId || it.provider != session.provider) {
+                    throw ProtocolDecodingError("Person detail returned a foreign provider/server identity")
+                }
+            }
+        }
+    }
+
+    suspend fun setFavorite(session: MediaSession, id: MediaId, favorite: Boolean) {
+        mutate(session) { adapter -> adapter.setFavorite(id, favorite) }
+    }
+
+    suspend fun setWatched(session: MediaSession, id: MediaId, watched: Boolean) {
+        mutate(session) { adapter -> adapter.setWatched(id, watched) }
+    }
+
+    /** Administrator-scoped media deletion; the server enforces the policy. */
+    suspend fun deleteItems(session: MediaSession, ids: Collection<MediaId>) {
+        if (ids.isEmpty()) return
+        mutate(session) { adapter -> adapter.deleteItems(ids) }
+    }
+
+    /** Whether the current caller may delete media (drives UI affordances only). */
+    suspend fun canDeleteMedia(session: MediaSession): Boolean =
+        mutex.withLock { requireActive(session).adapter }.canDeleteMedia()
+
+    private suspend fun mutate(
+        session: MediaSession,
+        action: suspend (MediaProviderAdapter) -> Unit,
+    ) {
+        currentCoroutineContext().ensureActive()
+        val adapter = mutex.withLock { requireActive(session).adapter }
+        action(adapter)
+        currentCoroutineContext().ensureActive()
+        mutex.withLock {
+            requireActive(session)
+            // The provider accepted the mutation; no pre-edit list/detail
+            // snapshot may be published or reused afterwards.
+            clearData()
+        }
+    }
+
     private class Start<T>(
         val cached: MediaCache.Entry<T>?, val fresh: Boolean,
         val ticket: Long, val revision: Long, val adapter: MediaProviderAdapter,
@@ -132,6 +275,7 @@ class MediaRepository(
         session: MediaSession, key: K, cache: MediaCache<K, T>, refresh: Boolean,
         store: (T) -> T = { it }, fetch: suspend (MediaProviderAdapter) -> T,
     ): MediaLoad<T> {
+        val label = keyLabel(key)
         currentCoroutineContext().ensureActive()
         val start = mutex.withLock {
             val binding = requireActive(session)
@@ -143,9 +287,19 @@ class MediaRepository(
             }
             Start(cached, fresh, sequence, revision, binding.adapter)
         }
-        if (start.fresh) return MediaLoad(start.cached!!.value, session, MediaLoadOrigin.FreshCache)
+        if (start.fresh) {
+            timingLog("$label: fresh cache hit (0ms)")
+            return MediaLoad(start.cached!!.value, session, MediaLoadOrigin.FreshCache)
+        }
+        val fetchMark = TimeSource.Monotonic.markNow()
         try {
-            val value = fetch(start.adapter)
+            // 网络 + **解码 + 领域映射**都放到默认调度器上：调用方链路是
+            // `LaunchedEffect → MediaBrowser.refresh()`，也就是 UI 上下文；这里不切的话，
+            // 一次首页首屏要把好几页响应的 JSON 解在 UI 线程上，界面会整段卡住 ——
+            // 看起来就像"异步没生效"。状态发布仍在原来的上下文里做（锁内那次），
+            // 所以 `MediaBrowser` 的单线程状态语义不变。
+            val value = withContext(fetchDispatcher) { fetch(start.adapter) }
+            timingLog("$label: network ${fetchMark.elapsedNow().inWholeMilliseconds}ms")
             currentCoroutineContext().ensureActive()
             return mutex.withLock {
                 validatePublication(session, key, start)
@@ -156,20 +310,43 @@ class MediaRepository(
         } catch (error: CancellationException) {
             throw error
         } catch (error: DomainError) {
+            val elapsed = fetchMark.elapsedNow().inWholeMilliseconds
             return mutex.withLock {
                 validatePublication(session, key, start)
                 if (error is AuthenticationError || error is AuthorizationError) clearData()
                 val cached = start.cached
                 if (allowsStale(error) && cached != null &&
                     cached.age(clock.nowEpochMs())?.let { it <= policy.staleMaxAgeMs } == true
-                ) MediaLoad(cached.value, session, MediaLoadOrigin.StaleCache, error)
-                else throw error
+                ) {
+                    timingLog("$label: FAILED after ${elapsed}ms -> stale cache (${error::class.simpleName})")
+                    MediaLoad(cached.value, session, MediaLoadOrigin.StaleCache, error)
+                } else {
+                    timingLog("$label: FAILED after ${elapsed}ms (${error::class.simpleName})")
+                    throw error
+                }
             }
         } finally {
             withContext(NonCancellable) {
                 mutex.withLock { if (latest[key] == start.ticket) latest.remove(key) }
             }
         }
+    }
+
+    private fun keyLabel(key: Key): String = when (key) {
+        is BrowseKey -> "browse/" + when (val query = key.query) {
+            is MediaQuery.Items -> "items:${query.collectionId?.value ?: "all"}" +
+                if (key.request.cursor != null) "+page" else ""
+            is MediaQuery.Search -> "search:${query.term}"
+            is MediaQuery.Seasons -> "seasons"
+            is MediaQuery.Episodes -> "episodes"
+            is MediaQuery.PersonItems -> "person-items"
+            is MediaQuery.Resume -> "resume"
+            is MediaQuery.Similar -> "similar:${query.itemId.value}"
+        }
+        is CollectionsKey -> "collections"
+        is HomeKey -> "home-feed"
+        is ItemKey -> "item:${key.id.value}"
+        is PersonKey -> "person:${key.id.value}"
     }
 
     private fun requireActive(session: MediaSession): Binding = active?.takeIf { it.session === session }
@@ -185,7 +362,7 @@ class MediaRepository(
     private fun clearData() {
         check(revision < Long.MAX_VALUE) { "Media cache revision exhausted" }
         revision++
-        pages.clear(); libraries.clear(); details.clear(); listUserState.clear(); latest.clear()
+        pages.clear(); libraries.clear(); homes.clear(); details.clear(); people.clear(); listUserState.clear(); latest.clear()
     }
 
     private fun validateItem(session: MediaSession, item: MediaItem) {
@@ -201,4 +378,14 @@ class MediaRepository(
         mediaTypes = filter.mediaTypes.toSet(), genres = filter.genres.toSet(), years = filter.years.toSet(),
         searchTerm = filter.searchTerm?.trim()?.takeIf { it.isNotEmpty() },
     ))
+
+    private fun HomeFeed.allItems(): Sequence<MediaItem> = sequence {
+        yieldAll(recommendations)
+        yieldAll(resume)
+        yieldAll(nextUp)
+        yieldAll(latest)
+    }
 }
+
+private const val HomeSnapshotSchemaVersion = 1L
+private const val HomeSnapshotKeyPrefix = "mafei.media.home-snapshot.v1"

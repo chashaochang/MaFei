@@ -40,6 +40,7 @@ kotlin {
                 "-lnative_drawing",
                 "--no-as-needed",
                 "-lrawfile.z",
+                "-lasset_ndk.z",
                 "--as-needed",
                 "-limage_source",
                 "-lpixelmap",
@@ -134,6 +135,12 @@ kotlin {
                 implementation("org.jetbrains.compose.ui:ui:1.9.2")
                 implementation("org.jetbrains.compose.material3:material3:1.9.0")
                 implementation("org.jetbrains.compose.components:components-resources:1.9.2")
+                implementation(
+                    "org.jetbrains.androidx.navigation3:navigation3-runtime-desktop:1.0.0+dev2861",
+                )
+                implementation(
+                    "org.jetbrains.androidx.navigation3:navigation3-ui-desktop:1.0.0+dev2861",
+                )
                 // CPF publishes the OHOS Compose artifacts with a -1.0.0 suffix,
                 // but no matching Desktop bundle exists. MaFei only targets ARM Macs,
                 // so use JetBrains' official macOS ARM64 Desktop artifact explicitly.
@@ -183,6 +190,7 @@ kotlin {
                 implementation(project(":player:runtime-ohos"))
                 implementation(project(":platform:http-ohos"))
                 implementation(project(":platform:secure-storage-ohos"))
+                implementation(project(":platform:secure-storage-core"))
             }
         }
         val ohosTest by creating {
@@ -248,11 +256,6 @@ compose.resources {
 // Explicit opt-in for local Mac acceptance only. Default and release remain Keychain-backed.
 val desktopDevelopmentStorage = providers.gradleProperty("mafei.desktopDevelopmentStorage")
     .map { it == "true" }.getOrElse(false)
-val desktopVisualShowcase = providers.gradleProperty("mafei.desktop.visualShowcase")
-    .map { it == "true" }.getOrElse(false)
-val desktopShowcasePlayer = providers.gradleProperty("mafei.desktop.showcasePlayer")
-    .map { it == "true" }.getOrElse(false)
-val desktopShowcaseDark = providers.gradleProperty("mafei.desktop.showcaseDark").orNull
 val desktopWindowWidth = providers.gradleProperty("mafei.desktop.windowWidth").orNull
 val desktopWindowHeight = providers.gradleProperty("mafei.desktop.windowHeight").orNull
 if (desktopDevelopmentStorage) {
@@ -268,11 +271,7 @@ compose.desktop {
     application {
         mainClass = "cn.mafei.cmp.MainKt"
         if (desktopDevelopmentStorage) jvmArgs += "-Dmafei.desktop.developmentStorage=true"
-        if (desktopVisualShowcase) jvmArgs += "-Dmafei.desktop.visualShowcase=true"
-        if (desktopShowcasePlayer) jvmArgs += "-Dmafei.desktop.showcasePlayer=true"
-        desktopShowcaseDark?.let { value ->
-            if (value == "true" || value == "false") jvmArgs += "-Dmafei.desktop.showcaseDark=$value"
-        }
+        // 只保留窗口尺寸：验收统一走"真应用 + 真实数据"，假数据入口已移除（见 Main.kt）。
         desktopWindowWidth?.toIntOrNull()?.let { value ->
             if (value in 320..2400) jvmArgs += "-Dmafei.desktop.windowWidth=$value"
         }
@@ -296,11 +295,21 @@ arrayOf("debug", "release").forEach { buildType ->
         harmonyEntryDir.dir("src/main/resources/rawfile/composeResources").asFile
     val composeResourcePackage =
         "${rootProject.name}.${project.name.lowercase()}.generated.resources"
+    val connectResourcePackage = "cn.mafei.cmp.feature.connect.generated.resources"
+    val connectResources = project(":feature:connect").layout.buildDirectory.dir(
+        "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
+    )
+    val commonUiResourcePackage = "cn.mafei.cmp.common.ui.generated.resources"
+    val commonUiResources = project(":common:ui").layout.buildDirectory.dir(
+        "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
+    )
 
     tasks.register<Copy>("publish${capitalizedType}BinariesToHarmonyApp") {
         group = "harmony"
         description = "Publishes the ARM64 Kotlin/Native library and Compose resources."
         dependsOn("link${capitalizedType}SharedOhosArm64")
+        dependsOn(":feature:connect:prepareComposeResourcesTaskForCommonMain")
+        dependsOn(":common:ui:prepareComposeResourcesTaskForCommonMain")
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
         doNotTrackState("HarmonyApp is an external Hvigor staging directory.")
         into(harmonyEntryDir)
@@ -320,6 +329,12 @@ arrayOf("debug", "release").forEach { buildType ->
             "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
         )) {
             into("src/main/resources/rawfile/composeResources/${composeResourcePackage}")
+        }
+        from(connectResources) {
+            into("src/main/resources/rawfile/composeResources/$connectResourcePackage")
+        }
+        from(commonUiResources) {
+            into("src/main/resources/rawfile/composeResources/$commonUiResourcePackage")
         }
     }
 

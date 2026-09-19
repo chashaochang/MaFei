@@ -84,6 +84,30 @@ class JellyfinCatalogApiTest {
     }
 
     @Test
+    fun homeEndpointsUseOfficialPathsAndLowerCamelQueries() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, """[{"Items":[],"RecommendationType":"SimilarToRecentlyPlayed"}]""", base)
+        fixture.transport.enqueueJson(200, """{"Items":[],"TotalRecordCount":0,"StartIndex":0}""", base)
+        fixture.transport.enqueueJson(200, """{"Items":[],"TotalRecordCount":0,"StartIndex":0}""", base)
+        fixture.transport.enqueueJson(200, "[]", base)
+
+        fixture.api.recommendations("u1", categoryLimit = 4, itemLimit = 4)
+        fixture.api.resume("u1", limit = 12, includeItemTypes = listOf("Movie", "Episode", "Video"))
+        fixture.api.nextUp("u1", limit = 24)
+        fixture.api.latest("u1", limit = 50, includeItemTypes = listOf("Movie", "Series", "Episode", "Video"))
+
+        val requests = fixture.transport.requests
+        assertTrue(requests[0].url.encodedPath.endsWith("/Movies/Recommendations"))
+        assertEquals("4", requests[0].url.queryParameters.first("categoryLimit"))
+        assertTrue(requests[1].url.encodedPath.endsWith("/UserItems/Resume"))
+        assertEquals("Movie,Episode,Video", requests[1].url.queryParameters.first("includeItemTypes"))
+        assertTrue(requests[2].url.encodedPath.endsWith("/Shows/NextUp"))
+        assertEquals("false", requests[2].url.queryParameters.first("enableResumable"))
+        assertTrue(requests[3].url.encodedPath.endsWith("/Items/Latest"))
+        assertEquals("true", requests[3].url.queryParameters.first("groupItems"))
+    }
+
+    @Test
     fun itemDetailDecodesOffsetIsoDateAndPeople() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, JellyfinFixtures.SERIES_DETAIL, base)

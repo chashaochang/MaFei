@@ -9,6 +9,7 @@ import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerCapabilities
@@ -30,7 +31,7 @@ private class StubAdapter : MediaProviderAdapter {
     val reports = mutableListOf<Pair<PlaybackPreparation.Ready, PlaybackEvent>>()
     var failReports = false
 
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation = PlaybackPreparation.Ready(
+    override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation = PlaybackPreparation.Ready(
         streamUrl = "https://stream.test/session-a.m3u8",
         headers = mapOf("Authorization" to "tok"),
         reportingContext = "{\"item\":\"${item.value}\"}",

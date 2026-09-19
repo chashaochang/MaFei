@@ -14,6 +14,9 @@ class MediaPageAccumulator {
 
     fun reset() { started = false; page = Page.empty(); seenCursors.clear() }
 
+    /** Read-only view of the accumulated walk, for callers merging several sources. */
+    fun snapshot(): Page<MediaItem> = page
+
     fun append(requestCursor: PageCursor?, incoming: Page<MediaItem>): Page<MediaItem> {
         if ((!started && requestCursor != null) || (started && (page.nextCursor == null || requestCursor != page.nextCursor))) {
             throw ClientConfigError("Out-of-order media page")

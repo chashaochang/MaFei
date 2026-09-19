@@ -13,7 +13,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.dp
 
-enum class MaFeiGlyph { Home, Library, More, Back, Arrow, Search, Refresh, Appearance, Account }
+enum class MaFeiGlyph {
+    Home, Library, More, Back, Arrow, Search, Refresh, Appearance, Account, History,
+    Play, Favorite, Watched, Clock, Close,
+    PersonFilled,
+}
 
 /** Small product-owned outline set. No new icon/font dependency on CPF. */
 @Composable
@@ -48,6 +52,60 @@ fun MaFeiIcon(glyph: MaFeiGlyph, modifier: Modifier = Modifier, color: Color = L
                 MaFeiGlyph.Account -> {
                     drawCircle(color, 4f, Offset(12f, 7f), style = Stroke(1.7f))
                     drawArc(color, 180f, 180f, false, Offset(4f, 13f), androidx.compose.ui.geometry.Size(16f, 14f), style = Stroke(1.7f))
+                }
+                MaFeiGlyph.History -> {
+                    drawArc(
+                        color,
+                        -48f,
+                        300f,
+                        false,
+                        Offset(4f, 4f),
+                        androidx.compose.ui.geometry.Size(16f, 16f),
+                        style = Stroke(1.7f),
+                    )
+                    line(4.4f, 5.2f, 4.4f, 10f)
+                    line(4.4f, 5.2f, 9.2f, 5.2f)
+                    line(12f, 7.7f, 12f, 12f)
+                    line(12f, 12f, 15.4f, 14f)
+                }
+                MaFeiGlyph.Play -> {
+                    val play = Path().apply { moveTo(8f, 5f); lineTo(19f, 12f); lineTo(8f, 19f); close() }
+                    drawPath(play, color)
+                }
+                MaFeiGlyph.Favorite -> {
+                    val heart = Path().apply {
+                        moveTo(12f, 20f)
+                        cubicTo(10f, 18f, 4f, 14.1f, 4f, 8.8f)
+                        cubicTo(4f, 5.7f, 6.3f, 3.5f, 9.1f, 3.5f)
+                        cubicTo(10.6f, 3.5f, 11.6f, 4.2f, 12f, 5f)
+                        cubicTo(12.4f, 4.2f, 13.4f, 3.5f, 14.9f, 3.5f)
+                        cubicTo(17.7f, 3.5f, 20f, 5.7f, 20f, 8.8f)
+                        cubicTo(20f, 14.1f, 14f, 18f, 12f, 20f)
+                    }
+                    drawPath(heart, color, style = Stroke(1.7f, cap = StrokeCap.Round))
+                }
+                MaFeiGlyph.Watched -> {
+                    line(5f, 12.5f, 9.5f, 17f)
+                    line(9.5f, 17f, 19f, 7f)
+                }
+                MaFeiGlyph.Clock -> {
+                    drawCircle(color, 8.5f, Offset(12f, 12f), style = Stroke(1.7f))
+                    line(12f, 7f, 12f, 12f)
+                    line(12f, 12f, 15.5f, 14f)
+                }
+                MaFeiGlyph.PersonFilled -> {
+                    drawCircle(color, 4f, Offset(12f, 8f))
+                    val body = Path().apply {
+                        moveTo(4.4f, 20f)
+                        cubicTo(5.4f, 15.4f, 8.4f, 13.4f, 12f, 13.4f)
+                        cubicTo(15.6f, 13.4f, 18.6f, 15.4f, 19.6f, 20f)
+                        close()
+                    }
+                    drawPath(body, color)
+                }
+                MaFeiGlyph.Close -> {
+                    line(7f, 7f, 17f, 17f)
+                    line(17f, 7f, 7f, 17f)
                 }
             }
         }

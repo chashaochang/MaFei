@@ -16,7 +16,7 @@ fun connectFailureMessage(error: Exception): String = when (error) {
     }
     is AuthenticationError -> "登录未通过，请检查账号和密码"
     is AuthorizationError -> "此账号没有访问权限"
-    is ClientConfigError -> "请检查服务器地址和用户名；地址须包含 http:// 或 https://"
+    is ClientConfigError -> "请检查服务器地址和用户名"
     is NetworkUnreachableError, is TimeoutError -> "无法连接服务器，请检查地址和网络"
     is ProtocolDecodingError -> "服务器登录响应不完整或不受支持"
     else -> "连接失败，请检查服务器和网络后重试"

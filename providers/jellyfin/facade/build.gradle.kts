@@ -12,6 +12,7 @@ dependencies {
     add("commonMainApi", project(":providers:jellyfin:catalog"))
     add("commonMainApi", project(":providers:jellyfin:playstate"))
     add("commonMainApi", project(":providers:jellyfin:playback"))
+    add("commonMainApi", project(":providers:jellyfin:userdata"))
     add("commonMainApi", project(":providers:jellyfin:images"))
 }
 

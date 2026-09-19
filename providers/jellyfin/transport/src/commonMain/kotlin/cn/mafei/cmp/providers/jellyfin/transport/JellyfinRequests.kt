@@ -60,6 +60,7 @@ data object JellyfinRequests {
         get(base, "Items") {
             addQueryParameter("userId", query.userId)
             query.parentId?.let { addQueryParameter("parentId", it) }
+            addQueryParameterIfNotBlank("personIds", query.personIds.joinToString(",") { it.trim() })
             addQueryParameter("startIndex", query.startIndex.toString())
             addQueryParameter("limit", query.limit.toString())
             addQueryParameterIfNotBlank("includeItemTypes", query.includeItemTypes.joinToString(",") { it.trim() })
@@ -71,8 +72,168 @@ data object JellyfinRequests {
             if (query.genres.isNotEmpty()) addQueryParameter("genres", query.genres.joinToString("|"))
             if (query.years.isNotEmpty()) addQueryParameter("years", query.years.joinToString(","))
             if (query.filters.isNotEmpty()) addQueryParameter("filters", query.filters.joinToString(",") { it.wireName })
+            addQueryParameter("enableImages", "true")
+            addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
             addQueryParameter("imageTypeLimit", query.imageTypeLimit.toString())
         }
+
+    /** Official endpoint: GET /Movies/Recommendations. */
+    fun recommendations(
+        base: HttpUrl,
+        userId: String,
+        categoryLimit: Int,
+        itemLimit: Int,
+        fields: List<ItemField> = emptyList(),
+    ): HttpRequest = get(base, "Movies/Recommendations") {
+        addQueryParameter("userId", userId)
+        addQueryParameter("categoryLimit", categoryLimit.toString())
+        addQueryParameter("itemLimit", itemLimit.toString())
+        if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
+        addQueryParameter("enableImages", "true")
+        addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+        addQueryParameter("imageTypeLimit", "1")
+    }
+
+    /** Official endpoint: GET /UserItems/Resume. */
+    fun resume(
+        base: HttpUrl,
+        userId: String,
+        startIndex: Int = 0,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField> = emptyList(),
+    ): HttpRequest = get(base, "UserItems/Resume") {
+        addQueryParameter("userId", userId)
+        addQueryParameter("startIndex", startIndex.toString())
+        addQueryParameter("limit", limit.toString())
+        addQueryParameterIfNotBlank("includeItemTypes", includeItemTypes.joinToString(","))
+        if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
+        addQueryParameter("enableUserData", "true")
+        addQueryParameter("enableImages", "true")
+        addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+        addQueryParameter("imageTypeLimit", "1")
+    }
+
+    /**
+     * Official endpoint: GET /Items/{itemId}/Similar. The 10.10.7 operation
+     * returns a bare item array (no query-result envelope).
+     */
+    fun similar(
+        base: HttpUrl,
+        userId: String,
+        itemId: String,
+        limit: Int,
+        fields: List<ItemField> = emptyList(),
+    ): HttpRequest =
+        base.newBuilder()
+            .addPathSegments("Items")
+            .addPathSegment(itemId)
+            .addPathSegments("Similar")
+            .apply {
+                addQueryParameter("userId", userId)
+                addQueryParameter("limit", limit.toString())
+                if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
+                addQueryParameter("enableUserData", "true")
+                addQueryParameter("enableImages", "true")
+                addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+                addQueryParameter("imageTypeLimit", "1")
+            }
+            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
+
+    // ---------------------------------------------------------- user library
+
+    /** Official endpoint: POST /Users/{userId}/FavoriteItems/{itemId}. */
+    fun markFavorite(base: HttpUrl, userId: String, itemId: String): HttpRequest =
+        userItemWrite(base, userId, "FavoriteItems", itemId, HttpMethod.Post)
+
+    /** Official endpoint: DELETE /Users/{userId}/FavoriteItems/{itemId}. */
+    fun unmarkFavorite(base: HttpUrl, userId: String, itemId: String): HttpRequest =
+        userItemWrite(base, userId, "FavoriteItems", itemId, HttpMethod.Delete)
+
+    /** Official endpoint: POST /Users/{userId}/PlayedItems/{itemId}. */
+    fun markPlayed(base: HttpUrl, userId: String, itemId: String): HttpRequest =
+        userItemWrite(base, userId, "PlayedItems", itemId, HttpMethod.Post)
+
+    /** Official endpoint: DELETE /Users/{userId}/PlayedItems/{itemId}. */
+    fun unmarkPlayed(base: HttpUrl, userId: String, itemId: String): HttpRequest =
+        userItemWrite(base, userId, "PlayedItems", itemId, HttpMethod.Delete)
+
+    /** Official endpoint: GET /Users/{userId} (self-readable; exposes the user policy). */
+    fun user(base: HttpUrl, userId: String): HttpRequest =
+        base.newBuilder()
+            .addPathSegments("Users")
+            .addPathSegment(userId)
+            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
+
+    /**
+     * Official endpoint: DELETE /Items?ids=... — administrator-scoped media
+     * deletion. The server rejects non-admin callers with 401/403; the client
+     * only uses its policy probe to hide the affordance.
+     */
+    fun deleteItems(base: HttpUrl, itemIds: Collection<String>): HttpRequest =
+        base.newBuilder()
+            .addPathSegments("Items")
+            .apply { addQueryParameter("ids", itemIds.joinToString(",") { it.trim() }) }
+            .build()
+            .let { url -> request(HttpMethod.Delete, url).build() }
+
+    private fun userItemWrite(
+        base: HttpUrl,
+        userId: String,
+        segment: String,
+        itemId: String,
+        method: HttpMethod,
+    ): HttpRequest =
+        base.newBuilder()
+            .addPathSegments("Users")
+            .addPathSegment(userId)
+            .addPathSegments(segment)
+            .addPathSegment(itemId)
+            .build()
+            .let { url -> request(method, url).build() }
+
+    /** Official endpoint: GET /Shows/NextUp. */
+    fun nextUp(
+        base: HttpUrl,
+        userId: String,
+        limit: Int,
+        fields: List<ItemField> = emptyList(),
+    ): HttpRequest = get(base, "Shows/NextUp") {
+        addQueryParameter("userId", userId)
+        addQueryParameter("startIndex", "0")
+        addQueryParameter("limit", limit.toString())
+        if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
+        addQueryParameter("enableImages", "true")
+        addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+        addQueryParameter("enableUserData", "true")
+        addQueryParameter("imageTypeLimit", "1")
+        addQueryParameter("disableFirstEpisode", "false")
+        addQueryParameter("enableResumable", "false")
+        addQueryParameter("enableRewatching", "false")
+    }
+
+    /** Official endpoint: GET /Items/Latest. */
+    fun latest(
+        base: HttpUrl,
+        userId: String,
+        parentId: String?,
+        limit: Int,
+        includeItemTypes: List<String>,
+        fields: List<ItemField> = emptyList(),
+    ): HttpRequest = get(base, "Items/Latest") {
+        addQueryParameter("userId", userId)
+        parentId?.let { addQueryParameter("parentId", it) }
+        addQueryParameter("limit", limit.toString())
+        addQueryParameterIfNotBlank("includeItemTypes", includeItemTypes.joinToString(","))
+        if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
+        addQueryParameter("enableImages", "true")
+        addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+        addQueryParameter("enableUserData", "true")
+        addQueryParameter("imageTypeLimit", "1")
+        addQueryParameter("groupItems", "true")
+    }
 
     /**
      * Official endpoint: GET /Items/{itemId}?userId=... The OpenAPI operation

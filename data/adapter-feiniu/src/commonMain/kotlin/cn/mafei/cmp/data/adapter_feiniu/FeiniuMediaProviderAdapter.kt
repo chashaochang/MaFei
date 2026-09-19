@@ -1,6 +1,7 @@
 package cn.mafei.cmp.data.adapter_feiniu
 
 import cn.mafei.cmp.core.domain.AccountId
+import cn.mafei.cmp.core.domain.AuthenticationError
 import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.CollectionId
 import cn.mafei.cmp.core.domain.MediaCollection
@@ -17,8 +18,11 @@ import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
+import cn.mafei.cmp.data.adapter_contract.HomeFeed
+import cn.mafei.cmp.data.adapter_contract.HomeFeedRequest
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
@@ -28,9 +32,20 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayRecordRequest
 import cn.mafei.cmp.providers.feiniu.facade.FeiniuFacade
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
+
+/** 临时诊断打点：首页加载慢定位用，定位完成后可整体删除。 */
+private fun timingLog(message: String) {
+    println("[MaFeiTiming] $message")
+}
+
+private const val LEGACY_RECOMMENDATION_DETAIL_LIMIT = 6
 
 /**
  * Feiniu implementation of the provider-neutral [MediaProviderAdapter]
@@ -102,6 +117,117 @@ class FeiniuMediaProviderAdapter(
         val libraries = translate { facade.catalog.mediaLibraries(resolution) }
         val collections = libraries.mapNotNull { it.toMediaCollection(serverId, ::imageUrl) }
         return Page.of(collections, nextCursor = null, totalEstimate = collections.size)
+    }
+
+    override suspend fun home(request: HomeFeedRequest): HomeFeed {
+        val homeMark = TimeSource.Monotonic.markNow()
+        val feed = coroutineScope {
+            val candidateLimit = maxOf(request.latestLimit, request.recommendationLimit * 4)
+            // 三个请求彼此独立：串行发就是把延迟相加。并发后首屏只等最慢的那一个。
+            val latestDataDeferred = async {
+            val mark = TimeSource.Monotonic.markNow()
+            val data = translate {
+                facade.catalog.items(
+                    resolution = resolution,
+                    page = 1,
+                    pageSize = candidateLimit,
+                    sortColumn = "create_time",
+                    sortType = "DESC",
+                )
+            }
+            timingLog("feiniu/home latest ${mark.elapsedNow().inWholeMilliseconds}ms (${data.list.size})")
+            data
+        }
+        val highestRatedDataDeferred = async {
+            val mark = TimeSource.Monotonic.markNow()
+            val data = translate {
+                facade.catalog.items(
+                    resolution = resolution,
+                    page = 1,
+                    pageSize = candidateLimit,
+                    sortColumn = "vote_average",
+                    sortType = "DESC",
+                )
+            }
+            timingLog("feiniu/home highestRated ${mark.elapsedNow().inWholeMilliseconds}ms (${data.list.size})")
+            data
+        }
+        val playHistoryDeferred = async {
+            val mark = TimeSource.Monotonic.markNow()
+            val data = translate { facade.catalog.playHistory(resolution) }
+            timingLog("feiniu/home playHistory ${mark.elapsedNow().inWholeMilliseconds}ms (${data.size})")
+            data
+        }
+            val latestData = latestDataDeferred.await()
+            val highestRatedData = highestRatedDataDeferred.await()
+            val playHistory = playHistoryDeferred.await()
+            val latest = latestData.list.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
+            val resume = playHistory
+                .mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
+                .filter { it.userData.hasProgress && !it.userData.isPlayed }
+                .distinctBy { it.id }
+                .take(request.resumeLimit)
+            val seen = playHistory.mapTo(mutableSetOf()) { it.guid }
+            val recommendationCandidates = (highestRatedData.list + latestData.list)
+                .mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
+                .filter { it.mediaType == cn.mafei.cmp.core.domain.MediaType.Movie || it.mediaType == cn.mafei.cmp.core.domain.MediaType.Series }
+                .filter { it.id.value !in seen }
+                .distinctBy { it.id }
+                .take(request.recommendationLimit)
+            val detailMark = TimeSource.Monotonic.markNow()
+            val recommendations = coroutineScope {
+                recommendationCandidates.mapIndexed { index, item ->
+                    async {
+                        val mark = TimeSource.Monotonic.markNow()
+                        val enriched = if (index < LEGACY_RECOMMENDATION_DETAIL_LIMIT) recommendationWithDetail(item) else item
+                        if (index < LEGACY_RECOMMENDATION_DETAIL_LIMIT) {
+                            timingLog("feiniu/home recommendation-detail[${item.id.value}] ${mark.elapsedNow().inWholeMilliseconds}ms")
+                        }
+                        enriched
+                    }
+                }.awaitAll()
+            }
+            timingLog("feiniu/home recommendation-details ${detailMark.elapsedNow().inWholeMilliseconds}ms (concurrency)")
+            HomeFeed(
+                recommendations = recommendations,
+                resume = resume,
+                // fnOS has no global next-up endpoint. The legacy client also kept
+                // this home section empty instead of issuing an N+1 series walk.
+                nextUp = emptyList(),
+                latest = latest.take(request.latestLimit),
+            )
+        }
+        timingLog("feiniu/home TOTAL ${homeMark.elapsedNow().inWholeMilliseconds}ms")
+        return feed
+    }
+
+    /** The old provider enriched the selected first six recommendations to obtain `backdrops`. */
+    private suspend fun recommendationWithDetail(fallback: MediaItem): MediaItem {
+        val detail = try {
+            translate { facade.catalog.itemDetail(resolution, fallback.id.value) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (authentication: AuthenticationError) {
+            throw authentication
+        } catch (_: Exception) {
+            return fallback
+        }
+        val mapped = detail.toMediaItem(serverId, ::imageUrl)
+            ?.takeIf { it.id == fallback.id }
+            ?: return fallback
+        val detailedKinds = mapped.images.mapTo(mutableSetOf()) { it.kind }
+        return fallback.copy(
+            title = mapped.title.takeIf { it.isNotBlank() } ?: fallback.title,
+            mediaType = mapped.mediaType.takeUnless { it == cn.mafei.cmp.core.domain.MediaType.Unknown }
+                ?: fallback.mediaType,
+            originalTitle = mapped.originalTitle ?: fallback.originalTitle,
+            overview = mapped.overview?.takeIf { it.isNotBlank() } ?: fallback.overview,
+            year = mapped.year ?: fallback.year,
+            premiereEpochMs = mapped.premiereEpochMs ?: fallback.premiereEpochMs,
+            communityRating = mapped.communityRating ?: fallback.communityRating,
+            officialRating = mapped.officialRating ?: fallback.officialRating,
+            images = mapped.images + fallback.images.filter { it.kind !in detailedKinds },
+        )
     }
 
     override suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem> {
@@ -223,7 +349,7 @@ class FeiniuMediaProviderAdapter(
         }
     }
 
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
+    override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
         val info = translate { facade.playback.playInfo(resolution, itemGuid = item.value, pinnedOperation = currentOperation()) }
         val mediaGuid = info.mediaGuid?.takeIf { it.isNotBlank() }
             ?: return PlaybackPreparation.Refused(

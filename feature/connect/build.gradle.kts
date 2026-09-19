@@ -13,3 +13,8 @@ dependencies {
     add("commonMainApi", project(":common:media"))
     add("commonMainImplementation", project(":data:repositories"))
 }
+
+compose.resources {
+    packageOfResClass = "cn.mafei.cmp.feature.connect.generated.resources"
+    generateResClass = always
+}

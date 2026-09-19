@@ -8,34 +8,35 @@ class MaFeiLayoutTest {
     @Test fun navigationUsesWindowNotDeviceOrInput() {
         val phone = mafeiLayout(390f, 844f)
         val tablet = mafeiLayout(800f, 600f)
-        val desktop = mafeiLayout(1180f, 780f)
+        val desktop = mafeiLayout(1600f, 1000f)
         assertEquals(MaFeiLayoutFamily.Phone, phone.family)
         assertEquals(NavigationPlacement.Bottom, phone.navigation)
         assertEquals(MaFeiLayoutFamily.Tablet, tablet.family)
-        assertEquals(NavigationPlacement.Rail, tablet.navigation)
+        assertEquals(NavigationPlacement.Drawer, tablet.navigation)
         assertEquals(MaFeiLayoutFamily.Desktop, desktop.family)
         assertEquals(NavigationPlacement.Sidebar, desktop.navigation)
     }
 
     @Test fun breakpointEdgesAreDeterministic() {
         assertEquals(NavigationPlacement.Bottom, mafeiLayout(599f, 800f).navigation)
-        assertEquals(NavigationPlacement.Rail, mafeiLayout(600f, 800f).navigation)
-        assertEquals(NavigationPlacement.Rail, mafeiLayout(999f, 800f).navigation)
-        assertEquals(NavigationPlacement.Sidebar, mafeiLayout(1000f, 800f).navigation)
+        assertEquals(NavigationPlacement.Drawer, mafeiLayout(600f, 800f).navigation)
+        assertEquals(NavigationPlacement.Sidebar, mafeiLayout(999f, 800f).navigation)
+        assertEquals(NavigationPlacement.Sidebar, mafeiLayout(1200f, 800f).navigation)
+        assertEquals(NavigationPlacement.Drawer, mafeiLayout(1000f, 1400f).navigation)
     }
 
     @Test fun landscapeWithLittleHeightDoesNotWasteSpaceOnHero() {
         val portrait = mafeiLayout(390f, 844f)
         val landscape = mafeiLayout(844f, 390f)
         assertTrue(landscape.heroHeightDp < portrait.heroHeightDp)
-        assertEquals(NavigationPlacement.Rail, landscape.navigation)
+        assertEquals(NavigationPlacement.Sidebar, landscape.navigation)
     }
 
     @Test fun columnsUseRemainingWidthAfterNavigation() {
         val layout = mafeiLayout(1440f, 900f)
-        assertEquals(208f, layout.navigationWidthDp)
-        assertEquals(1160f, layout.gridWidthDp)
-        assertEquals(6, layout.posterColumns)
+        // 侧栏贴窗口边缘通栏：导航宽度 == 侧栏材质宽度（没有悬浮边距）。
+        assertEquals(240f, layout.navigationWidthDp)
+        assertEquals(1136f, layout.gridWidthDp)
         assertTrue(layout.horizontalHero)
     }
 
@@ -44,15 +45,55 @@ class MaFeiLayoutTest {
         val landscape = mafeiLayout(1194f, 834f)
 
         assertEquals(MaFeiLayoutFamily.Tablet, portrait.family)
-        assertEquals(MaFeiLayoutFamily.Desktop, landscape.family)
-        assertTrue(landscape.posterColumns > portrait.posterColumns)
+        assertEquals(MaFeiLayoutFamily.Tablet, landscape.family)
+        assertEquals(NavigationPlacement.Drawer, portrait.navigation)
+        assertEquals(NavigationPlacement.Sidebar, landscape.navigation)
+        assertTrue(landscape.navigationWidthDp > portrait.navigationWidthDp)
+    }
+
+    @Test fun broadFoldingInnerScreenUsesTrailingCompactRail() {
+        val broadFold = mafeiLayout(
+            mafeiAdaptiveWindow(
+                MaFeiWindowEnvironment(
+                    widthDp = 900f,
+                    heightDp = 1_000f,
+                    foldPosture = MaFeiFoldPosture.Flat,
+                    displayRole = MaFeiDisplayRole.Inner,
+                ),
+            ),
+        )
+
+        assertEquals(NavigationPlacement.Rail, broadFold.navigation)
+        assertEquals(NavigationEdge.Trailing, broadFold.navigationEdge)
+        assertEquals(80f, broadFold.navigationWidthDp)
+    }
+
+    @Test fun balancedTabletAndSmallFoldDoNotClaimCompactRail() {
+        val tablet = mafeiLayout(
+            mafeiAdaptiveWindow(
+                MaFeiWindowEnvironment(900f, 1_000f),
+            ),
+        )
+        val smallFold = mafeiLayout(
+            mafeiAdaptiveWindow(
+                MaFeiWindowEnvironment(
+                    widthDp = 430f,
+                    heightDp = 860f,
+                    foldPosture = MaFeiFoldPosture.Flat,
+                    displayRole = MaFeiDisplayRole.Inner,
+                ),
+            ),
+        )
+
+        assertEquals(NavigationPlacement.Drawer, tablet.navigation)
+        assertEquals(NavigationPlacement.Bottom, smallFold.navigation)
     }
 
     @Test fun ultraWideDesktopCapsContentAndPosterDensity() {
         val layout = mafeiLayout(2560f, 1440f)
 
         assertEquals(1440f, layout.contentMaxWidthDp)
-        assertEquals(1368f, layout.gridWidthDp)
+        assertEquals(1376f, layout.gridWidthDp)
         assertEquals(6, layout.posterColumns)
     }
 

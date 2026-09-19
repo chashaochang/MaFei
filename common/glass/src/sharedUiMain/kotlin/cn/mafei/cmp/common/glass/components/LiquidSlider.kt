@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,7 +56,10 @@ fun LiquidSlider(
     backdrop: GlassBackdrop,
     modifier: Modifier = Modifier
 ) {
-    val isLightTheme = !isSystemInDarkTheme()
+    // 判定必须跟随**应用**主题，不是系统外观：应用已经只有深色一套（浅色主题已砍），
+    // 之前用 `!isSystemInDarkTheme()` 会在系统处于浅色时把滑杆画成浅色配色（蓝 0xFF0088FF
+    // + 浅轨道），与周围深色界面脱节。这里与其它玻璃组件统一用配色方案自身的亮度。
+    val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
     val accentColor =
         if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)

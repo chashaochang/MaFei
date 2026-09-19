@@ -71,6 +71,7 @@ enum class SortDirection {
 enum class MediaSortField {
     Title,
     DateAdded,
+    DatePlayed,
     PremiereDate,
     CommunityRating,
     Runtime,

@@ -7,20 +7,29 @@ import kotlinx.cinterop.*
 import platform.posix.*
 import kotlin.random.Random
 
-
 /** Host supplies its persistent filesDir; no inferred/temp path and no ArkTS business storage. */
 fun createOhosSettings(privateDirectory: String): SettingsStorage =
-    DocumentSettingsStorage(OhosSettingsDocument(privateDirectory))
+    DocumentSettingsStorage(OhosSettingsDocument(privateDirectory, "mafei-settings-v2", "settings.json"))
+
+/** Legacy-compatible CMP credential document, isolated from ordinary settings and old ArkUI data. */
+internal fun createOhosCredentialSettings(privateDirectory: String): SettingsStorage =
+    DocumentSettingsStorage(OhosSettingsDocument(privateDirectory, "mafei-credentials-v2", "credentials.json"))
 
 /** Atomic visibility, bounded descriptor reads, owner-only files; one runtime writer. */
-private class OhosSettingsDocument(private val privateDirectory: String) : SettingsDocumentBackend {
+private class OhosSettingsDocument(
+    private val privateDirectory: String,
+    private val storageDirectory: String,
+    private val storageFile: String,
+) : SettingsDocumentBackend {
     init {
         require(privateDirectory.startsWith('/') && privateDirectory.length > 1 && '\u0000' !in privateDirectory) {
             "Persistent private settings directory required"
         }
+        require(storageDirectory.matches(Regex("[a-z0-9-]{1,64}")) && storageFile.matches(Regex("[a-z0-9.-]{1,64}")))
     }
+
     override fun read(): ByteArray? = inDirectory { directory ->
-        val fd = openat(directory, "settings.json", O_RDONLY or O_NOFOLLOW or O_NONBLOCK or O_CLOEXEC)
+        val fd = openat(directory, storageFile, O_RDONLY or O_NOFOLLOW or O_NONBLOCK or O_CLOEXEC)
         if (fd < 0) {
             if (errno == ENOENT) return@inDirectory null
             unavailable()
@@ -45,17 +54,21 @@ private class OhosSettingsDocument(private val privateDirectory: String) : Setti
                 if (count != 0L) corrupt()
             }
             bytes
-        } finally { close(fd) }
+        } finally {
+            close(fd)
+        }
     }
 
     override fun replace(document: ByteArray): Unit = inDirectory { directory ->
-        val existing = openat(directory, "settings.json", O_RDONLY or O_NOFOLLOW or O_NONBLOCK or O_CLOEXEC)
+        val existing = openat(directory, storageFile, O_RDONLY or O_NOFOLLOW or O_NONBLOCK or O_CLOEXEC)
         if (existing >= 0) {
             try { checkFile(existing, directory = false) } finally { close(existing) }
-        } else if (errno != ENOENT) unavailable()
-        // Randomness is for a unique temporary filename, not cryptography. O_EXCL is authoritative.
-        val name = ".settings-" + Random.nextLong().toULong().toString(16) + ".tmp"
-        val fd = openat(directory, name, O_WRONLY or O_CREAT or O_EXCL or O_NOFOLLOW or O_CLOEXEC, 384)
+        } else if (errno != ENOENT) {
+            unavailable()
+        }
+
+        val temporary = ".settings-" + Random.nextLong().toULong().toString(16) + ".tmp"
+        val fd = openat(directory, temporary, O_WRONLY or O_CREAT or O_EXCL or O_NOFOLLOW or O_CLOEXEC, 384)
         if (fd < 0) unavailable()
         try {
             checkFile(fd, directory = false)
@@ -69,33 +82,41 @@ private class OhosSettingsDocument(private val privateDirectory: String) : Setti
                 }
             }
             if (fsync(fd) != 0) unavailable()
-            // Commit point. No fallible work is reported after this succeeds.
-            if (renameat(directory, name, directory, "settings.json") != 0) unavailable()
+            if (renameat(directory, temporary, directory, storageFile) != 0) unavailable()
         } finally {
             close(fd)
-            unlinkat(directory, name, 0) // best-effort cleanup of only this call's temporary file
+            unlinkat(directory, temporary, 0)
         }
     }
 
     private fun <T> inDirectory(block: (Int) -> T): T {
-        // The Harmony host supplies an already-existing persistent private directory.
         val parent = open(privateDirectory, O_RDONLY or O_DIRECTORY or O_NOFOLLOW or O_CLOEXEC)
         if (parent < 0) unavailable()
         try {
             checkFile(parent, directory = true, privatePermissions = false)
-            if (mkdirat(parent, "mafei-settings-v1", 448u.convert()) != 0 && errno != EEXIST) unavailable()
-            val directory = openat(parent, "mafei-settings-v1", O_RDONLY or O_DIRECTORY or O_NOFOLLOW or O_CLOEXEC)
+            // This new CMP-only directory avoids the broken development NDK Preferences store.
+            // It does not modify the legacy ArkUI databases and preferences being migrated.
+            if (mkdirat(parent, storageDirectory, 448u.convert()) != 0 && errno != EEXIST) unavailable()
+            val directory = openat(parent, storageDirectory, O_RDONLY or O_DIRECTORY or O_NOFOLLOW or O_CLOEXEC)
             if (directory < 0) unavailable()
-            try { checkFile(directory, directory = true); return block(directory) }
-            finally { close(directory) }
-        } finally { close(parent) }
+            try {
+                checkFile(directory, directory = true)
+                return block(directory)
+            } finally {
+                close(directory)
+            }
+        } finally {
+            close(parent)
+        }
     }
+
     private fun checkFile(fd: Int, directory: Boolean, privatePermissions: Boolean = true): Long = memScoped {
         val info = alloc<stat>()
         if (fstat(fd, info.ptr) != 0) unavailable()
         val expected = if (directory) S_IFDIR.toUInt() else S_IFREG.toUInt()
         if ((info.st_mode.toUInt() and S_IFMT.toUInt()) != expected || info.st_uid != geteuid() ||
-            privatePermissions && (info.st_mode.toUInt() and 63u) != 0u) unavailable()
+            privatePermissions && (info.st_mode.toUInt() and 63u) != 0u
+        ) unavailable()
         info.st_size
     }
 }

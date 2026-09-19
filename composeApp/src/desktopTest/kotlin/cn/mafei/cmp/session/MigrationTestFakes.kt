@@ -79,7 +79,8 @@ internal class FakeLegacyReader : LegacySnapshotReader {
             LegacySource.entries.associateWith { LegacySourceState.Read },
             listOf(LegacyServer("j", ProviderKind.Jellyfin, "Jelly", "https://media.test/base")),
             listOf(LegacyAccount("j-account", "j", "remote-j", "J",
-                SecureSecret.AuthToken("MediaBrowser", "J-SECRET"))),
+                token = SecureSecret.AuthToken("MediaBrowser", "J-SECRET"),
+                password = SecureSecret.Password("remembered-password"))),
             selectedAccountKey = "j-account",
         ),
     )

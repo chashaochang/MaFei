@@ -27,7 +27,20 @@ data class PublicUserDto(
     @SerialName("HasConfiguredPassword") val hasConfiguredPassword: Boolean? = null,
 )
 
-/** Subset of the Jellyfin user DTO returned inside authentication results. */
+/**
+ * Subset of the Jellyfin user policy used to decide client-side UI
+ * affordances (media deletion). The server remains the authority: a stale or
+ * wrong local flag only hides/shows an entry, never bypasses a permission.
+ */
+@Serializable
+data class UserPolicyDto(
+    @SerialName("IsAdministrator") val isAdministrator: Boolean? = null,
+)
+
+/**
+ * Subset of the Jellyfin user DTO returned inside authentication results and
+ * by GET /Users/{id} (self-readable; carries the admin policy probe).
+ */
 @Serializable
 data class UserDto(
     @SerialName("Name") val name: String? = null,
@@ -36,6 +49,7 @@ data class UserDto(
     @SerialName("PrimaryImageTag") val primaryImageTag: String? = null,
     @SerialName("HasPassword") val hasPassword: Boolean? = null,
     @SerialName("HasConfiguredPassword") val hasConfiguredPassword: Boolean? = null,
+    @SerialName("Policy") val policy: UserPolicyDto? = null,
 )
 
 /** POST /Users/AuthenticateByName response. */

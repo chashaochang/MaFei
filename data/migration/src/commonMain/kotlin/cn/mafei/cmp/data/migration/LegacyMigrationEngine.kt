@@ -12,6 +12,7 @@ class LegacyMigrationEngine(
     private val journal: VersionedStorage,
     private val sink: MigrationSink,
     private val nowEpochMs: () -> Long,
+    private val reportStage: (String) -> Unit = {},
 ) {
     /** Ordering: validate -> journal plan -> immutable secrets -> business+receipt -> marker.
      * A crash before receipt repeats create-if-absent credential writes. A crash after receipt
@@ -20,14 +21,24 @@ class LegacyMigrationEngine(
      * Backend exceptions/cancellation propagate, so failures are never reported as empty success.
      */
     suspend fun migrate(): MigrationResult = sink.exclusive {
+        reportStage("reader")
         val captured = reader.read()
         if (captured is LegacyReadResult.Unavailable) return@exclusive MigrationResult.Pending(captured.reason)
         val snapshot = (captured as LegacyReadResult.Captured).snapshot
         // Freeze clock-derived home expiry at first attempt so a retry crossing seven days does
         // not change the migration manifest. This metadata itself contains no source secrets.
         val planner = LegacyMigrationPlanner()
+        reportStage("plan")
         val initialPlan = planner.plan(snapshot, nowEpochMs())
+        if (initialPlan.records.servers.isEmpty() && initialPlan.records.accounts.isEmpty() &&
+            initialPlan.records.playback == MigratedPlaybackPreferences(null, null, null, emptyList()) &&
+            initialPlan.records.chasing.isEmpty() && initialPlan.records.home == null
+        ) {
+            reportStage("not-needed")
+            return@exclusive MigrationResult.NotNeeded
+        }
         val clockKey = "\$mafei.migration.capture-time.${initialPlan.id}"
+        reportStage("journal-read")
         val storedClock = journal.getString(clockKey)
         val captureTime = storedClock?.toLongOrNull() ?: if (storedClock == null) nowEpochMs()
             else fail(MigrationProblem.CorruptedJournal)
@@ -48,6 +59,7 @@ class LegacyMigrationEngine(
         rejectUnless(recordedPlan == null || recordedPlan == manifest, MigrationProblem.SourceChanged)
         rejectUnless(receipt == null || receipt == manifest, MigrationProblem.SourceChanged)
         if (recordedPlan == null) {
+            reportStage("journal-plan")
             journal.edit {
                 putString(clockKey, captureTime.toString())
                 putString(planKey, manifest)
@@ -55,11 +67,13 @@ class LegacyMigrationEngine(
         }
         if (receipt == null) {
             for ((alias, secret) in plan.secrets) {
+                reportStage("credential-read")
                 val existing = secure.read(alias)
                 if (existing != null) {
                     rejectUnless(existing == secret, MigrationProblem.CredentialConflict)
                 } else {
                     try {
+                        reportStage("credential-save")
                         secure.save(alias, secret, overwrite = false)
                     } catch (e: CredentialAccessException) {
                         if (e.kind != CredentialFailureKind.AlreadyExists) throw e
@@ -67,9 +81,14 @@ class LegacyMigrationEngine(
                     }
                 }
             }
+            reportStage("records-commit")
             sink.commit(plan.id, manifest, records)
         }
-        if (!done) journal.markMigrationCompleted(plan.id)
+        if (!done) {
+            reportStage("journal-complete")
+            journal.markMigrationCompleted(plan.id)
+        }
+        reportStage("completed")
         MigrationResult.Completed(plan.id, done, plan.warnings)
     }
 }

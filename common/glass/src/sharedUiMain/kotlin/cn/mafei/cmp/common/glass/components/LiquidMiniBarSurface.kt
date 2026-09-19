@@ -4,12 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
@@ -29,7 +27,6 @@ fun LiquidMiniBarSurface(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < .5f
     Box(
         modifier
             .drawBackdrop(
@@ -37,14 +34,13 @@ fun LiquidMiniBarSurface(
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(12.dp.toPx())
+                    blur(8.dp.toPx())
                     lens(16.dp.toPx(), 28.dp.toPx(), chromaticAberration = true)
                 },
                 shadow = { Shadow(alpha = .18f) },
                 innerShadow = { InnerShadow(radius = 5.dp, alpha = .25f) },
                 onDrawSurface = {
-                    drawRect(Color.White.copy(alpha = if (dark) .12f else .2f))
-                    if (dark) drawRect(Color.Black.copy(alpha = .16f))
+                    drawRect(Color.White.copy(alpha = .2f))
                 },
             )
             .clip(Capsule())

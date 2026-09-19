@@ -73,6 +73,11 @@ class FakeMediaProviderAdapter(
     val favoriteToggles: MutableList<Pair<MediaId, Boolean>> = mutableListOf()
     val watchedToggles: MutableList<Pair<MediaId, Boolean>> = mutableListOf()
     val reportedEvents: MutableList<Pair<PlaybackPreparation.Ready, PlaybackEvent>> = mutableListOf()
+    var lastPlaybackOptions: PlaybackOptions? = null
+        private set
+    val deletedItems: MutableList<Collection<MediaId>> = mutableListOf()
+    var similarResults: List<MediaItem>? = null
+    var resumeResults: Page<MediaItem>? = null
 
     private fun throwIfConfigured() {
         cancellation?.let { throw it }
@@ -145,11 +150,31 @@ class FakeMediaProviderAdapter(
         watchedToggles += id to watched
     }
 
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
+    override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
         calls += "preparePlayback"
         throwIfConfigured()
+        lastPlaybackOptions = options
         (playbackOutcome as? PlaybackPreparation.Ready)?.let(preparedStreams::add)
         return playbackOutcome
+    }
+
+    override suspend fun similar(id: MediaId): List<MediaItem> {
+        calls += "similar"
+        throwIfConfigured()
+        return similarResults ?: itemsSource.filter { it.id != id }.take(SimilarLimit)
+    }
+
+    override suspend fun resumeItems(request: PageRequest): Page<MediaItem> {
+        calls += "resumeItems"
+        throwIfConfigured()
+        return resumeResults ?: Page.empty()
+    }
+
+    override suspend fun deleteItems(ids: Collection<MediaId>) {
+        calls += "deleteItems"
+        requireCapability(capabilities, AdapterCapability.MediaDelete)
+        throwIfConfigured()
+        deletedItems += ids
     }
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
@@ -208,6 +233,7 @@ class FakeMediaProviderAdapter(
         val comparator = when (sort.field) {
             MediaSortField.Title -> nullableCompare(descending, { it.title }, String::compareTo)
             MediaSortField.DateAdded -> nullableCompare(descending, { it.dateAddedEpochMs }, Long::compareTo)
+            MediaSortField.DatePlayed -> nullableCompare(descending, { it.userData.lastPlayedEpochMs }, Long::compareTo)
             MediaSortField.PremiereDate -> nullableCompare(descending, { it.premiereEpochMs }, Long::compareTo)
             MediaSortField.CommunityRating -> nullableCompare(descending, { it.communityRating }, Double::compareTo)
             MediaSortField.Runtime -> nullableCompare(descending, { it.runtimeMs }, Long::compareTo)
@@ -251,3 +277,5 @@ class FakeMediaProviderAdapter(
     private fun rejectCursorNotHonored(cursor: PageCursor, method: String): Nothing =
         throw ClientConfigError("$method cannot honor cursor '$cursor' (single-chunk listing)")
 }
+
+private const val SimilarLimit = 6

@@ -25,4 +25,6 @@ dependencies {
     add("commonMainImplementation", project(":player:api"))
     add("commonTestImplementation", project(":player:testkit"))
     add("commonTestImplementation", project(":player:facade"))
+    // Home snapshot persistence tests build a JsonSnapshotStorage over a fake store.
+    add("commonTestImplementation", libs.kotlinx.serialization.json)
 }

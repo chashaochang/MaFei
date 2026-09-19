@@ -1,6 +1,7 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -10,12 +11,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.MaFeiShape
+import cn.mafei.cmp.common.ui.generated.resources.Res
+import cn.mafei.cmp.common.ui.generated.resources.placeholder_video
+import org.jetbrains.compose.resources.painterResource
 
 /** Provider-neutral card. The caller owns authenticated artwork fetching and lifecycle. */
 @Composable
@@ -29,11 +36,11 @@ fun MediaCard(
     progress: Float? = null,
 ) {
     Column(
-        modifier.mafeiInteractive(onClick, radiusDp = 14f, label = "查看$title"),
-        verticalArrangement = Arrangement.spacedBy(9.dp),
+        modifier.mafeiInteractive(onClick, radiusDp = 10f, label = "查看$title"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(MaFeiShape.poster)
+            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (poster != null) poster(Modifier.fillMaxSize()) else TextPoster(title, Modifier.fillMaxSize())
@@ -57,10 +64,10 @@ fun MediaCard(
                     trackColor = Color.Black.copy(alpha = .5f))
             }
         }
-        Column(Modifier.padding(horizontal = 2.dp).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium,
+        Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(subtitle, fontSize = 12.sp, lineHeight = 17.sp, color = Color.White.copy(alpha = .72f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -68,19 +75,25 @@ fun MediaCard(
 
 @Composable
 fun TextPoster(title: String, modifier: Modifier = Modifier) {
+    val light = MaterialTheme.colorScheme.background.luminance() >= .5f
     Box(
-        modifier.clip(MaFeiShape.poster).background(Brush.linearGradient(listOf(
-            MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.surface,
-        ))),
+        modifier.clip(MaFeiShape.poster).background(
+            if (light) Color(0xFFCBD2D3)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .58f),
+        ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title.take(1).ifEmpty { "影" }, style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Text("暂无封面", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Image(
+            painter = painterResource(Res.drawable.placeholder_video),
+            contentDescription = null,
+            // ArkUI's MediaNetworkImage used ImageFit.CENTER for both the
+            // loading and error source. Keep the original 128px reel at its
+            // natural, centred size instead of shrinking it to a tiny icon;
+            // otherwise a valid fallback reads as an empty/broken poster.
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Inside,
+            alpha = 1f,
+        )
     }
 }
 

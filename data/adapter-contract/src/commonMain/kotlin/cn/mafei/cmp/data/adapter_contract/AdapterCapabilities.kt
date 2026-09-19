@@ -32,6 +32,9 @@ enum class AdapterCapability {
 
     /** Can report playback start/progress/stop ([MediaProviderAdapter.reportPlayback]). */
     PlaybackReporting,
+
+    /** Can delete media items ([MediaProviderAdapter.deleteItems]), server policy permitting. */
+    MediaDelete,
 }
 
 /**
@@ -48,6 +51,7 @@ data class AdapterCapabilities(
     val watchedFilter: Boolean = false,
     val watchedEdit: Boolean = false,
     val playbackReporting: Boolean = false,
+    val mediaDelete: Boolean = false,
 ) {
     fun supports(capability: AdapterCapability): Boolean = when (capability) {
         AdapterCapability.Search -> search
@@ -57,6 +61,7 @@ data class AdapterCapabilities(
         AdapterCapability.WatchedFilter -> watchedFilter
         AdapterCapability.WatchedEdit -> watchedEdit
         AdapterCapability.PlaybackReporting -> playbackReporting
+        AdapterCapability.MediaDelete -> mediaDelete
     }
 }
 

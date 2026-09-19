@@ -48,6 +48,43 @@ class ProviderLoginTest {
         assertEquals(0, transport.closes)
     }
 
+    @Test fun jellyfinLoginAcceptsBareLanAddressAndEmptyPassword() = runBlocking<Unit> {
+        val requests = mutableListOf<HttpRequest>()
+        val transport = object : HttpTransport {
+            override suspend fun execute(request: HttpRequest): HttpResponse {
+                requests += request
+                if (request.url.encodedPath.endsWith("/System/Info/Public") && request.url.isHttps) {
+                    throw HttpTransportException(request.url, TransportFailureKind.Tls, "fixture TLS mismatch")
+                }
+                val body = when {
+                    request.url.encodedPath.endsWith("/System/Info/Public") ->
+                        """{"ProductName":"Jellyfin Server","Version":"10.10.7","Id":"server-id"}"""
+                    request.url.encodedPath.endsWith("/Users/AuthenticateByName") ->
+                        """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token"}"""
+                    else -> error("Unexpected request")
+                }
+                return HttpResponse(200, HttpHeaders.EMPTY, body.encodeToByteArray(), request.url, request.url)
+            }
+
+            override fun close() = Unit
+        }
+
+        val result = ProviderLogin(transport).authenticate(
+            ProviderKind.Jellyfin,
+            "192.168.31.96:8096",
+            "xiaobai",
+            "",
+        )
+
+        assertEquals(listOf("https", "http", "http"), requests.map { it.url.scheme })
+        val request = requests.last()
+        assertEquals("http", request.url.scheme)
+        assertEquals("192.168.31.96", request.url.host)
+        assertEquals(8096, request.url.port)
+        assertEquals("""{"Username":"xiaobai","Pw":""}""", (request.body as HttpBody.Text).text)
+        result.binding.clear()
+    }
+
     @Test fun feiniuDirectLoginReadsAuthoritativeCookieAfterUserInfo() = runBlocking<Unit> {
         val transport = Transport(
             Response("""{"code":0,"data":{"token":"fixture-token"}}""", cookie = "session=login; Path=/"),
@@ -157,6 +194,121 @@ class ProviderLoginTest {
         }
         entered.await(); job.cancelAndJoin()
         assertFalse(admitted); assertFalse(closed)
+    }
+
+    @Test fun reloginKeepsSavedIdentityAndPresentsItsNamespaceAsTheDeviceId() = runBlocking<Unit> {
+        val typed = "https://media.test"
+        val existing = SavedConnection(
+            server = Server(ServerId("jellyfin-server-abcd"), ProviderKind.Jellyfin, "media.test", typed),
+            account = Account(AccountId("jellyfin-server-abcd-account-remote-user"),
+                ServerId("jellyfin-server-abcd"), ProviderKind.Jellyfin, "Demo"),
+            remoteUserId = "remote-user",
+            credentialKey = "0123456789abcdef0123456789abcdef",
+        )
+        val lookups = mutableListOf<String>()
+        val transport = Transport(
+            Response("""{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
+            Response("""{"Items":[],"TotalRecordCount":0}"""),
+        )
+        val login = ProviderLogin(transport) { provider, address, remoteUserId, username ->
+            lookups += "${provider.name}|$address|${remoteUserId ?: "typed"}|$username"
+            existing.takeIf {
+                provider == ProviderKind.Jellyfin &&
+                    (remoteUserId == existing.remoteUserId || (remoteUserId == null && username == "Demo"))
+            }
+        }
+        val result = login.authenticate(ProviderKind.Jellyfin, typed, "Demo", "pw")
+        // The device identity has to be known BEFORE the request, and the
+        // authoritative lookup afterwards must agree with that first answer. Both
+        // see the normalized address (a scheme's default port is made explicit).
+        assertEquals(listOf(
+            "Jellyfin|https://media.test:443|typed|Demo",
+            "Jellyfin|https://media.test:443|remote-user|Demo",
+        ), lookups)
+        assertEquals(existing.credentialKey, result.connection.credentialKey)
+        assertEquals(existing.deviceId, result.connection.deviceId)
+        assertEquals(existing.server.id, result.connection.server.id)
+        assertEquals(existing.account.id, result.connection.account.id)
+        assertEquals("remote-user", result.connection.remoteUserId)
+        val loginHeader = transport.requests.first().headers.first("Authorization")!!
+        assertTrue(loginHeader.contains("DeviceId=\"${existing.deviceId}\""))
+        result.binding.adapter.collections(PageRequest())
+        // The admitted session keeps presenting the very same device.
+        assertTrue(transport.requests.last().headers.first("Authorization")!!.contains("DeviceId=\"${result.connection.deviceId}\""))
+        result.binding.clear()
+        assertEquals(0, transport.closes)
+    }
+
+    /**
+     * The same typed user name can authenticate as a different remote account (a
+     * rebuilt account, or any provider that accepts an alias). That account must
+     * not be forced into the saved row's namespace, while the token it just got
+     * still belongs to the device that requested it.
+     */
+    @Test fun aLoginThatLandsOnAnotherRemoteUserTakesAFreshNamespaceButKeepsTheDevice() = runBlocking<Unit> {
+        val knownDevice = "0123456789abcdef0123456789abcdef"
+        val existing = SavedConnection(
+            server = Server(ServerId("jellyfin-server-abcd"), ProviderKind.Jellyfin, "media.test", "https://media.test"),
+            account = Account(AccountId("jellyfin-server-abcd-account-remote-user"),
+                ServerId("jellyfin-server-abcd"), ProviderKind.Jellyfin, "Demo"),
+            remoteUserId = "remote-user",
+            credentialKey = knownDevice,
+        )
+        val transport = Transport(
+            Response("""{"User":{"Id":"other-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
+        )
+        val login = ProviderLogin(transport) { provider, _, remoteUserId, username ->
+            existing.takeIf {
+                provider == ProviderKind.Jellyfin &&
+                    (remoteUserId == existing.remoteUserId || (remoteUserId == null && username == "Demo"))
+            }
+        }
+        val result = login.authenticate(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
+        assertNotEquals(knownDevice, result.connection.credentialKey)
+        assertEquals(knownDevice, result.connection.deviceId)
+        assertEquals("other-user", result.connection.remoteUserId)
+        assertNotEquals(existing.selection, result.connection.selection)
+        // The borrowed device is what the request and the session both present.
+        assertTrue(transport.requests.first().headers.first("Authorization")!!.contains("DeviceId=\"$knownDevice\""))
+        result.binding.clear()
+    }
+
+    @Test fun firstLoginDerivesTheSameIdsForThatServerEveryTime() = runBlocking<Unit> {
+        val loginBody = """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""
+        val transport = Transport(Response(loginBody), Response(loginBody))
+        // No hook wired: the identity still has to be the server's own, so that a
+        // caller which forgets the reuse lookup still cannot fork the account.
+        val first = ProviderLogin(transport).authenticate(ProviderKind.Jellyfin, "https://media.test/", "Demo", "pw")
+        val second = ProviderLogin(transport).authenticate(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
+        assertEquals(ServerId("jellyfin-server-abcd"), first.connection.server.id)
+        assertEquals(AccountId("jellyfin-server-abcd-account-remote-user"), first.connection.account.id)
+        assertEquals(first.connection.selection, second.connection.selection)
+        first.binding.clear()
+        second.binding.clear()
+        assertEquals(0, transport.closes)
+    }
+
+    @Test fun feiniuReloginRebuildsTheSavedRecordVerbatimIncludingRoutes() = runBlocking<Unit> {
+        val existing = SavedConnection(
+            server = Server(ServerId("feiniu-server-media"), ProviderKind.Feiniu, "media.test", "http://media.test:5667/base"),
+            account = Account(AccountId("feiniu-server-media-account-user-7"),
+                ServerId("feiniu-server-media"), ProviderKind.Feiniu, "demo", displayName = "Cinema"),
+            remoteUserId = "user-7",
+            credentialKey = "fedcba9876543210fedcba9876543210",
+            feiniuRoutes = listOf(SavedFeiniuRoute("http://media.test:5667/base", "Direct")),
+        )
+        val transport = Transport(
+            Response("""{"code":0,"data":{"token":"fixture-token"}}""", cookie = "session=login; Path=/"),
+            Response("""{"code":0,"data":{"user_id":"user-7","username":"demo","nickname":"Cinema"}}""", cookie = "session=rotated; Path=/"),
+        )
+        val login = ProviderLogin(transport) { provider, _, remoteUserId, _ ->
+            existing.takeIf { provider == ProviderKind.Feiniu && remoteUserId == "user-7" }
+        }
+        val result = login.authenticate(ProviderKind.Feiniu, "http://media.test:5667/base", " demo ", " pw ")
+        // Byte-identical to the saved record: the catalog rewrites that one row.
+        assertEquals(existing, result.connection)
+        result.binding.clear()
+        assertEquals(0, transport.closes)
     }
 
     private fun assertSafeChain(error: Throwable) {

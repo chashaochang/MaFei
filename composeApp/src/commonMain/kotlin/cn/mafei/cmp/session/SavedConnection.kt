@@ -26,14 +26,24 @@ data class SavedFeiniuRoute(val baseUrl: String, val route: String) {
     override fun toString() = "SavedFeiniuRoute(route=$route, baseUrl=redacted)"
 }
 
-/** All fields are non-secret metadata; credentials only exist behind [tokenAlias]/[cookieAlias]. */
+/** All fields are non-secret metadata; credentials only exist behind the derived aliases. */
 @Serializable
 data class SavedConnection(
     val server: Server,
     val account: Account,
     val remoteUserId: String,
     val credentialKey: String,
+    /**
+     * Device registration this account's token was issued for. Jellyfin binds an
+     * access token to the DeviceId that requested it, so the session has to keep
+     * presenting it. It defaults to [credentialKey] — the two used to be one
+     * field — and only differs when a login adopted the device it upgraded: that
+     * token belongs to that device, while the namespace has to stay free for the
+     * account that already holds it.
+     */
+    val deviceId: String = credentialKey,
     val feiniuRoutes: List<SavedFeiniuRoute> = emptyList(),
+    val rememberLogin: Boolean = true,
 ) {
     init {
         if (account.serverId != server.id || account.provider != server.provider) {
@@ -44,6 +54,9 @@ data class SavedConnection(
         }
         if (credentialKey.length != 32 || credentialKey.any { it !in '0'..'9' && it !in 'a'..'f' }) {
             throw ClientConfigError("Saved credential namespace is invalid")
+        }
+        if (deviceId.length != 32 || deviceId.any { it !in '0'..'9' && it !in 'a'..'f' }) {
+            throw ClientConfigError("Saved device identity is invalid")
         }
         validateSavedBaseUrl(server.baseUrl)
         account.avatarImage?.let { validateSavedBaseUrl(it.url) }
@@ -62,6 +75,8 @@ data class SavedConnection(
     // ASCII, fixed length and independent of potentially long/user-controlled remote identifiers.
     val tokenAlias: CredentialAlias get() = CredentialAlias("mafei/session/$credentialKey/token")
     val cookieAlias: CredentialAlias get() = CredentialAlias("mafei/session/$credentialKey/cookie")
+    /** User-entered login secret. Deliberately excluded from [aliases], which manages SDK sessions. */
+    val passwordAlias: CredentialAlias get() = CredentialAlias("mafei/session/$credentialKey/password")
     val aliases: Set<CredentialAlias> get() = when (server.provider) {
         ProviderKind.Jellyfin -> setOf(tokenAlias)
         ProviderKind.Feiniu -> setOf(tokenAlias, cookieAlias)

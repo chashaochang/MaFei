@@ -21,6 +21,7 @@ class SessionArtworkTest {
     private fun connection(provider: ProviderKind = ProviderKind.Jellyfin): SavedConnection {
         val server = Server(ServerId("a"), provider, "Test", "https://media.test/base")
         return SavedConnection(server, Account(AccountId("a"), server.id, provider, "Test"), "user", "a".repeat(32),
+            "a".repeat(32),
             if (provider == ProviderKind.Feiniu) listOf(SavedFeiniuRoute(server.baseUrl, "Relay")) else emptyList())
     }
     private fun bind(c: SavedConnection, t: Transport) = DefaultProviderSessionFactory(t).restore(c, buildMap {
@@ -37,6 +38,16 @@ class SessionArtworkTest {
         assertEquals("480", r.url.queryParameters.first("maxWidth"))
         assertEquals(RedirectPolicy.FollowSameOrigin, r.redirectPolicy)
         assertEquals(BodyReadPolicy.BufferedAtMost(4L * 1024 * 1024), r.bodyReadPolicy)
+    }
+    @Test fun jellyfinArtworkHonorsBoundedDisplayWidth() = runBlocking {
+        val t = Transport(); val c = connection(); val b = bind(c, t)
+        assertNotNull(SessionArtwork(t).load(
+            c,
+            b,
+            MediaImage(url = "https://media.test/base/Items/a/Images/Primary"),
+            targetWidthPx = 240,
+        ))
+        assertEquals("240", t.requests.single().url.queryParameters.first("maxWidth"))
     }
     @Test fun foreignOriginAndDowngradeNeverReceiveCredentials() = runBlocking {
         val t = Transport(); val c = connection(); val b = bind(c, t)
@@ -59,10 +70,22 @@ class SessionArtworkTest {
         t.contentType = "image/jpeg"; t.status = 404
         assertNull(SessionArtwork(t).load(c, b, MediaImage(url = "https://media.test/a")))
     }
+    @Test fun opaqueBinaryImageResponseCanReachTheDecoder() = runBlocking {
+        val t = Transport(); val c = connection(); val b = bind(c, t)
+        t.contentType = "application/octet-stream"
+        assertNotNull(SessionArtwork(t).load(c, b, MediaImage(url = "https://media.test/a")))
+        Unit
+    }
     @Test fun feiniuUsesAuthoritativeTokenCookieAndRelayContext() = runBlocking {
         val t = Transport(); val c = connection(ProviderKind.Feiniu); val b = bind(c, t)
-        assertNotNull(SessionArtwork(t).load(c, b, MediaImage(url = "https://media.test/base/v/api/v1/sys/img/a")))
+        assertNotNull(SessionArtwork(t).load(
+            c,
+            b,
+            MediaImage(url = "https://media.test/base/v/api/v1/sys/img/a?w=400"),
+            targetWidthPx = 720,
+        ))
         val r = t.requests.single()
+        assertEquals("720", r.url.queryParameters.first("w"))
         assertEquals("synthetic-token", r.headers.first("Authorization"))
         assertTrue(r.headers.first("Cookie")!!.contains("mode=relay"))
         assertEquals(1, r.headers.values("Cookie").size)

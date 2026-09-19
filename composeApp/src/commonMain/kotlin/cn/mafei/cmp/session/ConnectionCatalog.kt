@@ -8,7 +8,10 @@ import kotlinx.serialization.json.Json
 
 /** Non-secret connection metadata. The application coordinator owns all writes. */
 class ConnectionCatalog(private val settings: SettingsStorage) {
-    suspend fun find(selection: SessionSelection): SavedConnection? = entries().singleOrNull { it.selection == selection }
+    suspend fun find(selection: SessionSelection): SavedConnection? = all().singleOrNull { it.selection == selection }
+
+    /** Non-secret account history, independent from whether credentials remain restorable. */
+    suspend fun all(): List<SavedConnection> = entries()
 
     suspend fun save(connection: SavedConnection) {
         val snapshot = connection.copy(feiniuRoutes = connection.feiniuRoutes.toList())
@@ -23,6 +26,15 @@ class ConnectionCatalog(private val settings: SettingsStorage) {
         val encoded = Json.encodeToString(snapshot)
         require(encoded.length <= 262_144) { "Connection metadata exceeds limit" }
         settings.edit { putString(PREFIX + snapshot.credentialKey, encoded) }
+    }
+
+    /** Removes exactly the stored non-secret record for [connection]. */
+    suspend fun remove(connection: SavedConnection): Boolean {
+        val stored = find(connection.selection) ?: return false
+        require(stored.credentialKey == connection.credentialKey) {
+            "Saved account credential namespace does not match"
+        }
+        return settings.remove(PREFIX + stored.credentialKey)
     }
 
     private suspend fun entries(): List<SavedConnection> {
