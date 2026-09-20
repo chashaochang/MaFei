@@ -23,6 +23,8 @@ data class MediaUserData(
     val isFavorite: Boolean = false,
     val isPlayed: Boolean = false,
     val playCount: Int? = null,
+    /** Jellyfin series user data used by the legacy chasing-page completed rule. */
+    val unplayedItemCount: Int? = null,
     val playbackPositionMs: Long = 0L,
     val playedPercentage: Double? = null,
     val lastPlayedEpochMs: Long? = null,
@@ -66,6 +68,25 @@ data class MediaPerson(
 data class MediaExternalUrl(
     val name: String,
     val url: String,
+)
+
+/**
+ * Provider-authoritative playback target carried by a series/season detail.
+ *
+ * This mirrors the legacy ArkUI `MediaPlaybackTarget`: Feiniu may return the
+ * target directly from `/play/info`, while Jellyfin resolves it through the
+ * per-series Next Up endpoint. It is deliberately only a reference + progress
+ * hint; the browser still resolves it against the real episode list before it
+ * renders or plays anything.
+ */
+@Serializable
+data class MediaPlaybackTarget(
+    val id: MediaId? = null,
+    val seasonNumber: Int? = null,
+    val episodeNumber: Int? = null,
+    val playbackPositionMs: Long = 0L,
+    val playedPercentage: Double? = null,
+    val durationMs: Long? = null,
 )
 
 /**
@@ -119,6 +140,8 @@ data class MediaItem(
     val mediaSources: List<MediaSourceInfo> = emptyList(),
     /** Provider-supplied external reference links (IMDb/TMDB/...), detail pages only. */
     val externalUrls: List<MediaExternalUrl> = emptyList(),
+    /** Legacy detail playback target; resolved against the episode list by the browser. */
+    val playbackTarget: MediaPlaybackTarget? = null,
     /**
      * 本条数据的展示风格覆盖。适配器**只在**自身服务器的命名/排版与
      * [MediaDisplayStyle.forProvider] 给出的默认风格不一致时才写入；为 `null` 时按
@@ -129,6 +152,24 @@ data class MediaItem(
 ) {
     val primaryImage: MediaImage? get() = images.firstOrNull { it.kind == ImageKind.Primary } ?: images.firstOrNull()
 }
+
+/**
+ * One row in the legacy playback-history surfaces (the Mine preview and the
+ * standalone history page).
+ *
+ * The latest available season/episode does not describe [media] itself, so it
+ * deliberately lives in this aggregate instead of being written into the
+ * ordinary [MediaItem]. Providers still own the playable row; the browser
+ * enriches only episode rows by walking the owning series exactly like the old
+ * `MineHistoryRepository`.
+ */
+@Serializable
+data class PlaybackHistoryItem(
+    val media: MediaItem,
+    val latestSeasonNumber: Int? = null,
+    val latestEpisodeNumber: Int? = null,
+    val seriesHasMultipleSeasons: Boolean = (media.seasonNumber ?: 0) > 1,
+)
 
 /** One playable file for an item — a Jellyfin "media source" / version. */
 @Serializable

@@ -130,24 +130,104 @@ class MediaPresentationTest {
         assertNull(feiniu(MediaType.Episode).episodeLabel)
     }
 
+    // --- playback history --------------------------------------------------
+
+    @Test
+    fun playbackHistoryTitleAndUpdateBadgeFollowLegacySeasonRules() {
+        val episode = PlaybackHistoryItem(
+            media = jellyfin(
+                MediaType.Episode,
+                title = "单集名",
+                seriesTitle = "漫长的季节",
+                seasonNumber = 1,
+                episodeNumber = 3,
+            ),
+            latestSeasonNumber = 2,
+            latestEpisodeNumber = 8,
+            seriesHasMultipleSeasons = true,
+        )
+        assertEquals("漫长的季节 · 第1季第3集", episode.titleText)
+        assertEquals("更新至2季8集", episode.updateBadgeText)
+
+        val singleSeason = episode.copy(
+            latestSeasonNumber = 1,
+            latestEpisodeNumber = 9,
+            seriesHasMultipleSeasons = false,
+        )
+        assertEquals("漫长的季节 · 第3集", singleSeason.titleText)
+        assertEquals("更新至9集", singleSeason.updateBadgeText)
+    }
+
+    @Test
+    fun playbackHistoryRatingRoundsAndRejectsOutOfRangeValues() {
+        assertEquals(
+            "8.7",
+            PlaybackHistoryItem(jellyfinMovie(year = 2024).copy(communityRating = 8.74)).movieRatingText,
+        )
+        assertEquals(
+            "8.8",
+            PlaybackHistoryItem(jellyfinMovie(year = 2024).copy(communityRating = 8.75)).movieRatingText,
+        )
+        assertNull(PlaybackHistoryItem(jellyfinMovie(year = 2024).copy(communityRating = 10.1)).movieRatingText)
+        assertNull(PlaybackHistoryItem(jellyfin(MediaType.Episode).copy(communityRating = 9.0)).movieRatingText)
+    }
+
+    @Test
+    fun playbackHistoryProgressRoundsClampsAndHidesCompletedRows() {
+        val movie = jellyfinMovie(year = 2024)
+        assertEquals(
+            36,
+            PlaybackHistoryItem(movie.copy(userData = MediaUserData(playedPercentage = 35.6))).progressPercent,
+        )
+        assertEquals(
+            100,
+            PlaybackHistoryItem(movie.copy(userData = MediaUserData(playedPercentage = 135.0))).progressPercent,
+        )
+        assertEquals(
+            25,
+            PlaybackHistoryItem(
+                movie.copy(
+                    runtimeMs = 400_000L,
+                    userData = MediaUserData(playbackPositionMs = 100_000L),
+                ),
+            ).progressPercent,
+        )
+        assertNull(
+            PlaybackHistoryItem(movie.copy(userData = MediaUserData(isPlayed = true, playedPercentage = 75.0)))
+                .progressPercent,
+        )
+    }
+
     // --- 风格表与覆盖 --------------------------------------------------------
 
     @Test
     fun providerStyleTableIsTheSingleSourceOfTruth() {
-        assertEquals(
-            listOf(
-                MediaSortField.Title,
-                MediaSortField.DateAdded,
-                MediaSortField.PremiereDate,
-                MediaSortField.CommunityRating,
-                MediaSortField.Runtime,
-            ),
-            MediaDisplayStyle.forProvider(ProviderKind.Jellyfin).sortableFields,
+        val legacySortFields = listOf(
+            MediaSortField.Default,
+            MediaSortField.Title,
+            MediaSortField.DateAdded,
+            MediaSortField.PremiereDate,
+            MediaSortField.DatePlayed,
+            MediaSortField.CommunityRating,
+            MediaSortField.CriticRating,
+            MediaSortField.ProductionYear,
+            MediaSortField.PlayCount,
+            MediaSortField.Runtime,
+            MediaSortField.OfficialRating,
+            MediaSortField.Random,
+            MediaSortField.Album,
+            MediaSortField.Artist,
+            MediaSortField.AlbumArtist,
+            MediaSortField.AiredEpisodeOrder,
+            MediaSortField.SeriesSortName,
+            MediaSortField.Studio,
+            MediaSortField.IsFavoriteOrLiked,
+            MediaSortField.DateLastContentAdded,
+            MediaSortField.IsUnplayed,
+            MediaSortField.IsPlayed,
         )
-        assertEquals(
-            listOf(MediaSortField.DateAdded),
-            MediaDisplayStyle.forProvider(ProviderKind.Feiniu).sortableFields,
-        )
+        assertEquals(legacySortFields, MediaDisplayStyle.forProvider(ProviderKind.Jellyfin).sortableFields)
+        assertEquals(legacySortFields, MediaDisplayStyle.forProvider(ProviderKind.Feiniu).sortableFields)
     }
 
     @Test

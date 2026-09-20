@@ -35,6 +35,9 @@ enum class AdapterCapability {
 
     /** Can delete media items ([MediaProviderAdapter.deleteItems]), server policy permitting. */
     MediaDelete,
+
+    /** Legacy followed-series chasing page (resume + per-series next-up + completed state). */
+    Chasing,
 }
 
 /**
@@ -52,6 +55,7 @@ data class AdapterCapabilities(
     val watchedEdit: Boolean = false,
     val playbackReporting: Boolean = false,
     val mediaDelete: Boolean = false,
+    val chasing: Boolean = false,
 ) {
     fun supports(capability: AdapterCapability): Boolean = when (capability) {
         AdapterCapability.Search -> search
@@ -62,6 +66,7 @@ data class AdapterCapabilities(
         AdapterCapability.WatchedEdit -> watchedEdit
         AdapterCapability.PlaybackReporting -> playbackReporting
         AdapterCapability.MediaDelete -> mediaDelete
+        AdapterCapability.Chasing -> chasing
     }
 }
 

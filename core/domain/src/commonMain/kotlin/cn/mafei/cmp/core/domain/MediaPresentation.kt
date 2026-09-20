@@ -1,6 +1,7 @@
 package cn.mafei.cmp.core.domain
 
 import kotlinx.serialization.Serializable
+import kotlin.math.roundToInt
 
 /**
  * 展示风格标记。
@@ -47,7 +48,6 @@ data class MediaDisplayStyle(
                 heroSubtitleStyle = HeroSubtitleStyle.YearOnly,
                 episodeLabelStyle = EpisodeLabelStyle.Compact,
                 episodeCodeStyle = EpisodeCodeStyle.None,
-                sortableFields = listOf(MediaSortField.DateAdded),
             )
         }
     }
@@ -91,13 +91,30 @@ enum class EpisodeLabelStyle { LongForm, Compact }
 @Serializable
 enum class EpisodeCodeStyle { SeriesCode, None }
 
-/** [MediaDisplayStyle.Default] 使用的排序字段（名称 / 添加日期 / 首播日期 / 社区评分 / 时长）。 */
+/** 旧版 `SortOption.ets` 的完整顺序；媒体库与收藏页共用这一菜单。 */
 private val DefaultSortFields = listOf(
+    MediaSortField.Default,
     MediaSortField.Title,
     MediaSortField.DateAdded,
     MediaSortField.PremiereDate,
+    MediaSortField.DatePlayed,
     MediaSortField.CommunityRating,
+    MediaSortField.CriticRating,
+    MediaSortField.ProductionYear,
+    MediaSortField.PlayCount,
     MediaSortField.Runtime,
+    MediaSortField.OfficialRating,
+    MediaSortField.Random,
+    MediaSortField.Album,
+    MediaSortField.Artist,
+    MediaSortField.AlbumArtist,
+    MediaSortField.AiredEpisodeOrder,
+    MediaSortField.SeriesSortName,
+    MediaSortField.Studio,
+    MediaSortField.IsFavoriteOrLiked,
+    MediaSortField.DateLastContentAdded,
+    MediaSortField.IsUnplayed,
+    MediaSortField.IsPlayed,
 )
 
 // ---------------------------------------------------------------------------
@@ -230,4 +247,80 @@ val MediaItem.episodeLabel: String?
                 else -> null
             }
         }
+    }
+
+// ---------------------------------------------------------------------------
+// Legacy playback-history presentation
+// ---------------------------------------------------------------------------
+
+/**
+ * Playback-history title copied from `MineHistoryPoster.titleText()`:
+ *
+ * - movie/video: item title;
+ * - episode in a single-season series: `剧名 · 第N集`;
+ * - episode in a multi-season series: `剧名 · 第N季第M集`;
+ * - blank title: `未命名内容`.
+ */
+val PlaybackHistoryItem.titleText: String
+    get() {
+        val item = media
+        val name = if (item.mediaType == MediaType.Episode) {
+            item.seriesTitle?.trim()?.takeIf(String::isNotEmpty) ?: item.title.trim()
+        } else {
+            item.title.trim()
+        }.ifEmpty { "未命名内容" }
+        val episode = item.episodeNumber?.takeIf { it > 0 }
+        if (item.mediaType != MediaType.Episode || episode == null) return name
+        val season = item.seasonNumber?.takeIf { it > 0 }
+        return if (seriesHasMultipleSeasons && season != null) {
+            "$name · 第${season}季第${episode}集"
+        } else {
+            "$name · 第${episode}集"
+        }
+    }
+
+/** Legacy movie badge: only finite ratings in `(0, 10]`, rounded to one decimal. */
+val PlaybackHistoryItem.movieRating: Double?
+    get() = media.communityRating
+        ?.takeIf { media.mediaType == MediaType.Movie && it.isFinite() && it > 0.0 && it <= 10.0 }
+        ?.let { (it * 10.0).roundToInt() / 10.0 }
+
+/** The exact one-decimal text rendered by the old poster badge. */
+val PlaybackHistoryItem.movieRatingText: String?
+    get() = movieRating?.let { rating ->
+        val tenths = (rating * 10.0).roundToInt()
+        "${tenths / 10}.${tenths % 10}"
+    }
+
+/**
+ * Legacy episode badge. The old resource strings contain no spaces:
+ * `更新至N集` / `更新至N季M集`.
+ */
+val PlaybackHistoryItem.updateBadgeText: String?
+    get() {
+        if (media.mediaType != MediaType.Episode) return null
+        val episode = latestEpisodeNumber?.takeIf { it > 0 } ?: return null
+        val season = latestSeasonNumber?.takeIf { it > 0 }
+        return if (seriesHasMultipleSeasons && season != null) {
+            "更新至${season}季${episode}集"
+        } else {
+            "更新至${episode}集"
+        }
+    }
+
+/**
+ * Legacy progress normalization: use provider percentage when present,
+ * otherwise derive it from position/runtime, round to an integer and clamp to
+ * 0..100. Completed rows and zero progress have no progress bar.
+ */
+val PlaybackHistoryItem.progressPercent: Int?
+    get() {
+        if (media.userData.isPlayed) return null
+        val raw = media.userData.playedPercentage
+            ?: media.runtimeMs?.takeIf { it > 0L }?.let { runtime ->
+                media.userData.playbackPositionMs.toDouble() * 100.0 / runtime.toDouble()
+            }
+            ?: 0.0
+        if (!raw.isFinite()) return null
+        return raw.roundToInt().coerceIn(0, 100).takeIf { it > 0 }
     }

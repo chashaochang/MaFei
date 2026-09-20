@@ -69,12 +69,28 @@ enum class SortDirection {
 /** Canonical sortable fields; providers map these to their native sort keys. */
 @Serializable
 enum class MediaSortField {
+    Default,
     Title,
     DateAdded,
     DatePlayed,
     PremiereDate,
     CommunityRating,
+    CriticRating,
+    ProductionYear,
+    PlayCount,
     Runtime,
+    OfficialRating,
+    Random,
+    Album,
+    Artist,
+    AlbumArtist,
+    AiredEpisodeOrder,
+    SeriesSortName,
+    Studio,
+    IsFavoriteOrLiked,
+    DateLastContentAdded,
+    IsUnplayed,
+    IsPlayed,
     SeasonNumber,
     EpisodeNumber,
 }

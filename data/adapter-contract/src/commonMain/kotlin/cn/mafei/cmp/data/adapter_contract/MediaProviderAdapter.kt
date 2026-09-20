@@ -90,9 +90,27 @@ interface MediaProviderAdapter {
     suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem>
 
     /**
-     * "More like this" for [id] (legacy detail page 「相似推荐」). Providers
-     * without a similar-items surface reject via the default body. Single
-     * chunk: the provider picks the count.
+     * Provider-authoritative next episode for one series, used by the legacy
+     * detail-page play button. `null` means the provider has no target and the
+     * browser applies the old first-unwatched/rewatch fallback to real episode
+     * data; implementations must not invent a synthetic episode.
+     */
+    suspend fun nextUp(seriesId: MediaId): MediaItem? = null
+
+    /**
+     * The exact Next Up variant used by the legacy chasing page. Jellyfin
+     * disables resumable/rewatch candidates and applies a one-year cutoff;
+     * providers without a distinct variant may reuse [nextUp].
+     */
+    suspend fun chasingNextUp(seriesId: MediaId, nextUpDateCutoffEpochMs: Long): MediaItem? =
+        nextUp(seriesId)
+
+    /**
+     * Provider "More like this" data retained for the legacy player-side
+     * recommendation state. ArkUI `VideoDetailPage` does not render a similar
+     * section, so this contract must not be used as justification for adding
+     * one to the CMP detail page. Providers without this surface reject via
+     * the default body; the provider picks the single-chunk count.
      */
     suspend fun similar(id: MediaId): List<MediaItem> =
         throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose similar items")
@@ -120,6 +138,14 @@ interface MediaProviderAdapter {
      * session by the UI; the server remains authoritative at delete time.
      */
     suspend fun canDeleteMedia(): Boolean = capabilities.mediaDelete
+
+    /**
+     * Provider-authoritative role shown by the legacy Mine profile header.
+     * This is deliberately separate from feature capabilities: Feiniu exposes
+     * `is_admin` even though the CMP adapter does not yet implement management
+     * or media deletion, while Jellyfin reports the role in the user policy.
+     */
+    suspend fun isAdministrator(): Boolean = false
 
     /** Toggles favorite state; capability [AdapterCapability.FavoritesEdit]. */
     suspend fun setFavorite(id: MediaId, favorite: Boolean)

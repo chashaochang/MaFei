@@ -231,12 +231,31 @@ class FakeMediaProviderAdapter(
         if (sort == null) return source
         val descending = sort.direction == SortDirection.Descending
         val comparator = when (sort.field) {
-            MediaSortField.Title -> nullableCompare(descending, { it.title }, String::compareTo)
-            MediaSortField.DateAdded -> nullableCompare(descending, { it.dateAddedEpochMs }, Long::compareTo)
-            MediaSortField.DatePlayed -> nullableCompare(descending, { it.userData.lastPlayedEpochMs }, Long::compareTo)
+            MediaSortField.Default,
+            MediaSortField.Random -> nullableCompare(descending, { it.id.value }, String::compareTo)
+            MediaSortField.Title,
+            MediaSortField.Album,
+            MediaSortField.Artist,
+            MediaSortField.AlbumArtist,
+            MediaSortField.SeriesSortName,
+            MediaSortField.Studio,
+            MediaSortField.OfficialRating -> nullableCompare(descending, { it.title }, String::compareTo)
+            MediaSortField.DateAdded,
+            MediaSortField.DateLastContentAdded -> nullableCompare(descending, { it.dateAddedEpochMs }, Long::compareTo)
+            MediaSortField.DatePlayed,
+            MediaSortField.PlayCount -> nullableCompare(descending, { it.userData.lastPlayedEpochMs }, Long::compareTo)
             MediaSortField.PremiereDate -> nullableCompare(descending, { it.premiereEpochMs }, Long::compareTo)
-            MediaSortField.CommunityRating -> nullableCompare(descending, { it.communityRating }, Double::compareTo)
+            MediaSortField.ProductionYear,
+            MediaSortField.AiredEpisodeOrder -> nullableCompare(descending, { it.year }, Int::compareTo)
+            MediaSortField.CommunityRating,
+            MediaSortField.CriticRating -> nullableCompare(descending, { it.communityRating }, Double::compareTo)
             MediaSortField.Runtime -> nullableCompare(descending, { it.runtimeMs }, Long::compareTo)
+            MediaSortField.IsFavoriteOrLiked ->
+                nullableCompare(descending, { it.userData.isFavorite }, Boolean::compareTo)
+            MediaSortField.IsUnplayed ->
+                nullableCompare(descending, { !it.userData.isPlayed }, Boolean::compareTo)
+            MediaSortField.IsPlayed ->
+                nullableCompare(descending, { it.userData.isPlayed }, Boolean::compareTo)
             MediaSortField.SeasonNumber -> nullableCompare(descending, { it.seasonNumber }, Int::compareTo)
             MediaSortField.EpisodeNumber -> nullableCompare(descending, { it.episodeNumber }, Int::compareTo)
         }.thenBy { it.id.value }
