@@ -454,7 +454,11 @@ private fun BoxScope.DetailBody(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .nestedScroll(heroScrollConnection)
-                .verticalScroll(scrollState),
+                // The legacy hero owns the top-edge stretch. Compose's default
+                // overscroll translates the whole scroll layer after a fast
+                // return from the bottom, which pulls the hero away from the
+                // viewport top instead of stretching it in place.
+                .verticalScroll(scrollState, overscrollEffect = null),
         ) {
             DetailHero(
                 item = item,
@@ -834,23 +838,16 @@ private fun RowScope.DetailPlayAction(
     val remaining = target?.remainingTime().orEmpty()
     val label = legacyDetailPlayLabel(item, target)
     Box(modifier.height(50.dp).clip(MaFeiShape.capsule)) {
-        if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
-            Box(
-                Modifier.fillMaxWidth(progress).fillMaxHeight()
-                    .background(Color.White.copy(alpha = .26f)),
-            )
-        }
         if (onPlay != null) {
             LiquidButton(
                 onClick = { if (!busy) onPlay() },
                 backdrop = backdrop,
                 height = 50.dp,
+                horizontalPadding = 0.dp,
                 modifier = Modifier.fillMaxSize().semantics {
                     contentDescription = if (remaining.isBlank()) label else "$label $remaining"
                 },
-            ) {
-                DetailPlayContents(label, remaining, busy)
-            }
+            ) {}
         } else {
             GlassSurface(
                 backdrop = backdrop,
@@ -860,15 +857,25 @@ private fun RowScope.DetailPlayAction(
                     contentDescription = label
                     disabled()
                 },
-            ) {
-                Row(
-                    Modifier.fillMaxSize().alpha(.48f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DetailPlayContents(label, remaining, busy = false)
-                }
-            }
+            ) {}
+        }
+        // LegacyDetailPlayAction paints progress above the material surface and
+        // below the button contents. Painting it before LiquidButton lets the
+        // refracted backdrop cover the fill completely.
+        if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
+            Box(
+                Modifier.fillMaxWidth(progress).fillMaxHeight()
+                    .background(Color.White.copy(alpha = .26f)),
+            )
+        }
+        Row(
+            Modifier.fillMaxSize()
+                .alpha(if (onPlay == null) .48f else 1f)
+                .padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DetailPlayContents(label, remaining, busy && onPlay != null)
         }
     }
 }

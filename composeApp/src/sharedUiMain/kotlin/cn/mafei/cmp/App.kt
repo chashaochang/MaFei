@@ -2077,7 +2077,13 @@ private fun BrowseContent(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 } else {
-                                    val playTarget = state.selectedSeasonPlayTarget?.takeIf { it.canPlay }
+                                    // The legacy season page always exposes playFirst(): it resolves
+                                    // progress/unwatched/first from the episode queue and lets playback
+                                    // preparation decide whether the target can actually be opened.
+                                    // Display-profile episode rows may not carry canPlay, so filtering it
+                                    // here leaves a visible but empty action capsule.
+                                    val playTarget = state.selectedSeasonPlayTarget
+                                        ?: state.detailEpisodes.firstOrNull()
                                     SeasonDetailScreen(
                                         series = series,
                                         season = season,

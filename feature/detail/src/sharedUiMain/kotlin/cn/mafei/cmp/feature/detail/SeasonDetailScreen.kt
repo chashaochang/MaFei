@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -150,7 +151,10 @@ fun SeasonDetailScreen(
             Column(
                 Modifier.fillMaxWidth()
                     .nestedScroll(heroStretch.connection)
-                    .verticalScroll(scrollState),
+                    // Hero stretching replaces the platform overscroll visual;
+                    // running both moves the entire page during a fast return
+                    // to the top instead of keeping the hero's top edge fixed.
+                    .verticalScroll(scrollState, overscrollEffect = null),
             ) {
                 SeasonHero(
                     seriesName = seriesName,
@@ -364,38 +368,7 @@ private fun SeasonActions(
                         contentDescription = if (remaining.isBlank()) label else "$label $remaining"
                     },
                 ) {
-                    if (playbackBusy) {
-                        CircularProgressIndicator(
-                            Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    } else {
-                        Image(
-                            painter = painterResource(MaFeiLegacyDrawables.playRound),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            label,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (remaining.isNotBlank()) {
-                            Text(
-                                remaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
-                                    .replace(" 分钟", "分"),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                            )
-                        }
-                    }
+                    SeasonPlayActionContent(label, remaining, playbackBusy)
                 }
             } else {
                 GlassSurface(
@@ -406,7 +379,15 @@ private fun SeasonActions(
                         contentDescription = label
                         disabled()
                     },
-                ) {}
+                ) {
+                    Row(
+                        Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SeasonPlayActionContent(label, remaining, busy = false)
+                    }
+                }
             }
         }
         SeasonWatchedAction(
@@ -414,6 +395,46 @@ private fun SeasonActions(
             onAction = onTogglePlayed?.takeUnless { actionsBusy },
             backdrop = backdrop,
         )
+    }
+}
+
+@Composable
+private fun RowScope.SeasonPlayActionContent(
+    label: String,
+    remaining: String,
+    busy: Boolean,
+) {
+    if (busy) {
+        CircularProgressIndicator(
+            Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    } else {
+        Image(
+            painter = painterResource(MaFeiLegacyDrawables.playRound),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (remaining.isNotBlank()) {
+            Text(
+                remaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
+                    .replace(" 分钟", "分"),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+        }
     }
 }
 
