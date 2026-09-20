@@ -31,8 +31,6 @@ import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.NavigationPlacement
-import cn.mafei.cmp.common.glass.captureGlassBackdrop
-import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
@@ -40,8 +38,6 @@ import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
-import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
-import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.core.domain.MediaItem
@@ -54,7 +50,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun FavoriteScreen(
     items: List<MediaItem>,
-    totalEstimate: Int?,
     selectedSort: MediaSort,
     sortChoices: List<LegacySortChoice<MediaSort>>,
     loading: Boolean,
@@ -91,33 +86,33 @@ fun FavoriteScreen(
         }
     }
 
-    // 媒体库 / 收藏 / 我的 三个一级页共用同一种顶部标题：页面自己是**记录者**，
-    // 标题栏是捕获层的**兄弟**（放进记录层里会自引用，skiko 的 drawable 图会栈溢出）。
-    val backdrop = rememberGlassBackdrop()
+    // Legacy FavoriteListPage is embedded with `fromHome = true`, so it hides
+    // its ActionBar. The 46dp sort row is still present while the grid skeleton
+    // is loading; hiding it changes both the information hierarchy and the
+    // vertical position of the first media row.
     Box(modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
         Column(Modifier.fillMaxSize()) {
-        if (!loading || items.isNotEmpty()) {
             LegacySortRow(
                 label = sortChoices.firstOrNull { it.value.field == selectedSort.field }?.label ?: "按添加日期",
-                totalCount = (totalEstimate ?: items.size).toString(),
+                // Legacy FavoriteListViewModel displays the current data
+                // source count after every page append.
+                totalCount = items.size.toString(),
                 descending = selectedSort.direction == SortDirection.Descending,
                 onOpenSort = { showSort = true },
                 onToggleDirection = onToggleSortDirection,
                 modifier = Modifier.padding(
                     start = safeArea.start + horizontalPadding,
-                    top = safeArea.top + MaFeiPageTitleBarHeight,
+                    top = safeArea.top,
                     end = safeArea.end + horizontalPadding,
                 ),
             )
-        }
 
         when {
             loading && items.isEmpty() -> LegacyMediaGridSkeleton(
                 columns = legacyMediaColumns(contentWidth),
                 startPadding = safeArea.start + horizontalPadding,
                 endPadding = safeArea.end + horizontalPadding,
-                topPadding = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
+                topPadding = 12.dp,
                 bottomPadding = bottomPadding,
                 modifier = Modifier.weight(1f),
             )
@@ -159,12 +154,6 @@ fun FavoriteScreen(
             }
         }
         }
-        }
-        MaFeiPageTitleBar(
-            title = "收藏",
-            backdrop = backdrop,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
     }
 
     if (showSort) {

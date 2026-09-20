@@ -1,6 +1,8 @@
 package cn.mafei.cmp.session
 
 import cn.mafei.cmp.common.core.SystemEpochClock
+import cn.mafei.cmp.core.domain.AccountId
+import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.http_contract.HttpTransport
 import cn.mafei.cmp.core.secure_credential_api.SecureCredentialStore
@@ -11,13 +13,22 @@ import cn.mafei.cmp.core.storage_api.SettingsStorage
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.session.SessionRepository
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.PlayerPhase
+import cn.mafei.cmp.providers.feiniu.connection.FeiniuAddressParser
+import cn.mafei.cmp.providers.feiniu.connection.FeiniuConnectionApi
+import cn.mafei.cmp.providers.feiniu.core.FeiniuHostCandidate
+import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
+import cn.mafei.cmp.providers.feiniu.core.FeiniuRoute
+import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** Process-scoped services, not an Activity/ViewController-scoped persistence writer. */
@@ -50,6 +61,7 @@ class ApplicationRuntime(
     private val playbackMutex = Mutex()
     private val playbacks = MutableStateFlow(emptyMap<ApplicationSession, SessionPlaybackRuntime>())
     private var playbackObserver: Job? = null
+    private var deferredFeiniuRouteRefresh: Job? = null
     val sessions = ApplicationSessions(
         SessionRepository(secureStore, settings, persistenceStageReporter),
         MediaRepository(
@@ -64,43 +76,75 @@ class ApplicationRuntime(
         beforeExplicitLogout = { suppressLegacyAccountRecovery() },
     )
     private val connectionCatalog = ConnectionCatalog(settings)
+    private val persistedChasingSeries = SettingsChasingSeriesStore(settings)
+    val chasingSeriesStore: cn.mafei.cmp.feature.chasing.ChasingSeriesStore
+        get() = persistedChasingSeries
     // Logging in to an already saved account must land on that record again: the
     // catalog keeps one credential namespace per selection, and a fresh namespace
     // per login used to append another identical row to the account history.
     private val login = ProviderLogin(
         transport,
-        savedConnectionFor = { provider, address, remoteUserId, username ->
-            savedAccount(provider, address, remoteUserId, username)
+        savedConnectionFor = { provider, address, originalAddress, remoteUserId, username ->
+            savedAccount(provider, address, originalAddress, remoteUserId, username)
         },
     )
     private val artwork = SessionArtwork(transport)
 
-    /**
-     * 播放偏好持久化（legacy `AppPreference.preferredMediaSourceId` 的对应物）：
-     * 全局记忆「最近一次手动选择的媒体源」，详情页下次预选同名源。读写失败
-     * 一律降级为无偏好，绝不影响主流程。
-     */
+    /** Legacy-compatible account + item scoped media-source selections. */
     val playbackPreferences: cn.mafei.cmp.feature.home.MediaPlaybackPreferences by lazy {
         val storage = cn.mafei.cmp.core.storage_api.JsonSnapshotStorage(
             settings,
             Json { ignoreUnknownKeys = true },
             { SystemEpochClock.nowEpochMs() },
         )
+        val preferenceMutex = Mutex()
         object : cn.mafei.cmp.feature.home.MediaPlaybackPreferences {
-            override suspend fun preferredMediaSourceId(): String? = try {
-                storage.load(PreferredMediaSourceKey, String.serializer())
-            } catch (cancelled: kotlin.coroutines.cancellation.CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                null
-            }
+            override suspend fun preferredMediaSourceId(accountId: AccountId, mediaId: MediaId): String? =
+                preferenceMutex.withLock {
+                    try {
+                        val current = storage.load(
+                            PreferredMediaSourcesKey,
+                            PreferredMediaSources.serializer(),
+                        )
+                        current?.entries?.firstOrNull {
+                            it.accountId == accountId.value && it.mediaId == mediaId.value
+                        }?.sourceId ?: storage.load(PreferredMediaSourceKey, String.serializer())
+                    } catch (cancelled: kotlin.coroutines.cancellation.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
 
-            override suspend fun setPreferredMediaSourceId(id: String?) {
-                try {
-                    if (id == null) storage.delete(PreferredMediaSourceKey)
-                    else storage.save(PreferredMediaSourceKey, id, String.serializer())
-                } catch (_: Exception) {
-                    // 持久化失败只影响下次预选。
+            override suspend fun setPreferredMediaSourceId(
+                accountId: AccountId,
+                mediaId: MediaId,
+                sourceId: String,
+            ) {
+                preferenceMutex.withLock {
+                    try {
+                        val retained = storage.load(
+                            PreferredMediaSourcesKey,
+                            PreferredMediaSources.serializer(),
+                        )?.entries.orEmpty().filterNot {
+                            it.accountId == accountId.value && it.mediaId == mediaId.value
+                        }
+                        storage.save(
+                            PreferredMediaSourcesKey,
+                            PreferredMediaSources(
+                                (listOf(PreferredMediaSource(accountId.value, mediaId.value, sourceId)) + retained)
+                                    .take(PreferredMediaSourceLimit),
+                            ),
+                            PreferredMediaSources.serializer(),
+                        )
+                        // The previous CMP draft stored one global string. Once a scoped
+                        // selection is written it must not leak into unrelated items.
+                        storage.delete(PreferredMediaSourceKey)
+                    } catch (cancelled: kotlin.coroutines.cancellation.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // A preference write must not block playback or source switching.
+                    }
                 }
             }
         }
@@ -125,7 +169,17 @@ class ApplicationRuntime(
         rememberPassword: Boolean = true,
     ): ApplicationSession {
         check(!isClosed) { "Application is closed" }
-        val authenticated = login.authenticate(provider, baseUrl, username, password)
+        val authenticated = login.authenticate(
+            provider = provider,
+            baseUrl = baseUrl,
+            username = username,
+            password = password,
+            feiniuRoutePreference = if (provider == ProviderKind.Feiniu) {
+                loadFeiniuRoutePreference()
+            } else {
+                FeiniuRoutePreference.Speed
+            },
+        )
         val connection = authenticated.connection.copy(rememberLogin = rememberPassword)
         var previousPasswordSecret: SecureSecret? = null
         var passwordStateCaptured = false
@@ -184,12 +238,13 @@ class ApplicationRuntime(
     private suspend fun savedAccount(
         provider: ProviderKind,
         address: String,
+        originalAddress: String?,
         remoteUserId: String?,
         username: String,
     ): SavedConnection? = connectionCatalog.all()
         .filter { saved ->
             saved.server.provider == provider &&
-                SessionIdentity.serverAddress(saved.server.baseUrl) == address &&
+                savedConnectionMatchesAddress(saved, address, originalAddress) &&
                 if (remoteUserId != null) {
                     saved.remoteUserId == remoteUserId
                 } else {
@@ -210,13 +265,16 @@ class ApplicationRuntime(
      * successful login, and the next login simply retries what a failure left.
      */
     private suspend fun mergeDuplicateAccounts(connection: SavedConnection) {
-        val address = SessionIdentity.serverAddress(connection.server.baseUrl) ?: return
+        val addresses = connection.normalizedServerAddresses()
         try {
             val duplicates = connectionCatalog.all().filter { saved ->
                 saved.credentialKey != connection.credentialKey &&
                     saved.server.provider == connection.server.provider &&
                     saved.remoteUserId == connection.remoteUserId &&
-                    SessionIdentity.serverAddress(saved.server.baseUrl) == address
+                    (
+                        saved.normalizedServerAddresses().any(addresses::contains) ||
+                            sameFeiniuOriginalAddress(saved, connection)
+                    )
             }
             for (duplicate in duplicates) {
                 // The application's own deletion path: it refuses the active
@@ -285,6 +343,109 @@ class ApplicationRuntime(
         check(!isClosed) { "Application is closed" }
         require(value in APPEARANCE_MODES) { "Unsupported appearance mode" }
         settings.putString(APPEARANCE_MODE_KEY, value)
+    }
+
+    /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
+    suspend fun loadFeiniuRoutePreference(): FeiniuRoutePreference {
+        check(!isClosed) { "Application is closed" }
+        return try {
+            when (settings.getString(FEINIU_ROUTE_PREFERENCE_KEY)) {
+                FEINIU_ROUTE_PUBLIC -> FeiniuRoutePreference.Public
+                FEINIU_ROUTE_RELAY -> FeiniuRoutePreference.Relay
+                else -> FeiniuRoutePreference.Speed
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            failureReporter("feiniu-route-preference-read", failure)
+            FeiniuRoutePreference.Speed
+        }
+    }
+
+    /**
+     * Persists the choice first, exactly like the ArkUI store. Re-resolving the
+     * selected Feiniu account is best effort and never rolls back a saved choice.
+     */
+    suspend fun saveFeiniuRoutePreference(value: FeiniuRoutePreference) {
+        check(!isClosed) { "Application is closed" }
+        val normalized = when (value) {
+            FeiniuRoutePreference.Public -> FEINIU_ROUTE_PUBLIC
+            FeiniuRoutePreference.Relay -> FEINIU_ROUTE_RELAY
+            else -> FEINIU_ROUTE_SPEED
+        }
+        settings.putString(FEINIU_ROUTE_PREFERENCE_KEY, normalized)
+        try {
+            refreshSelectedFeiniuConnection(
+                when (normalized) {
+                    FEINIU_ROUTE_PUBLIC -> FeiniuRoutePreference.Public
+                    FEINIU_ROUTE_RELAY -> FeiniuRoutePreference.Relay
+                    else -> FeiniuRoutePreference.Speed
+                },
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            failureReporter("feiniu-route-refresh", failure)
+        }
+    }
+
+    private suspend fun refreshSelectedFeiniuConnection(preference: FeiniuRoutePreference) {
+        val active = sessions.state.value.session
+            ?.takeIf { it.selection.provider == ProviderKind.Feiniu }
+            ?: return
+        val playback = playbacks.value[active]
+        if (playback != null && playback.controller.state.value.phase.isActivePlaybackPhase()) {
+            deferredFeiniuRouteRefresh?.cancel()
+            deferredFeiniuRouteRefresh = scope.launch {
+                playback.controller.state.first { !it.phase.isActivePlaybackPhase() }
+                try {
+                    refreshSelectedFeiniuConnectionNow(preference)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    failureReporter("feiniu-route-refresh-deferred", failure)
+                }
+            }
+            return
+        }
+        refreshSelectedFeiniuConnectionNow(preference)
+    }
+
+    private suspend fun refreshSelectedFeiniuConnectionNow(preference: FeiniuRoutePreference) {
+        val active = sessions.state.value.session
+            ?.takeIf { it.selection.provider == ProviderKind.Feiniu }
+            ?: return
+        val originalAddress = active.connection.feiniuOriginalAddress ?: active.connection.server.baseUrl
+        val parsed = FeiniuAddressParser.parse(originalAddress)
+        val resolution = when (parsed.kind) {
+            FeiniuAddressParser.Kind.Direct -> {
+                val direct = validateSavedBaseUrl(parsed.directBaseUrl)
+                FeiniuHostResolution(FeiniuHostCandidate(direct.toEncodedString(), FeiniuRoute.Direct))
+            }
+            FeiniuAddressParser.Kind.FnId -> FeiniuConnectionApi(transport).resolve(originalAddress, preference)
+        }
+        val preferred = validateSavedBaseUrl(resolution.preferred.baseUrl)
+        val refreshed = active.connection.copy(
+            server = active.connection.server.copy(
+                name = preferred.host,
+                baseUrl = preferred.toEncodedString(),
+            ),
+            feiniuRoutes = resolution.orderedCandidates
+                .distinctBy { SessionIdentity.serverAddress(it.baseUrl) }
+                .take(16)
+                .map { route ->
+                    SavedFeiniuRoute(
+                        validateSavedBaseUrl(route.baseUrl).toEncodedString(),
+                        route.route.name,
+                    )
+                },
+            feiniuOriginalAddress = originalAddress,
+        )
+        val binding = DefaultProviderSessionFactory(transport).restore(
+            refreshed,
+            active.binding.source.current().secrets,
+        )
+        sessions.activate(refreshed, binding)
     }
 
     private suspend fun importLegacyRememberedPasswordsSafely(
@@ -507,6 +668,8 @@ class ApplicationRuntime(
             persistenceStageReporter("migration-records-read")
             val records = sink.storedRecords(result.migrationId)
                 ?: return result
+            persistenceStageReporter("migration-chasing-save")
+            persistedChasingSeries.importMigrated(records.chasing)
             // Persist every mappable connection, then admit the migrated
             // current account through the SAME activate pipeline as a fresh
             // login: credentials are read from the secure store by the
@@ -566,6 +729,8 @@ class ApplicationRuntime(
             if (isClosed) return@withLock
             try {
                 releaseAllPlaybacks()
+                deferredFeiniuRouteRefresh?.cancel()
+                deferredFeiniuRouteRefresh = null
                 playbackObserver?.cancel()
                 playbackObserver = null
                 sessions.close()
@@ -584,6 +749,10 @@ class ApplicationRuntime(
     private companion object {
         const val APPEARANCE_MODE_KEY = "mafei.ui.appearance-mode.v1"
         val APPEARANCE_MODES = setOf("auto", "light", "dark")
+        const val FEINIU_ROUTE_PREFERENCE_KEY = "pref_feiniu_connection_preference"
+        const val FEINIU_ROUTE_SPEED = "speed"
+        const val FEINIU_ROUTE_PUBLIC = "public"
+        const val FEINIU_ROUTE_RELAY = "relay"
         const val LEGACY_MIGRATION_CONSUMED_KEY = "mafei.legacy-migration.v1.consumed"
         const val LEGACY_MIGRATION_CONSUMED = "done"
         const val LEGACY_MIGRATION_EMPTY_KEY = "mafei.legacy-migration.v1.empty"
@@ -598,9 +767,60 @@ class ApplicationRuntime(
     }
 }
 
+private fun savedConnectionMatchesAddress(
+    saved: SavedConnection,
+    address: String,
+    originalAddress: String?,
+): Boolean {
+    if (saved.normalizedServerAddresses().contains(address)) return true
+    if (saved.server.provider != ProviderKind.Feiniu || originalAddress == null) return false
+    return saved.feiniuOriginalAddress?.normalizedOriginalAddress() ==
+        originalAddress.normalizedOriginalAddress()
+}
+
+private fun SavedConnection.normalizedServerAddresses(): Set<String> = buildSet {
+    SessionIdentity.serverAddress(server.baseUrl)?.let(::add)
+    feiniuRoutes.forEach { route -> SessionIdentity.serverAddress(route.baseUrl)?.let(::add) }
+}
+
+private fun sameFeiniuOriginalAddress(first: SavedConnection, second: SavedConnection): Boolean {
+    if (first.server.provider != ProviderKind.Feiniu || second.server.provider != ProviderKind.Feiniu) return false
+    val firstAddress = first.feiniuOriginalAddress?.normalizedOriginalAddress() ?: return false
+    val secondAddress = second.feiniuOriginalAddress?.normalizedOriginalAddress() ?: return false
+    return firstAddress == secondAddress
+}
+
+private fun String.normalizedOriginalAddress(): String = trim().trimEnd('/')
+
+private fun PlayerPhase.isActivePlaybackPhase(): Boolean = when (this) {
+    PlayerPhase.Loading,
+    PlayerPhase.Ready,
+    PlayerPhase.Playing,
+    PlayerPhase.Paused,
+    PlayerPhase.Buffering -> true
+    PlayerPhase.Idle,
+    PlayerPhase.Ended,
+    PlayerPhase.Error,
+    PlayerPhase.Released -> false
+}
+
 private val RuntimeSettingsJson = Json { ignoreUnknownKeys = true }
 private const val SEARCH_HISTORY_KEY = "mafei/ui/search-history-v1"
 private const val PreferredMediaSourceKey = "mafei/media/playback/preferred-media-source-v1"
+private const val PreferredMediaSourcesKey = "mafei/media/playback/preferred-media-sources-v2"
+private const val PreferredMediaSourceLimit = 128
+
+@Serializable
+private data class PreferredMediaSource(
+    val accountId: String,
+    val mediaId: String,
+    val sourceId: String,
+)
+
+@Serializable
+private data class PreferredMediaSources(
+    val entries: List<PreferredMediaSource> = emptyList(),
+)
 
 /** Called only by platform main-thread entry points. Rotation does not create a second writer. */
 internal object ProcessApplication {

@@ -15,6 +15,7 @@ import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.player.api.PlayableResource
@@ -88,7 +89,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
 
     private fun defaultStub(): StubOutcome = StubOutcome.ReadyStub("https://stream.test/default", emptyMap())
 
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation {
+    override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
         val callNumber = preparedCallCount.incrementAndGet()
         val gate = if (callNumber in gateCallNumbers) CompletableDeferred<Unit>().also { gates += it } else null
         gate?.await()

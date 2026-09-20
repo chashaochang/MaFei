@@ -1,16 +1,22 @@
 package cn.mafei.cmp.player.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,8 +24,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,53 +35,74 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassRole
-import cn.mafei.cmp.common.glass.GlassSurface
-import cn.mafei.cmp.common.glass.GlassSurfaceSpec
+import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
+import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
-import cn.mafei.cmp.common.glass.components.LiquidSlider
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerState
-import com.kyant.shapes.RoundedRectangle
-import kotlin.math.min
+import cn.mafei.cmp.player.api.PlayerTrack
+import cn.mafei.cmp.player.api.TrackKind
+import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToLong
+
+private const val PlayerAutoHideDelayMs = 4_000L
+private const val PlayerLongPressSpeed = 3f
+
+private val PlayerControlSurface = Color(0x52000000)
+private val PlayerControlMask = Color(0x3D000000)
+private val PlayerFullscreenControlMask = Color(0x52000000)
+private val PlayerGestureSeekSurface = Color(0x85000000)
+private val PlayerGestureTrack = Color(0x66FFFFFF)
+private val PlayerMenuText = Color(0xE6FFFFFF)
+private val PlayerMenuSecondaryText = Color(0x99FFFFFF)
+private val PlayerMenuDivider = Color(0x24FFFFFF)
+private val PlayerMenuCell = Color(0x26000000)
+private val PlayerMenuSelectedCell = Color(0x3DFFFFFF)
+private val PlayerMenuMiddle = Color(0x8A000000)
+private val PlayerMenuEnd = Color(0xDC000000)
+private val PlayerAccent = Color(0xFF2173DF)
+
+private enum class PlayerChromePanel { None, Speed, Audio, Subtitle }
+
+private enum class PlayerChromeGlyph { More, Play, Pause, Retry, Fullscreen, Lock, Unlock, Next }
 
 /**
- * Adaptive player controls over one page-level live capture. The media scene is
- * recorded separately; every optical control consumes it as a sibling, so no
- * surface samples itself.
+ * CMP translation of the legacy ArkUI `PlayerChrome`.
+ *
+ * The video surface is the full-screen first layer. Controls retain the old
+ * black masks, persistent portrait back button, 4-second auto hide,
+ * landscape lock, 4dp timeline and runtime-backed speed/track actions.
+ * Unsupported platform capabilities stay absent instead of being faked.
  */
 @Composable
 fun NowPlayingScreen(
@@ -84,224 +113,317 @@ fun NowPlayingScreen(
     onTogglePlay: () -> Unit,
     onRetry: () -> Unit,
     onSeek: (Long) -> Unit,
-    artwork: @Composable (Modifier) -> Unit,
-    backdropArtwork: @Composable (Modifier) -> Unit,
+    onSpeed: (Float) -> Unit,
+    onSelectTrack: (TrackKind, String?) -> Unit,
+    videoSurface: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    onFullscreenToggle: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
 ) {
     val backdrop = rememberGlassBackdrop()
     val presentation = state.toNowPlayingPresentation(capabilities)
-    var sliderProgress by remember(media.id, state.generation) {
-        mutableFloatStateOf(presentation.progress)
+    val safeArea = currentMaFeiSafeArea()
+    val latestTogglePlay by rememberUpdatedState(onTogglePlay)
+    val latestSeek by rememberUpdatedState(onSeek)
+    val latestSpeed by rememberUpdatedState(onSpeed)
+    val latestPlaybackSpeed by rememberUpdatedState(state.speed)
+
+    var controlsVisible by remember(media.id, state.generation) { mutableStateOf(true) }
+    var locked by remember(media.id, state.generation) { mutableStateOf(false) }
+    var panel by remember(media.id, state.generation) { mutableStateOf(PlayerChromePanel.None) }
+    var autoHideGeneration by remember(media.id, state.generation) { mutableIntStateOf(0) }
+    var sliderPositionMs by remember(media.id, state.generation) { mutableLongStateOf(state.positionMs) }
+    var draggingSlider by remember(media.id, state.generation) { mutableStateOf(false) }
+    var seekFeedbackMs by remember(media.id, state.generation) { mutableStateOf<Long?>(null) }
+    var sceneSize by remember { mutableStateOf(IntSize.Zero) }
+    var longPressSpeedActive by remember(media.id, state.generation) { mutableStateOf(false) }
+    var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(state.positionMs, draggingSlider) {
+        if (!draggingSlider) sliderPositionMs = state.positionMs.coerceAtLeast(0L)
     }
-    LaunchedEffect(presentation.progress) {
-        sliderProgress = presentation.progress
+    LaunchedEffect(controlsVisible, panel, locked, state.phase, autoHideGeneration) {
+        if (controlsVisible && panel == PlayerChromePanel.None && !locked && state.phase == PlayerPhase.Playing) {
+            delay(PlayerAutoHideDelayMs)
+            controlsVisible = false
+        }
     }
 
-    BoxWithConstraints(modifier.background(Color(0xFF070A0E))) {
-        val wide = useWideNowPlayingLayout(maxWidth.value, maxHeight.value)
+    fun showControlsTemporarily() {
+        if (!locked) {
+            controlsVisible = true
+            autoHideGeneration++
+        }
+    }
+
+    BoxWithConstraints(
+        modifier.background(Color.Black).onSizeChanged { sceneSize = it },
+    ) {
+        val fullscreen = maxWidth > maxHeight
+        val durationMs = state.durationMs?.takeIf { it > 0L }
 
         Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-            NowPlayingScene(
-                media = media,
-                wide = wide,
-                artwork = artwork,
-                backdropArtwork = backdropArtwork,
+            videoSurface(Modifier.fillMaxSize())
+        }
+
+        Box(
+            Modifier.fillMaxSize()
+                .pointerInput(media.id, state.generation, locked) {
+                    detectTapGestures(
+                        onTap = {
+                            if (!locked) {
+                                controlsVisible = !controlsVisible
+                                if (controlsVisible) autoHideGeneration++
+                            }
+                        },
+                        onDoubleTap = {
+                            if (!locked) {
+                                latestTogglePlay()
+                                showControlsTemporarily()
+                            }
+                        },
+                        onLongPress = {
+                            if (!locked && presentation.isPlaying && capabilities.speed) {
+                                speedBeforeLongPress = latestPlaybackSpeed
+                                longPressSpeedActive = true
+                                latestSpeed(PlayerLongPressSpeed)
+                                controlsVisible = false
+                            }
+                        },
+                        onPress = {
+                            tryAwaitRelease()
+                            if (longPressSpeedActive) {
+                                longPressSpeedActive = false
+                                latestSpeed(speedBeforeLongPress)
+                                showControlsTemporarily()
+                            }
+                        },
+                    )
+                }
+                .pointerInput(media.id, state.generation, durationMs, locked, sceneSize) {
+                    val total = durationMs ?: return@pointerInput
+                    if (locked || sceneSize.width <= 0) return@pointerInput
+                    var accumulatedX = 0f
+                    var accumulatedY = 0f
+                    var dragAxis = 0
+                    var startPosition = 0L
+                    detectDragGestures(
+                        onDragStart = {
+                            accumulatedX = 0f
+                            accumulatedY = 0f
+                            dragAxis = 0
+                            startPosition = state.positionMs.coerceIn(0L, total)
+                        },
+                        onDrag = { change, dragAmount ->
+                            accumulatedX += dragAmount.x
+                            accumulatedY += dragAmount.y
+                            if (dragAxis == 0 && maxOf(abs(accumulatedX), abs(accumulatedY)) >= 4f) {
+                                dragAxis = if (abs(accumulatedX) >= abs(accumulatedY)) 1 else 2
+                            }
+                            if (dragAxis == 1) {
+                                change.consume()
+                                val delta = total.toDouble() * accumulatedX / sceneSize.width.toDouble()
+                                seekFeedbackMs = (startPosition + delta.roundToLong()).coerceIn(0L, total)
+                            }
+                        },
+                        onDragCancel = { seekFeedbackMs = null },
+                        onDragEnd = {
+                            if (dragAxis == 1) seekFeedbackMs?.let(latestSeek)
+                            seekFeedbackMs = null
+                            if (dragAxis == 1) showControlsTemporarily()
+                        },
+                    )
+                },
+        )
+
+        if (!fullscreen && !locked && panel == PlayerChromePanel.None) {
+            PlayerChromeButton(
+                glyph = null,
+                label = "返回",
+                diameter = 44,
+                iconSize = 22,
+                backdrop = backdrop,
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.TopStart)
+                    .padding(start = 12.dp + safeArea.start, top = 10.dp + safeArea.top),
+            ) {
+                MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = controlsVisible && !locked,
+            enter = fadeIn() + slideInVertically { -24 },
+            exit = fadeOut() + slideOutVertically { -24 },
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            PlayerTopChrome(
+                title = media.title,
+                fullscreen = fullscreen,
+                safeStart = safeArea.start,
+                safeTop = safeArea.top,
+                safeEnd = safeArea.end,
+                backdrop = backdrop,
+                // Legacy "more" only contains aspect ratio and playback info.
+                // Neither contract exists in the CMP player API yet, so do not
+                // remap this command to speed or track selection.
+                showMenu = false,
+                onBack = onBack,
+                onMenu = {},
             )
         }
 
-        LiquidButton(
-            onClick = onBack,
-            backdrop = backdrop,
-            modifier = Modifier.align(Alignment.TopStart).padding(20.dp),
-            surfaceColor = Color.White.copy(alpha = .08f),
+        AnimatedVisibility(
+            visible = controlsVisible && !locked,
+            enter = fadeIn() + slideInVertically { 24 },
+            exit = fadeOut() + slideOutVertically { 24 },
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            MaFeiIcon(MaFeiGlyph.Back, Modifier.size(20.dp), Color.White)
-            Text("返回", color = Color.White, style = MaterialTheme.typography.labelLarge)
+            PlayerBottomChrome(
+                state = state,
+                presentation = presentation,
+                fullscreen = fullscreen,
+                safeStart = safeArea.start,
+                safeEnd = safeArea.end,
+                safeBottom = safeArea.bottom,
+                backdrop = backdrop,
+                sliderPositionMs = sliderPositionMs,
+                draggingSlider = draggingSlider,
+                onDraggingChanged = { draggingSlider = it },
+                onSliderPositionChanged = { sliderPositionMs = it },
+                onSeek = {
+                    sliderPositionMs = it
+                    latestSeek(it)
+                    showControlsTemporarily()
+                },
+                onTogglePlay = latestTogglePlay,
+                onRetry = onRetry,
+                onFullscreenToggle = onFullscreenToggle,
+                onNext = onNext,
+                onLock = { locked = true; controlsVisible = false; panel = PlayerChromePanel.None },
+                onPanel = { panel = it; controlsVisible = true },
+                capabilities = capabilities,
+            )
         }
 
-        NowPlayingConsole(
-            media = media,
-            presentation = presentation,
-            wide = wide,
-            sliderProgress = sliderProgress,
-            backdrop = backdrop,
-            onSliderProgress = { value ->
-                sliderProgress = value
-                state.durationMs?.takeIf { it > 0L }?.let { duration ->
-                    onSeek((duration * value.coerceIn(0f, 1f)).toLong())
-                }
-            },
-            onTogglePlay = onTogglePlay,
-            onRetry = onRetry,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = if (wide) 36.dp else 16.dp, vertical = 18.dp)
-                .widthIn(max = if (wide) 980.dp else 560.dp)
-                .fillMaxWidth(),
-        )
+        if (locked) {
+            PlayerChromeButton(
+                glyph = PlayerChromeGlyph.Unlock,
+                label = "解锁",
+                diameter = 52,
+                iconSize = 24,
+                backdrop = backdrop,
+                onClick = {
+                    locked = false
+                    showControlsTemporarily()
+                },
+                modifier = Modifier.align(Alignment.CenterStart)
+                    .padding(start = safeArea.start + if (fullscreen) 20.dp else 24.dp),
+            )
+        }
+
+        seekFeedbackMs?.let { target ->
+            PlayerSeekFeedback(target, durationMs ?: 1L, Modifier.align(Alignment.Center))
+        }
+
+        if (presentation.isBusy && state.phase != PlayerPhase.Error) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center).size(40.dp),
+                color = Color.White,
+                strokeWidth = 3.dp,
+            )
+        }
+
+        if (presentation.showRetry) {
+            PlayerError(onRetry, Modifier.align(Alignment.Center))
+        }
+
+        if (panel != PlayerChromePanel.None) {
+            PlayerSidePanel(
+                panel = panel,
+                state = state,
+                safeEnd = safeArea.end,
+                onDismiss = {
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+                onSpeed = { value ->
+                    latestSpeed(value)
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+                onSelectTrack = { kind, id ->
+                    onSelectTrack(kind, id)
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+            )
+        }
     }
 }
 
 @Composable
-private fun NowPlayingScene(
-    media: NowPlayingMedia,
-    wide: Boolean,
-    artwork: @Composable (Modifier) -> Unit,
-    backdropArtwork: @Composable (Modifier) -> Unit,
+private fun PlayerTopChrome(
+    title: String,
+    fullscreen: Boolean,
+    safeStart: androidx.compose.ui.unit.Dp,
+    safeTop: androidx.compose.ui.unit.Dp,
+    safeEnd: androidx.compose.ui.unit.Dp,
+    backdrop: GlassBackdrop,
+    showMenu: Boolean,
+    onBack: () -> Unit,
+    onMenu: () -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        backdropArtwork(
-            Modifier.fillMaxSize().graphicsLayer {
-                scaleX = 1.18f
-                scaleY = 1.18f
-                alpha = .72f
-            }.blur(54.dp),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
+    Box(
+        Modifier.fillMaxWidth()
+            .height((if (fullscreen) 96.dp else 88.dp) + safeTop)
+            .background(
                 Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = .16f),
-                    .48f to Color(0xFF071018).copy(alpha = .4f),
-                    1f to Color(0xFF05070A).copy(alpha = .7f),
+                    0f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
+                    1f to Color.Transparent,
                 ),
             ),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = if (wide) .2f else .06f),
-                        Color.Transparent,
-                        Color(0xFF06111A).copy(alpha = if (wide) .66f else .12f),
-                    ),
-                ),
-            ),
-        )
-
-        if (wide) {
-            WideMediaComposition(media, artwork)
-        } else {
-            CompactMediaComposition(media, artwork)
-        }
-    }
-}
-
-@Composable
-private fun BoxWithConstraintsScope.CompactMediaComposition(
-    media: NowPlayingMedia,
-    artwork: @Composable (Modifier) -> Unit,
-) {
-    val availableByHeight = ((maxHeight - 330.dp).coerceAtLeast(180.dp)) * (2f / 3f)
-    val artworkWidth = minOf(360.dp, (maxWidth - 48.dp).coerceAtLeast(180.dp), availableByHeight)
-    Column(
-        Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 82.dp, bottom = 194.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        artwork(
-            Modifier
-                .width(artworkWidth)
-                .aspectRatio(2f / 3f)
-                .shadow(
-                    elevation = 30.dp,
-                    shape = RoundedRectangle(30.dp),
-                    ambientColor = Color.Black.copy(alpha = .48f),
-                    spotColor = Color.Black.copy(alpha = .62f),
+        Row(
+            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .padding(
+                    start = if (fullscreen) safeStart + 20.dp else safeStart + 68.dp,
+                    end = safeEnd + 12.dp,
+                    top = safeTop + if (fullscreen) 16.dp else 10.dp,
                 )
-                .clip(RoundedRectangle(30.dp)),
-        )
-        Spacer(Modifier.height(22.dp))
-        Text(
-            media.title,
-            color = Color.White,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (media.subtitle.isNotBlank()) {
-            Spacer(Modifier.height(7.dp))
+                .height(44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (fullscreen) {
+                PlayerChromeButton(
+                    glyph = null,
+                    label = "返回",
+                    diameter = 44,
+                    iconSize = 22,
+                    backdrop = backdrop,
+                    onClick = onBack,
+                ) {
+                    MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
+                }
+            }
             Text(
-                media.subtitle,
-                color = Color.White.copy(alpha = .68f),
-                style = MaterialTheme.typography.bodyMedium,
+                text = title,
+                modifier = Modifier.weight(1f),
+                color = Color.White,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-@Composable
-private fun BoxWithConstraintsScope.WideMediaComposition(
-    media: NowPlayingMedia,
-    artwork: @Composable (Modifier) -> Unit,
-) {
-    val short = maxHeight < 620.dp
-    val topPadding = if (short) 60.dp else 72.dp
-    val bottomPadding = if (short) 118.dp else 150.dp
-    val horizontalPadding = if (maxWidth < 900.dp) 42.dp else 82.dp
-    val contentHeight = (maxHeight - topPadding - bottomPadding - 12.dp).coerceAtLeast(150.dp)
-    Row(
-        Modifier.fillMaxSize().padding(
-            start = horizontalPadding,
-            end = if (short) 36.dp else 74.dp,
-            top = topPadding,
-            bottom = bottomPadding,
-        ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(if (maxWidth < 900.dp) 32.dp else 72.dp),
-    ) {
-        Box(Modifier.weight(.54f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            val artworkWidth = min(420f, contentHeight.value * (2f / 3f)).dp
-            artwork(
-                Modifier
-                    .width(artworkWidth)
-                    .aspectRatio(2f / 3f)
-                    .shadow(
-                        elevation = 38.dp,
-                        shape = RoundedRectangle(36.dp),
-                        ambientColor = Color.Black.copy(alpha = .5f),
-                        spotColor = Color.Black.copy(alpha = .68f),
-                    )
-                    .clip(RoundedRectangle(36.dp)),
-            )
-        }
-        Column(
-            Modifier.weight(.46f).widthIn(max = 520.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                "正在播放",
-                color = Color(0xFF8BC8FF),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                media.title,
-                color = Color.White,
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (media.subtitle.isNotBlank()) {
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    media.subtitle,
-                    color = Color.White.copy(alpha = .7f),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            media.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    description,
-                    color = Color.White.copy(alpha = .58f),
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
+            if (showMenu) {
+                PlayerChromeButton(
+                    glyph = PlayerChromeGlyph.More,
+                    label = "更多设置",
+                    diameter = 44,
+                    iconSize = 22,
+                    backdrop = backdrop,
+                    onClick = onMenu,
                 )
             }
         }
@@ -309,242 +431,517 @@ private fun BoxWithConstraintsScope.WideMediaComposition(
 }
 
 @Composable
-private fun NowPlayingConsole(
-    media: NowPlayingMedia,
+private fun PlayerBottomChrome(
+    state: PlayerState,
     presentation: NowPlayingPresentation,
-    wide: Boolean,
-    sliderProgress: Float,
-    backdrop: cn.mafei.cmp.common.glass.GlassBackdrop,
-    onSliderProgress: (Float) -> Unit,
+    fullscreen: Boolean,
+    safeStart: androidx.compose.ui.unit.Dp,
+    safeEnd: androidx.compose.ui.unit.Dp,
+    safeBottom: androidx.compose.ui.unit.Dp,
+    backdrop: GlassBackdrop,
+    sliderPositionMs: Long,
+    draggingSlider: Boolean,
+    onDraggingChanged: (Boolean) -> Unit,
+    onSliderPositionChanged: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
     onTogglePlay: () -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
+    onFullscreenToggle: (() -> Unit)?,
+    onNext: (() -> Unit)?,
+    onLock: () -> Unit,
+    onPanel: (PlayerChromePanel) -> Unit,
+    capabilities: PlayerCapabilities,
 ) {
-    GlassSurface(
-        backdrop = backdrop,
-        spec = GlassSurfaceSpec(
-            role = GlassRole.PlayerOverlay,
-            level = GlassLevel.Full,
-            tintAlpha = .18f,
-            intensity = 1f,
-            cornerRadiusDp = if (wide) 34f else 30f,
-        ),
-        tint = Color(0xFF1C2B36),
-        modifier = modifier,
-    ) {
-        if (wide) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 17.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                PlaybackButton(presentation, backdrop, onTogglePlay, onRetry)
-                Column(Modifier.widthIn(min = 150.dp, max = 220.dp)) {
-                    Text(
-                        media.title,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        presentation.status,
-                        color = Color.White.copy(alpha = .58f),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-                PlaybackTimeline(
-                    presentation = presentation,
-                    sliderProgress = sliderProgress,
-                    backdrop = backdrop,
-                    onSliderProgress = onSliderProgress,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        } else {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                PlaybackTimeline(
-                    presentation = presentation,
-                    sliderProgress = sliderProgress,
-                    backdrop = backdrop,
-                    onSliderProgress = onSliderProgress,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        presentation.status,
-                        color = Color.White.copy(alpha = .66f),
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    PlaybackButton(presentation, backdrop, onTogglePlay, onRetry)
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
+    val audioTracks = state.tracks.filter { it.kind == TrackKind.Audio }
+    val subtitleTracks = state.tracks.filter { it.kind == TrackKind.Subtitle }
+    val duration = state.durationMs?.takeIf { it > 0L }
+    val maskHeight = if (fullscreen) 132.dp else 106.dp
 
-@Composable
-private fun PlaybackTimeline(
-    presentation: NowPlayingPresentation,
-    sliderProgress: Float,
-    backdrop: cn.mafei.cmp.common.glass.GlassBackdrop,
-    onSliderProgress: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier) {
-        if (presentation.canSeek) {
-            LiquidSlider(
-                value = { sliderProgress },
-                onValueChange = onSliderProgress,
-                valueRange = 0f..1f,
-                visibilityThreshold = .001f,
+    Box(
+        Modifier.fillMaxWidth().height(maskHeight + safeBottom)
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    1f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
+                ),
+            ),
+    ) {
+        if (fullscreen) {
+            PlayerChromeButton(
+                glyph = PlayerChromeGlyph.Lock,
+                label = "锁定",
+                diameter = 44,
+                iconSize = 22,
                 backdrop = backdrop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                        when (event.key) {
-                            Key.DirectionLeft -> {
-                                onSliderProgress((sliderProgress - .01f).coerceAtLeast(0f))
-                                true
-                            }
-                            Key.DirectionRight -> {
-                                onSliderProgress((sliderProgress + .01f).coerceAtMost(1f))
-                                true
-                            }
-                            else -> false
+                onClick = onLock,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = safeStart + 20.dp),
+            )
+        }
+
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(
+                    start = safeStart + if (fullscreen) 20.dp else 8.dp,
+                    end = safeEnd + if (fullscreen) 20.dp else 8.dp,
+                    bottom = safeBottom + 14.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (fullscreen) 2.dp else 0.dp),
+        ) {
+            if (fullscreen) {
+                PlayerTimelineRow(
+                    state = state,
+                    positionMs = sliderPositionMs,
+                    durationMs = duration,
+                    thumbDiameter = 14,
+                    onDraggingChanged = onDraggingChanged,
+                    onPositionChanged = onSliderPositionChanged,
+                    onSeek = onSeek,
+                    modifier = Modifier.height(28.dp),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    PlayerChromeButton(
+                        glyph = playbackGlyph(presentation),
+                        label = playbackLabel(presentation),
+                        diameter = 30,
+                        iconSize = 16,
+                        backdrop = backdrop,
+                        transparent = true,
+                        onClick = if (presentation.showRetry) onRetry else onTogglePlay,
+                    )
+                    if (onNext != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Next,
+                            label = "下一集",
+                            diameter = 30,
+                            iconSize = 16,
+                            backdrop = backdrop,
+                            transparent = true,
+                            onClick = onNext,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (capabilities.trackSelection && audioTracks.size > 1) {
+                        PlayerTextControl("音轨") { onPanel(PlayerChromePanel.Audio) }
+                    }
+                    if (capabilities.trackSelection && subtitleTracks.isNotEmpty()) {
+                        PlayerTextControl("字幕") { onPanel(PlayerChromePanel.Subtitle) }
+                    }
+                    if (capabilities.speed) {
+                        PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x") {
+                            onPanel(PlayerChromePanel.Speed)
                         }
                     }
-                    .focusable()
-                    .semantics {
-                        contentDescription = "播放进度"
-                        progressBarRangeInfo = ProgressBarRangeInfo(sliderProgress, 0f..1f)
-                        setProgress { value ->
-                            onSliderProgress(value.coerceIn(0f, 1f))
-                            true
-                        }
-                    },
-            )
-        } else {
-            Box(
-                Modifier.fillMaxWidth().height(24.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Box(
-                    Modifier.fillMaxWidth().height(4.dp).clip(CircleShape)
-                        .background(Color.White.copy(alpha = .18f)),
-                )
-                if (presentation.isBusy) {
-                    Box(
-                        Modifier.fillMaxWidth(.34f).height(4.dp).clip(CircleShape)
-                            .background(Color.White.copy(alpha = .72f)),
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PlayerChromeButton(
+                        glyph = playbackGlyph(presentation),
+                        label = playbackLabel(presentation),
+                        diameter = 46,
+                        iconSize = 24,
+                        backdrop = backdrop,
+                        onClick = if (presentation.showRetry) onRetry else onTogglePlay,
                     )
+                    Text(
+                        formatPlayerDuration(if (draggingSlider) sliderPositionMs else state.positionMs),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    LegacyPlayerSeekBar(
+                        valueMs = sliderPositionMs,
+                        bufferedMs = state.bufferedPositionMs,
+                        totalMs = duration,
+                        enabled = presentation.canSeek,
+                        thumbDiameter = 16,
+                        onDraggingChanged = onDraggingChanged,
+                        onValueChanged = onSliderPositionChanged,
+                        onSeek = onSeek,
+                        modifier = Modifier.weight(1f).height(32.dp),
+                    )
+                    Text(
+                        duration?.let(::formatPlayerDuration) ?: "--:--",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    if (onFullscreenToggle != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Fullscreen,
+                            label = "全屏",
+                            diameter = 40,
+                            iconSize = 20,
+                            backdrop = backdrop,
+                            onClick = onFullscreenToggle,
+                        )
+                    }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(presentation.elapsed, color = Color.White.copy(alpha = .64f), style = MaterialTheme.typography.labelSmall)
-            Text(presentation.duration, color = Color.White.copy(alpha = .64f), style = MaterialTheme.typography.labelSmall)
-        }
     }
 }
 
 @Composable
-private fun PlaybackButton(
-    presentation: NowPlayingPresentation,
-    backdrop: cn.mafei.cmp.common.glass.GlassBackdrop,
-    onTogglePlay: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    val action = if (presentation.showRetry) onRetry else onTogglePlay
-    LiquidButton(
-        onClick = action,
-        backdrop = backdrop,
-        surfaceColor = Color(0xFF72B9FF).copy(alpha = .12f),
-    ) {
-        if (presentation.isBusy) {
-            CircularProgressIndicator(
-                Modifier.size(20.dp),
-                color = Color.White,
-                strokeWidth = 2.dp,
-            )
-        } else {
-            PlaybackGlyph(
-                phase = if (presentation.showRetry) PlayerPhase.Error
-                else if (presentation.isPlaying) PlayerPhase.Playing
-                else PlayerPhase.Paused,
-                modifier = Modifier.size(21.dp),
-            )
-        }
-        Text(
-            when {
-                presentation.showRetry -> "重试"
-                presentation.isBusy -> "缓冲"
-                presentation.isPlaying -> "暂停"
-                else -> "播放"
-            },
-            color = Color.White,
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
-@Composable
-private fun PlaybackGlyph(
-    phase: PlayerPhase,
+private fun PlayerTimelineRow(
+    state: PlayerState,
+    positionMs: Long,
+    durationMs: Long?,
+    thumbDiameter: Int,
+    onDraggingChanged: (Boolean) -> Unit,
+    onPositionChanged: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Canvas(modifier) {
-        when (phase) {
-            PlayerPhase.Playing, PlayerPhase.Buffering -> {
-                val barWidth = size.width * .2f
-                drawRoundRect(
-                    Color.White,
-                    topLeft = Offset(size.width * .22f, size.height * .16f),
-                    size = androidx.compose.ui.geometry.Size(barWidth, size.height * .68f),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth * .3f),
-                )
-                drawRoundRect(
-                    Color.White,
-                    topLeft = Offset(size.width * .58f, size.height * .16f),
-                    size = androidx.compose.ui.geometry.Size(barWidth, size.height * .68f),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth * .3f),
-                )
-            }
-            PlayerPhase.Error -> {
-                drawArc(
-                    Color.White,
-                    startAngle = -55f,
-                    sweepAngle = 285f,
-                    useCenter = false,
-                    style = Stroke(width = size.width * .11f, cap = StrokeCap.Round),
-                )
-                val arrow = Path().apply {
-                    moveTo(size.width * .72f, size.height * .08f)
-                    lineTo(size.width * .92f, size.height * .18f)
-                    lineTo(size.width * .7f, size.height * .3f)
-                    close()
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(formatPlayerDuration(positionMs), color = Color.White, style = MaterialTheme.typography.labelSmall)
+        LegacyPlayerSeekBar(
+            valueMs = positionMs,
+            bufferedMs = state.bufferedPositionMs,
+            totalMs = durationMs,
+            enabled = durationMs != null,
+            thumbDiameter = thumbDiameter,
+            onDraggingChanged = onDraggingChanged,
+            onValueChanged = onPositionChanged,
+            onSeek = onSeek,
+            modifier = Modifier.weight(1f).height(28.dp),
+        )
+        Text(durationMs?.let(::formatPlayerDuration) ?: "--:--", color = Color.White, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun LegacyPlayerSeekBar(
+    valueMs: Long,
+    bufferedMs: Long,
+    totalMs: Long?,
+    enabled: Boolean,
+    thumbDiameter: Int,
+    onDraggingChanged: (Boolean) -> Unit,
+    onValueChanged: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    var dragValue by remember { mutableLongStateOf(valueMs) }
+    val total = totalMs?.coerceAtLeast(1L) ?: 1L
+    fun valueFor(x: Float): Long = if (size.width <= 0) valueMs else {
+        (total.toDouble() * (x / size.width.toFloat()).coerceIn(0f, 1f)).roundToLong()
+    }
+    Canvas(
+        modifier.onSizeChanged { size = it }
+            .semantics { contentDescription = "播放进度" }
+            .pointerInput(enabled, total, size) {
+                if (!enabled) return@pointerInput
+                detectTapGestures { offset ->
+                    val target = valueFor(offset.x)
+                    onValueChanged(target)
+                    onSeek(target)
                 }
-                drawPath(arrow, Color.White)
             }
-            else -> {
-                val play = Path().apply {
-                    moveTo(size.width * .3f, size.height * .16f)
-                    lineTo(size.width * .84f, size.height * .5f)
-                    lineTo(size.width * .3f, size.height * .84f)
-                    close()
+            .pointerInput(enabled, total, size) {
+                if (!enabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        onDraggingChanged(true)
+                        dragValue = valueFor(offset.x)
+                        onValueChanged(dragValue)
+                    },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        dragValue = valueFor(change.position.x)
+                        onValueChanged(dragValue)
+                    },
+                    onDragCancel = { onDraggingChanged(false) },
+                    onDragEnd = {
+                        onDraggingChanged(false)
+                        onSeek(dragValue)
+                    },
+                )
+            },
+    ) {
+        val centerY = size.height / 2f
+        val trackHeight = 4.dp.toPx()
+        val radius = trackHeight / 2f
+        val valueFraction = (valueMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
+        val bufferedFraction = (bufferedMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
+        drawRoundRect(
+            color = Color(0x66FFFFFF),
+            topLeft = Offset(0f, centerY - radius),
+            size = Size(size.width.toFloat(), trackHeight),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius),
+        )
+        drawRoundRect(
+            color = Color(0xA6FFFFFF),
+            topLeft = Offset(0f, centerY - radius),
+            size = Size(size.width * bufferedFraction, trackHeight),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius),
+        )
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset(0f, centerY - radius),
+            size = Size(size.width * valueFraction, trackHeight),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius),
+        )
+        if (enabled && size.width > 0f) {
+            val diameter = thumbDiameter.dp.toPx()
+            val thumbX = valueFraction * (size.width - diameter) + diameter / 2f
+            drawCircle(Color.White, diameter / 2f, Offset(thumbX, centerY))
+        }
+    }
+}
+
+@Composable
+private fun PlayerSidePanel(
+    panel: PlayerChromePanel,
+    state: PlayerState,
+    safeEnd: androidx.compose.ui.unit.Dp,
+    onDismiss: () -> Unit,
+    onSpeed: (Float) -> Unit,
+    onSelectTrack: (TrackKind, String?) -> Unit,
+) {
+    val (title, width, options) = when (panel) {
+        PlayerChromePanel.Speed -> Triple(
+            "播放速度",
+            138.dp,
+            listOf(3f, 2f, 1.5f, 1.25f, 1f, .75f).map { speed ->
+                PlayerPanelOption(speed.toString(), "${speed}x", abs(state.speed - speed) < .01f)
+            },
+        )
+        PlayerChromePanel.Audio -> Triple(
+            "音轨",
+            220.dp,
+            state.tracks.filter { it.kind == TrackKind.Audio }.map(PlayerTrack::toPanelOption),
+        )
+        PlayerChromePanel.Subtitle -> Triple(
+            "字幕",
+            220.dp,
+            listOf(PlayerPanelOption("", "关闭字幕")) +
+                state.tracks.filter { it.kind == TrackKind.Subtitle }.map(PlayerTrack::toPanelOption),
+        )
+        PlayerChromePanel.None -> return
+    }
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxHeight().clickable(onClick = onDismiss))
+        Column(
+            modifier = Modifier.width(width + safeEnd).fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        .42f to PlayerMenuMiddle,
+                        1f to PlayerMenuEnd,
+                    ),
+                )
+                .padding(start = 16.dp, end = safeEnd + 16.dp, top = 18.dp, bottom = 18.dp),
+        ) {
+            Text(
+                title,
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                color = PlayerMenuText,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                items(options, key = { it.id }) { option ->
+                    PlayerPanelOptionRow(option) {
+                        when (panel) {
+                            PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
+                            PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
+                            PlayerChromePanel.Subtitle -> onSelectTrack(TrackKind.Subtitle, option.id.ifEmpty { null })
+                            PlayerChromePanel.None -> Unit
+                        }
+                    }
                 }
-                drawPath(play, Color.White)
             }
         }
     }
+}
+
+private data class PlayerPanelOption(
+    val id: String,
+    val label: String,
+    val selected: Boolean = false,
+    val secondary: String? = null,
+)
+
+private fun PlayerTrack.toPanelOption(): PlayerPanelOption = PlayerPanelOption(id, label, secondary = language)
+
+@Composable
+private fun PlayerPanelOptionRow(option: PlayerPanelOption, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .background(if (option.selected) PlayerMenuSelectedCell else PlayerMenuCell)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(option.label, color = PlayerMenuText, style = MaterialTheme.typography.bodyMedium)
+        option.secondary?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = PlayerMenuSecondaryText, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(PlayerMenuDivider))
+}
+
+@Composable
+private fun PlayerTextControl(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.height(36.dp).clip(CircleShape).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = Color.White, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun PlayerSeekFeedback(target: Long, duration: Long, modifier: Modifier = Modifier) {
+    val progress = (target.toDouble() / duration.coerceAtLeast(1L)).toFloat().coerceIn(0f, 1f)
+    Column(
+        modifier.clip(RoundedCornerShape(12.dp)).background(PlayerGestureSeekSurface)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(formatPlayerDuration(target), color = Color.White, style = MaterialTheme.typography.labelLarge)
+        Box(Modifier.width(146.dp).height(3.dp).clip(CircleShape).background(PlayerGestureTrack)) {
+            Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(PlayerAccent))
+        }
+    }
+}
+
+@Composable
+private fun PlayerError(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xC9000000)).padding(22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ChromeGlyph(PlayerChromeGlyph.Retry, Modifier.size(34.dp), Color.White)
+        Text("视频播放失败", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+        Box(
+            Modifier.height(40.dp).clip(CircleShape).background(PlayerAccent)
+                .clickable(onClick = onRetry).padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("重试", color = Color.White, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun PlayerChromeButton(
+    glyph: PlayerChromeGlyph?,
+    label: String,
+    diameter: Int,
+    iconSize: Int,
+    backdrop: GlassBackdrop,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    transparent: Boolean = false,
+    content: (@Composable () -> Unit)? = null,
+) {
+    LiquidButton(
+        onClick = onClick,
+        backdrop = backdrop,
+        modifier = modifier.size(diameter.dp).semantics { contentDescription = label },
+        surfaceColor = if (transparent) Color.Transparent else PlayerControlSurface,
+        height = diameter.dp,
+        horizontalPadding = ((diameter - iconSize) / 2f).dp,
+    ) {
+        if (content != null) content()
+        else if (glyph != null) ChromeGlyph(glyph, Modifier.size(iconSize.dp), Color.White)
+    }
+}
+
+@Composable
+private fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: Color = Color.White) {
+    Canvas(modifier) {
+        val stroke = size.minDimension * .09f
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float, width: Float = stroke) {
+            drawLine(
+                color,
+                Offset(size.width * x1, size.height * y1),
+                Offset(size.width * x2, size.height * y2),
+                width,
+                StrokeCap.Round,
+            )
+        }
+        when (glyph) {
+            PlayerChromeGlyph.More -> {
+                val radius = size.minDimension * .075f
+                listOf(.24f, .5f, .76f).forEach { drawCircle(color, radius, Offset(size.width * it, size.height * .5f)) }
+            }
+            PlayerChromeGlyph.Play -> drawPath(Path().apply {
+                moveTo(size.width * .3f, size.height * .16f)
+                lineTo(size.width * .84f, size.height * .5f)
+                lineTo(size.width * .3f, size.height * .84f)
+                close()
+            }, color)
+            PlayerChromeGlyph.Pause -> {
+                drawRoundRect(color, Offset(size.width * .22f, size.height * .16f), Size(size.width * .2f, size.height * .68f))
+                drawRoundRect(color, Offset(size.width * .58f, size.height * .16f), Size(size.width * .2f, size.height * .68f))
+            }
+            PlayerChromeGlyph.Retry -> {
+                drawArc(color, -55f, 285f, false, style = Stroke(width = stroke, cap = StrokeCap.Round))
+                drawPath(Path().apply {
+                    moveTo(size.width * .7f, size.height * .05f)
+                    lineTo(size.width * .92f, size.height * .18f)
+                    lineTo(size.width * .68f, size.height * .3f)
+                    close()
+                }, color)
+            }
+            PlayerChromeGlyph.Fullscreen -> {
+                line(.12f, .38f, .12f, .12f); line(.12f, .12f, .38f, .12f)
+                line(.62f, .12f, .88f, .12f); line(.88f, .12f, .88f, .38f)
+                line(.12f, .62f, .12f, .88f); line(.12f, .88f, .38f, .88f)
+                line(.62f, .88f, .88f, .88f); line(.88f, .62f, .88f, .88f)
+            }
+            PlayerChromeGlyph.Lock, PlayerChromeGlyph.Unlock -> {
+                drawRoundRect(
+                    color,
+                    Offset(size.width * .22f, size.height * .43f),
+                    Size(size.width * .56f, size.height * .45f),
+                    androidx.compose.ui.geometry.CornerRadius(size.width * .1f),
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
+                drawPath(Path().apply {
+                    moveTo(size.width * (if (glyph == PlayerChromeGlyph.Unlock) .38f else .3f), size.height * .43f)
+                    cubicTo(
+                        size.width * (if (glyph == PlayerChromeGlyph.Unlock) .3f else .3f), size.height * .13f,
+                        size.width * .7f, size.height * .13f,
+                        size.width * .7f, size.height * .43f,
+                    )
+                }, color, style = Stroke(stroke, cap = StrokeCap.Round))
+            }
+            PlayerChromeGlyph.Next -> {
+                drawPath(Path().apply {
+                    moveTo(size.width * .18f, size.height * .18f)
+                    lineTo(size.width * .66f, size.height * .5f)
+                    lineTo(size.width * .18f, size.height * .82f)
+                    close()
+                }, color)
+                line(.76f, .18f, .76f, .82f)
+            }
+        }
+    }
+}
+
+private fun playbackGlyph(presentation: NowPlayingPresentation): PlayerChromeGlyph = when {
+    presentation.showRetry -> PlayerChromeGlyph.Retry
+    presentation.isPlaying -> PlayerChromeGlyph.Pause
+    else -> PlayerChromeGlyph.Play
+}
+
+private fun playbackLabel(presentation: NowPlayingPresentation): String = when {
+    presentation.showRetry -> "重试"
+    presentation.isPlaying -> "暂停"
+    else -> "播放"
 }

@@ -32,9 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,7 +66,6 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
-import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 
 /** Mechanical Compose translation of ArkUI `SearchPage`. */
@@ -77,12 +74,9 @@ import org.jetbrains.compose.resources.painterResource
 fun SearchScreen(
     query: String,
     results: List<MediaItem>,
-    totalEstimate: Int?,
     histories: List<String>,
     loading: Boolean,
-    loadingMore: Boolean,
     error: String?,
-    canLoadMore: Boolean,
     layout: MaFeiLayout,
     gridState: LazyGridState,
     onBack: () -> Unit,
@@ -91,7 +85,6 @@ fun SearchScreen(
     onRecordHistory: (String) -> Unit,
     onClearHistories: () -> Unit,
     onOpen: (MediaItem) -> Unit,
-    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
@@ -100,18 +93,8 @@ fun SearchScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val currentLoadMore by rememberUpdatedState(onLoadMore)
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
-
-    LaunchedEffect(gridState, canLoadMore, loading, loadingMore, results.size) {
-        snapshotFlow {
-            val info = gridState.layoutInfo
-            (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount
-        }.distinctUntilChanged().collect { (last, total) ->
-            if (canLoadMore && !loading && !loadingMore && total > 0 && last >= total - 5) currentLoadMore()
-        }
-    }
 
     val pageHorizontalPadding = if (layout.gridWidthDp < 600f) 16.dp else 24.dp
 
@@ -230,7 +213,7 @@ fun SearchScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                "${totalEstimate ?: results.size} 个",
+                                "${results.size} 个",
                                 Modifier.padding(start = 8.dp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
@@ -270,14 +253,6 @@ fun SearchScreen(
                                             { cardModifier -> draw(item, cardModifier) }
                                         },
                                     )
-                                }
-                                if (loadingMore) item {
-                                    Box(
-                                        Modifier.fillMaxWidth().height(120.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
-                                    }
                                 }
                             }
                         }

@@ -43,6 +43,18 @@ data class SavedConnection(
      */
     val deviceId: String = credentialKey,
     val feiniuRoutes: List<SavedFeiniuRoute> = emptyList(),
+    /**
+     * The address the user entered for a Feiniu account (normally an FNID, but
+     * it may also be a direct host). The ArkUI account table persisted this as
+     * `original_address` separately from the currently selected `base_url` so
+     * the route could be resolved again after the connection preference or
+     * network changed.
+     *
+     * Older CMP records predate this field and decode as null; those records
+     * fall back to [Server.baseUrl] until the next successful login refreshes
+     * the metadata.
+     */
+    val feiniuOriginalAddress: String? = null,
     val rememberLogin: Boolean = true,
 ) {
     init {
@@ -63,11 +75,20 @@ data class SavedConnection(
         if (server.provider == ProviderKind.Feiniu && feiniuRoutes.isEmpty()) {
             throw ClientConfigError("Saved Feiniu connection requires explicit routes")
         }
-        if (server.provider == ProviderKind.Jellyfin && feiniuRoutes.isNotEmpty()) {
-            throw ClientConfigError("Jellyfin connection cannot contain Feiniu routes")
+        if (server.provider == ProviderKind.Jellyfin &&
+            (feiniuRoutes.isNotEmpty() || feiniuOriginalAddress != null)
+        ) {
+            throw ClientConfigError("Jellyfin connection cannot contain Feiniu connection metadata")
         }
         if (feiniuRoutes.size > 16 || feiniuRoutes.distinct().size != feiniuRoutes.size) {
             throw ClientConfigError("Saved Feiniu routes are duplicated or exceed the supported limit")
+        }
+        feiniuOriginalAddress?.let { address ->
+            if (address != address.trim() || address.isBlank() || address.length > 2_048 ||
+                address.any { it.code < 32 || it.code == 127 }
+            ) {
+                throw ClientConfigError("Saved Feiniu original address is invalid")
+            }
         }
     }
 

@@ -23,7 +23,7 @@ class MediaRepositoryConcurrencyTest {
         override suspend fun item(id: MediaId) = error("unused")
         override suspend fun setFavorite(id: MediaId, favorite: Boolean) = error("unused")
         override suspend fun setWatched(id: MediaId, watched: Boolean) = error("unused")
-        override suspend fun preparePlayback(item: MediaId) = error("unused")
+        override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions) = error("unused")
         override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) = error("unused")
     }
 

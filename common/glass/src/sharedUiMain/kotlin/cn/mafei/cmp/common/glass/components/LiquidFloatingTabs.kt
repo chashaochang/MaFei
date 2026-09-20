@@ -2,6 +2,7 @@ package cn.mafei.cmp.common.glass.components
 
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,9 +31,9 @@ fun LiquidFloatingTabs(
     val animationScope = rememberCoroutineScope()
 
     LazyRow(
-        modifier = modifier,
+        modifier = modifier.height(40.dp),
         state = listState,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         itemsIndexed(labels) { index, label ->
             val selected = index == selectedIndex
@@ -42,7 +43,7 @@ fun LiquidFloatingTabs(
             }
             val surfaceColor = when {
                 selected -> Color.White
-                else -> Color.Black.copy(alpha = .24f)
+                else -> Color.Transparent
             }
             LiquidButton(
                 onClick = {
@@ -67,7 +68,7 @@ fun LiquidFloatingTabs(
                 },
                 backdrop = backdrop,
                 surfaceColor = surfaceColor,
-                height = 40.dp,
+                height = 36.dp,
                 horizontalPadding = 14.dp,
             ) {
                 BasicText(
@@ -75,7 +76,7 @@ fun LiquidFloatingTabs(
                     style = TextStyle(
                         color = contentColor,
                         fontSize = 14.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        fontWeight = FontWeight.Medium,
                     ),
                 )
             }

@@ -55,7 +55,10 @@ private class StubAdapter(
     override suspend fun collections(request: PageRequest): Page<MediaCollection> { calls++; return Page(listOf(MediaCollection(CollectionId("lib"), serverId, provider, "Library"))) }
     override suspend fun setFavorite(id: MediaId, favorite: Boolean) = error("Not used")
     override suspend fun setWatched(id: MediaId, watched: Boolean) = error("Not used")
-    override suspend fun preparePlayback(item: MediaId): PlaybackPreparation = error("Not used")
+    override suspend fun preparePlayback(
+        item: MediaId,
+        options: PlaybackOptions,
+    ): PlaybackPreparation = error("Not used")
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) = error("Not used")
 }
 

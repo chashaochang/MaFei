@@ -304,6 +304,10 @@ arrayOf("debug", "release").forEach { buildType ->
     val commonUiResources = project(":common:ui").layout.buildDirectory.dir(
         "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
     )
+    val detailResourcePackage = "cn.mafei.cmp.feature.detail.generated.resources"
+    val detailResources = project(":feature:detail").layout.buildDirectory.dir(
+        "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
+    )
 
     tasks.register<Copy>("publish${capitalizedType}BinariesToHarmonyApp") {
         group = "harmony"
@@ -311,6 +315,7 @@ arrayOf("debug", "release").forEach { buildType ->
         dependsOn("link${capitalizedType}SharedOhosArm64")
         dependsOn(":feature:connect:prepareComposeResourcesTaskForCommonMain")
         dependsOn(":common:ui:prepareComposeResourcesTaskForCommonMain")
+        dependsOn(":feature:detail:prepareComposeResourcesTaskForCommonMain")
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
         doNotTrackState("HarmonyApp is an external Hvigor staging directory.")
         into(harmonyEntryDir)
@@ -336,6 +341,9 @@ arrayOf("debug", "release").forEach { buildType ->
         }
         from(commonUiResources) {
             into("src/main/resources/rawfile/composeResources/$commonUiResourcePackage")
+        }
+        from(detailResources) {
+            into("src/main/resources/rawfile/composeResources/$detailResourcePackage")
         }
     }
 

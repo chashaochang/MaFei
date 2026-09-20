@@ -3,6 +3,7 @@ package cn.mafei.cmp.session
 import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.core.http_contract.*
 import cn.mafei.cmp.core.secure_credential_api.SecureSecret
+import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -101,6 +102,7 @@ class ProviderLoginTest {
         assertEquals("user-7", saved.remoteUserId)
         assertEquals("Cinema", saved.account.displayName)
         assertEquals(listOf(SavedFeiniuRoute(saved.server.baseUrl, "Direct")), saved.feiniuRoutes)
+        assertEquals("http://media.test:5667/base", saved.feiniuOriginalAddress)
         assertNull(saved.account.avatarImage)
         val cookie = (result.binding.source.current().secrets[saved.cookieAlias] as SecureSecret.CookieText).value
         assertTrue(cookie.contains("session=rotated")); assertFalse(cookie.contains("session=login"))
@@ -133,7 +135,13 @@ class ProviderLoginTest {
     @Test fun invalidAddressAndUsernameFailBeforeNetworkWithoutEchoingSecrets() = runBlocking<Unit> {
         val transport = Transport()
         for (provider in ProviderKind.entries) {
-            for (url in listOf("fnid-only", "ftp://media.test", "https://user:secret@media.test", "https://media.test?token=secret", "https://media.test#secret")) {
+            val invalid = listOf(
+                "ftp://media.test",
+                "https://user:secret@media.test",
+                "https://media.test?token=secret",
+                "https://media.test#secret",
+            ) + if (provider == ProviderKind.Jellyfin) listOf("fnid-only") else emptyList()
+            for (url in invalid) {
                 val error = assertFailsWith<ClientConfigError> { ProviderLogin(transport).authenticate(provider, url, "demo", "secret") }
                 assertFalse(error.toString().contains("secret"))
             }
@@ -210,7 +218,7 @@ class ProviderLoginTest {
             Response("""{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
             Response("""{"Items":[],"TotalRecordCount":0}"""),
         )
-        val login = ProviderLogin(transport) { provider, address, remoteUserId, username ->
+        val login = ProviderLogin(transport) { provider, address, _, remoteUserId, username ->
             lookups += "${provider.name}|$address|${remoteUserId ?: "typed"}|$username"
             existing.takeIf {
                 provider == ProviderKind.Jellyfin &&
@@ -257,7 +265,7 @@ class ProviderLoginTest {
         val transport = Transport(
             Response("""{"User":{"Id":"other-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
         )
-        val login = ProviderLogin(transport) { provider, _, remoteUserId, username ->
+        val login = ProviderLogin(transport) { provider, _, _, remoteUserId, username ->
             existing.takeIf {
                 provider == ProviderKind.Jellyfin &&
                     (remoteUserId == existing.remoteUserId || (remoteUserId == null && username == "Demo"))
@@ -301,14 +309,65 @@ class ProviderLoginTest {
             Response("""{"code":0,"data":{"token":"fixture-token"}}""", cookie = "session=login; Path=/"),
             Response("""{"code":0,"data":{"user_id":"user-7","username":"demo","nickname":"Cinema"}}""", cookie = "session=rotated; Path=/"),
         )
-        val login = ProviderLogin(transport) { provider, _, remoteUserId, _ ->
+        val login = ProviderLogin(transport) { provider, _, _, remoteUserId, _ ->
             existing.takeIf { provider == ProviderKind.Feiniu && remoteUserId == "user-7" }
         }
         val result = login.authenticate(ProviderKind.Feiniu, "http://media.test:5667/base", " demo ", " pw ")
-        // Byte-identical to the saved record: the catalog rewrites that one row.
-        assertEquals(existing, result.connection)
+        assertEquals(existing.credentialKey, result.connection.credentialKey)
+        assertEquals(existing.selection, result.connection.selection)
+        assertEquals(existing.feiniuRoutes, result.connection.feiniuRoutes)
+        assertEquals("http://media.test:5667/base", result.connection.feiniuOriginalAddress)
         result.binding.clear()
         assertEquals(0, transport.closes)
+    }
+
+    @Test fun feiniuBareHostGetsLegacyDefaultPort() = runBlocking<Unit> {
+        val transport = Transport(
+            Response("""{"code":0,"data":{"token":"fixture-token"}}"""),
+            Response("""{"code":0,"data":{"user_id":"user-7","username":"demo"}}"""),
+        )
+
+        val result = ProviderLogin(transport).authenticate(
+            ProviderKind.Feiniu,
+            "192.168.31.20",
+            "demo",
+            "pw",
+        )
+
+        assertEquals("http://192.168.31.20:5666/", result.connection.server.baseUrl)
+        assertEquals("192.168.31.20", result.connection.feiniuOriginalAddress)
+        assertEquals(listOf("http://192.168.31.20:5666/"), result.connection.feiniuRoutes.map { it.baseUrl })
+        result.binding.clear()
+    }
+
+    @Test fun feiniuFnIdResolvesAndPersistsAllRoutesInPreferenceOrder() = runBlocking<Unit> {
+        val transport = Transport(
+            Response(
+                """{"code":0,"data":{"ipv4":["192.168.31.20"],"publicIpv4":["203.0.113.8"],"fn":["fnid-only.5ddd.com"],"port":{"httpPort":5666,"httpsPort":5667}}}""",
+            ),
+            Response("{}"),
+            Response("{}"),
+            Response("{}"),
+            Response("{}"),
+            Response("""{"code":0,"data":{"token":"fixture-token"}}"""),
+            Response("""{"code":0,"data":{"user_id":"user-7","username":"demo"}}"""),
+        )
+
+        val result = ProviderLogin(transport).authenticate(
+            ProviderKind.Feiniu,
+            "fnid-only",
+            "demo",
+            "pw",
+            FeiniuRoutePreference.Public,
+        )
+
+        assertEquals("fnid-only", result.connection.feiniuOriginalAddress)
+        assertEquals("Public", result.connection.feiniuRoutes.first().route)
+        assertEquals(result.connection.feiniuRoutes.first().baseUrl, result.connection.server.baseUrl)
+        assertEquals(setOf("Local", "Public", "Relay"), result.connection.feiniuRoutes.map { it.route }.toSet())
+        assertEquals("/api/v1/fn/con", transport.requests.first().url.encodedPath)
+        assertEquals(4, transport.requests.count { it.url.encodedPath.endsWith("/license/v1/device/baseInfo") })
+        result.binding.clear()
     }
 
     private fun assertSafeChain(error: Throwable) {

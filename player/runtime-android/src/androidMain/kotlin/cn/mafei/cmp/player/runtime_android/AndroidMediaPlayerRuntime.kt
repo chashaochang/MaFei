@@ -186,7 +186,10 @@ class AndroidMediaPlayerRuntime(
  * declare only what `android.media.MediaPlayer` genuinely supports; device
  * decode/render verification remains a Pending real-device item.
  */
-fun createAndroidPlayerRuntime(context: Context): PlayerRuntime = AndroidMediaPlayerRuntime(
+fun createAndroidPlayerRuntime(
+    context: Context,
+    surfaces: AndroidSurfaceRegistry = AndroidSurfaceRegistry(),
+): PlayerRuntime = AndroidMediaPlayerRuntime(
     capabilities = cn.mafei.cmp.player.api.PlayerCapabilities(
         seek = true,
         speed = true, // API 23+, minSdk 24
@@ -195,4 +198,5 @@ fun createAndroidPlayerRuntime(context: Context): PlayerRuntime = AndroidMediaPl
     ),
     engine = SystemMediaPlayerEngine(context),
     pollScheduler = MainThreadPollScheduler(),
+    surfaces = surfaces,
 )

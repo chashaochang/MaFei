@@ -6,6 +6,7 @@ import cn.mafei.cmp.core.http_contract.HttpResponse
 import cn.mafei.cmp.core.http_contract.HttpTransport
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.core.secure_credential_api.SecureSecret
+import cn.mafei.cmp.providers.feiniu.connection.FeiniuAddressParser
 import cn.mafei.cmp.providers.feiniu.core.*
 import cn.mafei.cmp.providers.feiniu.facade.DefaultFeiniuFacade
 import cn.mafei.cmp.providers.jellyfin.core.*
@@ -24,7 +25,8 @@ class AuthenticatedConnection(val connection: SavedConnection, val binding: Prov
 /**
  * Server address + username/password login. Jellyfin LAN addresses may omit the
  * scheme and port; the original HarmonyOS HTTP/HTTPS and 8096/8920 candidates
- * are probed before authentication. No UDP discovery, FNID routing or OAuth.
+ * are probed before authentication. Feiniu accepts either the original FNID or
+ * a direct address and keeps the complete resolved route list. No OAuth.
  *
  * Logging in to an account that is already saved **reuses that account's local
  * identity and credential namespace** ([savedConnectionFor]) instead of minting
@@ -53,15 +55,17 @@ class ProviderLogin(
     private val savedConnectionFor: suspend (
         provider: ProviderKind,
         address: String,
+        originalAddress: String?,
         remoteUserId: String?,
         username: String,
-    ) -> SavedConnection? = { _, _, _, _ -> null },
+    ) -> SavedConnection? = { _, _, _, _, _ -> null },
 ) {
     suspend fun authenticate(
         provider: ProviderKind,
         baseUrl: String,
         username: String,
         password: String,
+        feiniuRoutePreference: FeiniuRoutePreference = FeiniuRoutePreference.Speed,
     ): AuthenticatedConnection {
         currentCoroutineContext().ensureActive()
         if (baseUrl.any { it.code < 32 || it.code == 127 }) {
@@ -77,7 +81,7 @@ class ProviderLogin(
         // successful server response was structurally unusable, not that the
         // address field itself was invalid.
         val exactUrl = when {
-            provider == ProviderKind.Feiniu -> validateSavedBaseUrl(rawAddress)
+            provider == ProviderKind.Feiniu -> null
             rawAddress.hasHttpScheme() -> validateSavedBaseUrl(rawAddress)
             else -> null
         }
@@ -98,7 +102,7 @@ class ProviderLogin(
                     val url = exactUrl ?: resolveJellyfinAddress(jellyfinCandidates, newCredentialKey())
                     jellyfin(url, name, password)
                 }
-                ProviderKind.Feiniu -> feiniu(requireNotNull(exactUrl), name, password)
+                ProviderKind.Feiniu -> feiniu(rawAddress, name, password, feiniuRoutePreference)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -140,7 +144,13 @@ class ProviderLogin(
         // issued token to it, so the admitted session has to keep presenting it. A
         // saved account contributes its own stable device, which renews that
         // registration instead of adding one per login.
-        val known = savedConnectionFor(ProviderKind.Jellyfin, SessionIdentity.serverAddress(url), null, username)
+        val known = savedConnectionFor(
+            ProviderKind.Jellyfin,
+            SessionIdentity.serverAddress(url),
+            null,
+            null,
+            username,
+        )
         val presented = PresentedDevice(known?.deviceId ?: newCredentialKey(), borrowed = known != null)
         val state = InMemoryJellyfinSessionState()
         val facade = DefaultJellyfinFacade(
@@ -163,10 +173,23 @@ class ProviderLogin(
         }
     }
 
-    private suspend fun feiniu(url: HttpUrl, username: String, password: String): AuthenticatedConnection {
+    private suspend fun feiniu(
+        rawAddress: String,
+        username: String,
+        password: String,
+        preference: FeiniuRoutePreference,
+    ): AuthenticatedConnection {
         val state = InMemoryFeiniuSessionState()
         val facade = DefaultFeiniuFacade(LoginBorrowedTransport(transport), state)
-        val resolution = FeiniuHostResolution(FeiniuHostCandidate(url.toEncodedString(), FeiniuRoute.Direct))
+        val parsed = FeiniuAddressParser.parse(rawAddress)
+        val resolution = when (parsed.kind) {
+            FeiniuAddressParser.Kind.Direct -> {
+                val url = validateSavedBaseUrl(parsed.directBaseUrl)
+                FeiniuHostResolution(FeiniuHostCandidate(url.toEncodedString(), FeiniuRoute.Direct))
+            }
+            FeiniuAddressParser.Kind.FnId -> facade.connection.resolve(rawAddress, preference)
+        }
+        val url = validateSavedBaseUrl(resolution.preferred.baseUrl)
         try {
             facade.auth.login(resolution, username, password)
             // Login only returns credentials. Identity must come from authenticated
@@ -178,7 +201,10 @@ class ProviderLogin(
                 ?: throw ProtocolDecodingError()
             val connection = connection(ProviderKind.Feiniu, url, null, null, remoteId,
                 user.username?.takeIf { it.isNotBlank() } ?: username,
-                user.nickname?.takeIf { it.isNotBlank() })
+                user.nickname?.takeIf { it.isNotBlank() },
+                feiniuOriginalAddress = rawAddress.trim(),
+                feiniuResolution = resolution,
+            )
             // This is the authoritative post-userInfo state, never login()'s receipt.
             val credentials = facade.credentials.value.credentials
             val secrets = buildMap {
@@ -211,11 +237,19 @@ class ProviderLogin(
         remoteId: String,
         username: String,
         displayName: String? = null,
+        feiniuOriginalAddress: String? = null,
+        feiniuResolution: FeiniuHostResolution? = null,
     ): SavedConnection {
         // Both lookups share provider+address, and the pre-authentication one only
         // differs by matching the typed name, so a Jellyfin request cannot end up
         // keyed to a record other than the one whose device it just presented.
-        val saved = savedConnectionFor(provider, SessionIdentity.serverAddress(url), remoteId, username)
+        val saved = savedConnectionFor(
+            provider,
+            SessionIdentity.serverAddress(url),
+            feiniuOriginalAddress,
+            remoteId,
+            username,
+        )
         val credentialKey = when {
             saved != null -> saved.credentialKey
             presented != null && !presented.borrowed -> presented.id
@@ -230,11 +264,27 @@ class ProviderLogin(
         // already matched this exact address, so keep them for a re-saved account.
         val routes = when {
             provider != ProviderKind.Feiniu -> emptyList()
+            feiniuResolution != null -> feiniuResolution.orderedCandidates
+                .distinctBy { SessionIdentity.serverAddress(it.baseUrl) }
+                .take(16)
+                .map { SavedFeiniuRoute(validateSavedBaseUrl(it.baseUrl).toEncodedString(), it.route.name) }
             saved != null -> saved.feiniuRoutes
             else -> listOf(SavedFeiniuRoute(server.baseUrl, "Direct"))
         }
         // Avatar URLs may contain signed credentials; fetch them at runtime instead.
-        return SavedConnection(server, account, remoteId, credentialKey, deviceId, routes)
+        return SavedConnection(
+            server = server,
+            account = account,
+            remoteUserId = remoteId,
+            credentialKey = credentialKey,
+            deviceId = deviceId,
+            feiniuRoutes = routes,
+            feiniuOriginalAddress = if (provider == ProviderKind.Feiniu) {
+                feiniuOriginalAddress ?: saved?.feiniuOriginalAddress ?: server.baseUrl
+            } else {
+                null
+            },
+        )
     }
 
     /**

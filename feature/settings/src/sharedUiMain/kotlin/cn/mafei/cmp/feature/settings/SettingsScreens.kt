@@ -71,7 +71,6 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAppearance: () -> Unit,
-    onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier,
     feiniuRoutePreferenceTitle: String? = null,
     onOpenFeiniuPreference: (() -> Unit)? = null,
@@ -107,11 +106,6 @@ fun SettingsScreen(
                         onItemClick = { onOpenFeiniuPreference() },
                     )
                 }
-                // 关于/隐私从「我的」挪到这里：设置页才有内容，也让「我的」只留账号相关操作。
-                LegacyListGroup(
-                    items = listOf(LegacyListGroupItem("关于马飞")),
-                    onItemClick = { onOpenAbout() },
-                )
             }
         }
     }

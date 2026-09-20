@@ -269,34 +269,22 @@ fun MaFeiAdaptiveShell(
         //
         // 横向只铺在**内容区**：持久侧栏占据的那一栏没有滚动内容，给它也铺一层会让顶部
         // 看起来整条都在模糊。左右缩进必须与上面内容 Box 的那份完全一致。
-        val topScrolled = topChromeScrolledProgress().coerceIn(0f, 1f)
-        if (topScrolled > 0f) {
-            val topBandHeight = safeArea.top +
-                if (topTabsVisible) MaFeiTopChromeHeightDp else 16.dp
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .padding(
-                        start = if (!leadingEdge) 0.dp
-                        else animatedContentLeadingInset.value + safeArea.start,
-                        end = if (leadingEdge) 0.dp
-                        else animatedContentTrailingInset.value + safeArea.end,
-                    )
-                    .height(topBandHeight)
-                    .mafeiProgressiveBlur(
-                        backdrop = backdrop,
-                        tint = MaterialTheme.colorScheme.background,
-                        tintIntensity = if (MaterialTheme.colorScheme.background.luminance() >= .5f) {
-                            .72f
-                        } else {
-                            .68f
-                        },
-                        gradientStartFraction = 1f / 3f,
-                        opacity = topScrolled,
-                    ),
-            )
-        }
+        TopChromeProgressiveBlur(
+            progress = topChromeScrolledProgress,
+            backdrop = backdrop,
+            height = safeArea.top + if (topTabsVisible) MaFeiTopChromeHeightDp else 16.dp,
+            contentStartInset = if (leadingEdge) {
+                animatedContentLeadingInset.value + safeArea.start
+            } else {
+                0.dp
+            },
+            contentEndInset = if (leadingEdge) {
+                0.dp
+            } else {
+                animatedContentTrailingInset.value + safeArea.end
+            },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
 
         overlay(backdrop)
 
@@ -428,6 +416,42 @@ fun MaFeiAdaptiveShell(
         modal(backdrop)
     }
     }
+}
+
+/**
+ * Isolates the per-frame scroll-state read from [MaFeiAdaptiveShell].
+ *
+ * Home scroll progress changes on almost every frame. Reading it in the shell's
+ * root restart group invalidated the complete scene/navigation/modal subtree,
+ * even though only this narrow blur band depends on the value. Keeping the read
+ * in a small child means the large adaptive shell remains skippable while the
+ * list is moving.
+ */
+@Composable
+private fun TopChromeProgressiveBlur(
+    progress: () -> Float,
+    backdrop: GlassBackdrop,
+    height: Dp,
+    contentStartInset: Dp,
+    contentEndInset: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val opacity = progress().coerceIn(0f, 1f)
+    if (opacity <= 0f) return
+    val tint = MaterialTheme.colorScheme.background
+    Box(
+        modifier
+            .fillMaxWidth()
+            .padding(start = contentStartInset, end = contentEndInset)
+            .height(height)
+            .mafeiProgressiveBlur(
+                backdrop = backdrop,
+                tint = tint,
+                tintIntensity = if (tint.luminance() >= .5f) .72f else .68f,
+                gradientStartFraction = 1f / 3f,
+                opacity = opacity,
+            ),
+    )
 }
 
 @Composable

@@ -8,6 +8,7 @@ import cn.mafei.cmp.core.storage_api.StorageEditor
 import cn.mafei.cmp.data.adapter_contract.*
 import cn.mafei.cmp.data.repositories.*
 import cn.mafei.cmp.feature.home.MediaBrowser
+import cn.mafei.cmp.feature.home.MediaPlaybackPreferences
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import kotlin.test.*
@@ -32,10 +33,14 @@ class MediaBrowserTest {
         var homeFailure: Exception? = null
         var seasonFetch: suspend (MediaId) -> Page<MediaItem> = { Page(emptyList()) }
         var episodeFetch: suspend (MediaId, MediaId?, PageRequest) -> Page<MediaItem> = { _, _, _ -> Page(emptyList()) }
+        var nextUpFetch: suspend (MediaId) -> MediaItem? = { null }
+        var resumeFetch: suspend (PageRequest) -> Page<MediaItem> = { Page.empty() }
         var searchFetch: suspend (String, PageRequest) -> Page<MediaItem> = { term, _ -> Page(listOf(media(term))) }
         val requests = mutableListOf<PageRequest>()
         val itemRequests = mutableListOf<Pair<CollectionId?, PageRequest>>()
         val searchRequests = mutableListOf<Pair<String, PageRequest>>()
+        val resumeRequests = mutableListOf<PageRequest>()
+        val episodeRequests = mutableListOf<Triple<MediaId, MediaId?, PageRequest>>()
         // openPerson 的三路作品查询经 MediaRepository 在 Dispatchers.Default 上真并发，
         // 记录列表必须线程安全，否则偶发丢条目让计数断言失败。
         val personRequests = java.util.Collections.synchronizedList(mutableListOf<Pair<MediaId, PageRequest>>())
@@ -60,16 +65,37 @@ class MediaBrowserTest {
             return searchFetch(term, request)
         }
         override suspend fun seasons(seriesId: MediaId): Page<MediaItem> = seasonFetch(seriesId)
-        override suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem> =
-            episodeFetch(seriesId, seasonId, request)
+        override suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem> {
+            episodeRequests += Triple(seriesId, seasonId, request)
+            return episodeFetch(seriesId, seasonId, request)
+        }
+        override suspend fun nextUp(seriesId: MediaId): MediaItem? = nextUpFetch(seriesId)
+        override suspend fun resumeItems(request: PageRequest): Page<MediaItem> {
+            resumeRequests += request
+            return resumeFetch(request)
+        }
         override suspend fun setFavorite(id: MediaId, favorite: Boolean): Unit = error("unused")
         override suspend fun setWatched(id: MediaId, watched: Boolean): Unit = error("unused")
         override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation = error("unused")
         override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent): Unit = error("unused")
     }
-    private suspend fun browser(a: Adapter): MediaBrowser {
+    private class PlaybackPreferences : MediaPlaybackPreferences {
+        val values = linkedMapOf<Pair<AccountId, MediaId>, String>()
+        override suspend fun preferredMediaSourceId(accountId: AccountId, mediaId: MediaId): String? =
+            values[accountId to mediaId]
+
+        override suspend fun setPreferredMediaSourceId(
+            accountId: AccountId,
+            mediaId: MediaId,
+            sourceId: String,
+        ) {
+            values[accountId to mediaId] = sourceId
+        }
+    }
+
+    private suspend fun browser(a: Adapter, preferences: MediaPlaybackPreferences? = null): MediaBrowser {
         val repository = MediaRepository(FixedEpochClock())
-        return MediaBrowser(repository, repository.open(a))
+        return MediaBrowser(repository, repository.open(a), playbackPreferences = preferences)
     }
 
     @Test fun startupLoadsRealCollectionsAndFirstLibraryOnlyOnce() = runBlocking<Unit> {
@@ -249,6 +275,66 @@ class MediaBrowserTest {
         }
     }
 
+    @Test fun detailRestoresPerItemSourceAndUsesThatSourcesLegacyTrackDefaults() = runBlocking<Unit> {
+        val a = Adapter()
+        val first = MediaSourceInfo(
+            id = "source-1",
+            defaultAudioIndex = 1,
+            defaultSubtitleIndex = -1,
+            streams = listOf(
+                MediaStreamInfo(index = 1, kind = MediaStreamKind.Audio),
+                MediaStreamInfo(index = 2, kind = MediaStreamKind.Subtitle),
+            ),
+        )
+        val second = MediaSourceInfo(
+            id = "source-2",
+            defaultAudioIndex = 7,
+            defaultSubtitleIndex = 8,
+            streams = listOf(
+                MediaStreamInfo(index = 7, kind = MediaStreamKind.Audio),
+                MediaStreamInfo(index = 8, kind = MediaStreamKind.Subtitle),
+            ),
+        )
+        val movie = a.media("movie").copy(canPlay = true, mediaSources = listOf(first, second))
+        a.detail = { movie }
+        val preferences = PlaybackPreferences().apply {
+            values[a.accountId to movie.id] = "source-2"
+        }
+        val b = browser(a, preferences)
+
+        b.openDetail(movie.id)
+
+        assertEquals("source-2", b.state.value.selectedMediaSourceId)
+        assertEquals(7, b.state.value.selectedAudioStreamIndex)
+        assertEquals(8, b.state.value.selectedSubtitleStreamIndex)
+        assertEquals("source-2", b.playbackOptionsFor(movie).mediaSourceId)
+
+        b.selectMediaSource("source-1")
+
+        assertEquals("source-1", b.state.value.selectedMediaSourceId)
+        assertEquals(1, b.state.value.selectedAudioStreamIndex)
+        assertEquals(-1, b.state.value.selectedSubtitleStreamIndex)
+        assertEquals("source-1", preferences.values[a.accountId to movie.id])
+    }
+
+    @Test fun detailSelectsFirstPlayableSourceInsteadOfLeavingServerToGuess() = runBlocking<Unit> {
+        val a = Adapter()
+        val movie = a.media("movie").copy(
+            canPlay = true,
+            mediaSources = listOf(
+                MediaSourceInfo(id = "blocked", playable = false),
+                MediaSourceInfo(id = "playable", playable = true),
+            ),
+        )
+        a.detail = { movie }
+        val b = browser(a)
+
+        b.openDetail(movie.id)
+
+        assertEquals("playable", b.state.value.selectedMediaSourceId)
+        assertEquals("playable", b.playbackOptionsFor(movie).mediaSourceId)
+    }
+
     @Test fun seriesDetailLoadsSortedSeasonsAndFirstSeasonEpisodes() = runBlocking<Unit> {
         val a = Adapter()
         val series = a.media("series").copy(mediaType = MediaType.Series)
@@ -274,6 +360,53 @@ class MediaBrowserTest {
         assertNull(b.state.value.detailSectionsError)
     }
 
+    @Test fun seriesDetailUsesLegacyPlaybackTargetSeasonEpisodeAndProgress() = runBlocking<Unit> {
+        val a = Adapter()
+        val target = MediaPlaybackTarget(
+            id = MediaId("episode-2"),
+            seasonNumber = 2,
+            episodeNumber = 2,
+            playbackPositionMs = 90_000L,
+            playedPercentage = 25.0,
+            durationMs = 360_000L,
+        )
+        val series = a.media("series").copy(mediaType = MediaType.Series, playbackTarget = target)
+        val season1 = a.media("season-1").copy(mediaType = MediaType.Season, seasonNumber = 1)
+        val season2 = a.media("season-2").copy(mediaType = MediaType.Season, seasonNumber = 2)
+        a.detail = { series }
+        a.seasonFetch = { Page(listOf(season1, season2)) }
+        a.episodeFetch = { _, seasonId, request ->
+            assertEquals(season2.id, seasonId)
+            assertEquals(500, request.pageSize)
+            Page(
+                listOf(
+                    a.media("episode-1").copy(
+                        mediaType = MediaType.Episode,
+                        seasonNumber = 2,
+                        episodeNumber = 1,
+                        canPlay = true,
+                    ),
+                    a.media("episode-2").copy(
+                        mediaType = MediaType.Episode,
+                        seasonNumber = 2,
+                        episodeNumber = 2,
+                        runtimeMs = 300_000L,
+                        canPlay = true,
+                    ),
+                ),
+            )
+        }
+
+        val b = browser(a)
+        b.openDetail(series.id)
+
+        assertEquals(season2.id, b.state.value.selectedSeasonId)
+        assertEquals(MediaId("episode-2"), b.state.value.detailPlayTarget?.id)
+        assertEquals(90_000L, b.state.value.detailPlayTarget?.userData?.playbackPositionMs)
+        assertEquals(360_000L, b.state.value.detailPlayTarget?.runtimeMs)
+        assertEquals(b.state.value.detailPlayTarget, b.state.value.selectedSeasonPlayTarget)
+    }
+
     @Test fun selectingSeasonReloadsEpisodesAndBackClearsSeriesState() = runBlocking<Unit> {
         val a = Adapter()
         val series = a.media("series").copy(mediaType = MediaType.Series)
@@ -291,6 +424,35 @@ class MediaBrowserTest {
         assertTrue(b.state.value.detailSeasons.isEmpty())
         assertNull(b.state.value.selectedSeasonId)
         assertTrue(b.state.value.detailEpisodes.isEmpty())
+    }
+
+    @Test fun seasonEpisodesStopAtTheLegacyThousandItemWindow() = runBlocking<Unit> {
+        val a = Adapter()
+        val series = a.media("series").copy(mediaType = MediaType.Series)
+        val season = a.media("season").copy(mediaType = MediaType.Season, seasonNumber = 1)
+        a.detail = { series }
+        a.seasonFetch = { Page(listOf(season)) }
+        a.episodeFetch = { _, _, request ->
+            when (request.cursor?.value) {
+                null -> Page(
+                    listOf(a.media("episode-1").copy(mediaType = MediaType.Episode, episodeNumber = 1)),
+                    PageCursor("second"),
+                )
+                "second" -> Page(
+                    listOf(a.media("episode-2").copy(mediaType = MediaType.Episode, episodeNumber = 2)),
+                    PageCursor("must-not-load"),
+                )
+                else -> error("legacy 1000-item window must not request a third page")
+            }
+        }
+
+        val b = browser(a)
+        b.openDetail(series.id)
+
+        assertEquals(listOf("episode-1", "episode-2"), b.state.value.detailEpisodes.map { it.id.value })
+        assertEquals(2, a.episodeRequests.size)
+        assertEquals(listOf(null, PageCursor("second")), a.episodeRequests.map { it.third.cursor })
+        assertTrue(a.episodeRequests.all { it.third.pageSize == 500 })
     }
 
     @Test fun personPageLoadsLegacyWorkGroupsAndClearsIndependently() = runBlocking<Unit> {
@@ -318,20 +480,242 @@ class MediaBrowserTest {
         assertTrue(b.state.value.personMovies.isEmpty())
     }
 
-    @Test fun searchTrimsTermAndMergesOpaquePages() = runBlocking<Unit> {
+    @Test fun personAndWorkGroupsSurviveOpeningAWorkAndReturningFromItsDetail() = runBlocking<Unit> {
+        val a = Adapter()
+        a.personDetail = { id ->
+            MediaPerson(id, a.serverId, a.provider, "Actor", overview = "Biography")
+        }
+        val b = browser(a)
+
+        b.openPerson(MediaId("person"))
+        val person = b.state.value.person
+        val movies = b.state.value.personMovies
+        val series = b.state.value.personSeries
+        val episodes = b.state.value.personEpisodes
+
+        b.openDetail(movies.single().id)
+        assertEquals(movies.single().id, b.state.value.detailId)
+        b.back()
+
+        assertNull(b.state.value.detailId)
+        assertEquals(person, b.state.value.person)
+        assertEquals(movies, b.state.value.personMovies)
+        assertEquals(series, b.state.value.personSeries)
+        assertEquals(episodes, b.state.value.personEpisodes)
+    }
+
+    @Test fun searchReproducesLegacyEightHundredItemSingleScreenLoad() = runBlocking<Unit> {
         val a = Adapter()
         a.searchFetch = { term, request ->
             assertEquals("query", term)
-            if (request.cursor == null) Page(listOf(a.media("one")), PageCursor("next"))
-            else Page(listOf(a.media("one").copy(title = "updated"), a.media("two")))
+            assertEquals(setOf(MediaType.Episode, MediaType.Movie, MediaType.Video, MediaType.Series),
+                request.filter.mediaTypes)
+            if (request.cursor == null) {
+                assertEquals(PageRequest.MAX_PAGE_SIZE, request.pageSize)
+                Page((0 until 500).map { a.media("item-$it") }, PageCursor("next"), totalEstimate = 900)
+            } else {
+                assertEquals(PageCursor("next"), request.cursor)
+                assertEquals(300, request.pageSize)
+                Page((500 until 800).map { a.media("item-$it") }, PageCursor("ignored-after-legacy-limit"),
+                    totalEstimate = 900)
+            }
         }
         val b = browser(a)
-        b.search("  query  ")
-        b.loadMoreSearch()
+        assertTrue(b.search("  query  "))
         assertEquals("query", b.state.value.searchQuery)
-        assertEquals(listOf("updated", "two"), b.state.value.searchItems.map { it.title })
+        assertEquals(800, b.state.value.searchItems.size)
+        assertEquals("item-0", b.state.value.searchItems.first().title)
+        assertEquals("item-799", b.state.value.searchItems.last().title)
+        assertEquals(800, b.state.value.searchTotalEstimate)
         assertNull(b.state.value.searchNextCursor)
-        assertEquals(PageCursor("next"), a.searchRequests.last().second.cursor)
+        assertEquals(2, a.searchRequests.size)
+    }
+
+    @Test fun historyUsesLegacySourcesDedupesSeriesAndEnrichesLatestEpisode() = runBlocking<Unit> {
+        val a = Adapter()
+        val seriesId = MediaId("series-a")
+        fun history(
+            id: String,
+            type: MediaType,
+            playedAt: Long,
+            series: MediaId? = null,
+            season: Int? = null,
+            episode: Int? = null,
+        ) = a.media(id).copy(
+            mediaType = type,
+            seriesId = series,
+            seriesTitle = if (series != null) "Series A" else null,
+            seasonNumber = season,
+            episodeNumber = episode,
+            userData = MediaUserData(lastPlayedEpochMs = playedAt),
+        )
+        a.resumeFetch = { request ->
+            assertEquals(10, request.pageSize)
+            assertEquals(setOf(MediaType.Movie, MediaType.Episode), request.filter.mediaTypes)
+            Page.of(listOf(history("episode-new", MediaType.Episode, 200, seriesId, 1, 3)))
+        }
+        a.fetch = { collectionId, request ->
+            assertNull(collectionId)
+            assertEquals(10, request.pageSize)
+            assertEquals(setOf(MediaType.Movie, MediaType.Episode), request.filter.mediaTypes)
+            assertTrue(request.filter.playedOnly)
+            assertEquals(MediaSort(MediaSortField.DatePlayed, SortDirection.Descending), request.sort)
+            Page.of(
+                listOf(
+                    history("movie", MediaType.Movie, 300),
+                    history("episode-old", MediaType.Episode, 100, seriesId, 1, 2),
+                ),
+            )
+        }
+        a.episodeFetch = { requestedSeries, seasonId, request ->
+            assertEquals(seriesId, requestedSeries)
+            assertNull(seasonId)
+            assertEquals(PageRequest.MAX_PAGE_SIZE, request.pageSize)
+            Page.of(
+                listOf(
+                    a.media("s1e12").copy(mediaType = MediaType.Episode, seasonNumber = 1, episodeNumber = 12),
+                    a.media("s2e3").copy(mediaType = MediaType.Episode, seasonNumber = 2, episodeNumber = 3),
+                    a.media("s2e8").copy(mediaType = MediaType.Episode, seasonNumber = 2, episodeNumber = 8),
+                ),
+            )
+        }
+        val b = browser(a)
+
+        b.loadHistory()
+
+        val items = b.state.value.historyItems
+        assertEquals(listOf("movie", "episode-new"), items.map { it.media.id.value })
+        assertEquals(2, items[1].latestSeasonNumber)
+        assertEquals(8, items[1].latestEpisodeNumber)
+        assertTrue(items[1].seriesHasMultipleSeasons)
+        assertNull(b.state.value.historyError)
+        assertFalse(b.state.value.historyLoadMoreFailed)
+    }
+
+    @Test fun historyKeepsSuccessfulSourceAndRetriesFailedFirstPageFromTheFooter() = runBlocking<Unit> {
+        val a = Adapter()
+        var resumeFails = true
+        a.resumeFetch = {
+            if (resumeFails) throw NetworkUnreachableError()
+            Page.of(
+                listOf(
+                    a.media("resume").copy(
+                        mediaType = MediaType.Movie,
+                        userData = MediaUserData(lastPlayedEpochMs = 200),
+                    ),
+                ),
+            )
+        }
+        a.fetch = { _, _ ->
+            Page.of(
+                listOf(
+                    a.media("completed").copy(
+                        mediaType = MediaType.Movie,
+                        userData = MediaUserData(isPlayed = true, lastPlayedEpochMs = 100),
+                    ),
+                ),
+            )
+        }
+        val b = browser(a)
+
+        b.loadHistory()
+
+        assertEquals(listOf("completed"), b.state.value.historyItems.map { it.media.id.value })
+        assertNull(b.state.value.historyError)
+        assertTrue(b.state.value.historyLoadMoreFailed)
+        assertTrue(b.state.value.historyCanLoadMore)
+
+        resumeFails = false
+        b.retryLoadMoreHistory()
+
+        assertEquals(listOf("resume", "completed"), b.state.value.historyItems.map { it.media.id.value })
+        assertFalse(b.state.value.historyLoadMoreFailed)
+        assertFalse(b.state.value.historyCanLoadMore)
+        assertEquals(listOf(null, null), a.resumeRequests.map { it.cursor })
+    }
+
+    @Test fun historyShowsWholePageErrorOnlyWhenNoSourceCanSupplyContent() = runBlocking<Unit> {
+        val a = Adapter()
+        a.resumeFetch = { throw NetworkUnreachableError() }
+        a.fetch = { _, _ -> throw TimeoutError() }
+        val b = browser(a)
+
+        b.loadHistory()
+
+        assertTrue(b.state.value.historyItems.isEmpty())
+        assertEquals("播放历史加载失败，点击重试", b.state.value.historyError)
+        assertFalse(b.state.value.historyLoadMoreFailed)
+    }
+
+    @Test fun historyPagingFailurePreservesRowsAndUsesExplicitRetry() = runBlocking<Unit> {
+        val a = Adapter()
+        var resumeTailFails = true
+        a.resumeFetch = { request ->
+            if (request.cursor == null) {
+                Page.of(
+                    listOf(
+                        a.media("resume-1").copy(
+                            mediaType = MediaType.Movie,
+                            userData = MediaUserData(lastPlayedEpochMs = 400),
+                        ),
+                    ),
+                    nextCursor = PageCursor("resume-next"),
+                )
+            } else if (resumeTailFails) {
+                throw NetworkUnreachableError()
+            } else {
+                Page.of(
+                    listOf(
+                        a.media("resume-2").copy(
+                            mediaType = MediaType.Movie,
+                            userData = MediaUserData(lastPlayedEpochMs = 200),
+                        ),
+                    ),
+                )
+            }
+        }
+        a.fetch = { _, request ->
+            if (request.cursor == null) {
+                Page.of(
+                    listOf(
+                        a.media("completed-1").copy(
+                            mediaType = MediaType.Movie,
+                            userData = MediaUserData(isPlayed = true, lastPlayedEpochMs = 300),
+                        ),
+                    ),
+                    nextCursor = PageCursor("completed-next"),
+                )
+            } else {
+                Page.of(
+                    listOf(
+                        a.media("completed-2").copy(
+                            mediaType = MediaType.Movie,
+                            userData = MediaUserData(isPlayed = true, lastPlayedEpochMs = 100),
+                        ),
+                    ),
+                )
+            }
+        }
+        val b = browser(a)
+        b.loadHistory()
+
+        b.loadMoreHistory()
+
+        assertEquals(
+            listOf("resume-1", "completed-1", "completed-2"),
+            b.state.value.historyItems.map { it.media.id.value },
+        )
+        assertTrue(b.state.value.historyLoadMoreFailed)
+        assertNull(b.state.value.historyError)
+
+        resumeTailFails = false
+        b.retryLoadMoreHistory()
+
+        assertEquals(
+            listOf("resume-1", "completed-1", "resume-2", "completed-2"),
+            b.state.value.historyItems.map { it.media.id.value },
+        )
+        assertFalse(b.state.value.historyLoadMoreFailed)
     }
 
     @Test fun clearingSearchRejectsLateResults() = runBlocking<Unit> {

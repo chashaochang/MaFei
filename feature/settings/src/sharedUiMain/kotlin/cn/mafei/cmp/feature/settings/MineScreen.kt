@@ -61,7 +61,11 @@ import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
-import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.core.domain.PlaybackHistoryItem
+import cn.mafei.cmp.core.domain.movieRatingText
+import cn.mafei.cmp.core.domain.progressPercent
+import cn.mafei.cmp.core.domain.titleText
+import cn.mafei.cmp.core.domain.updateBadgeText
 import org.jetbrains.compose.resources.painterResource
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -77,7 +81,7 @@ data class MineProfile(
 @Composable
 fun MineScreen(
     profile: MineProfile,
-    historyItems: List<MediaItem>,
+    historyItems: List<PlaybackHistoryItem>,
     historyLoading: Boolean,
     historyError: String?,
     layout: MaFeiLayout,
@@ -87,6 +91,7 @@ fun MineScreen(
     onHistoryMore: () -> Unit,
     onSwitchAccount: () -> Unit,
     onSettings: () -> Unit,
+    onPrivacy: () -> Unit,
     onAddGroup: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
@@ -156,9 +161,15 @@ fun MineScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         LegacyListGroup(
                             items = listOf(
+                                LegacyListGroupItem("隐私协议", MaFeiLegacyDrawables.privacy),
                                 LegacyListGroupItem("加入群聊", MaFeiLegacyDrawables.addGroup),
                             ),
-                            onItemClick = { onAddGroup() },
+                            onItemClick = { index ->
+                                when (index) {
+                                    0 -> onPrivacy()
+                                    1 -> onAddGroup()
+                                }
+                            },
                         )
                         if (versionName.isNotBlank()) {
                             Text(
@@ -271,7 +282,7 @@ private fun MineProfileHeader(
 
 @Composable
 private fun MineHistorySection(
-    items: List<MediaItem>,
+    items: List<PlaybackHistoryItem>,
     columns: Int,
     onItem: (MediaItem) -> Unit,
     onMore: () -> Unit,
@@ -313,7 +324,7 @@ private fun MineHistorySection(
 
 @Composable
 private fun MineHistoryRows(
-    items: List<MediaItem>,
+    items: List<PlaybackHistoryItem>,
     columns: Int,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
@@ -324,7 +335,7 @@ private fun MineHistoryRows(
                 rowItems.forEach { item ->
                     MineHistoryPoster(
                         item = item,
-                        onClick = { onItem(item) },
+                        onClick = { onItem(item.media) },
                         modifier = Modifier.weight(1f),
                         artwork = artwork,
                     )
@@ -337,45 +348,47 @@ private fun MineHistoryRows(
 
 @Composable
 private fun MineHistoryPoster(
-    item: MediaItem,
+    item: PlaybackHistoryItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
 ) {
+    val badgeText = item.movieRatingText ?: item.updateBadgeText
+    val progress = item.progressPercent
     Column(
-        modifier.mafeiInteractive(onClick, radiusDp = 10f, label = mineHistoryTitle(item)),
+        modifier.mafeiInteractive(onClick, radiusDp = 10f, label = item.titleText),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (artwork != null) artwork(item, Modifier.fillMaxSize())
+            if (artwork != null) artwork(item.media, Modifier.fillMaxSize())
             else Image(
                 painter = painterResource(MaFeiLegacyDrawables.noHistory),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Inside,
             )
-            if (item.mediaType == MediaType.Movie) {
-                item.communityRating?.takeIf { it > 0.0 }?.let { rating ->
-                    Text(
-                        legacyRating(rating),
-                        Modifier.align(Alignment.BottomEnd).padding(
-                            end = 4.dp,
-                            bottom = if (mineHistoryProgress(item) != null) 7.dp else 4.dp,
-                        ).clip(RoundedCornerShape(5.dp)).background(Color(0x99000000))
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+            badgeText?.let { text ->
+                Text(
+                    text,
+                    Modifier.align(Alignment.BottomEnd).padding(
+                        end = 4.dp,
+                        bottom = if (progress != null) 7.dp else 4.dp,
+                    ).clip(RoundedCornerShape(5.dp)).background(Color(0x99000000))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            mineHistoryProgress(item)?.let { progress ->
+            progress?.let { percent ->
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { percent / 100f },
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Black.copy(alpha = .32f),
@@ -383,7 +396,7 @@ private fun MineHistoryPoster(
             }
         }
         Text(
-            mineHistoryTitle(item),
+            item.titleText,
             Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 12.sp,
@@ -463,7 +476,7 @@ private fun MineHistoryErrorSection(onRetry: () -> Unit) {
 /** Mechanical Compose translation of ArkUI `MineHistoryPage`. */
 @Composable
 fun MineHistoryScreen(
-    items: List<MediaItem>,
+    items: List<PlaybackHistoryItem>,
     loading: Boolean,
     error: String?,
     layout: MaFeiLayout,
@@ -473,7 +486,9 @@ fun MineHistoryScreen(
     modifier: Modifier = Modifier,
     canLoadMore: Boolean = false,
     loadingMore: Boolean = false,
+    loadMoreFailed: Boolean = false,
     onLoadMore: (() -> Unit)? = null,
+    onRetryLoadMore: (() -> Unit)? = null,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
@@ -525,13 +540,16 @@ fun MineHistoryScreen(
                 val gridState = rememberLazyGridState()
                 val currentLoadMore by rememberUpdatedState(onLoadMore)
                 val currentLoadingMore by rememberUpdatedState(loadingMore)
+                val currentLoadMoreFailed by rememberUpdatedState(loadMoreFailed)
                 // 触底续页：resume + 已看完两路的游标由 browser 决定是否还有。
                 LaunchedEffect(gridState, canLoadMore, items.size) {
                     snapshotFlow {
                         val info = gridState.layoutInfo
                         (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount
                     }.distinctUntilChanged().collect { (last, total) ->
-                        if (canLoadMore && !currentLoadingMore && total > 0 && last >= total - 4) {
+                        if (canLoadMore && !currentLoadingMore && !currentLoadMoreFailed &&
+                            total > 0 && last >= total - 4
+                        ) {
                             currentLoadMore?.invoke()
                         }
                     }
@@ -549,20 +567,45 @@ fun MineHistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    items(items, key = { item -> item.id.value }) { item ->
+                    items(items, key = { item -> historyItemKey(item) }) { item ->
                         MineHistoryPoster(
                             item = item,
-                            onClick = { onItem(item) },
+                            onClick = { onItem(item.media) },
                             artwork = artwork,
                         )
                     }
-                    if (loadingMore) {
+                    if (loadingMore || loadMoreFailed) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                            if (loadingMore) {
+                                Row(
+                                    Modifier.fillMaxWidth().height(52.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "正在加载",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    Modifier.fillMaxWidth().height(44.dp)
+                                        .mafeiInteractive(
+                                            onClick = { onRetryLoadMore?.invoke() },
+                                            radiusDp = 22f,
+                                            label = "加载更多失败，点击重试",
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "加载更多失败，点击重试",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp,
+                                    )
+                                }
                             }
                         }
                     }
@@ -599,27 +642,6 @@ private fun MineHistoryPageLoadingGrid(
     }
 }
 
-private fun mineHistoryTitle(item: MediaItem): String {
-    if (item.mediaType != MediaType.Episode || item.episodeNumber == null) {
-        return item.title.ifBlank { "未命名内容" }
-    }
-    val name = item.seriesTitle?.takeIf { it.isNotBlank() } ?: item.title.ifBlank { "未命名内容" }
-    val season = item.seasonNumber
-    return if (season != null && season > 1) {
-        "$name · 第${season}季第${item.episodeNumber}集"
-    } else {
-        "$name · 第${item.episodeNumber}集"
-    }
-}
-
-private fun mineHistoryProgress(item: MediaItem): Float? {
-    if (item.userData.isPlayed) return null
-    val percentage = item.userData.playedPercentage?.div(100.0)
-        ?: item.runtimeMs?.takeIf { it > 0L }?.let { item.userData.playbackPositionMs.toDouble() / it }
-    return percentage?.takeIf { it > 0.0 }?.coerceIn(0.0, 1.0)?.toFloat()
-}
-
-private fun legacyRating(value: Double): String {
-    val rounded = (value * 10.0).toInt() / 10.0
-    return if (rounded == rounded.toInt().toDouble()) "${rounded.toInt()}.0" else rounded.toString()
-}
+private fun historyItemKey(item: PlaybackHistoryItem): String =
+    "${item.media.id.value}|${item.latestSeasonNumber ?: 0}|${item.latestEpisodeNumber ?: 0}|" +
+        if (item.seriesHasMultipleSeasons) "1" else "0"

@@ -66,7 +66,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun VideoListScreen(
     title: String,
     items: List<MediaItem>,
-    totalEstimate: Int?,
     selectedSort: MediaSort,
     sortChoices: List<LegacySortChoice<MediaSort>>,
     loading: Boolean,
@@ -141,7 +140,10 @@ fun VideoListScreen(
             } else {
                 LegacySortRow(
                     label = sortChoices.firstOrNull { it.value.field == selectedSort.field }?.label ?: "按添加日期",
-                    totalCount = (totalEstimate ?: items.size).toString(),
+                    // ArkUI VideoListViewModel updates this from
+                    // RefreshDataSource.totalCount(), i.e. the rows that are
+                    // currently loaded, not the provider's TotalRecordCount.
+                    totalCount = items.size.toString(),
                     descending = selectedSort.direction == cn.mafei.cmp.core.domain.SortDirection.Descending,
                     onOpenSort = { showSort = true },
                     onToggleDirection = onToggleSortDirection,

@@ -61,12 +61,24 @@ check(entries.includes(resource), 'Missing or misplaced Compose resource probe')
 const packaged = execFileSync('unzip', ['-p', hap, resource]);
 const prepared = readFileSync(resolve(root, 'composeApp/build/generated/compose/resourceGenerator/preparedResources/commonMain/composeResources/values/strings.commonMain.cvr'));
 check(packaged.equals(prepared), 'Packaged Compose resource differs from prepared resource');
-const connectBackground = 'resources/rawfile/composeResources/cn.mafei.cmp.feature.connect.generated.resources/drawable/mafei_login_background.png';
-check(entries.includes(connectBackground), 'Missing feature:connect login background');
-const preparedBackground = readFileSync(resolve(root, 'feature/connect/build/generated/compose/resourceGenerator/preparedResources/commonMain/composeResources/drawable/mafei_login_background.png'));
-const packagedBackground = execFileSync('unzip', ['-p', hap, connectBackground], {
-  maxBuffer: preparedBackground.length + 1024,
-});
-check(packagedBackground.equals(preparedBackground), 'Packaged login background differs from prepared resource');
+// The login backdrop is now a 24-poster mosaic instead of the removed single
+// mafei_login_background.png. Verify every referenced image, otherwise a HAP
+// can build successfully but fail when Compose resolves one missing poster.
+const connectDrawables = [
+  'mafei_app_icon.png',
+  ...Array.from({ length: 24 }, (_, index) => `poster_${String(index + 1).padStart(2, '0')}.jpg`),
+  'provider_feiniu.png',
+  'provider_jellyfin.svg',
+];
+for (const name of connectDrawables) {
+  const resource = `resources/rawfile/composeResources/cn.mafei.cmp.feature.connect.generated.resources/drawable/${name}`;
+  check(entries.includes(resource), `Missing feature:connect drawable: ${name}`);
+  const preparedDrawable = readFileSync(resolve(root,
+    `feature/connect/build/generated/compose/resourceGenerator/preparedResources/commonMain/composeResources/drawable/${name}`));
+  const packagedDrawable = execFileSync('unzip', ['-p', hap, resource], {
+    maxBuffer: preparedDrawable.length + 1024,
+  });
+  check(packagedDrawable.equals(preparedDrawable), `Packaged feature:connect drawable differs: ${name}`);
+}
 console.log('PASS: matched libkn/header and Hvigor copy-in; same-build stripped/package libkn; HAP ARM64 libraries; byte-identical Compose resources');
 console.log('Signing, installation and runtime are separate checks.');

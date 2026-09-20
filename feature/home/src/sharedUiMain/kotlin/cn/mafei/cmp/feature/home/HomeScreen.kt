@@ -2,7 +2,6 @@ package cn.mafei.cmp.feature.home
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -60,6 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassLevel
+import cn.mafei.cmp.common.glass.GlassMaterial
+import cn.mafei.cmp.common.glass.GlassRole
+import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.components.LiquidFloatingTabs
@@ -68,17 +71,20 @@ import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private const val RecentFeedKey = "__home_recent__"
 private const val HeroAutoplayMillis = 6_500
-private const val HeroPageAnimationMillis = 320
+private const val HeroSnapDampingRatio = .92f
+private const val HeroSnapStiffness = 420f
+private const val HeroSnapThreshold = .58f
 // The ambient is an environment layer driven by the selected hero item. The
 // selection only changes when the pager settles, so a slow crossfade stands in
 // for the continuous pager parallax the ambient used to draw.
-private const val HeroAmbientFadeMillis = 600
+private const val HeroAmbientFadeMillis = 360
 private const val HeroVirtualPageCount = Int.MAX_VALUE
 // 背景清晰轮播图的羽化起点（占清晰层自身高度的比例）：80% 处才开始渐隐。
 private const val HomeHeroFeatherStartFraction = 0.8f
@@ -86,6 +92,18 @@ private const val HomeHeroFeatherStartFraction = 0.8f
 // 标题区域后面（内容浮在图片渐隐段之上），可见清晰区约达屏幕高度的 70%，
 // 羽化带压缩在底部 —— 观感上图片清晰的部分占大头，同时内容仍完整可读。
 private val HomeHeroClearExtraDp = 180.dp
+// The wide-screen title/subtitle/overview block itself is roughly 150dp tall.
+// Fade it before that complete block reaches the viewport edge; using only a
+// 72dp tail left the final overview line floating at the top on short tablet
+// feeds when the grid had already reached its maximum scroll position.
+private val HomeHeroForegroundHiddenTail = 160.dp
+private val HomeHeroForegroundFadeDistance = 128.dp
+// Once only a narrow strip of the clear hero remains, hand the whole viewport
+// to the already-present ambient layer. Besides removing an otherwise visible
+// sliver, alpha=0 lets the renderer skip the large DstIn offscreen layer while
+// users scroll the shelves at the bottom of a short home feed.
+private val HomeHeroClearHiddenTail = 96.dp
+private val HomeHeroClearFadeDistance = 96.dp
 private const val HomeHeroKey = "home-recommendation-hero"
 private const val LatestFeedAnchorKey = "home-latest-feed-anchor"
 private val HomeHeroRefreshThreshold = 64.dp
@@ -122,6 +140,7 @@ fun HomeScreen(
     layout: MaFeiLayout,
     onCollection: (MediaCollection) -> Unit,
     onItem: (MediaItem) -> Unit,
+    onHeroItem: (MediaItem) -> Unit = onItem,
     onPlay: ((MediaItem) -> Unit)? = null,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
@@ -413,6 +432,19 @@ fun HomeScreen(
         }
     }
     val gridScrolling by remember(gridState) { derivedStateOf { gridState.isScrollInProgress } }
+    val heroAutoplayMinimumVisiblePx = with(density) { HomeHeroForegroundHiddenTail.roundToPx() }
+    val heroVisibleForAutoplay by remember(gridState, heroAutoplayMinimumVisiblePx) {
+        derivedStateOf {
+            val heroInfo = gridState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == HomeHeroKey }
+            homeHeroAutoplayVisible(
+                heroOffsetY = heroInfo?.offset?.y,
+                heroHeightPx = heroInfo?.size?.height,
+                firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+                minimumVisiblePx = heroAutoplayMinimumVisiblePx,
+            )
+        }
+    }
     var activeHeroItem by remember(heroItems) { mutableStateOf(heroItems.firstOrNull()) }
     val heroItemKeys = remember(heroItems) { heroItems.map { it.id.value } }
     val heroPagerState = key(heroItemKeys) {
@@ -423,12 +455,24 @@ fun HomeScreen(
             },
         )
     }
-    // 轮播全部 item 的横版图并行预载：翻页跟手序列把相邻页组合进视口、模糊层
-    // Crossfade 在 settle 时切图，两者都要求「图已在缓存」—— 否则翻页瞬间两层
-    // 同时透明，露出 shell 背景色（右缘黑带）。轮播 item 数量少，全部预载即可。
-    LaunchedEffect(heroItems, prefetchBackdrop) {
-        heroItems.forEach { item ->
-            launch { prefetchBackdrop?.invoke(item) }
+    // Only keep the settled page and its two neighbours warm. Warming every
+    // remaining 960px hero after a fixed delay still competed with the first
+    // user scroll on slower devices. A settled-page change cancels stale work
+    // and advances this three-image window instead.
+    LaunchedEffect(heroItems, prefetchBackdrop, heroPagerState) {
+        val prefetch = prefetchBackdrop ?: return@LaunchedEffect
+        if (heroItems.isEmpty()) return@LaunchedEffect
+        snapshotFlow { heroPagerState.settledPage }
+            .distinctUntilChanged()
+            .collectLatest { settledPage ->
+                homeHeroPrefetchOrder(heroItems.size, settledPage).forEach { index ->
+                    prefetch(heroItems[index])
+                }
+            }
+    }
+    DisposableEffect(heroBackdropState, heroPagerState, gridState) {
+        onDispose {
+            heroBackdropState?.detach(heroPagerState, gridState)
         }
     }
     // 同步窗口级轮播背景的状态（背景画在 shell 窗口画布，不在 scene 里）。
@@ -439,10 +483,29 @@ fun HomeScreen(
         heroBackdropState?.let { state ->
             state.pagerState = heroPagerState
             state.gridState = gridState
-            state.blurRadius = if (layout.family == MaFeiLayoutFamily.Phone) 48.dp else 72.dp
+            // A 72dp full-window blur is disproportionately expensive on a
+            // 2800x1840 tablet: every ambient transition temporarily renders
+            // two large blurred layers. The clear hero still supplies the
+            // foreground detail, so the ambient only needs enough blur to
+            // carry colour and light into the feed below it.
+            state.blurRadius = when (layout.family) {
+                MaFeiLayoutFamily.Phone -> 40.dp
+                MaFeiLayoutFamily.Tablet -> 44.dp
+                MaFeiLayoutFamily.Desktop -> 48.dp
+            }
             state.heroHeight = layout.heroHeightDp.dp
-            state.extraHeight = heroExtraHeight
         }
+    }
+    // `heroExtraHeight` changes on every resisted pull-down frame. Keeping it
+    // inside the attachment effect above left the window-level artwork at its
+    // initial height because that effect's keys are otherwise stable. Publish
+    // the latest value after each successful composition without restarting a
+    // coroutine for every gesture frame.
+    SideEffect {
+        heroBackdropState?.extraHeight = heroExtraHeight
+    }
+    LaunchedEffect(heroBackdropState, heroVisibleForAutoplay) {
+        heroBackdropState?.precomposeNeighbours = heroVisibleForAutoplay
     }
     LaunchedEffect(activeHeroItem, heroBackdropState) {
         heroBackdropState?.activeItem = activeHeroItem
@@ -506,9 +569,9 @@ fun HomeScreen(
                         items = heroItems,
                         pagerState = heroPagerState,
                         layout = layout,
-                        onItem = onItem,
+                        onItem = onHeroItem,
                         artwork = backdropArtwork,
-                        autoplay = heroAutoplay,
+                        autoplay = heroAutoplay && heroVisibleForAutoplay,
                         scrolling = gridScrolling,
                         onActiveItemChanged = { item ->
                             activeHeroItem = item
@@ -785,6 +848,7 @@ fun HomeScreen(
               heroHeight = layout.heroHeightDp.dp,
               extraHeight = heroExtraHeight,
               windowWidth = navigationChrome.windowWidthDp ?: maxWidth,
+              precomposeNeighbours = heroVisibleForAutoplay,
           )
       }
       // 浮层导航（置顶 Tab 条 / 搜索按钮 / 二级页头部）必须留在**捕获层之外**：它们采样
@@ -1110,6 +1174,93 @@ private fun <T : Comparable<T>> compareNullable(left: T?, right: T?, descending:
 }
 
 /**
+ * Keeps the window-level hero layers attached to their lazy-grid placeholder.
+ *
+ * Once item zero has scrolled out, LazyGrid removes it from [visibleItemsInfo].
+ * Treating that missing entry as offset zero makes the detached hero foreground
+ * jump back over the feed. Before the first layout the same entry is also
+ * missing, so [firstVisibleItemIndex] distinguishes the two states.
+ */
+internal fun homeHeroTranslationY(
+    heroOffsetY: Int?,
+    firstVisibleItemIndex: Int,
+    clearHeightPx: Float,
+): Float {
+    if (clearHeightPx <= 0f) return 0f
+    val offset = when {
+        heroOffsetY != null -> heroOffsetY.toFloat()
+        firstVisibleItemIndex > 0 -> -clearHeightPx
+        else -> 0f
+    }
+    return offset.coerceIn(-clearHeightPx, 0f)
+}
+
+/**
+ * Fades the detached hero foreground before only a clipped text tail remains.
+ *
+ * On short wide-screen home feeds, the lazy grid can reach its maximum scroll
+ * while the large hero item still has a few pixels in the viewport. In that
+ * state item zero is technically visible, so disposal-based hiding is too
+ * late and the final line of the overview sits over the first shelf. Keep the
+ * artwork transition continuous, but make the text/indicator fully invisible
+ * for the final [hiddenTailPx] and ease it out over [fadeDistancePx].
+ */
+internal fun homeHeroForegroundAlpha(
+    heroOffsetY: Int?,
+    firstVisibleItemIndex: Int,
+    clearHeightPx: Float,
+    hiddenTailPx: Float,
+    fadeDistancePx: Float,
+): Float {
+    if (clearHeightPx <= 0f) return 1f
+    val remainingHeight = (
+        clearHeightPx + homeHeroTranslationY(heroOffsetY, firstVisibleItemIndex, clearHeightPx)
+        ).coerceAtLeast(0f)
+    if (fadeDistancePx <= 0f) return if (remainingHeight > hiddenTailPx) 1f else 0f
+    return ((remainingHeight - hiddenTailPx) / fadeDistancePx).coerceIn(0f, 1f)
+}
+
+/** Only materialize adjacent full-screen pages while the horizontal pager moves. */
+internal fun homeHeroPageRange(
+    currentPage: Int,
+    itemCount: Int,
+    inMotion: Boolean,
+): IntRange = if (itemCount > 1 && inMotion) {
+    (currentPage - 1)..(currentPage + 1)
+} else {
+    currentPage..currentPage
+}
+
+/**
+ * Stops the carousel clock once its meaningful foreground has left the viewport.
+ *
+ * Keeping autoplay alive below the hero changed the full-window ambient image
+ * every 6.5 seconds while the user was reading shelves. On slower GPUs that
+ * periodic crossfade was visible as an unrelated list hitch. A missing layout
+ * entry is allowed only before the first layout; once another lazy item is first,
+ * the hero has been disposed and must stay inactive.
+ */
+internal fun homeHeroAutoplayVisible(
+    heroOffsetY: Int?,
+    heroHeightPx: Int?,
+    firstVisibleItemIndex: Int,
+    minimumVisiblePx: Int,
+): Boolean {
+    if (heroOffsetY != null && heroHeightPx != null) {
+        return heroOffsetY + heroHeightPx > minimumVisiblePx.coerceAtLeast(0)
+    }
+    return firstVisibleItemIndex == 0
+}
+
+/** Current, next and previous are the only pages needed before the first autoplay tick. */
+internal fun homeHeroPrefetchOrder(itemCount: Int, currentIndex: Int): List<Int> {
+    if (itemCount <= 0) return emptyList()
+    val settled = currentIndex.mod(itemCount)
+    return listOf(settled, (settled + 1).mod(itemCount), (settled - 1).mod(itemCount))
+        .distinct()
+}
+
+/**
  * 窗口级轮播背景的状态。背景由 App.kt 的 shell 窗口画布绘制（fillMaxSize 天然
  * 全窗，与侧栏让位量、scene 视口完全无关），HomeScreen 负责把实时状态喂进来。
  */
@@ -1118,12 +1269,24 @@ class HomeHeroBackdropState {
     var activeItem by mutableStateOf<MediaItem?>(null)
     var pagerState by mutableStateOf<PagerState?>(null)
     var gridState by mutableStateOf<LazyGridState?>(null)
-    var blurRadius by mutableStateOf(72.dp)
+    var blurRadius by mutableStateOf(44.dp)
     // hero 占位的固有高度（heroHeight + 下拉拉伸 extra）：窗口层自己用**窗口原始
     // 安全区**算清晰层高度 —— 不含顶部 Tab 的让位（Tab 是浮层，不该推动背景），
     // 侧栏收起/展开、Tab 条出现消失，背景都逐像素静止。
     var heroHeight by mutableStateOf(0.dp)
     var extraHeight by mutableStateOf(0.dp)
+    var precomposeNeighbours by mutableStateOf(false)
+    /** Release a disposed HomeScreen without clearing a newer screen attachment. */
+    fun detach(pager: PagerState, grid: LazyGridState) {
+        if (pagerState !== pager || gridState !== grid) return
+        items = emptyList()
+        activeItem = null
+        pagerState = null
+        gridState = null
+        heroHeight = 0.dp
+        extraHeight = 0.dp
+        precomposeNeighbours = false
+    }
 }
 
 /**
@@ -1161,24 +1324,28 @@ fun HomeHeroWindowBackdrop(
         // background on every drag and every autoplay tick, which is exactly the
         // continuous parallax the UI research doc rules out. This is also
         // cheaper: one blurred layer at rest instead of three.
-        Crossfade(
-            targetState = state.activeItem,
-            modifier = Modifier.fillMaxSize(),
-            animationSpec = tween(durationMillis = HeroAmbientFadeMillis),
-            label = "mafei-hero-ambient",
-        ) { target ->
-            if (target != null && artwork != null) {
-                artwork(
-                    target,
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = 1.18f
-                            scaleY = 1.18f
-                            colorFilter = brightnessFilter
-                        }
-                        .blur(state.blurRadius),
-                )
+        // Crossfade the source images first, then blur the combined result once.
+        // Blurring both outgoing and incoming full-window layers separately made
+        // every autoplay transition pay for two 2800x1840 blur passes on tablet.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = 1.18f
+                    scaleY = 1.18f
+                    colorFilter = brightnessFilter
+                }
+                .blur(state.blurRadius),
+        ) {
+            Crossfade(
+                targetState = state.activeItem,
+                modifier = Modifier.fillMaxSize(),
+                animationSpec = tween(durationMillis = HeroAmbientFadeMillis),
+                label = "mafei-hero-ambient",
+            ) { target ->
+                if (target != null && artwork != null) {
+                    artwork(target, Modifier.fillMaxSize())
+                }
             }
         }
         // 清晰轮播图层：轮播图下沉到背景后的主画面。从视口顶部铺到 hero 占位
@@ -1209,17 +1376,48 @@ fun HomeHeroWindowBackdrop(
                 .height(clearHeight)
                 .clipToBounds()
                 .graphicsLayer {
+                    // One offscreen layer applies the feather to the complete
+                    // carousel. Applying DstIn to every visible page allocated
+                    // three/four full-width render targets during every drag.
+                    compositingStrategy = CompositingStrategy.Offscreen
                     if (grid != null) {
                         val heroInfo = grid.layoutInfo.visibleItemsInfo
                             .firstOrNull { it.key == HomeHeroKey }
-                        translationY = (heroInfo?.offset?.y?.toFloat() ?: 0f)
-                            .coerceIn(-clearHeight.toPx(), 0f)
+                        val heroOffsetY = heroInfo?.offset?.y
+                        val clearHeightPx = clearHeight.toPx()
+                        translationY = homeHeroTranslationY(
+                            heroOffsetY = heroOffsetY,
+                            firstVisibleItemIndex = grid.firstVisibleItemIndex,
+                            clearHeightPx = clearHeightPx,
+                        )
+                        alpha = homeHeroForegroundAlpha(
+                            heroOffsetY = heroOffsetY,
+                            firstVisibleItemIndex = grid.firstVisibleItemIndex,
+                            clearHeightPx = clearHeightPx,
+                            hiddenTailPx = HomeHeroClearHiddenTail.toPx(),
+                            fadeDistancePx = HomeHeroClearFadeDistance.toPx(),
+                        )
                     }
+                }
+                .drawWithContent {
+                    drawContent()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.White,
+                            HomeHeroFeatherStartFraction to Color.White,
+                            1f to Color.Transparent,
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
                 },
         ) {
             if (artwork != null && state.items.isNotEmpty() && pager != null) {
                 val current = pager.currentPage
-                val pageRange = if (state.items.size > 1) (current - 1)..(current + 2) else current..current
+                val pageRange = homeHeroPageRange(
+                    currentPage = current,
+                    itemCount = state.items.size,
+                    inMotion = pager.isScrollInProgress || state.precomposeNeighbours,
+                )
                 for (page in pageRange) {
                     key(page) {
                         val pageItem = state.items[page.mod(state.items.size)]
@@ -1234,20 +1432,7 @@ fun HomeHeroWindowBackdrop(
                         ) {
                             artwork(
                                 pageItem,
-                                Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                                    .drawWithContent {
-                                        drawContent()
-                                        drawRect(
-                                            brush = Brush.verticalGradient(
-                                                0f to Color.White,
-                                                HomeHeroFeatherStartFraction to Color.White,
-                                                1f to Color.Transparent,
-                                            ),
-                                            blendMode = BlendMode.DstIn,
-                                        )
-                                    },
+                                Modifier.fillMaxSize(),
                             )
                         }
                     }
@@ -1286,6 +1471,7 @@ private fun HomeHeroForegroundOverlay(
     heroHeight: Dp,
     extraHeight: Dp,
     windowWidth: Dp,
+    precomposeNeighbours: Boolean,
 ) {
     // 前景的纵向基准 = contentPadding.top（safeTop + 12）+ hero 占位固有高度：
     // 与 grid 的占位、背景的 clearHeight **同源同值**（都含 safeTop）—— 三者
@@ -1296,20 +1482,40 @@ private fun HomeHeroForegroundOverlay(
     val fullClear = topPadding + heroHeight + extraHeight
     Box(
         Modifier
-            .fillMaxSize()
+            // Only the hero interval contains foreground content. Keeping this
+            // as a full-window layer made every vertical scroll composite an
+            // otherwise empty lower half, and alpha < 1 forced that oversized
+            // layer offscreen on CPF/OHOS.
+            .fillMaxWidth()
+            .height(fullClear)
             .graphicsLayer {
                 val heroInfo = gridState.layoutInfo.visibleItemsInfo
                     .firstOrNull { it.key == HomeHeroKey }
-                translationY = (heroInfo?.offset?.y?.toFloat() ?: 0f)
-                    .coerceIn(-fullClear.toPx(), 0f)
+                val heroOffsetY = heroInfo?.offset?.y
+                val clearHeightPx = fullClear.toPx()
+                translationY = homeHeroTranslationY(
+                    heroOffsetY = heroOffsetY,
+                    firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+                    clearHeightPx = clearHeightPx,
+                )
+                alpha = homeHeroForegroundAlpha(
+                    heroOffsetY = heroOffsetY,
+                    firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+                    clearHeightPx = clearHeightPx,
+                    hiddenTailPx = HomeHeroForegroundHiddenTail.toPx(),
+                    fadeDistancePx = HomeHeroForegroundFadeDistance.toPx(),
+                )
             },
     ) {
         // 文字/指示器钉在占位底边（不是视口底）：这层 Box 的高度就是占位的
         // 纵向区间，BottomStart 对齐的是占位底而不是整个视口的底。
-        Box(Modifier.fillMaxWidth().height(fullClear)) {
         val current = pagerState.currentPage
         val activeItemIndex = pagerState.settledPage.mod(items.size)
-        val pageRange = if (items.size > 1) (current - 1)..(current + 2) else current..current
+        val pageRange = homeHeroPageRange(
+            currentPage = current,
+            itemCount = items.size,
+            inMotion = pagerState.isScrollInProgress || precomposeNeighbours,
+        )
         for (page in pageRange) {
             key(page) {
                 val pageItem = items[page.mod(items.size)]
@@ -1438,7 +1644,6 @@ private fun HomeHeroForegroundOverlay(
                 }
             }
         }
-        }
     }
 }
 
@@ -1534,14 +1739,15 @@ private fun RecommendationHero(
     }
     val pagerFlingBehavior = PagerDefaults.flingBehavior(
         state = pagerState,
-        // A normal trackpad momentum should not throw the banner to the next
-        // card. Require a more deliberate positional drag, then settle without
-        // the desktop rubber-band overshoot.
-        snapAnimationSpec = tween(
-            durationMillis = HeroPageAnimationMillis,
-            easing = FastOutSlowInEasing,
+        // Use one lightly damped settle model for touch, trackpad and autoplay.
+        // The old fixed 320ms tween felt rigid after a short drag and delayed
+        // the response until 72% of a page had moved.
+        snapAnimationSpec = spring(
+            dampingRatio = HeroSnapDampingRatio,
+            stiffness = HeroSnapStiffness,
+            visibilityThreshold = .001f,
         ),
-        snapPositionalThreshold = .72f,
+        snapPositionalThreshold = HeroSnapThreshold,
     )
     val activeItemIndex = pagerState.settledPage % items.size
     val isUserDragging by pagerState.interactionSource.collectIsDraggedAsState()
@@ -1558,7 +1764,11 @@ private fun RecommendationHero(
             val targetPage = pagerState.settledPage + 1
             pagerState.animateScrollToPage(
                 page = targetPage,
-                animationSpec = tween(HeroPageAnimationMillis),
+                animationSpec = spring(
+                    dampingRatio = HeroSnapDampingRatio,
+                    stiffness = HeroSnapStiffness,
+                    visibilityThreshold = .001f,
+                ),
             )
             // CPF/OHOS can occasionally finish a long frame between pages.
             // Align only the completed automatic step; direct swipes stay native.
@@ -1589,6 +1799,7 @@ private fun RecommendationHero(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             flingBehavior = pagerFlingBehavior,
+            beyondViewportPageCount = if (items.size > 1) 1 else 0,
             overscrollEffect = null,
         ) { page ->
             val item = items[page % items.size]
@@ -1922,4 +2133,3 @@ private fun progressLabel(item: MediaItem): String {
     val remaining = item.runtimeMs?.let { ((it - item.userData.playbackPositionMs).coerceAtLeast(0) / 60_000) }
     return if (remaining != null) "看到 $minutes 分钟 · 剩余 $remaining 分钟" else "看到 $minutes 分钟"
 }
-

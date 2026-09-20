@@ -1,5 +1,6 @@
 package cn.mafei.cmp.feature.home
 
+import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.adapter_contract.HomeFeed
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
@@ -52,16 +53,16 @@ data class MediaBrowserState(
     val detailError: String? = null,
     val detailSeasons: List<MediaItem> = emptyList(),
     val selectedSeasonId: MediaId? = null,
+    val selectedSeasonDetail: MediaItem? = null,
     val detailEpisodes: List<MediaItem> = emptyList(),
-    val detailEpisodesNextCursor: PageCursor? = null,
-    val detailEpisodesLoadingMore: Boolean = false,
+    /** Legacy series-detail play button target (provider target resolved to a real episode). */
+    val detailPlayTarget: MediaItem? = null,
+    /** Legacy season-detail play button target for the currently selected season. */
+    val selectedSeasonPlayTarget: MediaItem? = null,
     val detailSectionsLoading: Boolean = false,
     val detailSectionsError: String? = null,
     val detailActionBusy: Boolean = false,
     val detailActionError: String? = null,
-    val detailSimilar: List<MediaItem> = emptyList(),
-    val detailSimilarLoading: Boolean = false,
-    val detailSimilarError: String? = null,
     /** 详情页上用户指定的播放版本/轨道（仅对当前 detail 生效）。 */
     val selectedMediaSourceId: String? = null,
     val selectedAudioStreamIndex: Int? = null,
@@ -74,31 +75,29 @@ data class MediaBrowserState(
     val personSeries: List<MediaItem> = emptyList(),
     val personEpisodes: List<MediaItem> = emptyList(),
     val personSectionsLoading: Boolean = false,
-    val personCursors: Map<MediaType, PageCursor> = emptyMap(),
-    val personLoadingMore: Set<MediaType> = emptySet(),
     val personFavoriteBusy: Boolean = false,
     /** 独立播放历史：resume（进行中）+ 已看完两路分页合并，剧集按剧去重。 */
-    val historyItems: List<MediaItem> = emptyList(),
+    val historyItems: List<PlaybackHistoryItem> = emptyList(),
     val historyLoading: Boolean = false,
     val historyRefreshing: Boolean = false,
     val historyLoadingMore: Boolean = false,
+    val historyLoadMoreFailed: Boolean = false,
+    val historyCanLoadMore: Boolean = false,
     val historyError: String? = null,
     val historyResumeCursor: PageCursor? = null,
     val historyCompletedCursor: PageCursor? = null,
     /** null = 未探测；探测由 [refreshDeleteAvailability] 触发。 */
     val deleteAvailable: Boolean? = null,
+    /** null = 尚未完成 Provider 用户角色探测。 */
+    val administrator: Boolean? = null,
     val deleteBusy: Boolean = false,
     val deleteError: String? = null,
 )
 
-/**
- * Durable playback selections (legacy `AppPreference.preferredMediaSourceId`).
- * One global "last picked version" — the picker on the next detail page
- * preselects it when the item carries a matching source id.
- */
+/** Durable playback selections keyed exactly like legacy: provider account + media item. */
 interface MediaPlaybackPreferences {
-    suspend fun preferredMediaSourceId(): String?
-    suspend fun setPreferredMediaSourceId(id: String?)
+    suspend fun preferredMediaSourceId(accountId: AccountId, mediaId: MediaId): String?
+    suspend fun setPreferredMediaSourceId(accountId: AccountId, mediaId: MediaId, sourceId: String)
 }
 
 /** One screen and one account. Calls/state mutations run on the UI dispatcher.
@@ -125,10 +124,12 @@ class MediaBrowser(
     private var pages = MediaPageAccumulator()
     private var searchPages = MediaPageAccumulator()
     private var favoritePages = MediaPageAccumulator()
-    private var episodePages = MediaPageAccumulator()
-    private val personPages = mutableMapOf<MediaType, MediaPageAccumulator>()
     private var historyResumePages = MediaPageAccumulator()
     private var historyCompletedPages = MediaPageAccumulator()
+    private var historyResumeRetryInitial = false
+    private var historyCompletedRetryInitial = false
+    private var historyPageSize = HistoryPageSize
+    private val historySeriesCache = mutableMapOf<MediaId, HistorySeriesCacheEntry>()
 
     suspend fun start() {
         if (initialized) return
@@ -164,10 +165,6 @@ class MediaBrowser(
                     val snapshot = repository.homeSnapshot(session)
                     if (operation != ticket) return@launch
                     if (snapshot != null && state.value.homeFeed == HomeFeed()) {
-                        println(
-                            "[MaFeiTiming] home snapshot painted " +
-                                "(${snapshot.recommendations.size + snapshot.resume.size + snapshot.nextUp.size + snapshot.latest.size} items)",
-                        )
                         mutableState.value = state.value.copy(homeFeed = snapshot, homeError = null, homeStale = false)
                     }
                     val home = repository.home(session, refresh = true)
@@ -370,7 +367,20 @@ class MediaBrowser(
         }
     }
 
-    suspend fun search(term: String) {
+    /**
+     * Legacy SearchViewModel semantics: one screen load, at most 800 visible
+     * Movie/Series/Episode/Video results, with no UI-driven pagination.
+     *
+     * PageRequest is intentionally capped at 500 by the shared contract, so
+     * Jellyfin's old `limit = 800` request is reproduced as two internal
+     * segments. Feiniu remains a single endpoint call because its adapter
+     * returns the provider's unpaged search result in one chunk.
+     *
+     * @return true only when the current request completed successfully. The
+     * caller uses this to preserve the old "submit saves history after success"
+     * behavior; incremental text changes ignore the return value.
+     */
+    suspend fun search(term: String): Boolean {
         val normalized = term.trim()
         val operation = ++searchTicket
         searchPages = MediaPageAccumulator()
@@ -384,7 +394,7 @@ class MediaBrowser(
                 searchNextCursor = null,
                 searchTotalEstimate = null,
             )
-            return
+            return false
         }
         mutableState.value = state.value.copy(
             searchQuery = normalized,
@@ -396,21 +406,46 @@ class MediaBrowser(
             searchTotalEstimate = null,
         )
         try {
-            val loaded = repository.browse(
+            val request = PageRequest(
+                pageSize = SearchFirstSegmentSize,
+                filter = MediaFilter(mediaTypes = SearchMediaTypes),
+            )
+            val first = repository.browse(
                 session,
                 MediaQuery.Search(normalized),
-                PageRequest(pageSize = SearchPageSize),
+                request,
                 refresh = true,
             )
-            if (operation != searchTicket) return
-            val page = searchPages.append(null, loaded.value)
+            if (operation != searchTicket) return false
+            var page = searchPages.append(null, first.value)
+            val secondCursor = page.nextCursor
+            val remaining = LegacySearchLimit - page.items.size
+            if (secondCursor != null && remaining > 0) {
+                val second = repository.browse(
+                    session,
+                    MediaQuery.Search(normalized),
+                    PageRequest(
+                        cursor = secondCursor,
+                        pageSize = minOf(remaining, PageRequest.MAX_PAGE_SIZE),
+                        filter = MediaFilter(mediaTypes = SearchMediaTypes),
+                    ),
+                    refresh = true,
+                )
+                if (operation != searchTicket) return false
+                page = searchPages.append(secondCursor, second.value)
+            }
+            val items = page.items.take(LegacySearchLimit)
             mutableState.value = state.value.copy(
-                searchItems = page.items,
+                searchItems = items,
                 searchLoading = false,
+                searchLoadingMore = false,
                 searchError = null,
-                searchNextCursor = page.nextCursor,
-                searchTotalEstimate = page.totalEstimate,
+                // The old page displayed the number of mapped items, not the
+                // server's possibly larger TotalRecordCount.
+                searchNextCursor = null,
+                searchTotalEstimate = items.size,
             )
+            return true
         } catch (cancelled: CancellationException) {
             if (operation == searchTicket) mutableState.value = state.value.copy(searchLoading = false)
             throw cancelled
@@ -418,37 +453,7 @@ class MediaBrowser(
             if (operation == searchTicket) {
                 mutableState.value = state.value.copy(searchLoading = false, searchError = browseError(failure))
             }
-        }
-    }
-
-    suspend fun loadMoreSearch() {
-        val before = state.value
-        val cursor = before.searchNextCursor ?: return
-        val term = before.searchQuery.takeIf { it.isNotBlank() } ?: return
-        if (before.searchLoading || before.searchLoadingMore) return
-        val operation = ++searchTicket
-        mutableState.value = before.copy(searchLoadingMore = true, searchError = null)
-        try {
-            val loaded = repository.browse(
-                session,
-                MediaQuery.Search(term),
-                PageRequest(cursor = cursor, pageSize = SearchPageSize),
-            )
-            if (operation != searchTicket) return
-            val page = searchPages.append(cursor, loaded.value)
-            mutableState.value = state.value.copy(
-                searchItems = page.items,
-                searchLoadingMore = false,
-                searchNextCursor = page.nextCursor,
-                searchTotalEstimate = page.totalEstimate,
-            )
-        } catch (cancelled: CancellationException) {
-            if (operation == searchTicket) mutableState.value = state.value.copy(searchLoadingMore = false)
-            throw cancelled
-        } catch (failure: Exception) {
-            if (operation == searchTicket) {
-                mutableState.value = state.value.copy(searchLoadingMore = false, searchError = browseError(failure))
-            }
+            return false
         }
     }
 
@@ -579,14 +584,16 @@ class MediaBrowser(
         pageSize = CatalogPageSize,
         sort = state.value.favoriteSort,
         filter = MediaFilter(
-            mediaTypes = if (capabilities.favoritesFilter) FavoriteMediaTypes else emptySet(),
+            // Fixed page semantics from FavoriteListViewModel.queryTypes. This
+            // is not an arbitrary user-composed filter, so Feiniu can forward
+            // it even though it still advertises favoritesFilter=false.
+            mediaTypes = FavoriteMediaTypes,
             favoritesOnly = true,
         ),
     )
 
     suspend fun openDetail(id: MediaId) {
         val operation = ++detailTicket
-        episodePages = MediaPageAccumulator()
         mutableState.value = state.value.copy(
             detailId = id,
             detail = null,
@@ -594,16 +601,14 @@ class MediaBrowser(
             detailError = null,
             detailSeasons = emptyList(),
             selectedSeasonId = null,
+            selectedSeasonDetail = null,
             detailEpisodes = emptyList(),
-            detailEpisodesNextCursor = null,
-            detailEpisodesLoadingMore = false,
+            detailPlayTarget = null,
+            selectedSeasonPlayTarget = null,
             detailSectionsLoading = false,
             detailSectionsError = null,
             detailActionBusy = false,
             detailActionError = null,
-            detailSimilar = emptyList(),
-            detailSimilarLoading = false,
-            detailSimilarError = null,
             selectedMediaSourceId = null,
             selectedAudioStreamIndex = null,
             selectedSubtitleStreamIndex = null,
@@ -611,28 +616,33 @@ class MediaBrowser(
         try {
             val loaded = repository.item(session, id, refresh = true)
             if (operation != detailTicket) return
-            // 偏好版本预选：上次手动挑过的媒体源在这一条数据上也存在时直接选中
-            //（legacy preferredMediaSourceId 的行为）。
+            val playableSources = loaded.value.mediaSources.filter { it.playable != false }
+            // 旧版按「账号 + 媒体条目」恢复版本；找不到时明确选择第一条可播源，
+            // 起播时也会把这个 source id 交给 Provider，而不是交回服务器猜测。
             var preferredSourceId: String? = null
-            if (loaded.value.mediaSources.size > 1) {
+            if (playableSources.size > 1) {
                 val remembered = try {
-                    playbackPreferences?.preferredMediaSourceId()
+                    playbackPreferences?.preferredMediaSourceId(session.accountId, id)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
                     null
                 }
                 preferredSourceId = remembered?.takeIf { candidate ->
-                    loaded.value.mediaSources.any { it.id == candidate }
+                    playableSources.any { it.id == candidate }
                 }
             }
+            val selectedSource = playableSources.firstOrNull { it.id == preferredSourceId }
+                ?: playableSources.firstOrNull()
             mutableState.value = state.value.copy(detail = loaded.value, detailLoading = false,
                 detailError = if (loaded.origin == MediaLoadOrigin.StaleCache) "连接暂不可用，显示缓存详情" else null,
-                selectedMediaSourceId = preferredSourceId)
+                selectedMediaSourceId = selectedSource?.id,
+                selectedAudioStreamIndex = selectedSource?.legacyDefaultAudioStreamIndex(),
+                selectedSubtitleStreamIndex = selectedSource?.legacyDefaultSubtitleStreamIndex(),
+                detailPlayTarget = loaded.value.takeIf { it.mediaType != MediaType.Series && it.canPlay },
+            )
             if (loaded.value.mediaType == MediaType.Series) {
-                loadSeriesSections(id, operation)
-            } else {
-                loadSimilar(id, operation)
+                loadSeriesSections(id, loaded.value, operation)
             }
         } catch (cancelled: CancellationException) {
             if (operation == detailTicket) mutableState.value = state.value.copy(detailLoading = false)
@@ -642,47 +652,19 @@ class MediaBrowser(
         }
     }
 
-    /**
-     * Legacy VideoDetailPage 「相似推荐」: one small row under the cast
-     * section. Loaded for every playable/detailable item; a failure leaves
-     * the section absent instead of failing the page.
-     */
-    private suspend fun loadSimilar(id: MediaId, operation: Long) {
-        mutableState.value = state.value.copy(detailSimilarLoading = true, detailSimilarError = null)
-        try {
-            val loaded = repository.browse(session, MediaQuery.Similar(id), refresh = true)
-            if (operation != detailTicket) return
-            mutableState.value = state.value.copy(
-                detailSimilar = loaded.value.items,
-                detailSimilarLoading = false,
-                detailSimilarError = null,
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            if (operation == detailTicket) {
-                mutableState.value = state.value.copy(
-                    detailSimilar = emptyList(),
-                    detailSimilarLoading = false,
-                    detailSimilarError = null, // 相似区失败不提示，区块直接消失
-                )
-            }
-        }
-    }
-
-    /** 用户在详情页指定播放版本；选择持久化为全局「最近一次选择」。 */
+    /** 用户在详情页指定播放版本；与旧版一致，按当前账号和媒体条目持久化。 */
     suspend fun selectMediaSource(sourceId: String?) {
         val detail = state.value.detail ?: return
-        if (sourceId != null && detail.mediaSources.none { it.id == sourceId }) return
+        val selected = sourceId?.let { id ->
+            detail.mediaSources.firstOrNull { it.id == id && it.playable != false }
+        } ?: return
         mutableState.value = state.value.copy(
-            selectedMediaSourceId = sourceId,
-            // 换版本后旧轨道索引不再有意义（不同源的流布局不同）。
-            selectedAudioStreamIndex = null,
-            selectedSubtitleStreamIndex = null,
+            selectedMediaSourceId = selected.id,
+            selectedAudioStreamIndex = selected.legacyDefaultAudioStreamIndex(),
+            selectedSubtitleStreamIndex = selected.legacyDefaultSubtitleStreamIndex(),
         )
-        if (sourceId == null) return
         try {
-            playbackPreferences?.setPreferredMediaSourceId(sourceId)
+            playbackPreferences?.setPreferredMediaSourceId(session.accountId, detail.id, sourceId)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -721,11 +703,8 @@ class MediaBrowser(
             personSeries = emptyList(),
             personEpisodes = emptyList(),
             personSectionsLoading = false,
-            personCursors = emptyMap(),
-            personLoadingMore = emptySet(),
             personFavoriteBusy = false,
         )
-        personPages.clear()
         try {
             val loaded = repository.person(session, id, refresh = true)
             if (operation != personTicket) return
@@ -745,14 +724,9 @@ class MediaBrowser(
             }
             if (operation != personTicket) return
             mutableState.value = state.value.copy(
-                personMovies = works.first.items,
-                personSeries = works.second.items,
-                personEpisodes = works.third.items,
-                personCursors = mapOf(
-                    MediaType.Movie to works.first.cursor,
-                    MediaType.Series to works.second.cursor,
-                    MediaType.Episode to works.third.cursor,
-                ).filterValues { it != null }.mapValues { it.value!! },
+                personMovies = works.first,
+                personSeries = works.second,
+                personEpisodes = works.third,
                 personSectionsLoading = false,
             )
         } catch (cancelled: CancellationException) {
@@ -771,9 +745,7 @@ class MediaBrowser(
         }
     }
 
-    private class PersonWorkPage(val items: List<MediaItem>, val cursor: PageCursor?)
-
-    private suspend fun loadPersonWorks(personId: MediaId, type: MediaType): PersonWorkPage {
+    private suspend fun loadPersonWorks(personId: MediaId, type: MediaType): List<MediaItem> {
         val request = PageRequest(
             pageSize = PersonWorkPageSize,
             sort = MediaSort(MediaSortField.Title, SortDirection.Ascending),
@@ -786,63 +758,13 @@ class MediaBrowser(
                 request = request,
                 refresh = true,
             )
-            val accumulator = MediaPageAccumulator()
-            val page = accumulator.append(null, loaded.value)
-            personPages[type] = accumulator
-            PersonWorkPage(page.items, page.nextCursor)
+            loaded.value.items
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             // The legacy page keeps the other two work groups when one provider
             // query fails, so a section failure is represented by an empty group.
-            personPages.remove(type)
-            PersonWorkPage(emptyList(), null)
-        }
-    }
-
-    /** 人物作品横滑到尾部时追加下一页（契约的 PersonItems 分页能力首次被 UI 消费）。 */
-    suspend fun loadMorePersonWorks(type: MediaType) {
-        val current = state.value
-        val personId = current.personId ?: return
-        val cursor = current.personCursors[type] ?: return
-        if (type in current.personLoadingMore) return
-        if (current.personMovies.size + current.personSeries.size + current.personEpisodes.size == 0) return
-        val operation = personTicket
-        mutableState.value = current.copy(personLoadingMore = current.personLoadingMore + type)
-        try {
-            val loaded = repository.browse(
-                session,
-                MediaQuery.PersonItems(personId),
-                PageRequest(
-                    cursor = cursor,
-                    pageSize = PersonWorkPageSize,
-                    sort = MediaSort(MediaSortField.Title, SortDirection.Ascending),
-                    filter = MediaFilter(mediaTypes = setOf(type)),
-                ),
-            )
-            if (operation != personTicket) return
-            val accumulator = personPages[type] ?: MediaPageAccumulator().also { personPages[type] = it }
-            val page = accumulator.append(cursor, loaded.value)
-            mutableState.value = state.value.copy(
-                personMovies = if (type == MediaType.Movie) page.items else state.value.personMovies,
-                personSeries = if (type == MediaType.Series) page.items else state.value.personSeries,
-                personEpisodes = if (type == MediaType.Episode) page.items else state.value.personEpisodes,
-                personCursors = if (page.nextCursor != null) {
-                    state.value.personCursors + (type to page.nextCursor!!)
-                } else {
-                    state.value.personCursors - type
-                },
-                personLoadingMore = state.value.personLoadingMore - type,
-            )
-        } catch (cancelled: CancellationException) {
-            if (operation == personTicket) {
-                mutableState.value = state.value.copy(personLoadingMore = state.value.personLoadingMore - type)
-            }
-            throw cancelled
-        } catch (failure: Exception) {
-            if (operation == personTicket) {
-                mutableState.value = state.value.copy(personLoadingMore = state.value.personLoadingMore - type)
-            }
+            emptyList()
         }
     }
 
@@ -871,7 +793,6 @@ class MediaBrowser(
 
     fun clearPerson() {
         ++personTicket
-        personPages.clear()
         mutableState.value = state.value.copy(
             personId = null,
             person = null,
@@ -881,8 +802,6 @@ class MediaBrowser(
             personSeries = emptyList(),
             personEpisodes = emptyList(),
             personSectionsLoading = false,
-            personCursors = emptyMap(),
-            personLoadingMore = emptySet(),
             personFavoriteBusy = false,
         )
     }
@@ -892,16 +811,31 @@ class MediaBrowser(
         val seriesId = current.detail?.takeIf { it.mediaType == MediaType.Series }?.id ?: return
         if (current.detailSeasons.none { it.id == id }) return
         val operation = detailTicket
-        episodePages = MediaPageAccumulator()
         mutableState.value = current.copy(
             selectedSeasonId = id,
+            selectedSeasonDetail = null,
             detailEpisodes = emptyList(),
-            detailEpisodesNextCursor = null,
-            detailEpisodesLoadingMore = false,
+            selectedSeasonPlayTarget = null,
             detailSectionsLoading = true,
             detailSectionsError = null,
         )
-        loadEpisodes(seriesId, id, operation)
+        val seasonDetail = try {
+            repository.item(session, id, refresh = true).value
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        if (operation != detailTicket || state.value.selectedSeasonId != id) return
+        mutableState.value = state.value.copy(selectedSeasonDetail = seasonDetail)
+        loadEpisodes(
+            seriesId = seriesId,
+            seasonId = id,
+            operation = operation,
+            playbackTarget = seasonDetail?.playbackTarget,
+            preferProgressFallback = true,
+            updateSeriesTarget = false,
+        )
     }
 
     suspend fun toggleFavorite() {
@@ -925,35 +859,62 @@ class MediaBrowser(
 
     private enum class HistorySource { Resume, Completed }
 
+    private data class HistorySourceLoad(
+        val requested: Boolean,
+        val failed: Boolean,
+    )
+
+    private data class HistorySeriesPosition(
+        val seasonNumber: Int,
+        val episodeNumber: Int,
+        val hasMultipleSeasons: Boolean,
+    )
+
+    private data class HistorySeriesCacheEntry(
+        val position: HistorySeriesPosition?,
+        val expiresAtEpochMs: Long,
+    )
+
     /**
      * 独立播放历史（旧版 MineHistoryPage）：resume（进行中）与已看完（played）
      * 两路各自分页，浏览器层按 legacy 规则合并——剧集按所属剧去重（同一部剧只留
      * 最近一条），电影按条目去重，按最后播放时间倒序。与首页捎带的 resume 段
      * 解耦：这里有自己的分页与刷新，不再借用 homeFeed。
      */
-    suspend fun loadHistory() {
+    suspend fun loadHistory() = loadHistory(HistoryPageSize)
+
+    /** Legacy Mine tab preview: each source requests 24 rows, then the UI shows 6/8. */
+    suspend fun loadHistoryPreview() = loadHistory(MineHistoryPreviewSourceLimit)
+
+    private suspend fun loadHistory(pageSize: Int) {
         val operation = ++historyTicket
+        historyPageSize = pageSize
         historyResumePages = MediaPageAccumulator()
         historyCompletedPages = MediaPageAccumulator()
-        val alreadyLoaded = state.value.historyItems.isNotEmpty() || state.value.historyResumeCursor != null ||
-            state.value.historyCompletedCursor != null
+        historyResumeRetryInitial = false
+        historyCompletedRetryInitial = false
         mutableState.value = state.value.copy(
-            historyLoading = !alreadyLoaded,
-            historyRefreshing = alreadyLoaded,
+            historyLoading = true,
+            historyRefreshing = false,
             historyLoadingMore = false,
+            historyLoadMoreFailed = false,
+            historyCanLoadMore = true,
             historyError = null,
-            historyItems = if (alreadyLoaded) state.value.historyItems else emptyList(),
+            historyItems = emptyList(),
             historyResumeCursor = null,
             historyCompletedCursor = null,
         )
         try {
-            coroutineScope {
-                val resume = async { loadHistorySource(HistorySource.Resume, cursor = null, fetch = true) }
-                val completed = async { loadHistorySource(HistorySource.Completed, cursor = null, fetch = true) }
-                resume.await()
-                completed.await()
+            val (resume, completed) = coroutineScope {
+                val resume = async {
+                    loadHistorySource(operation, HistorySource.Resume, cursor = null, fetch = true)
+                }
+                val completed = async {
+                    loadHistorySource(operation, HistorySource.Completed, cursor = null, fetch = true)
+                }
+                resume.await() to completed.await()
             }
-            publishHistory(operation)
+            publishHistory(operation, initial = true, resume = resume, completed = completed)
         } catch (cancelled: CancellationException) {
             if (operation == historyTicket) {
                 mutableState.value = state.value.copy(historyLoading = false, historyRefreshing = false)
@@ -964,6 +925,7 @@ class MediaBrowser(
                 mutableState.value = state.value.copy(
                     historyLoading = false,
                     historyRefreshing = false,
+                    historyCanLoadMore = false,
                     historyError = browseError(failure),
                 )
             }
@@ -974,19 +936,29 @@ class MediaBrowser(
     suspend fun loadMoreHistory() {
         val before = state.value
         if (before.historyLoading || before.historyRefreshing || before.historyLoadingMore) return
-        val resumeCursor = before.historyResumeCursor
-        val completedCursor = before.historyCompletedCursor
-        if (resumeCursor == null && completedCursor == null) return
+        if (!before.historyCanLoadMore || before.historyLoadMoreFailed) return
+        val resumeCursor = if (historyResumeRetryInitial) null else before.historyResumeCursor
+        val completedCursor = if (historyCompletedRetryInitial) null else before.historyCompletedCursor
+        val fetchResume = historyResumeRetryInitial || resumeCursor != null
+        val fetchCompleted = historyCompletedRetryInitial || completedCursor != null
+        if (!fetchResume && !fetchCompleted) return
         val operation = ++historyTicket
-        mutableState.value = before.copy(historyLoadingMore = true, historyError = null)
+        mutableState.value = before.copy(
+            historyLoadingMore = true,
+            historyLoadMoreFailed = false,
+            historyError = null,
+        )
         try {
-            coroutineScope {
-                val resume = async { loadHistorySource(HistorySource.Resume, cursor = resumeCursor, fetch = resumeCursor != null) }
-                val completed = async { loadHistorySource(HistorySource.Completed, cursor = completedCursor, fetch = completedCursor != null) }
-                resume.await()
-                completed.await()
+            val (resume, completed) = coroutineScope {
+                val resume = async {
+                    loadHistorySource(operation, HistorySource.Resume, resumeCursor, fetchResume)
+                }
+                val completed = async {
+                    loadHistorySource(operation, HistorySource.Completed, completedCursor, fetchCompleted)
+                }
+                resume.await() to completed.await()
             }
-            publishHistory(operation)
+            publishHistory(operation, initial = false, resume = resume, completed = completed)
         } catch (cancelled: CancellationException) {
             if (operation == historyTicket) {
                 mutableState.value = state.value.copy(historyLoadingMore = false)
@@ -999,18 +971,26 @@ class MediaBrowser(
         }
     }
 
+    /** The old footer owns retry; reaching the end again must not auto-loop. */
+    suspend fun retryLoadMoreHistory() {
+        val before = state.value
+        if (!before.historyLoadMoreFailed || before.historyLoadingMore) return
+        mutableState.value = before.copy(historyLoadMoreFailed = false)
+        loadMoreHistory()
+    }
+
     private fun historyResumeQuery(cursor: PageCursor?) = PageRequest(
         cursor = cursor,
-        pageSize = HistoryPageSize,
-        filter = MediaFilter(mediaTypes = setOf(MediaType.Movie, MediaType.Episode, MediaType.Video)),
+        pageSize = historyPageSize,
+        filter = MediaFilter(mediaTypes = HistoryMediaTypes),
     )
 
     private fun historyCompletedQuery(cursor: PageCursor?) = PageRequest(
         cursor = cursor,
-        pageSize = HistoryPageSize,
+        pageSize = historyPageSize,
         sort = MediaSort(MediaSortField.DatePlayed, SortDirection.Descending),
         filter = MediaFilter(
-            mediaTypes = setOf(MediaType.Movie, MediaType.Episode, MediaType.Video),
+            mediaTypes = HistoryMediaTypes,
             playedOnly = true,
         ),
     )
@@ -1020,37 +1000,68 @@ class MediaBrowser(
      * 累加器始终持有该路的完整累积，[publishHistory] 从快照合并，因此翻页时
      * 已耗尽的另一路不会丢内容。
      */
-    private suspend fun loadHistorySource(source: HistorySource, cursor: PageCursor?, fetch: Boolean) {
-        if (!fetch) return
-        try {
+    private suspend fun loadHistorySource(
+        operation: Long,
+        source: HistorySource,
+        cursor: PageCursor?,
+        fetch: Boolean,
+    ): HistorySourceLoad {
+        if (!fetch) return HistorySourceLoad(requested = false, failed = false)
+        return try {
+            val page =
             when (source) {
                 HistorySource.Resume -> repository.browse(
                     session,
                     MediaQuery.Resume,
                     historyResumeQuery(cursor),
                     refresh = cursor == null,
-                ).value.let { historyResumePages.append(cursor, it) }
+                ).value
                 HistorySource.Completed -> repository.browse(
                     session,
                     MediaQuery.Items(null),
                     historyCompletedQuery(cursor),
                     refresh = cursor == null,
-                ).value.let { historyCompletedPages.append(cursor, it) }
+                ).value
             }
+            if (operation != historyTicket) return HistorySourceLoad(requested = true, failed = false)
+            when (source) {
+                HistorySource.Resume -> {
+                    historyResumePages.append(cursor, page)
+                    if (cursor == null) historyResumeRetryInitial = false
+                }
+                HistorySource.Completed -> {
+                    historyCompletedPages.append(cursor, page)
+                    if (cursor == null) historyCompletedRetryInitial = false
+                }
+            }
+            HistorySourceLoad(requested = true, failed = false)
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            if (cursor == null) {
-                // 首页失败：重置该路，等待下次刷新；翻页失败则保留旧累积。
-                if (source == HistorySource.Resume) historyResumePages = MediaPageAccumulator()
-                else historyCompletedPages = MediaPageAccumulator()
+        } catch (_: Exception) {
+            if (operation == historyTicket && cursor == null) {
+                // A failed first page remains retryable from cursor=null. A
+                // failed following page keeps the accumulator's old cursor.
+                if (source == HistorySource.Resume) historyResumeRetryInitial = true
+                else historyCompletedRetryInitial = true
             }
+            HistorySourceLoad(requested = true, failed = true)
         }
     }
 
-    private suspend fun publishHistory(operation: Long) {
+    private suspend fun publishHistory(
+        operation: Long,
+        initial: Boolean,
+        resume: HistorySourceLoad,
+        completed: HistorySourceLoad,
+    ) {
         if (operation != historyTicket) return
         val merged = mergeHistory(historyResumePages.snapshot().items, historyCompletedPages.snapshot().items)
+        val requested = listOf(resume, completed).filter { it.requested }
+        val anyFailed = requested.any { it.failed }
+        val allRequestedFailed = requested.isNotEmpty() && requested.all { it.failed }
+        val pageError = initial && (allRequestedFailed || (merged.isEmpty() && anyFailed))
+        val canLoadMore = historyResumeRetryInitial || historyCompletedRetryInitial ||
+            historyResumePages.snapshot().nextCursor != null || historyCompletedPages.snapshot().nextCursor != null
         mutableState.value = state.value.copy(
             historyItems = merged,
             historyResumeCursor = historyResumePages.snapshot().nextCursor,
@@ -1058,17 +1069,21 @@ class MediaBrowser(
             historyLoading = false,
             historyRefreshing = false,
             historyLoadingMore = false,
-            historyError = null,
+            historyLoadMoreFailed = !pageError && anyFailed,
+            historyCanLoadMore = canLoadMore,
+            historyError = if (pageError) HistoryLoadError else null,
         )
+        if (!pageError && merged.isNotEmpty()) enrichHistorySeries(operation, merged)
     }
 
     /** Legacy MineHistoryPlanner.merge：剧集按剧折叠保留最近一条，按播放时间倒序。 */
-    private fun mergeHistory(vararg sources: List<MediaItem>): List<MediaItem> {
+    private fun mergeHistory(vararg sources: List<MediaItem>): List<PlaybackHistoryItem> {
         val byKey = linkedMapOf<String, Pair<Long, MediaItem>>()
         sources.forEach { source ->
             source.forEach { item ->
                 if (item.id.value.isEmpty()) return@forEach
-                val playedAt = item.userData.lastPlayedEpochMs ?: 0L
+                if (item.mediaType !in HistoryMediaTypes) return@forEach
+                val playedAt = item.userData.lastPlayedEpochMs ?: return@forEach
                 val key = if (item.mediaType == MediaType.Episode && item.seriesId != null) {
                     "series:${item.seriesId!!.value}"
                 } else {
@@ -1078,7 +1093,110 @@ class MediaBrowser(
                 if (current == null || playedAt > current.first) byKey[key] = playedAt to item
             }
         }
-        return byKey.values.sortedByDescending { it.first }.map { it.second }
+        return byKey.values.sortedByDescending { it.first }.map { (_, item) -> historyItem(item) }
+    }
+
+    private fun historyItem(item: MediaItem): PlaybackHistoryItem {
+        val cached = item.seriesId?.let(historySeriesCache::get)
+            ?.takeIf { it.expiresAtEpochMs > SystemEpochClock.nowEpochMs() }
+            ?.position
+        return PlaybackHistoryItem(
+            media = item,
+            latestSeasonNumber = cached?.seasonNumber,
+            latestEpisodeNumber = cached?.episodeNumber,
+            seriesHasMultipleSeasons = (item.seasonNumber ?: 0) > 1 || cached?.hasMultipleSeasons == true,
+        )
+    }
+
+    private suspend fun enrichHistorySeries(operation: Long, visible: List<PlaybackHistoryItem>) {
+        val seriesIds = visible.asSequence()
+            .filter { it.media.mediaType == MediaType.Episode }
+            .mapNotNull { it.media.seriesId }
+            .distinct()
+            .toList()
+        if (seriesIds.isEmpty()) return
+        val positions = mutableMapOf<MediaId, HistorySeriesPosition>()
+        seriesIds.chunked(HistoryEnrichmentConcurrency).forEach { batch ->
+            val loaded = coroutineScope {
+                batch.map { seriesId ->
+                    async {
+                        try {
+                            seriesId to latestHistorySeriesPosition(seriesId)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            seriesId to null
+                        }
+                    }
+                }.map { it.await() }
+            }
+            if (operation != historyTicket) return
+            loaded.forEach { (seriesId, position) ->
+                if (position != null) positions[seriesId] = position
+            }
+        }
+        if (operation != historyTicket || positions.isEmpty()) return
+        mutableState.value = state.value.copy(
+            historyItems = state.value.historyItems.map { item ->
+                val position = item.media.seriesId?.let(positions::get) ?: return@map item
+                item.copy(
+                    latestSeasonNumber = position.seasonNumber,
+                    latestEpisodeNumber = position.episodeNumber,
+                    seriesHasMultipleSeasons = item.seriesHasMultipleSeasons || position.hasMultipleSeasons,
+                )
+            },
+        )
+    }
+
+    private suspend fun latestHistorySeriesPosition(seriesId: MediaId): HistorySeriesPosition? {
+        val now = SystemEpochClock.nowEpochMs()
+        historySeriesCache[seriesId]?.let { cached ->
+            if (cached.expiresAtEpochMs > now) return cached.position
+            historySeriesCache.remove(seriesId)
+        }
+        val accumulator = MediaPageAccumulator()
+        val first = repository.browse(
+            session,
+            MediaQuery.Episodes(seriesId, seasonId = null),
+            PageRequest(pageSize = PageRequest.MAX_PAGE_SIZE),
+            refresh = true,
+        ).value
+        var page = accumulator.append(null, first)
+        page.nextCursor?.let { cursor ->
+            val second = repository.browse(
+                session,
+                MediaQuery.Episodes(seriesId, seasonId = null),
+                PageRequest(cursor = cursor, pageSize = PageRequest.MAX_PAGE_SIZE),
+            ).value
+            page = accumulator.append(cursor, second)
+        }
+        val position = latestHistorySeriesPosition(page.items)
+        historySeriesCache[seriesId] = HistorySeriesCacheEntry(
+            position = position,
+            expiresAtEpochMs = now + HistorySeriesCacheTtlMs,
+        )
+        return position
+    }
+
+    private fun latestHistorySeriesPosition(episodes: List<MediaItem>): HistorySeriesPosition? {
+        var latestSeason = -1
+        var latestEpisode = -1
+        val seasons = mutableSetOf<Int>()
+        episodes.forEach { item ->
+            val season = item.seasonNumber?.takeIf { it > 0 } ?: return@forEach
+            val episode = item.episodeNumber?.takeIf { it > 0 } ?: return@forEach
+            seasons += season
+            if (season > latestSeason || (season == latestSeason && episode > latestEpisode)) {
+                latestSeason = season
+                latestEpisode = episode
+            }
+        }
+        if (latestEpisode <= 0) return null
+        return HistorySeriesPosition(
+            seasonNumber = latestSeason,
+            episodeNumber = latestEpisode,
+            hasMultipleSeasons = seasons.size > 1 || latestSeason > 1,
+        )
     }
 
     // ---------------------------------------------------------------- deletion
@@ -1098,6 +1216,19 @@ class MediaBrowser(
             false
         }
         mutableState.value = state.value.copy(deleteAvailable = available)
+    }
+
+    /** 旧版“我的”页角色标签：Jellyfin Policy / 飞牛 user/info 是唯一来源。 */
+    suspend fun refreshAdministratorStatus() {
+        if (state.value.administrator != null) return
+        val administrator = try {
+            repository.isAdministrator(session)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
+        mutableState.value = state.value.copy(administrator = administrator)
     }
 
     /** 管理员批量删除媒体（列表页多选 / 详情页单条）。成功后同步修剪各列表。 */
@@ -1155,22 +1286,68 @@ class MediaBrowser(
         }
     }
 
-    private suspend fun loadSeriesSections(seriesId: MediaId, operation: Long) {
+    private suspend fun loadSeriesSections(seriesId: MediaId, detail: MediaItem, operation: Long) {
         mutableState.value = state.value.copy(detailSectionsLoading = true, detailSectionsError = null)
         try {
-            val loaded = repository.browse(session, MediaQuery.Seasons(seriesId), refresh = true)
+            val (loaded, providerNextUp) = coroutineScope {
+                val seasons = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    repository.browse(session, MediaQuery.Seasons(seriesId), refresh = true)
+                }
+                val nextUp = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    if (detail.playbackTarget != null) return@async null
+                    try {
+                        repository.browse(session, MediaQuery.NextUp(seriesId), refresh = true).value.items.firstOrNull()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Legacy preferredSeriesTarget deliberately treats a
+                        // failed Next Up lookup as "no target".
+                        null
+                    }
+                }
+                seasons.await() to nextUp.await()
+            }
             if (operation != detailTicket) return
             val seasons = loaded.value.items.sortedWith(
                 compareBy<MediaItem> { it.seasonNumber ?: Int.MAX_VALUE }.thenBy { it.title },
             )
-            val selected = seasons.firstOrNull()?.id
+            val playbackTarget = detail.playbackTarget ?: providerNextUp?.toPlaybackTarget()
+            val selected = playbackTarget?.seasonNumber?.let { targetSeason ->
+                seasons.firstOrNull { it.seasonNumber == targetSeason }
+            } ?: seasons.firstOrNull()
             mutableState.value = state.value.copy(
                 detailSeasons = seasons,
-                selectedSeasonId = selected,
+                selectedSeasonId = selected?.id,
+                selectedSeasonDetail = null,
                 detailSectionsLoading = selected != null,
                 detailSectionsError = null,
             )
-            if (selected != null) loadEpisodes(seriesId, selected, operation)
+            if (selected != null) {
+                loadEpisodes(
+                    seriesId = seriesId,
+                    seasonId = selected.id,
+                    operation = operation,
+                    playbackTarget = playbackTarget,
+                    preferProgressFallback = false,
+                    updateSeriesTarget = true,
+                )
+            } else {
+                val directTarget = providerNextUp ?: playbackTarget?.id?.let { id ->
+                    try {
+                        repository.item(session, id, refresh = true).value
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (operation == detailTicket) {
+                    mutableState.value = state.value.copy(
+                        detailPlayTarget = directTarget,
+                        detailSectionsLoading = false,
+                    )
+                }
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -1183,25 +1360,44 @@ class MediaBrowser(
         }
     }
 
-    private suspend fun loadEpisodes(seriesId: MediaId, seasonId: MediaId, operation: Long) {
+    private suspend fun loadEpisodes(
+        seriesId: MediaId,
+        seasonId: MediaId,
+        operation: Long,
+        playbackTarget: MediaPlaybackTarget?,
+        preferProgressFallback: Boolean,
+        updateSeriesTarget: Boolean,
+    ) {
         try {
-            // 首页拉 200：一季极少超过这个量，超出部分由 [loadMoreEpisodes] 续页
-            //（旧版是一次拉全 + 30 集一组；200 首页在体感上等价，且尊重服务端分页）。
+            // Legacy requests one 1000-item window. PageRequest is capped at
+            // 500, so consume at most two provider pages and intentionally
+            // ignore any remaining cursor rather than inventing UI pagination.
             val loaded = repository.browse(
                 session,
                 MediaQuery.Episodes(seriesId, seasonId),
-                PageRequest(pageSize = 200),
+                PageRequest(pageSize = 500),
                 refresh = true,
             )
             if (operation != detailTicket || state.value.selectedSeasonId != seasonId) return
             val freshPages = MediaPageAccumulator()
-            val page = freshPages.append(null, loaded.value)
-            episodePages = freshPages
+            var page = freshPages.append(null, loaded.value)
+            page.nextCursor?.let { secondCursor ->
+                val second = repository.browse(
+                    session,
+                    MediaQuery.Episodes(seriesId, seasonId),
+                    PageRequest(cursor = secondCursor, pageSize = 500),
+                )
+                if (operation != detailTicket || state.value.selectedSeasonId != seasonId) return
+                page = freshPages.append(secondCursor, second.value)
+            }
+            val episodes = page.items.sortedWith(
+                compareBy<MediaItem> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.title },
+            )
+            val playTarget = resolveEpisodePlaybackTarget(episodes, playbackTarget, preferProgressFallback)
             mutableState.value = state.value.copy(
-                detailEpisodes = page.items.sortedWith(
-                    compareBy<MediaItem> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.title },
-                ),
-                detailEpisodesNextCursor = page.nextCursor,
+                detailEpisodes = episodes,
+                detailPlayTarget = if (updateSeriesTarget) playTarget else state.value.detailPlayTarget,
+                selectedSeasonPlayTarget = playTarget,
                 detailSectionsLoading = false,
                 detailSectionsError = null,
             )
@@ -1217,45 +1413,8 @@ class MediaBrowser(
         }
     }
 
-    /** 超长季（>200 集）续页；与 30 集分组 UI 正交——新页合并后分组自动扩展。 */
-    suspend fun loadMoreEpisodes() {
-        val before = state.value
-        val cursor = before.detailEpisodesNextCursor ?: return
-        val seriesId = before.detail?.id ?: return
-        val seasonId = before.selectedSeasonId ?: return
-        if (before.detailSectionsLoading || before.detailEpisodesLoadingMore) return
-        val operation = detailTicket
-        mutableState.value = before.copy(detailEpisodesLoadingMore = true)
-        try {
-            val loaded = repository.browse(
-                session,
-                MediaQuery.Episodes(seriesId, seasonId),
-                PageRequest(cursor = cursor, pageSize = 200),
-            )
-            if (operation != detailTicket || state.value.selectedSeasonId != seasonId) return
-            val page = episodePages.append(cursor, loaded.value)
-            mutableState.value = state.value.copy(
-                detailEpisodes = page.items.sortedWith(
-                    compareBy<MediaItem> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.title },
-                ),
-                detailEpisodesNextCursor = page.nextCursor,
-                detailEpisodesLoadingMore = false,
-            )
-        } catch (cancelled: CancellationException) {
-            if (operation == detailTicket) {
-                mutableState.value = state.value.copy(detailEpisodesLoadingMore = false)
-            }
-            throw cancelled
-        } catch (failure: Exception) {
-            if (operation == detailTicket) {
-                mutableState.value = state.value.copy(detailEpisodesLoadingMore = false)
-            }
-        }
-    }
-
     fun back() {
         ++detailTicket
-        episodePages = MediaPageAccumulator()
         mutableState.value = state.value.copy(
             detailId = null,
             detail = null,
@@ -1263,16 +1422,14 @@ class MediaBrowser(
             detailError = null,
             detailSeasons = emptyList(),
             selectedSeasonId = null,
+            selectedSeasonDetail = null,
             detailEpisodes = emptyList(),
-            detailEpisodesNextCursor = null,
-            detailEpisodesLoadingMore = false,
+            detailPlayTarget = null,
+            selectedSeasonPlayTarget = null,
             detailSectionsLoading = false,
             detailSectionsError = null,
             detailActionBusy = false,
             detailActionError = null,
-            detailSimilar = emptyList(),
-            detailSimilarLoading = false,
-            detailSimilarError = null,
             selectedMediaSourceId = null,
             selectedAudioStreamIndex = null,
             selectedSubtitleStreamIndex = null,
@@ -1280,13 +1437,83 @@ class MediaBrowser(
     }
 }
 
+private fun MediaItem.toPlaybackTarget(): MediaPlaybackTarget = MediaPlaybackTarget(
+    id = id,
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber,
+    playbackPositionMs = userData.playbackPositionMs,
+    playedPercentage = userData.playedPercentage,
+    durationMs = runtimeMs,
+)
+
+/**
+ * Resolves the old ArkUI playback-target rules against real episode rows.
+ * Series detail uses target -> first unwatched -> first; season detail inserts
+ * "episode with partial progress" before the first-unwatched fallback.
+ */
+private fun resolveEpisodePlaybackTarget(
+    episodes: List<MediaItem>,
+    target: MediaPlaybackTarget?,
+    preferProgressFallback: Boolean,
+): MediaItem? {
+    if (episodes.isEmpty()) return null
+    var targetIndex = target?.id?.let { id -> episodes.indexOfFirst { it.id == id } } ?: -1
+    if (targetIndex < 0 && target?.episodeNumber != null) {
+        targetIndex = episodes.indexOfFirst { episode ->
+            episode.episodeNumber == target.episodeNumber &&
+                (target.seasonNumber == null || episode.seasonNumber == target.seasonNumber)
+        }
+    }
+    val matchedTarget = targetIndex >= 0
+    if (targetIndex < 0 && preferProgressFallback) {
+        targetIndex = episodes.indexOfFirst { episode ->
+            val percentage = episodePlaybackPercentage(episode)
+            percentage > 0.0 && percentage < 100.0
+        }
+    }
+    if (targetIndex < 0) targetIndex = episodes.indexOfFirst { !it.userData.isPlayed }
+    if (targetIndex < 0) targetIndex = 0
+    val selected = episodes[targetIndex]
+    if (!matchedTarget || target == null) return selected
+    val targetPercentage = target.playedPercentage ?: 0.0
+    if (target.playbackPositionMs <= 0L && targetPercentage <= 0.0) return selected
+    return selected.copy(
+        runtimeMs = target.durationMs?.takeIf { it > 0L } ?: selected.runtimeMs,
+        userData = selected.userData.copy(
+            playbackPositionMs = target.playbackPositionMs.coerceAtLeast(0L),
+            playedPercentage = target.playedPercentage,
+        ),
+    )
+}
+
+private fun episodePlaybackPercentage(item: MediaItem): Double {
+    val explicit = item.userData.playedPercentage?.coerceIn(0.0, 100.0) ?: 0.0
+    if (explicit > 0.0) return explicit
+    val duration = item.runtimeMs ?: 0L
+    return if (item.userData.playbackPositionMs > 0L && duration > 0L) {
+        (item.userData.playbackPositionMs.toDouble() * 100.0 / duration.toDouble()).coerceIn(0.0, 100.0)
+    } else {
+        0.0
+    }
+}
+
 private fun MediaBrowserState.replaceUserData(id: MediaId, userData: MediaUserData): MediaBrowserState {
     fun List<MediaItem>.replace() = map { item -> if (item.id == id) item.copy(userData = userData) else item }
+    fun List<PlaybackHistoryItem>.replaceHistory() = map { item ->
+        if (item.media.id == id) item.copy(media = item.media.copy(userData = userData)) else item
+    }
     return copy(
         items = items.replace(),
         favoriteItems = favoriteItems.replace(),
         searchItems = searchItems.replace(),
         detail = detail?.let { item -> if (item.id == id) item.copy(userData = userData) else item },
+        selectedSeasonDetail = selectedSeasonDetail?.let { item ->
+            if (item.id == id) item.copy(userData = userData) else item
+        },
+        detailPlayTarget = detailPlayTarget?.let { item -> if (item.id == id) item.copy(userData = userData) else item },
+        selectedSeasonPlayTarget = selectedSeasonPlayTarget?.let { item ->
+            if (item.id == id) item.copy(userData = userData) else item
+        },
         detailSeasons = detailSeasons.replace(),
         detailEpisodes = detailEpisodes.replace(),
         homeFeed = homeFeed.copy(
@@ -1296,26 +1523,31 @@ private fun MediaBrowserState.replaceUserData(id: MediaId, userData: MediaUserDa
             latest = homeFeed.latest.replace(),
         ),
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.replace() },
+        historyItems = historyItems.replaceHistory(),
     )
 }
 
 private fun MediaBrowserState.containsMedia(id: MediaId): Boolean =
-    detail?.id == id || detailSeasons.any { it.id == id } || detailEpisodes.any { it.id == id }
+    detail?.id == id || selectedSeasonDetail?.id == id || detailSeasons.any { it.id == id } ||
+        detailEpisodes.any { it.id == id }
 
 /** 删除成功后的状态修剪：所有列表里被删条目一并移除，总数收紧。 */
 private fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState {
     fun List<MediaItem>.prune() = filter { it.id !in ids }
+    fun List<PlaybackHistoryItem>.pruneHistory() = filter { it.media.id !in ids }
     return copy(
         items = items.prune(),
         favoriteItems = favoriteItems.prune(),
         searchItems = searchItems.prune(),
         detailEpisodes = detailEpisodes.prune(),
         detailSeasons = detailSeasons.prune(),
-        detailSimilar = detailSimilar.prune(),
+        selectedSeasonDetail = selectedSeasonDetail?.takeIf { it.id !in ids },
+        detailPlayTarget = detailPlayTarget?.takeIf { it.id !in ids },
+        selectedSeasonPlayTarget = selectedSeasonPlayTarget?.takeIf { it.id !in ids },
         personMovies = personMovies.prune(),
         personSeries = personSeries.prune(),
         personEpisodes = personEpisodes.prune(),
-        historyItems = historyItems.prune(),
+        historyItems = historyItems.pruneHistory(),
         totalEstimate = totalEstimate?.let { total -> (total - items.count { it.id in ids }).coerceAtLeast(0) },
         favoriteTotalEstimate = favoriteTotalEstimate?.let { total ->
             (total - favoriteItems.count { it.id in ids }).coerceAtLeast(0)
@@ -1330,11 +1562,30 @@ private fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState 
     )
 }
 
+private fun MediaSourceInfo.legacyDefaultAudioStreamIndex(): Int? =
+    defaultAudioIndex?.let { preferred -> audioStreams.firstOrNull { it.index == preferred }?.index }
+        ?: audioStreams.firstOrNull { it.isDefault }?.index
+        ?: audioStreams.firstOrNull()?.index
+
+private fun MediaSourceInfo.legacyDefaultSubtitleStreamIndex(): Int = when (defaultSubtitleIndex) {
+    -1 -> -1
+    else -> defaultSubtitleIndex?.let { preferred ->
+        subtitleStreams.firstOrNull { it.index == preferred }?.index
+    } ?: subtitleStreams.firstOrNull { it.isDefault }?.index ?: -1
+}
+
 private const val HomeLatestPageSize = 30
 private const val CatalogPageSize = 100
-private const val SearchPageSize = 500
+private const val LegacySearchLimit = 800
+private const val SearchFirstSegmentSize = PageRequest.MAX_PAGE_SIZE
+private val SearchMediaTypes = setOf(MediaType.Episode, MediaType.Movie, MediaType.Video, MediaType.Series)
 private const val PersonWorkPageSize = 10
-private const val HistoryPageSize = 50
+private const val HistoryPageSize = 10
+private const val MineHistoryPreviewSourceLimit = 24
+private const val HistoryEnrichmentConcurrency = 4
+private const val HistorySeriesCacheTtlMs = 5L * 60L * 1_000L
+private const val HistoryLoadError = "播放历史加载失败，点击重试"
+private val HistoryMediaTypes = setOf(MediaType.Movie, MediaType.Episode)
 private val FavoriteMediaTypes = setOf(MediaType.Movie, MediaType.Series, MediaType.Episode, MediaType.Video)
 
 /** Never display exception messages, URLs, response bodies or credential-bearing causes. */

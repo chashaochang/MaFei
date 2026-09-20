@@ -8,10 +8,14 @@ sealed interface MediaQuery {
     data class Search(val term: String) : MediaQuery
     data class Seasons(val seriesId: MediaId) : MediaQuery
     data class Episodes(val seriesId: MediaId, val seasonId: MediaId? = null) : MediaQuery
+    /** Provider-authoritative one-item Next Up result for a series detail. */
+    data class NextUp(val seriesId: MediaId) : MediaQuery
+    /** Legacy chasing-page Next Up semantics, including its one-year cutoff. */
+    data class ChasingNextUp(val seriesId: MediaId, val nextUpDateCutoffEpochMs: Long) : MediaQuery
     data class PersonItems(val personId: MediaId) : MediaQuery
     /** One account-scoped page of resumable (in-progress) items — watch history source. */
     data object Resume : MediaQuery
-    /** "More like this" for one item (detail page). Single chunk, cursor ignored. */
+    /** Player-side "More like this" data. The legacy detail page does not render it. */
     data class Similar(val itemId: MediaId) : MediaQuery
 }
 

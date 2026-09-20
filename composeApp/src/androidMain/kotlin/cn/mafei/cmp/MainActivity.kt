@@ -11,18 +11,18 @@ import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.createAndroidSettings
 import cn.mafei.cmp.platform.secure_storage_android.AndroidSecureCredentialStore
 import cn.mafei.cmp.platform.http_android.createAndroidHttpTransport
-import cn.mafei.cmp.player.runtime_android.createAndroidPlayerRuntime
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        val playerHost = AndroidPlayerHost.getOrCreate(applicationContext)
         val runtime = ProcessApplication.getOrCreate {
             ApplicationRuntime(
                 createAndroidSettings(applicationContext),
                 AndroidSecureCredentialStore(applicationContext),
                 createAndroidHttpTransport(),
-                playerRuntimeFactory = { createAndroidPlayerRuntime(applicationContext) },
+                playerRuntimeFactory = { playerHost.createRuntime() },
             )
         }
         setContent {
@@ -31,6 +31,8 @@ class MainActivity : ComponentActivity() {
                 // edge-to-edge API select readable system icons for that theme.
                 val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }, playerSurface = { controller, modifier ->
+                playerHost.Surface(controller, modifier)
             })
         }
     }

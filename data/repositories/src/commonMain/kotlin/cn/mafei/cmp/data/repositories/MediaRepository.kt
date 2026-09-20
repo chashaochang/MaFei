@@ -15,12 +15,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.time.TimeSource
-
-/** 临时诊断打点：首页加载慢定位用，定位完成后可整体删除。 */
-internal fun timingLog(message: String) {
-    println("[MaFeiTiming] $message")
-}
 
 /**
  * In-memory media read repository (04D). Credentials and persistence are not
@@ -95,8 +89,11 @@ class MediaRepository(
     ): MediaLoad<Page<MediaItem>> {
         val normalized = if (query is MediaQuery.Search) query.copy(term = query.term.trim()) else query
         val frozen = request.snapshot()
-        if (normalized is MediaQuery.Seasons && (frozen.cursor != null || !frozen.filter.isEmpty || frozen.sort != null)) {
-            throw ClientConfigError("Seasons is a single-call surface without filters or sort")
+        if ((normalized is MediaQuery.Seasons || normalized is MediaQuery.NextUp ||
+                normalized is MediaQuery.ChasingNextUp) &&
+            (frozen.cursor != null || !frozen.filter.isEmpty || frozen.sort != null)
+        ) {
+            throw ClientConfigError("$normalized is a single-call surface without cursor, filters or sort")
         }
         val key = BrowseKey(session, normalized, frozen)
         return load(session, key, pages, refresh, store = { page ->
@@ -115,6 +112,13 @@ class MediaRepository(
                 is MediaQuery.Search -> adapter.search(normalized.term, frozen)
                 is MediaQuery.Seasons -> adapter.seasons(normalized.seriesId)
                 is MediaQuery.Episodes -> adapter.episodes(normalized.seriesId, normalized.seasonId, frozen)
+                is MediaQuery.NextUp -> Page.of(listOfNotNull(adapter.nextUp(normalized.seriesId)), nextCursor = null)
+                is MediaQuery.ChasingNextUp -> Page.of(
+                    listOfNotNull(
+                        adapter.chasingNextUp(normalized.seriesId, normalized.nextUpDateCutoffEpochMs),
+                    ),
+                    nextCursor = null,
+                )
                 is MediaQuery.PersonItems -> adapter.itemsByPerson(normalized.personId, frozen)
                 is MediaQuery.Resume -> adapter.resumeItems(frozen)
                 is MediaQuery.Similar -> Page.of(adapter.similar(normalized.itemId), nextCursor = null)
@@ -176,8 +180,7 @@ class MediaRepository(
             snapshots.load(key, HomeFeed.serializer())
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            timingLog("home-snapshot load failed (${failure::class.simpleName})")
+        } catch (_: Exception) {
             runCatching { snapshots.delete(key) }
             null
         }
@@ -194,8 +197,7 @@ class MediaRepository(
             )
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            timingLog("home-snapshot save failed (${failure::class.simpleName})")
+        } catch (_: Exception) {
         }
     }
 
@@ -250,6 +252,10 @@ class MediaRepository(
     suspend fun canDeleteMedia(session: MediaSession): Boolean =
         mutex.withLock { requireActive(session).adapter }.canDeleteMedia()
 
+    /** Provider-authoritative role used by the legacy Mine profile header. */
+    suspend fun isAdministrator(session: MediaSession): Boolean =
+        mutex.withLock { requireActive(session).adapter }.isAdministrator()
+
     private suspend fun mutate(
         session: MediaSession,
         action: suspend (MediaProviderAdapter) -> Unit,
@@ -275,7 +281,6 @@ class MediaRepository(
         session: MediaSession, key: K, cache: MediaCache<K, T>, refresh: Boolean,
         store: (T) -> T = { it }, fetch: suspend (MediaProviderAdapter) -> T,
     ): MediaLoad<T> {
-        val label = keyLabel(key)
         currentCoroutineContext().ensureActive()
         val start = mutex.withLock {
             val binding = requireActive(session)
@@ -288,10 +293,8 @@ class MediaRepository(
             Start(cached, fresh, sequence, revision, binding.adapter)
         }
         if (start.fresh) {
-            timingLog("$label: fresh cache hit (0ms)")
             return MediaLoad(start.cached!!.value, session, MediaLoadOrigin.FreshCache)
         }
-        val fetchMark = TimeSource.Monotonic.markNow()
         try {
             // 网络 + **解码 + 领域映射**都放到默认调度器上：调用方链路是
             // `LaunchedEffect → MediaBrowser.refresh()`，也就是 UI 上下文；这里不切的话，
@@ -299,7 +302,6 @@ class MediaRepository(
             // 看起来就像"异步没生效"。状态发布仍在原来的上下文里做（锁内那次），
             // 所以 `MediaBrowser` 的单线程状态语义不变。
             val value = withContext(fetchDispatcher) { fetch(start.adapter) }
-            timingLog("$label: network ${fetchMark.elapsedNow().inWholeMilliseconds}ms")
             currentCoroutineContext().ensureActive()
             return mutex.withLock {
                 validatePublication(session, key, start)
@@ -310,7 +312,6 @@ class MediaRepository(
         } catch (error: CancellationException) {
             throw error
         } catch (error: DomainError) {
-            val elapsed = fetchMark.elapsedNow().inWholeMilliseconds
             return mutex.withLock {
                 validatePublication(session, key, start)
                 if (error is AuthenticationError || error is AuthorizationError) clearData()
@@ -318,10 +319,8 @@ class MediaRepository(
                 if (allowsStale(error) && cached != null &&
                     cached.age(clock.nowEpochMs())?.let { it <= policy.staleMaxAgeMs } == true
                 ) {
-                    timingLog("$label: FAILED after ${elapsed}ms -> stale cache (${error::class.simpleName})")
                     MediaLoad(cached.value, session, MediaLoadOrigin.StaleCache, error)
                 } else {
-                    timingLog("$label: FAILED after ${elapsed}ms (${error::class.simpleName})")
                     throw error
                 }
             }
@@ -330,23 +329,6 @@ class MediaRepository(
                 mutex.withLock { if (latest[key] == start.ticket) latest.remove(key) }
             }
         }
-    }
-
-    private fun keyLabel(key: Key): String = when (key) {
-        is BrowseKey -> "browse/" + when (val query = key.query) {
-            is MediaQuery.Items -> "items:${query.collectionId?.value ?: "all"}" +
-                if (key.request.cursor != null) "+page" else ""
-            is MediaQuery.Search -> "search:${query.term}"
-            is MediaQuery.Seasons -> "seasons"
-            is MediaQuery.Episodes -> "episodes"
-            is MediaQuery.PersonItems -> "person-items"
-            is MediaQuery.Resume -> "resume"
-            is MediaQuery.Similar -> "similar:${query.itemId.value}"
-        }
-        is CollectionsKey -> "collections"
-        is HomeKey -> "home-feed"
-        is ItemKey -> "item:${key.id.value}"
-        is PersonKey -> "person:${key.id.value}"
     }
 
     private fun requireActive(session: MediaSession): Binding = active?.takeIf { it.session === session }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -49,6 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiLayout
+import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
@@ -72,8 +74,12 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.MediaArtwork
 import cn.mafei.cmp.common.media.landscapeArtworkCandidates
+import cn.mafei.cmp.common.media.legacyDetailBackdropArtworkCandidates
+import cn.mafei.cmp.common.media.legacyPrimaryArtworkCandidates
+import cn.mafei.cmp.common.media.legacyPrimaryThenBackdropArtworkCandidates
 import cn.mafei.cmp.common.media.posterArtworkCandidates
 import cn.mafei.cmp.common.media.prefetchLandscapeArtwork
+import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.common.ui.MaFeiAdaptiveShell
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiGlyph
@@ -99,15 +105,20 @@ import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
 import cn.mafei.cmp.feature.connect.ServerDiscoverySuggestion
 import cn.mafei.cmp.feature.connect.ServerSuggestionType
 import cn.mafei.cmp.feature.connect.rememberConnectFormState
+import cn.mafei.cmp.feature.chasing.ChasingBrowser
+import cn.mafei.cmp.feature.chasing.ChasingScreen
 import cn.mafei.cmp.feature.detail.DetailScreen
 import cn.mafei.cmp.feature.detail.PersonDetailScreen
 import cn.mafei.cmp.feature.detail.SeasonDetailScreen
+import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.feature.favorite.FavoriteScreen
 import cn.mafei.cmp.feature.home.HomeHeroBackdropState
 import cn.mafei.cmp.feature.home.HomeHeroWindowBackdrop
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.LibraryIndexScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
+import cn.mafei.cmp.feature.home.legacyHomeHeroDetailTarget
+import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
 import cn.mafei.cmp.feature.media.VideoListScreen
 import cn.mafei.cmp.feature.search.SearchScreen
 import cn.mafei.cmp.feature.settings.AccountSwitchItem
@@ -116,6 +127,8 @@ import cn.mafei.cmp.feature.settings.AddAccountScreen
 import cn.mafei.cmp.feature.settings.AddGroupScreen
 import cn.mafei.cmp.feature.settings.AboutPrivacyScreen
 import cn.mafei.cmp.feature.settings.AppearanceScreen
+import cn.mafei.cmp.feature.settings.FeiniuConnectionPreference
+import cn.mafei.cmp.feature.settings.FeiniuConnectionPreferenceScreen
 import cn.mafei.cmp.feature.settings.MineHistoryScreen
 import cn.mafei.cmp.feature.settings.MineProfile
 import cn.mafei.cmp.feature.settings.MineScreen as LegacyMineScreen
@@ -128,7 +141,9 @@ import cn.mafei.cmp.player.ui.MiniPlayerMedia
 import cn.mafei.cmp.player.ui.NowPlayingMedia
 import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
+import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
+import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -144,7 +159,13 @@ val LocalApplicationRuntime = staticCompositionLocalOf<ApplicationRuntime> {
 }
 
 @Composable
-fun App(runtime: ApplicationRuntime, onThemeChanged: (Boolean) -> Unit = {}) {
+fun App(
+    runtime: ApplicationRuntime,
+    onThemeChanged: (Boolean) -> Unit = {},
+    playerSurface: @Composable (PlayerController, Modifier) -> Unit = { _, modifier ->
+        Box(modifier.background(Color.Black))
+    },
+) {
     val sessionState by runtime.sessions.state.collectAsState()
     val scope = rememberCoroutineScope()
     var probe by remember { mutableStateOf(false) }
@@ -219,6 +240,7 @@ fun App(runtime: ApplicationRuntime, onThemeChanged: (Boolean) -> Unit = {}) {
                                             runtime = runtime,
                                             session = session,
                                             busy = busy,
+                                            playerSurface = playerSurface,
                                             onLogout = {
                                                 if (!busy) {
                                                     busy = true
@@ -296,6 +318,9 @@ private sealed interface BrowseRoute : NavKey
 private data object BrowseHomeRoute : BrowseRoute
 
 @Serializable
+private data object BrowseChasingRoute : BrowseRoute
+
+@Serializable
 private data object BrowseFavoriteRoute : BrowseRoute
 
 @Serializable
@@ -325,7 +350,13 @@ private data class BrowseConnectAccountRoute(
 ) : BrowseRoute
 
 @Serializable
+private data object BrowseServerDiscoveryRoute : BrowseRoute
+
+@Serializable
 private data object BrowseSettingsRoute : BrowseRoute
+
+@Serializable
+private data object BrowseFeiniuConnectionPreferenceRoute : BrowseRoute
 
 /** Reachable only once the appearance entry in `SettingsScreen` is re-enabled. */
 @Serializable
@@ -344,19 +375,29 @@ private data object BrowseUserAgreementRoute : BrowseRoute
 private data class BrowseLibraryRoute(val collectionId: String) : BrowseRoute
 
 @Serializable
-private data class BrowseDetailRoute(val mediaId: String) : BrowseRoute
+private data class BrowseDetailRoute(
+    val mediaId: String,
+    /** Legacy VideoDetailPage route parameter used in the secondary metadata line. */
+    val mediaName: String? = null,
+) : BrowseRoute
 
 @Serializable
 private data class BrowsePersonRoute(val personId: String) : BrowseRoute
 
 @Serializable
-private data class BrowseSeasonRoute(val seriesId: String, val seasonId: String) : BrowseRoute
+private data class BrowseSeasonRoute(
+    val seriesId: String,
+    val seasonId: String,
+    /** Preserved through series -> season -> episode exactly like the ArkUI route chain. */
+    val mediaName: String? = null,
+) : BrowseRoute
 
 @Serializable
 private data class BrowseEpisodeRoute(
     val seriesId: String,
     val seasonId: String,
     val episodeId: String,
+    val mediaName: String? = null,
 ) : BrowseRoute
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -677,6 +718,7 @@ private fun BrowseContent(
     runtime: ApplicationRuntime,
     session: ApplicationSession,
     busy: Boolean,
+    playerSurface: @Composable (PlayerController, Modifier) -> Unit,
     onLogout: () -> Unit,
 ) {
     val browser = remember(session) {
@@ -688,6 +730,16 @@ private fun BrowseContent(
         )
     }
     val state by browser.state.collectAsState()
+    val chasingBrowser = remember(session) {
+        ChasingBrowser(
+            repository = runtime.sessions.media,
+            session = session.media,
+            capabilities = session.binding.adapter.capabilities,
+            store = runtime.chasingSeriesStore,
+            nowEpochMs = SystemEpochClock::nowEpochMs,
+        )
+    }
+    val chasingState by chasingBrowser.state.collectAsState()
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     // 管理员媒体删除：确认弹窗 + 待删集合。入口由 browser 探测的服务器策略决定。
@@ -702,6 +754,7 @@ private fun BrowseContent(
     // Home always opens at its hero. Do not restore a process-saved grid
     // position; route changes are handled explicitly by selectDestination.
     val homeGridState = remember(session) { LazyGridState() }
+    val chasingListState = rememberLazyListState()
     val favoriteGridState = rememberLazyGridState()
     val libraryGridState = rememberLazyGridState()
     val searchGridState = rememberLazyGridState()
@@ -713,6 +766,12 @@ private fun BrowseContent(
     var deletingAccountKey by remember(session) { mutableStateOf<String?>(null) }
     var accountConnectBusy by remember(session) { mutableStateOf(false) }
     var accountConnectError by remember(session) { mutableStateOf<String?>(null) }
+    var pendingDiscoveredServerAddress by remember(session) { mutableStateOf<String?>(null) }
+    var feiniuConnectionPreference by remember(session) {
+        mutableStateOf(FeiniuConnectionPreference.Speed)
+    }
+    var feiniuConnectionPreferenceError by remember(session) { mutableStateOf<String?>(null) }
+    var feiniuConnectionPreferenceSaving by remember(session) { mutableStateOf(false) }
     val artworkCache = remember(session) { ArtworkMemoryCache() }
     val fetchArtwork: suspend (MediaImage, Int) -> ByteArray? = remember(session) {
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
@@ -748,29 +807,43 @@ private fun BrowseContent(
     }
     val destination = when (currentRoute) {
         BrowseHomeRoute, BrowseSearchRoute -> HomeDestination
+        BrowseChasingRoute -> ChasingDestination
         BrowseFavoriteRoute -> FavoriteDestination
         BrowseMineRoute,
         BrowseMineHistoryRoute,
         BrowseAccountSwitchRoute,
         BrowseAddAccountRoute,
         is BrowseConnectAccountRoute,
+        BrowseServerDiscoveryRoute,
         BrowseSettingsRoute,
+        BrowseFeiniuConnectionPreferenceRoute,
         BrowseAppearanceRoute,
         BrowseAddGroupRoute,
         BrowseAboutPrivacyRoute,
         BrowseUserAgreementRoute -> MineDestination
         else -> LibraryDestination
     }
-    val chromeCompactProgress = remember(destination, homeGridState, favoriteGridState, libraryGridState) {
+    val chromeCompactProgress = remember(
+        destination,
+        homeGridState,
+        chasingListState,
+        favoriteGridState,
+        libraryGridState,
+    ) {
         derivedStateOf {
-            val activeGrid = when (destination) {
-                HomeDestination -> homeGridState
-                FavoriteDestination -> favoriteGridState
-                LibraryDestination -> libraryGridState
-                else -> return@derivedStateOf 0f
+            if (destination == ChasingDestination) {
+                if (chasingListState.firstVisibleItemIndex > 0) 1f
+                else (chasingListState.firstVisibleItemScrollOffset / 160f).coerceIn(0f, 1f)
+            } else {
+                val activeGrid = when (destination) {
+                    HomeDestination -> homeGridState
+                    FavoriteDestination -> favoriteGridState
+                    LibraryDestination -> libraryGridState
+                    else -> return@derivedStateOf 0f
+                }
+                if (activeGrid.firstVisibleItemIndex > 0) 1f
+                else (activeGrid.firstVisibleItemScrollOffset / 160f).coerceIn(0f, 1f)
             }
-            if (activeGrid.firstVisibleItemIndex > 0) 1f
-            else (activeGrid.firstVisibleItemScrollOffset / 160f).coerceIn(0f, 1f)
         }
     }
 
@@ -784,19 +857,34 @@ private fun BrowseContent(
             emptyList()
         }
     }
+    LaunchedEffect(runtime, session.selection) {
+        if (session.selection.provider == ProviderKind.Feiniu) {
+            feiniuConnectionPreference = runtime.loadFeiniuRoutePreference().toPresentationPreference()
+        }
+    }
     LaunchedEffect(state.selectedCollection) {
         libraryGridState.scrollToItem(0)
     }
     LaunchedEffect(currentRoute) {
         if (currentRoute == BrowseFavoriteRoute) browser.refreshFavorites()
+        if (currentRoute == BrowseChasingRoute) chasingBrowser.refresh()
     }
-    // 独立播放历史：进入「我的 → 播放历史」时加载（resume + 已看完双源分页）。
-    LaunchedEffect(currentRoute) {
-        if (currentRoute == BrowseMineHistoryRoute) browser.loadHistory()
+    // Legacy MineTab refreshes its independent resume + completed preview every
+    // time the account surface becomes visible; it never borrows HomeFeed.resume.
+    LaunchedEffect(minePresented) {
+        if (minePresented) browser.loadHistoryPreview()
+    }
+    // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
+    // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
+    LaunchedEffect(mineBackStack.lastOrNull()) {
+        if (mineBackStack.lastOrNull() == BrowseMineHistoryRoute) browser.loadHistory()
         librarySelectedIds = emptySet()
     }
     // 删除可用性只探测一次：服务器用户策略决定是否出现删除入口。
-    LaunchedEffect(browser) { browser.refreshDeleteAvailability() }
+    LaunchedEffect(browser) {
+        browser.refreshDeleteAvailability()
+        browser.refreshAdministratorStatus()
+    }
     LaunchedEffect(state.detailId) { playbackError = null }
     LaunchedEffect(playerState.phase) {
         if (playerState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
@@ -878,6 +966,7 @@ private fun BrowseContent(
         val destinations = remember {
             listOf(
                 MaFeiNavItem(HomeDestination, "首页", MaFeiGlyph.Home),
+                MaFeiNavItem(ChasingDestination, "追剧", MaFeiGlyph.History),
                 MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite),
                 MaFeiNavItem(LibraryDestination, "媒体库", MaFeiGlyph.Library),
                 MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account),
@@ -905,6 +994,7 @@ private fun BrowseContent(
                 browseBackStack.clear()
                 browseBackStack += when (next) {
                     HomeDestination -> BrowseHomeRoute
+                    ChasingDestination -> BrowseChasingRoute
                     FavoriteDestination -> BrowseFavoriteRoute
                     else -> BrowseLibraryIndexRoute
                 }
@@ -919,7 +1009,7 @@ private fun BrowseContent(
                         // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
                         val generation = playback.play(
                             itemId = item.id,
-                            resumePositionMs = item.playbackResumePositionMs(),
+                            resumePositionMs = legacyPlaybackResumePositionMs(item),
                             options = browser.playbackOptionsFor(item),
                         )
                         if (generation == null) {
@@ -954,14 +1044,15 @@ private fun BrowseContent(
                     serverName = legacyVisibleServerName(session.connection),
                     serverVersion = session.connection.server.serverVersion.orEmpty(),
                     connectionDescription = legacyConnectionDescription(session.connection),
+                    policy = if (state.administrator == true) "管理员" else "普通用户",
                 ),
-                historyItems = state.homeFeed.resume,
-                historyLoading = state.loading && state.homeFeed.resume.isEmpty(),
-                historyError = state.homeError,
+                historyItems = state.historyItems,
+                historyLoading = state.historyLoading && state.historyItems.isEmpty(),
+                historyError = state.historyError,
                 layout = layout,
                 busy = busy,
                 onHistoryItem = startPlayback,
-                onHistoryRetry = { scope.launch { browser.refresh() } },
+                onHistoryRetry = { scope.launch { browser.loadHistoryPreview() } },
                 // 「我的」里的二级页推到**容器自己的**回退栈上，容器不关闭 —— 模态 / 全屏
                 // 两种呈现共用同一条栈。
                 onHistoryMore = {
@@ -980,6 +1071,7 @@ private fun BrowseContent(
                         mineBackStack += BrowseSettingsRoute
                     }
                 },
+                onPrivacy = { uriHandler.openUri(PRIVACY_AGREEMENT_URL) },
                 onAddGroup = {
                     if (mineBackStack.lastOrNull() != BrowseAddGroupRoute) {
                         mineBackStack += BrowseAddGroupRoute
@@ -1047,10 +1139,11 @@ private fun BrowseContent(
                                     onBack = popMineRoute,
                                     onRetry = { scope.launch { browser.loadHistory() } },
                                     onItem = startPlayback,
-                                    canLoadMore = state.historyResumeCursor != null ||
-                                        state.historyCompletedCursor != null,
+                                    canLoadMore = state.historyCanLoadMore,
                                     loadingMore = state.historyLoadingMore,
+                                    loadMoreFailed = state.historyLoadMoreFailed,
                                     onLoadMore = { scope.launch { browser.loadMoreHistory() } },
+                                    onRetryLoadMore = { scope.launch { browser.retryLoadMoreHistory() } },
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
@@ -1150,11 +1243,22 @@ private fun BrowseContent(
                             is BrowseConnectAccountRoute -> NavEntry(route) {
                                 val formState = rememberConnectFormState()
                                 LaunchedEffect(formState, route) {
-                                    formState.provider = route.provider
-                                    formState.baseUrl = route.presetBaseUrl.orEmpty()
-                                    formState.username = route.presetUsername.orEmpty()
-                                    formState.password = ""
-                                    formState.rememberPassword = true
+                                    // Returning from discovery may recreate this entry. Preserve the
+                                    // selected address until the result effect below consumes it.
+                                    if (pendingDiscoveredServerAddress == null) {
+                                        formState.provider = route.provider
+                                        formState.baseUrl = route.presetBaseUrl.orEmpty()
+                                        formState.username = route.presetUsername.orEmpty()
+                                        formState.password = ""
+                                        formState.rememberPassword = true
+                                    }
+                                }
+                                LaunchedEffect(formState, pendingDiscoveredServerAddress) {
+                                    val address = pendingDiscoveredServerAddress ?: return@LaunchedEffect
+                                    formState.provider = ProviderKind.Jellyfin
+                                    formState.baseUrl = address
+                                    formState.requestServerAddressFocus()
+                                    pendingDiscoveredServerAddress = null
                                 }
                                 ConnectScreen(
                                     busy = accountConnectBusy,
@@ -1186,6 +1290,23 @@ private fun BrowseContent(
                                     onBack = popMineRoute,
                                     showProviderSwitcher = false,
                                     showHistory = false,
+                                    onOpenServerDiscovery = {
+                                        if (mineBackStack.lastOrNull() != BrowseServerDiscoveryRoute) {
+                                            mineBackStack += BrowseServerDiscoveryRoute
+                                        }
+                                    },
+                                )
+                            }
+                            BrowseServerDiscoveryRoute -> NavEntry(route) {
+                                ServerDiscoveryScreen(
+                                    loadSavedServers = { savedJellyfinServerSuggestions(runtime) },
+                                    discoverServers = { discoveredJellyfinServerSuggestions() },
+                                    onBack = popMineRoute,
+                                    onSelectServer = { address ->
+                                        pendingDiscoveredServerAddress = address
+                                        popMineRoute()
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
                                 )
                             }
                             BrowseSettingsRoute -> NavEntry(route) {
@@ -1196,15 +1317,53 @@ private fun BrowseContent(
                                             mineBackStack += BrowseAppearanceRoute
                                         }
                                     },
-                                    // Moved here from 我的: settings owns the informational
-                                    // entries, the account sheet keeps account actions.
-                                    onOpenAbout = {
-                                        if (layout.navigation == NavigationPlacement.Bottom) {
-                                            uriHandler.openUri(PRIVACY_AGREEMENT_URL)
-                                        } else if (mineBackStack.lastOrNull() != BrowseAboutPrivacyRoute) {
-                                            mineBackStack += BrowseAboutPrivacyRoute
+                                    feiniuRoutePreferenceTitle = if (
+                                        session.selection.provider == ProviderKind.Feiniu
+                                    ) {
+                                        feiniuConnectionPreference.title
+                                    } else {
+                                        null
+                                    },
+                                    onOpenFeiniuPreference = if (
+                                        session.selection.provider == ProviderKind.Feiniu
+                                    ) {
+                                        {
+                                            feiniuConnectionPreferenceError = null
+                                            if (mineBackStack.lastOrNull() != BrowseFeiniuConnectionPreferenceRoute) {
+                                                mineBackStack += BrowseFeiniuConnectionPreferenceRoute
+                                            }
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            BrowseFeiniuConnectionPreferenceRoute -> NavEntry(route) {
+                                FeiniuConnectionPreferenceScreen(
+                                    selectedPreference = feiniuConnectionPreference,
+                                    onSelect = { selected ->
+                                        if (selected != feiniuConnectionPreference &&
+                                            !feiniuConnectionPreferenceSaving
+                                        ) {
+                                            feiniuConnectionPreferenceError = null
+                                            feiniuConnectionPreferenceSaving = true
+                                            scope.launch {
+                                                try {
+                                                    runtime.saveFeiniuRoutePreference(selected.toProviderPreference())
+                                                    feiniuConnectionPreference = selected
+                                                } catch (cancelled: CancellationException) {
+                                                    throw cancelled
+                                                } catch (_: Exception) {
+                                                    feiniuConnectionPreferenceError = "连接策略保存失败，请重试"
+                                                } finally {
+                                                    feiniuConnectionPreferenceSaving = false
+                                                }
+                                            }
                                         }
                                     },
+                                    onBack = popMineRoute,
+                                    errorMessage = feiniuConnectionPreferenceError,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -1311,23 +1470,30 @@ private fun BrowseContent(
                 onTogglePlay = togglePlayback,
                 onRetry = { startPlayback(activeMedia) },
                 onSeek = { pendingSeekPosition = it },
-                artwork = { modifier ->
-                    MediaArtwork(
-                        activeMedia.preferredPoster(),
-                        activeMedia.title,
-                        artworkCache,
-                        fetchArtwork,
-                        modifier,
-                    )
+                onSpeed = { speed ->
+                    scope.launch {
+                        try {
+                            playback.controller.speed(speed)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            playbackError = "播放器操作失败，请重试"
+                        }
+                    }
                 },
-                backdropArtwork = { modifier ->
-                    MediaArtwork(
-                        activeMedia.preferredLandscape(),
-                        activeMedia.title,
-                        artworkCache,
-                        fetchArtwork,
-                        modifier,
-                    )
+                onSelectTrack = { kind, id ->
+                    scope.launch {
+                        try {
+                            playback.controller.selectTrack(kind, id)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            playbackError = "播放器操作失败，请重试"
+                        }
+                    }
+                },
+                videoSurface = { modifier ->
+                    playerSurface(playback.controller, modifier)
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -1430,11 +1596,14 @@ private fun BrowseContent(
                     }
                     if (browseBackStack.size > 1) browseBackStack.removeLastOrNull()
                 }
-                val openDetail: (MediaItem) -> Unit = { item ->
+                val openDetailId: (MediaId, String?) -> Unit = { id, mediaName ->
                     if (browseBackStack.lastOrNull() !is BrowseDetailRoute) {
-                        browseBackStack += BrowseDetailRoute(item.id.value)
+                        browseBackStack += BrowseDetailRoute(id.value, mediaName)
                     }
-                    scope.launch { browser.openDetail(item.id) }
+                    scope.launch { browser.openDetail(id) }
+                }
+                val openDetail: (MediaItem, String?) -> Unit = { item, mediaName ->
+                    openDetailId(item.id, mediaName)
                 }
                 val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->
                     person.id?.let { id ->
@@ -1492,7 +1661,13 @@ private fun BrowseContent(
                                     layout = layout,
                                     onCollection = { collection -> scope.launch { browser.loadHomeLatest(collection.id) } },
                                     onBrowseCollection = browseCollection,
-                                    onItem = openDetail,
+                                    onItem = { item ->
+                                        openDetail(item, item.legacyHomeLatestMediaName(state.collections))
+                                    },
+                                    onHeroItem = { item ->
+                                        val target = item.legacyHomeHeroDetailTarget()
+                                        openDetailId(target.mediaId, target.mediaName)
+                                    },
                                     onPlay = startPlayback,
                                     onRetry = { scope.launch { browser.refresh() } },
                                     onLoadMore = { scope.launch { browser.loadMore() } },
@@ -1508,7 +1683,12 @@ private fun BrowseContent(
                                             artworkCache,
                                             fetchArtwork,
                                             modifier,
-                                            targetWidthPx = 480,
+                                            // Wide home cards are 140dp. On the
+                                            // 2.5x MatePad canvas that is about
+                                            // 350px, so decoding 480px posters
+                                            // only adds allocation pressure while
+                                            // the shelf is entering the viewport.
+                                            targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 480 else 360,
                                         )
                                     },
                                     backdropArtwork = { item, modifier ->
@@ -1550,10 +1730,30 @@ private fun BrowseContent(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
+                            BrowseChasingRoute -> NavEntry(route) {
+                                ChasingScreen(
+                                    state = chasingState,
+                                    layout = layout,
+                                    listState = chasingListState,
+                                    onRetry = { scope.launch { chasingBrowser.refresh() } },
+                                    onPlay = startPlayback,
+                                    onOpenSeries = { id -> openDetailId(id, "电视节目") },
+                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    modifier = Modifier.fillMaxSize(),
+                                    artwork = { item, modifier ->
+                                        MediaArtwork(
+                                            item.landscapeArtworkCandidates(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                        )
+                                    },
+                                )
+                            }
                             BrowseFavoriteRoute -> NavEntry(route) {
                                 FavoriteScreen(
                                     items = state.favoriteItems,
-                                    totalEstimate = state.favoriteTotalEstimate,
                                     selectedSort = state.favoriteSort,
                                     sortChoices = favoriteSortChoices,
                                     loading = state.favoriteLoading,
@@ -1578,7 +1778,7 @@ private fun BrowseContent(
                                     },
                                     onRetry = { scope.launch { browser.refreshFavorites() } },
                                     onLoadMore = { scope.launch { browser.loadMoreFavorites() } },
-                                    onItem = openDetail,
+                                    onItem = { item -> openDetail(item, "收藏") },
                                     bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
@@ -1590,12 +1790,9 @@ private fun BrowseContent(
                                 SearchScreen(
                                     query = state.searchQuery,
                                     results = state.searchItems,
-                                    totalEstimate = state.searchTotalEstimate,
                                     histories = searchHistories,
                                     loading = state.searchLoading,
-                                    loadingMore = state.searchLoadingMore,
                                     error = state.searchError,
-                                    canLoadMore = state.searchNextCursor != null,
                                     layout = layout,
                                     gridState = searchGridState,
                                     onBack = popBrowseRoute,
@@ -1606,10 +1803,9 @@ private fun BrowseContent(
                                         }
                                     },
                                     onSubmit = { term ->
-                                        recordSearchHistory(term)
                                         scope.launch {
                                             searchGridState.scrollToItem(0)
-                                            browser.search(term)
+                                            if (browser.search(term)) recordSearchHistory(term)
                                         }
                                     },
                                     onRecordHistory = recordSearchHistory,
@@ -1625,8 +1821,7 @@ private fun BrowseContent(
                                             }
                                         }
                                     },
-                                    onOpen = openDetail,
-                                    onLoadMore = { scope.launch { browser.loadMoreSearch() } },
+                                    onOpen = { item -> openDetail(item, null) },
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
@@ -1637,7 +1832,6 @@ private fun BrowseContent(
                                 VideoListScreen(
                                     title = state.collections.firstOrNull { it.id.value == route.collectionId }?.name.orEmpty(),
                                     items = state.items,
-                                    totalEstimate = state.totalEstimate,
                                     selectedSort = state.librarySort,
                                     sortChoices = librarySortChoices,
                                     loading = state.loading,
@@ -1660,7 +1854,12 @@ private fun BrowseContent(
                                             browser.setLibrarySort(state.librarySort.copy(direction = direction))
                                         }
                                     },
-                                    onItem = openDetail,
+                                    onItem = { item ->
+                                        openDetail(
+                                            item,
+                                            state.collections.firstOrNull { it.id.value == route.collectionId }?.name,
+                                        )
+                                    },
                                     onRetry = { scope.launch { browser.refresh() } },
                                     onLoadMore = { scope.launch { browser.loadMore() } },
                                     canDeleteMedia = state.deleteAvailable == true,
@@ -1689,11 +1888,7 @@ private fun BrowseContent(
                                 )
                             }
                             is BrowseDetailRoute -> NavEntry(route) {
-                                val detailPlayTarget = state.detail?.takeIf { it.canPlay }
-                                    ?: state.detailEpisodes.firstOrNull {
-                                        it.canPlay && !it.userData.isPlayed && !it.userData.hasProgress
-                                    }
-                                    ?: state.detailEpisodes.firstOrNull { it.canPlay }
+                                val detailPlayTarget = state.detailPlayTarget?.takeIf { it.canPlay }
                                 DetailScreen(
                                     item = state.detail,
                                     loading = state.detailLoading,
@@ -1706,9 +1901,6 @@ private fun BrowseContent(
                                         { startPlayback(item) }
                                     },
                                     playTarget = detailPlayTarget,
-                                    similar = state.detailSimilar,
-                                    similarLoading = state.detailSimilarLoading,
-                                    onSimilarItemSelected = openDetail,
                                     onOpenExternalUrl = { url ->
                                         try {
                                             uriHandler.openUri(url)
@@ -1740,19 +1932,20 @@ private fun BrowseContent(
                                     sectionsError = state.detailSectionsError,
                                     onSeasonSelected = { season ->
                                         if (browseBackStack.lastOrNull() !is BrowseSeasonRoute) {
-                                            browseBackStack += BrowseSeasonRoute(route.mediaId, season.id.value)
+                                            browseBackStack += BrowseSeasonRoute(
+                                                route.mediaId,
+                                                season.id.value,
+                                                route.mediaName,
+                                            )
                                         }
-                                        scope.launch { browser.selectSeason(season.id) }
                                     },
                                     playbackBusy = playbackBusy,
                                     playbackError = playbackError,
-                                    libraryName = state.collections.firstOrNull {
-                                        it.id == state.selectedCollection
-                                    }?.name,
+                                    libraryName = route.mediaName,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.preferredPoster(),
+                                            item.legacyPrimaryThenBackdropArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,
@@ -1762,7 +1955,7 @@ private fun BrowseContent(
                                     },
                                     backdropArtwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.preferredLandscape(),
+                                            item.legacyDetailBackdropArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,
@@ -1794,7 +1987,7 @@ private fun BrowseContent(
                                     onPersonSelected = openPerson,
                                     atmosphereArtwork = { item, modifier ->
                                         MediaArtwork(
-                                            images = item.landscapeArtworkCandidates(),
+                                            images = item.legacyDetailBackdropArtworkCandidates(),
                                             title = item.title,
                                             cache = artworkCache,
                                             fetch = fetchArtwork,
@@ -1811,18 +2004,18 @@ private fun BrowseContent(
                                     series = state.personSeries,
                                     episodes = state.personEpisodes,
                                     loading = state.personLoading,
-                                    sectionsLoading = state.personSectionsLoading,
                                     error = state.personError,
                                     onBack = popBrowseRoute,
                                     onRetry = { scope.launch { browser.openPerson(MediaId(route.personId)) } },
-                                    onItem = openDetail,
+                                    onItem = { item ->
+                                        openDetail(
+                                            item,
+                                            if (item.mediaType == MediaType.Series) "电视节目" else "电影",
+                                        )
+                                    },
                                     canFavorite = browser.capabilities.favoritesEdit,
                                     onToggleFavorite = { scope.launch { browser.togglePersonFavorite() } },
                                     favoriteBusy = state.personFavoriteBusy,
-                                    onLoadMoreMovies = { scope.launch { browser.loadMorePersonWorks(MediaType.Movie) } },
-                                    onLoadMoreSeries = { scope.launch { browser.loadMorePersonWorks(MediaType.Series) } },
-                                    onLoadMoreEpisodes = { scope.launch { browser.loadMorePersonWorks(MediaType.Episode) } },
-                                    loadingMoreSections = state.personLoadingMore.map { it.name.lowercase() }.toSet(),
                                     modifier = Modifier.fillMaxSize(),
                                     personArtwork = { person, modifier ->
                                         LegacyPersonArtwork(
@@ -1836,7 +2029,7 @@ private fun BrowseContent(
                                     },
                                     artwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.preferredPoster(),
+                                            item.legacyPrimaryArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,
@@ -1847,8 +2040,27 @@ private fun BrowseContent(
                                 )
                             }
                             is BrowseSeasonRoute -> NavEntry(route) {
+                                // The ArkUI season page owns its own ViewModel. Our
+                                // provider-neutral browser has one detail slot, so an
+                                // episode page temporarily replaces the series in that
+                                // slot. Make the route the source of truth: entering or
+                                // returning to this destination restores the exact
+                                // series + season before rendering it.
+                                LaunchedEffect(route.seriesId, route.seasonId) {
+                                    if (state.detail?.id?.value != route.seriesId) {
+                                        browser.openDetail(MediaId(route.seriesId))
+                                    }
+                                    if (state.selectedSeasonId?.value != route.seasonId ||
+                                        state.selectedSeasonDetail?.id?.value != route.seasonId
+                                    ) {
+                                        browser.selectSeason(MediaId(route.seasonId))
+                                    }
+                                }
                                 val series = state.detail?.takeIf { it.id.value == route.seriesId }
-                                val season = state.detailSeasons.firstOrNull { it.id.value == route.seasonId }
+                                val seasonSummary = state.detailSeasons.firstOrNull { it.id.value == route.seasonId }
+                                val season = state.selectedSeasonDetail
+                                    ?.takeIf { it.id.value == route.seasonId }
+                                    ?: seasonSummary
                                 if (series == null || season == null) {
                                     DetailScreen(
                                         item = null,
@@ -1865,53 +2077,47 @@ private fun BrowseContent(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 } else {
-                                    val playTarget = state.detailEpisodes.firstOrNull {
-                                        it.canPlay && !it.userData.isPlayed && it.userData.hasProgress
-                                    } ?: state.detailEpisodes.firstOrNull {
-                                        it.canPlay && !it.userData.isPlayed
-                                    } ?: state.detailEpisodes.firstOrNull { it.canPlay }
+                                    val playTarget = state.selectedSeasonPlayTarget?.takeIf { it.canPlay }
                                     SeasonDetailScreen(
                                         series = series,
                                         season = season,
                                         seasons = state.detailSeasons,
                                         episodes = state.detailEpisodes,
                                         loading = state.detailSectionsLoading,
-                                        error = state.detailSectionsError,
                                         onBack = popBrowseRoute,
                                         onSeasonSelected = { nextSeason ->
                                             val lastIndex = browseBackStack.lastIndex
                                             if (lastIndex >= 0) {
-                                                browseBackStack[lastIndex] = BrowseSeasonRoute(route.seriesId, nextSeason.id.value)
+                                                browseBackStack[lastIndex] = BrowseSeasonRoute(
+                                                    route.seriesId,
+                                                    nextSeason.id.value,
+                                                    route.mediaName,
+                                                )
                                             }
-                                            scope.launch { browser.selectSeason(nextSeason.id) }
                                         },
                                         onEpisodeSelected = { episode ->
                                             browseBackStack += BrowseEpisodeRoute(
                                                 seriesId = route.seriesId,
                                                 seasonId = route.seasonId,
                                                 episodeId = episode.id.value,
+                                                mediaName = route.mediaName,
                                             )
                                         },
                                         onPlayFirst = playTarget?.takeIf { playback != null }?.let { item ->
                                             { startPlayback(item) }
                                         },
                                         playTarget = playTarget,
-                                        canLoadMoreEpisodes = state.detailEpisodesNextCursor != null,
-                                        episodesLoadingMore = state.detailEpisodesLoadingMore,
-                                        onLoadMoreEpisodes = { scope.launch { browser.loadMoreEpisodes() } },
                                         onTogglePlayed = if (browser.capabilities.watchedEdit) {
                                             { scope.launch { browser.toggleWatched(season) } }
                                         } else null,
                                         playbackBusy = playbackBusy,
                                         actionsBusy = state.detailActionBusy,
                                         actionsError = state.detailActionError,
-                                        libraryName = state.collections.firstOrNull {
-                                            it.id == state.selectedCollection
-                                        }?.name,
+                                        libraryName = route.mediaName,
                                         modifier = Modifier.fillMaxSize(),
                                         posterArtwork = { item, modifier ->
                                             MediaArtwork(
-                                                item.preferredPoster(),
+                                                item.legacyPrimaryArtworkCandidates(),
                                                 item.title,
                                                 artworkCache,
                                                 fetchArtwork,
@@ -1921,7 +2127,17 @@ private fun BrowseContent(
                                         },
                                         landscapeArtwork = { item, modifier ->
                                             MediaArtwork(
-                                                item.preferredLandscape(),
+                                                item.legacyDetailBackdropArtworkCandidates(),
+                                                item.title,
+                                                artworkCache,
+                                                fetchArtwork,
+                                                modifier,
+                                                targetWidthPx = 720,
+                                            )
+                                        },
+                                        episodeArtwork = { item, modifier ->
+                                            MediaArtwork(
+                                                item.legacyPrimaryThenBackdropArtworkCandidates(),
                                                 item.title,
                                                 artworkCache,
                                                 fetchArtwork,
@@ -1941,7 +2157,7 @@ private fun BrowseContent(
                                         onPersonSelected = openPerson,
                                         atmosphereArtwork = { item, modifier ->
                                             MediaArtwork(
-                                                images = item.landscapeArtworkCandidates(),
+                                                images = item.legacyDetailBackdropArtworkCandidates(),
                                                 title = item.title,
                                                 cache = artworkCache,
                                                 fetch = fetchArtwork,
@@ -1972,9 +2188,6 @@ private fun BrowseContent(
                                         { startPlayback(item) }
                                     },
                                     playTarget = episode,
-                                    similar = state.detailSimilar,
-                                    similarLoading = state.detailSimilarLoading,
-                                    onSimilarItemSelected = openDetail,
                                     onOpenExternalUrl = { url ->
                                         try {
                                             uriHandler.openUri(url)
@@ -2003,13 +2216,11 @@ private fun BrowseContent(
                                     actionsError = state.detailActionError,
                                     playbackBusy = playbackBusy,
                                     playbackError = playbackError,
-                                    libraryName = state.collections.firstOrNull {
-                                        it.id == state.selectedCollection
-                                    }?.name,
+                                    libraryName = route.mediaName,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.preferredPoster(),
+                                            item.legacyPrimaryThenBackdropArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,
@@ -2019,7 +2230,7 @@ private fun BrowseContent(
                                     },
                                     backdropArtwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.preferredLandscape(),
+                                            item.legacyDetailBackdropArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,
@@ -2051,7 +2262,7 @@ private fun BrowseContent(
                                     onPersonSelected = openPerson,
                                     atmosphereArtwork = { item, modifier ->
                                         MediaArtwork(
-                                            images = item.landscapeArtworkCandidates(),
+                                            images = item.legacyDetailBackdropArtworkCandidates(),
                                             title = item.title,
                                             cache = artworkCache,
                                             fetch = fetchArtwork,
@@ -2381,12 +2592,6 @@ private fun MediaItem.preferredLandscape(): List<MediaImage> = landscapeArtworkC
 private fun MediaItem.preferredLogo(): MediaImage? =
     images.firstOrNull { it.kind == ImageKind.Logo }
 
-private fun MediaItem.playbackResumePositionMs(): Long {
-    val saved = userData.playbackPositionMs.coerceAtLeast(0L)
-    val duration = runtimeMs?.takeIf { it > 0L } ?: return saved
-    return saved.takeIf { it < (duration - 10_000L).coerceAtLeast(0L) } ?: 0L
-}
-
 private fun MediaItem.miniPlayerSubtitle(): String = listOfNotNull(
     year?.toString(),
     when (mediaType) {
@@ -2430,9 +2635,23 @@ private suspend fun discoveredJellyfinServerSuggestions(): List<ServerDiscoveryS
     }
 
 private const val HomeDestination = "home"
+private const val ChasingDestination = "chasing"
 private const val FavoriteDestination = "favorite"
 private const val LibraryDestination = "library"
 private const val MineDestination = "mine"
+
+private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
+    FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
+    FeiniuRoutePreference.Relay -> FeiniuConnectionPreference.Relay
+    FeiniuRoutePreference.Auto,
+    FeiniuRoutePreference.Speed -> FeiniuConnectionPreference.Speed
+}
+
+private fun FeiniuConnectionPreference.toProviderPreference(): FeiniuRoutePreference = when (this) {
+    FeiniuConnectionPreference.Speed -> FeiniuRoutePreference.Speed
+    FeiniuConnectionPreference.Public -> FeiniuRoutePreference.Public
+    FeiniuConnectionPreference.Relay -> FeiniuRoutePreference.Relay
+}
 
 private fun legacySortChoices(
     provider: ProviderKind,
@@ -2441,11 +2660,28 @@ private fun legacySortChoices(
     // 可排序字段集由 model 的展示风格表给出（core:domain/MediaPresentation.kt），
     // 此处不再判断 provider；UI 只负责把字段翻译成菜单文案。
     val labels = mapOf(
+        MediaSortField.Default to "默认",
         MediaSortField.Title to "按名称",
         MediaSortField.DateAdded to "按添加日期",
         MediaSortField.PremiereDate to "按首播日期",
+        MediaSortField.DatePlayed to "按播放日期",
         MediaSortField.CommunityRating to "按社区评分",
+        MediaSortField.CriticRating to "按影评人评分",
+        MediaSortField.ProductionYear to "按出品年份",
+        MediaSortField.PlayCount to "按播放次数",
         MediaSortField.Runtime to "按时长",
+        MediaSortField.OfficialRating to "按官方评级",
+        MediaSortField.Random to "随机",
+        MediaSortField.Album to "按专辑",
+        MediaSortField.Artist to "按艺术家",
+        MediaSortField.AlbumArtist to "按专辑艺术家",
+        MediaSortField.AiredEpisodeOrder to "按播出集数顺序",
+        MediaSortField.SeriesSortName to "按剧集名称",
+        MediaSortField.Studio to "按制作公司",
+        MediaSortField.IsFavoriteOrLiked to "按收藏/喜欢",
+        MediaSortField.DateLastContentAdded to "按最后添加内容日期",
+        MediaSortField.IsUnplayed to "未播放优先",
+        MediaSortField.IsPlayed to "已播放优先",
     )
     return MediaDisplayStyle.forProvider(provider).sortableFields.map { field ->
         LegacySortChoice(labels.getValue(field), MediaSort(field, direction))
