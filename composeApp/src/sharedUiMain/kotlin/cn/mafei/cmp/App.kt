@@ -2084,11 +2084,10 @@ private fun BrowseContent(
                 }
             },
             modal = { backdrop ->
-                // 大屏：居中的毛玻璃模态。同一个 mineNavContent，所以来回切形态时里面停在哪
-                // 一页、翻了几层都保持不变。
+                // 大屏：居中的正常背景模态（容器不上玻璃）。同一个 mineNavContent，
+                // 所以来回切形态时里面停在哪一页、翻了几层都保持不变。
                 if (minePresented && !mineFullScreen) {
                     MineAccountSheet(
-                        backdrop = backdrop,
                         layout = layout,
                         onDismiss = { minePresented = false },
                         content = mineNavContent,
@@ -2156,7 +2155,6 @@ private fun MineFullScreenHost(
  */
 @Composable
 private fun MineAccountSheet(
-    backdrop: GlassBackdrop,
     layout: MaFeiLayout,
     onDismiss: () -> Unit,
     content: @Composable (Modifier) -> Unit,
@@ -2201,11 +2199,18 @@ private fun MineAccountSheet(
                     .height(sheetHeight)
                     .shadow(MineSheetElevation, RoundedCornerShape(MineSheetCornerDp))
                     .clip(RoundedCornerShape(MineSheetCornerDp))
-                    .background(MaterialTheme.colorScheme.background)
                     .pointerInput(Unit) { detectTapGestures { } }
                     .semantics { contentDescription = "我的" },
             ) {
-                Box(Modifier.fillMaxSize()) {
+                // 局部记录者：把**弹窗自己这一层**（容器背景 + 子页面内容）录成
+                // backdrop。关闭按钮直接取这层映射 —— 玻璃模糊的是它下面的弹窗
+                // 内容，而不是采样窗口 backdrop 看穿到窗口背景。
+                val sheetBackdrop = rememberGlassBackdrop()
+                Box(Modifier.fillMaxSize().captureGlassBackdrop(sheetBackdrop)) {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                    )
                     // 弹窗内的页面没有窗口安全区（不在状态栏下），但统一为顶部导航区
                     // （关闭按钮所在的那条）让位 —— 所有子页面从这里往下排，不会被
                     // 关闭按钮压住。
@@ -2215,21 +2220,20 @@ private fun MineAccountSheet(
                                 .testTag("mineAccountSheetContent"),
                         )
                     }
-                    // 右上角关闭按钮：液态玻璃按钮（容器在 modal 槽，采样窗口
-                    // backdrop 是合法的消费者位置）。
-                    LiquidButton(
-                        onClick = onDismiss,
-                        backdrop = backdrop,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
-                            .size(36.dp)
-                            .semantics { contentDescription = "关闭我的" },
-                        height = 36.dp,
-                        horizontalPadding = 0.dp,
-                    ) {
-                        MaFeiIcon(MaFeiGlyph.Close, Modifier.size(16.dp))
-                    }
+                }
+                // 右上角关闭按钮：液态玻璃按钮，取下层（弹窗）映射。
+                LiquidButton(
+                    onClick = onDismiss,
+                    backdrop = sheetBackdrop,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .size(36.dp)
+                        .semantics { contentDescription = "关闭我的" },
+                    height = 36.dp,
+                    horizontalPadding = 0.dp,
+                ) {
+                    MaFeiIcon(MaFeiGlyph.Close, Modifier.size(16.dp))
                 }
             }
         }
