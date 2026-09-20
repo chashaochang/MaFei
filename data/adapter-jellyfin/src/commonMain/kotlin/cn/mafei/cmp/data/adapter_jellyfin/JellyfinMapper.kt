@@ -69,6 +69,8 @@ internal val JELLYFIN_LIST_FIELDS = listOf(
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.PremiereDate,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.DateCreated,
     cn.mafei.cmp.providers.jellyfin.wire.ItemField.Runtime,
+    cn.mafei.cmp.providers.jellyfin.wire.ItemField.ItemCounts,
+    cn.mafei.cmp.providers.jellyfin.wire.ItemField.ChildCount,
 )
 
 internal fun ItemKind.toMediaType(): MediaType = when (this) {
@@ -155,12 +157,28 @@ internal fun MediaSort?.toQuerySort(): Pair<List<JellyfinSortBy>, JellyfinSortOr
             when (sort.field) {
                 // SeasonNumber/EpisodeNumber sort by the positional fields,
                 // mirroring Jellyfin season/episode numbering semantics.
-                cn.mafei.cmp.core.domain.MediaSortField.Title -> JellyfinSortBy.SortName
+                cn.mafei.cmp.core.domain.MediaSortField.Default -> JellyfinSortBy.Default
+                cn.mafei.cmp.core.domain.MediaSortField.Title -> JellyfinSortBy.Name
                 cn.mafei.cmp.core.domain.MediaSortField.DateAdded -> JellyfinSortBy.DateCreated
                 cn.mafei.cmp.core.domain.MediaSortField.DatePlayed -> JellyfinSortBy.DatePlayed
                 cn.mafei.cmp.core.domain.MediaSortField.PremiereDate -> JellyfinSortBy.PremiereDate
                 cn.mafei.cmp.core.domain.MediaSortField.CommunityRating -> JellyfinSortBy.CommunityRating
+                cn.mafei.cmp.core.domain.MediaSortField.CriticRating -> JellyfinSortBy.CriticRating
+                cn.mafei.cmp.core.domain.MediaSortField.ProductionYear -> JellyfinSortBy.ProductionYear
+                cn.mafei.cmp.core.domain.MediaSortField.PlayCount -> JellyfinSortBy.PlayCount
                 cn.mafei.cmp.core.domain.MediaSortField.Runtime -> JellyfinSortBy.Runtime
+                cn.mafei.cmp.core.domain.MediaSortField.OfficialRating -> JellyfinSortBy.OfficialRating
+                cn.mafei.cmp.core.domain.MediaSortField.Random -> JellyfinSortBy.Random
+                cn.mafei.cmp.core.domain.MediaSortField.Album -> JellyfinSortBy.Album
+                cn.mafei.cmp.core.domain.MediaSortField.Artist -> JellyfinSortBy.Artist
+                cn.mafei.cmp.core.domain.MediaSortField.AlbumArtist -> JellyfinSortBy.AlbumArtist
+                cn.mafei.cmp.core.domain.MediaSortField.AiredEpisodeOrder -> JellyfinSortBy.AiredEpisodeOrder
+                cn.mafei.cmp.core.domain.MediaSortField.SeriesSortName -> JellyfinSortBy.SeriesSortName
+                cn.mafei.cmp.core.domain.MediaSortField.Studio -> JellyfinSortBy.Studio
+                cn.mafei.cmp.core.domain.MediaSortField.IsFavoriteOrLiked -> JellyfinSortBy.IsFavoriteOrLiked
+                cn.mafei.cmp.core.domain.MediaSortField.DateLastContentAdded -> JellyfinSortBy.DateLastContentAdded
+                cn.mafei.cmp.core.domain.MediaSortField.IsUnplayed -> JellyfinSortBy.IsUnplayed
+                cn.mafei.cmp.core.domain.MediaSortField.IsPlayed -> JellyfinSortBy.IsPlayed
                 cn.mafei.cmp.core.domain.MediaSortField.SeasonNumber -> JellyfinSortBy.ParentIndexNumber
                 cn.mafei.cmp.core.domain.MediaSortField.EpisodeNumber -> JellyfinSortBy.IndexNumber
             },
@@ -261,6 +279,7 @@ internal fun BaseItemDto.toMediaItem(
             else -> null
         },
         episodeNumber = if (mediaType == MediaType.Episode) indexNumber else null,
+        childCount = (childCount ?: episodeCount)?.coerceAtLeast(0),
         indexNumber = if (mediaType == MediaType.Episode || mediaType == MediaType.Season) null else indexNumber,
         parentIndexNumber = if (mediaType == MediaType.Episode || mediaType == MediaType.Season) null else parentIndexNumber,
         year = productionYear,
@@ -290,13 +309,18 @@ internal fun BaseItemDto.toMediaItem(
                 isFavorite = data?.isFavorite ?: false,
                 isPlayed = data?.played ?: false,
                 playCount = data?.playCount,
+                unplayedItemCount = data?.unplayedItemCount,
                 playbackPositionMs = (data?.playbackPositionTicks ?: 0L).let(JellyfinTicks::toMilliseconds),
                 playedPercentage = data?.playedPercentage,
                 lastPlayedEpochMs = data?.lastPlayedDate,
             )
         },
         canPlay = mediaType.toPlayable(),
-        mediaSources = this.mediaSources.map { it.toMediaSourceInfo() },
+        mediaSources = this.mediaSources.mapIndexed { index, source ->
+            source.toMediaSourceInfo().let { mapped ->
+                if (mapped.id == null) mapped.copy(id = "$id:$index") else mapped
+            }
+        },
         externalUrls = externalUrls.mapNotNull { link ->
             val url = link.url?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             cn.mafei.cmp.core.domain.MediaExternalUrl(
@@ -335,8 +359,11 @@ internal fun MediaStreamDto.toMediaStreamInfo(): MediaStreamInfo = MediaStreamIn
         else -> MediaStreamKind.Other
     },
     codec = codec?.takeIf { it.isNotBlank() },
+    profile = profile?.takeIf { it.isNotBlank() },
+    level = level,
     language = language?.takeIf { it.isNotBlank() },
-    title = (displayTitle ?: title)?.takeIf { it.isNotBlank() },
+    title = title?.takeIf { it.isNotBlank() },
+    displayTitle = displayTitle?.takeIf { it.isNotBlank() },
     isDefault = isDefault ?: false,
     isForced = isForced ?: false,
     isExternal = isExternal ?: false,
@@ -344,8 +371,19 @@ internal fun MediaStreamDto.toMediaStreamInfo(): MediaStreamInfo = MediaStreamIn
     channelLayout = channelLayout?.takeIf { it.isNotBlank() },
     sampleRateHz = sampleRate,
     bitRate = bitRate,
+    bitDepth = bitDepth,
+    referenceFrames = refFrames,
     widthPx = width,
     heightPx = height,
+    aspectRatio = aspectRatio?.takeIf { it.isNotBlank() },
+    frameRate = averageFrameRate ?: realFrameRate,
+    interlaced = isInterlaced,
+    videoRangeType = videoRangeType?.takeIf { it.isNotBlank() },
+    dolbyVisionProfile = dolbyVisionProfile,
+    colorPrimaries = colorPrimaries?.takeIf { it.isNotBlank() },
+    colorSpace = colorSpace?.takeIf { it.isNotBlank() },
+    colorTransfer = colorTransfer?.takeIf { it.isNotBlank() },
+    pixelFormat = pixelFormat?.takeIf { it.isNotBlank() },
 )
 
 /** Mechanical mapping of the legacy Jellyfin person detail contract. */

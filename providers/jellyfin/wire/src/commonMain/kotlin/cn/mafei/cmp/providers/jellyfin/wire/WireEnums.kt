@@ -219,6 +219,7 @@ enum class ItemField(val wireName: String) {
     PremiereDate("PremiereDate"),
     DateCreated("DateCreated"),
     Runtime("Runtime"),
+    ItemCounts("ItemCounts"),
     ChildCount("ChildCount"),
 }
 

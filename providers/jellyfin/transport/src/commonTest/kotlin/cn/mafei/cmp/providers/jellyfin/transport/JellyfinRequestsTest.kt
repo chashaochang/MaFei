@@ -117,6 +117,27 @@ class JellyfinRequestsTest {
     }
 
     @Test
+    fun seriesNextUpCarriesTheLegacyDetailSelectionFlags() {
+        val request = JellyfinRequests.nextUp(
+            base = base,
+            userId = "u1",
+            limit = 1,
+            seriesId = "series-1",
+            disableFirstEpisode = false,
+            enableResumable = true,
+            enableRewatching = true,
+            nextUpDateCutoffEpochMs = 1_000L,
+        )
+        val query = urlOf(request).queryParameters
+        assertEquals("series-1", query.first("seriesId"))
+        assertEquals("1", query.first("limit"))
+        assertEquals("false", query.first("disableFirstEpisode"))
+        assertEquals("true", query.first("enableResumable"))
+        assertEquals("true", query.first("enableRewatching"))
+        assertEquals("1970-01-01T00:00:01Z", query.first("nextUpDateCutoff"))
+    }
+
+    @Test
     fun authenticateByNameEncodesOfficialBody() {
         val request = JellyfinRequests.authenticateByName(base, "ada@example.org", "p@ss\"word")
         val body = (request.body as HttpBody.Text).text

@@ -3,6 +3,8 @@ package cn.mafei.cmp.data.adapter_jellyfin
 import cn.mafei.cmp.core.domain.AccountId
 import cn.mafei.cmp.core.domain.AuthorizationError
 import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaFilter
+import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
@@ -21,7 +23,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * 二级页面数据缺口补齐的端点级测试：收藏/已看写接口、相似推荐、resume 分页、
+ * 二级链路数据缺口补齐的端点级测试：收藏/已看写接口、播放器相似条目、resume 分页、
  * 管理员删除与播放选项（版本/轨道）。
  */
 class JellyfinAdapterSecondLevelTest {
@@ -89,6 +91,22 @@ class JellyfinAdapterSecondLevelTest {
         assertEquals("2", fixture.transport.requests[1].url.queryParameters.first("startIndex"))
     }
 
+    @Test
+    fun resumeItemsForwardsTheLegacyMovieAndEpisodeConstraint() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, resumePage(0, 1, total = 1))
+
+        fixture.adapter.resumeItems(
+            PageRequest(
+                pageSize = 10,
+                filter = MediaFilter(mediaTypes = setOf(MediaType.Movie, MediaType.Episode)),
+            ),
+        )
+
+        val request = fixture.transport.requests.single()
+        assertEquals("Movie,Episode", request.url.queryParameters.first("includeItemTypes"))
+    }
+
     // -------------------------------------------------------- user-data ops
 
     @Test
@@ -114,6 +132,7 @@ class JellyfinAdapterSecondLevelTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, """{"Id":"u1","Name":"Admin","Policy":{"IsAdministrator":true}}""")
         assertTrue(fixture.adapter.canDeleteMedia())
+        assertTrue(fixture.adapter.isAdministrator())
         assertTrue(fixture.adapter.canDeleteMedia())
         // 缓存生效：第二次不再发请求。
         assertEquals(1, fixture.transport.requests.size)

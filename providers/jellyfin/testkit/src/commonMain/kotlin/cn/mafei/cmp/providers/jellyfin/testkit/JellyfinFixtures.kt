@@ -91,8 +91,8 @@ data object JellyfinFixtures {
 
     const val SEASONS: String = """{
         "Items": [
-            {"Name": "Season 1", "Id": "se01020304050607", "Type": "Season", "IndexNumber": 1, "SeriesId": "s0102030405060708"},
-            {"Name": "Season 2", "Id": "se02030405060708", "Type": "Season", "IndexNumber": 2, "SeriesId": "s0102030405060708"}
+            {"Name": "Season 1", "Id": "se01020304050607", "Type": "Season", "IndexNumber": 1, "SeriesId": "s0102030405060708", "ChildCount": 10},
+            {"Name": "Season 2", "Id": "se02030405060708", "Type": "Season", "IndexNumber": 2, "SeriesId": "s0102030405060708", "EpisodeCount": 8}
         ],
         "TotalRecordCount": 2,
         "StartIndex": 0

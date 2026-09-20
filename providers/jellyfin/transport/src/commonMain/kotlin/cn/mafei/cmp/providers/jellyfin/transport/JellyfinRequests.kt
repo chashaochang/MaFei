@@ -9,6 +9,7 @@ import cn.mafei.cmp.core.serialization.MafeiJson
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinRequestMode
 import cn.mafei.cmp.providers.jellyfin.wire.ImageType
 import cn.mafei.cmp.providers.jellyfin.wire.ItemField
+import cn.mafei.cmp.core.serialization.formatIsoInstant
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackInfoRequestDto
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackProgressInfoDto
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackStartInfoDto
@@ -200,18 +201,27 @@ data object JellyfinRequests {
         userId: String,
         limit: Int,
         fields: List<ItemField> = emptyList(),
+        seriesId: String? = null,
+        disableFirstEpisode: Boolean = false,
+        enableResumable: Boolean = false,
+        enableRewatching: Boolean = false,
+        nextUpDateCutoffEpochMs: Long? = null,
     ): HttpRequest = get(base, "Shows/NextUp") {
         addQueryParameter("userId", userId)
         addQueryParameter("startIndex", "0")
         addQueryParameter("limit", limit.toString())
+        seriesId?.trim()?.takeIf { it.isNotEmpty() }?.let { addQueryParameter("seriesId", it) }
         if (fields.isNotEmpty()) addQueryParameter("fields", fields.joinToString(",") { it.wireName })
         addQueryParameter("enableImages", "true")
         addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
         addQueryParameter("enableUserData", "true")
         addQueryParameter("imageTypeLimit", "1")
-        addQueryParameter("disableFirstEpisode", "false")
-        addQueryParameter("enableResumable", "false")
-        addQueryParameter("enableRewatching", "false")
+        addQueryParameter("disableFirstEpisode", disableFirstEpisode.toString())
+        addQueryParameter("enableResumable", enableResumable.toString())
+        addQueryParameter("enableRewatching", enableRewatching.toString())
+        nextUpDateCutoffEpochMs?.takeIf { it > 0L }?.let {
+            addQueryParameter("nextUpDateCutoff", formatIsoInstant(it))
+        }
     }
 
     /** Official endpoint: GET /Items/Latest. */

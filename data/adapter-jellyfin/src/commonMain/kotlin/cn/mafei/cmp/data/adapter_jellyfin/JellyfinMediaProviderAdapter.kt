@@ -27,25 +27,20 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.jellyfin.facade.JellyfinFacade
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.time.TimeSource
-
-/** 临时诊断打点：首页加载慢定位用，定位完成后可整体删除。 */
-private fun timingLog(message: String) {
-    println("[MaFeiTiming] $message")
-}
 
 private const val HomeRecentLibraryLimit = 16
 
 /** 各媒体库 latest 的并发上限：够了（把延迟相加变成取最大值），又不会压垮 NAS。 */
 private const val HomeLatestConcurrency = 4
 
-/** 详情页「相似推荐」条数上限：旧版固定取一小横排，服务器通常默认 12。 */
+/** 播放器侧相似条目的取数上限；旧版 `VideoDetailPage` 不展示相似推荐。 */
 private const val SimilarItemsLimit = 12
 
 /**
@@ -81,6 +76,7 @@ class JellyfinMediaProviderAdapter(
         watchedEdit = true, // POST/DELETE /Users/{id}/PlayedItems/{itemId}
         playbackReporting = true,
         mediaDelete = true, // DELETE /Items?ids=... — the SERVER rejects non-admins
+        chasing = true,
     )
 
     /** Streams this instance prepared; reportPlayback accepts only these. */
@@ -116,14 +112,12 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun home(request: HomeFeedRequest): HomeFeed {
-        val homeMark = TimeSource.Monotonic.markNow()
-        val feed = coroutineScope {
+        return coroutineScope {
             // 这四段彼此**独立**，原来是一条串行链：推荐 → 继续观看 → 接下来 → 各库最新。
             // 串行发就是把这些来回的延迟直接相加，首屏要等 4 + 库数 个请求。这里并发，
             // 并把每个媒体库的 latest 限流成每批 4 个 —— NAS 上的 Jellyfin 扛不住十几个并发，
             // 但 4 个并发已经能把"相加"变成"取最大值"。
-            val recommendations = async {
-                val mark = TimeSource.Monotonic.markNow()
+            val recommendations = async(start = CoroutineStart.UNDISPATCHED) {
                 val items = translate {
                     facade.catalog.recommendations(
                         userId = jellyfinUserId,
@@ -135,11 +129,9 @@ class JellyfinMediaProviderAdapter(
                     .mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
                     .filter { it.mediaType == cn.mafei.cmp.core.domain.MediaType.Movie }
                     .distinctBy { it.id }
-                timingLog("jellyfin/home recommendations ${mark.elapsedNow().inWholeMilliseconds}ms (${items.size})")
                 items.take(request.recommendationLimit)
             }
-            val resume = async {
-                val mark = TimeSource.Monotonic.markNow()
+            val resume = async(start = CoroutineStart.UNDISPATCHED) {
                 val items = translate {
                     facade.catalog.resume(
                         userId = jellyfinUserId,
@@ -148,19 +140,15 @@ class JellyfinMediaProviderAdapter(
                         fields = JELLYFIN_LIST_FIELDS,
                     )
                 }.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
-                timingLog("jellyfin/home resume ${mark.elapsedNow().inWholeMilliseconds}ms (${items.size})")
                 items
             }
-            val nextUp = async {
-                val mark = TimeSource.Monotonic.markNow()
+            val nextUp = async(start = CoroutineStart.UNDISPATCHED) {
                 val items = translate {
                     facade.catalog.nextUp(jellyfinUserId, request.nextUpLimit, JELLYFIN_LIST_FIELDS)
                 }.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }
-                timingLog("jellyfin/home nextUp ${mark.elapsedNow().inWholeMilliseconds}ms (${items.size})")
                 items
             }
-            val latest = async {
-                val mark = TimeSource.Monotonic.markNow()
+            val latest = async(start = CoroutineStart.UNDISPATCHED) {
                 // Keep the original HarmonyOS home contract: Jellyfin's global
                 // /Items/Latest response is not the same feed. Read the user's views,
                 // fetch a small page from every visual-media library, then interleave
@@ -168,13 +156,11 @@ class JellyfinMediaProviderAdapter(
                 val latestViews = translate { facade.catalog.views(jellyfinUserId) }.items.filter { view ->
                     !view.id.isNullOrBlank() && view.collectionType?.trim()?.lowercase() !in setOf("livetv", "music")
                 }
-                timingLog("jellyfin/home latest-views ${mark.elapsedNow().inWholeMilliseconds}ms (${latestViews.size} libs)")
                 val latestPages = latestViews.chunked(HomeLatestConcurrency).flatMap { group ->
                     coroutineScope {
                         group.map { view ->
-                            async {
+                            async(start = CoroutineStart.UNDISPATCHED) {
                                 val collectionId = CollectionId(view.id!!.trim())
-                                val libMark = TimeSource.Monotonic.markNow()
                                 val page = try {
                                     translate {
                                         facade.catalog.latest(
@@ -192,10 +178,6 @@ class JellyfinMediaProviderAdapter(
                                     // in the legacy implementation either.
                                     emptyList()
                                 }
-                                timingLog(
-                                    "jellyfin/home latest-lib=${collectionId.value} " +
-                                        "${libMark.elapsedNow().inWholeMilliseconds}ms (${page.size})",
-                                )
                                 page
                             }
                         }.map { it.await() }
@@ -205,7 +187,6 @@ class JellyfinMediaProviderAdapter(
                     .mapNotNull { (collectionId, item) -> item.toMediaItem(serverId, ::imageUrl, collectionId) }
                     .distinctBy { it.id }
                     .take(request.latestLimit)
-                timingLog("jellyfin/home latest total ${mark.elapsedNow().inWholeMilliseconds}ms (${items.size})")
                 items
             }
             HomeFeed(
@@ -215,8 +196,6 @@ class JellyfinMediaProviderAdapter(
                 latest = latest.await(),
             )
         }
-        timingLog("jellyfin/home TOTAL ${homeMark.elapsedNow().inWholeMilliseconds}ms")
-        return feed
     }
 
     private fun <T> interleave(pages: List<List<T>>, limit: Int): List<T> {
@@ -270,7 +249,12 @@ class JellyfinMediaProviderAdapter(
         if (filter.favoritesOnly) requireCapability(capabilities, AdapterCapability.FavoritesRead)
         if (filter.playedOnly || filter.unplayedOnly) requireCapability(capabilities, AdapterCapability.WatchedFilter)
         val offset = decodeOffset(request.cursor)
-        val (sortBy, sortOrder) = request.sort.toQuerySort()
+        // Legacy SearchViewModel/JellyfinCatalogProvider did not send SortBy
+        // for free-text search. Preserve the server's native search ordering
+        // unless a caller explicitly asks for a sort.
+        val (sortBy, sortOrder) = request.sort?.toQuerySort()
+            ?: (emptyList<cn.mafei.cmp.providers.jellyfin.transport.JellyfinSortBy>() to
+                cn.mafei.cmp.providers.jellyfin.transport.JellyfinSortOrder.Ascending)
         val query = JellyfinItemQueryFor(
             parentId = null,
             startIndex = offset,
@@ -351,6 +335,37 @@ class JellyfinMediaProviderAdapter(
         return toPage(result, request, offset, collectionId = null)
     }
 
+    override suspend fun nextUp(seriesId: MediaId): MediaItem? {
+        val result = translate {
+            facade.catalog.nextUp(
+                userId = jellyfinUserId,
+                limit = 1,
+                fields = JELLYFIN_LIST_FIELDS,
+                seriesId = seriesId.value,
+                disableFirstEpisode = false,
+                enableResumable = true,
+                enableRewatching = true,
+            )
+        }
+        return result.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }.firstOrNull()
+    }
+
+    override suspend fun chasingNextUp(seriesId: MediaId, nextUpDateCutoffEpochMs: Long): MediaItem? {
+        val result = translate {
+            facade.catalog.nextUp(
+                userId = jellyfinUserId,
+                limit = 1,
+                fields = JELLYFIN_LIST_FIELDS,
+                seriesId = seriesId.value,
+                disableFirstEpisode = false,
+                enableResumable = false,
+                enableRewatching = false,
+                nextUpDateCutoffEpochMs = nextUpDateCutoffEpochMs,
+            )
+        }
+        return result.items.mapNotNull { it.toMediaItem(serverId, ::imageUrl) }.firstOrNull()
+    }
+
     /**
      * Toggles favorite via POST/DELETE /Users/{id}/FavoriteItems/{itemId}.
      * The response body carries no payload; success is the 2xx itself.
@@ -378,18 +393,26 @@ class JellyfinMediaProviderAdapter(
 
     override suspend fun resumeItems(request: PageRequest): Page<MediaItem> {
         val filter = request.filter
-        if (!filter.isEmpty || request.sort != null) {
+        if (filter.genres.isNotEmpty() || filter.years.isNotEmpty() ||
+            !filter.searchTerm.isNullOrBlank() || filter.favoritesOnly ||
+            filter.playedOnly || filter.unplayedOnly || request.sort != null
+        ) {
             throw ClientConfigError(
-                "resumeItems() follows the server's resume ordering; sort/filter cannot be expressed",
+                "resumeItems() only supports the legacy media-type constraint; sort and other filters cannot be expressed",
             )
         }
         val offset = decodeOffset(request.cursor)
+        val includeTypes = if (filter.mediaTypes.isEmpty()) {
+            listOf("Movie", "Episode", "Video")
+        } else {
+            filter.mediaTypes.map { it.toIncludeItemTypes() }
+        }
         val result = translate {
             facade.catalog.resume(
                 userId = jellyfinUserId,
                 startIndex = offset,
                 limit = request.pageSize,
-                includeItemTypes = listOf("Movie", "Episode", "Video"),
+                includeItemTypes = includeTypes,
                 fields = JELLYFIN_LIST_FIELDS,
             )
         }
@@ -410,6 +433,8 @@ class JellyfinMediaProviderAdapter(
         administratorCache = administrator
         return administrator
     }
+
+    override suspend fun isAdministrator(): Boolean = canDeleteMedia()
 
     override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
         // 用户指定的版本/轨道随协商一起提交：服务端按选中的源/轨协商转码决策。

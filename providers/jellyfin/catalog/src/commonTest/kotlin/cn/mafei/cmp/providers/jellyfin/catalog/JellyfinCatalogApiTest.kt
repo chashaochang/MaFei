@@ -108,6 +108,25 @@ class JellyfinCatalogApiTest {
     }
 
     @Test
+    fun perSeriesNextUpKeepsTheDetailPageSelectionContract() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, """{"Items":[],"TotalRecordCount":0,"StartIndex":0}""", base)
+
+        fixture.api.nextUp(
+            userId = "u1",
+            limit = 1,
+            seriesId = "series-1",
+            enableResumable = true,
+            enableRewatching = true,
+        )
+
+        val query = fixture.transport.requests.single().url.queryParameters
+        assertEquals("series-1", query.first("seriesId"))
+        assertEquals("true", query.first("enableResumable"))
+        assertEquals("true", query.first("enableRewatching"))
+    }
+
+    @Test
     fun itemDetailDecodesOffsetIsoDateAndPeople() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, JellyfinFixtures.SERIES_DETAIL, base)

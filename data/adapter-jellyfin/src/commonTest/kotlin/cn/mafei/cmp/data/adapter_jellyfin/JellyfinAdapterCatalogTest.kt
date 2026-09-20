@@ -36,6 +36,8 @@ import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinSession
 import cn.mafei.cmp.providers.jellyfin.testkit.FakeJellyfinTransport
 import cn.mafei.cmp.providers.jellyfin.testkit.JellyfinFixtures
+import cn.mafei.cmp.providers.jellyfin.wire.MediaStreamDto
+import cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -86,6 +88,45 @@ class JellyfinAdapterCatalogTest {
             accountId = AccountId("acc-1"),
             jellyfinUserId = "u1",
         )
+    }
+
+    @Test
+    fun mapsFullLegacyStreamMetadataWithoutCollapsingTitles() {
+        val stream = MediaStreamDto(
+            index = 3,
+            type = MediaStreamType.Video,
+            codec = "hevc",
+            profile = "Main 10",
+            level = 153.0,
+            title = "Raw title",
+            displayTitle = "4K HEVC HDR",
+            bitDepth = 10,
+            refFrames = 4,
+            width = 3840,
+            height = 2160,
+            averageFrameRate = 23.976,
+            isInterlaced = false,
+            videoRangeType = "HDR10",
+            dolbyVisionProfile = 8,
+            colorPrimaries = "bt2020",
+            colorSpace = "bt2020nc",
+            colorTransfer = "smpte2084",
+            pixelFormat = "yuv420p10le",
+        ).toMediaStreamInfo()
+
+        assertEquals("Raw title", stream.title)
+        assertEquals("4K HEVC HDR", stream.displayTitle)
+        assertEquals("Main 10", stream.profile)
+        assertEquals(153.0, stream.level)
+        assertEquals(10, stream.bitDepth)
+        assertEquals(4, stream.referenceFrames)
+        assertEquals(23.976, stream.frameRate)
+        assertEquals("HDR10", stream.videoRangeType)
+        assertEquals(8, stream.dolbyVisionProfile)
+        assertEquals("bt2020", stream.colorPrimaries)
+        assertEquals("bt2020nc", stream.colorSpace)
+        assertEquals("smpte2084", stream.colorTransfer)
+        assertEquals("yuv420p10le", stream.pixelFormat)
     }
 
     // ------------------------------------------------------------ identity
@@ -435,9 +476,67 @@ class JellyfinAdapterCatalogTest {
         val url = fixture.transport.requests.single().url.toString()
         assertTrue(url.contains("personIds=person-actor"), url)
         assertTrue(url.contains("includeItemTypes=Movie"), url)
-        assertTrue(url.contains("sortBy=SortName"), url)
+        assertTrue(url.contains("sortBy=Name"), url)
         assertTrue(url.contains("sortOrder=Ascending"), url)
         assertTrue(url.contains("limit=10"), url)
+    }
+
+    @Test
+    fun searchWithoutExplicitSortKeepsLegacyServerOrdering() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(MOVIE_JSON), total = 1))
+
+        val page = fixture.adapter.search(
+            "fixture",
+            PageRequest(
+                pageSize = 500,
+                filter = MediaFilter(
+                    mediaTypes = setOf(MediaType.Episode, MediaType.Movie, MediaType.Video, MediaType.Series),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("Fixture Movie"), page.items.map { it.title })
+        val url = fixture.transport.requests.single().url.toString()
+        assertTrue(url.contains("searchTerm=fixture"), url)
+        assertTrue(url.contains("recursive=true"), url)
+        assertTrue(url.contains("limit=500"), url)
+        assertFalse(url.contains("sortBy="), url)
+    }
+
+    @Test
+    fun legacySortFieldsMapToTheOriginalJellyfinWireNames() {
+        val expected = linkedMapOf(
+            MediaSortField.Default to "Default",
+            MediaSortField.Title to "Name",
+            MediaSortField.DateAdded to "DateCreated",
+            MediaSortField.PremiereDate to "PremiereDate",
+            MediaSortField.DatePlayed to "DatePlayed",
+            MediaSortField.CommunityRating to "CommunityRating",
+            MediaSortField.CriticRating to "CriticRating",
+            MediaSortField.ProductionYear to "ProductionYear",
+            MediaSortField.PlayCount to "PlayCount",
+            MediaSortField.Runtime to "Runtime",
+            MediaSortField.OfficialRating to "OfficialRating",
+            MediaSortField.Random to "Random",
+            MediaSortField.Album to "Album",
+            MediaSortField.Artist to "Artist",
+            MediaSortField.AlbumArtist to "AlbumArtist",
+            MediaSortField.AiredEpisodeOrder to "AiredEpisodeOrder",
+            MediaSortField.SeriesSortName to "SeriesSortName",
+            MediaSortField.Studio to "Studio",
+            MediaSortField.IsFavoriteOrLiked to "IsFavoriteOrLiked",
+            MediaSortField.DateLastContentAdded to "DateLastContentAdded",
+            MediaSortField.IsUnplayed to "IsUnplayed",
+            MediaSortField.IsPlayed to "IsPlayed",
+        )
+        assertEquals(expected.keys, MediaSortField.entries.toSet() - setOf(
+            MediaSortField.SeasonNumber,
+            MediaSortField.EpisodeNumber,
+        ))
+        expected.forEach { (field, wireName) ->
+            assertEquals(wireName, MediaSort(field).toQuerySort().first.single().wireName, field.name)
+        }
     }
 
     @Test
@@ -457,11 +556,46 @@ class JellyfinAdapterCatalogTest {
         fixture.transport.enqueueJson(200, JellyfinFixtures.SEASONS)
         val page = fixture.adapter.seasons(MediaId("s0102030405060708"))
         assertEquals(listOf("Season 1", "Season 2"), page.items.map { it.title })
+        assertEquals(listOf(10, 8), page.items.map { it.childCount })
         assertEquals(listOf(1, 2), page.items.map { it.seasonNumber })
         assertNull(page.nextCursor)
         assertEquals(2, page.totalEstimate)
         val request = fixture.transport.requests.single()
         assertTrue(request.url.toString().contains("/Shows/s0102030405060708/Seasons"), request.url.toString())
+    }
+
+    @Test
+    fun nextUpForSeriesUsesTheServerTargetInsteadOfInventingAnEpisode() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(EPISODE_JSON), total = 1))
+
+        val target = fixture.adapter.nextUp(MediaId("s0102030405060708"))
+
+        assertEquals(MediaId("e0102030405060708"), target?.id)
+        assertEquals(1, target?.seasonNumber)
+        assertEquals(2, target?.episodeNumber)
+        val query = fixture.transport.requests.single().url.queryParameters
+        assertEquals("s0102030405060708", query.first("seriesId"))
+        assertEquals("true", query.first("enableResumable"))
+        assertEquals("true", query.first("enableRewatching"))
+    }
+
+    @Test
+    fun chasingNextUpUsesTheLegacyCutoffWithoutResumeOrRewatchCandidates() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, queryResult(listOf(EPISODE_JSON), total = 1))
+
+        val target = fixture.adapter.chasingNextUp(
+            seriesId = MediaId("s0102030405060708"),
+            nextUpDateCutoffEpochMs = 1_000L,
+        )
+
+        assertEquals(MediaId("e0102030405060708"), target?.id)
+        val query = fixture.transport.requests.single().url.queryParameters
+        assertEquals("s0102030405060708", query.first("seriesId"))
+        assertEquals("false", query.first("enableResumable"))
+        assertEquals("false", query.first("enableRewatching"))
+        assertEquals("1970-01-01T00:00:01Z", query.first("nextUpDateCutoff"))
     }
 
     // --------------------------------------------------------------- paging

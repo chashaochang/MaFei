@@ -48,7 +48,16 @@ interface JellyfinCatalogApi {
         fields: List<ItemField> = emptyList(),
     ): List<BaseItemDto>
 
-    suspend fun nextUp(userId: String, limit: Int, fields: List<ItemField> = emptyList()): QueryResultDto<BaseItemDto>
+    suspend fun nextUp(
+        userId: String,
+        limit: Int,
+        fields: List<ItemField> = emptyList(),
+        seriesId: String? = null,
+        disableFirstEpisode: Boolean = false,
+        enableResumable: Boolean = false,
+        enableRewatching: Boolean = false,
+        nextUpDateCutoffEpochMs: Long? = null,
+    ): QueryResultDto<BaseItemDto>
 
     suspend fun latest(
         userId: String,
@@ -121,8 +130,29 @@ class DefaultJellyfinCatalogApi(
         itemListSerializer,
     )
 
-    override suspend fun nextUp(userId: String, limit: Int, fields: List<ItemField>): QueryResultDto<BaseItemDto> =
-        client.executeDecoding(JellyfinRequests.nextUp(client.config.baseUrl, userId, limit, fields), queryResultSerializer)
+    override suspend fun nextUp(
+        userId: String,
+        limit: Int,
+        fields: List<ItemField>,
+        seriesId: String?,
+        disableFirstEpisode: Boolean,
+        enableResumable: Boolean,
+        enableRewatching: Boolean,
+        nextUpDateCutoffEpochMs: Long?,
+    ): QueryResultDto<BaseItemDto> = client.executeDecoding(
+        JellyfinRequests.nextUp(
+            base = client.config.baseUrl,
+            userId = userId,
+            limit = limit,
+            fields = fields,
+            seriesId = seriesId,
+            disableFirstEpisode = disableFirstEpisode,
+            enableResumable = enableResumable,
+            enableRewatching = enableRewatching,
+            nextUpDateCutoffEpochMs = nextUpDateCutoffEpochMs,
+        ),
+        queryResultSerializer,
+    )
 
     override suspend fun latest(
         userId: String,
