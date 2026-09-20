@@ -104,6 +104,10 @@ private val HomeHeroForegroundFadeDistance = 128.dp
 // users scroll the shelves at the bottom of a short home feed.
 private val HomeHeroClearHiddenTail = 96.dp
 private val HomeHeroClearFadeDistance = 96.dp
+// The legacy phone carousel only blended its final 96vp into the page canvas.
+// Keep that physical depth on phone instead of reusing the wide-screen mask's
+// 64%-100% range, which starts fading a 430dp phone hero far above its bottom.
+private val HomePhoneHeroFeatherHeight = 96.dp
 private const val HomeHeroKey = "home-recommendation-hero"
 private const val LatestFeedAnchorKey = "home-latest-feed-anchor"
 private val HomeHeroRefreshThreshold = 64.dp
@@ -495,6 +499,7 @@ fun HomeScreen(
                 MaFeiLayoutFamily.Desktop -> 48.dp
             }
             state.heroHeight = layout.heroHeightDp.dp
+            state.clearCarouselEnabled = layout.family != MaFeiLayoutFamily.Phone
         }
     }
     // `heroExtraHeight` changes on every resisted pull-down frame. Keeping it
@@ -581,6 +586,7 @@ fun HomeScreen(
                         extraHeight = heroExtraHeight,
                         refreshProgress = heroRefreshProgress,
                         refreshing = refreshing,
+                        windowBackdropActive = heroBackdropState != null && backdropArtwork != null,
                     )
                 } else {
                     Box {
@@ -1276,6 +1282,9 @@ class HomeHeroBackdropState {
     // 侧栏收起/展开、Tab 条出现消失，背景都逐像素静止。
     var heroHeight by mutableStateOf(0.dp)
     var extraHeight by mutableStateOf(0.dp)
+    // 宽屏的清晰 Hero 由窗口层绘制，以跨过侧栏让位区域；手机则由 Pager
+    // 保持 430dp 的原始构图，并在底部羽化进这里只保留的模糊氛围层。
+    var clearCarouselEnabled by mutableStateOf(true)
     var precomposeNeighbours by mutableStateOf(false)
     /** Release a disposed HomeScreen without clearing a newer screen attachment. */
     fun detach(pager: PagerState, grid: LazyGridState) {
@@ -1286,6 +1295,7 @@ class HomeHeroBackdropState {
         gridState = null
         heroHeight = 0.dp
         extraHeight = 0.dp
+        clearCarouselEnabled = true
         precomposeNeighbours = false
     }
 }
@@ -1371,70 +1381,72 @@ fun HomeHeroWindowBackdrop(
         // offset.y 与 beforeCP 同帧同源，收起/展开让位动画中不会窜。
         val pager = state.pagerState
         val grid = state.gridState
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(clearHeight)
-                .clipToBounds()
-                .graphicsLayer {
-                    // One offscreen layer applies the feather to the complete
-                    // carousel. Applying DstIn to every visible page allocated
-                    // three/four full-width render targets during every drag.
-                    compositingStrategy = CompositingStrategy.Offscreen
-                    if (grid != null) {
-                        val heroInfo = grid.layoutInfo.visibleItemsInfo
-                            .firstOrNull { it.key == HomeHeroKey }
-                        val heroOffsetY = heroInfo?.offset?.y
-                        val clearHeightPx = clearHeight.toPx()
-                        translationY = homeHeroTranslationY(
-                            heroOffsetY = heroOffsetY,
-                            firstVisibleItemIndex = grid.firstVisibleItemIndex,
-                            clearHeightPx = clearHeightPx,
-                        )
-                        alpha = homeHeroForegroundAlpha(
-                            heroOffsetY = heroOffsetY,
-                            firstVisibleItemIndex = grid.firstVisibleItemIndex,
-                            clearHeightPx = clearHeightPx,
-                            hiddenTailPx = HomeHeroClearHiddenTail.toPx(),
-                            fadeDistancePx = HomeHeroClearFadeDistance.toPx(),
-                        )
-                    }
-                }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.White,
-                            HomeHeroFeatherStartFraction to Color.White,
-                            1f to Color.Transparent,
-                        ),
-                        blendMode = BlendMode.DstIn,
-                    )
-                },
-        ) {
-            if (artwork != null && state.items.isNotEmpty() && pager != null) {
-                val current = pager.currentPage
-                val pageRange = homeHeroPageRange(
-                    currentPage = current,
-                    itemCount = state.items.size,
-                    inMotion = pager.isScrollInProgress || state.precomposeNeighbours,
-                )
-                for (page in pageRange) {
-                    key(page) {
-                        val pageItem = state.items[page.mod(state.items.size)]
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    val rel = (page - pager.currentPage) -
-                                        pager.currentPageOffsetFraction
-                                    translationX = rel * size.width
-                                },
-                        ) {
-                            artwork(
-                                pageItem,
-                                Modifier.fillMaxSize(),
+        if (state.clearCarouselEnabled) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(clearHeight)
+                    .clipToBounds()
+                    .graphicsLayer {
+                        // One offscreen layer applies the feather to the complete
+                        // carousel. Applying DstIn to every visible page allocated
+                        // three/four full-width render targets during every drag.
+                        compositingStrategy = CompositingStrategy.Offscreen
+                        if (grid != null) {
+                            val heroInfo = grid.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.key == HomeHeroKey }
+                            val heroOffsetY = heroInfo?.offset?.y
+                            val clearHeightPx = clearHeight.toPx()
+                            translationY = homeHeroTranslationY(
+                                heroOffsetY = heroOffsetY,
+                                firstVisibleItemIndex = grid.firstVisibleItemIndex,
+                                clearHeightPx = clearHeightPx,
                             )
+                            alpha = homeHeroForegroundAlpha(
+                                heroOffsetY = heroOffsetY,
+                                firstVisibleItemIndex = grid.firstVisibleItemIndex,
+                                clearHeightPx = clearHeightPx,
+                                hiddenTailPx = HomeHeroClearHiddenTail.toPx(),
+                                fadeDistancePx = HomeHeroClearFadeDistance.toPx(),
+                            )
+                        }
+                    }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to Color.White,
+                                HomeHeroFeatherStartFraction to Color.White,
+                                1f to Color.Transparent,
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+            ) {
+                if (artwork != null && state.items.isNotEmpty() && pager != null) {
+                    val current = pager.currentPage
+                    val pageRange = homeHeroPageRange(
+                        currentPage = current,
+                        itemCount = state.items.size,
+                        inMotion = pager.isScrollInProgress || state.precomposeNeighbours,
+                    )
+                    for (page in pageRange) {
+                        key(page) {
+                            val pageItem = state.items[page.mod(state.items.size)]
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        val rel = (page - pager.currentPage) -
+                                            pager.currentPageOffsetFraction
+                                        translationX = rel * size.width
+                                    },
+                            ) {
+                                artwork(
+                                    pageItem,
+                                    Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                 }
@@ -1720,6 +1732,7 @@ private fun RecommendationHero(
     extraHeight: Dp,
     refreshProgress: Float,
     refreshing: Boolean,
+    windowBackdropActive: Boolean,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     val itemKeys = remember(items) { items.map { it.id.value } }
@@ -1814,40 +1827,71 @@ private fun RecommendationHero(
                     visualFeedback = false,
                 ),
             ) {
-                // 轮播图图片已下沉到背景层（HomeHeroAmbientBackground 的清晰
-                // 图层）：pager 页里只保留文字 scrim、文字与指示器，占位大小
-                // 不变。手机（Bottom）没有背景层，图片仍画在页里；图片加载器
-                // 不可用时退回 TextPoster 兜底。
-                val drawImageInPager = layout.navigation == NavigationPlacement.Bottom || artwork == null
+                // 宽屏的清晰图由窗口层负责；手机保留 Pager 的 430dp 原始构图。
+                // 手机只借用「清晰图退进同图模糊层」的层级关系，羽化范围仍按
+                // 旧手机轮播图自己的底部 96dp 计算，不复用大屏的整图比例。
+                val drawImageInPager = !windowBackdropActive || layout.family == MaFeiLayoutFamily.Phone
+                val featherIntoAmbient = windowBackdropActive && layout.family == MaFeiLayoutFamily.Phone
+                val readabilityScrim = if (layout.horizontalHero) {
+                    Brush.horizontalGradient(
+                        listOf(Color(0xDA071019), Color(0x8F071019), Color(0x16071019), Color.Transparent),
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = .08f),
+                        .42f to Color.Black.copy(alpha = .16f),
+                        1f to Color.Black.copy(alpha = .88f),
+                    )
+                }
                 if (drawImageInPager) {
-                    if (artwork != null) {
-                        artwork(item, Modifier.fillMaxSize())
-                    } else {
-                        TextPoster(item.title, Modifier.fillMaxSize())
+                    Box(
+                        Modifier.fillMaxSize()
+                            .then(
+                                if (featherIntoAmbient) {
+                                    Modifier.graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }.drawWithContent {
+                                        drawContent()
+                                        val featherHeightPx = HomePhoneHeroFeatherHeight.toPx()
+                                            .coerceAtMost(size.height)
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(Color.White, Color.Transparent),
+                                                startY = size.height - featherHeightPx,
+                                                endY = size.height,
+                                            ),
+                                            blendMode = BlendMode.DstIn,
+                                        )
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    ) {
+                        if (artwork != null) {
+                            artwork(item, Modifier.fillMaxSize())
+                        } else {
+                            TextPoster(item.title, Modifier.fillMaxSize())
+                        }
+                        // The phone readability scrim belongs to the clear
+                        // artwork. Feather it with that artwork; leaving this
+                        // full-size overlay outside the mask cuts a dark stripe
+                        // exactly at the carousel's bottom edge.
+                        if (featherIntoAmbient && layout.navigation != NavigationPlacement.Sidebar) {
+                            Box(Modifier.fillMaxSize().background(readabilityScrim))
+                        }
                     }
                 }
-                if (layout.navigation != NavigationPlacement.Sidebar) {
+                if (layout.navigation != NavigationPlacement.Sidebar && !featherIntoAmbient) {
                     // Sidebar 大屏不再叠加文字底部的黑色渐变遮罩：图片下沉到背景
                     // 后它就是「文字区域下面一块黑色半透明」，可读性由背景层的
                     // 全局 scrim 与羽化负责，这层只贡献脏块。
-                    Box(
-                        Modifier.fillMaxSize().background(
-                            if (layout.horizontalHero) {
-                                Brush.horizontalGradient(
-                                    listOf(Color(0xDA071019), Color(0x8F071019), Color(0x16071019), Color.Transparent),
-                                )
-                            } else Brush.verticalGradient(
-                                0f to Color.Black.copy(alpha = .08f),
-                                .42f to Color.Black.copy(alpha = .16f),
-                                1f to Color.Black.copy(alpha = .88f),
-                            ),
-                        ),
-                    )
+                    Box(Modifier.fillMaxSize().background(readabilityScrim))
                 }
-                // 手机端的羽化：图片仍在 pager 里，靠底部 96dp 渐变融入画布。
-                // 非 Phone 端不再叠加 background 渐变 —— 图片下沉到背景层后由
-                // DstIn 羽化自然渐隐进模糊背景，叠这层会重新洗出一条「带底边」。
-                if (layout.family == MaFeiLayoutFamily.Phone) {
+                // 仅 fallback 图片需要在 Pager 底部收进普通画布。窗口背景启用时
+                // 再盖一层不透明背景，会在 Hero 底边把连续图片截断，下一像素又
+                // 露出窗口背景，正是手机截图里那条割裂接缝。
+                if (layout.family == MaFeiLayoutFamily.Phone && !windowBackdropActive) {
                     Box(
                         Modifier.align(Alignment.BottomCenter)
                             .fillMaxWidth()
