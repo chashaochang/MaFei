@@ -121,6 +121,8 @@ fun MaFeiAdaptiveShell(
      */
     topChromeScrolledProgress: () -> Float = { 0f },
     background: @Composable () -> Unit,
+    /** 侧栏底部账号卡片显示的用户名（当前登录账号的 display name）。 */
+    accountName: String? = null,
     accountActions: @Composable () -> Unit,
     scene: @Composable () -> Unit,
     overlay: @Composable (GlassBackdrop) -> Unit,
@@ -310,6 +312,7 @@ fun MaFeiAdaptiveShell(
                 onSearch = onSearch,
                 selectedSearch = selectedSearch,
                 backdrop = backdrop,
+                accountName = accountName,
                 accountActions = accountActions,
                 sideScroll = sideScroll,
                 compact = rail && !sidebarExpanded,
@@ -387,6 +390,7 @@ fun MaFeiAdaptiveShell(
                         },
                         selectedSearch = selectedSearch,
                         backdrop = backdrop,
+                        accountName = accountName,
                         accountActions = accountActions,
                         sideScroll = sideScroll,
                         compact = false,
@@ -437,6 +441,7 @@ private fun SidebarPanel(
     onSearch: (() -> Unit)?,
     selectedSearch: Boolean,
     backdrop: GlassBackdrop,
+    accountName: String?,
     accountActions: @Composable () -> Unit,
     sideScroll: ScrollState,
     compact: Boolean,
@@ -450,12 +455,17 @@ private fun SidebarPanel(
     // 面板贴满窗口上下边，安全区改由内容自己让开（内边距）。这里能读到窗口的原始安全区，
     // 因为外壳在 scene 之前就提供了它，而侧栏在 routeSafeArea 之外。
     val windowSafeArea = LocalMaFeiSafeArea.current
-    // 分界线画在**朝内容**的那一边：面板在起始边时分界在右，反之在左。
-    val dividerAtEnd = LocalMaFeiNavigationChrome.current.edge == NavigationEdge.Leading
+    // The panel exports the material it actually drew. Header controls must sample
+    // page + panel; sampling the route backdrop alone visually drills through the
+    // sidebar and reproduces the media artwork underneath it.
+    val sidebarMaterialBackdrop = rememberGlassBackdrop()
+    val sidebarControlBackdrop = rememberCombinedGlassBackdrop(backdrop, sidebarMaterialBackdrop)
     MaFeiSurface(
         GlassSurfaceSpec(
             GlassRole.Navigation,
             GlassLevel.Full,
+            // 整块侧栏（含顶部 logo 区与底部账号区）就是这一种材质，顶/底不再
+            // 叠任何额外玻璃层；滚进来的列表项由滚动区的上下渐隐淡出。
             tintAlpha = .16f,
             intensity = 1f,
             // 贴窗口边缘的整块面板：不要圆角、不要液态玻璃的折射与高光描边，只做高斯模糊
@@ -466,69 +476,35 @@ private fun SidebarPanel(
         ),
         modifier.fillMaxHeight(),
         backdrop,
+        exportedBackdrop = sidebarMaterialBackdrop,
     ) {
         Box(Modifier.fillMaxSize()) {
+        // 整块侧栏是**一种材质**（面板的磨砂玻璃），顶/底不再叠任何玻璃层。
+        // 滚动内容由固定视口内边距让开 logo / 账号卡片，因此不再给整条侧栏
+        // 分配全尺寸 Offscreen + DstIn 遮罩。大屏滚动时这层离屏合成成本远高于
+        // 它实际提供的视觉收益。
+        val sidebarHeaderInset = 48.dp
+        val sidebarBottomInset = if (compact) 64.dp else 88.dp
         Column(
+            // 顶部与底部都消费窗口安全区，再各留 8dp 呼吸。底部手势条即使透明也仍是
+            // 系统交互区域，账号入口不能压进去；此前只留 8dp 会让 MatePad 上 80dp
+            // 账号卡片进入手势区，滚动到尾部时尤其像是整块侧栏错位。
             Modifier.fillMaxSize().padding(
-                top = windowSafeArea.top,
-                bottom = windowSafeArea.bottom,
-            ).padding(vertical = 8.dp),
+                top = windowSafeArea.top + 8.dp,
+                bottom = windowSafeArea.bottom + 8.dp,
+            ),
         ) {
-            if (compact) {
-                Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape)
-                            .mafeiInteractive(onExpand, radiusDp = 20f, label = "展开侧边栏"),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-            } else {
-                Row(
-                    Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Image(
-                        painterResource(Res.drawable.app_icon),
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                    Text(
-                        "马飞",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Spacer(Modifier.weight(1f))
-                    if (showCloseButton) {
-                        Box(
-                            // No opaque disc behind the glyph: the panel is already
-                            // a glass surface, so a solid `surface` circle on top of
-                            // it reads as a stray button plate. The compact header
-                            // renders the same glyph with no background.
-                            Modifier.size(40.dp).clip(CircleShape)
-                                .semantics { contentDescription = "收起侧边栏" }
-                                .mafeiInteractive(onClose, radiusDp = 20f, label = "收起侧边栏"),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
-
+            Box(Modifier.fillMaxSize()) {
             Column(
-                Modifier.weight(1f).verticalScroll(sideScroll).padding(
-                    top = 12.dp,
+                // padding 必须在 verticalScroll **之外**：否则让位内边距会变成
+                // 可滚走的滚动内容，列表能一路滚到面板最底、钻进账号卡片下面
+                // （文字叠在一起）。放在外面 = 固定的视口内边距。
+                Modifier.fillMaxSize().padding(
+                    top = sidebarHeaderInset,
+                    bottom = sidebarBottomInset,
                     start = if (compact) 8.dp else 12.dp,
                     end = if (compact) 8.dp else 12.dp,
-                ),
+                ).verticalScroll(sideScroll),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 onSearch?.let { action ->
@@ -592,31 +568,141 @@ private fun SidebarPanel(
                 }
             }
 
-            HorizontalDivider(
-                Modifier.padding(horizontal = if (compact) 8.dp else 12.dp, vertical = 10.dp),
-                thickness = .5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .72f),
-            )
+            // —— 浮层：logo 头部 —— 只有内容，没有额外玻璃层（整块侧栏已经是
+            // 同一种材质）；滚进来的列表项由上面的渐隐遮罩淡出。
             Column(
-                Modifier.padding(horizontal = if (compact) 8.dp else 12.dp),
+                Modifier.align(Alignment.TopStart).fillMaxWidth()
+                    .padding(bottom = 24.dp),
+            ) {
+                if (compact) {
+                    Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
+                        // 展开按钮：液态玻璃圆钮（侧栏在 backdrop 记录者之外，
+                        // 这里是合法消费者）。
+                        LiquidButton(
+                            onClick = onExpand,
+                            backdrop = sidebarControlBackdrop,
+                            modifier = Modifier.size(40.dp)
+                                .semantics { contentDescription = "展开侧边栏" },
+                            height = 40.dp,
+                            horizontalPadding = 0.dp,
+                        ) {
+                            SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painterResource(Res.drawable.app_icon),
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                        Text(
+                            "马飞",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.weight(1f))
+                        if (showCloseButton) {
+                            LiquidButton(
+                                onClick = onClose,
+                                backdrop = sidebarControlBackdrop,
+                                modifier = Modifier.size(40.dp)
+                                    .semantics { contentDescription = "收起侧边栏" },
+                                height = 40.dp,
+                                horizontalPadding = 0.dp,
+                            ) {
+                                SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            }
+            // —— 浮层：底部「我的」与账号区 —— 同样只有内容，无额外玻璃层。
+            // 「我的」上方不再画分割线（用户要求去掉）。
+            Column(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(top = 24.dp)
+                    .padding(horizontal = if (compact) 8.dp else 12.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                destinations.firstOrNull { it.key == "mine" }?.let { item ->
-                    NavigationEntry(item, selectedDestination == item.key, compact) { onDestination(item.key) }
+                // 账号卡片（「我的」入口）：头像 + 当前登录用户名，高度是普通
+                // 导航条目的两倍、内容垂直居中 —— 比一个「我的」文字条目更
+                // 能说明现在是谁在登录。收起态（compact）只留头像。
+                if (compact) {
+                    Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape)
+                                .semantics { contentDescription = "我的" }
+                                .mafeiInteractive(
+                                    onClick = { onDestination("mine") },
+                                    radiusDp = 20f,
+                                    label = "我的",
+                                ),
+                        ) {
+                            Image(
+                                painter = painterResource(MaFeiLegacyDrawables.defaultAvatar),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                    }
+                } else {
+                    val mineSelected = selectedDestination == "mine"
+                    Row(
+                        Modifier.fillMaxWidth().height(80.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (mineSelected) {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)
+                                } else {
+                                    Color.Transparent
+                                },
+                            )
+                            .semantics { contentDescription = "我的" }
+                            .mafeiInteractive(
+                                onClick = { onDestination("mine") },
+                                radiusDp = 12f,
+                                label = "我的",
+                            )
+                            .padding(horizontal = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(40.dp).clip(CircleShape)) {
+                            Image(
+                                painter = painterResource(MaFeiLegacyDrawables.defaultAvatar),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                        Text(
+                            accountName?.takeIf { it.isNotBlank() } ?: "我的",
+                            Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 if (!compact) {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) { accountActions() }
                 }
             }
         }
-        // 与内容之间的唯一一条分界线（其余三边不留线）。
-        Box(
-            Modifier
-                .align(if (dividerAtEnd) Alignment.CenterEnd else Alignment.CenterStart)
-                .fillMaxHeight()
-                .width(.5.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = .72f)),
-        )
+        }
         }
     }
 }
@@ -879,8 +965,11 @@ private fun NavigationEntry(
     val shape = RoundedCornerShape(if (compact) 12.dp else 8.dp)
     val modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(shape)
         .background(
+            // 选中底色必须在深色与浅色主题下都能看出来：深色提亮（白）、浅色压暗
+            // （黑）。原来两端都用 Color.Black —— 深色背景上黑叠黑等于没有选中的
+            // 视觉反馈（用户反馈"在深色桌面上基本看不出来"）。
             if (isSelected) {
-                Color.Black.copy(alpha = if (dark) .40f else .12f)
+                if (dark) Color.White.copy(alpha = .16f) else Color.Black.copy(alpha = .10f)
             } else Color.Transparent,
         )
         .semantics { selected = isSelected }

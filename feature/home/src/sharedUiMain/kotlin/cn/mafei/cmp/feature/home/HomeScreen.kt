@@ -605,14 +605,44 @@ fun HomeScreen(
                                 lineHeight = 26.sp,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                             )
-                            TextButton(
-                                onClick = {
-                                    val target = selectedFeedCollection
-                                    if (target != null) onBrowseCollection(target) else onOpenLibrary()
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp),
+                            // 「更多」= 玻璃胶囊按钮：文字 + 右箭头。
+                            // 注意：这里**不能**用需要 backdrop 的玻璃组件（MaFeiSurface /
+                            // LiquidButton）——首页内容本身是被窗口 backdrop 记录的对象，
+                            // 在 scene 内采样它等于自引用，在 macOS 桌面会直接原生崩溃
+                            // （skiko unsupported unit type / exit 132）。所以用自绘的
+                            // 半透明胶囊 + 高光描边还原玻璃观感。
+                            Row(
+                                Modifier
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .10f))
+                                    .border(
+                                        0.5.dp,
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = .20f),
+                                        RoundedCornerShape(18.dp),
+                                    )
+                                    .mafeiInteractive(
+                                        onClick = {
+                                            val target = selectedFeedCollection
+                                            if (target != null) onBrowseCollection(target) else onOpenLibrary()
+                                        },
+                                        radiusDp = 18f,
+                                        label = "更多",
+                                    )
+                                    .height(36.dp)
+                                    .padding(horizontal = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text("查看更多", fontSize = 14.sp)
+                                Text(
+                                    "更多",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 14.sp,
+                                )
+                                MaFeiIcon(
+                                    MaFeiGlyph.Chevron,
+                                    Modifier.size(14.dp),
+                                    MaterialTheme.colorScheme.onSurface,
+                                )
                             }
                         }
                         if (showFeedPlaceholders) {

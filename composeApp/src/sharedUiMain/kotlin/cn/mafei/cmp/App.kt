@@ -1290,6 +1290,7 @@ private fun BrowseContent(
             destinations = destinations,
             selectedDestination = if (minePresented) MineDestination else destination,
             onDestination = selectDestination,
+            accountName = session.connection.account.displayName,
             libraries = libraries,
             selectedLibrary = state.selectedCollection?.value,
             onLibrary = { id ->
