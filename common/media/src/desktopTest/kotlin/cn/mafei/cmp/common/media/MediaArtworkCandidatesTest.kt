@@ -40,6 +40,38 @@ class MediaArtworkCandidatesTest {
         )
     }
 
+    @Test
+    fun legacyDetailHeroSkipsThumbAndUsesOnlyBackdropThenPrimary() {
+        val item = item(
+            MediaImage(ImageKind.Thumb, "thumb"),
+            MediaImage(ImageKind.Primary, "primary"),
+            MediaImage(ImageKind.Backdrop, "backdrop"),
+        )
+
+        assertEquals(
+            listOf("backdrop", "primary"),
+            item.legacyDetailBackdropArtworkCandidates().map { it.url },
+        )
+    }
+
+    @Test
+    fun legacyPrimaryRulesDoNotInventThumbnailFallbacks() {
+        val item = item(
+            MediaImage(ImageKind.Thumb, "thumb"),
+            MediaImage(ImageKind.Backdrop, "backdrop"),
+            MediaImage(ImageKind.Primary, "primary"),
+        )
+
+        assertEquals(
+            listOf("primary"),
+            item.legacyPrimaryArtworkCandidates().map { it.url },
+        )
+        assertEquals(
+            listOf("primary", "backdrop"),
+            item.legacyPrimaryThenBackdropArtworkCandidates().map { it.url },
+        )
+    }
+
     private fun item(vararg images: MediaImage) = MediaItem(
         id = MediaId("item"),
         serverId = ServerId("server"),

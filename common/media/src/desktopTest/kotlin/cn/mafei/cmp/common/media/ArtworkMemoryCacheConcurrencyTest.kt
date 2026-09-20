@@ -9,12 +9,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class ArtworkMemoryCacheConcurrencyTest {
 
     @Test
-    fun networkFetchesDoNotConsumeTheTwoDecoderSlots() = runBlocking {
+    fun networkFetchesDoNotConsumeTheDecoderPermit() = runBlocking {
         val cache = ArtworkMemoryCache()
         val entered = Channel<Unit>(Channel.UNLIMITED)
         val release = CompletableDeferred<Unit>()
@@ -37,5 +38,17 @@ class ArtworkMemoryCacheConcurrencyTest {
             release.complete(Unit)
         }
         requests.awaitAll().forEach(::assertNull)
+    }
+
+    @Test
+    fun missingUrlIsNegativeCachedAcrossRequestedWidths() = runBlocking {
+        val cache = ArtworkMemoryCache()
+        val image = MediaImage(ImageKind.Primary, "https://images.test/missing")
+        var fetchCount = 0
+
+        assertNull(cache.load(image, 160) { _, _ -> fetchCount += 1; null })
+        assertNull(cache.load(image, 960) { _, _ -> fetchCount += 1; null })
+
+        assertEquals(1, fetchCount)
     }
 }

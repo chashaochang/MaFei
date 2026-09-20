@@ -18,9 +18,17 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import org.jetbrains.compose.resources.decodeToImageBitmap
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /** One account/screen lifetime. Small memory-only cache; no token-bearing disk cache. */
 class ArtworkMemoryCache {
+    private class UrlLoadGate {
+        val lock = Mutex()
+        var users: Int = 0
+    }
+
     private val mutex = Mutex()
     // Network latency must not occupy the scarce image-decoder slots. Keeping
     // these budgets separate lets a home viewport fetch several thumbnails at
@@ -28,7 +36,8 @@ class ArtworkMemoryCache {
     private val networkPermits = Semaphore(MaxConcurrentArtworkFetches)
     private val decodePermits = Semaphore(MaxConcurrentArtworkDecodes)
     private val images = linkedMapOf<String, ImageBitmap>()
-    private val keyLocks = mutableMapOf<String, Mutex>()
+    private val urlLoadGates = mutableMapOf<String, UrlLoadGate>()
+    private val failedUrls = linkedMapOf<String, TimeMark>()
     private var bytes = 0L
 
     suspend fun load(
@@ -40,21 +49,50 @@ class ArtworkMemoryCache {
         val key = "${image.url}#w=$width"
         cached(key)?.let { return it }
         // Multiple visible consumers (hero + ambient continuation) share one
-        // request/decode. If the first caller is cancelled, the next one can
-        // safely retry after the per-key mutex is released.
-        val keyLock = mutex.withLock { keyLocks.getOrPut(key) { Mutex() } }
-        return keyLock.withLock {
-            cached(key)?.let { return@withLock it }
-            val encoded = networkPermits.withPermit { fetch(image, width) }
-                ?: return@withLock null
-            if (encoded.size > MaxEncodedArtworkBytes) return@withLock null
-            val decoded = decodePermits.withPermit {
-                withContext(Dispatchers.Default) { encoded.decodeToImageBitmap() }
+        // request/decode. Lock by URL rather than width so a missing image does
+        // not fan out into simultaneous 160/240/960px 404s.
+        val gate = mutex.withLock {
+            urlLoadGates.getOrPut(image.url) { UrlLoadGate() }.also { it.users += 1 }
+        }
+        return try {
+            gate.lock.withLock {
+                cached(key)?.let { return@withLock it }
+                if (hasRecentFailure(image.url)) return@withLock null
+                val encoded = networkPermits.withPermit { fetch(image, width) }
+                    ?: run {
+                        recordFailure(image.url)
+                        return@withLock null
+                    }
+                if (encoded.size > MaxEncodedArtworkBytes) {
+                    recordFailure(image.url)
+                    return@withLock null
+                }
+                val decoded = try {
+                    decodePermits.withPermit {
+                        withContext(Dispatchers.Default) { encoded.decodeToImageBitmap() }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    recordFailure(image.url)
+                    return@withLock null
+                }
+                val size = decoded.width.toLong() * decoded.height * 4
+                if (size > MaxSingleArtworkBytes) {
+                    recordFailure(image.url)
+                    return@withLock null
+                }
+                clearFailure(image.url)
+                store(key, decoded, size)
+                decoded
             }
-            val size = decoded.width.toLong() * decoded.height * 4
-            if (size > MaxSingleArtworkBytes) return@withLock null
-            store(key, decoded, size)
-            decoded
+        } finally {
+            mutex.withLock {
+                gate.users -= 1
+                if (gate.users == 0 && urlLoadGates[image.url] === gate) {
+                    urlLoadGates.remove(image.url)
+                }
+            }
         }
     }
 
@@ -73,6 +111,32 @@ class ArtworkMemoryCache {
             images[key] = decoded
             bytes += size
         }
+    }
+
+    private suspend fun hasRecentFailure(url: String): Boolean = mutex.withLock {
+        val failedAt = failedUrls[url] ?: return@withLock false
+        if (failedAt.elapsedNow() < ArtworkFailureTtl) {
+            true
+        } else {
+            failedUrls.remove(url)
+            false
+        }
+    }
+
+    private suspend fun recordFailure(url: String) {
+        mutex.withLock {
+            // Refresh insertion order and keep malformed/missing catalog URLs
+            // from accumulating for the complete account session.
+            failedUrls.remove(url)
+            failedUrls[url] = TimeSource.Monotonic.markNow()
+            while (failedUrls.size > MaxFailedArtworkUrls) {
+                failedUrls.remove(failedUrls.keys.first())
+            }
+        }
+    }
+
+    private suspend fun clearFailure(url: String) {
+        mutex.withLock { failedUrls.remove(url) }
     }
 }
 
@@ -185,13 +249,6 @@ private fun MediaArtworkContent(
                 if (value != null || attempt == ArtworkRetryCount) break
                 delay(ArtworkRetryDelayMs * (attempt + 1))
             }
-            if (value == null) {
-                // 临时诊断打点：图片加载失败定位用，定位完成后整体删除。
-                println(
-                    "[MaFeiTiming] artwork gave up: title=$title " +
-                        candidates.joinToString("|") { c -> c.url.substringBefore("?").substringAfterLast("/") },
-                )
-            }
         }
     }
     val loaded = bitmap
@@ -221,6 +278,26 @@ fun MediaItem.landscapeArtworkCandidates(): List<MediaImage> = artworkCandidates
 )
 
 /**
+ * Exact `VideoDetailViewModel.applyDetail` / `SeasonDetailViewModel.applyDetail`
+ * artwork rule from the ArkUI client: the immersive hero uses the item's
+ * backdrop and falls back directly to its primary image. A thumbnail is not a
+ * valid intermediate fallback on these pages.
+ */
+fun MediaItem.legacyDetailBackdropArtworkCandidates(): List<MediaImage> =
+    exactArtworkCandidates(ImageKind.Backdrop, ImageKind.Primary)
+
+/** Exact ArkUI `BaseItemCard` / season-poster source: primary image only. */
+fun MediaItem.legacyPrimaryArtworkCandidates(): List<MediaImage> =
+    exactArtworkCandidates(ImageKind.Primary)
+
+/**
+ * Exact ArkUI season-card / episode-card source: primary first, then backdrop.
+ * This intentionally differs from the reusable landscape candidate list.
+ */
+fun MediaItem.legacyPrimaryThenBackdropArtworkCandidates(): List<MediaImage> =
+    exactArtworkCandidates(ImageKind.Primary, ImageKind.Backdrop)
+
+/**
  * 把一个 item 的横版图按目标档位预载进内存缓存。
  *
  * 轮播背景的翻页跟手序列会在拖动瞬间把相邻页组合进视口，模糊层的 Crossfade 也会在
@@ -239,7 +316,13 @@ suspend fun prefetchLandscapeArtwork(
         .filter { it.url.isNotBlank() }
         .distinctBy { it.url }
     for (candidate in candidates) {
-        val loaded = runCatching { cache.load(candidate, requested, fetch) }.getOrNull()
+        val loaded = try {
+            cache.load(candidate, requested, fetch)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
         if (loaded != null) return
     }
 }
@@ -247,6 +330,10 @@ suspend fun prefetchLandscapeArtwork(
 private fun MediaItem.artworkCandidates(vararg preferredKinds: ImageKind): List<MediaImage> = buildList {
     preferredKinds.forEach { kind -> addAll(images.filter { it.kind == kind }) }
     addAll(images)
+}.filter { it.url.isNotBlank() }.distinctBy { it.url }
+
+private fun MediaItem.exactArtworkCandidates(vararg kinds: ImageKind): List<MediaImage> = buildList {
+    kinds.forEach { kind -> addAll(images.filter { it.kind == kind }) }
 }.filter { it.url.isNotBlank() }.distinctBy { it.url }
 
 private fun artworkWidthBucket(widthPx: Int): Int = when {
@@ -263,8 +350,14 @@ private const val MaxArtworkWidthPx = 960
 private const val DefaultArtworkWidthPx = 480
 private const val ArtworkRetryCount = 2
 private const val ArtworkRetryDelayMs = 300L
+private val ArtworkFailureTtl = 30.seconds
 private const val MaxEncodedArtworkBytes = 4 * 1024 * 1024
 private const val MaxSingleArtworkBytes = 16L * 1024 * 1024
 private const val MaxArtworkCacheBytes = 64L * 1024 * 1024
+private const val MaxFailedArtworkUrls = 128
 private const val MaxConcurrentArtworkFetches = 6
-private const val MaxConcurrentArtworkDecodes = 2
+// Image decoding is CPU- and allocation-heavy on CPF/OHOS. Two simultaneous
+// 720/960px decodes regularly completed during the same scroll frame on tablet,
+// producing a visible cold-start hitch even though the work ran on Default.
+// Keep network I/O concurrent, but serialize decode/publication pressure.
+private const val MaxConcurrentArtworkDecodes = 1
