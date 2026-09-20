@@ -1,9 +1,20 @@
 package cn.mafei.cmp.providers.feiniu.core
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * P0 Feiniu wire models. JSON keys are snake_case per the fnOS media API —
@@ -119,11 +130,45 @@ data class FeiniuMediaItem(
 @Serializable
 data class FeiniuItemStream(
     @SerialName("resolutions") val resolutions: List<String> = emptyList(),
-    @SerialName("audio_type") val audioType: String? = null,
-    @SerialName("color_range_type") val colorRangeType: String? = null,
+    @SerialName("audio_type")
+    @Serializable(with = FeiniuStringValuesSerializer::class)
+    val audioTypes: List<String> = emptyList(),
+    @SerialName("color_range_type")
+    @Serializable(with = FeiniuStringValuesSerializer::class)
+    val colorRangeTypes: List<String> = emptyList(),
     @SerialName("progress") val progress: Double? = null,
     @SerialName("current_time") val currentTimeSeconds: Double? = null,
 )
+
+/** fnOS emits these catalog tags as either one string or an array of strings. */
+data object FeiniuStringValuesSerializer : KSerializer<List<String>> {
+    private val delegate = ListSerializer(String.serializer())
+
+    override val descriptor = delegate.descriptor
+
+    override fun serialize(encoder: Encoder, value: List<String>) {
+        if (encoder is JsonEncoder) {
+            encoder.encodeJsonElement(JsonArray(value.map(::JsonPrimitive)))
+        } else {
+            delegate.serialize(encoder, value)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): List<String> {
+        if (decoder !is JsonDecoder) return delegate.deserialize(decoder)
+        val element = decoder.decodeJsonElement()
+        val values = when (element) {
+            JsonNull -> emptyList()
+            is JsonPrimitive -> listOf(element.content)
+            is JsonArray -> element.map { value ->
+                (value as? JsonPrimitive)?.content
+                    ?: throw SerializationException("Expected string in fnOS catalog tag array")
+            }
+            else -> throw SerializationException("Expected string or string array for fnOS catalog tags")
+        }
+        return values.map(String::trim).filter(String::isNotEmpty).distinct()
+    }
+}
 
 /** GET /v/api/v1/play/list entry used by the home resume shelf. */
 @Serializable

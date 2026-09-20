@@ -57,7 +57,7 @@ private val LIST_PAGE_ONE =
              "watched":1,"is_favorite":1,"vote_average":"8.1","duration":7200,
              "release_date":"2024-01-01","ancestor_guid":"lib-0001","epoch":"ts",
              "ts":1800,"overview":"Overview text","official_rating_unused":"x",
-             "media_stream":{"resolutions":["4k","1080p"],"audio_type":"DTS","color_range_type":"HDR","progress":50.0,"current_time":3600.0}},
+             "media_stream":{"resolutions":["4k","1080p"],"audio_type":["DTS","DolbyAtmos"],"color_range_type":["HDR","DolbyVision"],"progress":50.0,"current_time":3600.0}},
             {"guid":"it-0002","title":"Fixture Show","type":"TV","poster":"/p/s.jpg","season_number":1},
             {"guid":"it-0003","title":"Hologram","type":"LiveChannel"}
         ]}""",
@@ -366,7 +366,7 @@ class FeiniuAdapterCatalogTest {
         assertNull(movie.dateAddedEpochMs) // list `ts` is playback position, not creation time
         assertEquals("Overview text", movie.overview)
         assertEquals(8.1, movie.communityRating)
-        assertEquals(listOf("4K", "1080P", "DTS", "HDR"), movie.tags)
+        assertEquals(listOf("4K", "1080P", "DTS", "DolbyAtmos", "HDR", "DolbyVision"), movie.tags)
         // Show: season number mapped, no play flag.
         val show = page.items[1]
         assertEquals(MediaType.Series, show.mediaType)
@@ -375,6 +375,23 @@ class FeiniuAdapterCatalogTest {
         // Unknown type tolerated as Unknown, no play capability inferred.
         assertEquals(MediaType.Unknown, page.items[2].mediaType)
         assertFalse(page.items[2].canPlay)
+    }
+
+    @Test
+    fun itemsAcceptLegacySingleStringCatalogTags() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            envelope(
+                """{"list":[{"guid":"single-tags","title":"Single Tags","type":"Movie",
+                    "media_stream":{"audio_type":"DTS","color_range_type":"HDR"}}],"total":1}""",
+            ),
+        )
+
+        assertEquals(
+            listOf("DTS", "HDR"),
+            fixture.adapter.items(null, PageRequest()).items.single().tags,
+        )
     }
 
     @Test

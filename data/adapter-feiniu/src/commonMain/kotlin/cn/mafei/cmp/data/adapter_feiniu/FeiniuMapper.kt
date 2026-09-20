@@ -238,8 +238,8 @@ private fun feiniuMediaTags(stream: cn.mafei.cmp.providers.feiniu.core.FeiniuIte
         val normalized = value.trim().uppercase()
         if (normalized.isNotEmpty() && normalized !in this) add(normalized)
     }
-    listOf(stream?.audioType, stream?.colorRangeType).forEach { value ->
-        value?.trim()?.takeIf { it.isNotEmpty() && it !in this }?.let(::add)
+    (stream?.audioTypes.orEmpty() + stream?.colorRangeTypes.orEmpty()).forEach { value ->
+        value.trim().takeIf { it.isNotEmpty() && it !in this }?.let(::add)
     }
 }
 
