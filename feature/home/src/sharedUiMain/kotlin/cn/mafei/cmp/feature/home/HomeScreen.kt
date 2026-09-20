@@ -282,10 +282,11 @@ fun HomeScreen(
             }
         }
     }
-    // 浮动 Tab / 搜索按钮的玻璃采样源 = shell 根部的窗口记录层（含窗口级轮播
-    // 背景与全部内容）。scene 里不再自建捕获层 —— 背景提升到窗口画布后，局部
-    // 捕获层反而采不到它。shell 之外（独立预览等）退回局部记录。
-    val floatingTabsBackdrop = LocalShellBackdrop.current ?: rememberGlassBackdrop()
+    // 首页浮层必须使用页面自己的记录层。HomeScreen 本身位于 shell 的捕获子树中，
+    // 若在这里消费 LocalShellBackdrop，就会把“读取 shell layer”的节点重新录进同一个
+    // shell layer，Skiko 绘制时形成 RenderNode -> SkDrawable 的无限递归并耗尽 native 栈。
+    // 下方滚动内容负责记录，Floating Tabs / 搜索按钮 / ActionBar 是它的兄弟消费者。
+    val floatingTabsBackdrop = rememberGlassBackdrop()
     val floatingTabLabels = remember(collections) {
         listOf("最近添加") + collections.map { it.name }
     }
@@ -526,7 +527,7 @@ fun HomeScreen(
       // 首页轮播背景已提升到 shell 的窗口画布（heroBackdropState 同步状态，
       // App.kt 的 background 里绘制）—— 它天然全窗、与侧栏让位无关，scene 里
       // 只保留内容、手势和文字浮层。
-      Box(Modifier.fillMaxSize()) {
+      Box(Modifier.fillMaxSize().captureGlassBackdrop(floatingTabsBackdrop)) {
       HomeRefreshContainer(
         stretchHero = stretchHeroRefresh,
         refreshing = refreshing,
