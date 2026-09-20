@@ -9,6 +9,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class ApplicationSessionStatus { NotStarted, Restoring, SignedOut, Ready, NeedsAttention, Closed }
+
+/**
+ * 保存的账号存在，但它的凭据已不可恢复（被系统清理、卸载重装、或当初就没
+ * 落盘）——这不是"切换失败"，而是"需要重新登录"：调用方应把用户带到该
+ * 服务器的登录页并预填地址/用户名，而不是笼统报错。继承
+ * [IllegalStateException] 以保持既有 `error("Saved account requires login")`
+ * 语义对老调用方/测试兼容。
+ */
+class SavedAccountRequiresLoginException(val selection: SessionSelection) :
+    IllegalStateException("Saved account requires login")
+
 data class ApplicationSessionState(
     val status: ApplicationSessionStatus = ApplicationSessionStatus.NotStarted,
     val selection: SessionSelection? = null,
@@ -70,7 +81,8 @@ class ApplicationSessions(
 
     suspend fun switchAccount(selection: SessionSelection): ApplicationSession = mutex.withLock {
         checkOpen()
-        val restored = credentials.restoreAccount(selection) ?: error("Saved account requires login")
+        val restored = credentials.restoreAccount(selection)
+            ?: throw SavedAccountRequiresLoginException(selection)
         restore(restored)
     }
 
