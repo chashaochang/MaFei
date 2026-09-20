@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.focus.FocusRequester
@@ -45,6 +46,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.NavigationPlacement
@@ -57,6 +59,7 @@ import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
@@ -306,7 +309,12 @@ private data object BrowseAccountSwitchRoute : BrowseRoute
 private data object BrowseAddAccountRoute : BrowseRoute
 
 @Serializable
-private data class BrowseConnectAccountRoute(val provider: ProviderKind) : BrowseRoute
+private data class BrowseConnectAccountRoute(
+    val provider: ProviderKind,
+    /** 重新登录既有账号时预填（保存的凭据已不可恢复）。 */
+    val presetBaseUrl: String? = null,
+    val presetUsername: String? = null,
+) : BrowseRoute
 
 @Serializable
 private data object BrowseSettingsRoute : BrowseRoute
@@ -1053,6 +1061,16 @@ private fun BrowseContent(
                                                     runtime.switchAccount(connection)
                                                 } catch (cancelled: CancellationException) {
                                                     throw cancelled
+                                                } catch (needsLogin: SavedAccountRequiresLoginException) {
+                                                    // 保存的凭据不可恢复（系统清理/卸载重装/当初未落盘）：
+                                                    // 这不是"切换失败"，而是"需要重新登录"。把用户带到
+                                                    // 这台服务器的登录页并预填地址与用户名，登录一次即可。
+                                                    accountsError = null
+                                                    mineBackStack += BrowseConnectAccountRoute(
+                                                        provider = connection.server.provider,
+                                                        presetBaseUrl = connection.server.baseUrl,
+                                                        presetUsername = connection.account.userName,
+                                                    )
                                                 } catch (_: Exception) {
                                                     accountsError = "账号切换失败，请稍后重试"
                                                 } finally {
@@ -1103,10 +1121,10 @@ private fun BrowseContent(
                             }
                             is BrowseConnectAccountRoute -> NavEntry(route) {
                                 val formState = rememberConnectFormState()
-                                LaunchedEffect(formState, route.provider) {
+                                LaunchedEffect(formState, route) {
                                     formState.provider = route.provider
-                                    formState.baseUrl = ""
-                                    formState.username = ""
+                                    formState.baseUrl = route.presetBaseUrl.orEmpty()
+                                    formState.username = route.presetUsername.orEmpty()
                                     formState.password = ""
                                     formState.rememberPassword = true
                                 }
@@ -2174,31 +2192,41 @@ private fun MineAccountSheet(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            MaFeiSurface(
-                GlassSurfaceSpec(
-                    GlassRole.Dialog,
-                    GlassLevel.Full,
-                    tintAlpha = .30f,
-                    intensity = 1f,
-                    cornerRadiusDp = 22f,
-                ),
+            // 大屏弹窗**容器**用正常背景（不透明主题色 + 圆角 + 投影），不是
+            // 液态玻璃 —— 浮层容器不上玻璃是定下的规格（玻璃只留给容器内的
+            // 交互件，例如右上角的关闭按钮）。
+            Box(
                 Modifier
                     .width(sheetWidth)
                     .height(sheetHeight)
+                    .shadow(MineSheetElevation, RoundedCornerShape(MineSheetCornerDp))
+                    .clip(RoundedCornerShape(MineSheetCornerDp))
+                    .background(MaterialTheme.colorScheme.background)
                     .pointerInput(Unit) { detectTapGestures { } }
                     .semantics { contentDescription = "我的" },
-                backdrop,
             ) {
                 Box(Modifier.fillMaxSize()) {
-                    content(Modifier.fillMaxSize().testTag("mineAccountSheetContent"))
-                    Box(
-                        Modifier
+                    // 弹窗内的页面没有窗口安全区（不在状态栏下），但统一为顶部导航区
+                    // （关闭按钮所在的那条）让位 —— 所有子页面从这里往下排，不会被
+                    // 关闭按钮压住。
+                    CompositionLocalProvider(LocalMaFeiSafeArea provides MaFeiSafeArea()) {
+                        content(
+                            Modifier.fillMaxSize().padding(top = MineSheetTopBarHeight)
+                                .testTag("mineAccountSheetContent"),
+                        )
+                    }
+                    // 右上角关闭按钮：液态玻璃按钮（容器在 modal 槽，采样窗口
+                    // backdrop 是合法的消费者位置）。
+                    LiquidButton(
+                        onClick = onDismiss,
+                        backdrop = backdrop,
+                        modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(10.dp)
                             .size(36.dp)
-                            .clip(CircleShape)
-                            .mafeiInteractive(onDismiss, radiusDp = 18f, label = "关闭我的"),
-                        contentAlignment = Alignment.Center,
+                            .semantics { contentDescription = "关闭我的" },
+                        height = 36.dp,
+                        horizontalPadding = 0.dp,
                     ) {
                         MaFeiIcon(MaFeiGlyph.Close, Modifier.size(16.dp))
                     }
@@ -2207,6 +2235,13 @@ private fun MineAccountSheet(
         }
     }
 }
+
+/** 弹窗顶部导航区（关闭按钮所在条带）的高度：所有子页面内容在此之下。 */
+private val MineSheetTopBarHeight = 56.dp
+private const val MineSheetCornerDp = 22f
+
+/** 弹窗容器的投影高度（正常背景容器靠它从遮罩上浮起来）。 */
+private val MineSheetElevation = 24.dp
 
 private const val PRIVACY_AGREEMENT_URL =
     "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1915508141466875008"
