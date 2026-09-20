@@ -1,6 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -31,9 +30,6 @@ kotlin {
     ohosArm64 {
         binaries.sharedLib {
             baseName = "kn"
-            if (buildType == NativeBuildType.RELEASE) {
-                optimized = false
-            }
             export(libs.compose.export)
             linkerOpts(
                 "-lz",
