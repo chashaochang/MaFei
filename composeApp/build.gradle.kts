@@ -67,6 +67,7 @@ kotlin {
                 implementation(project(":data:migration"))
                 implementation(project(":data:adapter-jellyfin"))
                 implementation(project(":data:adapter-feiniu"))
+                implementation(project(":providers:jellyfin:discovery"))
                 implementation(project(":providers:jellyfin:facade"))
                 implementation(project(":providers:feiniu:facade"))
 

@@ -53,6 +53,7 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.design_system.MaFeiSafeArea
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
@@ -94,6 +95,9 @@ import cn.mafei.cmp.feature.connect.ConnectAtmosphere
 import cn.mafei.cmp.feature.connect.AccountHistoryScreen
 import cn.mafei.cmp.feature.connect.ConnectScreen
 import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
+import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
+import cn.mafei.cmp.feature.connect.ServerDiscoverySuggestion
+import cn.mafei.cmp.feature.connect.ServerSuggestionType
 import cn.mafei.cmp.feature.connect.rememberConnectFormState
 import cn.mafei.cmp.feature.detail.DetailScreen
 import cn.mafei.cmp.feature.detail.PersonDetailScreen
@@ -124,6 +128,7 @@ import cn.mafei.cmp.player.ui.MiniPlayerMedia
 import cn.mafei.cmp.player.ui.NowPlayingMedia
 import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
+import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -280,6 +285,9 @@ private data object ConnectRoute : SignedOutRoute
 
 @Serializable
 private data object AccountHistoryRoute : SignedOutRoute
+
+@Serializable
+private data object ServerDiscoveryRoute : SignedOutRoute
 
 @Serializable
 private sealed interface BrowseRoute : NavKey
@@ -449,6 +457,11 @@ private fun SignedOutFlow(
                 }
                 loadHistory()
             },
+            onOpenServerDiscovery = {
+                if (backStack.lastOrNull() != ServerDiscoveryRoute) {
+                    backStack.add(ServerDiscoveryRoute)
+                }
+            },
             onSubmit = { provider, address, name, password, rememberPassword ->
                 if (!busy) {
                     onBusyChange(true)
@@ -524,6 +537,20 @@ private fun SignedOutFlow(
             pageBackdrop = pageBackdrop,
         )
     }
+    val discoveryContent: @Composable () -> Unit = {
+        ServerDiscoveryScreen(
+            loadSavedServers = { savedJellyfinServerSuggestions(runtime) },
+            discoverServers = { discoveredJellyfinServerSuggestions() },
+            onBack = { backStack.removeLastOrNull() },
+            onSelectServer = { address ->
+                connectFormState.provider = ProviderKind.Jellyfin
+                connectFormState.baseUrl = address
+                connectFormState.requestServerAddressFocus()
+                backStack.removeLastOrNull()
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val fontScale = LocalDensity.current.fontScale
@@ -559,7 +586,7 @@ private fun SignedOutFlow(
             Box(Modifier.fillMaxSize().captureGlassBackdrop(pageBackdrop)) {
                 ConnectAtmosphere()
             }
-            if (supportsTwoPane) {
+            if (supportsTwoPane && backStack.lastOrNull() != ServerDiscoveryRoute) {
                 val historyOpen = backStack.lastOrNull() == AccountHistoryRoute
                 val historyConnectPaneWidth = (paneHostWidth * .43f).coerceIn(420.dp, 560.dp)
                 val connectPaneWidth by animateDpAsState(
@@ -618,6 +645,7 @@ private fun SignedOutFlow(
                         when (route) {
                             ConnectRoute -> NavEntry(route) { connectContent() }
                             AccountHistoryRoute -> NavEntry(route) { historyContent() }
+                            ServerDiscoveryRoute -> NavEntry(route) { discoveryContent() }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -2369,6 +2397,37 @@ private fun MediaItem.miniPlayerSubtitle(): String = listOfNotNull(
         else -> null
     },
 ).joinToString(" · ")
+
+private suspend fun savedJellyfinServerSuggestions(
+    runtime: ApplicationRuntime,
+): List<ServerDiscoverySuggestion> = runtime.savedConnections()
+    .asSequence()
+    .filter { it.server.provider == ProviderKind.Jellyfin }
+    .distinctBy { it.server.baseUrl }
+    // ArkUI's loadPreviouslyUsedServers() reads the current server only. The
+    // CMP catalog is already ordered by last activity, so after sign-out the
+    // first Jellyfin row is the retained equivalent of currentServerId; do not
+    // turn the discovery page into a second account-history list.
+    .take(1)
+    .map { connection ->
+        // The ArkUI page deliberately displayed the saved hostname in both rows;
+        // the friendly server name is reserved for an actual UDP discovery reply.
+        ServerDiscoverySuggestion(
+            type = ServerSuggestionType.Saved,
+            name = connection.server.baseUrl,
+            address = connection.server.baseUrl,
+        )
+    }
+    .toList()
+
+private suspend fun discoveredJellyfinServerSuggestions(): List<ServerDiscoverySuggestion> =
+    discoverLocalJellyfinServers().map { server ->
+        ServerDiscoverySuggestion(
+            type = ServerSuggestionType.Discovered,
+            name = server.name.orEmpty(),
+            address = server.address.orEmpty(),
+        )
+    }
 
 private const val HomeDestination = "home"
 private const val FavoriteDestination = "favorite"

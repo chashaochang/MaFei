@@ -36,12 +36,15 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -76,6 +79,7 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.MaFeiSurface
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
@@ -163,6 +167,7 @@ fun ConnectScreen(
     onBack: (() -> Unit)? = null,
     showProviderSwitcher: Boolean = true,
     showHistory: Boolean = true,
+    onOpenServerDiscovery: (() -> Unit)? = null,
 ) {    val safeArea = currentMaFeiSafeArea()
     val provider = formState.provider
     val baseUrl = formState.baseUrl
@@ -263,6 +268,10 @@ fun ConnectScreen(
                                 canSubmit = canSubmit,
                                 error = error,
                                 onOpenHistory = onOpenHistory.takeIf { showHistory },
+                                onOpenServerDiscovery = onOpenServerDiscovery.takeIf {
+                                    provider == ProviderKind.Jellyfin
+                                },
+                                serverAddressFocusRequest = formState.serverAddressFocusRequest,
                                 onSubmit = submit,
                                 modifier = Modifier.widthIn(max = 375.dp).fillMaxWidth(),
                             )
@@ -377,6 +386,8 @@ private fun CompactLoginForm(
     canSubmit: Boolean,
     error: String?,
     onOpenHistory: (() -> Unit)?,
+    onOpenServerDiscovery: (() -> Unit)?,
+    serverAddressFocusRequest: Int,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -394,6 +405,7 @@ private fun CompactLoginForm(
                 "请输入IP地址/域名"
             },
             enabled = !busy,
+            focusRequestKey = serverAddressFocusRequest,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
             trailing = onOpenHistory?.let { openHistory -> {
                 val historyInteraction = remember { MutableInteractionSource() }
@@ -487,6 +499,26 @@ private fun CompactLoginForm(
                 fontWeight = FontWeight.SemiBold,
             )
         }
+        if (provider == ProviderKind.Jellyfin && onOpenServerDiscovery != null) {
+            val discoveryInteraction = remember { MutableInteractionSource() }
+            Box(
+                Modifier.fillMaxWidth().height(44.dp)
+                    .clickable(
+                        enabled = !busy,
+                        interactionSource = discoveryInteraction,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onOpenServerDiscovery,
+                    ),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    "发现局域网内的设备",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = if (busy) .34f else .58f),
+                )
+            }
+        }
     }
 }
 
@@ -536,9 +568,12 @@ private fun ConnectField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    focusRequestKey: Int = 0,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val focused by interactionSource.collectIsFocusedAsState()
     val edgeColor by animateColorAsState(
         if (focused) MaterialTheme.colorScheme.primary.copy(alpha = .68f)
@@ -547,6 +582,13 @@ private fun ConnectField(
     )
     val shape = RoundedCornerShape(14.dp)
     val fieldHeight = 52.dp
+
+    LaunchedEffect(focusRequestKey) {
+        if (focusRequestKey > 0) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     GlassSurface(
         backdrop = backdrop,
@@ -563,7 +605,7 @@ private fun ConnectField(
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth().heightIn(min = fieldHeight)
+            modifier = Modifier.fillMaxWidth().heightIn(min = fieldHeight).focusRequester(focusRequester)
                 .border(if (focused) 1.25.dp else 0.dp, edgeColor, shape)
                 .padding(start = 17.dp, end = if (trailing == null) 17.dp else 6.dp),
             enabled = enabled,

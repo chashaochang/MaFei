@@ -16,6 +16,12 @@ class ConnectFormState internal constructor() {
     var username by mutableStateOf("")
     var password by mutableStateOf("")
     var rememberPassword by mutableStateOf(true)
+    var serverAddressFocusRequest by mutableStateOf(0)
+        private set
+
+    fun requestServerAddressFocus() {
+        serverAddressFocusRequest += 1
+    }
 }
 
 @Composable
