@@ -44,9 +44,13 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.NavigationPlacement
+import cn.mafei.cmp.common.glass.captureGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyLoadingView
+import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
+import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
@@ -71,6 +75,7 @@ fun ChasingScreen(
     val horizontalPadding = horizontalSpacing * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
+    val backdrop = rememberGlassBackdrop()
     var selectedFilterIndex by rememberSaveable { mutableIntStateOf(0) }
     val sections = remember(state.sections) { state.sections.associateBy(ChasingSection::kind) }
     val nextUp = sections[ChasePlanner.NextUpKind]?.items.orEmpty()
@@ -89,23 +94,23 @@ fun ChasingScreen(
         2 -> completed
         else -> all
     }
-    // Legacy ChasingTab is embedded with `fromHome = true`: its ActionBar is
-    // deliberately hidden and the first row owns only the route safe-area.
-    // The app shell already supplies the top-level navigation chrome.
+    // 一级页面与「媒体库」共用同一条顶部栏。内容记录 backdrop，顶部栏作为兄弟层消费，
+    // 避免把玻璃消费者重新录进同一个 layer 形成自采样递归。
     Box(modifier.fillMaxSize()) {
-        PullToRefreshBox(
-            isRefreshing = state.refreshing,
-            onRefresh = onRetry,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            LazyColumn(
-                state = listState,
+        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
+            PullToRefreshBox(
+                isRefreshing = state.refreshing,
+                onRefresh = onRetry,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = safeArea.top + 12.dp,
-                    bottom = bottomPadding,
-                ),
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
+                        bottom = bottomPadding,
+                    ),
+                ) {
                     if (state.followedCount > 0 || state.totalCount > 0) {
                         item(key = "filters") {
                             ChasingFilters(
@@ -198,15 +203,21 @@ fun ChasingScreen(
                             )
                         }
                     }
+                }
+            }
+
+            when {
+                state.loading -> LegacyLoadingView()
+                state.error != null && state.sections.all { it.items.isEmpty() } -> LegacyFailedView(onRetry)
+                !state.loading && state.error == null && state.followedCount == 0 ->
+                    LegacyEmptyView(title = "暂无追剧，去剧集详情页添加")
             }
         }
-
-        when {
-            state.loading -> LegacyLoadingView()
-            state.error != null && state.sections.all { it.items.isEmpty() } -> LegacyFailedView(onRetry)
-            !state.loading && state.error == null && state.followedCount == 0 ->
-                LegacyEmptyView(title = "暂无追剧，去剧集详情页添加")
-        }
+        MaFeiPageTitleBar(
+            title = "追剧",
+            backdrop = backdrop,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 }
 

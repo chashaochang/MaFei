@@ -31,9 +31,13 @@ import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.NavigationPlacement
+import cn.mafei.cmp.common.glass.captureGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
+import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
+import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
 import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
@@ -76,6 +80,7 @@ fun FavoriteScreen(
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
+    val backdrop = rememberGlassBackdrop()
 
     LaunchedEffect(gridState, canLoadMore, loading, loadingMore, items.size) {
         snapshotFlow {
@@ -86,12 +91,10 @@ fun FavoriteScreen(
         }
     }
 
-    // Legacy FavoriteListPage is embedded with `fromHome = true`, so it hides
-    // its ActionBar. The 46dp sort row is still present while the grid skeleton
-    // is loading; hiding it changes both the information hierarchy and the
-    // vertical position of the first media row.
+    // 一级页面与「媒体库」共用同一条顶部栏。内容记录 backdrop，顶部栏作为兄弟层消费，
+    // 避免把玻璃消费者重新录进同一个 layer 形成自采样递归。
     Box(modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
             LegacySortRow(
                 label = sortChoices.firstOrNull { it.value.field == selectedSort.field }?.label ?: "按添加日期",
                 // Legacy FavoriteListViewModel displays the current data
@@ -102,58 +105,63 @@ fun FavoriteScreen(
                 onToggleDirection = onToggleSortDirection,
                 modifier = Modifier.padding(
                     start = safeArea.start + horizontalPadding,
-                    top = safeArea.top,
+                    top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
                     end = safeArea.end + horizontalPadding,
                 ),
             )
 
-        when {
-            loading && items.isEmpty() -> LegacyMediaGridSkeleton(
-                columns = legacyMediaColumns(contentWidth),
-                startPadding = safeArea.start + horizontalPadding,
-                endPadding = safeArea.end + horizontalPadding,
-                topPadding = 12.dp,
-                bottomPadding = bottomPadding,
-                modifier = Modifier.weight(1f),
-            )
-            error != null && items.isEmpty() -> LegacyFailedView(onRetry, Modifier.weight(1f))
-            items.isEmpty() -> LegacyEmptyView(modifier = Modifier.weight(1f))
-            else -> PullToRefreshBox(
-                isRefreshing = refreshing,
-                onRefresh = onRetry,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            ) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(legacyMediaColumns(contentWidth)),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = safeArea.start + horizontalPadding,
-                        end = safeArea.end + horizontalPadding,
-                        bottom = bottomPadding,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(gap),
-                    verticalArrangement = Arrangement.spacedBy(gap),
+            when {
+                loading && items.isEmpty() -> LegacyMediaGridSkeleton(
+                    columns = legacyMediaColumns(contentWidth),
+                    startPadding = safeArea.start + horizontalPadding,
+                    endPadding = safeArea.end + horizontalPadding,
+                    topPadding = 12.dp,
+                    bottomPadding = bottomPadding,
+                    modifier = Modifier.weight(1f),
+                )
+                error != null && items.isEmpty() -> LegacyFailedView(onRetry, Modifier.weight(1f))
+                items.isEmpty() -> LegacyEmptyView(modifier = Modifier.weight(1f))
+                else -> PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = onRetry,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) {
-                    items(items, key = { it.id.value }) { item ->
-                        LegacyVideoCard(
-                            item = item,
-                            onClick = { onItem(item) },
-                            poster = artwork?.let { draw -> { cardModifier -> draw(item, cardModifier) } },
-                        )
-                    }
-                    if (loadingMore) item {
-                        Box(
-                            Modifier.fillMaxWidth().aspectRatio(2f / 3f),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(legacyMediaColumns(contentWidth)),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = safeArea.start + horizontalPadding,
+                            end = safeArea.end + horizontalPadding,
+                            bottom = bottomPadding,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(gap),
+                    ) {
+                        items(items, key = { it.id.value }) { item ->
+                            LegacyVideoCard(
+                                item = item,
+                                onClick = { onItem(item) },
+                                poster = artwork?.let { draw -> { cardModifier -> draw(item, cardModifier) } },
+                            )
+                        }
+                        if (loadingMore) item {
+                            Box(
+                                Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                            }
                         }
                     }
                 }
             }
         }
-        }
+        MaFeiPageTitleBar(
+            title = "收藏",
+            backdrop = backdrop,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 
     if (showSort) {
