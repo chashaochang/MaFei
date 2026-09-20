@@ -2,6 +2,7 @@ package cn.mafei.cmp.feature.detail
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ScrollState
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -81,6 +83,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -102,7 +105,6 @@ import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
-import cn.mafei.cmp.common.glass.components.LiquidFloatingTabs
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.LegacyTransientToast
@@ -115,18 +117,26 @@ import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaItem
-import cn.mafei.cmp.core.domain.MediaSourceInfo
-import cn.mafei.cmp.core.domain.MediaStreamInfo
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.core.domain.PersonKind
 import cn.mafei.cmp.core.domain.episodeLabel
 import cn.mafei.cmp.core.domain.episodeSubtitle
-import cn.mafei.cmp.core.domain.episodeLabel
-import cn.mafei.cmp.core.domain.episodeSubtitle
 import cn.mafei.cmp.core.domain.PersonRef
+import cn.mafei.cmp.feature.detail.generated.resources.Res
+import cn.mafei.cmp.feature.detail.generated.resources.ma_shan_zheng_regular
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_1080
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_4k
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_atmos
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_surround
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_vision
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dts
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_hdr
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_sdr
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_stereo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.Font
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -158,6 +168,9 @@ fun DetailScreen(
     sectionsLoading: Boolean = false,
     sectionsError: String? = null,
     onSeasonSelected: (MediaItem) -> Unit = {},
+    // Source-compatible only: the ArkUI page has no similar-content section,
+    // so callers from an older app shell may still pass these without the
+    // detail page rendering invented content.
     similar: List<MediaItem> = emptyList(),
     similarLoading: Boolean = false,
     onSimilarItemSelected: (MediaItem) -> Unit = {},
@@ -196,6 +209,16 @@ fun DetailScreen(
         else -> ((collapseProgress - .72f) / .22f).coerceIn(0f, 1f)
     }
     var overviewSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
+    var mediaInfoSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
+    var pickerKind by remember(item?.id?.value) { mutableStateOf<DetailPickerKind?>(null) }
+    val playbackSources = remember(item?.provider, item?.mediaSources) {
+        item?.let {
+            presentDetailPlaybackSources(it.provider, selectLegacyDetailSources(it.mediaSources))
+        }.orEmpty()
+    }
+    val selectedPlaybackSource = remember(playbackSources, selectedMediaSourceId) {
+        playbackSources.firstOrNull { it.id == selectedMediaSourceId } ?: playbackSources.firstOrNull()
+    }
     LaunchedEffect(item?.id?.value) {
         if (item != null) scrollState.scrollTo(0)
     }
@@ -212,16 +235,8 @@ fun DetailScreen(
             0.dp
         }
         val atmosphereWidth = maxWidth + atmosphereBleed
-        // Home and this page share one content column on wide chrome: the layout's
-        // grid width, centred in the pane. Phone keeps the legacy 720dp cap, which
-        // resolves to the full pane width and must not gain extra gutters.
-        val wideChrome = effectiveLayout?.navigation != null &&
-            effectiveLayout.navigation != NavigationPlacement.Bottom
-        val detailContentMaxWidth = if (wideChrome) {
-            effectiveLayout.gridWidthDp.dp
-        } else {
-            720.dp
-        }
+        // Legacy keeps the hero full-width and constrains only the reading area.
+        val detailContentMaxWidth = 720.dp
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
                 DetailAtmosphere(item, atmosphereArtwork, atmosphereBleed, atmosphereWidth)
@@ -245,17 +260,16 @@ fun DetailScreen(
                     sectionsLoading = sectionsLoading,
                     sectionsError = sectionsError,
                     onSeasonSelected = onSeasonSelected,
-                    similar = similar,
-                    similarLoading = similarLoading,
-                    onSimilarItemSelected = onSimilarItemSelected,
+                    playbackSources = playbackSources,
                     onOpenExternalUrl = onOpenExternalUrl,
-                    onDelete = onDelete,
                     selectedMediaSourceId = selectedMediaSourceId,
                     onSelectMediaSource = onSelectMediaSource,
                     selectedAudioStreamIndex = selectedAudioStreamIndex,
                     onSelectAudioTrack = onSelectAudioTrack,
                     selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
                     onSelectSubtitleTrack = onSelectSubtitleTrack,
+                    pickerKind = pickerKind,
+                    onOpenPicker = { pickerKind = it },
                     libraryName = libraryName,
                     contentMaxWidth = detailContentMaxWidth,
                     artwork = artwork,
@@ -264,6 +278,7 @@ fun DetailScreen(
                     personArtwork = personArtwork,
                     onPersonSelected = onPersonSelected,
                     onOpenOverview = { overviewSheetVisible = true },
+                    onOpenMediaInfo = { mediaInfoSheetVisible = true },
                     backdrop = backdrop,
                     heroExtraHeight = heroStretch.extraHeight,
                     heroScrollConnection = heroStretch.connection,
@@ -280,12 +295,7 @@ fun DetailScreen(
             materialAlpha = if (item == null) 1f else collapseProgress,
             titleAlpha = if (item == null) 0f else collapsedTitleOpacity,
             contentColor = if (item == null) MaterialTheme.colorScheme.onSurface else Color.White,
-            // Keep the back button on the content column's leading edge instead of
-            // stranding it at the far edge of a wide window.
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .widthIn(max = detailContentMaxWidth)
-                .fillMaxWidth(),
+            modifier = Modifier.align(Alignment.TopCenter),
         )
         LegacyTransientToast(
             message = actionsError ?: playbackError,
@@ -296,6 +306,36 @@ fun DetailScreen(
                 overview = item?.overview,
                 backdrop = actionBarBackdrop,
                 onDismiss = { overviewSheetVisible = false },
+            )
+        }
+        if (mediaInfoSheetVisible && selectedPlaybackSource != null) {
+            MediaInfoSheetOverlay(
+                sections = selectedPlaybackSource.infoSections,
+                backdrop = actionBarBackdrop,
+                onDismiss = { mediaInfoSheetVisible = false },
+            )
+        }
+        pickerKind?.let { kind ->
+            DetailPickerSheetOverlay(
+                kind = kind,
+                sources = playbackSources,
+                selectedSource = selectedPlaybackSource,
+                selectedAudioStreamIndex = selectedAudioStreamIndex,
+                selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
+                backdrop = actionBarBackdrop,
+                onDismiss = { pickerKind = null },
+                onSelectSource = { sourceId ->
+                    pickerKind = null
+                    onSelectMediaSource?.invoke(sourceId)
+                },
+                onSelectAudio = { streamIndex ->
+                    pickerKind = null
+                    onSelectAudioTrack?.invoke(streamIndex)
+                },
+                onSelectSubtitle = { streamIndex ->
+                    pickerKind = null
+                    onSelectSubtitleTrack?.invoke(streamIndex)
+                },
             )
         }
     }
@@ -369,17 +409,16 @@ private fun BoxScope.DetailBody(
     sectionsLoading: Boolean,
     sectionsError: String?,
     onSeasonSelected: (MediaItem) -> Unit,
-    similar: List<MediaItem>,
-    similarLoading: Boolean,
-    onSimilarItemSelected: (MediaItem) -> Unit,
+    playbackSources: List<DetailPlaybackSource>,
     onOpenExternalUrl: ((String) -> Unit)?,
-    onDelete: (() -> Unit)?,
     selectedMediaSourceId: String?,
     onSelectMediaSource: ((String?) -> Unit)?,
     selectedAudioStreamIndex: Int?,
     onSelectAudioTrack: ((Int?) -> Unit)?,
     selectedSubtitleStreamIndex: Int?,
     onSelectSubtitleTrack: ((Int?) -> Unit)?,
+    pickerKind: DetailPickerKind?,
+    onOpenPicker: (DetailPickerKind) -> Unit,
     libraryName: String?,
     contentMaxWidth: Dp,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
@@ -388,11 +427,14 @@ private fun BoxScope.DetailBody(
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)?,
     onPersonSelected: (PersonRef) -> Unit,
     onOpenOverview: () -> Unit,
+    onOpenMediaInfo: () -> Unit,
     backdrop: GlassBackdrop,
     heroExtraHeight: Dp,
     heroScrollConnection: NestedScrollConnection,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val selectedPlaybackSource = playbackSources.firstOrNull { it.id == selectedMediaSourceId }
+        ?: playbackSources.firstOrNull()
     // The full-page atmosphere is always media-first and darkened. Downstream
     // text therefore shares one white ink hierarchy instead of switching with
     // the app theme while it still sits on cover art.
@@ -400,9 +442,6 @@ private fun BoxScope.DetailBody(
         Column(
             Modifier
                 .align(Alignment.TopCenter)
-                // Match the home page's content column. A fixed phone-width column
-                // left ~100dp of dead space on each side of a desktop window.
-                .widthIn(max = contentMaxWidth)
                 .fillMaxWidth()
                 .nestedScroll(heroScrollConnection)
                 .verticalScroll(scrollState),
@@ -414,10 +453,15 @@ private fun BoxScope.DetailBody(
                 libraryName = libraryName,
                 artwork = backdropArtwork ?: artwork,
                 logoArtwork = logoArtwork,
-                )
+                playbackSource = selectedPlaybackSource,
+            )
 
             Column(
-                Modifier.fillMaxWidth().padding(bottom = safeArea.bottom + 30.dp),
+                Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .widthIn(max = contentMaxWidth)
+                    .fillMaxWidth()
+                    .padding(bottom = safeArea.bottom + 30.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -433,6 +477,21 @@ private fun BoxScope.DetailBody(
                 )
                 if (loading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                }
+                if (item.mediaType != MediaType.Series && playbackSources.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    PlaybackSelectionSection(
+                        sources = playbackSources,
+                        selectedMediaSourceId = selectedPlaybackSource?.id,
+                        onSelectMediaSource = onSelectMediaSource,
+                        selectedAudioStreamIndex = selectedAudioStreamIndex,
+                        onSelectAudioTrack = onSelectAudioTrack,
+                        selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
+                        onSelectSubtitleTrack = onSelectSubtitleTrack,
+                        pickerKind = pickerKind,
+                        onOpenPicker = onOpenPicker,
+                        backdrop = backdrop,
+                    )
                 }
                 if (item.overview?.isNotBlank() == true) {
                     Spacer(Modifier.height(28.dp))
@@ -456,38 +515,18 @@ private fun BoxScope.DetailBody(
                     Spacer(Modifier.height(16.dp))
                     LegacyPeopleSection(item.people, personArtwork, onPersonSelected)
                 }
-                PlaybackSelectionSection(
-                    sources = item.mediaSources,
-                    selectedMediaSourceId = selectedMediaSourceId,
-                    onSelectMediaSource = onSelectMediaSource,
-                    selectedAudioStreamIndex = selectedAudioStreamIndex,
-                    onSelectAudioTrack = onSelectAudioTrack,
-                    selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
-                    onSelectSubtitleTrack = onSelectSubtitleTrack,
-                    backdrop = backdrop,
-                )
-                if (item.mediaSources.isNotEmpty()) {
-                    Spacer(Modifier.height(20.dp))
+                if (item.mediaType != MediaType.Series && selectedPlaybackSource != null &&
+                    (selectedPlaybackSource.hasFileInformation || selectedPlaybackSource.hasVideoInformation)
+                ) {
+                    Spacer(Modifier.height(16.dp))
                     MediaInfoSection(
-                        sources = item.mediaSources,
-                        onDelete = onDelete,
+                        source = selectedPlaybackSource,
+                        onOpenDetails = onOpenMediaInfo,
                     )
                 }
                 if (onOpenExternalUrl != null && item.externalUrls.isNotEmpty()) {
-                    Spacer(Modifier.height(20.dp))
-                    ExternalLinksSection(item.externalUrls, onOpenExternalUrl, backdrop)
-                }
-                if (similar.isNotEmpty()) {
-                    Spacer(Modifier.height(20.dp))
-                    SimilarSection(
-                        items = similar,
-                        loading = similarLoading,
-                        onItemSelected = onSimilarItemSelected,
-                        artwork = artwork,
-                    )
-                } else if (similarLoading) {
-                    Spacer(Modifier.height(20.dp))
-                    LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                    Spacer(Modifier.height(16.dp))
+                    ExternalLinksSection(item.externalUrls, onOpenExternalUrl)
                 }
                 if (item.overview.isNullOrBlank() && item.mediaType != MediaType.Series && item.people.isEmpty() &&
                     error != null && !stale
@@ -507,6 +546,7 @@ private fun DetailHero(
     libraryName: String?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    playbackSource: DetailPlaybackSource?,
 ) {
     val titleOpacity = when {
         collapseProgress <= .72f -> 1f
@@ -514,7 +554,17 @@ private fun DetailHero(
     }
     val titlePhase = smoothStep(((collapseProgress - .42f) / .58f).coerceIn(0f, 1f))
     val hasLogo = item.images.any { it.kind == ImageKind.Logo }
-    val collapsedScale = if (hasLogo) .28f else .46f
+    val usesCalligraphy = item.title.any { it in '\u3400'..'\u9fff' }
+    val calligraphyFont = if (usesCalligraphy) {
+        FontFamily(Font(Res.font.ma_shan_zheng_regular))
+    } else {
+        null
+    }
+    val collapsedScale = when {
+        hasLogo -> .28f
+        usesCalligraphy -> .23f
+        else -> .46f
+    }
     val titleScale = 1f - (1f - collapsedScale) * titlePhase
     // 与手机同一套规格：hero 是 edge-to-edge 的 band，底部羽化融入氛围背景。
     // 之前宽屏把 hero 做成圆角卡片（"桌面化第二套布局"），既失去沉浸感，也让
@@ -563,6 +613,7 @@ private fun DetailHero(
             if (hasLogo && logoArtwork != null) {
                 Box(
                     Modifier
+                        .align(Alignment.CenterHorizontally)
                         .width(196.dp)
                         .height(76.dp)
                         .graphicsLayer {
@@ -584,7 +635,7 @@ private fun DetailHero(
                             alpha = titleOpacity
                             translationY = -16.dp.toPx() * titlePhase
                         },
-                    horizontalAlignment = Alignment.Start,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     detailSubtitle(item).takeIf { it.isNotBlank() }?.let { subtitle ->
@@ -601,10 +652,11 @@ private fun DetailHero(
                         item.title,
                         Modifier.fillMaxWidth().semantics { heading() },
                         color = Color.White,
-                        fontSize = 38.sp,
-                        lineHeight = 44.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Start,
+                        fontSize = if (usesCalligraphy) 68.sp else 38.sp,
+                        lineHeight = if (usesCalligraphy) 72.sp else 44.sp,
+                        fontFamily = calligraphyFont,
+                        fontWeight = if (usesCalligraphy) FontWeight.Normal else FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.displaySmall.copy(
@@ -615,9 +667,43 @@ private fun DetailHero(
             }
 
             DetailMetadata(item, libraryName, Color.White)
+            if (item.mediaType != MediaType.Series && playbackSource != null && playbackSource.tagKeys.isNotEmpty()) {
+                DetailHeroMediaTags(playbackSource.tagKeys)
+            }
         }
     }
 }
+
+@Composable
+private fun DetailHeroMediaTags(tags: List<DetailVideoTag>) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tags.forEach { tag ->
+            Image(
+                painter = painterResource(tag.drawable),
+                contentDescription = null,
+                modifier = Modifier.height(21.dp),
+                colorFilter = ColorFilter.tint(Color.White),
+            )
+        }
+    }
+}
+
+private val DetailVideoTag.drawable: DrawableResource
+    get() = when (this) {
+        DetailVideoTag.Tag1080 -> Res.drawable.video_tag_1080
+        DetailVideoTag.Tag4K -> Res.drawable.video_tag_4k
+        DetailVideoTag.Stereo -> Res.drawable.video_tag_stereo
+        DetailVideoTag.Hdr -> Res.drawable.video_tag_hdr
+        DetailVideoTag.Sdr -> Res.drawable.video_tag_sdr
+        DetailVideoTag.Dts -> Res.drawable.video_tag_dts
+        DetailVideoTag.DolbyVision -> Res.drawable.video_tag_dolby_vision
+        DetailVideoTag.DolbyAtmos -> Res.drawable.video_tag_dolby_atmos
+        DetailVideoTag.DolbySurround -> Res.drawable.video_tag_dolby_surround
+    }
 
 private fun Modifier.featherBottom(startFraction: Float): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -643,7 +729,7 @@ private fun DetailMetadata(item: MediaItem, libraryName: String?, color: Color) 
     }.joinToString(" · ")
     val secondaryInfo = buildList {
         item.year?.let { add(it.toString()) }
-        item.runtimeMs?.takeIf { it > 0L }?.let { add(durationLabel(it)) }
+        item.runtimeMs?.takeIf { it > 0L }?.let { add(legacyDetailDurationLabel(it)) }
         libraryName?.takeIf { it.isNotBlank() }?.let(::add)
     }.joinToString(" · ")
 
@@ -736,7 +822,7 @@ private fun RowScope.DetailPlayAction(
 ) {
     val progress = target?.playbackProgress() ?: item.playbackProgress()
     val remaining = target?.remainingTime().orEmpty()
-    val label = detailPlayLabel(item, target)
+    val label = legacyDetailPlayLabel(item, target)
     Box(modifier.height(50.dp).clip(MaFeiShape.capsule)) {
         if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
             Box(
@@ -867,7 +953,7 @@ internal fun OverviewSection(
 ) {
     val text = overview?.takeIf { it.isNotBlank() } ?: return
     val textColor = LocalContentColor.current.copy(alpha = .86f)
-    val moreColor = LocalContentColor.current.copy(alpha = .78f)
+    val moreColor = MaterialTheme.colorScheme.primary
     val textStyle = MaterialTheme.typography.bodyMedium.copy(
         color = textColor,
         fontSize = 13.sp,
@@ -1027,7 +1113,10 @@ private fun RowScope.SeasonCard(
     LegacyVideoCard(
         item = season,
         title = season.seasonNumber?.let { "第 $it 季" } ?: season.title,
-        subtitle = season.year?.toString().orEmpty(),
+        subtitle = buildList {
+            add("共${season.childCount ?: 0}集")
+            season.year?.let { add(it.toString()) }
+        }.joinToString(" · "),
         textAlign = TextAlign.Center,
         onClick = onClick,
         modifier = modifier,
@@ -1037,161 +1126,528 @@ private fun RowScope.SeasonCard(
 
 /**
  * 播放选择区（legacy MediaSourceSelector + AudioSubtitleSelector 的页面内化）：
- * 多版本时先选版本（选择持久化为「最近一次选择」，下次详情页同名源自动预选），
- * 再按需挑音轨/字幕轨；字幕「关闭」传 -1，「自动」交回服务器协商。区块只在
- * 真的有多可选内容时出现。
+ * 多版本时先选版本（按账号和当前媒体条目保存），再按需挑音轨/字幕轨；
+ * 字幕「无字幕」传 -1。区块只在真的有多可选内容时出现。
  */
 @Composable
 private fun PlaybackSelectionSection(
-    sources: List<MediaSourceInfo>,
+    sources: List<DetailPlaybackSource>,
     selectedMediaSourceId: String?,
     onSelectMediaSource: ((String?) -> Unit)?,
     selectedAudioStreamIndex: Int?,
     onSelectAudioTrack: ((Int?) -> Unit)?,
     selectedSubtitleStreamIndex: Int?,
     onSelectSubtitleTrack: ((Int?) -> Unit)?,
+    pickerKind: DetailPickerKind?,
+    onOpenPicker: (DetailPickerKind) -> Unit,
     backdrop: GlassBackdrop,
 ) {
     val primary = sources.firstOrNull { it.id == selectedMediaSourceId } ?: sources.firstOrNull() ?: return
     val multiSource = sources.size > 1 && onSelectMediaSource != null
-    val audioTracks = primary.audioStreams.filter { it.index != null }
-    val subtitleTracks = primary.subtitleStreams.filter { it.index != null && it.isExternal }
-    val multiAudio = audioTracks.size > 1 && onSelectAudioTrack != null
-    val multiSubtitle = subtitleTracks.isNotEmpty() && onSelectSubtitleTrack != null
-    if (!multiSource && !multiAudio && !multiSubtitle) return
+    val audioTracks = primary.audioOptions
+    val subtitleTracks = primary.subtitleOptions
+    val effectiveAudioIndex = selectedAudioStreamIndex ?: primary.defaultAudioStreamIndex
+    val effectiveSubtitleIndex = selectedSubtitleStreamIndex ?: primary.defaultSubtitleStreamIndex
+    val audioLabel = audioTracks.firstOrNull { it.streamIndex == effectiveAudioIndex }?.compactLabel ?: "无音频"
+    val subtitleLabel = subtitleTracks.firstOrNull {
+        it.streamIndex == effectiveSubtitleIndex
+    }?.compactLabel ?: "无字幕"
 
-    Column(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+    Row(
+        Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (multiSource) {
+            DetailSelectorTrigger(
+                label = primary.compactLabel,
+                hasOptions = true,
+                expanded = pickerKind == DetailPickerKind.Source,
+                onClick = { onOpenPicker(DetailPickerKind.Source) },
+                backdrop = backdrop,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(Modifier.weight(if (multiSource) 2f else 1f).fillMaxHeight()) {
+            DetailSelectorTrigger(
+                label = subtitleLabel,
+                hasOptions = subtitleTracks.size > 1 && onSelectSubtitleTrack != null,
+                expanded = pickerKind == DetailPickerKind.Subtitle,
+                onClick = { onOpenPicker(DetailPickerKind.Subtitle) },
+                backdrop = backdrop,
+                modifier = Modifier.weight(1f),
+            )
+            DetailSelectorTrigger(
+                label = audioLabel,
+                hasOptions = audioTracks.size > 1 && onSelectAudioTrack != null,
+                expanded = pickerKind == DetailPickerKind.Audio,
+                onClick = { onOpenPicker(DetailPickerKind.Audio) },
+                backdrop = backdrop,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailSelectorTrigger(
+    label: String,
+    hasOptions: Boolean,
+    expanded: Boolean,
+    onClick: () -> Unit,
+    backdrop: GlassBackdrop,
+    modifier: Modifier = Modifier,
+) {
+    LiquidButton(
+        onClick = if (hasOptions) onClick else ({}),
+        backdrop = backdrop,
+        isInteractive = hasOptions,
+        height = 32.dp,
+        horizontalPadding = 8.dp,
+        modifier = modifier.fillMaxHeight().padding(horizontal = 4.dp, vertical = 6.dp),
+    ) {
         Text(
-            "播放选择",
-            Modifier.padding(horizontal = 16.dp).semantics { heading() },
-            color = LocalContentColor.current,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.Medium,
+            label,
+            Modifier.weight(1f),
+            color = Color.White,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        if (hasOptions) {
+            MaFeiIcon(
+                glyph = MaFeiGlyph.Chevron,
+                modifier = Modifier.size(12.dp).graphicsLayer {
+                    rotationZ = if (expanded) -90f else 90f
+                },
+                color = Color.White,
+            )
+        }
+    }
+}
+
+private enum class DetailPickerKind {
+    Source,
+    Subtitle,
+    Audio,
+}
+
+/**
+ * Same-layer translation of the legacy ArkUI bindSheet selectors. The source
+ * list keeps the 68vp checkmark row; audio and subtitle keep the 66vp radio row.
+ */
+@Composable
+private fun BoxScope.DetailPickerSheetOverlay(
+    kind: DetailPickerKind,
+    sources: List<DetailPlaybackSource>,
+    selectedSource: DetailPlaybackSource?,
+    selectedAudioStreamIndex: Int?,
+    selectedSubtitleStreamIndex: Int?,
+    backdrop: GlassBackdrop,
+    onDismiss: () -> Unit,
+    onSelectSource: (String) -> Unit,
+    onSelectAudio: (Int) -> Unit,
+    onSelectSubtitle: (Int) -> Unit,
+) {
+    val source = selectedSource ?: return
+    val safeArea = LocalMaFeiSafeArea.current
+    val dismissInteraction = remember { MutableInteractionSource() }
+    val sheetInteraction = remember { MutableInteractionSource() }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
+            interactionSource = dismissInteraction,
+            indication = null,
+            onClick = onDismiss,
+        ),
+    )
+    BoxWithConstraints(
+        Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth(),
+    ) {
+        val sheetMaxHeight = maxHeight * .70f
+        val listMaxHeight = (sheetMaxHeight - 76.dp).coerceAtLeast(120.dp)
+        GlassSurface(
+            backdrop = backdrop,
+            spec = OverviewSheetSurfaceSpec,
+            tint = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight).clickable(
+                interactionSource = sheetInteraction,
+                indication = null,
+                onClick = {},
+            ),
         ) {
-            if (multiSource) {
-                SelectionChips(
-                    labels = listOf(AutoChoiceLabel) + sources.map { sourceLabel(it) },
-                    selectedIndex = sources.indexOfFirst { it.id == selectedMediaSourceId } + 1,
-                    onSelect = { index ->
-                        onSelectMediaSource?.invoke(if (index == 0) null else sources.getOrNull(index - 1)?.id)
+            Column(
+                Modifier.fillMaxWidth().padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 10.dp,
+                    bottom = safeArea.bottom + 10.dp,
+                ),
+            ) {
+                Box(
+                    Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = .32f)),
+                )
+                Text(
+                    text = when (kind) {
+                        DetailPickerKind.Source -> "选择播放版本"
+                        DetailPickerKind.Subtitle -> "字幕"
+                        DetailPickerKind.Audio -> "音频"
                     },
-                    backdrop = backdrop,
+                    modifier = Modifier.padding(top = 14.dp, bottom = 12.dp).semantics { heading() },
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(
+                        if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
+                    ),
+                ) {
+                    when (kind) {
+                        DetailPickerKind.Source -> sources.forEach { option ->
+                            DetailSourceOptionRow(
+                                option = option,
+                                selected = option.id == source.id,
+                                onClick = { onSelectSource(option.id) },
+                            )
+                        }
+
+                        DetailPickerKind.Subtitle -> {
+                            val selectedIndex = selectedSubtitleStreamIndex ?: source.defaultSubtitleStreamIndex
+                            source.subtitleOptions.forEach { option ->
+                                DetailTrackOptionRow(
+                                    option = option,
+                                    selected = option.streamIndex == selectedIndex,
+                                    onClick = { onSelectSubtitle(option.streamIndex) },
+                                )
+                            }
+                        }
+
+                        DetailPickerKind.Audio -> {
+                            val selectedIndex = selectedAudioStreamIndex ?: source.defaultAudioStreamIndex
+                            source.audioOptions.forEach { option ->
+                                DetailTrackOptionRow(
+                                    option = option,
+                                    selected = option.streamIndex == selectedIndex,
+                                    onClick = { onSelectAudio(option.streamIndex) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSourceOptionRow(
+    option: DetailPlaybackSource,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().height(68.dp).clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = .04f))
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.padding(start = 16.dp).width(20.dp).fillMaxHeight(),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                MaFeiIcon(
+                    glyph = MaFeiGlyph.Watched,
+                    modifier = Modifier.size(18.dp),
+                    color = Color.White,
                 )
             }
-            if (multiAudio) {
-                SelectionChips(
-                    labels = listOf(AutoChoiceLabel) + audioTracks.map { trackLabel(it) },
-                    selectedIndex = audioTracks.indexOfFirst { it.index == selectedAudioStreamIndex } + 1,
-                    onSelect = { index ->
-                        onSelectAudioTrack?.invoke(if (index == 0) null else audioTracks.getOrNull(index - 1)?.index)
-                    },
-                    backdrop = backdrop,
+        }
+        Column(
+            Modifier.weight(1f).padding(start = 12.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                option.title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                option.summary,
+                color = Color.White.copy(alpha = .72f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailTrackOptionRow(
+    option: DetailMediaOption,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = .04f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(16.dp)) {
+            val strokeWidth = 1.5.dp.toPx()
+            drawCircle(
+                color = Color.White.copy(alpha = if (selected) .95f else .70f),
+                radius = size.minDimension / 2f - strokeWidth / 2f,
+                style = Stroke(width = strokeWidth),
+            )
+            if (selected) {
+                drawCircle(
+                    color = Color.White.copy(alpha = .95f),
+                    radius = size.minDimension * .25f,
                 )
             }
-            if (multiSubtitle) {
-                SelectionChips(
-                    labels = listOf(SubtitleOffLabel, AutoChoiceLabel) + subtitleTracks.map { trackLabel(it) },
-                    selectedIndex = when (selectedSubtitleStreamIndex) {
-                        null -> 1
-                        -1 -> 0
-                        else -> subtitleTracks.indexOfFirst { it.index == selectedSubtitleStreamIndex } + 2
-                    },
-                    onSelect = { index ->
-                        onSelectSubtitleTrack?.invoke(
-                            when {
-                                index == 0 -> -1
-                                index == 1 -> null
-                                else -> subtitleTracks.getOrNull(index - 2)?.index
-                            },
-                        )
-                    },
-                    backdrop = backdrop,
+        }
+        Column(
+            Modifier.weight(1f).padding(start = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                option.title,
+                color = Color.White,
+                fontSize = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (option.summary.isNotEmpty()) {
+                Text(
+                    option.summary,
+                    color = Color.White.copy(alpha = .72f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
 }
 
-/** 一排单选胶囊：与季切换同款 LiquidFloatingTabs，选中态有液态滑动。 */
-@Composable
-private fun SelectionChips(
-    labels: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    backdrop: GlassBackdrop,
-) {
-    LiquidFloatingTabs(
-        labels = labels,
-        selectedIndex = selectedIndex.coerceIn(0, labels.size - 1),
-        onSelected = onSelect,
-        backdrop = backdrop,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-private const val AutoChoiceLabel = "自动"
-private const val SubtitleOffLabel = "关闭字幕"
-
-private fun sourceLabel(source: MediaSourceInfo): String = buildList {
-    add(source.name?.takeIf { it.isNotBlank() } ?: source.container?.uppercase() ?: "版本")
-    source.sizeBytes?.takeIf { it > 0L }?.let { add(formatFileSize(it)) }
-    source.videoStream?.resolutionLabel?.let(::add)
-}.joinToString(" · ")
-
-private fun trackLabel(stream: MediaStreamInfo): String = buildList {
-    add(stream.title?.takeIf { it.isNotBlank() } ?: stream.language?.uppercase() ?: "轨道 ${stream.index ?: 0}")
-    stream.codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-}.joinToString(" · ")
-
-/**
- * Legacy ArkUI 「文件媒体信息」 block: every playable file with its container,
- * size, duration and its video/audio/subtitle streams. The mapping already
- * carries the data, so the block renders whenever the provider reports sources
- * and stays absent for providers that do not. [onDelete]（管理员）在标题行挂
- * 一个删除入口，确认弹窗由外层处理。
- */
 @Composable
 internal fun MediaInfoSection(
-    sources: List<MediaSourceInfo>,
-    onDelete: (() -> Unit)? = null,
+    source: DetailPlaybackSource,
+    onOpenDetails: () -> Unit,
 ) {
-    if (sources.isEmpty()) return
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    if (!source.hasFileInformation && !source.hasVideoInformation) return
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        if (source.hasFileInformation) {
             Text(
-                "文件媒体信息",
-                Modifier.weight(1f).semantics { heading() },
+                "文件信息",
+                Modifier.semantics { heading() },
                 color = LocalContentColor.current,
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
                 fontWeight = FontWeight.Medium,
             )
-            if (onDelete != null) {
-                Text(
-                    "删除",
-                    Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onDelete)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = Color(0xFFFF6B5E),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+            Column(
+                Modifier.fillMaxWidth().padding(top = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DetailInformationBackground)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                DetailInformationValue("文件位置", source.filePath)
+                DetailInformationValue("文件大小", source.fileSize)
+                DetailInformationValue("文件创建日期", source.fileCreatedDate)
+                DetailInformationValue("添加日期", source.addedDate)
             }
         }
+        if (source.hasVideoInformation) {
+            if (source.hasFileInformation) Spacer(Modifier.height(16.dp))
+            Text(
+                "视频信息",
+                Modifier.semantics { heading() },
+                color = LocalContentColor.current,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Column(
+                Modifier.fillMaxWidth().padding(top = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DetailInformationBackground)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                DetailInformationValue("视频", source.videoSummary, multiline = true)
+                DetailInformationValue("音频", source.audioSummary, multiline = true)
+                DetailInformationValue("字幕", source.subtitleSummary, multiline = true)
+                if (source.infoSections.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(.5.dp).background(Color.White.copy(alpha = .18f)))
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onOpenDetails)
+                            .padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "查看全部",
+                            Modifier.weight(1f),
+                            color = Color.White.copy(alpha = .88f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        MaFeiIcon(
+                            glyph = MaFeiGlyph.Chevron,
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White.copy(alpha = .88f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailInformationValue(
+    label: String,
+    value: String,
+    multiline: Boolean = false,
+) {
+    if (value.isBlank()) return
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            label,
+            color = Color.White.copy(alpha = .60f),
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
+        Text(
+            value,
+            color = Color.White.copy(alpha = .88f),
+            fontSize = 12.sp,
+            lineHeight = if (multiline) 20.sp else 18.sp,
+        )
+    }
+}
+
+@Composable
+internal fun BoxScope.MediaInfoSheetOverlay(
+    sections: List<DetailInfoSection>,
+    backdrop: GlassBackdrop,
+    onDismiss: () -> Unit,
+) {
+    if (sections.isEmpty()) return
+    val safeArea = LocalMaFeiSafeArea.current
+    val dismissInteraction = remember { MutableInteractionSource() }
+    val sheetInteraction = remember { MutableInteractionSource() }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
+            interactionSource = dismissInteraction,
+            indication = null,
+            onClick = onDismiss,
+        ),
+    )
+    GlassSurface(
+        backdrop = backdrop,
+        spec = OverviewSheetSurfaceSpec,
+        tint = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
+            .clickable(
+                interactionSource = sheetInteraction,
+                indication = null,
+                onClick = {},
+            ),
+    ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            Modifier.fillMaxSize().padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 10.dp,
+                bottom = safeArea.bottom + 10.dp,
+            ),
         ) {
-            sources.forEach { source -> MediaSourceBlock(source) }
+            Box(
+                Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = .32f)),
+            )
+            Text(
+                "文件媒体信息",
+                Modifier.padding(top = 14.dp, bottom = 16.dp).semantics { heading() },
+                color = Color.White,
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Column(
+                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                sections.forEach { section ->
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            section.title,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        section.cards.forEach { card -> DetailInfoCard(card) }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailInfoCard(card: DetailInfoCard) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .background(DetailInformationBackground)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            card.title,
+            color = Color.White.copy(alpha = .92f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        card.rows.forEach { row ->
+            if (row.dividerBefore) {
+                Box(Modifier.fillMaxWidth().height(.5.dp).background(Color.White.copy(alpha = .18f)))
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text(
+                    row.title,
+                    color = Color.White.copy(alpha = .60f),
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    row.value,
+                    Modifier.widthIn(max = 440.dp),
+                    color = Color.White.copy(alpha = .60f),
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.End,
+                )
+            }
         }
     }
 }
@@ -1201,189 +1657,34 @@ internal fun MediaInfoSection(
 private fun ExternalLinksSection(
     links: List<cn.mafei.cmp.core.domain.MediaExternalUrl>,
     onOpenUrl: (String) -> Unit,
-    backdrop: GlassBackdrop,
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
-            "外部链接",
+            "链接",
             Modifier.padding(horizontal = 16.dp).semantics { heading() },
             color = LocalContentColor.current,
             fontSize = 15.sp,
             lineHeight = 21.sp,
             fontWeight = FontWeight.Medium,
         )
-        LazyRow(
-            Modifier.fillMaxWidth().padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            Modifier.fillMaxWidth().padding(top = 12.dp).horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            item { Spacer(Modifier.width(8.dp)) }
-            items(links, key = { it.url }) { link ->
-                GlassSurface(
-                    backdrop = backdrop,
-                    spec = DetailActionSurfaceSpec,
-                    tint = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
-                ) {
-                    Text(
-                        link.name,
-                        Modifier
-                            .clickable(onClick = { onOpenUrl(link.url) })
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        color = Color.White,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-            item { Spacer(Modifier.width(8.dp)) }
-        }
-    }
-}
-
-/** 「相似推荐」横滑（legacy Similar 区块）。 */
-@Composable
-private fun SimilarSection(
-    items: List<MediaItem>,
-    loading: Boolean,
-    onItemSelected: (MediaItem) -> Unit,
-    artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
-) {
-    if (items.isEmpty() && !loading) return
-    Column(Modifier.fillMaxWidth()) {
-        Text(
-            "相似推荐",
-            Modifier.padding(horizontal = 16.dp).semantics { heading() },
-            color = LocalContentColor.current,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        LazyRow(
-            Modifier.fillMaxWidth().height(194.dp).padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item { Spacer(Modifier.width(8.dp)) }
-            items(items, key = { it.id.value }) { item ->
-                LegacyVideoCard(
-                    item = item,
-                    onClick = { onItemSelected(item) },
-                    modifier = Modifier.width(100.dp),
-                    poster = artwork?.let { draw -> { imageModifier -> draw(item, imageModifier) } },
+            links.forEach { link ->
+                Text(
+                    link.name,
+                    Modifier.clip(RoundedCornerShape(4.dp))
+                        .background(DetailInformationBackground)
+                        .clickable(onClick = { onOpenUrl(link.url) })
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = Color.White.copy(alpha = .88f),
+                    fontSize = 12.sp,
                 )
             }
-            item { Spacer(Modifier.width(8.dp)) }
         }
     }
-}
-
-@Composable
-private fun MediaSourceBlock(source: MediaSourceInfo) {
-    val summary = buildList {
-        source.container?.takeIf { it.isNotBlank() }?.let { add("容器 ${it.uppercase()}") }
-        source.sizeBytes?.takeIf { it > 0L }?.let { add("大小 ${formatFileSize(it)}") }
-        source.runTimeMs?.takeIf { it > 0L }?.let { add("时长 ${durationLabel(it)}") }
-        if (source.isRemote) add("网络源")
-    }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(
-            source.name ?: source.path ?: "媒体文件",
-            color = LocalContentColor.current,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        source.path?.takeIf { it.isNotBlank() && it != source.name }?.let { path ->
-            Text(
-                path,
-                color = Color.White.copy(alpha = .52f),
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (summary.isNotEmpty()) {
-            Text(
-                summary.joinToString(" · "),
-                color = Color.White.copy(alpha = .68f),
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-            )
-        }
-        source.videoStream?.let { stream -> MediaInfoLine("视频", videoStreamSummary(stream)) }
-        if (source.audioStreams.isNotEmpty()) {
-            MediaInfoLine("音频", source.audioStreams.joinToString("\n", transform = ::audioStreamSummary))
-        }
-        MediaInfoLine(
-            "字幕",
-            source.subtitleStreams
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString("\n", transform = ::subtitleStreamSummary)
-                ?: "无字幕",
-        )
-    }
-}
-
-@Composable
-private fun MediaInfoLine(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Text(
-            label,
-            Modifier.width(32.dp),
-            color = Color.White.copy(alpha = .60f),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-        )
-        Text(
-            value,
-            Modifier.weight(1f),
-            color = Color.White.copy(alpha = .88f),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-        )
-    }
-}
-
-private fun videoStreamSummary(stream: MediaStreamInfo): String = buildList {
-    stream.codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    stream.resolutionLabel?.let { add(it) }
-    stream.bitRate?.takeIf { it > 0 }?.let { add("${it / 1000} kbps") }
-    stream.language?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    if (stream.isDefault) add("默认")
-}.joinToString(" · ").ifBlank { "—" }
-
-private fun audioStreamSummary(stream: MediaStreamInfo): String = buildList {
-    stream.title?.takeIf { it.isNotBlank() }?.let { add(it) }
-    stream.codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    (stream.channelLayout ?: stream.channels?.let { "$it 声道" })?.let { add(it) }
-    stream.language?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    if (stream.isDefault) add("默认")
-}.joinToString(" · ").ifBlank { "—" }
-
-private fun subtitleStreamSummary(stream: MediaStreamInfo): String = buildList {
-    stream.title?.takeIf { it.isNotBlank() }?.let { add(it) }
-    stream.language?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    stream.codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-    add(if (stream.isExternal) "外挂" else "内嵌")
-    if (stream.isForced) add("强制")
-    if (stream.isDefault) add("默认")
-}.joinToString(" · ")
-
-private fun formatFileSize(bytes: Long): String {
-    val units = listOf("B", "KB", "MB", "GB", "TB")
-    var value = bytes.toDouble()
-    var unit = 0
-    while (value >= 1024.0 && unit < units.lastIndex) {
-        value /= 1024.0
-        unit++
-    }
-    val rounded = (value * 10).toLong() / 10.0
-    return if (unit == 0) "$bytes ${units[0]}" else "$rounded ${units[unit]}"
 }
 
 @Composable
@@ -1428,10 +1729,10 @@ internal fun LegacyPeopleSection(
                         if (artwork != null && person.image != null) {
                             artwork(person, Modifier.fillMaxSize())
                         } else {
-                            MaFeiIcon(
-                                glyph = MaFeiGlyph.PersonFilled,
-                                color = LocalContentColor.current.copy(alpha = .68f),
-                                modifier = Modifier.size(30.dp),
+                            Image(
+                                painter = painterResource(MaFeiLegacyDrawables.castAvatar),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
@@ -1473,6 +1774,8 @@ internal fun episodeLabel(item: MediaItem): String = buildString {
 internal fun episodeProgress(item: MediaItem): Float? =
     item.playbackProgress()?.takeIf { it > 0f && it < 1f }
 
+// All three legacy detail pages use TextSectionAttribute's default maxLines=3.
+// LastSpanAttribute(..., 2, ...) reserves suffix characters; it is not a line count.
 private const val LegacyOverviewMaxLines = 3
 private const val LegacyOverviewMoreTag = "legacy-overview-more"
 
@@ -1644,27 +1947,7 @@ private fun LegacyDetailSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-internal fun durationLabel(runtimeMs: Long): String {
-    val totalMinutes = runtimeMs / 60_000L
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    return when {
-        hours > 0L && minutes > 0L -> "${hours}小时${minutes}分钟"
-        hours > 0L -> "${hours}小时"
-        else -> "${minutes}分钟"
-    }
-}
-
 private fun detailSubtitle(item: MediaItem): String = item.episodeSubtitle ?: ""
-
-private fun detailPlayLabel(item: MediaItem, target: MediaItem?): String {
-    if (item.mediaType != MediaType.Series || target == null || target.mediaType != MediaType.Episode) {
-        return if ((target ?: item).userData.hasProgress) "继续播放" else "播放"
-    }
-    // 集信息格式由 model 按 provider 的风格标记给出（见 core:domain/MediaPresentation.kt），
-    // 此处不再判断 provider。
-    return target.episodeLabel ?: "播放"
-}
 
 private fun MediaItem.playbackProgress(): Float? {
     val duration = runtimeMs?.takeIf { it > 0L } ?: return null
@@ -1693,7 +1976,7 @@ private fun compactRemainingTime(value: String): String = value
     .replace(" 分钟", "分")
 
 private fun PersonRef.legacyRoleLabel(): String = when (personType) {
-    PersonKind.Actor -> role?.takeIf { it.isNotBlank() }?.let { "饰$it" }.orEmpty()
+    PersonKind.Actor -> "饰${role.orEmpty()}"
     PersonKind.Director -> "导演"
     else -> role.orEmpty()
 }
@@ -1716,3 +1999,4 @@ private val DetailActionSurfaceSpec = GlassSurfaceSpec(
 private val ScoreColor = Color(0xFFF1B020)
 private val FavoriteColor = Color(0xFFE9210B)
 private val DetailAtmosphereInk = Color(0xFF161618)
+private val DetailInformationBackground = Color(0x24FFFFFF)

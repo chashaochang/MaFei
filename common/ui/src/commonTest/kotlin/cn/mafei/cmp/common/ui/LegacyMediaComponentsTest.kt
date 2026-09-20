@@ -27,10 +27,39 @@ class LegacyMediaComponentsTest {
     )
 
     @Test
-    fun listSubtitleMatchesLegacyEpisodeGrammar() {
+    fun listSubtitleKeepsTheLegacyYearFirstMapping() {
         assertEquals("2024", legacyListSubtitle(item(MediaType.Movie)))
-        assertEquals("S1:E2 - Pilot", legacyListSubtitle(item(MediaType.Episode, season = 1, episode = 2)))
-        assertEquals("第 2 集 - Pilot", legacyListSubtitle(item(MediaType.Episode, season = null, episode = 2)))
-        assertEquals("Pilot", legacyListSubtitle(item(MediaType.Episode, season = null, episode = null)))
+        assertEquals("2024", legacyListSubtitle(item(MediaType.Episode, season = 1, episode = 2)))
+        assertEquals(
+            "S1:E2 - Pilot",
+            legacyListSubtitle(item(MediaType.Episode, season = 1, episode = 2, year = null)),
+        )
+        assertEquals(
+            "第 2 集 - Pilot",
+            legacyListSubtitle(item(MediaType.Episode, season = null, episode = 2, year = null)),
+        )
+        assertEquals(
+            "Pilot",
+            legacyListSubtitle(item(MediaType.Episode, season = null, episode = null, year = null)),
+        )
+    }
+
+    @Test
+    fun actorWorkSubtitleUsesBaseItemCardGrammarInstead() {
+        assertEquals("2024", legacyBaseItemSubtitle(item(MediaType.Movie)))
+        assertEquals(
+            "S1:E2 - Pilot",
+            legacyBaseItemSubtitle(item(MediaType.Episode, season = 1, episode = 2)),
+        )
+        assertEquals(
+            "S0:E0 - Pilot",
+            legacyBaseItemSubtitle(item(MediaType.Episode, season = null, episode = null, year = null)),
+        )
+    }
+
+    @Test
+    fun ratingUsesTheLegacyOneDecimalRoundingInsteadOfTruncation() {
+        assertEquals("9.0", formatLegacyRating(8.96))
+        assertEquals("8.9", formatLegacyRating(8.94))
     }
 }

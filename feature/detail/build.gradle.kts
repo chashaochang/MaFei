@@ -15,3 +15,8 @@ dependencies {
     add("commonMainImplementation", project(":common:design-system"))
     add("commonMainImplementation", project(":data:repositories"))
 }
+
+compose.resources {
+    packageOfResClass = "cn.mafei.cmp.feature.detail.generated.resources"
+    generateResClass = always
+}

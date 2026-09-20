@@ -94,6 +94,8 @@ data class MediaItem(
     val seasonTitle: String? = null,
     val seasonNumber: Int? = null,
     val episodeNumber: Int? = null,
+    /** Direct child count reported by the provider (season episodes, series seasons, folder items). */
+    val childCount: Int? = null,
     val indexNumber: Int? = null,
     val parentIndexNumber: Int? = null,
     val year: Int? = null,
@@ -137,7 +139,15 @@ data class MediaSourceInfo(
     val container: String? = null,
     val sizeBytes: Long? = null,
     val runTimeMs: Long? = null,
+    /** File birth/create time reported by the provider. */
+    val fileCreatedEpochMs: Long? = null,
+    /** Time the file was added to the provider catalog. */
+    val dateAddedEpochMs: Long? = null,
     val isRemote: Boolean = false,
+    val sortOrder: Int? = null,
+    val playable: Boolean? = null,
+    val playError: String? = null,
+    val defaultVideoIndex: Int? = null,
     val defaultAudioIndex: Int? = null,
     val defaultSubtitleIndex: Int? = null,
     val streams: List<MediaStreamInfo> = emptyList(),
@@ -153,8 +163,12 @@ data class MediaStreamInfo(
     val index: Int? = null,
     val kind: MediaStreamKind = MediaStreamKind.Other,
     val codec: String? = null,
+    val profile: String? = null,
+    val level: Double? = null,
     val language: String? = null,
     val title: String? = null,
+    /** Provider display label kept separate from the raw stream title. */
+    val displayTitle: String? = null,
     val isDefault: Boolean = false,
     val isForced: Boolean = false,
     val isExternal: Boolean = false,
@@ -162,8 +176,30 @@ data class MediaStreamInfo(
     val channelLayout: String? = null,
     val sampleRateHz: Int? = null,
     val bitRate: Int? = null,
+    val bitDepth: Int? = null,
+    val referenceFrames: Int? = null,
     val widthPx: Int? = null,
     val heightPx: Int? = null,
+    /** Encoded frame dimensions; may differ from the display dimensions. */
+    val codedWidthPx: Int? = null,
+    val codedHeightPx: Int? = null,
+    val aspectRatio: String? = null,
+    val frameRate: Double? = null,
+    val rotation: Int? = null,
+    val interlaced: Boolean? = null,
+    /** Provider resolution label such as `2160p`; kept separate from display title. */
+    val resolutionType: String? = null,
+    val videoRangeType: String? = null,
+    val dolbyVisionProfile: Int? = null,
+    val colorPrimaries: String? = null,
+    val colorSpace: String? = null,
+    val colorTransfer: String? = null,
+    val pixelFormat: String? = null,
+    val isBluray: Boolean? = null,
+    val audioType: String? = null,
+    val isFake: Boolean? = null,
+    val source: String? = null,
+    val fileSizeBytes: Long? = null,
 ) {
     val resolutionLabel: String? get() = when {
         widthPx != null && heightPx != null -> "${widthPx}×${heightPx}"

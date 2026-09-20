@@ -2,9 +2,11 @@ package cn.mafei.cmp.feature.detail
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -34,9 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -79,7 +79,6 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PersonRef
 import org.jetbrains.compose.resources.painterResource
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
 
 /** Mechanical Compose translation of the HarmonyOS `SeasonDetailPage`. */
@@ -90,7 +89,10 @@ fun SeasonDetailScreen(
     seasons: List<MediaItem>,
     episodes: List<MediaItem>,
     loading: Boolean,
-    error: String?,
+    // Compatibility parameters from the old paged implementation. The ArkUI
+    // season page consumes the resolved legacy window instead of exposing a
+    // second paging/error surface inside the episode row.
+    error: String? = null,
     onBack: () -> Unit,
     onSeasonSelected: (MediaItem) -> Unit,
     onEpisodeSelected: (MediaItem) -> Unit,
@@ -107,6 +109,7 @@ fun SeasonDetailScreen(
     modifier: Modifier = Modifier,
     posterArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     landscapeArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
+    episodeArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)? = null,
     onPersonSelected: (PersonRef) -> Unit = {},
     atmosphereArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = landscapeArtwork,
@@ -132,6 +135,7 @@ fun SeasonDetailScreen(
         }
     }
     var overviewSheetVisible by remember(season.id.value) { mutableStateOf(false) }
+    val seriesName = legacySeasonSeriesName(series, season, libraryName)
     LaunchedEffect(season.id.value) { scrollState.scrollTo(0) }
 
     Box(modifier.fillMaxSize()) {
@@ -140,11 +144,12 @@ fun SeasonDetailScreen(
                 SeasonAtmosphere(season, atmosphereArtwork)
             }
             Column(
-                Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .nestedScroll(heroStretch.connection)
                     .verticalScroll(scrollState),
             ) {
                 SeasonHero(
+                    seriesName = seriesName,
                     series = series,
                     season = season,
                     libraryName = libraryName,
@@ -153,7 +158,9 @@ fun SeasonDetailScreen(
                     extraHeight = heroStretch.extraHeight,
                 )
                 Column(
-                    Modifier.fillMaxWidth().padding(bottom = safeArea.bottom + 30.dp),
+                    Modifier.align(Alignment.CenterHorizontally)
+                        .widthIn(max = 720.dp).fillMaxWidth()
+                        .padding(bottom = safeArea.bottom + 30.dp),
                 ) {
                     SeasonActions(
                         season = season,
@@ -178,14 +185,10 @@ fun SeasonDetailScreen(
                         season = season,
                         episodes = episodes,
                         loading = loading,
-                        error = error,
                         onSeasonSelected = onSeasonSelected,
                         onEpisodeSelected = onEpisodeSelected,
-                        artwork = landscapeArtwork,
+                        artwork = episodeArtwork,
                         backdrop = backdrop,
-                        canLoadMore = canLoadMoreEpisodes,
-                        loadingMore = episodesLoadingMore,
-                        onLoadMore = onLoadMoreEpisodes,
                     )
                     if (season.people.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
@@ -196,7 +199,7 @@ fun SeasonDetailScreen(
         }
 
         MaFeiActionBar(
-            title = "${series.title} ${season.title}".trim(),
+            title = "$seriesName ${season.title}".trim(),
             onBack = onBack,
             backdrop = actionBarBackdrop,
             materialAlpha = collapseProgress,
@@ -252,6 +255,7 @@ private fun SeasonAtmosphere(
 
 @Composable
 private fun SeasonHero(
+    seriesName: String,
     series: MediaItem,
     season: MediaItem,
     libraryName: String?,
@@ -281,7 +285,7 @@ private fun SeasonHero(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            Box(Modifier.width(96.dp).height(144.dp).clip(RoundedCornerShape(6.dp))) {
+            Box(Modifier.width(96.dp).height(144.dp).clip(RoundedCornerShape(8.dp))) {
                 if (posterArtwork != null) posterArtwork(season, Modifier.fillMaxSize())
                 else TextPoster(season.title, Modifier.fillMaxSize())
             }
@@ -298,7 +302,7 @@ private fun SeasonHero(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    series.title,
+                    seriesName,
                     Modifier.semantics { heading() },
                     color = Color.White,
                     fontSize = 28.sp,
@@ -455,14 +459,10 @@ private fun SeasonEpisodeSection(
     season: MediaItem,
     episodes: List<MediaItem>,
     loading: Boolean,
-    error: String?,
     onSeasonSelected: (MediaItem) -> Unit,
     onEpisodeSelected: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     backdrop: GlassBackdrop,
-    canLoadMore: Boolean,
-    loadingMore: Boolean,
-    onLoadMore: (() -> Unit)?,
 ) {
     var selectedGroup by remember(season.id.value) { mutableIntStateOf(0) }
     val groups = remember(episodes) { episodes.chunked(30) }
@@ -497,7 +497,12 @@ private fun SeasonEpisodeSection(
         if (seasons.size > 1) {
             Spacer(Modifier.height(12.dp))
             LiquidFloatingTabs(
-                labels = seasons.map { it.title },
+                // ArkUI SeasonDetailViewModel reuses the mapped VideoItem
+                // name here: numbered seasons are always rendered as
+                // “第 N 季”, regardless of the server's raw title.
+                labels = seasons.map { candidate ->
+                    candidate.seasonNumber?.let { "第 $it 季" } ?: candidate.title
+                },
                 selectedIndex = seasons.indexOfFirst { it.id == season.id }.coerceAtLeast(0),
                 onSelected = { index -> seasons.getOrNull(index)?.let(onSeasonSelected) },
                 backdrop = backdrop,
@@ -517,34 +522,15 @@ private fun SeasonEpisodeSection(
         Spacer(Modifier.height(16.dp))
         when {
             loading -> SeasonEpisodeSkeletons()
-            error != null -> Text(
-                error,
-                Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 12.sp,
-            )
             groups.isNotEmpty() -> {
                 val listState = rememberLazyListState()
                 LaunchedEffect(season.id.value, selectedGroup) { listState.scrollToItem(0) }
-                // 最后一组滚到尾部时续拉下一页（>200 集的超长季）。
-                val currentLoadMore by rememberUpdatedState(onLoadMore)
-                LaunchedEffect(listState, selectedGroup, groups.size, canLoadMore, loadingMore) {
-                    snapshotFlow {
-                        listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                    }.distinctUntilChanged().collect { last ->
-                        if (canLoadMore && !loadingMore && selectedGroup == groups.lastIndex &&
-                            last >= groups[selectedGroup].size - 2
-                        ) {
-                            currentLoadMore?.invoke()
-                        }
-                    }
-                }
                 LazyRow(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().height(184.dp),
                 ) {
-                    item { Spacer(Modifier.width(4.dp)) }
                     items(groups[selectedGroup], key = { it.id.value }) { episode ->
                         SeasonEpisodeCard(
                             item = episode,
@@ -552,17 +538,6 @@ private fun SeasonEpisodeSection(
                             onClick = { onEpisodeSelected(episode) },
                         )
                     }
-                    if (loadingMore) {
-                        item {
-                            Box(
-                                Modifier.width(40.dp).fillMaxHeight(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            }
-                        }
-                    }
-                    item { Spacer(Modifier.width(4.dp)) }
                 }
             }
         }
@@ -574,8 +549,8 @@ private fun SeasonEpisodeSkeletons() {
     LazyRow(
         Modifier.fillMaxWidth().height(184.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
     ) {
-        item { Spacer(Modifier.width(4.dp)) }
         items(3) {
             Column(Modifier.width(180.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
@@ -592,7 +567,6 @@ private fun SeasonEpisodeSkeletons() {
                 )
             }
         }
-        item { Spacer(Modifier.width(4.dp)) }
     }
 }
 
@@ -603,11 +577,16 @@ private fun SeasonEpisodeCard(
     onClick: () -> Unit,
 ) {
     Column(
-        Modifier.width(180.dp).heightIn(min = 158.dp)
+        Modifier.width(180.dp).height(158.dp)
             .mafeiInteractive(onClick, radiusDp = 6f, label = item.title),
         horizontalAlignment = Alignment.Start,
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp))) {
+        val imageShape = RoundedCornerShape(6.dp)
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, imageShape)
+                .clip(imageShape),
+        ) {
             if (artwork != null) artwork(item, Modifier.fillMaxSize())
             else TextPoster(item.title, Modifier.fillMaxSize())
             episodeProgress(item)?.let { progress ->
@@ -620,11 +599,14 @@ private fun SeasonEpisodeCard(
             }
             LegacyMediaTagBadges(
                 tags = item.tags,
+                maxTags = null,
+                filterOther = false,
+                deduplicate = false,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
             )
         }
         Text(
-            item.episodeNumber?.let { "$it.${item.title}" } ?: item.title,
+            legacyEpisodeCardTitle(item),
             Modifier.fillMaxWidth().padding(top = 8.dp),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
@@ -659,7 +641,7 @@ private fun legacySeriesInfo(series: MediaItem, libraryName: String?): String = 
     series.officialRating?.takeIf { it.isNotBlank() }?.let(::add)
     addAll(series.genres.filter { it.isNotBlank() })
     series.year?.let { add(it.toString()) }
-    series.runtimeMs?.takeIf { it > 0L }?.let { add(durationLabel(it)) }
+    series.runtimeMs?.takeIf { it > 0L }?.let { add(legacyDetailDurationLabel(it)) }
     libraryName?.takeIf { it.isNotBlank() }?.let(::add)
 }.joinToString(" · ")
 

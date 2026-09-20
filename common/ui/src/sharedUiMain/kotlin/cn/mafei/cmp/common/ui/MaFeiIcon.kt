@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.dp
 
 enum class MaFeiGlyph {
-    Home, Library, More, Back, Arrow, Search, Refresh, Appearance, Account, History,
+    Home, Library, More, Back, Arrow, Chevron, Search, Refresh, Appearance, Account, History,
     Play, Favorite, Watched, Clock, Close,
     PersonFilled,
 }
@@ -42,6 +42,8 @@ fun MaFeiIcon(glyph: MaFeiGlyph, modifier: Modifier = Modifier, color: Color = L
                 MaFeiGlyph.More -> listOf(5f, 12f, 19f).forEach { drawCircle(color, 1.6f, Offset(it, 12f)) }
                 MaFeiGlyph.Back -> { line(15f, 5f, 8f, 12f); line(8f, 12f, 15f, 19f) }
                 MaFeiGlyph.Arrow -> { line(4f, 12f, 20f, 12f); line(14f, 6f, 20f, 12f); line(14f, 18f, 20f, 12f) }
+                // 纯箭头（无横杠）：只有两条斜线组成的 ›。
+                MaFeiGlyph.Chevron -> { line(10f, 5f, 17f, 12f); line(17f, 12f, 10f, 19f) }
                 MaFeiGlyph.Search -> { drawCircle(color, 7f, Offset(10f, 10f), style = Stroke(1.7f)); line(15f, 15f, 21f, 21f) }
                 MaFeiGlyph.Refresh -> { drawArc(color, 40f, 300f, false, Offset(4f, 4f),
                     androidx.compose.ui.geometry.Size(16f, 16f), style = Stroke(1.7f)); line(20f, 4f, 20f, 10f); line(20f, 10f, 14f, 10f) }
