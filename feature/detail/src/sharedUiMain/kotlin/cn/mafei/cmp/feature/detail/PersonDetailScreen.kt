@@ -87,6 +87,10 @@ fun PersonDetailScreen(
         derivedStateOf { if (scrollState.value > 0) 1f else 0f }
     }
     var overviewSheetVisible by remember(person?.id?.value) { mutableStateOf(false) }
+    DetailSheetBackHandler(
+        enabled = overviewSheetVisible,
+        onDismiss = { overviewSheetVisible = false },
+    )
     LaunchedEffect(person?.id?.value) {
         if (person != null) scrollState.scrollTo(0)
     }
@@ -144,7 +148,7 @@ fun PersonDetailScreen(
 
         MaFeiActionBar(
             title = person?.name.orEmpty(),
-            onBack = onBack,
+            onBack = { if (overviewSheetVisible) overviewSheetVisible = false else onBack() },
             backdrop = actionBarBackdrop,
             materialAlpha = if (person == null) 1f else actionBarProgress,
             titleAlpha = if (person == null) 0f else actionBarProgress,

@@ -106,6 +106,7 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.common.ui.LegacyVideoCard
@@ -211,6 +212,15 @@ fun DetailScreen(
     var overviewSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
     var mediaInfoSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
     var pickerKind by remember(item?.id?.value) { mutableStateOf<DetailPickerKind?>(null) }
+    val sheetVisible = overviewSheetVisible || mediaInfoSheetVisible || pickerKind != null
+    val dismissTopSheet: () -> Unit = {
+        when {
+            pickerKind != null -> pickerKind = null
+            mediaInfoSheetVisible -> mediaInfoSheetVisible = false
+            overviewSheetVisible -> overviewSheetVisible = false
+        }
+    }
+    DetailSheetBackHandler(enabled = sheetVisible, onDismiss = dismissTopSheet)
     val playbackSources = remember(item?.provider, item?.mediaSources) {
         item?.let {
             presentDetailPlaybackSources(it.provider, selectLegacyDetailSources(it.mediaSources))
@@ -290,7 +300,7 @@ fun DetailScreen(
 
         MaFeiActionBar(
             title = item?.title.orEmpty(),
-            onBack = onBack,
+            onBack = { if (sheetVisible) dismissTopSheet() else onBack() },
             backdrop = actionBarBackdrop,
             materialAlpha = if (item == null) 1f else collapseProgress,
             titleAlpha = if (item == null) 0f else collapsedTitleOpacity,
@@ -998,6 +1008,10 @@ internal fun BoxScope.OverviewSheetOverlay(
     val safeArea = LocalMaFeiSafeArea.current
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
+    val sheetMaterialBackdrop = rememberGlassBackdrop()
+    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    val contentScrollState = rememberScrollState()
+    val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black.copy(alpha = .28f))
@@ -1012,11 +1026,13 @@ internal fun BoxScope.OverviewSheetOverlay(
         spec = OverviewSheetSurfaceSpec,
         tint = MaterialTheme.colorScheme.surface,
         modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
+            .then(sheetDrag)
             .clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
                 onClick = {},
             ),
+        exportedBackdrop = sheetMaterialBackdrop,
     ) {
         Column(
             Modifier.fillMaxSize().padding(
@@ -1026,21 +1042,10 @@ internal fun BoxScope.OverviewSheetOverlay(
                 bottom = safeArea.bottom + 10.dp,
             ),
         ) {
-            Box(
-                Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
-            )
-            Text(
-                "简介",
-                Modifier.padding(top = 14.dp, bottom = 16.dp).semantics { heading() },
-                fontSize = 18.sp,
-                lineHeight = 24.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            DetailSheetHeader("简介", closeButtonBackdrop, onDismiss)
             Text(
                 text,
-                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 textAlign = TextAlign.Start,
@@ -1255,6 +1260,10 @@ private fun BoxScope.DetailPickerSheetOverlay(
     val safeArea = LocalMaFeiSafeArea.current
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
+    val sheetMaterialBackdrop = rememberGlassBackdrop()
+    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    val contentScrollState = rememberScrollState()
+    val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
             interactionSource = dismissInteraction,
@@ -1271,11 +1280,12 @@ private fun BoxScope.DetailPickerSheetOverlay(
             backdrop = backdrop,
             spec = OverviewSheetSurfaceSpec,
             tint = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight).clickable(
+            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight).then(sheetDrag).clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
                 onClick = {},
             ),
+            exportedBackdrop = sheetMaterialBackdrop,
         ) {
             Column(
                 Modifier.fillMaxWidth().padding(
@@ -1285,25 +1295,18 @@ private fun BoxScope.DetailPickerSheetOverlay(
                     bottom = safeArea.bottom + 10.dp,
                 ),
             ) {
-                Box(
-                    Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = .32f)),
-                )
-                Text(
-                    text = when (kind) {
+                DetailSheetHeader(
+                    title = when (kind) {
                         DetailPickerKind.Source -> "选择播放版本"
                         DetailPickerKind.Subtitle -> "字幕"
                         DetailPickerKind.Audio -> "音频"
                     },
-                    modifier = Modifier.padding(top = 14.dp, bottom = 12.dp).semantics { heading() },
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.Medium,
+                    backdrop = closeButtonBackdrop,
+                    onDismiss = onDismiss,
+                    contentColor = Color.White,
                 )
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(rememberScrollState()),
+                    Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(contentScrollState),
                     verticalArrangement = Arrangement.spacedBy(
                         if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
                     ),
@@ -1555,6 +1558,10 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     val safeArea = LocalMaFeiSafeArea.current
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
+    val sheetMaterialBackdrop = rememberGlassBackdrop()
+    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    val contentScrollState = rememberScrollState()
+    val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
             interactionSource = dismissInteraction,
@@ -1567,11 +1574,13 @@ internal fun BoxScope.MediaInfoSheetOverlay(
         spec = OverviewSheetSurfaceSpec,
         tint = MaterialTheme.colorScheme.surface,
         modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
+            .then(sheetDrag)
             .clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
                 onClick = {},
             ),
+        exportedBackdrop = sheetMaterialBackdrop,
     ) {
         Column(
             Modifier.fillMaxSize().padding(
@@ -1581,21 +1590,14 @@ internal fun BoxScope.MediaInfoSheetOverlay(
                 bottom = safeArea.bottom + 10.dp,
             ),
         ) {
-            Box(
-                Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = .32f)),
-            )
-            Text(
+            DetailSheetHeader(
                 "文件媒体信息",
-                Modifier.padding(top = 14.dp, bottom = 16.dp).semantics { heading() },
-                color = Color.White,
-                fontSize = 18.sp,
-                lineHeight = 24.sp,
-                fontWeight = FontWeight.Medium,
+                closeButtonBackdrop,
+                onDismiss,
+                contentColor = Color.White,
             )
             Column(
-                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 sections.forEach { section ->

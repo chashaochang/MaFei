@@ -135,6 +135,10 @@ fun SeasonDetailScreen(
         }
     }
     var overviewSheetVisible by remember(season.id.value) { mutableStateOf(false) }
+    DetailSheetBackHandler(
+        enabled = overviewSheetVisible,
+        onDismiss = { overviewSheetVisible = false },
+    )
     val seriesName = legacySeasonSeriesName(series, season, libraryName)
     LaunchedEffect(season.id.value) { scrollState.scrollTo(0) }
 
@@ -200,7 +204,7 @@ fun SeasonDetailScreen(
 
         MaFeiActionBar(
             title = "$seriesName ${season.title}".trim(),
-            onBack = onBack,
+            onBack = { if (overviewSheetVisible) overviewSheetVisible = false else onBack() },
             backdrop = actionBarBackdrop,
             materialAlpha = collapseProgress,
             titleAlpha = titleOpacity,
