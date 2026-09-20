@@ -5,6 +5,8 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuClient
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostCandidate
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
+import cn.mafei.cmp.providers.feiniu.core.FeiniuOfficialStreamRequest
+import cn.mafei.cmp.providers.feiniu.core.FeiniuOfficialStreamRequestHeader
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoute
 import cn.mafei.cmp.providers.feiniu.testkit.FakeFeiniuTransport
@@ -81,6 +83,10 @@ class FeiniuPlaybackApiTest {
         assertEquals("/v/api/v1/stream/fixture?sign=abc", session.data.playLink)
         assertEquals("/v/api/v1/subtitle/dl/sb-0001", session.data.subtitleLink)
         assertEquals(1, session.data.isSubtitleExternal)
+        assertEquals("vd-0001", session.data.videoGuid)
+        assertEquals("au-0001", session.data.audioGuid)
+        assertEquals("sb-0001", session.data.subtitleGuid)
+        assertEquals("4K", session.data.supportedHighestResolution)
         // R10: session context carries the serving host/route
         assertEquals("https://feiniu.test", session.baseUrl)
         assertEquals(FeiniuRoute.Direct, session.route)
@@ -127,5 +133,39 @@ class FeiniuPlaybackApiTest {
             "https://feiniu.test/v/api/v1/media/range/md-0001?range=bytes=1024-",
             fixture.api.directRangeUrl(FeiniuFixtures.BASE_URL, "md-0001", byteOffset = 1024),
         )
+    }
+
+    @Test
+    fun officialStreamUsesLegacyBodyAndDecodesSupplementalTracks() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":{"file_stream":{"guid":"media-1","file_name":"movie.strm"},"video_stream":{"guid":"video-1","codec_name":"hevc"},"audio_streams":[{"guid":"audio-1","codec_name":"aac"}],"subtitle_streams":[{"guid":"sub-1","format":"ass"}],"header":{"X-Remote-Key":"remote-value","Cookie":["a=1","b=2"]},"qualities":[{"url":"https://cdn.test/movie.m3u8","resolution":"4K","bitrate":20000000,"is_m3u8":true}]}}""",
+        )
+
+        val data = fixture.api.officialStream(
+            fixture.resolution,
+            FeiniuOfficialStreamRequest(
+                mediaGuid = "media-1",
+                ip = "source-md5",
+                header = FeiniuOfficialStreamRequestHeader(listOf("official-agent")),
+                level = 1,
+            ),
+        )
+
+        assertEquals("media-1", data.fileStream?.guid)
+        assertEquals("hevc", data.videoStream?.codecName)
+        assertEquals("audio-1", data.audioStreams.single().guid)
+        assertEquals("sub-1", data.subtitleStreams.single().guid)
+        assertEquals("https://cdn.test/movie.m3u8", data.qualities.single().url)
+        assertEquals("\"remote-value\"", data.header?.get("X-Remote-Key").toString())
+        assertEquals("[\"a=1\",\"b=2\"]", data.header?.get("Cookie").toString())
+        val sent = fixture.transport.requests.single()
+        assertEquals("/v/api/v1/stream", sent.url.encodedPath)
+        val body = (sent.body as HttpBody.Text).text
+        assertTrue(body.contains("\"media_guid\":\"media-1\""), body)
+        assertTrue(body.contains("\"ip\":\"source-md5\""), body)
+        assertTrue(body.contains("\"User-Agent\":[\"official-agent\"]"), body)
+        assertTrue(body.contains("\"level\":1"), body)
     }
 }

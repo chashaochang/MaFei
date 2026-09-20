@@ -79,6 +79,29 @@ class FeiniuCatalogApiTest {
     }
 
     @Test
+    fun itemsForwardLegacyHistoryTypesWatchedTagAndDatePlayedSort() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, """{"code":0,"msg":"","data":{"list":[],"total":0}}""")
+
+        fixture.api.items(
+            resolution = fixture.resolution,
+            itemTypes = listOf("Movie", "Episode"),
+            page = 1,
+            pageSize = 10,
+            sortColumn = "watched_ts",
+            sortType = "DESC",
+            watchedTag = "1",
+        )
+
+        val body = (fixture.transport.requests.single().body as HttpBody.Text).text
+        assertTrue(body.contains("\"type\":[\"Movie\",\"Episode\"]"), body)
+        assertTrue(body.contains("\"watched\":\"1\""), body)
+        assertTrue(body.contains("\"sort_column\":\"watched_ts\""), body)
+        assertTrue(body.contains("\"sort_type\":\"DESC\""), body)
+        assertTrue(body.contains("\"page_size\":10"), body)
+    }
+
+    @Test
     fun searchFavoritesWatchedDetailSeasonsEpisodesBindOfficialPaths() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, """{"code":0,"msg":"","data":[]}""")            // search
@@ -88,7 +111,13 @@ class FeiniuCatalogApiTest {
         fixture.transport.enqueueJson(200, FeiniuFixtures.ITEM_DETAIL)                     // detail
 
         fixture.api.search(fixture.resolution, "fixture")
-        fixture.api.favorites(fixture.resolution, page = 1)
+        fixture.api.favorites(
+            fixture.resolution,
+            page = 1,
+            sortColumn = "sort_title",
+            sortType = "ASC",
+            itemTypes = listOf("Movie", "TV", "Episode", "Video"),
+        )
         fixture.api.markFavorite(fixture.resolution, "it-0001")
         fixture.api.markWatched(fixture.resolution, "it-0001")
         fixture.api.seasons(fixture.resolution, "it-0002")
@@ -110,9 +139,18 @@ class FeiniuCatalogApiTest {
             ),
             paths,
         )
+        val favoriteBody = (fixture.transport.requests[1].body as HttpBody.Text).text
+        assertTrue(favoriteBody.contains("\"sort_column\":\"sort_title\""), favoriteBody)
+        assertTrue(favoriteBody.contains("\"sort_type\":\"ASC\""), favoriteBody)
+        assertTrue(favoriteBody.contains("\"type\":[\"Movie\",\"TV\",\"Episode\",\"Video\"]"), favoriteBody)
         assertEquals(cn.mafei.cmp.providers.feiniu.core.FeiniuApiCall.FeiniuMethod.Put.name, fixture.transport.requests[2].method.name)
         assertEquals(cn.mafei.cmp.providers.feiniu.core.FeiniuApiCall.FeiniuMethod.Delete.name, fixture.transport.requests[6].method.name)
         assertEquals("tt0000001", detail.imdbId)
+        assertEquals("child-1", detail.singleChildGuid)
+        assertEquals("2024-01-02", detail.airDate)
+        assertEquals("/p/summary.jpg", detail.poster)
+        assertEquals(1000, detail.posterWidth)
+        assertEquals(2, detail.logicType)
         assertEquals("Fixture Movie", detail.title)
     }
 
@@ -137,5 +175,64 @@ class FeiniuCatalogApiTest {
         assertEquals("resume-1", history.single().guid)
         assertEquals(3600.0, history.single().mediaStream?.currentTimeSeconds)
         assertTrue(fixture.transport.requests.single().url.encodedPath.endsWith("/v/api/v1/play/list"))
+    }
+
+    @Test
+    fun detailCompanionEndpointsMatchLegacyPathsAndShapes() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":{"list":[{"person_guid":"person-1","name":"演员甲","job":"Actor","profile_path":"/p.jpg"}],"total":1}}""",
+        )
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":{"guid":"person-1","name":"演员甲","original_name":"Actor A","profile":"/p.jpg","biography":"简介","is_favorite":1}}""",
+        )
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":{"list":[{"item_guid":"movie-1","title":"作品","type":"Movie","poster":"/m.jpg"}],"total":1}}""",
+        )
+        fixture.transport.enqueueJson(200, """{"code":0,"data":[{"id":7,"value":"剧情"}]}""")
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":[{"media_guid":"media-1","item_guid":"movie-1","filename":"movie.mkv","file_path":"/video/movie.mkv","file_size":1024}]}""",
+        )
+
+        val people = fixture.api.people(fixture.resolution, "movie-1")
+        val person = fixture.api.person(fixture.resolution, "person-1")
+        val works = fixture.api.personItems(
+            fixture.resolution,
+            cn.mafei.cmp.providers.feiniu.core.FeiniuPersonItemListRequest(
+                personGuid = "person-1",
+                page = 1,
+                pageSize = 10,
+                job = "Actor",
+                sortColumn = "sort_title",
+                sortType = "ASC",
+            ),
+        )
+        val genres = fixture.api.genres(fixture.resolution)
+        val files = fixture.api.itemFiles(fixture.resolution, "movie-1")
+
+        assertEquals("person-1", people.list.single().personGuid)
+        assertEquals("Actor A", person.originalName)
+        assertEquals("movie-1", works.list.single().itemGuid)
+        assertEquals("剧情", genres.single().value)
+        assertEquals("/video/movie.mkv", files.single().filePath)
+        assertEquals(
+            listOf(
+                "/v/api/v1/person/list/movie-1",
+                "/v/api/v1/person/person-1",
+                "/v/api/v1/person/item/list",
+                "/v/api/v1/tag/genres",
+                "/v/api/v1/media/itemfile/movie-1",
+            ),
+            fixture.transport.requests.map { it.url.encodedPath },
+        )
+        assertEquals(cn.mafei.cmp.providers.feiniu.core.FeiniuApiCall.FeiniuMethod.Post.name, fixture.transport.requests[0].method.name)
+        val workBody = (fixture.transport.requests[2].body as HttpBody.Text).text
+        assertTrue(workBody.contains("\"person_guid\":\"person-1\""), workBody)
+        assertTrue(workBody.contains("\"job\":\"Actor\""), workBody)
+        assertEquals("zh", fixture.transport.requests[3].url.queryParameters.first("lan"))
     }
 }

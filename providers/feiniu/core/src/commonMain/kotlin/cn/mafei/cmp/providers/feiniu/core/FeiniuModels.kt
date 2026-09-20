@@ -3,6 +3,7 @@ package cn.mafei.cmp.providers.feiniu.core
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 /**
  * P0 Feiniu wire models. JSON keys are snake_case per the fnOS media API —
@@ -53,6 +54,14 @@ data class FeiniuUserInfo(
     @SerialName("username") val username: String? = null,
     @SerialName("user_id") val userId: String? = null,
     @SerialName("is_admin") val isAdmin: Int? = null,
+    @SerialName("sources") val sources: List<FeiniuUserSource> = emptyList(),
+)
+
+@Serializable
+data class FeiniuUserSource(
+    @SerialName("source") val source: String? = null,
+    @SerialName("source_id") val sourceId: String? = null,
+    @SerialName("source_name") val sourceName: String? = null,
 )
 
 @Serializable
@@ -88,6 +97,9 @@ data class FeiniuMediaItem(
     @SerialName("episode_number") val episodeNumber: Int? = null,
     @SerialName("number_of_seasons") val numberOfSeasons: Int? = null,
     @SerialName("number_of_episodes") val numberOfEpisodes: Int? = null,
+    @SerialName("local_number_of_seasons") val localNumberOfSeasons: Int? = null,
+    @SerialName("local_number_of_episodes") val localNumberOfEpisodes: Int? = null,
+    @SerialName("single_child_guid") val singleChildGuid: String? = null,
     @SerialName("play_item_guid") val playItemGuid: String? = null,
     @SerialName("media_guid") val mediaGuid: String? = null,
     @SerialName("video_guid") val videoGuid: String? = null,
@@ -95,7 +107,12 @@ data class FeiniuMediaItem(
     @SerialName("subtitle_guid") val subtitleGuid: String? = null,
     @SerialName("file_name") val fileName: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("air_date") val airDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("last_air_date") val lastAirDate: String? = null,
+    @SerialName("genres") val genres: List<Int> = emptyList(),
+    @SerialName("logos") val logos: String? = null,
+    @SerialName("still_path") val stillPath: String? = null,
     @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
 )
 
@@ -133,7 +150,7 @@ data class FeiniuPlayItem(
     @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
 )
 
-/** P0 subset of the item detail payload. */
+/** Item detail payload used by the legacy Feiniu catalog aggregation. */
 @Serializable
 data class FeiniuItemDetail(
     @SerialName("guid") val guid: String? = null,
@@ -141,18 +158,134 @@ data class FeiniuItemDetail(
     @SerialName("type") val type: String? = null,
     @SerialName("original_title") val originalTitle: String? = null,
     @SerialName("overview") val overview: String? = null,
+    @SerialName("poster") val poster: String? = null,
+    @SerialName("still_path") val stillPath: String? = null,
+    @SerialName("status") val status: String? = null,
+    @SerialName("parent_guid") val parentGuid: String? = null,
+    @SerialName("parent_title") val parentTitle: String? = null,
+    @SerialName("ancestor_guid") val ancestorGuid: String? = null,
+    @SerialName("ancestor_name") val ancestorName: String? = null,
+    @SerialName("ancestor_category") val ancestorCategory: String? = null,
+    @SerialName("tv_title") val tvTitle: String? = null,
     @SerialName("posters") val posters: String? = null,
     @SerialName("backdrops") val backdrops: String? = null,
+    @SerialName("logos") val logos: String? = null,
     @SerialName("vote_average") val voteAverage: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("air_date") val airDate: String? = null,
     @SerialName("first_air_date") val firstAirDate: String? = null,
+    @SerialName("last_air_date") val lastAirDate: String? = null,
     @SerialName("content_ratings") val contentRatings: String? = null,
     @SerialName("production_countries") val productionCountries: List<String> = emptyList(),
+    @SerialName("genres") val genres: List<Int> = emptyList(),
     @SerialName("number_of_seasons") val numberOfSeasons: Int? = null,
     @SerialName("number_of_episodes") val numberOfEpisodes: Int? = null,
+    @SerialName("local_number_of_seasons") val localNumberOfSeasons: Int? = null,
+    @SerialName("local_number_of_episodes") val localNumberOfEpisodes: Int? = null,
     @SerialName("imdb_id") val imdbId: String? = null,
     @SerialName("trim_id") val trimId: String? = null,
+    @SerialName("poster_width") val posterWidth: Int? = null,
+    @SerialName("poster_height") val posterHeight: Int? = null,
+    @SerialName("watched") val watched: Int? = null,
+    @SerialName("is_watched") val isWatched: Int? = null,
+    @SerialName("watched_ts") val watchedEpochSeconds: Long? = null,
+    @SerialName("is_favorite") val isFavorite: Int? = null,
+    @SerialName("ts") val playbackPositionSeconds: Long? = null,
+    @SerialName("duration") val durationSeconds: Long? = null,
+    @SerialName("runtime") val runtimeMinutes: Int? = null,
+    @SerialName("season_number") val seasonNumber: Int? = null,
+    @SerialName("episode_number") val episodeNumber: Int? = null,
+    @SerialName("media_guid") val mediaGuid: String? = null,
+    @SerialName("video_guid") val videoGuid: String? = null,
+    @SerialName("audio_guid") val audioGuid: String? = null,
+    @SerialName("subtitle_guid") val subtitleGuid: String? = null,
+    @SerialName("file_name") val fileName: String? = null,
+    @SerialName("single_child_guid") val singleChildGuid: String? = null,
+    @SerialName("play_item_guid") val playItemGuid: String? = null,
+    @SerialName("can_play") val canPlay: Int? = null,
     @SerialName("play_error") val playError: String? = null,
+    @SerialName("logic_type") val logicType: Int? = null,
+    @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
+)
+
+/** GET/POST `/v/api/v1/person/list/{itemGuid}` credit. */
+@Serializable
+data class FeiniuPersonCredit(
+    @SerialName("item_guid") val itemGuid: String? = null,
+    @SerialName("person_guid") val personGuid: String? = null,
+    @SerialName("role") val role: String? = null,
+    @SerialName("job") val job: String? = null,
+    @SerialName("order") val order: Int? = null,
+    @SerialName("department") val department: String? = null,
+    @SerialName("trim_id") val trimId: String? = null,
+    @SerialName("imdb_id") val imdbId: String? = null,
+    @SerialName("tmdb_id") val tmdbId: Long? = null,
+    @SerialName("lan") val language: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("original_name") val originalName: String? = null,
+    @SerialName("also_know_as") val alsoKnownAs: String? = null,
+    @SerialName("biography") val biography: String? = null,
+    @SerialName("known_for_department") val knownForDepartment: String? = null,
+    @SerialName("profile_path") val profilePath: String? = null,
+    @SerialName("gender") val gender: Int? = null,
+)
+
+@Serializable
+data class FeiniuPersonListData(
+    @SerialName("list") val list: List<FeiniuPersonCredit> = emptyList(),
+    @SerialName("total") val total: Int? = null,
+)
+
+/** GET `/v/api/v1/person/{guid}`. */
+@Serializable
+data class FeiniuPersonDetail(
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("imdb_id") val imdbId: String? = null,
+    @SerialName("original_name") val originalName: String? = null,
+    @SerialName("profile") val profile: String? = null,
+    @SerialName("biography") val biography: String? = null,
+    @SerialName("is_favorite") val isFavorite: Int? = null,
+)
+
+@Serializable
+data class FeiniuPersonItemListRequest(
+    @SerialName("person_guid") val personGuid: String,
+    @SerialName("page") val page: Int,
+    @SerialName("page_size") val pageSize: Int,
+    @SerialName("job") val job: String,
+    @SerialName("sort_column") val sortColumn: String,
+    @SerialName("sort_type") val sortType: String,
+)
+
+@Serializable
+data class FeiniuPersonItem(
+    @SerialName("item_guid") val itemGuid: String? = null,
+    @SerialName("person_guid") val personGuid: String? = null,
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("title") val title: String? = null,
+    @SerialName("type") val type: String? = null,
+    @SerialName("poster") val poster: String? = null,
+    @SerialName("vote_average") val voteAverage: String? = null,
+    @SerialName("watched") val watched: Int? = null,
+    @SerialName("is_favorite") val isFavorite: Int? = null,
+    @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
+    @SerialName("job") val job: String? = null,
+    @SerialName("role") val role: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
+)
+
+@Serializable
+data class FeiniuPersonItemListData(
+    @SerialName("total") val total: Int? = null,
+    @SerialName("list") val list: List<FeiniuPersonItem> = emptyList(),
+)
+
+@Serializable
+data class FeiniuGenreItem(
+    @SerialName("id") val id: Int? = null,
+    @SerialName("value") val value: String? = null,
 )
 
 @Serializable
@@ -160,6 +293,9 @@ data class FeiniuItemListData(
     @SerialName("list") val list: List<FeiniuMediaItem> = emptyList(),
     @SerialName("total") val total: Int? = null,
     @SerialName("dir") val dir: String? = null,
+    @SerialName("jump_list") val jumpList: List<String> = emptyList(),
+    @SerialName("mdb_category") val mediaDatabaseCategory: String? = null,
+    @SerialName("mdb_name") val mediaDatabaseName: String? = null,
     @SerialName("top_dir") val topDir: String? = null,
 )
 
@@ -207,13 +343,166 @@ data class FeiniuPlayInfoData(
     @SerialName("item") val item: FeiniuPlayInfoItem? = null,
 )
 
-/** P0 subset of the stream list payload (track description). */
+/** One file/version from `/stream/list` (same fields consumed by the ArkUI catalog mapper). */
+@Serializable
+data class FeiniuStreamFileInfo(
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("path") val path: String? = null,
+    @SerialName("file_name") val fileName: String? = null,
+    @SerialName("size") val sizeBytes: Long? = null,
+    @SerialName("timestamp") val timestamp: Long? = null,
+    @SerialName("type") val type: Int? = null,
+    @SerialName("sort_num") val sortNumber: Int? = null,
+    @SerialName("can_play") val canPlay: Int? = null,
+    @SerialName("play_error") val playError: String? = null,
+    @SerialName("create_time") val createTime: Long? = null,
+    @SerialName("update_time") val updateTime: Long? = null,
+    @SerialName("file_birth_time") val fileBirthTime: Long? = null,
+    @SerialName("progress_thumb_hash_dir") val progressThumbHashDir: String? = null,
+    @SerialName("duration") val durationSeconds: Double? = null,
+    @SerialName("direct_link_qualities") val directLinkQualities: List<FeiniuDirectLinkQuality> = emptyList(),
+)
+
+@Serializable
+data class FeiniuVideoStream(
+    @SerialName("media_guid") val mediaGuid: String? = null,
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("title") val title: String? = null,
+    @SerialName("index") val index: Int? = null,
+    @SerialName("resolution_type") val resolutionType: String? = null,
+    @SerialName("color_range_type") val colorRangeType: String? = null,
+    @SerialName("color_range") val colorRange: String? = null,
+    @SerialName("codec_name") val codecName: String? = null,
+    @SerialName("codec_type") val codecType: String? = null,
+    @SerialName("profile") val profile: String? = null,
+    @SerialName("width") val width: Int? = null,
+    @SerialName("height") val height: Int? = null,
+    @SerialName("coded_width") val codedWidth: Int? = null,
+    @SerialName("coded_height") val codedHeight: Int? = null,
+    @SerialName("display_aspect_ratio") val displayAspectRatio: String? = null,
+    @SerialName("pix_fmt") val pixelFormat: String? = null,
+    @SerialName("level") val level: JsonElement? = null,
+    @SerialName("color_space") val colorSpace: String? = null,
+    @SerialName("color_transfer") val colorTransfer: String? = null,
+    @SerialName("color_primaries") val colorPrimaries: String? = null,
+    @SerialName("dv_profile") val dolbyVisionProfile: Int? = null,
+    @SerialName("bits_per_raw_sample") val bitsPerRawSample: JsonElement? = null,
+    @SerialName("wrapper") val wrapper: String? = null,
+    @SerialName("duration") val durationSeconds: Double? = null,
+    @SerialName("bps") val bitRate: Int? = null,
+    @SerialName("fps") val fps: JsonElement? = null,
+    @SerialName("frame_rate") val frameRate: JsonElement? = null,
+    @SerialName("avg_frame_rate") val averageFrameRate: JsonElement? = null,
+    @SerialName("r_frame_rate") val rawFrameRate: JsonElement? = null,
+    @SerialName("progressive") val progressive: Int? = null,
+    @SerialName("bit_depth") val bitDepth: Int? = null,
+    @SerialName("refs") val referenceFrames: Int? = null,
+    @SerialName("reference_frames") val referenceFramesFallback: Int? = null,
+    @SerialName("rotation") val rotation: Int? = null,
+    @SerialName("is_bluray") val isBluray: Boolean? = null,
+)
+
+@Serializable
+data class FeiniuAudioStream(
+    @SerialName("media_guid") val mediaGuid: String? = null,
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("index") val index: Int? = null,
+    @SerialName("title") val title: String? = null,
+    @SerialName("audio_type") val audioType: String? = null,
+    @SerialName("codec_name") val codecName: String? = null,
+    @SerialName("codec_type") val codecType: String? = null,
+    @SerialName("language") val language: String? = null,
+    @SerialName("channels") val channels: Int? = null,
+    @SerialName("profile") val profile: String? = null,
+    @SerialName("sample_rate") val sampleRate: JsonElement? = null,
+    @SerialName("is_default") val isDefault: Int? = null,
+    @SerialName("channel_layout") val channelLayout: String? = null,
+    @SerialName("duration") val durationSeconds: Double? = null,
+    @SerialName("bps") val bitRate: Int? = null,
+    @SerialName("is_fake") val isFake: Boolean? = null,
+)
+
+@Serializable
+data class FeiniuSubtitleStream(
+    @SerialName("media_guid") val mediaGuid: String? = null,
+    @SerialName("guid") val guid: String? = null,
+    @SerialName("index") val index: Int? = null,
+    @SerialName("title") val title: String? = null,
+    @SerialName("codec_name") val codecName: String? = null,
+    @SerialName("codec_type") val codecType: String? = null,
+    @SerialName("format") val format: String? = null,
+    @SerialName("language") val language: String? = null,
+    @SerialName("forced") val forced: Int? = null,
+    @SerialName("is_default") val isDefault: Int? = null,
+    @SerialName("is_external") val isExternal: Int? = null,
+    @SerialName("trim_id") val trimId: String? = null,
+    @SerialName("source_id") val sourceId: String? = null,
+    @SerialName("Source") val source: String? = null,
+    @SerialName("create_time") val createTime: Long? = null,
+    @SerialName("update_time") val updateTime: Long? = null,
+    @SerialName("extra_file") val extraFile: Int? = null,
+    @SerialName("is_bitmap") val isBitmap: Int? = null,
+    @SerialName("file_size") val fileSizeBytes: Long? = null,
+)
+
+@Serializable
+data class FeiniuItemFile(
+    @SerialName("media_guid") val mediaGuid: String? = null,
+    @SerialName("item_guid") val itemGuid: String? = null,
+    @SerialName("filename") val fileName: String? = null,
+    @SerialName("file_path") val filePath: String? = null,
+    @SerialName("size") val sizeBytes: Long? = null,
+    @SerialName("file_size") val fileSizeBytes: Long? = null,
+    @SerialName("duration") val durationSeconds: Double? = null,
+    @SerialName("create_time") val createTime: Long? = null,
+    @SerialName("update_time") val updateTime: Long? = null,
+    @SerialName("file_birth_time") val fileBirthTime: Long? = null,
+    @SerialName("timestamp") val timestamp: Long? = null,
+    @SerialName("media_stream") val mediaStream: FeiniuItemStream? = null,
+)
+
+/** One quality candidate returned by fnOS's official `/stream` endpoint. */
+@Serializable
+data class FeiniuDirectLinkQuality(
+    @SerialName("bitrate") val bitrate: Long? = null,
+    @SerialName("resolution") val resolution: String? = null,
+    @SerialName("progressive") val progressive: Boolean? = null,
+    @SerialName("is_m3u8") val isM3u8: Boolean? = null,
+    @SerialName("url") val url: String? = null,
+)
+
+@Serializable
+data class FeiniuOfficialStreamRequestHeader(
+    @SerialName("User-Agent") val userAgent: List<String>,
+)
+
+@Serializable
+data class FeiniuOfficialStreamRequest(
+    @SerialName("media_guid") val mediaGuid: String,
+    @SerialName("ip") val ip: String,
+    @SerialName("header") val header: FeiniuOfficialStreamRequestHeader,
+    @SerialName("level") val level: Int,
+)
+
+@Serializable
+data class FeiniuOfficialStreamData(
+    @SerialName("file_stream") val fileStream: FeiniuStreamFileInfo? = null,
+    @SerialName("video_stream") val videoStream: FeiniuVideoStream? = null,
+    @SerialName("audio_streams") val audioStreams: List<FeiniuAudioStream> = emptyList(),
+    @SerialName("subtitle_streams") val subtitleStreams: List<FeiniuSubtitleStream> = emptyList(),
+    /** Preserve every upstream header; fnOS may add provider-specific names. */
+    @SerialName("header") val header: JsonObject? = null,
+    @SerialName("direct_link_qualities") val directLinkQualities: List<FeiniuDirectLinkQuality> = emptyList(),
+    @SerialName("qualities") val qualities: List<FeiniuDirectLinkQuality> = emptyList(),
+)
+
+/** Typed stream catalog; fields and fallback behavior mirror the legacy provider. */
 @Serializable
 data class FeiniuStreamListData(
-    @SerialName("files") val files: JsonElement? = null,
-    @SerialName("video_streams") val videoStreams: JsonElement? = null,
-    @SerialName("audio_streams") val audioStreams: JsonElement? = null,
-    @SerialName("subtitle_streams") val subtitleStreams: JsonElement? = null,
+    @SerialName("files") val files: List<FeiniuStreamFileInfo> = emptyList(),
+    @SerialName("video_streams") val videoStreams: List<FeiniuVideoStream> = emptyList(),
+    @SerialName("audio_streams") val audioStreams: List<FeiniuAudioStream> = emptyList(),
+    @SerialName("subtitle_streams") val subtitleStreams: List<FeiniuSubtitleStream> = emptyList(),
 )
 
 /** POST /v/api/v1/play/play request (P0 fields). */
@@ -235,6 +524,7 @@ data class FeiniuPlayPlayRequest(
 /** POST /v/api/v1/play/play response — play_link is the (expiring) stream URL. */
 @Serializable
 data class FeiniuPlayPlayData(
+    @SerialName("audio_guid") val audioGuid: String? = null,
     @SerialName("media_guid") val mediaGuid: String? = null,
     @SerialName("play_link") val playLink: String? = null,
     @SerialName("subtitle_link") val subtitleLink: String? = null,
@@ -242,9 +532,13 @@ data class FeiniuPlayPlayData(
     @SerialName("audio_index") val audioIndex: Int? = null,
     @SerialName("video_index") val videoIndex: Int? = null,
     @SerialName("subtitle_index") val subtitleIndex: Int? = null,
+    @SerialName("subtitle_guid") val subtitleGuid: String? = null,
     @SerialName("hls_time") val hlsTime: Int? = null,
     @SerialName("non_fatal_errno") val nonFatalErrno: Int? = null,
     @SerialName("video_encoder") val videoEncoder: String? = null,
+    @SerialName("video_guid") val videoGuid: String? = null,
+    @SerialName("not_supported_resolution") val notSupportedResolution: String? = null,
+    @SerialName("supported_highest_resolution") val supportedHighestResolution: String? = null,
 )
 
 /** POST /v/api/v1/play/record request (progress reporting). */

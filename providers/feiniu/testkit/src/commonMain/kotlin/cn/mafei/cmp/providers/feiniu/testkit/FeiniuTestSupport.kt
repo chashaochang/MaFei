@@ -73,10 +73,10 @@ data object FeiniuFixtures {
         {"guid":"it-0002","title":"Fixture Show","type":"TV","poster":"/p/s.jpg","season_number":1,"number_of_seasons":2}
     ]}}"""
 
-    const val ITEM_DETAIL: String = """{"code":0,"msg":"","data":{"guid":"it-0001","title":"Fixture Movie","type":"Movie","original_title":"Fixture Movie (Original)","overview":"Overview text","vote_average":"8.1","release_date":"2024-01-01","imdb_id":"tt0000001","trim_id":"tr-0001","posters":"[\u0022/p/m.jpg\u0022]","content_ratings":"PG-13"}}"""
+    const val ITEM_DETAIL: String = """{"code":0,"msg":"","data":{"guid":"it-0001","title":"Fixture Movie","type":"Movie","original_title":"Fixture Movie (Original)","overview":"Overview text","poster":"/p/summary.jpg","still_path":"/p/still.jpg","status":"Released","vote_average":"8.1","release_date":"2024-01-01","air_date":"2024-01-02","imdb_id":"tt0000001","trim_id":"tr-0001","posters":"[\u0022/p/m.jpg\u0022]","poster_width":1000,"poster_height":1500,"content_ratings":"PG-13","single_child_guid":"child-1","play_item_guid":"play-1","logic_type":2}}"""
 
     const val SEASON_LIST: String = """{"code":0,"msg":"","data":[
-        {"guid":"se-0001","title":"第一季","type":"TV","season_number":1,"parent_guid":"it-0002"}
+        {"guid":"se-0001","title":"第一季","type":"TV","season_number":1,"parent_guid":"it-0002","local_number_of_episodes":12}
     ]}"""
 
     const val EPISODE_LIST: String = """{"code":0,"msg":"","data":[
@@ -89,7 +89,7 @@ data object FeiniuFixtures {
 
     const val PLAY_INFO: String = """{"code":0,"msg":"","data":{"guid":"it-0001","media_guid":"md-0001","video_guid":"vd-0001","audio_guid":"au-0001","subtitle_guid":"sb-0001","type":"Movie","item":{"title":"Fixture Movie","type":"Movie","duration":7200}}}"""
 
-    const val PLAY_PLAY: String = """{"code":0,"msg":"","data":{"media_guid":"md-0001","play_link":"/v/api/v1/stream/fixture?sign=abc","subtitle_link":"/v/api/v1/subtitle/dl/sb-0001","is_subtitle_external":1,"audio_index":1,"video_index":0,"subtitle_index":3,"hls_time":6}}"""
+    const val PLAY_PLAY: String = """{"code":0,"msg":"","data":{"media_guid":"md-0001","video_guid":"vd-0001","audio_guid":"au-0001","subtitle_guid":"sb-0001","play_link":"/v/api/v1/stream/fixture?sign=abc","subtitle_link":"/v/api/v1/subtitle/dl/sb-0001","is_subtitle_external":1,"audio_index":1,"video_index":0,"subtitle_index":3,"hls_time":6,"not_supported_resolution":"8K","supported_highest_resolution":"4K"}}"""
 
     const val FN_CONNECT: String = """{"code":0,"msg":"","data":{"ipv4":["192.168.1.10"],"ipv6":[],"publicIpv4":["203.0.113.10"],"publicIpv6":["2001:db8::1"],"fn":["relay-fixture.fnos gala.invalid"],"port":{"httpPort":5666,"httpsPort":5667}}}"""
 }

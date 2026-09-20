@@ -7,8 +7,14 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
 import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuItemListTags
+import cn.mafei.cmp.providers.feiniu.core.FeiniuGenreItem
+import cn.mafei.cmp.providers.feiniu.core.FeiniuItemFile
 import cn.mafei.cmp.providers.feiniu.core.FeiniuMediaLibraryEntry
 import cn.mafei.cmp.providers.feiniu.core.FeiniuMediaItem
+import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonDetail
+import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonItemListData
+import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonItemListRequest
+import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonListData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayItem
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -37,6 +43,7 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
         resolution: FeiniuHostResolution,
         ancestorGuid: String? = null,
         category: String? = null,
+        itemTypes: List<String>? = null,
         page: Int = 1,
         pageSize: Int = 36,
         sortColumn: String = "create_time",
@@ -61,7 +68,7 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
                         pageSize = pageSize,
                         page = page,
                         tags = FeiniuItemListTags(
-                            type = itemTypesByCategory(category),
+                            type = itemTypes ?: itemTypesByCategory(category),
                             genres = genres,
                             resolution = resolutionTag,
                             watched = watchedTag,
@@ -83,7 +90,20 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
         category: String? = null,
         page: Int = 1,
         pageSize: Int = 36,
-    ): FeiniuItemListData = itemsPage("/v/api/v1/favorite/list", resolution, ancestorGuid, category, page, pageSize)
+        sortColumn: String = "create_time",
+        sortType: String = "DESC",
+        itemTypes: List<String>? = null,
+    ): FeiniuItemListData = itemsPage(
+        path = "/v/api/v1/favorite/list",
+        resolution = resolution,
+        ancestorGuid = ancestorGuid,
+        category = category,
+        page = page,
+        pageSize = pageSize,
+        sortColumn = sortColumn,
+        sortType = sortType,
+        itemTypes = itemTypes,
+    )
 
     suspend fun search(resolution: FeiniuHostResolution, keyword: String): List<FeiniuMediaItem> =
         client.execute(
@@ -140,6 +160,76 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
             FeiniuApiCall("/v/api/v1/episode/list/${guid.trim()}", FeiniuApiCall.FeiniuMethod.Get, authRequirement = FeiniuApiCall.AuthRequirement.Token),
         ) { envelope, _ -> decodeList(envelope, FeiniuMediaItem.serializer()) }
 
+    /** Legacy detail aggregation: POST `/person/list/{itemGuid}`. */
+    suspend fun people(resolution: FeiniuHostResolution, itemGuid: String): FeiniuPersonListData =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                "/v/api/v1/person/list/${itemGuid.trim()}",
+                FeiniuApiCall.FeiniuMethod.Post,
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ ->
+            envelope.data?.let { MafeiJson.Default.decodeFromJsonElement(FeiniuPersonListData.serializer(), it) }
+                ?: FeiniuPersonListData()
+        }
+
+    /** Legacy cast detail: GET `/person/{personGuid}`. */
+    suspend fun person(resolution: FeiniuHostResolution, personGuid: String): FeiniuPersonDetail =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                "/v/api/v1/person/${personGuid.trim()}",
+                FeiniuApiCall.FeiniuMethod.Get,
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ ->
+            val data = envelope.data
+                ?: throw cn.mafei.cmp.providers.feiniu.core.FeiniuDecodeError("Feiniu person detail is empty")
+            MafeiJson.Default.decodeFromJsonElement(FeiniuPersonDetail.serializer(), data)
+        }
+
+    /** One job-specific page from the old actor/director/screenplay work query. */
+    suspend fun personItems(
+        resolution: FeiniuHostResolution,
+        request: FeiniuPersonItemListRequest,
+    ): FeiniuPersonItemListData =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                path = "/v/api/v1/person/item/list",
+                method = FeiniuApiCall.FeiniuMethod.Post,
+                bodyText = MafeiJson.Default.encodeToString(FeiniuPersonItemListRequest.serializer(), request),
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ ->
+            envelope.data?.let { MafeiJson.Default.decodeFromJsonElement(FeiniuPersonItemListData.serializer(), it) }
+                ?: FeiniuPersonItemListData()
+        }
+
+    /** Numeric genre id dictionary used by the old Feiniu mapper. */
+    suspend fun genres(resolution: FeiniuHostResolution): List<FeiniuGenreItem> =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                path = "/v/api/v1/tag/genres",
+                method = FeiniuApiCall.FeiniuMethod.Get,
+                queryParameters = listOf("lan" to "zh"),
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ -> decodeList(envelope, FeiniuGenreItem.serializer()) }
+
+    /** Supplemental file list merged with `/stream/list` by the legacy detail provider. */
+    suspend fun itemFiles(resolution: FeiniuHostResolution, itemGuid: String): List<FeiniuItemFile> =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                "/v/api/v1/media/itemfile/${itemGuid.trim()}",
+                FeiniuApiCall.FeiniuMethod.Get,
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+            ),
+        ) { envelope, _ -> decodeList(envelope, FeiniuItemFile.serializer()) }
+
     // ------------------------------------------------------------------ internals
 
     private suspend fun itemsPage(
@@ -149,6 +239,9 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
         category: String?,
         page: Int,
         pageSize: Int,
+        sortColumn: String = "create_time",
+        sortType: String = "DESC",
+        itemTypes: List<String>? = null,
     ): FeiniuItemListData =
         client.execute(
             resolution,
@@ -160,11 +253,11 @@ class FeiniuCatalogApi(private val client: FeiniuClient) {
                     FeiniuItemListRequest(
                         ancestorGuid = ancestorGuid?.trim()?.takeIf { it.isNotEmpty() },
                         excludeGroupedVideo = 1,
-                        sortType = "DESC",
-                        sortColumn = "create_time",
+                        sortType = sortType.trim().uppercase(),
+                        sortColumn = sortColumn,
                         pageSize = pageSize,
                         page = page,
-                        tags = FeiniuItemListTags(type = itemTypesByCategory(category)),
+                        tags = FeiniuItemListTags(type = itemTypes ?: itemTypesByCategory(category)),
                     ),
                 ),
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,

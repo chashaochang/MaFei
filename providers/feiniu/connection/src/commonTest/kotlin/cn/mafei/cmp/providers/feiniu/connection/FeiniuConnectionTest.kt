@@ -34,10 +34,15 @@ class FeiniuAddressParserTest {
     @Test
     fun directAddressGetsDefaultPorts() {
         assertEquals("http://192.168.1.10:5666", FeiniuAddressParser.parse("192.168.1.10").directBaseUrl)
-        assertEquals("http://192.168.1.10:5666", FeiniuAddressParser.parse("http://192.168.1.10").directBaseUrl)
+        assertEquals("http://192.168.1.10:80", FeiniuAddressParser.parse("http://192.168.1.10").directBaseUrl)
         assertEquals("http://nas.example.org:5666", FeiniuAddressParser.parse("nas.example.org").directBaseUrl)
-        assertEquals("https://nas.example.org:5667", FeiniuAddressParser.parse("https://nas.example.org").directBaseUrl)
+        assertEquals("https://nas.example.org:443", FeiniuAddressParser.parse("https://nas.example.org").directBaseUrl)
         assertEquals("http://nas.example.org:8080", FeiniuAddressParser.parse("nas.example.org:8080").directBaseUrl)
+        assertEquals("http://nas.example.org:5666/media", FeiniuAddressParser.parse("nas.example.org/media").directBaseUrl)
+        assertEquals("http://nas.example.org:80/media", FeiniuAddressParser.parse("http://nas.example.org/media").directBaseUrl)
+        assertEquals("https://nas.example.org:443/media", FeiniuAddressParser.parse("https://nas.example.org/media").directBaseUrl)
+        assertEquals("http://nas.example.org:80/media", FeiniuAddressParser.parse("ws://nas.example.org/media").directBaseUrl)
+        assertEquals("https://nas.example.org:443/media", FeiniuAddressParser.parse("wss://nas.example.org/media").directBaseUrl)
     }
 
     @Test
@@ -45,6 +50,7 @@ class FeiniuAddressParserTest {
         assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("") }
         assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("http://host?query=1") }
         assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("http://user:pass@host") }
+        assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("ftp://host") }
     }
 }
 

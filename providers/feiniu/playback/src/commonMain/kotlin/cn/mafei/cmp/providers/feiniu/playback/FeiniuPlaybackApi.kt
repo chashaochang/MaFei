@@ -6,6 +6,8 @@ import cn.mafei.cmp.core.serialization.MafeiJson
 import cn.mafei.cmp.providers.feiniu.core.FeiniuApiCall
 import cn.mafei.cmp.providers.feiniu.core.FeiniuClient
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
+import cn.mafei.cmp.providers.feiniu.core.FeiniuOfficialStreamData
+import cn.mafei.cmp.providers.feiniu.core.FeiniuOfficialStreamRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayInfoData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
@@ -154,9 +156,8 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
 
     /**
      * GET /v/api/v1/stream/list/{guid} — the track catalog (files, video/
-     * audio/subtitle streams) used to prepare playback (P0 per design §6.6).
-     * Track fields stay as raw JSON elements until real-device fixtures
-     * justify typing them.
+     * audio/subtitle streams) used to prepare playback. The wire models keep
+     * the complete field set consumed by the legacy catalog and player.
      */
     suspend fun streamList(
         resolution: FeiniuHostResolution,
@@ -177,6 +178,32 @@ class FeiniuPlaybackApi(private val client: FeiniuClient) {
             envelope.data?.let {
                 MafeiJson.Default.decodeFromJsonElement(FeiniuStreamListData.serializer(), it)
             } ?: FeiniuStreamListData()
+        }
+
+    /**
+     * Official fnOS stream metadata for one media file. The legacy detail
+     * provider uses this to fill fields that `/stream/list` omits (notably
+     * STRM video/audio/subtitle metadata and signed direct-link qualities).
+     */
+    suspend fun officialStream(
+        resolution: FeiniuHostResolution,
+        request: FeiniuOfficialStreamRequest,
+        pinnedOperation: FeiniuSessionSnapshot? = null,
+    ): FeiniuOfficialStreamData =
+        client.execute(
+            resolution,
+            FeiniuApiCall(
+                path = "/v/api/v1/stream",
+                method = FeiniuApiCall.FeiniuMethod.Post,
+                bodyText = MafeiJson.Default.encodeToString(FeiniuOfficialStreamRequest.serializer(), request),
+                authRequirement = FeiniuApiCall.AuthRequirement.Token,
+                readTimeoutMs = 60_000,
+                pinnedOperation = pinnedOperation,
+            ),
+        ) { envelope, _ ->
+            envelope.data?.let {
+                MafeiJson.Default.decodeFromJsonElement(FeiniuOfficialStreamData.serializer(), it)
+            } ?: FeiniuOfficialStreamData()
         }
 
     /** Absolute direct-range stream URL (`/v/api/v1/media/range/{mediaGuid}`). */

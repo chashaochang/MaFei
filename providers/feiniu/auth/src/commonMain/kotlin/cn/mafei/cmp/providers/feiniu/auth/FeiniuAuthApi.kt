@@ -10,6 +10,7 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuTokenData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuEnvelope
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
 import cn.mafei.cmp.providers.feiniu.core.FeiniuLoginRequest
+import cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot
 import cn.mafei.cmp.providers.feiniu.core.FeiniuUserInfo
 
 /**
@@ -96,13 +97,17 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
         }
     }
 
-    suspend fun userInfo(resolution: FeiniuHostResolution): FeiniuUserInfo =
+    suspend fun userInfo(
+        resolution: FeiniuHostResolution,
+        pinnedOperation: FeiniuSessionSnapshot? = null,
+    ): FeiniuUserInfo =
         client.execute(
             resolution,
             FeiniuApiCall(
                 path = "/v/api/v1/user/info",
                 method = FeiniuApiCall.FeiniuMethod.Get,
                 authRequirement = FeiniuApiCall.AuthRequirement.Token,
+                pinnedOperation = pinnedOperation,
             ),
         ) { envelope, _ ->
             // R3: decode failures propagate as FeiniuDecodeError from the
@@ -139,5 +144,4 @@ class FeiniuAuthApi(private val client: FeiniuClient) {
     }
 
 }
-
 
