@@ -23,7 +23,18 @@ interface MaFeiPlayerInteropArgs {
   autoPlay: boolean;
   positionMs: number;
   speed: number;
-  onState?: (state: Object) => void;
+  onState?: (state: MaFeiPlayerState) => void;
+}
+
+/** Snapshot sent from the native player surface back to Compose. */
+interface MaFeiPlayerState {
+  handle: number;
+  itemStatus: number;
+  timeControl: number;
+  positionMs: number;
+  durationMs: number;
+  bufferedMs: number;
+  errorKind: number;
 }
 
 @Builder
