@@ -189,12 +189,27 @@ fun KotlinMultiplatformExtension.configureDesktopTargetOnly() {
     configureCommonTests()
 }
 
+val verifyNoSvgResources = tasks.register<Exec>("verifyNoSvgResources") {
+    group = "verification"
+    description = "Rejects SVG source resources; active app artwork must use PNG."
+    commandLine(
+        "node",
+        rootProject.file("scripts/verify-no-svg-resources.mjs").absolutePath,
+        rootProject.projectDir.absolutePath,
+    )
+}
+
 subprojects {
     val groupSegments = path
         .split(":")
         .filter { it.isNotBlank() }
         .dropLast(1)
     group = (listOf("cn", "mafei", "cmp") + groupSegments).joinToString(".")
+
+    tasks.matching { it.name.startsWith("prepareComposeResourcesTaskFor") }
+        .configureEach {
+            dependsOn(rootProject.tasks.named("verifyNoSvgResources"))
+        }
 
     if (path == ":composeApp") {
         return@subprojects
@@ -280,5 +295,5 @@ tasks.register<Exec>("verifyArchitecture") {
 }
 
 tasks.named("check") {
-    dependsOn("verifyArchitecture")
+    dependsOn("verifyArchitecture", verifyNoSvgResources)
 }

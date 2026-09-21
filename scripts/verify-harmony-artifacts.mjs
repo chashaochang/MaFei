@@ -68,7 +68,7 @@ const connectDrawables = [
   'mafei_app_icon.png',
   ...Array.from({ length: 24 }, (_, index) => `poster_${String(index + 1).padStart(2, '0')}.jpg`),
   'provider_feiniu.png',
-  'provider_jellyfin.svg',
+  'provider_jellyfin.png',
 ];
 for (const name of connectDrawables) {
   const resource = `resources/rawfile/composeResources/cn.mafei.cmp.feature.connect.generated.resources/drawable/${name}`;
