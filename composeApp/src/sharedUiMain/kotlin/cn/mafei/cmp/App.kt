@@ -1580,33 +1580,7 @@ private fun BrowseContent(
                     val revealed = browseBackStack.getOrNull(browseBackStack.lastIndex - 1)
                     when (route) {
                         is BrowseDetailRoute -> browser.back()
-                        is BrowseEpisodeRoute -> scope.launch {
-                            // ArkUI opens an episode as a real VideoDetailPage. Restore the
-                            // parent series and selected season when that page is popped.
-                            browser.openDetail(MediaId(route.seriesId))
-                            browser.selectSeason(MediaId(route.seasonId))
-                        }
-                        is BrowsePersonRoute -> {
-                            browser.clearPerson()
-                            when (revealed) {
-                                is BrowseDetailRoute -> if (state.detail?.id?.value != revealed.mediaId) {
-                                    scope.launch { browser.openDetail(MediaId(revealed.mediaId)) }
-                                }
-                                is BrowseSeasonRoute -> if (
-                                    state.detail?.id?.value != revealed.seriesId ||
-                                    state.selectedSeasonId?.value != revealed.seasonId
-                                ) {
-                                    scope.launch {
-                                        browser.openDetail(MediaId(revealed.seriesId))
-                                        browser.selectSeason(MediaId(revealed.seasonId))
-                                    }
-                                }
-                                is BrowseEpisodeRoute -> if (state.detail?.id?.value != revealed.episodeId) {
-                                    scope.launch { browser.openDetail(MediaId(revealed.episodeId)) }
-                                }
-                                else -> Unit
-                            }
-                        }
+                        is BrowsePersonRoute -> browser.clearPerson()
                         BrowseSearchRoute -> {
                             searchJob?.cancel()
                             searchJob = null
@@ -1616,12 +1590,41 @@ private fun BrowseContent(
                     }
                     if (browseBackStack.size > 1) {
                         browseBackStack.removeLastOrNull()
-                        if (revealed == BrowseHomeRoute) {
-                            // Returning reveals the existing home document with
-                            // its established scroll position immediately. Data
-                            // catches up independently without global loading,
-                            // route reconstruction or a visible refresh jump.
-                            scope.launch { browser.refreshHome() }
+                        when (revealed) {
+                            BrowseHomeRoute -> {
+                                // Returning reveals the existing home document with
+                                // its established scroll position immediately. Data
+                                // catches up independently without global loading,
+                                // route reconstruction or a visible refresh jump.
+                                scope.launch { browser.refreshHome() }
+                            }
+                            is BrowseDetailRoute -> scope.launch {
+                                val id = MediaId(revealed.mediaId)
+                                if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
+                            }
+                            is BrowseEpisodeRoute -> scope.launch {
+                                val id = MediaId(revealed.episodeId)
+                                if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
+                            }
+                            is BrowseSeasonRoute -> scope.launch {
+                                val seriesId = MediaId(revealed.seriesId)
+                                val seasonId = MediaId(revealed.seasonId)
+                                val requiresRestore = state.detail?.id != seriesId ||
+                                    state.selectedSeasonId != seasonId
+                                if (state.detail?.id != seriesId) {
+                                    // Episode detail temporarily owns the single
+                                    // provider detail slot. Restore its parent once;
+                                    // all ordinary child returns stay in-place below.
+                                    browser.openDetail(seriesId)
+                                }
+                                if (browser.state.value.selectedSeasonId != seasonId) {
+                                    browser.selectSeason(seasonId)
+                                }
+                                if (!requiresRestore) {
+                                    browser.refreshDetail(seriesId)
+                                }
+                            }
+                            else -> Unit
                         }
                     }
                 }

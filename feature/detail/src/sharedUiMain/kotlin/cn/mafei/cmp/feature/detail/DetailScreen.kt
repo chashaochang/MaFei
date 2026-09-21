@@ -45,7 +45,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -229,10 +228,6 @@ fun DetailScreen(
     val selectedPlaybackSource = remember(playbackSources, selectedMediaSourceId) {
         playbackSources.firstOrNull { it.id == selectedMediaSourceId } ?: playbackSources.firstOrNull()
     }
-    LaunchedEffect(item?.id?.value) {
-        if (item != null) scrollState.scrollTo(0)
-    }
-
     BoxWithConstraints(modifier.fillMaxSize()) {
         // The atmosphere mirrors the home ambient: it also runs under the floating
         // sidebar, so navigation samples the same blurred artwork instead of the

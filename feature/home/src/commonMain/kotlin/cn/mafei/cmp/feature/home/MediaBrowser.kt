@@ -115,6 +115,7 @@ class MediaBrowser(
     private var ticket = 0L
     private var homeTicket = 0L
     private var detailTicket = 0L
+    private var detailRefreshTicket = 0L
     private var personTicket = 0L
     private var searchTicket = 0L
     private var favoriteTicket = 0L
@@ -642,6 +643,7 @@ class MediaBrowser(
 
     suspend fun openDetail(id: MediaId) {
         val operation = ++detailTicket
+        ++detailRefreshTicket
         mutableState.value = state.value.copy(
             detailId = id,
             detail = null,
@@ -697,6 +699,65 @@ class MediaBrowser(
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket) mutableState.value = state.value.copy(detailLoading = false, detailError = browseError(failure))
+        }
+    }
+
+    /**
+     * Refreshes the detail currently on screen without replacing its document
+     * state. This is used when a child route returns to a movie/series/episode:
+     * the old detail, scroll position, sections and actions remain available
+     * while the provider catches up in the background.
+     */
+    suspend fun refreshDetail(id: MediaId) {
+        val beforeRequest = state.value
+        if (beforeRequest.detail?.id != id || beforeRequest.detailLoading) return
+        val operation = ++detailRefreshTicket
+        val detailGeneration = detailTicket
+        try {
+            val loaded = repository.item(session, id, refresh = true)
+            if (
+                operation != detailRefreshTicket ||
+                detailGeneration != detailTicket ||
+                state.value.detail?.id != id
+            ) return
+            // A transient network failure may be represented by the repository
+            // as a stale-cache success. The same detail is already visible, so
+            // publishing an error row would only move the page for no new data.
+            if (loaded.origin == MediaLoadOrigin.StaleCache) return
+
+            val current = state.value
+            val detail = loaded.value
+            val playableSources = detail.mediaSources.filter { it.playable != false }
+            val selectedSource = playableSources.firstOrNull { it.id == current.selectedMediaSourceId }
+                ?: playableSources.firstOrNull()
+            val sourceUnchanged = selectedSource?.id == current.selectedMediaSourceId
+            mutableState.value = current.copy(
+                detail = detail,
+                detailError = null,
+                selectedMediaSourceId = selectedSource?.id,
+                // A background data refresh must not silently undo a track the
+                // user selected on this same source.
+                selectedAudioStreamIndex = if (sourceUnchanged) {
+                    current.selectedAudioStreamIndex
+                } else {
+                    selectedSource?.legacyDefaultAudioStreamIndex()
+                },
+                selectedSubtitleStreamIndex = if (sourceUnchanged) {
+                    current.selectedSubtitleStreamIndex
+                } else {
+                    selectedSource?.legacyDefaultSubtitleStreamIndex()
+                },
+                detailPlayTarget = if (detail.mediaType == MediaType.Series) {
+                    current.detailPlayTarget
+                } else {
+                    detail.takeIf { it.canPlay }
+                },
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Background refresh failures leave the presented detail exactly as
+            // it was. Explicit retry still uses [openDetail] and exposes errors.
         }
     }
 
@@ -1463,6 +1524,7 @@ class MediaBrowser(
 
     fun back() {
         ++detailTicket
+        ++detailRefreshTicket
         mutableState.value = state.value.copy(
             detailId = null,
             detail = null,

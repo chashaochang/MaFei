@@ -141,7 +141,6 @@ fun SeasonDetailScreen(
         onDismiss = { overviewSheetVisible = false },
     )
     val seriesName = legacySeasonSeriesName(series, season, libraryName)
-    LaunchedEffect(season.id.value) { scrollState.scrollTo(0) }
 
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {

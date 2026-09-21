@@ -392,6 +392,106 @@ class MediaBrowserTest {
         }
     }
 
+    @Test fun backgroundDetailRefreshKeepsThePresentedDocumentUntilFreshDataArrives() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val a = Adapter()
+            val source = MediaSourceInfo(
+                id = "source",
+                streams = listOf(
+                    MediaStreamInfo(index = 1, kind = MediaStreamKind.Audio),
+                    MediaStreamInfo(index = 2, kind = MediaStreamKind.Audio),
+                    MediaStreamInfo(index = 3, kind = MediaStreamKind.Subtitle),
+                ),
+            )
+            val movie = a.media("movie").copy(canPlay = true, mediaSources = listOf(source))
+            a.detail = { movie }
+            val b = browser(a)
+            b.openDetail(movie.id)
+            b.selectAudioTrack(2)
+            b.selectSubtitleTrack(-1)
+            val before = b.state.value
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            a.detail = {
+                entered.complete(Unit)
+                release.await()
+                movie.copy(title = "fresh movie")
+            }
+
+            val refresh = launch { b.refreshDetail(movie.id) }
+            entered.await()
+
+            assertEquals(before, b.state.value)
+            assertFalse(b.state.value.detailLoading)
+
+            release.complete(Unit)
+            refresh.join()
+            val after = b.state.value
+            assertEquals("fresh movie", after.detail?.title)
+            assertEquals("fresh movie", after.detailPlayTarget?.title)
+            assertEquals(2, after.selectedAudioStreamIndex)
+            assertEquals(-1, after.selectedSubtitleStreamIndex)
+            assertFalse(after.detailLoading)
+            assertEquals(before.detailSeasons, after.detailSeasons)
+            assertEquals(before.detailEpisodes, after.detailEpisodes)
+        }
+    }
+
+    @Test fun failedBackgroundDetailRefreshKeepsExistingDetailAndStateUntouched() = runBlocking<Unit> {
+        val a = Adapter()
+        val movie = a.media("movie").copy(canPlay = true)
+        a.detail = { movie }
+        val b = browser(a)
+        b.openDetail(movie.id)
+        val before = b.state.value
+        a.detail = { throw NetworkUnreachableError() }
+
+        b.refreshDetail(movie.id)
+
+        assertEquals(before, b.state.value)
+    }
+
+    @Test fun newerBackgroundDetailRefreshCannotBeOverwrittenByAnOlderResponse() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val a = Adapter()
+            val movie = a.media("movie").copy(canPlay = true)
+            a.detail = { movie }
+            val b = browser(a)
+            b.openDetail(movie.id)
+            val calls = java.util.concurrent.atomic.AtomicInteger()
+            val firstEntered = CompletableDeferred<Unit>()
+            val firstRelease = CompletableDeferred<Unit>()
+            val secondEntered = CompletableDeferred<Unit>()
+            val secondRelease = CompletableDeferred<Unit>()
+            a.detail = {
+                when (calls.incrementAndGet()) {
+                    1 -> {
+                        firstEntered.complete(Unit)
+                        firstRelease.await()
+                        movie.copy(title = "older")
+                    }
+                    else -> {
+                        secondEntered.complete(Unit)
+                        secondRelease.await()
+                        movie.copy(title = "newer")
+                    }
+                }
+            }
+
+            val older = launch { b.refreshDetail(movie.id) }
+            firstEntered.await()
+            val newer = launch { b.refreshDetail(movie.id) }
+            secondEntered.await()
+            secondRelease.complete(Unit)
+            newer.join()
+            firstRelease.complete(Unit)
+            older.join()
+
+            assertEquals("newer", b.state.value.detail?.title)
+            assertFalse(b.state.value.detailLoading)
+        }
+    }
+
     @Test fun detailRestoresPerItemSourceAndUsesThatSourcesLegacyTrackDefaults() = runBlocking<Unit> {
         val a = Adapter()
         val first = MediaSourceInfo(
