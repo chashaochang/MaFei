@@ -113,6 +113,7 @@ class MediaBrowser(
     private val mutableState = MutableStateFlow(MediaBrowserState())
     val state: StateFlow<MediaBrowserState> = mutableState.asStateFlow()
     private var ticket = 0L
+    private var homeTicket = 0L
     private var detailTicket = 0L
     private var personTicket = 0L
     private var searchTicket = 0L
@@ -138,6 +139,7 @@ class MediaBrowser(
 
     suspend fun refresh() {
         val operation = ++ticket
+        val homeOperation = ++homeTicket
         mutableState.value = state.value.copy(
             loading = !initialized,
             refreshing = initialized,
@@ -163,24 +165,20 @@ class MediaBrowser(
                     // this content in place; only publish when nothing better
                     // (a previous publish or pull-to-refresh result) is showing.
                     val snapshot = repository.homeSnapshot(session)
-                    if (operation != ticket) return@launch
+                    if (homeOperation != homeTicket) return@launch
                     if (snapshot != null && state.value.homeFeed == HomeFeed()) {
                         mutableState.value = state.value.copy(homeFeed = snapshot, homeError = null, homeStale = false)
                     }
                     val home = repository.home(session, refresh = true)
-                    if (operation != ticket) return@launch
-                    mutableState.value = state.value.copy(
-                        homeFeed = home.value,
-                        homeError = null,
-                        homeStale = home.origin == MediaLoadOrigin.StaleCache,
-                    )
+                    if (homeOperation != homeTicket) return@launch
+                    publishHome(home)
                 } catch (cancelled: CancellationException) {
                     // supervisorScope swallows child cancellation; record it so
                     // refresh still propagates the cancellation contract.
                     cancellation = cancelled
                     throw cancelled
                 } catch (failure: Exception) {
-                    if (operation != ticket) return@launch
+                    if (homeOperation != homeTicket) return@launch
                     mutableState.value = state.value.copy(homeError = browseError(failure), homeStale = false)
                 }
             }
@@ -250,6 +248,56 @@ class MediaBrowser(
                 )
             }
         }
+    }
+
+    /**
+     * Refreshes only the provider-backed home feed while keeping the currently
+     * presented home document intact.
+     *
+     * Returning from a detail, season, episode or person route is not a manual
+     * pull-to-refresh. The old content therefore remains visible while this
+     * request runs: no global busy flag changes, no library request is issued,
+     * and no pagination or selection state is reset. On success, unchanged
+     * shelves retain their list instances so Compose only has to update the
+     * sections whose provider data actually changed.
+     */
+    suspend fun refreshHome() {
+        val operation = ++homeTicket
+        try {
+            val home = repository.home(session, refresh = true)
+            if (operation != homeTicket) return
+            if (home.origin == MediaLoadOrigin.StaleCache && state.value.homeFeed != HomeFeed()) {
+                // The repository has already fallen back to the content that
+                // is on screen. Publishing `homeStale=true` here would insert
+                // a status row and move the viewport even though no shelf data
+                // changed. A later successful return refresh clears any prior
+                // home error/stale state through [publishHome].
+                return
+            }
+            publishHome(home)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (operation != homeTicket) return
+            // A background refresh must not insert an error row above existing
+            // content and shift the user's established viewport. With no home
+            // content at all, exposing the failure remains the honest fallback.
+            if (state.value.homeFeed == HomeFeed()) {
+                mutableState.value = state.value.copy(
+                    homeError = browseError(failure),
+                    homeStale = false,
+                )
+            }
+        }
+    }
+
+    private fun publishHome(home: MediaLoad<HomeFeed>) {
+        val before = state.value
+        mutableState.value = before.copy(
+            homeFeed = before.homeFeed.mergeUnchangedSections(home.value),
+            homeError = null,
+            homeStale = home.origin == MediaLoadOrigin.StaleCache,
+        )
     }
 
     suspend fun select(id: CollectionId) {
@@ -1494,6 +1542,29 @@ private fun episodePlaybackPercentage(item: MediaItem): Double {
         (item.userData.playbackPositionMs.toDouble() * 100.0 / duration.toDouble()).coerceIn(0.0, 100.0)
     } else {
         0.0
+    }
+}
+
+/** Preserve stable shelf inputs so an in-place home refresh stays local. */
+private fun HomeFeed.mergeUnchangedSections(fresh: HomeFeed): HomeFeed {
+    val recommendations = recommendations.takeIf { it == fresh.recommendations } ?: fresh.recommendations
+    val resume = resume.takeIf { it == fresh.resume } ?: fresh.resume
+    val nextUp = nextUp.takeIf { it == fresh.nextUp } ?: fresh.nextUp
+    val latest = latest.takeIf { it == fresh.latest } ?: fresh.latest
+    return if (
+        recommendations === this.recommendations &&
+        resume === this.resume &&
+        nextUp === this.nextUp &&
+        latest === this.latest
+    ) {
+        this
+    } else {
+        HomeFeed(
+            recommendations = recommendations,
+            resume = resume,
+            nextUp = nextUp,
+            latest = latest,
+        )
     }
 }
 

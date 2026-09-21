@@ -265,7 +265,15 @@ fun HomeScreen(
     // consumed merely because the home grid reached its tail.
     val paginationEnabled = !overview && canLoadMore && !loading && !refreshing && !loadingMore
     val currentLoadMore by rememberUpdatedState(onLoadMore)
-    var initialHeroAlignmentPending by remember(gridState) { mutableStateOf(overview) }
+    var initialHeroAlignmentPending by remember(gridState) {
+        mutableStateOf(
+            shouldAlignHomeHeroInitially(
+                overview = overview,
+                firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = gridState.firstVisibleItemScrollOffset,
+            ),
+        )
+    }
     LaunchedEffect(overview, showHero) {
         // Align once immediately and once when the first real hero is ready.
         // The latter closes the one-frame anchor race without interrupting
@@ -985,6 +993,12 @@ fun HomeScreen(
       }
       }
 }
+
+internal fun shouldAlignHomeHeroInitially(
+    overview: Boolean,
+    firstVisibleItemIndex: Int,
+    firstVisibleItemScrollOffset: Int,
+): Boolean = overview && firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
 
 @Composable
 private fun HomeLatestFeedError(message: String, onRetry: () -> Unit) {

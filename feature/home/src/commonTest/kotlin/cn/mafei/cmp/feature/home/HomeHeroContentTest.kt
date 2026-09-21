@@ -63,6 +63,34 @@ class HomeHeroContentTest {
     }
 
     @Test
+    fun initialHeroAlignmentRunsOnlyAtTheRealTop() {
+        assertEquals(
+            true,
+            shouldAlignHomeHeroInitially(
+                overview = true,
+                firstVisibleItemIndex = 0,
+                firstVisibleItemScrollOffset = 0,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldAlignHomeHeroInitially(
+                overview = true,
+                firstVisibleItemIndex = 3,
+                firstVisibleItemScrollOffset = 24,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldAlignHomeHeroInitially(
+                overview = true,
+                firstVisibleItemIndex = 0,
+                firstVisibleItemScrollOffset = 24,
+            ),
+        )
+    }
+
+    @Test
     fun heroForegroundIsHiddenWhenOnlyTheClippedTailRemains() {
         assertEquals(
             0f,

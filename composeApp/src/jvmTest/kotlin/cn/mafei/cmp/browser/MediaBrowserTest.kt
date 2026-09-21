@@ -31,6 +31,7 @@ class MediaBrowserTest {
         }
         var feed = HomeFeed()
         var homeFailure: Exception? = null
+        var homeFetch: (suspend (HomeFeedRequest) -> HomeFeed)? = null
         var seasonFetch: suspend (MediaId) -> Page<MediaItem> = { Page(emptyList()) }
         var episodeFetch: suspend (MediaId, MediaId?, PageRequest) -> Page<MediaItem> = { _, _, _ -> Page(emptyList()) }
         var nextUpFetch: suspend (MediaId) -> MediaItem? = { null }
@@ -47,7 +48,7 @@ class MediaBrowserTest {
         override suspend fun collections(request: PageRequest) = Page(libraryList)
         override suspend fun home(request: HomeFeedRequest): HomeFeed {
             homeFailure?.let { throw it }
-            return feed
+            return homeFetch?.invoke(request) ?: feed
         }
         override suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem> {
             requests += request
@@ -122,6 +123,122 @@ class MediaBrowserTest {
         assertEquals(listOf("next"), b.state.value.homeFeed.nextUp.map { it.title })
         assertEquals(listOf("latest"), b.state.value.homeFeed.latest.map { it.title })
         assertNull(b.state.value.homeError)
+    }
+
+    @Test fun backgroundHomeRefreshKeepsTheDocumentStableAndOnlyReplacesChangedShelves() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val a = Adapter()
+            a.feed = HomeFeed(
+                recommendations = listOf(a.media("hero")),
+                resume = listOf(a.media("resume")),
+                nextUp = listOf(a.media("next")),
+                latest = listOf(a.media("latest")),
+            )
+            val b = browser(a)
+            b.start()
+            val before = b.state.value
+            val itemRequestCount = a.itemRequests.size
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            a.homeFetch = {
+                entered.complete(Unit)
+                release.await()
+                HomeFeed(
+                    recommendations = listOf(a.media("hero")),
+                    resume = listOf(a.media("resume")),
+                    nextUp = listOf(a.media("next-fresh")),
+                    latest = listOf(a.media("latest")),
+                )
+            }
+
+            val refresh = launch { b.refreshHome() }
+            entered.await()
+
+            assertEquals(before, b.state.value)
+            assertFalse(b.state.value.loading)
+            assertFalse(b.state.value.refreshing)
+            assertEquals(itemRequestCount, a.itemRequests.size)
+
+            release.complete(Unit)
+            refresh.join()
+            val after = b.state.value
+            assertSame(before.homeFeed.recommendations, after.homeFeed.recommendations)
+            assertSame(before.homeFeed.resume, after.homeFeed.resume)
+            assertNotSame(before.homeFeed.nextUp, after.homeFeed.nextUp)
+            assertSame(before.homeFeed.latest, after.homeFeed.latest)
+            assertEquals(listOf("next-fresh"), after.homeFeed.nextUp.map { it.title })
+            assertEquals(before.copy(homeFeed = after.homeFeed), after)
+        }
+    }
+
+    @Test fun failedBackgroundHomeRefreshKeepsExistingContentAndPageStateUntouched() = runBlocking<Unit> {
+        val a = Adapter()
+        a.feed = HomeFeed(latest = listOf(a.media("visible")))
+        val b = browser(a)
+        b.start()
+        val before = b.state.value
+        // The repository serves its cached feed as StaleCache for a transient
+        // network failure. The browser must still avoid publishing a stale
+        // banner because that would insert a row and move the visible content.
+        a.homeFetch = { throw NetworkUnreachableError() }
+
+        b.refreshHome()
+
+        assertEquals(before, b.state.value)
+    }
+
+    @Test fun newerBackgroundHomeRefreshCannotBeOverwrittenByAnOlderResponse() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val a = Adapter()
+            a.feed = HomeFeed(latest = listOf(a.media("initial")))
+            val b = browser(a)
+            b.start()
+            val calls = java.util.concurrent.atomic.AtomicInteger()
+            val firstEntered = CompletableDeferred<Unit>()
+            val firstRelease = CompletableDeferred<Unit>()
+            val secondEntered = CompletableDeferred<Unit>()
+            val secondRelease = CompletableDeferred<Unit>()
+            a.homeFetch = {
+                when (calls.incrementAndGet()) {
+                    1 -> {
+                        firstEntered.complete(Unit)
+                        firstRelease.await()
+                        HomeFeed(latest = listOf(a.media("older")))
+                    }
+                    else -> {
+                        secondEntered.complete(Unit)
+                        secondRelease.await()
+                        HomeFeed(latest = listOf(a.media("newer")))
+                    }
+                }
+            }
+
+            val older = launch { b.refreshHome() }
+            firstEntered.await()
+            val newer = launch { b.refreshHome() }
+            secondEntered.await()
+            secondRelease.complete(Unit)
+            newer.join()
+            firstRelease.complete(Unit)
+            older.join()
+
+            assertEquals(listOf("newer"), b.state.value.homeFeed.latest.map { it.title })
+            assertFalse(b.state.value.loading)
+            assertFalse(b.state.value.refreshing)
+        }
+    }
+
+    @Test fun backgroundHomeRefreshFailureIsVisibleOnlyWhenHomeWasAlreadyEmpty() = runBlocking<Unit> {
+        val a = Adapter()
+        val b = browser(a)
+        b.start()
+        a.homeFetch = { throw ProtocolDecodingError("bad refresh payload") }
+
+        b.refreshHome()
+
+        assertEquals("服务器返回了无法识别的数据", b.state.value.homeError)
+        assertFalse(b.state.value.loading)
+        assertFalse(b.state.value.refreshing)
     }
 
     @Test fun homeLibraryFeedDoesNotReplaceTheActiveLibraryOrItsItems() = runBlocking<Unit> {

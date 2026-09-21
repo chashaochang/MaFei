@@ -1614,7 +1614,16 @@ private fun BrowseContent(
                         }
                         else -> Unit
                     }
-                    if (browseBackStack.size > 1) browseBackStack.removeLastOrNull()
+                    if (browseBackStack.size > 1) {
+                        browseBackStack.removeLastOrNull()
+                        if (revealed == BrowseHomeRoute) {
+                            // Returning reveals the existing home document with
+                            // its established scroll position immediately. Data
+                            // catches up independently without global loading,
+                            // route reconstruction or a visible refresh jump.
+                            scope.launch { browser.refreshHome() }
+                        }
+                    }
                 }
                 val openDetailId: (MediaId, String?) -> Unit = { id, mediaName ->
                     if (browseBackStack.lastOrNull() !is BrowseDetailRoute) {
