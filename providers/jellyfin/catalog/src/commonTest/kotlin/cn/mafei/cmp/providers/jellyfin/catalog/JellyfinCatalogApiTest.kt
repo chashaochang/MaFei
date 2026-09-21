@@ -141,6 +141,22 @@ class JellyfinCatalogApiTest {
     }
 
     @Test
+    fun personDetailUsesTheNameEndpoint() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            """{"Name":"Bob Actor","Id":"person-actor","Type":"Person","ImageTags":{"Primary":"actor-tag"}}""",
+            base,
+        )
+
+        val person = fixture.api.person("Bob Actor")
+
+        assertEquals("person-actor", person.id)
+        assertEquals("actor-tag", person.imageTags["Primary"])
+        assertEquals("/Persons/Bob%20Actor", fixture.transport.requests.single().url.encodedPath)
+    }
+
+    @Test
     fun seasonsAndEpisodesBindPagedRequests() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, JellyfinFixtures.SEASONS, base)

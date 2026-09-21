@@ -288,7 +288,11 @@ private fun PersonWorkSection(
         )
         Spacer(Modifier.height(12.dp))
         LazyRow(
-            Modifier.fillMaxWidth().height(194.dp),
+            // ArkUI's 194vp list did not clip BaseItemCard's trailing text,
+            // while Compose measures the explicit 19sp/17sp line heights and
+            // the card's 8dp bottom breathing room into the row. Allocate the
+            // card's real 206dp height so the subtitle remains fully visible.
+            Modifier.fillMaxWidth().height(206.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item { Spacer(Modifier.width(8.dp)) }

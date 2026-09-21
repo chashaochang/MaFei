@@ -222,10 +222,15 @@ class MediaRepository(
         }
     }
 
-    suspend fun person(session: MediaSession, id: MediaId, refresh: Boolean = false): MediaLoad<MediaPerson> {
+    suspend fun person(
+        session: MediaSession,
+        id: MediaId,
+        name: String,
+        refresh: Boolean = false,
+    ): MediaLoad<MediaPerson> {
         val key = PersonKey(session, id)
         return load(session, key, people, refresh) { adapter ->
-            adapter.person(id).also {
+            adapter.person(id, name).also {
                 if (it.id != id) throw ProtocolDecodingError("Person detail returned a different identity")
                 if (it.serverId != session.serverId || it.provider != session.provider) {
                     throw ProtocolDecodingError("Person detail returned a foreign provider/server identity")

@@ -73,6 +73,9 @@ interface JellyfinCatalogApi {
      */
     suspend fun item(userId: String, itemId: String): BaseItemDto
 
+    /** Person detail via GET /Persons/{name}. */
+    suspend fun person(name: String): BaseItemDto
+
     suspend fun seasons(userId: String, seriesId: String, fields: List<ItemField> = emptyList()): QueryResultDto<BaseItemDto>
 
     suspend fun episodes(
@@ -168,6 +171,12 @@ class DefaultJellyfinCatalogApi(
     override suspend fun item(userId: String, itemId: String): BaseItemDto =
         client.executeDecoding(
             JellyfinRequests.itemById(client.config.baseUrl, userId, itemId),
+            BaseItemDto.serializer(),
+        )
+
+    override suspend fun person(name: String): BaseItemDto =
+        client.executeDecoding(
+            JellyfinRequests.personByName(client.config.baseUrl, name),
             BaseItemDto.serializer(),
         )
 

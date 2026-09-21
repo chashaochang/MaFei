@@ -257,6 +257,18 @@ data object JellyfinRequests {
             .build()
             .let { url -> request(HttpMethod.Get, url).build() }
 
+    /**
+     * Jellyfin's person-specific lookup. Some 10.11 servers do not complete
+     * GET /Items/{personId}, while this endpoint remains the authoritative
+     * person detail route.
+     */
+    fun personByName(base: HttpUrl, name: String): HttpRequest =
+        base.newBuilder()
+            .addPathSegments("Persons")
+            .addPathSegment(name)
+            .build()
+            .let { url -> request(HttpMethod.Get, url).build() }
+
     /** Official endpoint: GET /Shows/{seriesId}/Seasons?userId=... */
     fun seasons(base: HttpUrl, userId: String, seriesId: String, fields: List<ItemField> = emptyList()): HttpRequest =
         base.newBuilder()

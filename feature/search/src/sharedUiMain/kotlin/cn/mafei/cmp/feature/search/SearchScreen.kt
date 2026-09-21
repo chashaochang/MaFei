@@ -223,18 +223,11 @@ fun SearchScreen(
                             LegacyEmptyView(modifier = Modifier.weight(1f))
                         } else {
                             val gap = if (layout.gridWidthDp < 320f) 12.dp else 16.dp
-                            val innerPadding = when {
-                                layout.gridWidthDp < 320f -> 8.dp
-                                layout.gridWidthDp < 600f -> 12.dp
-                                else -> 0.dp
-                            }
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(legacyMediaColumns(layout.gridWidthDp)),
                                 state = gridState,
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(
-                                    start = innerPadding,
-                                    end = innerPadding,
                                     bottom = safeArea.bottom + 30.dp,
                                 ),
                                 horizontalArrangement = Arrangement.spacedBy(gap),
@@ -265,6 +258,7 @@ fun SearchScreen(
             title = "搜索",
             onBack = onBack,
             backdrop = actionBarBackdrop,
+            centerTitleOnScreen = false,
             titleContent = { buttonBackdrop ->
                 SearchField(
                     value = text,
@@ -355,6 +349,9 @@ private fun SearchField(
                                     "搜索影片、剧集和视频",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 16.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             field()
@@ -378,6 +375,8 @@ private fun SearchField(
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false,
                 )
         }
     }

@@ -238,7 +238,7 @@ class MediaRepositoryTest {
     @Test fun collectionsAndDetailsUseSeparateTypedCaches() = runTest {
         val a = StubAdapter(); val r = testRepository(FixedEpochClock()); val s = r.open(a)
         r.collections(s); r.collections(s); r.item(s, MediaId("m")); r.item(s, MediaId("m"))
-        r.person(s, MediaId("p")); r.person(s, MediaId("p"))
+        r.person(s, MediaId("p"), "Person"); r.person(s, MediaId("p"), "Person")
         assertEquals(3, a.calls)
     }
 

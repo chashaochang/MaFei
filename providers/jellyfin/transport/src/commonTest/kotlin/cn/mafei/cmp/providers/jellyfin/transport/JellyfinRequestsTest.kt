@@ -53,6 +53,13 @@ class JellyfinRequestsTest {
     }
 
     @Test
+    fun personLookupUsesThePersonNameRoute() {
+        val request = JellyfinRequests.personByName(base, "Bob Actor / Guest")
+        assertEquals("https://jellyfin.test/Persons/Bob%20Actor%20%2F%20Guest", urlOf(request).toString())
+        assertEquals(JellyfinRequestMode.AUTHENTICATED, request.attributes[JellyfinRequestMode.ATTRIBUTE])
+    }
+
+    @Test
     fun userImageUsesTheOfficialUserImageEndpoint() {
         assertEquals(
             "https://jellyfin.test/UserImage?userId=u1&imageType=Primary&tag=t1",

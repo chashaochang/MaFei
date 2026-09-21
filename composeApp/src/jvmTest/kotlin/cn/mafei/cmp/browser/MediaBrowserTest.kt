@@ -462,7 +462,7 @@ class MediaBrowserTest {
         }
         val b = browser(a)
 
-        b.openPerson(MediaId("person"))
+        b.openPerson(MediaId("person"), "Actor")
         assertEquals("Actor", b.state.value.person?.name)
         assertEquals(listOf("Movie"), b.state.value.personMovies.map { it.title })
         assertEquals(listOf("Series"), b.state.value.personSeries.map { it.title })
@@ -487,7 +487,7 @@ class MediaBrowserTest {
         }
         val b = browser(a)
 
-        b.openPerson(MediaId("person"))
+        b.openPerson(MediaId("person"), "Actor")
         val person = b.state.value.person
         val movies = b.state.value.personMovies
         val series = b.state.value.personSeries

@@ -79,6 +79,14 @@ interface MediaProviderAdapter {
     suspend fun person(id: MediaId): MediaPerson =
         throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose person details")
 
+    /**
+     * Person detail with the credited display name preserved from the source
+     * item. Providers whose person endpoint is id-based keep the default;
+     * Jellyfin uses the name-specific endpoint on servers where item lookup
+     * does not complete for person ids.
+     */
+    suspend fun person(id: MediaId, name: String): MediaPerson = person(id)
+
     /** Media credited to one person, used by the legacy actor detail page. */
     suspend fun itemsByPerson(personId: MediaId, request: PageRequest): Page<MediaItem> =
         throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose person catalog queries")

@@ -88,6 +88,7 @@ fun MaFeiActionBar(
     materialAlpha: Float = 1f,
     titleAlpha: Float = 1f,
     contentColor: Color = Color.Unspecified,
+    centerTitleOnScreen: Boolean = true,
     titleContent: (@Composable BoxScope.(buttonBackdrop: GlassBackdrop) -> Unit)? = null,
     actions: @Composable RowScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
 ) {
@@ -115,6 +116,7 @@ fun MaFeiActionBar(
         // 单行 64dp 的 10dp 内边距，否则按钮会压到第二行的标题上。
         verticalInset = if (stackedTitle) (MaFeiTopChromeHeightDp - 44.dp) / 2
         else MaFeiActionBarVerticalInsetDp,
+        centerTitleOnScreen = centerTitleOnScreen,
         stackedTitle = stackedTitle,
         navigation = onBack?.let { back ->
             { buttonBackdrop ->

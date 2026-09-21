@@ -86,6 +86,7 @@ import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiNavItem
+import cn.mafei.cmp.common.ui.LegacyPosterPlaceholder
 import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaImage
@@ -149,6 +150,8 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -382,7 +385,10 @@ private data class BrowseDetailRoute(
 ) : BrowseRoute
 
 @Serializable
-private data class BrowsePersonRoute(val personId: String) : BrowseRoute
+private data class BrowsePersonRoute(
+    val personId: String,
+    val personName: String,
+) : BrowseRoute
 
 @Serializable
 private data class BrowseSeasonRoute(
@@ -758,6 +764,7 @@ private fun BrowseContent(
     val favoriteGridState = rememberLazyGridState()
     val libraryGridState = rememberLazyGridState()
     val searchGridState = rememberLazyGridState()
+    var searchJob by remember(session) { mutableStateOf<Job?>(null) }
     var searchHistories by remember(session) { mutableStateOf(emptyList<String>()) }
     var accountConnections by remember(session) { mutableStateOf(emptyList<SavedConnection>()) }
     var accountsLoading by remember(session) { mutableStateOf(false) }
@@ -1146,7 +1153,16 @@ private fun BrowseContent(
                                     onRetryLoadMore = { scope.launch { browser.retryLoadMoreHistory() } },
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
-                                        MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
+                                        MediaArtwork(
+                                            item.preferredPoster(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
+                                        )
                                     },
                                 )
                             }
@@ -1591,7 +1607,11 @@ private fun BrowseContent(
                                 else -> Unit
                             }
                         }
-                        BrowseSearchRoute -> browser.clearSearch()
+                        BrowseSearchRoute -> {
+                            searchJob?.cancel()
+                            searchJob = null
+                            browser.clearSearch()
+                        }
                         else -> Unit
                     }
                     if (browseBackStack.size > 1) browseBackStack.removeLastOrNull()
@@ -1607,10 +1627,10 @@ private fun BrowseContent(
                 }
                 val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->
                     person.id?.let { id ->
-                        val route = BrowsePersonRoute(id.value)
+                        val route = BrowsePersonRoute(id.value, person.name)
                         if (browseBackStack.lastOrNull() != route) {
                             browseBackStack += route
-                            scope.launch { browser.openPerson(id) }
+                            scope.launch { browser.openPerson(id, person.name) }
                         }
                     }
                 }
@@ -1782,7 +1802,16 @@ private fun BrowseContent(
                                     bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
-                                        MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
+                                        MediaArtwork(
+                                            item.preferredPoster(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
+                                        )
                                     },
                                 )
                             }
@@ -1797,15 +1826,22 @@ private fun BrowseContent(
                                     gridState = searchGridState,
                                     onBack = popBrowseRoute,
                                     onQueryChange = { term ->
-                                        scope.launch {
-                                            searchGridState.scrollToItem(0)
-                                            browser.search(term)
+                                        searchJob?.cancel()
+                                        searchJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                            if (browser.search(term) && searchGridState.layoutInfo.totalItemsCount > 0) {
+                                                searchGridState.scrollToItem(0)
+                                            }
                                         }
                                     },
                                     onSubmit = { term ->
-                                        scope.launch {
-                                            searchGridState.scrollToItem(0)
-                                            if (browser.search(term)) recordSearchHistory(term)
+                                        searchJob?.cancel()
+                                        searchJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                            if (browser.search(term)) {
+                                                if (searchGridState.layoutInfo.totalItemsCount > 0) {
+                                                    searchGridState.scrollToItem(0)
+                                                }
+                                                recordSearchHistory(term)
+                                            }
                                         }
                                     },
                                     onRecordHistory = recordSearchHistory,
@@ -1824,7 +1860,16 @@ private fun BrowseContent(
                                     onOpen = { item -> openDetail(item, null) },
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
-                                        MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
+                                        MediaArtwork(
+                                            item.preferredPoster(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
+                                        )
                                     },
                                 )
                             }
@@ -1883,7 +1928,16 @@ private fun BrowseContent(
                                     bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
-                                        MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier)
+                                        MediaArtwork(
+                                            item.preferredPoster(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
+                                        )
                                     },
                                 )
                             }
@@ -2006,7 +2060,11 @@ private fun BrowseContent(
                                     loading = state.personLoading,
                                     error = state.personError,
                                     onBack = popBrowseRoute,
-                                    onRetry = { scope.launch { browser.openPerson(MediaId(route.personId)) } },
+                                    onRetry = {
+                                        scope.launch {
+                                            browser.openPerson(MediaId(route.personId), route.personName)
+                                        }
+                                    },
                                     onItem = { item ->
                                         openDetail(
                                             item,
@@ -2034,6 +2092,9 @@ private fun BrowseContent(
                                             artworkCache,
                                             fetchArtwork,
                                             modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
                                             targetWidthPx = 360,
                                         )
                                     },

@@ -446,7 +446,7 @@ class JellyfinAdapterCatalogTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, PERSON_JSON)
 
-        val person = fixture.adapter.person(MediaId("person-actor"))
+        val person = fixture.adapter.person(MediaId("person-actor"), "Bob Actor")
 
         assertEquals("Bob Actor", person.name)
         assertEquals("Actor, Bob", person.sortName)
@@ -456,6 +456,7 @@ class JellyfinAdapterCatalogTest {
         assertEquals(4, person.episodeCount)
         assertTrue(person.isFavorite)
         assertTrue(person.image!!.url.contains("/Items/person-actor/Images/Primary?tag=actor-tag"))
+        assertTrue(fixture.transport.requests.single().url.encodedPath.endsWith("/Persons/Bob%20Actor"))
     }
 
     @Test

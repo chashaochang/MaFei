@@ -47,6 +47,12 @@ fun LiquidActionBar(
     barHeight: Dp = 64.dp,
     verticalInset: Dp = 8.dp,
     /**
+     * Ordinary page titles stay centred against the whole window. Controls
+     * such as the search field instead consume the space between the actual
+     * leading/trailing buttons, matching the legacy action-bar row.
+     */
+    centerTitleOnScreen: Boolean = true,
+    /**
      * Tab（中屏）形态下的二级页面头部：**双倍高**，第一行放返回/操作（与顶部 Tab 条
      * 同一行的高度与缩进），第二行放居中标题。规格见导航重构：中屏二级页导航栏高度
      * = 2 × 顶部导航栏高度，返回与 Tab 一行、标题在下一行。
@@ -134,8 +140,14 @@ fun LiquidActionBar(
                     Box(Modifier.align(Alignment.TopStart)) { navigation(buttonBackdrop) }
                 }
                 Box(
-                    Modifier.align(Alignment.TopCenter).fillMaxWidth().height(44.dp)
-                        .padding(horizontal = titleReservation),
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                        .height(if (centerTitleOnScreen) 44.dp else 48.dp)
+                        .padding(
+                            start = if (centerTitleOnScreen) titleReservation
+                            else (navigationWidth + if (navigation == null) 0f else 12f).dp,
+                            end = if (centerTitleOnScreen) titleReservation
+                            else (actionsWidth + if (resolvedActionCount == 0) 0f else 12f).dp,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     title(buttonBackdrop)

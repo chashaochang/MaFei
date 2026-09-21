@@ -692,7 +692,7 @@ class MediaBrowser(
     }
 
     /** Legacy CastDetailViewModel: detail first, then three independent ten-item work lists in parallel. */
-    suspend fun openPerson(id: MediaId) {
+    suspend fun openPerson(id: MediaId, name: String) {
         val operation = ++personTicket
         mutableState.value = state.value.copy(
             personId = id,
@@ -706,7 +706,7 @@ class MediaBrowser(
             personFavoriteBusy = false,
         )
         try {
-            val loaded = repository.person(session, id, refresh = true)
+            val loaded = repository.person(session, id, name, refresh = true)
             if (operation != personTicket) return
             mutableState.value = state.value.copy(
                 person = loaded.value,

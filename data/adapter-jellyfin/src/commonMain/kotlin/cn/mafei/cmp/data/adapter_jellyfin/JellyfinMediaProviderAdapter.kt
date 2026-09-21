@@ -275,7 +275,11 @@ class JellyfinMediaProviderAdapter(
             ?: throw ResourceNotFoundError(resource = "jellyfin item $id")
 
     override suspend fun person(id: MediaId): MediaPerson =
-        translate { facade.catalog.item(jellyfinUserId, id.value) }.toMediaPerson(serverId, ::imageUrl)
+        throw ClientConfigError("Jellyfin person detail requires the credited name")
+
+    override suspend fun person(id: MediaId, name: String): MediaPerson =
+        translate { facade.catalog.person(name) }.toMediaPerson(serverId, ::imageUrl)
+            ?.takeIf { it.id == id }
             ?: throw ResourceNotFoundError(resource = "jellyfin person $id")
 
     override suspend fun itemsByPerson(personId: MediaId, request: PageRequest): Page<MediaItem> {
