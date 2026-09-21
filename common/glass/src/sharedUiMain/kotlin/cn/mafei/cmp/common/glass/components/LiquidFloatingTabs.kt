@@ -9,14 +9,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -29,6 +33,7 @@ fun LiquidFloatingTabs(
 ) {
     val listState = rememberLazyListState()
     val animationScope = rememberCoroutineScope()
+    val selectionScrollJob = remember { mutableStateOf<Job?>(null) }
 
     LazyRow(
         modifier = modifier.height(40.dp),
@@ -48,7 +53,8 @@ fun LiquidFloatingTabs(
             LiquidButton(
                 onClick = {
                     onSelected(index)
-                    animationScope.launch {
+                    selectionScrollJob.value?.cancel()
+                    selectionScrollJob.value = animationScope.launch {
                         var item = listState.layoutInfo.visibleItemsInfo
                             .firstOrNull { it.index == index }
                         if (item == null) {
@@ -72,12 +78,14 @@ fun LiquidFloatingTabs(
                 horizontalPadding = 14.dp,
             ) {
                 BasicText(
-                    label,
+                    text = label,
                     style = TextStyle(
                         color = contentColor,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

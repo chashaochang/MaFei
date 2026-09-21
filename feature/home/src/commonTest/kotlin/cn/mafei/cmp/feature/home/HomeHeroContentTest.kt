@@ -91,6 +91,108 @@ class HomeHeroContentTest {
     }
 
     @Test
+    fun floatingTabsStayHiddenUntilTheStickyAnchorIsMeasured() {
+        assertEquals(
+            HomeFloatingTabsPlacement(
+                visible = false,
+                pinned = false,
+                topPx = 48,
+                anchorIndex = null,
+            ),
+            resolveHomeFloatingTabsPlacement(
+                anchorOffsetY = null,
+                anchorIndex = null,
+                inlineInsetPx = 16,
+                stickyTopPx = 48,
+            ),
+        )
+    }
+
+    @Test
+    fun floatingTabsFollowTheirNaturalStickyHeaderPosition() {
+        assertEquals(
+            HomeFloatingTabsPlacement(
+                visible = true,
+                pinned = false,
+                topPx = 256,
+                anchorIndex = 4,
+            ),
+            resolveHomeFloatingTabsPlacement(
+                anchorOffsetY = 240,
+                anchorIndex = 4,
+                inlineInsetPx = 16,
+                stickyTopPx = 48,
+            ),
+        )
+    }
+
+    @Test
+    fun floatingTabsClampToOnePinnedPosition() {
+        assertEquals(
+            HomeFloatingTabsPlacement(
+                visible = true,
+                pinned = true,
+                topPx = 48,
+                anchorIndex = 4,
+            ),
+            resolveHomeFloatingTabsPlacement(
+                anchorOffsetY = 0,
+                anchorIndex = 4,
+                inlineInsetPx = 16,
+                stickyTopPx = 48,
+            ),
+        )
+    }
+
+    @Test
+    fun shortHomeFeedGetsOnlyTheMissingStickyHeight() {
+        assertEquals(
+            322f,
+            homeLatestFeedFillHeightDp(
+                minimumHeightDp = 600f,
+                contentWidthDp = 320f,
+                columns = 2,
+                columnGapDp = 8f,
+                rowGapDp = 20f,
+                itemCount = 2,
+                emptyContentHeightDp = 96f,
+            ),
+        )
+    }
+
+    @Test
+    fun longHomeFeedDoesNotAddBlankTail() {
+        assertEquals(
+            0f,
+            homeLatestFeedFillHeightDp(
+                minimumHeightDp = 600f,
+                contentWidthDp = 320f,
+                columns = 2,
+                columnGapDp = 8f,
+                rowGapDp = 20f,
+                itemCount = 6,
+                emptyContentHeightDp = 96f,
+            ),
+        )
+    }
+
+    @Test
+    fun emptyHomeFeedStillKeepsTheStickyHeaderStable() {
+        assertEquals(
+            504f,
+            homeLatestFeedFillHeightDp(
+                minimumHeightDp = 600f,
+                contentWidthDp = 320f,
+                columns = 2,
+                columnGapDp = 8f,
+                rowGapDp = 20f,
+                itemCount = 0,
+                emptyContentHeightDp = 96f,
+            ),
+        )
+    }
+
+    @Test
     fun heroForegroundIsHiddenWhenOnlyTheClippedTailRemains() {
         assertEquals(
             0f,

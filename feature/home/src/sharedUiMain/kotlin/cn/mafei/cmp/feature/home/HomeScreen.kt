@@ -113,6 +113,65 @@ private const val LatestFeedAnchorKey = "home-latest-feed-anchor"
 private val HomeHeroRefreshThreshold = 64.dp
 private val HomeHeroMaxStretch = 160.dp
 private const val HomeHeroStretchResistance = 3f
+private val HomeFloatingTabsInlineInset = 8.dp
+private val HomeFloatingTabsSlotHeight = 56.dp
+private const val HomeFeedCardChromeHeightDp = 44f
+
+internal data class HomeFloatingTabsPlacement(
+    val visible: Boolean,
+    val pinned: Boolean,
+    val topPx: Int,
+    val anchorIndex: Int?,
+)
+
+internal fun resolveHomeFloatingTabsPlacement(
+    anchorOffsetY: Int?,
+    anchorIndex: Int?,
+    inlineInsetPx: Int,
+    stickyTopPx: Int,
+): HomeFloatingTabsPlacement {
+    if (anchorOffsetY == null || anchorIndex == null) {
+        return HomeFloatingTabsPlacement(
+            visible = false,
+            pinned = false,
+            topPx = stickyTopPx,
+            anchorIndex = null,
+        )
+    }
+    val naturalTop = anchorOffsetY + inlineInsetPx
+    val pinned = naturalTop <= stickyTopPx
+    return HomeFloatingTabsPlacement(
+        visible = true,
+        pinned = pinned,
+        topPx = maxOf(stickyTopPx, naturalTop),
+        anchorIndex = anchorIndex,
+    )
+}
+
+internal fun homeLatestFeedFillHeightDp(
+    minimumHeightDp: Float,
+    contentWidthDp: Float,
+    columns: Int,
+    columnGapDp: Float,
+    rowGapDp: Float,
+    itemCount: Int,
+    emptyContentHeightDp: Float,
+    trailingContentHeightDp: Float = 0f,
+): Float {
+    val safeColumns = columns.coerceAtLeast(1)
+    val rows = if (itemCount <= 0) 0 else (itemCount + safeColumns - 1) / safeColumns
+    val availableWidth = (
+        contentWidthDp - columnGapDp.coerceAtLeast(0f) * (safeColumns - 1)
+        ).coerceAtLeast(1f)
+    val cardWidth = availableWidth / safeColumns
+    val estimatedContentHeight = if (rows == 0) {
+        emptyContentHeightDp.coerceAtLeast(0f)
+    } else {
+        rows * (cardWidth * 1.5f + HomeFeedCardChromeHeightDp) +
+            (rows - 1) * rowGapDp.coerceAtLeast(0f)
+    } + trailingContentHeightDp.coerceAtLeast(0f)
+    return (minimumHeightDp - estimatedContentHeight).coerceAtLeast(0f)
+}
 
 private enum class BrowseSortField(val label: String) {
     DateAdded("添加日期"),
@@ -213,7 +272,13 @@ fun HomeScreen(
     var browseSortIndex by rememberSaveable { mutableStateOf(0) }
     var browseDescending by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(collections) {
-        if (selectedFeedKey != RecentFeedKey && collections.none { it.id.value == selectedFeedKey }) {
+        // A refresh can briefly publish an empty collection list. Keep the
+        // current feed through that transient state instead of visibly jumping
+        // back to "最近添加"; reset only after a real collection snapshot exists.
+        if (
+            collections.isNotEmpty() && selectedFeedKey != RecentFeedKey &&
+            collections.none { it.id.value == selectedFeedKey }
+        ) {
             selectedFeedKey = RecentFeedKey
         }
     }
@@ -239,6 +304,7 @@ fun HomeScreen(
             sortBrowseItems(items.distinctByMediaId(), browseSort, browseDescending)
         }
     }
+    val showFeedPlaceholders = (loading || latestFeedLoading) && displayed.isEmpty()
     // 网格列数是**结构度量**：只跟 family/navigation 走，与侧栏展开状态无关。
     // 侧栏收起/展开只把内容整体平移，不重排网格。
     val latestColumns = when (layout.family) {
@@ -305,12 +371,6 @@ fun HomeScreen(
     val selectedFloatingTab = if (selectedFeedKey == RecentFeedKey) 0 else {
         collections.indexOfFirst { it.id.value == selectedFeedKey }.let { if (it < 0) 0 else it + 1 }
     }
-    val latestFeedAnchorIndex = buildList {
-        if (showHeroSlot) add(Unit)
-        if (showStatus) add(Unit)
-        if (overview && overviewHasContent && progressItems.isNotEmpty()) add(Unit)
-        if (overview && overviewHasContent && nextUpItems.isNotEmpty()) add(Unit)
-    }.size
     val density = LocalDensity.current
     val stretchHeroRefresh = overview && showHero && layout.family == MaFeiLayoutFamily.Phone
     val heroRefreshThresholdPx = with(density) { HomeHeroRefreshThreshold.toPx() }
@@ -391,7 +451,7 @@ fun HomeScreen(
     }
     val heroExtraHeight = with(density) { heroStretchPx.floatValue.toDp() }
     val heroRefreshProgress = (heroStretchPx.floatValue / heroRefreshThresholdPx).coerceIn(0f, 1f)
-    val floatingTabsInsetPx = with(density) { 16.dp.roundToPx() }
+    val floatingTabsInsetPx = with(density) { HomeFloatingTabsInlineInset.roundToPx() }
     val floatingTabsStickyTopPx = with(density) {
         when (layout.navigation) {
             NavigationPlacement.Drawer -> 88.dp
@@ -400,17 +460,6 @@ fun HomeScreen(
             NavigationPlacement.Bottom -> safeArea.top + 12.dp
         }.roundToPx()
     }
-    val floatingTabsVisible by remember(
-        gridState,
-        latestFeedAnchorIndex,
-    ) {
-        derivedStateOf {
-            val anchor = gridState.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.key == LatestFeedAnchorKey }
-            val scrolledPastAnchor = gridState.firstVisibleItemIndex > latestFeedAnchorIndex
-            anchor != null || scrolledPastAnchor
-        }
-    }
     // 浮动 feed 切换条（最近添加 / 各媒体库 Tab）是手机与中屏的信息结构。大屏的
     // 常驻导航形态（Sidebar / Rail）改用「最近添加」横向 shelf + 查看更多；侧栏
     // 收起只是让内容区变宽，不改变信息结构 —— Pad 上收起侧栏不允许退回小屏布局。
@@ -418,21 +467,12 @@ fun HomeScreen(
         NavigationPlacement.Drawer, NavigationPlacement.Bottom -> true
         NavigationPlacement.Rail, NavigationPlacement.Sidebar -> false
     }
-    val floatingTabsPinned by remember(
-        gridState,
-        latestFeedAnchorIndex,
-        floatingTabsInsetPx,
-        floatingTabsStickyTopPx,
-    ) {
-        derivedStateOf {
-            val anchor = gridState.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.key == LatestFeedAnchorKey }
-            val scrolledPastAnchor = gridState.firstVisibleItemIndex > latestFeedAnchorIndex
-            val naturalTop = anchor?.let { it.offset.y + floatingTabsInsetPx }
-            scrolledPastAnchor || (naturalTop != null && naturalTop <= floatingTabsStickyTopPx)
-        }
-    }
-    val floatingTabsTopPx = remember(
+    // The real sticky header remains in the lazy grid, so its measured item is
+    // the sole source of truth for visibility, pinning and position. The glass
+    // surface is only a sibling renderer outside the captured scene; it no
+    // longer tries to reconstruct sticky state from a separately maintained
+    // item index.
+    val floatingTabsPlacement by remember(
         gridState,
         floatingTabsInsetPx,
         floatingTabsStickyTopPx,
@@ -440,8 +480,12 @@ fun HomeScreen(
         derivedStateOf {
             val anchor = gridState.layoutInfo.visibleItemsInfo
                 .firstOrNull { it.key == LatestFeedAnchorKey }
-            anchor?.let { maxOf(floatingTabsStickyTopPx, it.offset.y + floatingTabsInsetPx) }
-                ?: floatingTabsStickyTopPx
+            resolveHomeFloatingTabsPlacement(
+                anchorOffsetY = anchor?.offset?.y,
+                anchorIndex = anchor?.index,
+                inlineInsetPx = floatingTabsInsetPx,
+                stickyTopPx = floatingTabsStickyTopPx,
+            )
         }
     }
     val gridScrolling by remember(gridState) { derivedStateOf { gridState.isScrollInProgress } }
@@ -537,6 +581,41 @@ fun HomeScreen(
       // 页面节奏恒定：侧栏让位（240dp）由外壳的 padding 动画统一负责，内容自己的
       // leading 边距始终是 pagePadding —— 展开与收起之间边距不再塌陷。
       val sceneControlLeading = 0.dp
+      val gridStartPadding = if (layout.navigation == NavigationPlacement.Bottom) {
+          safeArea.start + layout.pagePaddingDp.dp
+      } else {
+          layout.pagePaddingDp.dp
+      }
+      val gridEndPadding = layout.pagePaddingDp.dp + safeArea.end
+      val gridBottomPadding = (if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp) +
+          safeArea.bottom + bottomOverlayInset
+      val gridVerticalGap = if (layout.family == MaFeiLayoutFamily.Phone) 20.dp else 16.dp
+      // Match the legacy HomeLatestFeedContent.constraintSize(minHeight): a
+      // short/loading/empty feed must still be tall enough for its sticky
+      // header to remain at the top. Without this tail the lazy grid clamps to
+      // its new, shorter maximum scroll range immediately after a tab switch.
+      val latestFeedMinimumHeight = maxOf(
+          360.dp,
+          maxHeight - (safeArea.top + HomeActionBarHeight) - gridBottomPadding,
+      )
+      val gridContentWidth = (
+          minOf(maxWidth, layout.contentMaxWidthDp.dp) - gridStartPadding - gridEndPadding
+          ).coerceAtLeast(1.dp)
+      val feedVisualItemCount = if (showFeedPlaceholders) HomeLoadingPlaceholderCount else displayed.size
+      val latestFeedFillHeight = if (overview && showFloatingTabs) {
+          homeLatestFeedFillHeightDp(
+              minimumHeightDp = latestFeedMinimumHeight.value,
+              contentWidthDp = gridContentWidth.value,
+              columns = latestColumns,
+              columnGapDp = latestGap.value,
+              rowGapDp = gridVerticalGap.value,
+              itemCount = feedVisualItemCount,
+              emptyContentHeightDp = if (latestFeedError != null) 120f else 96f,
+              trailingContentHeightDp = if (loadingMore) 64f + gridVerticalGap.value else 0f,
+          ).dp
+      } else {
+          0.dp
+      }
       // 首页轮播背景已提升到 shell 的窗口画布（heroBackdropState 同步状态，
       // App.kt 的 background 里绘制）—— 它天然全窗、与侧栏让位无关，scene 里
       // 只保留内容、手势和文字浮层。
@@ -554,12 +633,8 @@ fun HomeScreen(
             modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
             overscrollEffect = null,
             contentPadding = PaddingValues(
-                start = if (layout.navigation == NavigationPlacement.Bottom) {
-                    safeArea.start + layout.pagePaddingDp.dp
-                } else {
-                    layout.pagePaddingDp.dp
-                },
-                end = layout.pagePaddingDp.dp + safeArea.end,
+                start = gridStartPadding,
+                end = gridEndPadding,
                 top = when {
                     overview && layout.family == MaFeiLayoutFamily.Phone && showHeroSlot -> 0.dp
                     overview && layout.family == MaFeiLayoutFamily.Phone -> safeArea.top + 12.dp
@@ -570,11 +645,10 @@ fun HomeScreen(
                     overview -> 0.dp
                     else -> safeArea.top + HomeActionBarHeight + 12.dp
                 },
-                bottom = (if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp) +
-                    safeArea.bottom + bottomOverlayInset,
+                bottom = gridBottomPadding,
             ),
             horizontalArrangement = Arrangement.spacedBy(latestGap),
-            verticalArrangement = Arrangement.spacedBy(if (layout.family == MaFeiLayoutFamily.Phone) 20.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(gridVerticalGap),
         ) {
         if (showHeroSlot) {
             item(key = HomeHeroKey, span = { GridItemSpan(maxLineSpan) }) {
@@ -646,7 +720,7 @@ fun HomeScreen(
                 // tab replaces every media-card key, LazyGrid can retain this
                 // stable first-visible key instead of falling back to the hero.
                 stickyHeader(key = LatestFeedAnchorKey) {
-                    Spacer(Modifier.fillMaxWidth().height(72.dp))
+                    Spacer(Modifier.fillMaxWidth().height(HomeFloatingTabsSlotHeight))
                 }
             }
         } else if (!overview) {
@@ -664,7 +738,6 @@ fun HomeScreen(
             }
         }
 
-        val showFeedPlaceholders = (loading || latestFeedLoading) && displayed.isEmpty()
         if (overview) {
             if (!showFloatingTabs) {
                 // Desktop sidebar layout: "Recently Added" is a horizontal
@@ -827,6 +900,11 @@ fun HomeScreen(
                     }
                 }
             }
+            if (latestFeedFillHeight > 0.dp) {
+                item(key = "home-latest-feed-min-height", span = { GridItemSpan(maxLineSpan) }) {
+                    Spacer(Modifier.fillMaxWidth().height(latestFeedFillHeight))
+                }
+            }
             }
         } else {
             if (showFeedPlaceholders) {
@@ -870,7 +948,7 @@ fun HomeScreen(
       // `floatingTabsBackdrop`，而这个捕获层记录的正是它里面那个 Box 的内容 —— 采样的
       // 节点如果也在被记录的子树里，记录内容就包含"读取自己"，skiko 的 drawable 图会
       // 递归到 native 栈耗尽（Stack Guard）直接 SIGILL。层记录者与其消费者必须是兄弟。
-      if (floatingTabsVisible && floatingTabsPinned && showFloatingTabs) {
+      if (floatingTabsPlacement.visible && floatingTabsPlacement.pinned && showFloatingTabs) {
           Box(
               Modifier.align(Alignment.TopCenter)
                   .fillMaxWidth()
@@ -884,23 +962,20 @@ fun HomeScreen(
                   ),
           )
       }
-      if (overview && overviewHasContent && floatingTabsVisible && showFloatingTabs) {
+      if (overview && overviewHasContent && floatingTabsPlacement.visible && showFloatingTabs) {
           Row(
               modifier = Modifier.align(Alignment.TopCenter)
                   .widthIn(max = layout.contentMaxWidthDp.dp)
                   .fillMaxWidth()
-                  .offset {
-                      val stretchOffset = if (
-                          stretchHeroRefresh && heroStretchPx.floatValue > 0f && !floatingTabsPinned
-                      ) heroStretchPx.floatValue.roundToInt() else 0
-                      IntOffset(0, floatingTabsTopPx.value + stretchOffset)
-                  }
+                  .offset { IntOffset(0, floatingTabsPlacement.topPx) }
                   .padding(
                       start = layout.pagePaddingDp.dp +
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
-                      end = layout.pagePaddingDp.dp + safeArea.end,
+                      // Keep the tab viewport width stable when the search
+                      // action becomes visible at the sticky edge.
+                      end = layout.pagePaddingDp.dp + safeArea.end +
+                          if (onSearch != null) 48.dp else 0.dp,
                   ),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
               verticalAlignment = Alignment.CenterVertically,
           ) {
               LiquidFloatingTabs(
@@ -918,54 +993,56 @@ fun HomeScreen(
                               }
                           }
                       }
-                      // The provider data must not change until the stable
-                      // ListItemGroup-equivalent anchor has reached the sticky
-                      // edge. A relative scrollBy depends on the current
-                      // measurement and CPF/OHOS can apply it to a remeasured
-                      // grid, which restores item zero. Address the invariant
-                      // outer item directly, then defend that anchor across the
-                      // two frames in which the selected feed is replaced.
+                      val anchorIndex = floatingTabsPlacement.anchorIndex
+                          ?: return@LiquidFloatingTabs
+                      // Pin the real sticky item once, then replace the feed.
+                      // Its stable key keeps the grid anchored while poster
+                      // keys change; frame-by-frame corrective scrolls caused
+                      // the visible jump and fast-tap races this path used to
+                      // exhibit.
                       feedSelectionJob.value?.cancel()
                       feedSelectionJob.value = heroRefreshScope.launch {
-                          val pinScrollOffset = (floatingTabsInsetPx - floatingTabsStickyTopPx)
-                              .coerceAtLeast(0)
                           gridState.animateScrollToItem(
-                              index = latestFeedAnchorIndex,
-                              scrollOffset = pinScrollOffset,
+                              index = anchorIndex,
+                              scrollOffset = 0,
                           )
-                          withFrameNanos { }
                           selectFeed()
-                          repeat(2) {
-                              withFrameNanos { }
-                              if (gridState.firstVisibleItemIndex < latestFeedAnchorIndex) {
-                                  gridState.scrollToItem(
-                                      index = latestFeedAnchorIndex,
-                                      scrollOffset = pinScrollOffset,
-                                  )
-                              }
-                          }
+                          // selectedFeedKey replaces every poster key below
+                          // the header. Pin the stable header during that same
+                          // remeasure so LazyGrid never restores an old media
+                          // item and moves the page down after the animation.
+                          gridState.requestScrollToItem(
+                              index = anchorIndex,
+                              scrollOffset = 0,
+                          )
                       }
                   },
                   backdrop = floatingTabsBackdrop,
                   modifier = Modifier.weight(1f),
               )
-              if (floatingTabsPinned && onSearch != null) {
-                  HomeSearchButton(onSearch, floatingTabsBackdrop)
-              }
           }
       }
       if (
-          overview && onSearch != null && !floatingTabsPinned &&
-          layout.navigation == NavigationPlacement.Bottom
+          overview && onSearch != null && showFloatingTabs &&
+          (layout.navigation == NavigationPlacement.Bottom || floatingTabsPlacement.pinned)
       ) {
-          HomeSearchButton(
-              onClick = onSearch,
-              backdrop = floatingTabsBackdrop,
-              modifier = Modifier.align(Alignment.TopEnd).padding(
-                  top = safeArea.top + 12.dp,
-                  end = safeArea.end + layout.pagePaddingDp.dp,
-              ),
-          )
+          Box(
+              Modifier.align(Alignment.TopCenter)
+                  .widthIn(max = layout.contentMaxWidthDp.dp)
+                  .fillMaxWidth()
+                  .offset { IntOffset(0, floatingTabsStickyTopPx) }
+                  .padding(
+                      start = layout.pagePaddingDp.dp +
+                          if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
+                      end = layout.pagePaddingDp.dp + safeArea.end,
+                  ),
+          ) {
+              HomeSearchButton(
+                  onClick = onSearch,
+                  backdrop = floatingTabsBackdrop,
+                  modifier = Modifier.align(Alignment.TopEnd),
+              )
+          }
       }
       if (!overview) {
           MaFeiActionBar(
