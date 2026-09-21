@@ -1,5 +1,12 @@
 package cn.mafei.cmp.feature.detail
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -362,6 +369,7 @@ private fun SeasonActions(
                 LiquidButton(
                     onClick = { if (!playbackBusy) onPlay() },
                     backdrop = backdrop,
+                    isInteractive = !playbackBusy,
                     height = 50.dp,
                     modifier = Modifier.fillMaxSize().semantics {
                         contentDescription = if (remaining.isBlank()) label else "$label $remaining"
@@ -391,7 +399,8 @@ private fun SeasonActions(
         }
         SeasonWatchedAction(
             selected = season.userData.isPlayed,
-            onAction = onTogglePlayed?.takeUnless { actionsBusy },
+            onAction = onTogglePlayed,
+            busy = actionsBusy,
             backdrop = backdrop,
         )
     }
@@ -403,36 +412,52 @@ private fun RowScope.SeasonPlayActionContent(
     remaining: String,
     busy: Boolean,
 ) {
-    if (busy) {
-        CircularProgressIndicator(
-            Modifier.size(18.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-    } else {
-        Image(
-            painter = painterResource(MaFeiLegacyDrawables.playRound),
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            label,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (remaining.isNotBlank()) {
-            Text(
-                remaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
-                    .replace(" 分钟", "分"),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
-                fontSize = 12.sp,
-                maxLines = 1,
-            )
+    AnimatedContent(
+        targetState = Triple(label, remaining, busy),
+        transitionSpec = {
+            fadeIn(tween(DetailMotionFastMillis)) togetherWith
+                fadeOut(tween(DetailMotionExitMillis))
+        },
+        label = "season-play-state",
+    ) { (currentLabel, currentRemaining, isBusy) ->
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                if (isBusy) {
+                    CircularProgressIndicator(
+                        Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(MaFeiLegacyDrawables.playRound),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    currentLabel,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (currentRemaining.isNotBlank()) {
+                    Text(
+                        currentRemaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
+                            .replace(" 分钟", "分"),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }
@@ -441,26 +466,45 @@ private fun RowScope.SeasonPlayActionContent(
 private fun SeasonWatchedAction(
     selected: Boolean,
     onAction: (() -> Unit)?,
+    busy: Boolean,
     backdrop: GlassBackdrop,
 ) {
     val label = if (selected) "标记为未播放" else "标记为已播放"
+    val busyAlpha by animateFloatAsState(
+        targetValue = if (busy) .56f else 1f,
+        animationSpec = tween(DetailMotionFastMillis),
+        label = "season-action-alpha",
+    )
     val content: @Composable () -> Unit = {
-        Image(
-            painter = painterResource(MaFeiLegacyDrawables.watched),
-            contentDescription = null,
-            modifier = Modifier.size(22.dp),
-            colorFilter = ColorFilter.tint(
-                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            ),
-        )
+        AnimatedContent(
+            targetState = selected,
+            transitionSpec = {
+                fadeIn(tween(DetailMotionFastMillis)) togetherWith
+                    fadeOut(tween(DetailMotionExitMillis))
+            },
+            label = "season-watched-selection",
+        ) { isSelected ->
+            Image(
+                painter = painterResource(MaFeiLegacyDrawables.watched),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                colorFilter = ColorFilter.tint(
+                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                ),
+            )
+        }
     }
     if (onAction != null) {
         LiquidButton(
-            onClick = onAction,
+            onClick = { if (!busy) onAction() },
             backdrop = backdrop,
+            isInteractive = !busy,
             height = 44.dp,
             horizontalPadding = 11.dp,
-            modifier = Modifier.width(44.dp).semantics { contentDescription = label },
+            modifier = Modifier.width(44.dp).alpha(busyAlpha).semantics {
+                contentDescription = label
+                if (busy) disabled()
+            },
         ) { content() }
     } else {
         GlassSurface(
@@ -489,6 +533,7 @@ private fun SeasonEpisodeSection(
     backdrop: GlassBackdrop,
 ) {
     var selectedGroup by remember(season.id.value) { mutableIntStateOf(0) }
+    val showLoading = rememberDelayedDetailLoading(loading)
     val groups = remember(episodes) { episodes.chunked(30) }
     val groupLabels = remember(groups) {
         groups.mapIndexed { index, group ->
@@ -497,6 +542,7 @@ private fun SeasonEpisodeSection(
             if (group.size == 1) "$start" else "$start - $end"
         }
     }
+    val selectedEpisodes = groups.getOrNull(selectedGroup).orEmpty()
     LaunchedEffect(groups.size) {
         if (selectedGroup !in groups.indices) selectedGroup = 0
     }
@@ -533,20 +579,40 @@ private fun SeasonEpisodeSection(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
         }
-        if (!loading && groupLabels.size > 1) {
-            Spacer(Modifier.height(12.dp))
-            LiquidFloatingTabs(
-                labels = groupLabels,
-                selectedIndex = selectedGroup,
-                onSelected = { selectedGroup = it },
-                backdrop = backdrop,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            )
+        DetailAnimatedVisibility(
+            visible = !loading && groupLabels.size > 1,
+            enter = fadeIn(tween(DetailMotionEnterMillis)) +
+                slideInVertically(tween(DetailMotionEnterMillis)) { it / 10 },
+            exit = fadeOut(tween(DetailMotionExitMillis)),
+        ) {
+            Column {
+                Spacer(Modifier.height(12.dp))
+                LiquidFloatingTabs(
+                    labels = groupLabels,
+                    selectedIndex = selectedGroup,
+                    onSelected = { selectedGroup = it },
+                    backdrop = backdrop,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
-        when {
-            loading -> SeasonEpisodeSkeletons()
-            groups.isNotEmpty() -> {
+        Box(Modifier.fillMaxWidth().height(184.dp)) {
+            DetailAnimatedVisibility(
+                visible = showLoading,
+                modifier = Modifier.fillMaxSize(),
+                enter = fadeIn(tween(DetailMotionFastMillis)),
+                exit = fadeOut(tween(DetailMotionExitMillis)),
+            ) {
+                SeasonEpisodeSkeletons()
+            }
+            DetailAnimatedVisibility(
+                visible = !loading && groups.isNotEmpty(),
+                modifier = Modifier.fillMaxSize(),
+                enter = fadeIn(tween(DetailMotionEnterMillis)) +
+                    slideInVertically(tween(DetailMotionEnterMillis)) { it / 18 },
+                exit = fadeOut(tween(DetailMotionExitMillis)),
+            ) {
                 val listState = rememberLazyListState()
                 LaunchedEffect(season.id.value, selectedGroup) { listState.scrollToItem(0) }
                 LazyRow(
@@ -555,7 +621,7 @@ private fun SeasonEpisodeSection(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     modifier = Modifier.fillMaxWidth().height(184.dp),
                 ) {
-                    items(groups[selectedGroup], key = { it.id.value }) { episode ->
+                    items(selectedEpisodes, key = { it.id.value }) { episode ->
                         SeasonEpisodeCard(
                             item = episode,
                             artwork = artwork,

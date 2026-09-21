@@ -1,7 +1,14 @@
 package cn.mafei.cmp.feature.detail
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -246,50 +253,66 @@ fun DetailScreen(
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
                 DetailAtmosphere(item, atmosphereArtwork, atmosphereBleed, atmosphereWidth)
             }
-            if (item != null) {
-                DetailBody(
-                    item = item,
-                    scrollState = scrollState,
-                    collapseProgress = collapseProgress,
-                    loading = loading,
-                    error = error,
-                    stale = stale,
-                    onRetry = onRetry,
-                    onPlay = onPlay,
-                    playTarget = playTarget,
-                    playbackBusy = playbackBusy,
-                    onToggleFavorite = onToggleFavorite,
-                    onTogglePlayed = onTogglePlayed,
-                    actionsBusy = actionsBusy,
-                    seasons = seasons,
-                    sectionsLoading = sectionsLoading,
-                    sectionsError = sectionsError,
-                    onSeasonSelected = onSeasonSelected,
-                    playbackSources = playbackSources,
-                    onOpenExternalUrl = onOpenExternalUrl,
-                    selectedMediaSourceId = selectedMediaSourceId,
-                    onSelectMediaSource = onSelectMediaSource,
-                    selectedAudioStreamIndex = selectedAudioStreamIndex,
-                    onSelectAudioTrack = onSelectAudioTrack,
-                    selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
-                    onSelectSubtitleTrack = onSelectSubtitleTrack,
-                    pickerKind = pickerKind,
-                    onOpenPicker = { pickerKind = it },
-                    libraryName = libraryName,
-                    contentMaxWidth = detailContentMaxWidth,
-                    artwork = artwork,
-                    backdropArtwork = backdropArtwork,
-                    logoArtwork = logoArtwork,
-                    personArtwork = personArtwork,
-                    onPersonSelected = onPersonSelected,
-                    onOpenOverview = { overviewSheetVisible = true },
-                    onOpenMediaInfo = { mediaInfoSheetVisible = true },
-                    backdrop = backdrop,
-                    heroExtraHeight = heroStretch.extraHeight,
-                    heroScrollConnection = heroStretch.connection,
-                )
-            } else {
-                DetailState(loading, error, onRetry)
+            AnimatedContent(
+                targetState = item != null,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    (fadeIn(tween(DetailMotionEnterMillis)) +
+                        slideInVertically(tween(DetailMotionEnterMillis)) { it / 40 }) togetherWith
+                        fadeOut(tween(DetailMotionExitMillis))
+                },
+                contentKey = { it },
+                label = "detail-content",
+            ) { hasItem ->
+                if (hasItem) {
+                    item?.let { loadedItem ->
+                        Box(Modifier.fillMaxSize()) {
+                            DetailBody(
+                                item = loadedItem,
+                                scrollState = scrollState,
+                                collapseProgress = collapseProgress,
+                                loading = loading,
+                                error = error,
+                                stale = stale,
+                                onRetry = onRetry,
+                                onPlay = onPlay,
+                                playTarget = playTarget,
+                                playbackBusy = playbackBusy,
+                                onToggleFavorite = onToggleFavorite,
+                                onTogglePlayed = onTogglePlayed,
+                                actionsBusy = actionsBusy,
+                                seasons = seasons,
+                                sectionsLoading = sectionsLoading,
+                                sectionsError = sectionsError,
+                                onSeasonSelected = onSeasonSelected,
+                                playbackSources = playbackSources,
+                                onOpenExternalUrl = onOpenExternalUrl,
+                                selectedMediaSourceId = selectedMediaSourceId,
+                                onSelectMediaSource = onSelectMediaSource,
+                                selectedAudioStreamIndex = selectedAudioStreamIndex,
+                                onSelectAudioTrack = onSelectAudioTrack,
+                                selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
+                                onSelectSubtitleTrack = onSelectSubtitleTrack,
+                                pickerKind = pickerKind,
+                                onOpenPicker = { pickerKind = it },
+                                libraryName = libraryName,
+                                contentMaxWidth = detailContentMaxWidth,
+                                artwork = artwork,
+                                backdropArtwork = backdropArtwork,
+                                logoArtwork = logoArtwork,
+                                personArtwork = personArtwork,
+                                onPersonSelected = onPersonSelected,
+                                onOpenOverview = { overviewSheetVisible = true },
+                                onOpenMediaInfo = { mediaInfoSheetVisible = true },
+                                backdrop = backdrop,
+                                heroExtraHeight = heroStretch.extraHeight,
+                                heroScrollConnection = heroStretch.connection,
+                            )
+                        }
+                    }
+                } else {
+                    DetailState(loading, error, onRetry)
+                }
             }
         }
 
@@ -438,6 +461,7 @@ private fun BoxScope.DetailBody(
     heroScrollConnection: NestedScrollConnection,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val showRefreshProgress = rememberDelayedDetailLoading(loading)
     val selectedPlaybackSource = playbackSources.firstOrNull { it.id == selectedMediaSourceId }
         ?: playbackSources.firstOrNull()
     // The full-page atmosphere is always media-first and darkened. Downstream
@@ -484,8 +508,14 @@ private fun BoxScope.DetailBody(
                     actionsBusy = actionsBusy,
                     backdrop = backdrop,
                 )
-                if (loading) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                Box(Modifier.fillMaxWidth().height(2.dp)) {
+                    DetailAnimatedVisibility(
+                        visible = showRefreshProgress,
+                        enter = fadeIn(tween(DetailMotionFastMillis)),
+                        exit = fadeOut(tween(DetailMotionExitMillis)),
+                    ) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                    }
                 }
                 if (item.mediaType != MediaType.Series && playbackSources.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
@@ -806,7 +836,8 @@ private fun DetailActions(
             selectedColor = FavoriteColor,
             preserveOriginalColor = item.userData.isFavorite,
             accessibilityLabel = if (item.userData.isFavorite) "取消收藏" else "收藏",
-            onAction = onToggleFavorite?.takeUnless { actionsBusy },
+            onAction = onToggleFavorite,
+            busy = actionsBusy,
             backdrop = backdrop,
         )
         DetailIconAction(
@@ -814,7 +845,8 @@ private fun DetailActions(
             selected = item.userData.isPlayed,
             selectedColor = MaterialTheme.colorScheme.primary,
             accessibilityLabel = if (item.userData.isPlayed) "标记为未播放" else "标记为已播放",
-            onAction = onTogglePlayed?.takeUnless { actionsBusy },
+            onAction = onTogglePlayed,
+            busy = actionsBusy,
             backdrop = backdrop,
         )
     }
@@ -837,6 +869,7 @@ private fun RowScope.DetailPlayAction(
             LiquidButton(
                 onClick = { if (!busy) onPlay() },
                 backdrop = backdrop,
+                isInteractive = !busy,
                 height = 50.dp,
                 horizontalPadding = 0.dp,
                 modifier = Modifier.fillMaxSize().semantics {
@@ -877,33 +910,49 @@ private fun RowScope.DetailPlayAction(
 
 @Composable
 private fun DetailPlayContents(label: String, remaining: String, busy: Boolean) {
-    if (busy) {
-        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurface)
-    } else {
-        Image(
-            painter = painterResource(MaFeiLegacyDrawables.playRound),
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(
-            label,
-            color = Color.White,
-            fontSize = 16.sp,
-            lineHeight = 20.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (remaining.isNotBlank()) {
-            Text(
-                compactRemainingTime(remaining),
-                color = Color.White.copy(alpha = .78f),
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
-                maxLines = 1,
-            )
+    AnimatedContent(
+        targetState = Triple(label, remaining, busy),
+        transitionSpec = {
+            fadeIn(tween(DetailMotionFastMillis)) togetherWith
+                fadeOut(tween(DetailMotionExitMillis))
+        },
+        label = "detail-play-state",
+    ) { (currentLabel, currentRemaining, isBusy) ->
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                if (isBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                } else {
+                    Image(
+                        painter = painterResource(MaFeiLegacyDrawables.playRound),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    currentLabel,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (currentRemaining.isNotBlank()) {
+                    Text(
+                        compactRemainingTime(currentRemaining),
+                        color = Color.White.copy(alpha = .78f),
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }
@@ -916,25 +965,44 @@ private fun DetailIconAction(
     preserveOriginalColor: Boolean = false,
     accessibilityLabel: String,
     onAction: (() -> Unit)?,
+    busy: Boolean,
     backdrop: GlassBackdrop,
 ) {
+    val busyAlpha by animateFloatAsState(
+        targetValue = if (busy) .56f else 1f,
+        animationSpec = tween(DetailMotionFastMillis),
+        label = "detail-action-alpha",
+    )
     val content: @Composable RowScope.() -> Unit = {
-        Image(
-            painter = painterResource(icon),
-            contentDescription = null,
-            modifier = Modifier.size(22.dp),
-            colorFilter = if (selected && preserveOriginalColor) null else ColorFilter.tint(
-                if (selected) selectedColor else Color.White,
-            ),
-        )
+        AnimatedContent(
+            targetState = selected,
+            transitionSpec = {
+                fadeIn(tween(DetailMotionFastMillis)) togetherWith
+                    fadeOut(tween(DetailMotionExitMillis))
+            },
+            label = "detail-action-selection",
+        ) { isSelected ->
+            Image(
+                painter = painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                colorFilter = if (isSelected && preserveOriginalColor) null else ColorFilter.tint(
+                    if (isSelected) selectedColor else Color.White,
+                ),
+            )
+        }
     }
     if (onAction != null) {
         LiquidButton(
-            onClick = onAction,
+            onClick = { if (!busy) onAction() },
             backdrop = backdrop,
+            isInteractive = !busy,
             height = 44.dp,
             horizontalPadding = 11.dp,
-            modifier = Modifier.width(44.dp).semantics { contentDescription = accessibilityLabel },
+            modifier = Modifier.width(44.dp).alpha(busyAlpha).semantics {
+                contentDescription = accessibilityLabel
+                if (busy) disabled()
+            },
             content = content,
         )
     } else {
@@ -1064,44 +1132,60 @@ private fun SeriesSections(
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     onSeasonSelected: (MediaItem) -> Unit,
 ) {
+    val showLoading = rememberDelayedDetailLoading(loading)
     Column(Modifier.fillMaxWidth()) {
-        if (seasons.isNotEmpty()) {
-            if (seasons.size > 1) {
+        DetailAnimatedVisibility(
+            visible = seasons.isNotEmpty(),
+            enter = fadeIn(tween(DetailMotionEnterMillis)) +
+                slideInVertically(tween(DetailMotionEnterMillis)) { it / 16 },
+            exit = fadeOut(tween(DetailMotionExitMillis)),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                if (seasons.size > 1) {
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "共${seasons.size}季",
+                        Modifier.padding(horizontal = 16.dp).semantics { heading() },
+                        fontSize = 15.sp,
+                        lineHeight = 21.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
-                Text(
-                    "共${seasons.size}季",
-                    Modifier.padding(horizontal = 16.dp).semantics { heading() },
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                seasons.chunked(3).forEach { rowSeasons ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowSeasons.forEach { season ->
-                            SeasonCard(
-                                season = season,
-                                artwork = artwork,
-                                onClick = { onSeasonSelected(season) },
-                                modifier = Modifier.weight(1f),
-                            )
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    seasons.chunked(3).forEach { rowSeasons ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowSeasons.forEach { season ->
+                                SeasonCard(
+                                    season = season,
+                                    artwork = artwork,
+                                    onClick = { onSeasonSelected(season) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(3 - rowSeasons.size) { Spacer(Modifier.weight(1f)) }
                         }
-                        repeat(3 - rowSeasons.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
         }
-        if (loading) {
+        DetailAnimatedVisibility(
+            visible = showLoading,
+            enter = fadeIn(tween(DetailMotionFastMillis)),
+            exit = fadeOut(tween(DetailMotionExitMillis)),
+        ) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
         }
-        if (seasons.isEmpty() && error != null) {
+        DetailAnimatedVisibility(
+            visible = seasons.isEmpty() && !loading && error != null,
+            enter = fadeIn(tween(DetailMotionEnterMillis)),
+            exit = fadeOut(tween(DetailMotionExitMillis)),
+        ) {
             Text(
-                error,
+                error.orEmpty(),
                 Modifier.padding(horizontal = 16.dp),
                 color = MaterialTheme.colorScheme.error,
                 fontSize = 12.sp,
@@ -1897,25 +1981,40 @@ internal fun rememberLegacyHeroStretch(scrollState: ScrollState): LegacyHeroStre
 @Composable
 private fun DetailState(loading: Boolean, error: String?, onRetry: () -> Unit) {
     val safeArea = LocalMaFeiSafeArea.current
-    when {
-        loading -> LegacyDetailSkeleton(
-            Modifier.fillMaxSize().padding(
-                start = safeArea.start,
-                top = safeArea.top,
-                end = safeArea.end,
-                bottom = safeArea.bottom,
-            ),
-        )
-        error != null -> Box(
-            Modifier.fillMaxSize().padding(
-                start = safeArea.start + 24.dp,
-                top = safeArea.top + 88.dp,
-                end = safeArea.end + 24.dp,
-                bottom = safeArea.bottom + 24.dp,
-            ),
-            contentAlignment = Alignment.Center,
+    Box(Modifier.fillMaxSize()) {
+        DetailAnimatedVisibility(
+            visible = loading,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(tween(DetailMotionFastMillis)),
+            exit = fadeOut(tween(DetailMotionExitMillis)),
         ) {
-            InlineProblem(error, onRetry)
+            LegacyDetailSkeleton(
+                Modifier.fillMaxSize().padding(
+                    start = safeArea.start,
+                    top = safeArea.top,
+                    end = safeArea.end,
+                    bottom = safeArea.bottom,
+                ),
+            )
+        }
+        DetailAnimatedVisibility(
+            visible = !loading && error != null,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(tween(DetailMotionEnterMillis)) +
+                slideInVertically(tween(DetailMotionEnterMillis)) { it / 24 },
+            exit = fadeOut(tween(DetailMotionExitMillis)),
+        ) {
+            Box(
+                Modifier.fillMaxSize().padding(
+                    start = safeArea.start + 24.dp,
+                    top = safeArea.top + 88.dp,
+                    end = safeArea.end + 24.dp,
+                    bottom = safeArea.bottom + 24.dp,
+                ),
+                contentAlignment = Alignment.Center,
+            ) {
+                InlineProblem(error.orEmpty(), onRetry)
+            }
         }
     }
 }

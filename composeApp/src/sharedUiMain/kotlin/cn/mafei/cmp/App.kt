@@ -2152,6 +2152,7 @@ private fun BrowseContent(
                                     series = state.personSeries,
                                     episodes = state.personEpisodes,
                                     loading = state.personLoading,
+                                    sectionsLoading = state.personSectionsLoading,
                                     error = state.personError,
                                     onBack = popBrowseRoute,
                                     onRetry = {

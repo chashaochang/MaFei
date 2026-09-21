@@ -1,5 +1,12 @@
 package cn.mafei.cmp.feature.detail
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
@@ -79,6 +87,8 @@ fun PersonDetailScreen(
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val showInitialLoading = rememberDelayedDetailLoading(loading && person == null)
+    val showSectionsLoading = rememberDelayedDetailLoading(sectionsLoading)
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
     val scrollState = rememberScrollState()
@@ -98,43 +108,83 @@ fun PersonDetailScreen(
                 Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                     .captureGlassBackdrop(backdrop),
             )
-            if (person == null) {
-                Box(
-                    Modifier.fillMaxSize().padding(
-                        top = safeArea.top + 56.dp,
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = safeArea.bottom,
-                    ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when {
-                        loading -> CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
-                        error != null -> InlineProblem(error, onRetry)
+            AnimatedContent(
+                targetState = person != null,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    (fadeIn(tween(DetailMotionEnterMillis)) +
+                        slideInVertically(tween(DetailMotionEnterMillis)) { it / 40 }) togetherWith
+                        fadeOut(tween(DetailMotionExitMillis))
+                },
+                contentKey = { it },
+                label = "person-detail-content",
+            ) { hasPerson ->
+                if (!hasPerson) {
+                    Box(
+                        Modifier.fillMaxSize().padding(
+                            top = safeArea.top + 56.dp,
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = safeArea.bottom,
+                        ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        DetailAnimatedVisibility(
+                            visible = showInitialLoading,
+                            enter = fadeIn(tween(DetailMotionFastMillis)),
+                            exit = fadeOut(tween(DetailMotionExitMillis)),
+                        ) {
+                            CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                        }
+                        DetailAnimatedVisibility(
+                            visible = !loading && error != null,
+                            enter = fadeIn(tween(DetailMotionEnterMillis)) +
+                                slideInVertically(tween(DetailMotionEnterMillis)) { it / 24 },
+                            exit = fadeOut(tween(DetailMotionExitMillis)),
+                        ) {
+                            InlineProblem(error.orEmpty(), onRetry)
+                        }
                     }
-                }
-            } else {
-                Column(
-                    Modifier.fillMaxWidth().verticalScroll(scrollState)
-                        .padding(top = safeArea.top + 56.dp, bottom = safeArea.bottom + 30.dp),
-                ) {
-                    PersonHeader(
-                        person = person,
-                        artwork = personArtwork,
-                        canFavorite = canFavorite,
-                        favoriteBusy = favoriteBusy,
-                        onToggleFavorite = onToggleFavorite,
-                        onOpenOverview = { overviewSheetVisible = true },
-                        backdrop = backdrop,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                            .widthIn(max = 720.dp).fillMaxWidth(),
-                    )
-                    PersonWorkSection("电影", movies, onItem, artwork)
-                    PersonWorkSection("电视剧", series, onItem, artwork)
-                    PersonWorkSection("剧集", episodes, onItem, artwork)
-                    if (error != null && !loading) {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
-                            InlineProblem(error, onRetry)
+                } else {
+                    person?.let { loadedPerson ->
+                        Column(
+                            Modifier.fillMaxWidth().verticalScroll(scrollState)
+                                .padding(top = safeArea.top + 56.dp, bottom = safeArea.bottom + 30.dp),
+                        ) {
+                            PersonHeader(
+                                person = loadedPerson,
+                                artwork = personArtwork,
+                                canFavorite = canFavorite,
+                                favoriteBusy = favoriteBusy,
+                                onToggleFavorite = onToggleFavorite,
+                                onOpenOverview = { overviewSheetVisible = true },
+                                backdrop = backdrop,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                                    .widthIn(max = 720.dp).fillMaxWidth(),
+                            )
+                            Box(Modifier.fillMaxWidth().height(2.dp)) {
+                                DetailAnimatedVisibility(
+                                    visible = showSectionsLoading,
+                                    enter = fadeIn(tween(DetailMotionFastMillis)),
+                                    exit = fadeOut(tween(DetailMotionExitMillis)),
+                                ) {
+                                    androidx.compose.material3.LinearProgressIndicator(
+                                        Modifier.fillMaxWidth().height(2.dp),
+                                    )
+                                }
+                            }
+                            PersonWorkSectionAnimated("电影", movies, onItem, artwork)
+                            PersonWorkSectionAnimated("电视剧", series, onItem, artwork)
+                            PersonWorkSectionAnimated("剧集", episodes, onItem, artwork)
+                            DetailAnimatedVisibility(
+                                visible = error != null && !loading,
+                                enter = fadeIn(tween(DetailMotionEnterMillis)),
+                                exit = fadeOut(tween(DetailMotionExitMillis)),
+                            ) {
+                                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
+                                    InlineProblem(error.orEmpty(), onRetry)
+                                }
+                            }
                         }
                     }
                 }
@@ -171,6 +221,12 @@ private fun PersonHeader(
     modifier: Modifier = Modifier,
 ) {
     val imageShape = RoundedCornerShape(12.dp)
+    val showFavoriteProgress = rememberDelayedDetailLoading(favoriteBusy, delayMillis = 100L)
+    val favoriteAlpha by animateFloatAsState(
+        targetValue = if (favoriteBusy) .62f else 1f,
+        animationSpec = tween(DetailMotionFastMillis),
+        label = "person-favorite-alpha",
+    )
     Row(
         modifier.height(200.dp)
             // The CMP product follows the legacy Native-theme branch (System
@@ -238,26 +294,60 @@ private fun PersonHeader(
                 isInteractive = canFavorite && !favoriteBusy && onToggleFavorite != null,
                 height = 50.dp,
                 horizontalPadding = 14.dp,
-                modifier = Modifier.size(50.dp),
+                modifier = Modifier.size(50.dp).alpha(favoriteAlpha),
             ) {
-                Image(
-                    painter = painterResource(
-                        if (person.isFavorite) {
-                            MaFeiLegacyDrawables.favoriteSelected
-                        } else {
-                            MaFeiLegacyDrawables.favoriteUnselected
-                        },
-                    ),
-                    contentDescription = if (person.isFavorite) "取消收藏" else "收藏",
-                    modifier = Modifier.size(22.dp),
-                    colorFilter = if (person.isFavorite) {
-                        null // 选中时保留原色（红心）
-                    } else {
-                        ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
+                AnimatedContent(
+                    targetState = showFavoriteProgress to person.isFavorite,
+                    transitionSpec = {
+                        fadeIn(tween(DetailMotionFastMillis)) togetherWith
+                            fadeOut(tween(DetailMotionExitMillis))
                     },
-                )
+                    label = "person-favorite-state",
+                ) { (showProgress, isFavorite) ->
+                    if (showProgress) {
+                        CircularProgressIndicator(
+                            Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(
+                                if (isFavorite) {
+                                    MaFeiLegacyDrawables.favoriteSelected
+                                } else {
+                                    MaFeiLegacyDrawables.favoriteUnselected
+                                },
+                            ),
+                            contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                            modifier = Modifier.size(22.dp),
+                            colorFilter = if (isFavorite) {
+                                null // 选中时保留原色（红心）
+                            } else {
+                                ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
+                            },
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PersonWorkSectionAnimated(
+    title: String,
+    items: List<MediaItem>,
+    onItem: (MediaItem) -> Unit,
+    artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+) {
+    DetailAnimatedVisibility(
+        visible = items.isNotEmpty(),
+        enter = fadeIn(tween(DetailMotionEnterMillis)) +
+            slideInVertically(tween(DetailMotionEnterMillis)) { it / 18 },
+        exit = fadeOut(tween(DetailMotionExitMillis)),
+    ) {
+        PersonWorkSection(title, items, onItem, artwork)
     }
 }
 
