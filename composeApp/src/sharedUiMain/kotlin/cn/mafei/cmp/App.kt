@@ -1531,6 +1531,10 @@ private fun BrowseContent(
             }
         }
         val activeMedia = playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
+        // The floating mini player is the legacy MusicMiniPlayer. Video keeps
+        // using the full player surface, but must not reserve music chrome or
+        // appear above the app navigation after playback starts.
+        val musicMiniPlayerMedia = activeMedia?.takeIf { it.mediaType == MediaType.Audio }
         val recordSearchHistory: (String) -> Unit = { raw ->
             val term = raw.trim()
             if (term.isNotEmpty()) {
@@ -1635,7 +1639,7 @@ private fun BrowseContent(
             // With no active media there is nothing to merge into, so page
             // scrolling must leave the primary navigation at full size.
             bottomNavigationCompactProgress = {
-                if (activeMedia != null) chromeCompactProgress.value else 0f
+                if (musicMiniPlayerMedia != null) chromeCompactProgress.value else 0f
             },
             // 一级页面的标题随内容滚走，滚过状态栏后顶部才浮现毛玻璃。二级页面
             // （详情/设置/搜索）自带头部，头部材质由各页自己的 collapseProgress 驱动，
@@ -1796,7 +1800,7 @@ private fun BrowseContent(
                                     onLoadMore = { scope.launch { browser.loadMore() } },
                                     onOpenLibrary = { selectDestination(LibraryDestination) },
                                     onSearch = openSearch,
-                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     gridState = homeGridState,
                                     artwork = { item, modifier ->
@@ -1849,7 +1853,7 @@ private fun BrowseContent(
                                     layout = layout,
                                     onCollection = browseCollection,
                                     onRetry = { scope.launch { browser.refresh() } },
-                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -1861,7 +1865,7 @@ private fun BrowseContent(
                                     onRetry = { scope.launch { chasingBrowser.refresh() } },
                                     onPlay = startPlayback,
                                     onOpenSeries = { id -> openDetailId(id, "电视节目") },
-                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
@@ -1902,7 +1906,7 @@ private fun BrowseContent(
                                     onRetry = { scope.launch { browser.refreshFavorites() } },
                                     onLoadMore = { scope.launch { browser.loadMoreFavorites() } },
                                     onItem = { item -> openDetail(item, "收藏") },
-                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
@@ -2028,7 +2032,7 @@ private fun BrowseContent(
                                             pendingDeleteMedia = librarySelectedIds.map { MediaId(it) }
                                         }
                                     },
-                                    bottomOverlayInset = if (activeMedia != null) 76.dp else 0.dp,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
@@ -2462,7 +2466,7 @@ private fun BrowseContent(
             },
             overlay = { backdrop ->
                 val safeArea = cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea.current
-                val media = activeMedia
+                val media = musicMiniPlayerMedia
                 val playerController = playback?.controller
                 if (media != null && playerController != null && !showingDetail) {
                     BoundLiquidMiniPlayer(
