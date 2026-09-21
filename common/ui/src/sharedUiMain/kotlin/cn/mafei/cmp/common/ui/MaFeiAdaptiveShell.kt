@@ -407,7 +407,7 @@ fun MaFeiAdaptiveShell(
                     start = safeArea.start + 18.dp,
                     end = safeArea.end + 18.dp,
                     top = 14.dp,
-                    bottom = safeArea.bottom + 14.dp,
+                    bottom = safeArea.bottom,
                 )
                     .widthIn(max = 430.dp).fillMaxWidth(),
             )
