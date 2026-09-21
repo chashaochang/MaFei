@@ -1,5 +1,7 @@
 package cn.mafei.cmp.common.media
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +48,7 @@ class ArtworkMemoryCache {
         fetch: suspend (MediaImage, Int) -> ByteArray?,
     ): ImageBitmap? {
         val width = targetWidthPx.coerceIn(MinArtworkWidthPx, MaxArtworkWidthPx)
-        val key = "${image.url}#w=$width"
+        val key = artworkCacheKey(image.url, width)
         cached(key)?.let { return it }
         // Multiple visible consumers (hero + ambient continuation) share one
         // request/decode. Lock by URL rather than width so a missing image does
@@ -93,6 +95,27 @@ class ArtworkMemoryCache {
                     urlLoadGates.remove(image.url)
                 }
             }
+        }
+    }
+
+    /**
+     * Fast UI-thread cache probe used only to avoid a one-frame placeholder
+     * flash when a recycled card already has its bitmap in memory. A contended
+     * cache simply falls back to the normal suspending load path.
+     */
+    internal fun peek(candidates: List<MediaImage>, targetWidthPx: Int): ImageBitmap? {
+        if (!mutex.tryLock()) return null
+        return try {
+            val width = targetWidthPx.coerceIn(MinArtworkWidthPx, MaxArtworkWidthPx)
+            for (candidate in candidates) {
+                val key = artworkCacheKey(candidate.url, width)
+                val hit = images.remove(key) ?: continue
+                images[key] = hit
+                return hit
+            }
+            null
+        } finally {
+            mutex.unlock()
         }
     }
 
@@ -230,9 +253,12 @@ private fun MediaArtworkContent(
     fallback: (@Composable (Modifier) -> Unit)?,
     requestedWidthPx: Int,
 ) {
-    val bitmap by produceState<ImageBitmap?>(null, candidates, cache, requestedWidthPx) {
-        value = null
-        if (candidates.isNotEmpty()) {
+    val cachedBitmap = remember(candidates, cache, requestedWidthPx) {
+        cache.peek(candidates, requestedWidthPx)
+    }
+    val bitmap by produceState<ImageBitmap?>(cachedBitmap, candidates, cache, requestedWidthPx) {
+        value = cachedBitmap
+        if (value == null && candidates.isNotEmpty()) {
             // Match the legacy retry budget while allowing a known-good
             // alternate image to win immediately after a 404/decode miss.
             for (attempt in 0..ArtworkRetryCount) {
@@ -252,16 +278,23 @@ private fun MediaArtworkContent(
         }
     }
     val loaded = bitmap
-    if (loaded == null) {
-        if (fallback == null) TextPoster(title, modifier)
-        else fallback(modifier)
-    } else {
-        Image(
-            loaded,
-            contentDescription = null,
-            modifier = modifier,
-            contentScale = contentScale,
-        )
+    Crossfade(
+        targetState = loaded,
+        modifier = modifier,
+        animationSpec = tween(180),
+        label = "artwork-reveal",
+    ) { artwork ->
+        if (artwork == null) {
+            if (fallback == null) TextPoster(title, Modifier.fillMaxSize())
+            else fallback(Modifier.fillMaxSize())
+        } else {
+            Image(
+                artwork,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = contentScale,
+            )
+        }
     }
 }
 
@@ -344,6 +377,8 @@ private fun artworkWidthBucket(widthPx: Int): Int = when {
     widthPx <= 720 -> 720
     else -> 960
 }
+
+private fun artworkCacheKey(url: String, widthPx: Int): String = "$url#w=$widthPx"
 
 private const val MinArtworkWidthPx = 96
 private const val MaxArtworkWidthPx = 960

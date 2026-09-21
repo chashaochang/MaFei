@@ -1,5 +1,12 @@
 package cn.mafei.cmp.player.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -8,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,6 +24,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +36,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +70,18 @@ fun LiquidMiniPlayer(
 ) {
     if (!presentation.isVisible) return
 
+    var entered by remember(media.id) { mutableStateOf(false) }
+    LaunchedEffect(media.id) { entered = true }
+    val entrance = animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(180),
+        label = "mini-player-entrance",
+    )
+    val smoothProgress = animateFloatAsState(
+        targetValue = presentation.progress.coerceIn(0f, 1f),
+        animationSpec = tween(360, easing = LinearEasing),
+        label = "mini-player-progress",
+    )
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
     val contentColor = if (isLightTheme) Color.Black else Color.White
     val secondaryColor = contentColor.copy(alpha = .58f)
@@ -64,7 +91,12 @@ fun LiquidMiniPlayer(
         presentation.status.takeIf { it.isNotBlank() },
     ).joinToString(" · ")
 
-    BoxWithConstraints(modifier) {
+    BoxWithConstraints(
+        modifier.graphicsLayer {
+            alpha = entrance.value
+            translationY = (1f - entrance.value) * 8.dp.toPx()
+        },
+    ) {
         val progress = compactProgress().fastCoerceIn(0f, 1f)
         val compactWidth = min(maxWidth.value, 248f).dp
         val playerWidth = maxWidth + (compactWidth - maxWidth) * progress
@@ -120,24 +152,28 @@ fun LiquidMiniPlayer(
                     }
                 }
             }
-            if (presentation.progress > 0f) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(horizontal = 12.dp)
-                        .width((playerWidth - 24.dp) * presentation.progress)
-                        .height(2.dp)
-                        .clip(Capsule())
-                        .semantics {
-                            contentDescription = presentation.status
-                            progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(
-                                presentation.progress,
-                                0f..1f,
-                            )
-                        },
-                ) {
-                    Canvas(Modifier.fillMaxSize()) { drawRect(primaryColor) }
-                }
+            Canvas(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 12.dp)
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .clip(Capsule())
+                    .semantics {
+                        contentDescription = presentation.status
+                        progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(
+                            presentation.progress,
+                            0f..1f,
+                        )
+                    },
+            ) {
+                drawRect(
+                    color = primaryColor,
+                    size = androidx.compose.ui.geometry.Size(
+                        width = size.width * smoothProgress.value,
+                        height = size.height,
+                    ),
+                )
             }
         }
     }
@@ -175,13 +211,25 @@ private fun PlayPauseGlyph(isPlaying: Boolean, color: Color) {
 
 @Composable
 private fun BusyGlyph(color: Color) {
+    val transition = rememberInfiniteTransition(label = "mini-player-busy")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "mini-player-busy-rotation",
+    )
     Canvas(Modifier.size(22.dp)) {
-        drawArc(
-            color = color,
-            startAngle = -80f,
-            sweepAngle = 250f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(2.5.dp.toPx(), cap = StrokeCap.Round),
-        )
+        rotate(rotation) {
+            drawArc(
+                color = color,
+                startAngle = -80f,
+                sweepAngle = 250f,
+                useCenter = false,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(2.5.dp.toPx(), cap = StrokeCap.Round),
+            )
+        }
     }
 }

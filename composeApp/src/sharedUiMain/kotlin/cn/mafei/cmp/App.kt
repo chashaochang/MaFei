@@ -153,12 +153,84 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
 
 val LocalApplicationRuntime = staticCompositionLocalOf<ApplicationRuntime> {
     error("Application runtime is not installed")
+}
+
+/**
+ * Only state that changes application-level routing/chrome.
+ *
+ * Player progress arrives every 250-500 ms. Collecting the complete
+ * [PlayerState] in [BrowseApplication] used to recompose the whole browse
+ * tree for every progress tick even though only the player surfaces consume
+ * position/buffer data.
+ */
+private data class PlayerShellState(
+    val phase: PlayerPhase = PlayerPhase.Idle,
+    val resourceId: String? = null,
+)
+
+@Composable
+private fun BoundNowPlayingScreen(
+    media: NowPlayingMedia,
+    controller: PlayerController,
+    onBack: () -> Unit,
+    onTogglePlay: () -> Unit,
+    onRetry: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onSpeed: (Float) -> Unit,
+    onSelectTrack: (cn.mafei.cmp.player.api.TrackKind, String?) -> Unit,
+    playerSurface: @Composable (PlayerController, Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Keep the 250-500 ms progress stream inside the player subtree. The
+    // application shell only observes the low-frequency phase/resource pair.
+    val state by controller.state.collectAsState()
+    NowPlayingScreen(
+        media = media,
+        state = state,
+        capabilities = controller.capabilities,
+        onBack = onBack,
+        onTogglePlay = onTogglePlay,
+        onRetry = onRetry,
+        onSeek = onSeek,
+        onSpeed = onSpeed,
+        onSelectTrack = onSelectTrack,
+        videoSurface = { surfaceModifier -> playerSurface(controller, surfaceModifier) },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun BoundLiquidMiniPlayer(
+    media: MiniPlayerMedia,
+    controller: PlayerController,
+    backdrop: GlassBackdrop,
+    onOpen: () -> Unit,
+    onTogglePlay: () -> Unit,
+    compactProgress: () -> Float,
+    artwork: @Composable (Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Mini-player progress is another high-frequency consumer and must not
+    // invalidate Home/Library/Detail while playback advances.
+    val state by controller.state.collectAsState()
+    LiquidMiniPlayer(
+        media = media,
+        presentation = state.toMiniPlayerPresentation(),
+        backdrop = backdrop,
+        onOpen = onOpen,
+        onTogglePlay = onTogglePlay,
+        compactProgress = compactProgress,
+        artwork = artwork,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -784,7 +856,20 @@ private fun BrowseContent(
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
     }
     val playback = remember(session) { runtime.playback(session) }
-    val playerState = if (playback == null) PlayerState() else playback.controller.state.collectAsState().value
+    val playerShellState = if (playback == null) {
+        PlayerShellState()
+    } else {
+        val shellState = remember(playback) {
+            playback.controller.state
+                .map { PlayerShellState(phase = it.phase, resourceId = it.resourceId) }
+                .distinctUntilChanged()
+        }
+        shellState.collectAsState(
+            initial = playback.controller.state.value.let {
+                PlayerShellState(phase = it.phase, resourceId = it.resourceId)
+            },
+        ).value
+    }
     var playingMedia by remember(session) { mutableStateOf<MediaItem?>(null) }
     var playbackBusy by remember(session) { mutableStateOf(false) }
     var playbackError by remember(session) { mutableStateOf<String?>(null) }
@@ -893,9 +978,9 @@ private fun BrowseContent(
         browser.refreshAdministratorStatus()
     }
     LaunchedEffect(state.detailId) { playbackError = null }
-    LaunchedEffect(playerState.phase) {
-        if (playerState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
-        if (playerState.phase == PlayerPhase.Idle || playerState.phase == PlayerPhase.Released) {
+    LaunchedEffect(playerShellState.phase) {
+        if (playerShellState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
+        if (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released) {
             playerExpanded = false
         }
     }
@@ -1423,7 +1508,7 @@ private fun BrowseContent(
         val togglePlayback: () -> Unit = {
             scope.launch {
                 try {
-                    when (playerState.phase) {
+                    when (playback?.controller?.state?.value?.phase ?: PlayerPhase.Idle) {
                         PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
                         PlayerPhase.Ended, PlayerPhase.Error -> playingMedia?.let(startPlayback)
                         PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
@@ -1436,7 +1521,7 @@ private fun BrowseContent(
                 }
             }
         }
-        val activeMedia = playingMedia?.takeIf { it.id.value == playerState.resourceId }
+        val activeMedia = playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
         val recordSearchHistory: (String) -> Unit = { raw ->
             val term = raw.trim()
             if (term.isNotEmpty()) {
@@ -1473,15 +1558,14 @@ private fun BrowseContent(
             ),
         ) {
         if (playerExpanded && activeMedia != null && playback != null) {
-            NowPlayingScreen(
+            BoundNowPlayingScreen(
                 media = NowPlayingMedia(
                     id = activeMedia.id.value,
                     title = activeMedia.title,
                     subtitle = activeMedia.miniPlayerSubtitle(),
                     description = activeMedia.overview,
                 ),
-                state = playerState,
-                capabilities = playback.controller.capabilities,
+                controller = playback.controller,
                 onBack = { playerExpanded = false },
                 onTogglePlay = togglePlayback,
                 onRetry = { startPlayback(activeMedia) },
@@ -1508,9 +1592,7 @@ private fun BrowseContent(
                         }
                     }
                 },
-                videoSurface = { modifier ->
-                    playerSurface(playback.controller, modifier)
-                },
+                playerSurface = playerSurface,
                 modifier = Modifier.fillMaxSize(),
             )
         } else MaFeiAdaptiveShell(
@@ -2371,14 +2453,15 @@ private fun BrowseContent(
             overlay = { backdrop ->
                 val safeArea = cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea.current
                 val media = activeMedia
-                if (media != null && !showingDetail) {
-                    LiquidMiniPlayer(
+                val playerController = playback?.controller
+                if (media != null && playerController != null && !showingDetail) {
+                    BoundLiquidMiniPlayer(
                         media = MiniPlayerMedia(
                             id = media.id.value,
                             title = media.title,
                             subtitle = media.miniPlayerSubtitle(),
                         ),
-                        presentation = playerState.toMiniPlayerPresentation(),
+                        controller = playerController,
                         backdrop = backdrop,
                         onOpen = { playerExpanded = true },
                         onTogglePlay = togglePlayback,

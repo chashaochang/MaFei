@@ -3,8 +3,14 @@ package cn.mafei.cmp.player.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -138,6 +144,7 @@ fun NowPlayingScreen(
     var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var longPressSpeedActive by remember(media.id, state.generation) { mutableStateOf(false) }
     var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
+    var busyVisible by remember(media.id, state.generation) { mutableStateOf(false) }
 
     LaunchedEffect(state.positionMs, draggingSlider) {
         if (!draggingSlider) sliderPositionMs = state.positionMs.coerceAtLeast(0L)
@@ -146,6 +153,16 @@ fun NowPlayingScreen(
         if (controlsVisible && panel == PlayerChromePanel.None && !locked && state.phase == PlayerPhase.Playing) {
             delay(PlayerAutoHideDelayMs)
             controlsVisible = false
+        }
+    }
+    LaunchedEffect(presentation.isBusy, state.generation) {
+        if (presentation.isBusy) {
+            // Avoid flashing a spinner when prepare/buffer completes inside one
+            // or two frames; longer waits still receive a deliberate entrance.
+            delay(160)
+            busyVisible = true
+        } else {
+            busyVisible = false
         }
     }
 
@@ -326,16 +343,26 @@ fun NowPlayingScreen(
             PlayerSeekFeedback(target, durationMs ?: 1L, Modifier.align(Alignment.Center))
         }
 
-        if (presentation.isBusy && state.phase != PlayerPhase.Error) {
+        AnimatedVisibility(
+            visible = busyVisible && state.phase != PlayerPhase.Error,
+            enter = fadeIn(tween(160)) + scaleIn(tween(180), initialScale = .92f),
+            exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 1.04f),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
             CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center).size(40.dp),
+                modifier = Modifier.size(40.dp),
                 color = Color.White,
                 strokeWidth = 3.dp,
             )
         }
 
-        if (presentation.showRetry) {
-            PlayerError(onRetry, Modifier.align(Alignment.Center))
+        AnimatedVisibility(
+            visible = presentation.showRetry,
+            enter = fadeIn(tween(180)) + scaleIn(tween(200), initialScale = .94f),
+            exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = .98f),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            PlayerError(onRetry)
         }
 
         if (panel != PlayerChromePanel.None) {
@@ -633,7 +660,20 @@ private fun LegacyPlayerSeekBar(
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     var dragValue by remember { mutableLongStateOf(valueMs) }
+    var directManipulation by remember { mutableStateOf(false) }
     val total = totalMs?.coerceAtLeast(1L) ?: 1L
+    val valueFraction = (valueMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
+    val bufferedFraction = (bufferedMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
+    val displayedValueFraction by animateFloatAsState(
+        targetValue = valueFraction,
+        animationSpec = if (directManipulation) snap() else tween(300, easing = LinearEasing),
+        label = "player-progress",
+    )
+    val displayedBufferedFraction by animateFloatAsState(
+        targetValue = bufferedFraction,
+        animationSpec = tween(420, easing = LinearEasing),
+        label = "player-buffered-progress",
+    )
     fun valueFor(x: Float): Long = if (size.width <= 0) valueMs else {
         (total.toDouble() * (x / size.width.toFloat()).coerceIn(0f, 1f)).roundToLong()
     }
@@ -643,15 +683,18 @@ private fun LegacyPlayerSeekBar(
             .pointerInput(enabled, total, size) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
+                    directManipulation = true
                     val target = valueFor(offset.x)
                     onValueChanged(target)
                     onSeek(target)
+                    directManipulation = false
                 }
             }
             .pointerInput(enabled, total, size) {
                 if (!enabled) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
+                        directManipulation = true
                         onDraggingChanged(true)
                         dragValue = valueFor(offset.x)
                         onValueChanged(dragValue)
@@ -661,8 +704,12 @@ private fun LegacyPlayerSeekBar(
                         dragValue = valueFor(change.position.x)
                         onValueChanged(dragValue)
                     },
-                    onDragCancel = { onDraggingChanged(false) },
+                    onDragCancel = {
+                        directManipulation = false
+                        onDraggingChanged(false)
+                    },
                     onDragEnd = {
+                        directManipulation = false
                         onDraggingChanged(false)
                         onSeek(dragValue)
                     },
@@ -672,8 +719,6 @@ private fun LegacyPlayerSeekBar(
         val centerY = size.height / 2f
         val trackHeight = 4.dp.toPx()
         val radius = trackHeight / 2f
-        val valueFraction = (valueMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
-        val bufferedFraction = (bufferedMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
         drawRoundRect(
             color = Color(0x66FFFFFF),
             topLeft = Offset(0f, centerY - radius),
@@ -683,18 +728,18 @@ private fun LegacyPlayerSeekBar(
         drawRoundRect(
             color = Color(0xA6FFFFFF),
             topLeft = Offset(0f, centerY - radius),
-            size = Size(size.width * bufferedFraction, trackHeight),
+            size = Size(size.width * displayedBufferedFraction, trackHeight),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius),
         )
         drawRoundRect(
             color = Color.White,
             topLeft = Offset(0f, centerY - radius),
-            size = Size(size.width * valueFraction, trackHeight),
+            size = Size(size.width * displayedValueFraction, trackHeight),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius),
         )
         if (enabled && size.width > 0f) {
             val diameter = thumbDiameter.dp.toPx()
-            val thumbX = valueFraction * (size.width - diameter) + diameter / 2f
+            val thumbX = displayedValueFraction * (size.width - diameter) + diameter / 2f
             drawCircle(Color.White, diameter / 2f, Offset(thumbX, centerY))
         }
     }
