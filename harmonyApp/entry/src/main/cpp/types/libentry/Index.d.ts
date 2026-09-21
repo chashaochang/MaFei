@@ -13,3 +13,5 @@ export const UpdateOhosWindowInsets: (
   right: number,
   bottom: number
 ) => void
+
+export const IsOhosPlayerScreenVisible: () => boolean

@@ -8,6 +8,8 @@ const DOMAIN = 0x4D46;
 
 export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window;
+  private orientationPoller?: number;
+  private requestedOrientation?: window.Orientation;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -16,8 +18,36 @@ export default class EntryAbility extends UIAbility {
   private windowSizeChangeCallback = (_size: window.Size): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
+      this.applyOrientationPolicy(this.mainWindow);
     }
   };
+
+  private isCompactDisplay(windowClass: window.Window): boolean {
+    const currentDisplay = display.getDefaultDisplaySync();
+    const widthVp = this.pxToVp(windowClass, currentDisplay.width);
+    const heightVp = this.pxToVp(windowClass, currentDisplay.height);
+    return Math.min(widthVp, heightVp) < 600;
+  }
+
+  private applyOrientationPolicy(windowClass: window.Window): void {
+    const orientation = this.isCompactDisplay(windowClass)
+      ? (nativeApi.IsOhosPlayerScreenVisible() ? window.Orientation.AUTO_ROTATION : window.Orientation.PORTRAIT)
+      : window.Orientation.UNSPECIFIED;
+    if (orientation === this.requestedOrientation) return;
+    this.requestedOrientation = orientation;
+    windowClass.setPreferredOrientation(orientation).catch((error: Object) => {
+      if (this.requestedOrientation === orientation) this.requestedOrientation = undefined;
+      hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to apply orientation policy: %{public}s', JSON.stringify(error));
+    });
+  }
+
+  private startOrientationPolicy(windowClass: window.Window): void {
+    this.applyOrientationPolicy(windowClass);
+    if (this.orientationPoller !== undefined) clearInterval(this.orientationPoller);
+    this.orientationPoller = setInterval(() => {
+      if (this.mainWindow === windowClass) this.applyOrientationPolicy(windowClass);
+    }, 200);
+  }
 
   private resolveDensity(windowClass: window.Window): number {
     try {
@@ -116,6 +146,7 @@ export default class EntryAbility extends UIAbility {
       const createdWindow = windowStage.getMainWindowSync();
       mainWindow = createdWindow;
       this.mainWindow = createdWindow;
+      this.startOrientationPolicy(createdWindow);
       createdWindow.on('avoidAreaChange', this.avoidAreaChangeCallback);
       createdWindow.on('windowSizeChange', this.windowSizeChangeCallback);
       createdWindow.setWindowSystemBarProperties({
@@ -150,6 +181,11 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    if (this.orientationPoller !== undefined) {
+      clearInterval(this.orientationPoller);
+      this.orientationPoller = undefined;
+    }
+    this.requestedOrientation = undefined;
     const mainWindow = this.mainWindow;
     this.mainWindow = undefined;
     if (!mainWindow) return;

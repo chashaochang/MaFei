@@ -92,6 +92,17 @@ static napi_value UpdateWindowInsets(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value GetPlayerScreenVisible(napi_env env, napi_callback_info info) {
+    size_t count = 0;
+    if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
+        napi_throw_type_error(env, nullptr, "No arguments are accepted");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, IsOhosPlayerScreenVisible(), &result);
+    return result;
+}
+
 EXTERN_C_START
 static napi_value Init(napi_env env, napi_value exports) {
     androidx_compose_ui_arkui_init(env, exports);
@@ -111,6 +122,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "UpdateOhosWindowInsets",
             nullptr,
             UpdateWindowInsets,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "IsOhosPlayerScreenVisible",
+            nullptr,
+            GetPlayerScreenVisible,
             nullptr,
             nullptr,
             nullptr,

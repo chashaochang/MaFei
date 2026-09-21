@@ -240,6 +240,7 @@ fun App(
     playerSurface: @Composable (PlayerController, Modifier) -> Unit = { _, modifier ->
         Box(modifier.background(Color.Black))
     },
+    onPlayerScreenChanged: (Boolean) -> Unit = {},
 ) {
     val sessionState by runtime.sessions.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -316,6 +317,7 @@ fun App(
                                             session = session,
                                             busy = busy,
                                             playerSurface = playerSurface,
+                                            onPlayerScreenChanged = onPlayerScreenChanged,
                                             onLogout = {
                                                 if (!busy) {
                                                     busy = true
@@ -797,6 +799,7 @@ private fun BrowseContent(
     session: ApplicationSession,
     busy: Boolean,
     playerSurface: @Composable (PlayerController, Modifier) -> Unit,
+    onPlayerScreenChanged: (Boolean) -> Unit,
     onLogout: () -> Unit,
 ) {
     val browser = remember(session) {
@@ -877,6 +880,12 @@ private fun BrowseContent(
         session.selection.serverId.value,
         session.selection.accountId.value,
     ) { mutableStateOf(false) }
+    DisposableEffect(playerExpanded, onPlayerScreenChanged) {
+        onPlayerScreenChanged(playerExpanded)
+        onDispose {
+            if (playerExpanded) onPlayerScreenChanged(false)
+        }
+    }
     var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
     // Apple presents the account surface above the current document instead of
     // navigating away from it. "我的" therefore opens a modal sheet; the browse

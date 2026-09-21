@@ -33,6 +33,11 @@ import platform.PerformanceAnalysisKit.HiLog.LOG_ERROR
 import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
 
 private val ohosWindowFeatures = mutableStateOf(MaFeiWindowFeatures())
+private var ohosPlayerScreenVisible = false
+
+@OptIn(ExperimentalNativeApi::class)
+@CName("IsOhosPlayerScreenVisible")
+fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("UpdateOhosWindowInsets")
@@ -138,7 +143,12 @@ fun MainArkUIViewController(
             LocalNavigationEventDispatcherOwner provides navigationOwner,
             LocalMaFeiWindowFeatures provides windowFeatures,
         ) {
-            App(runtime)
+            App(
+                runtime = runtime,
+                onPlayerScreenChanged = { visible ->
+                    ohosPlayerScreenVisible = visible
+                },
+            )
         }
     }
 } catch (_: Exception) {
