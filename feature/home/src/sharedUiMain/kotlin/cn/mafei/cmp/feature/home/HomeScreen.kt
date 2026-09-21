@@ -971,10 +971,13 @@ fun HomeScreen(
                   .padding(
                       start = layout.pagePaddingDp.dp +
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
-                      // Keep the tab viewport width stable when the search
-                      // action becomes visible at the sticky edge.
+                      // The inline strip is lower in the list while search
+                      // remains in the top chrome, so it owns the full row.
+                      // Reserve the search hit area only after the strip pins
+                      // beside it; reserving it unconditionally clipped the
+                      // inline strip's right edge by 48dp.
                       end = layout.pagePaddingDp.dp + safeArea.end +
-                          if (onSearch != null) 48.dp else 0.dp,
+                          if (onSearch != null && floatingTabsPlacement.pinned) 48.dp else 0.dp,
                   ),
               verticalAlignment = Alignment.CenterVertically,
           ) {
