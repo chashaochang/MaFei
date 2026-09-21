@@ -1,6 +1,7 @@
 import { ArkUIViewController, Compose } from '@cpf-kmp-cmp/compose';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import nativeApi from 'libentry.so';
+import { registerMaFeiPlayerInteropBuilder } from '../player/PlayerInterop';
 import {
   captureLegacyAccountSnapshot,
   captureLegacyCmpSettings
@@ -33,6 +34,10 @@ struct Index {
         context.applicationInfo.name
       );
       const legacyCmpSettings = captureLegacyCmpSettings(context);
+      // Register the native mfplayer surface before CPF creates any ArkUIView
+      // interop nodes. Compose owns the player chrome; this builder owns only
+      // the old HarmonyOS video surface and decoder.
+      registerMaFeiPlayerInteropBuilder();
       this.controller = nativeApi.MainArkUIViewController(
         context.filesDir,
         context.applicationInfo.name,

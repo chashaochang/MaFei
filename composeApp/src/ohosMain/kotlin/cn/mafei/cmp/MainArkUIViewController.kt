@@ -86,6 +86,7 @@ fun MainArkUIViewController(
                 settings = settings,
             ),
             createOhosHttpTransport(),
+            playerRuntimeFactory = { createOhosPlayerRuntime() },
             legacySnapshotReader = LegacySnapshotPayloadReader.create(legacyPayload),
             failureReporter = { stage, failure ->
                 val diagnostic = if (failure is IllegalStateException) {
@@ -145,6 +146,9 @@ fun MainArkUIViewController(
         ) {
             App(
                 runtime = runtime,
+                playerSurface = { controller, modifier ->
+                    OhosPlayerSurface(controller, modifier)
+                },
                 onPlayerScreenChanged = { visible ->
                     ohosPlayerScreenVisible = visible
                 },

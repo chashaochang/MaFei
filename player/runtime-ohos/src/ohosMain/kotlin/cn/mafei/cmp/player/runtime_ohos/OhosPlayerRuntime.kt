@@ -31,6 +31,15 @@ interface OhosAvPlayerBridge {
      * Failed(UnsupportedMedia)) instead of silently dropping them.
      */
     fun loadUrl(handle: Long, url: String, headers: Map<String, String>)
+
+    /**
+     * Loads a source and, when present, attaches one externally delivered
+     * subtitle URL. The three-argument overload remains the compatibility
+     * entry point for existing bridge implementations and tests.
+     */
+    fun loadUrl(handle: Long, url: String, headers: Map<String, String>, subtitleUrl: String?) {
+        loadUrl(handle, url, headers)
+    }
     fun play(handle: Long)
     fun pause(handle: Long)
     fun stop(handle: Long)
@@ -212,7 +221,12 @@ class OhosPlayerRuntime(
             ),
         )
         try {
-            bridge.loadUrl(player, command.resource.url, command.resource.headers)
+            bridge.loadUrl(
+                player,
+                command.resource.url,
+                command.resource.headers,
+                command.resource.subtitleUrl,
+            )
         } catch (failure: UnsupportedOperationException) {
             markEnded()
             sink.value?.invoke(RuntimeEvent.Failed(command.generation, PlayerFailure.UnsupportedMedia))
