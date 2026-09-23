@@ -1021,6 +1021,75 @@ class MediaBrowserTest {
         assertNull(cold.state.value.homeError)
         assertFalse(cold.state.value.homeStale)
     }
+
+    // ------------------------------------------------ playback queue from home
+
+    @Test fun queueForAnEpisodeFromHomeLoadsTheSeasonItNeverOpened() = runBlocking<Unit> {
+        val a = Adapter()
+        val series = MediaId("series-1")
+        val season = MediaId("season-1")
+        val episodes = listOf(1, 2, 3).map { number ->
+            a.media("e$number").copy(
+                mediaType = MediaType.Episode,
+                seriesId = series,
+                seasonId = season,
+                episodeNumber = number,
+                canPlay = true,
+            )
+        }
+        a.episodeFetch = { _, _, _ -> Page(episodes) }
+        val b = browser(a)
+
+        // 首页「继续观看」直接起播：详情页从没打开过，这一季的集一次都没取过。
+        // 不补拉的话，同一部剧从首页播就没有「选集」也没有「下一集」。
+        val queue = b.playbackQueueFor(episodes[1])
+
+        assertEquals(listOf("e1", "e2", "e3"), queue.items.map { it.id.value })
+        assertEquals("e2", queue.current.id.value)
+        assertTrue(queue.hasNext)
+        assertTrue(queue.hasPrevious)
+        assertEquals(series, a.episodeRequests.single().first)
+        assertEquals(season, a.episodeRequests.single().second)
+    }
+
+    @Test fun queueForAnEpisodeWithoutASeriesStaysSingleItem() = runBlocking<Unit> {
+        val a = Adapter()
+        a.episodeFetch = { _, _, _ -> error("没有剧集归属的条目不该去拉集列表") }
+        val b = browser(a)
+
+        val orphan = a.media("lonely").copy(mediaType = MediaType.Episode, episodeNumber = 1, canPlay = true)
+        val queue = b.playbackQueueFor(orphan)
+
+        assertEquals(listOf("lonely"), queue.items.map { it.id.value })
+        assertTrue(a.episodeRequests.isEmpty())
+    }
+
+    @Test fun queueReusesTheSeasonTheDetailPageAlreadyLoaded() = runBlocking<Unit> {
+        val a = Adapter()
+        val series = MediaId("series-1")
+        val season = MediaId("season-1")
+        val episodes = listOf(1, 2).map { number ->
+            a.media("e$number").copy(
+                mediaType = MediaType.Episode,
+                seriesId = series,
+                seasonId = season,
+                episodeNumber = number,
+                canPlay = true,
+            )
+        }
+        a.detail = { a.media(it.value).copy(mediaType = MediaType.Series) }
+        a.seasonFetch = { Page(listOf(a.media("season-1").copy(mediaType = MediaType.Season))) }
+        a.episodeFetch = { _, _, _ -> Page(episodes) }
+        val b = browser(a)
+        b.openDetail(series)
+
+        val loaded = a.episodeRequests.size
+        val queue = b.playbackQueueFor(episodes[1])
+
+        assertEquals(listOf("e1", "e2"), queue.items.map { it.id.value })
+        // 详情页已经把这一季加载过了：起播不该再拉一遍。
+        assertEquals(loaded, a.episodeRequests.size)
+    }
 }
 
 /** Minimal in-memory [SettingsStorage] for the home snapshot persistence tests. */

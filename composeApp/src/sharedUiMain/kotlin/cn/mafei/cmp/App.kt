@@ -1250,12 +1250,13 @@ private fun BrowseContent(
                 playbackError = null
                 playingMedia = item
                 playerExpanded = true
-                // 队列：已在队列里的条目只移动指针（选集/下一集/上一集），否则按当前
-                // 浏览上下文重建（详情页/季详情点播放）。
                 val existing = playQueue?.takeIf { queue -> queue.items.any { it.id == item.id } }
-                playQueue = existing?.movedTo(item.id) ?: browser.playbackQueueFor(item)
                 scope.launch {
                     try {
+                        // 队列：已在队列里的条目只移动指针（选集/下一集/上一集），否则按当前
+                        // 浏览上下文重建 —— 首页直接起播时这里会补拉该季集列表，所以得先
+                        // 建好队列再 play（它是 suspend 的）。
+                        playQueue = existing?.movedTo(item.id) ?: browser.playbackQueueFor(item)
                         // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
                         val generation = playback.play(
                             itemId = item.id,

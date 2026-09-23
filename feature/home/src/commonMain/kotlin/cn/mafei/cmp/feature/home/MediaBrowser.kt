@@ -801,11 +801,34 @@ class MediaBrowser(
     }
 
     /**
-     * 起播 [item] 时的播放队列：从当前浏览上下文（详情页/季详情页已加载的集列表）
-     * 构造，等价于旧版 QueueManager.initializePlaybackQueue 的输入。
+     * 起播 [item] 时的播放队列，等价于旧版 QueueManager.initializePlaybackQueue 的输入。
+     *
+     * 详情页/季详情页起播时集列表已经加载，直接用。**首页「继续观看」直接起播**时
+     * 手里只有条目本身，那一季的集从来没取过 —— 这时按 series(+season) 拉一次，
+     * 否则同一部剧从首页播就没有「选集」也没有「下一集」。
      */
-    fun playbackQueueFor(item: MediaItem): PlaybackQueue =
-        PlaybackQueue.forItem(item, state.value.detailEpisodes)
+    suspend fun playbackQueueFor(item: MediaItem): PlaybackQueue {
+        val loaded = state.value.detailEpisodes
+        if (item.mediaType != MediaType.Episode || loaded.any { it.id == item.id }) {
+            return PlaybackQueue.forItem(item, loaded)
+        }
+        val seriesId = item.seriesId ?: return PlaybackQueue.forItem(item, emptyList())
+        val episodes = try {
+            repository.browse(
+                session = session,
+                query = MediaQuery.Episodes(seriesId, item.seasonId),
+                // 一季通常几十集；MAX_PAGE_SIZE 一次拿完，不做游标循环。
+                request = PageRequest(pageSize = PageRequest.MAX_PAGE_SIZE),
+                refresh = false,
+            ).value.items
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // 拉不到就当单片播放：队列构造绝不能把起播挡下来。
+            emptyList()
+        }
+        return PlaybackQueue.forItem(item, episodes)
+    }
 
     /** Legacy CastDetailViewModel: detail first, then three independent ten-item work lists in parallel. */
     suspend fun openPerson(id: MediaId, name: String) {
