@@ -3072,7 +3072,7 @@ private fun PonyStartupLoading(exiting: Boolean) {
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(230.dp)
+                    .size(190.dp)
                     .graphicsLayer {
                         translationY = -imageYOffsetPx - exitProgress * exitYOffsetPx
                         val scale = 0.98f + breathing * 0.02f + exitProgress * 0.06f
