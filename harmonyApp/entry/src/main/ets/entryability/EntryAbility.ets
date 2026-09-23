@@ -10,6 +10,7 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window;
   private orientationPoller?: number;
   private requestedOrientation?: window.Orientation;
+  private systemBarsHidden: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -30,9 +31,14 @@ export default class EntryAbility extends UIAbility {
   }
 
   private applyOrientationPolicy(windowClass: window.Window): void {
-    const orientation = this.isCompactDisplay(windowClass)
-      ? (nativeApi.IsOhosPlayerScreenVisible() ? window.Orientation.AUTO_ROTATION : window.Orientation.PORTRAIT)
-      : window.Orientation.UNSPECIFIED;
+    const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
+    // 手机：只有全屏才是横屏。旧版 PlayerFullscreenHelper 只在全屏时锁横屏，
+    // 退出全屏时 setMainWindowPortrait —— 窗口态必须锁竖屏，否则横着拿的手机上
+    // 「退出全屏」看不出任何变化（跟随传感器会一直留在横屏）。
+    const orientation = this.isCompactDisplay(windowClass) ?
+      (playerVisible && nativeApi.IsOhosPlayerFullscreenRequested() ?
+        window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.PORTRAIT) :
+      window.Orientation.UNSPECIFIED;
     if (orientation === this.requestedOrientation) return;
     this.requestedOrientation = orientation;
     windowClass.setPreferredOrientation(orientation).catch((error: Object) => {
@@ -41,11 +47,32 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
+  /**
+   * 全屏要真的收掉系统栏。旧版 `PlayerPage.enterFullscreen()` 就是
+   * `setWindowSystemBarEnable([])`，退出时 `restoreSystemBars()` —— 平板上全屏不旋转，
+   * 系统栏的收放才是「全屏」唯一可见的形态变化。
+   */
+  private applySystemBarPolicy(windowClass: window.Window): void {
+    const fullscreen = nativeApi.IsOhosPlayerScreenVisible() && nativeApi.IsOhosPlayerFullscreenRequested();
+    if (fullscreen === this.systemBarsHidden) {
+      return;
+    }
+    this.systemBarsHidden = fullscreen;
+    windowClass.setWindowSystemBarEnable(fullscreen ? [] : ['status', 'navigation']).catch((error: Object) => {
+      if (this.systemBarsHidden === fullscreen) this.systemBarsHidden = !fullscreen;
+      hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to apply system bar policy: %{public}s', JSON.stringify(error));
+    });
+  }
+
   private startOrientationPolicy(windowClass: window.Window): void {
     this.applyOrientationPolicy(windowClass);
+    this.applySystemBarPolicy(windowClass);
     if (this.orientationPoller !== undefined) clearInterval(this.orientationPoller);
     this.orientationPoller = setInterval(() => {
-      if (this.mainWindow === windowClass) this.applyOrientationPolicy(windowClass);
+      if (this.mainWindow === windowClass) {
+        this.applyOrientationPolicy(windowClass);
+        this.applySystemBarPolicy(windowClass);
+      }
     }, 200);
   }
 

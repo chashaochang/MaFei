@@ -37,6 +37,7 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
     @Volatile private var player: MediaPlayer? = null
     @Volatile private var speedValue = 1.0f
     @Volatile private var bufferedPercent = 0
+    @Volatile private var fillScaling = false
 
     override val session: Int get() = sessionValue
 
@@ -71,6 +72,32 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
         }
     }
 
+    override fun setVideoScalingMode(fill: Boolean) {
+        fillScaling = fill
+        onLooper { applyScaling(player) }
+    }
+
+    /**
+     * Sticky: a fresh MediaPlayer per load would otherwise silently fall back
+     * to the SDK default and undo the viewer's 「填满」 choice. IllegalState
+     * before preparation is expected — [applyScaling] runs again from the
+     * prepared listener.
+     */
+    private fun applyScaling(target: MediaPlayer?) {
+        val current = target ?: return
+        try {
+            current.setVideoScalingMode(
+                if (fillScaling) {
+                    MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                } else {
+                    MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                },
+            )
+        } catch (_: IllegalStateException) {
+            // Not prepared yet; the prepared listener re-applies.
+        }
+    }
+
     override fun setDataSource(url: String, headers: Map<String, String>) {
         onLooper {
             // Every load runs on a FRESH player: the retired one was already
@@ -85,6 +112,9 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
                     .build(),
             )
             created.setOnPreparedListener { mp ->
+                // Scaling is only settable once prepared; the request made
+                // before this load would otherwise be lost with the old player.
+                applyScaling(mp)
                 // The CAPTURED session id, never the current field: a late
                 // prepared from a retired player keeps its old identity and
                 // the runtime drops it.

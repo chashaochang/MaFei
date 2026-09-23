@@ -4,10 +4,13 @@ import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.repositories.playback.ProviderPlaybackCoordinator
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.TrackKind
 import cn.mafei.cmp.player.facade.DefaultPlayerController
 import kotlinx.coroutines.CoroutineScope
 
@@ -31,6 +34,18 @@ class SessionPlaybackRuntime private constructor(
     /** Total playback re-negotiations (expired link / auth refresh), for diagnostics. */
     val completedRenegotiations get() = coordinator.completedRenegotiations
 
+    /** Provider metadata wins over opaque native track labels when available. */
+    val tracks get() = coordinator.tracks
+
+    /**
+     * What the last negotiation actually produced: selected media source, how
+     * the stream is served, which ceilings the provider offered and which one
+     * is in effect. The chrome reports THIS instead of inferring anything from
+     * its own last click, so a ceiling the provider could not serve reads as
+     * 「自动」/「直连」 rather than as the label the user tapped.
+     */
+    val prepared get() = coordinator.prepared
+
     /** Synchronous observation hook; playback failures never crash the controller. */
     var onFailureObserved: ((cn.mafei.cmp.data.repositories.playback.PlaybackReportFailure) -> Unit)?
         get() = coordinator.onFailureObserved
@@ -43,6 +58,71 @@ class SessionPlaybackRuntime private constructor(
         autoplay: Boolean = true,
         options: PlaybackOptions = PlaybackOptions(),
     ): PlaybackGeneration? = coordinator.play(provider, itemId, resumePositionMs, autoplay, options)
+
+    /**
+     * Selects a track from the provider-declared list (its indexes are what the
+     * chrome shows). Two routes, exactly like the legacy MFPlayerView:
+     *
+     * - [PlaybackTrack.renegotiate] → the provider must be asked again
+     *   (external subtitle files, or any track on a transcoded stream).
+     * - otherwise the track is muxed inside a byte-for-byte direct stream, so
+     *   re-requesting the URL cannot change it: map the provider track onto the
+     *   native runtime's track list and switch there.
+     */
+    suspend fun selectTrack(kind: TrackKind, id: String?): PlaybackGeneration? {
+        val providerKind = when (kind) {
+            TrackKind.Audio -> PlaybackTrackKind.Audio
+            TrackKind.Subtitle -> PlaybackTrackKind.Subtitle
+            TrackKind.Video -> null
+        }
+        val declared = providerKind?.let { target ->
+            tracks.value.filter { it.kind == target }
+        }.orEmpty()
+        if (providerKind == null || declared.isEmpty()) {
+            controller.selectTrack(kind, id)
+            return controller.state.value.generation
+        }
+        val providerTrack = id?.let { selected -> declared.firstOrNull { it.index.toString() == selected } }
+        // Subtitles-off (id == null) is a negotiation: the provider must drop
+        // its external delivery URL. A track the provider never declared, or
+        // one it cannot re-negotiate, belongs to the native runtime.
+        val viaProvider = id == null || providerTrack?.renegotiate == true
+        if (viaProvider) return coordinator.selectTrack(providerKind, id)
+        val nativeId = resolveNativeTrack(providerTrack, controller.state.value.tracks.filter { it.kind == kind })
+            ?: return null
+        controller.selectTrack(kind, nativeId)
+        // 原生已经在播放器内部换了轨，但 provider 的选中态与当前选项还停在旧轨上：
+        // 界面勾选（优先显示 provider 状态）和后续重新协商都得跟上这次切换。
+        providerTrack?.let { coordinator.selectTrackLocally(providerKind, it.index) }
+        return controller.state.value.generation
+    }
+
+    /**
+     * Legacy `MFPlayerView.resolveNativeTrack` precedence: exact id, then
+     * display title, then language (+codec), then a single candidate.
+     * Provider stream indexes and native track ids are different namespaces —
+     * never assume they are equal beyond the id coincidence check below.
+     */
+    private fun resolveNativeTrack(
+        providerTrack: PlaybackTrack?,
+        nativeTracks: List<cn.mafei.cmp.player.api.PlayerTrack>,
+    ): String? {
+        if (providerTrack == null || nativeTracks.isEmpty()) return null
+        nativeTracks.firstOrNull { it.id == providerTrack.index.toString() }?.let { return it.id }
+        val title = providerTrack.displayTitle?.trim()?.lowercase().orEmpty()
+        val language = providerTrack.language?.trim()?.lowercase().orEmpty()
+        if (title.isNotEmpty()) {
+            nativeTracks.firstOrNull { it.label.trim().lowercase() == title }?.let { return it.id }
+        }
+        if (language.isNotEmpty()) {
+            nativeTracks.firstOrNull { it.language?.trim()?.lowercase() == language }?.let { return it.id }
+        }
+        return nativeTracks.singleOrNull()?.id
+    }
+
+    /** 清晰度档位（旧版 QualityOption.bitrate）：null = 自动/直连。 */
+    suspend fun selectQuality(maxStreamingBitrate: Int?): PlaybackGeneration? =
+        coordinator.selectQuality(maxStreamingBitrate)
 
     suspend fun stop() = coordinator.stop()
 

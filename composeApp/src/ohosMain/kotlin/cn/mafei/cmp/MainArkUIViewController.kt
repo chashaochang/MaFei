@@ -34,10 +34,15 @@ import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
 
 private val ohosWindowFeatures = mutableStateOf(MaFeiWindowFeatures())
 private var ohosPlayerScreenVisible = false
+private var ohosPlayerFullscreenRequested = false
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("IsOhosPlayerScreenVisible")
 fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
+
+@OptIn(ExperimentalNativeApi::class)
+@CName("IsOhosPlayerFullscreenRequested")
+fun IsOhosPlayerFullscreenRequested(): Boolean = ohosPlayerFullscreenRequested
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("UpdateOhosWindowInsets")
@@ -87,6 +92,9 @@ fun MainArkUIViewController(
             ),
             createOhosHttpTransport(),
             playerRuntimeFactory = { createOhosPlayerRuntime() },
+            // 播放页左侧调亮度、右侧调音量：亮度/音量只能经 ArkUI 拿到，所以值由
+            // MaFeiPlayerSurface 的 ArkTS 宿主推送，写入也回给它执行。
+            deviceControls = OhosDeviceControls,
             legacySnapshotReader = LegacySnapshotPayloadReader.create(legacyPayload),
             failureReporter = { stage, failure ->
                 val diagnostic = if (failure is IllegalStateException) {
@@ -146,11 +154,20 @@ fun MainArkUIViewController(
         ) {
             App(
                 runtime = runtime,
-                playerSurface = { controller, modifier ->
-                    OhosPlayerSurface(controller, modifier)
+                playerSurface = { controller, onBack, onExitFullscreen, modifier ->
+                    OhosPlayerSurface(
+                        controller = controller,
+                        onBack = onBack,
+                        onExitFullscreen = onExitFullscreen,
+                        modifier = modifier,
+                    )
                 },
                 onPlayerScreenChanged = { visible ->
                     ohosPlayerScreenVisible = visible
+                    if (!visible) ohosPlayerFullscreenRequested = false
+                },
+                onPlayerFullscreenChanged = { fullscreen ->
+                    ohosPlayerFullscreenRequested = fullscreen
                 },
             )
         }

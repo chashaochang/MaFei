@@ -800,6 +800,13 @@ class MediaBrowser(
         )
     }
 
+    /**
+     * 起播 [item] 时的播放队列：从当前浏览上下文（详情页/季详情页已加载的集列表）
+     * 构造，等价于旧版 QueueManager.initializePlaybackQueue 的输入。
+     */
+    fun playbackQueueFor(item: MediaItem): PlaybackQueue =
+        PlaybackQueue.forItem(item, state.value.detailEpisodes)
+
     /** Legacy CastDetailViewModel: detail first, then three independent ten-item work lists in parallel. */
     suspend fun openPerson(id: MediaId, name: String) {
         val operation = ++personTicket

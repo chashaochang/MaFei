@@ -8,6 +8,7 @@ private class FakeAndroidEngine : AndroidPlayerEngine {
     val log = mutableListOf<String>()
     val surfaces = mutableListOf<Any?>()
     var listenerRef: AndroidPlayerEngineListener? = null
+    var fillScaling = false
     private val sessions = AtomicInteger(0)
     override val session: Int get() = sessionValue
     @Volatile var sessionValue = 0
@@ -21,6 +22,7 @@ private class FakeAndroidEngine : AndroidPlayerEngine {
 
     override fun setListener(listener: AndroidPlayerEngineListener?) { listenerRef = listener }
     override fun setSurface(surface: Any?) { log += "setSurface"; surfaces += surface }
+    override fun setVideoScalingMode(fill: Boolean) { log += "scaling($fill)"; fillScaling = fill }
     override fun setDataSource(url: String, headers: Map<String, String>) { log += "dataSource($url,${headers.keys.sorted()})" }
     override fun prepareAsync() { log += "prepareAsync" }
     override fun start() { log += "start" }
@@ -264,5 +266,29 @@ class AndroidMediaPlayerRuntimeTest {
         runtime.bind { events += it }
         scheduler.tickAll()
         assertEquals(emptyList(), events)
+    }
+
+    @Test
+    fun contentModeForwardsOnlyTheCropOrLetterboxDecision() {
+        loadAndPrepare()
+        engine.log.clear()
+        // 比例类档位是宿主几何，只有「填满」需要原生裁切。
+        listOf(
+            PlayerContentMode.Fit to false,
+            PlayerContentMode.Original to false,
+            PlayerContentMode.Ratio16x9 to false,
+            PlayerContentMode.Fill to true,
+        ).forEach { (mode, fills) ->
+            engine.log.clear()
+            runtime.execute(RuntimeCommand.ContentMode(mode))
+            assertEquals(listOf("scaling($fills)"), engine.log, "$mode")
+        }
+    }
+
+    @Test
+    fun contentModeNeedsNoGenerationSoItAppliesBeforeTheFirstLoad() {
+        runtime.bind { events += it }
+        runtime.execute(RuntimeCommand.ContentMode(PlayerContentMode.Fill))
+        assertTrue(engine.fillScaling)
     }
 }

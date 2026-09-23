@@ -49,6 +49,12 @@ class ApplicationRuntime(
      * explicit configuration gap, never a faked player.
      */
     private val playerRuntimeFactory: ((ProviderKind) -> PlayerRuntime)? = null,
+    /**
+     * 平台亮度/音量（播放页竖向手势）。缺省是不支持：两条手势都不介入，也不会画出改了
+     * 没生效的反馈条 —— 与 [playerRuntimeFactory] 同类，缺配置就明确缺，绝不假装能调。
+     */
+    val deviceControls: cn.mafei.cmp.player.api.PlayerDeviceControls =
+        cn.mafei.cmp.player.api.PlayerDeviceControls.Unsupported,
     private val failureReporter: (stage: String, failure: Throwable) -> Unit = { _, _ -> },
     private val persistenceStageReporter: (stage: String) -> Unit = {},
 ) {

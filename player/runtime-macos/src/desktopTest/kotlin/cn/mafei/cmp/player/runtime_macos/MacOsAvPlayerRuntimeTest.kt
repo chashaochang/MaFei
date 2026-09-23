@@ -196,6 +196,15 @@ class MacOsAvPlayerRuntimeTest {
     }
 
     @Test
+    fun contentModeIsRefusedInsteadOfSilentlyIgnored() {
+        // AVPlayerLayer gravity 没有走 ObjC 桥暴露，桌面宿主也不挂视频面：直接拒绝。
+        // 能力位为 false 时状态机先拦住，这条断言守住「万一放行也不能静默吞掉」。
+        assertFailsWith<UnsupportedPlayerCapability> {
+            runtime.execute(RuntimeCommand.ContentMode(PlayerContentMode.Fill))
+        }
+    }
+
+    @Test
     fun releaseIsIdempotentStopsTheEngineAndDetachesSink() {
         loadAndPrepare()
         runtime.execute(RuntimeCommand.Release)

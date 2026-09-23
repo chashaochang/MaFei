@@ -1,7 +1,12 @@
 import { common } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { audio } from '@kit.AudioKit';
+import { window } from '@kit.ArkUI';
 import { registerComposeInteropBuilder } from '@cpf-kmp-cmp/compose/src/main/ets/compose/ArkUIView';
+import nativeApi from 'libentry.so';
 import {
   PlayerController,
+  PlayerErrorCode,
   PlayerEvent,
   PlayerEventListener,
   PlayerEventType,
@@ -9,69 +14,107 @@ import {
   PlayerSource,
   PlayerState,
   PlayerSurface,
-  PlayerContentMode
+  PlayerContentMode,
+  PlayerTrack
 } from 'mfplayer';
 
-/** Parameters supplied by Compose's ArkUIView interop builder. */
-interface MaFeiPlayerInteropArgs {
+interface MaFeiPlayerSurfaceArgs {
   commandId: number;
   handle: number;
   action: string;
   url: string;
   headers: string[];
   subtitleUrl: string;
-  autoPlay: boolean;
+  allowInsecureTls: boolean;
+  multiConnectionAllowed: boolean;
   positionMs: number;
   speed: number;
-  onState?: (state: MaFeiPlayerState) => void;
+  trackId: number;
+  contentMode: string;
+  /** setBrightness 用 0..1；setVolume 用步数。 */
+  level: number;
 }
 
-/** Snapshot sent from the native player surface back to Compose. */
-interface MaFeiPlayerState {
+const PLAYER_LOG_DOMAIN = 0x4D46;
+const PLAYER_LOG_TAG = 'MaFeiPlayer';
+
+interface MaFeiPlayerTrackState {
+  id: number;
+  kind: string;
+  label: string;
+  language?: string;
+  selected: boolean;
+}
+
+interface MaFeiPlayerEventState {
   handle: number;
-  itemStatus: number;
-  timeControl: number;
+  event: string;
   positionMs: number;
   durationMs: number;
   bufferedMs: number;
-  errorKind: number;
+  failure?: string;
+  tracks: MaFeiPlayerTrackState[];
+  /** event = 'device' 专用：窗口亮度与媒体音量，不属于任何一次播放。 */
+  brightness?: number;
+  volume?: number;
+  maxVolume?: number;
 }
 
+// CustomBuilderAdapter: cmp-arkuiview-player-host
 @Builder
-function mafeiPlayerInteropBuilder(args: Object): void {
-  MaFeiPlayerInterop({ args: args as MaFeiPlayerInteropArgs });
+function mafeiPlayerSurfaceBuilder(_args: Object): void {
+  MaFeiPlayerSurfaceHost();
 }
 
-/**
- * Thin ArkTS host for the legacy mfplayer SDK. It owns only the native video
- * surface and engine; Compose remains responsible for all visible controls.
- */
-@ComponentV2
-struct MaFeiPlayerInterop {
-  @Param
-  @Require
-  readonly args: MaFeiPlayerInteropArgs;
+/** Native video engine/surface only. CMP owns every visible control above it. */
+@Component
+struct MaFeiPlayerSurfaceHost {
+  @Consume('compose_args') @Watch('onArgsChanged') args: MaFeiPlayerSurfaceArgs;
 
+  /**
+   * Picture fitting. The CMP layer owns the video AREA geometry (原始比例 and
+   * the fixed ratios reshape the Compose node), so only the two scalings
+   * mfplayer must apply are mirrored here: 填满 crops, everything else
+   * letterboxes. @State because PlayerSurface must re-render on a change.
+   */
+  @State contentMode: PlayerContentMode = PlayerContentMode.Fit;
+
+  private playerWindow: window.Window | undefined = undefined;
   private readonly controller: PlayerController = new PlayerController();
   private appliedCommandId: number = -1;
-  private loadedUrl: string = '';
+  private lastPlayerState: PlayerState = PlayerState.IDLE;
   private readonly listener: PlayerEventListener = {
-    onPlayerEvent: (event: PlayerEvent): void => this.reportState(event)
+    onPlayerEvent: (event: PlayerEvent): void => this.handlePlayerEvent(event)
+  };
+  private readonly onHostBackground = (): void => {
+    this.controller.onHostBackground();
+  };
+  private readonly onHostForeground = (): void => {
+    this.controller.onHostForeground();
   };
 
   aboutToAppear(): void {
+    hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'surface host appear command=%{public}d action=%{public}s',
+      this.args.commandId, this.args.action);
     const context = getContext(this) as common.UIAbilityContext;
     this.controller.setCacheDir(context.cacheDir);
     this.controller.addListener(this.listener);
+    context.eventHub.on('onBackground', this.onHostBackground);
+    context.eventHub.on('onForeground', this.onHostForeground);
     this.applyCommand();
+    // 亮度和音量按旧版一样只挂在播放页：进页面先报一次，CMP 侧的手势才有基准值。
+    void this.emitDeviceState();
   }
 
   aboutToDisappear(): void {
+    const context = getContext(this) as common.UIAbilityContext;
+    this.emitProgress(true);
+    context.eventHub.off('onBackground', this.onHostBackground);
+    context.eventHub.off('onForeground', this.onHostForeground);
     this.controller.removeListener(this.listener);
     this.controller.release();
   }
 
-  @Monitor('args')
   onArgsChanged(): void {
     this.applyCommand();
   }
@@ -82,44 +125,139 @@ struct MaFeiPlayerInterop {
       return;
     }
     this.appliedCommandId = command.commandId;
+    hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'apply command=%{public}d action=%{public}s handle=%{public}d',
+      command.commandId, command.action, command.handle);
+    // Every command carries the current mode, so a surface that appears after
+    // the viewer already picked a ratio still renders correctly.
+    this.contentMode = command.contentMode === 'Fill' ? PlayerContentMode.Fill : PlayerContentMode.Fit;
     switch (command.action) {
       case 'load':
         this.load(command);
         break;
       case 'play':
+        if (command.positionMs > 0) {
+          this.controller.seekTo(command.positionMs, false);
+        }
         this.controller.play();
         break;
       case 'pause':
         this.controller.pause();
         break;
       case 'stop':
+        this.emitProgress(true);
         this.controller.stop();
         break;
       case 'seek':
         this.controller.seekTo(Math.max(0, command.positionMs), false);
         break;
       case 'speed':
-        if (command.speed > 0) {
-          this.controller.setPlaybackSpeed(command.speed);
-        }
+        if (command.speed > 0) this.controller.setPlaybackSpeed(command.speed);
+        break;
+      case 'selectAudio':
+        if (command.trackId >= 0) this.controller.selectAudioTrack(command.trackId);
+        break;
+      case 'selectSubtitle':
+        this.controller.selectSubtitleTrack(command.trackId);
         break;
       case 'release':
         this.controller.release();
+        break;
+      // 亮度/音量（旧版左侧调亮度、右侧调音量）：只作用于播放页窗口与媒体音量流。
+      case 'setBrightness':
+        void this.applyBrightness(command.level);
+        break;
+      case 'setVolume':
+        this.applyVolume(command.level);
+        break;
+      case 'deviceState':
+        void this.emitDeviceState();
         break;
       default:
         break;
     }
   }
 
-  private load(command: MaFeiPlayerInteropArgs): void {
-    const url = command.url.trim();
-    if (url.length === 0 || url === this.loadedUrl) {
+  /** 窗口实例只在第一次用的时候取：拖动亮度时每帧都要写，不能每帧都 getLastWindow。 */
+  private async resolveWindow(): Promise<window.Window | undefined> {
+    if (this.playerWindow !== undefined) {
+      return this.playerWindow;
+    }
+    try {
+      this.playerWindow = await window.getLastWindow(getContext(this) as common.UIAbilityContext);
+    } catch (_error) {
+      hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'window unavailable for brightness');
+    }
+    return this.playerWindow;
+  }
+
+  private async applyBrightness(value: number): Promise<void> {
+    const win = await this.resolveWindow();
+    if (win === undefined) {
       return;
     }
-    this.loadedUrl = url;
+    try {
+      await win.setWindowBrightness(Math.max(0, Math.min(1, value)));
+    } catch (_error) {
+      hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'setWindowBrightness rejected');
+    }
+  }
+
+  private applyVolume(steps: number): void {
+    try {
+      audio.getAudioManager().setVolume(audio.AudioVolumeType.MEDIA, Math.max(0, Math.round(steps)),
+        (): void => {
+        });
+    } catch (_error) {
+      hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'setVolume rejected');
+    }
+  }
+
+  /**
+   * 上报窗口亮度与媒体音量。任何一个读不到就报 -1 / 0，KMP 侧据此让对应手势不介入
+   * （宁可不响应，也不画一条改了没效果的反馈条）。
+   */
+  private async emitDeviceState(): Promise<void> {
+    let brightness = -1;
+    let volume = -1;
+    let maxVolume = 0;
+    const win = await this.resolveWindow();
+    if (win !== undefined) {
+      try {
+        brightness = win.getWindowProperties().brightness;
+      } catch (_error) {
+        brightness = -1;
+      }
+    }
+    try {
+      const groupManager = audio.getAudioManager().getVolumeManager()
+        .getVolumeGroupManagerSync(audio.DEFAULT_VOLUME_GROUP_ID);
+      maxVolume = groupManager.getMaxVolumeSync(audio.AudioVolumeType.MEDIA);
+      volume = groupManager.getVolumeSync(audio.AudioVolumeType.MEDIA);
+    } catch (_error) {
+      volume = -1;
+      maxVolume = 0;
+    }
+    const payload: MaFeiPlayerEventState = {
+      handle: this.args.handle,
+      event: 'device',
+      positionMs: 0,
+      durationMs: 0,
+      bufferedMs: 0,
+      tracks: [],
+      brightness: brightness,
+      volume: volume,
+      maxVolume: maxVolume
+    };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+  }
+
+  private load(command: MaFeiPlayerSurfaceArgs): void {
+    const url = command.url.trim();
+    if (url.length === 0) return;
     const source: PlayerSource = {
       uri: url,
       headers: command.headers,
+      allowInsecureTls: command.allowInsecureTls,
       externalSubtitles: command.subtitleUrl.trim().length > 0 ? [{
         uri: command.subtitleUrl.trim(),
         selected: true
@@ -128,50 +266,139 @@ struct MaFeiPlayerInterop {
     const options: PlayerOptions = {
       useHardwareDecode: true,
       preferSurface: true,
-      autoPlay: command.autoPlay,
+      // The shared PlayerStateMachine sends Play/Seek only after READY.
+      autoPlay: false,
       startPositionMs: Math.max(0, command.positionMs),
       playbackSpeed: command.speed > 0 ? command.speed : 1,
+      // The native view consumes smooth progress locally. KMP receives only
+      // throttled progress reports for provider bookkeeping.
       progressIntervalMs: 250,
-      exactSeek: false
+      exactSeek: false,
+      multiConnectionEnabled: command.multiConnectionAllowed
     };
-    this.controller.load(source, options);
-  }
-
-  private reportState(event: PlayerEvent): void {
-    const callback = this.args.onState;
-    if (!callback) {
-      return;
+    this.lastPlayerState = PlayerState.IDLE;
+    const accepted = this.controller.load(source, options);
+    hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
+      'load submitted accepted=%{public}s headers=%{public}d insecureTls=%{public}s multi=%{public}s',
+      `${accepted}`, command.headers.length, `${command.allowInsecureTls}`, `${command.multiConnectionAllowed}`);
+    if (!accepted) {
+      this.emitEvent('error', undefined, 'engine');
     }
-    const itemStatus = event.state === PlayerState.ERROR ? 2 :
-      (event.state === PlayerState.IDLE || event.state === PlayerState.RELEASED ? 0 : 1);
-    const timeControl = event.state === PlayerState.PLAYING ? 2 :
-      (event.state === PlayerState.BUFFERING ? 1 : 0);
-    callback({
-      handle: this.args.handle,
-      itemStatus: itemStatus,
-      timeControl: timeControl,
-      positionMs: Math.max(0, event.positionMs),
-      durationMs: Math.max(0, event.durationMs),
-      bufferedMs: Math.max(0, event.bufferedPositionMs),
-      errorKind: event.type === PlayerEventType.ERROR ? 1 : 0
-    });
   }
 
-  build(): void {
+  private handlePlayerEvent(event: PlayerEvent): void {
+    if (event.state !== this.lastPlayerState) {
+      this.lastPlayerState = event.state;
+      switch (event.state) {
+        case PlayerState.READY:
+          this.emitEvent('ready', event);
+          // Some mfplayer backends expose their final track list at READY
+          // without sending a separate TRACKS_CHANGED event.
+          this.emitEvent('tracks', event);
+          break;
+        case PlayerState.PLAYING:
+          this.emitEvent('playing', event);
+          break;
+        case PlayerState.PAUSED:
+          this.emitEvent('paused', event);
+          break;
+        case PlayerState.BUFFERING:
+          this.emitEvent('buffering', event);
+          break;
+        case PlayerState.ENDED:
+          this.emitProgress(true, event);
+          this.emitEvent('ended', event);
+          break;
+        case PlayerState.ERROR:
+          this.emitEvent('error', event, this.failureKind(event));
+          break;
+        default:
+          break;
+      }
+    }
+    if (event.type === PlayerEventType.TRACKS_CHANGED) {
+      this.emitEvent('tracks', event);
+    }
+    if (event.type === PlayerEventType.PROGRESS_CHANGED) {
+      this.emitProgress(false, event);
+    }
+  }
+
+  private failureKind(event: PlayerEvent): string {
+    if (event.errorCode === PlayerErrorCode.INVALID_SOURCE) return 'unsupported';
+    const message = event.errorMessage.toLowerCase();
+    if (message.includes('http') || message.includes('network') || message.includes('timeout')) return 'network';
+    if (message.includes('decode') || message.includes('codec')) return 'decode';
+    return 'engine';
+  }
+
+  private emitProgress(_force: boolean, event?: PlayerEvent): void {
+    // CMP draws the timeline, so it needs the SDK's live 250 ms progress.
+    // Provider progress reporting remains throttled by PlayerStateMachine.
+    this.emitEvent('progress', event);
+  }
+
+  private emitEvent(type: string, event?: PlayerEvent, failure?: string): void {
+    const includeTracks = type === 'tracks';
+    const eventAudioTracks = event?.audioTracks ?? [];
+    const eventSubtitleTracks = event?.subtitleTracks ?? [];
+    const audioSource = eventAudioTracks.length > 0 ? eventAudioTracks : this.controller.getAudioTracks();
+    const subtitleSource = eventSubtitleTracks.length > 0 ? eventSubtitleTracks : this.controller.getSubtitleTracks();
+    const audioTracks = (includeTracks ? audioSource : []).map(
+      (track: PlayerTrack): MaFeiPlayerTrackState => ({
+        id: track.id,
+        kind: 'audio',
+        label: track.title.trim().length > 0 ? track.title : `音轨 ${track.id}`,
+        language: track.language,
+        selected: track.isSelected
+      }));
+    const subtitleTracks = (includeTracks ? subtitleSource : []).map(
+      (track: PlayerTrack): MaFeiPlayerTrackState => ({
+        id: track.id,
+        kind: 'subtitle',
+        label: track.title.trim().length > 0 ? track.title : `字幕 ${track.id}`,
+        language: track.language,
+        selected: track.isSelected
+      }));
+    if (includeTracks) {
+      hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
+        'tracks audio=%{public}d subtitle=%{public}d', audioTracks.length, subtitleTracks.length);
+    }
+    const payload: MaFeiPlayerEventState = {
+      handle: this.args.handle,
+      event: type,
+      positionMs: Math.round(Math.max(0, event?.positionMs ?? this.controller.getCurrentPositionMs())),
+      durationMs: Math.round(Math.max(0, event?.durationMs ?? this.controller.getDurationMs())),
+      bufferedMs: Math.round(Math.max(0,
+        event?.bufferedPositionMs ?? this.controller.getBufferedPositionMs())),
+      failure: failure,
+      tracks: audioTracks.concat(subtitleTracks)
+    };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+  }
+
+  build() {
     Stack() {
       PlayerSurface({
         controller: this.controller,
-        contentMode: PlayerContentMode.Fit,
-        onVideoSurfaceControllerReady: (_controller: XComponentController): void => {}
+        contentMode: this.contentMode,
+        onVideoSurfaceControllerReady: (_controller: XComponentController): void => {
+          // PlayerController keeps load() as a pending source until the video
+          // surface is ready. Without this signal the native player is never
+          // created and CMP remains in its loading state indefinitely.
+          const accepted = this.controller.setVideoSurfaceReady(true);
+          hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'surface ready accepted=%{public}s', `${accepted}`);
+        }
       })
         .width('100%')
         .height('100%')
     }
-      .width('100%')
-      .height('100%')
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
   }
 }
 
 export function registerMaFeiPlayerInteropBuilder(): void {
-  registerComposeInteropBuilder('MaFeiPlayerSurface', mafeiPlayerInteropBuilder);
+  registerComposeInteropBuilder('MaFeiPlayerSurface', mafeiPlayerSurfaceBuilder);
 }

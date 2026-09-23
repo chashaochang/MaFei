@@ -58,6 +58,10 @@ class AndroidMediaPlayerRuntime(
                 // android.media.MediaPlayer track selection is device-dependent;
                 // honesty first: unsupported instead of a silently ignored command.
                 throw UnsupportedPlayerCapability("trackSelection")
+            // Generation-less like AttachSurface: MediaPlayer only knows
+            // letterbox vs crop, which is exactly PlayerContentMode.fills. The
+            // ratio modes are host geometry and never reach this layer.
+            is RuntimeCommand.ContentMode -> engine.setVideoScalingMode(command.mode.fills)
             is RuntimeCommand.AttachSurface -> {
                 // Always forwarded immediately: attaching before preparation is
                 // legal for MediaPlayer and must not silently wait.
@@ -195,6 +199,7 @@ fun createAndroidPlayerRuntime(
         speed = true, // API 23+, minSdk 24
         trackSelection = false, // device-dependent; refused rather than faked
         backgroundPlayback = false,
+        contentMode = true, // setVideoScalingMode: SCALE_TO_FIT / WITH_CROPPING
     ),
     engine = SystemMediaPlayerEngine(context),
     pollScheduler = MainThreadPollScheduler(),

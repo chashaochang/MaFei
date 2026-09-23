@@ -118,6 +118,7 @@ import cn.mafei.cmp.feature.home.HomeHeroWindowBackdrop
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.LibraryIndexScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
+import cn.mafei.cmp.feature.home.PlaybackQueue
 import cn.mafei.cmp.feature.home.legacyHomeHeroDetailTarget
 import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
 import cn.mafei.cmp.feature.media.VideoListScreen
@@ -143,6 +144,7 @@ import cn.mafei.cmp.player.ui.NowPlayingMedia
 import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.player.api.PlayerController
+import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
@@ -180,29 +182,109 @@ private data class PlayerShellState(
 private fun BoundNowPlayingScreen(
     media: NowPlayingMedia,
     controller: PlayerController,
+    providerTracks: kotlinx.coroutines.flow.StateFlow<List<cn.mafei.cmp.data.adapter_contract.PlaybackTrack>>,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
     onRetry: () -> Unit,
     onSeek: (Long) -> Unit,
     onSpeed: (Float) -> Unit,
     onSelectTrack: (cn.mafei.cmp.player.api.TrackKind, String?) -> Unit,
-    playerSurface: @Composable (PlayerController, Modifier) -> Unit,
+    onFullscreenChanged: (Boolean) -> Unit,
+    playerSurface: @Composable (
+        PlayerController,
+        onBack: () -> Unit,
+        onExitFullscreen: () -> Unit,
+        Modifier,
+    ) -> Unit,
+    preparing: Boolean,
+    playbackError: String?,
     modifier: Modifier = Modifier,
+    queue: PlaybackQueue? = null,
+    onNext: (() -> Unit)? = null,
+    onPrevious: (() -> Unit)? = null,
+    onSelectEpisode: ((Int) -> Unit)? = null,
+    qualityOptions: List<cn.mafei.cmp.player.ui.PlayerQualityOption> = emptyList(),
+    onSelectQuality: ((Int) -> Unit)? = null,
+    /** 目录条目：播放信息卡片要它的媒体源/流明细，播放控制本身只需要 NowPlayingMedia。 */
+    catalogItem: cn.mafei.cmp.core.domain.MediaItem? = null,
+    /**
+     * 本次协商的**实际结果**（媒体源 / 播放方式 / 档位表 / 生效档位）。
+     * 「播放信息」里的一切都从它来 —— 不用界面自己最后点的那一下去猜。
+     */
+    prepared: cn.mafei.cmp.data.repositories.playback.PreparedStreamFacts? = null,
+    onSelectContentMode: ((cn.mafei.cmp.player.api.PlayerContentMode) -> Unit)? = null,
+    /** 全屏是显式状态（旧版 AppUIState.isFullScreen），不是从窗口横竖推出来的。 */
+    fullscreen: Boolean = false,
 ) {
     // Keep the 250-500 ms progress stream inside the player subtree. The
     // application shell only observes the low-frequency phase/resource pair.
     val state by controller.state.collectAsState()
+    val negotiatedTracks by providerTracks.collectAsState()
+    val visibleTracks = negotiatedTracks.map { track ->
+        PlayerTrack(
+            id = track.index.toString(),
+            kind = when (track.kind) {
+                cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Audio ->
+                    cn.mafei.cmp.player.api.TrackKind.Audio
+                cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Subtitle ->
+                    cn.mafei.cmp.player.api.TrackKind.Subtitle
+            },
+            label = track.displayTitle?.takeIf(String::isNotBlank)
+                ?: track.title?.takeIf(String::isNotBlank)
+                ?: if (track.kind == cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Audio) {
+                    "音轨 ${track.index}"
+                } else {
+                    "字幕 ${track.index}"
+                },
+            language = track.language,
+            selected = track.selected,
+        )
+    }.ifEmpty { state.tracks }
+    // 平台亮度/音量来自 ApplicationRuntime（宿主注入）；缺省实现让两条竖向手势都不介入。
+    val deviceControls = LocalApplicationRuntime.current.deviceControls
+    val playbackFacts = catalogItem?.let { item ->
+        playerPlaybackFacts(
+            item = item,
+            playingMediaSourceId = prepared?.mediaSourceId,
+            transport = prepared?.transport,
+            providerTracks = negotiatedTracks,
+        )
+    }
     NowPlayingScreen(
         media = media,
         state = state,
-        capabilities = controller.capabilities,
+        tracks = visibleTracks,
+        capabilities = controller.capabilities.copy(
+            trackSelection = controller.capabilities.trackSelection || negotiatedTracks.isNotEmpty(),
+        ),
         onBack = onBack,
         onTogglePlay = onTogglePlay,
         onRetry = onRetry,
         onSeek = onSeek,
         onSpeed = onSpeed,
         onSelectTrack = onSelectTrack,
-        videoSurface = { surfaceModifier -> playerSurface(controller, surfaceModifier) },
+        preparing = preparing,
+        externalError = playbackError,
+        episodes = queue?.items.orEmpty(),
+        episodeIndex = queue?.index?.coerceAtLeast(0) ?: 0,
+        onNext = onNext,
+        onPrevious = onPrevious,
+        onSelectEpisode = onSelectEpisode,
+        qualityOptions = qualityOptions,
+        onSelectQuality = onSelectQuality,
+        playbackFacts = playbackFacts,
+        onSelectContentMode = onSelectContentMode,
+        deviceControls = deviceControls,
+        fullscreen = fullscreen,
+        onFullscreenRequest = { requested -> onFullscreenChanged(requested) },
+        videoSurface = { surfaceModifier ->
+            playerSurface(
+                controller,
+                onBack,
+                { onFullscreenChanged(false) },
+                surfaceModifier,
+            )
+        },
         modifier = modifier,
     )
 }
@@ -237,10 +319,16 @@ private fun BoundLiquidMiniPlayer(
 fun App(
     runtime: ApplicationRuntime,
     onThemeChanged: (Boolean) -> Unit = {},
-    playerSurface: @Composable (PlayerController, Modifier) -> Unit = { _, modifier ->
+    playerSurface: @Composable (
+        PlayerController,
+        onBack: () -> Unit,
+        onExitFullscreen: () -> Unit,
+        Modifier,
+    ) -> Unit = { _, _, _, modifier ->
         Box(modifier.background(Color.Black))
     },
     onPlayerScreenChanged: (Boolean) -> Unit = {},
+    onPlayerFullscreenChanged: (Boolean) -> Unit = {},
 ) {
     val sessionState by runtime.sessions.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -318,6 +406,7 @@ fun App(
                                             busy = busy,
                                             playerSurface = playerSurface,
                                             onPlayerScreenChanged = onPlayerScreenChanged,
+                                            onPlayerFullscreenChanged = onPlayerFullscreenChanged,
                                             onLogout = {
                                                 if (!busy) {
                                                     busy = true
@@ -798,8 +887,14 @@ private fun BrowseContent(
     runtime: ApplicationRuntime,
     session: ApplicationSession,
     busy: Boolean,
-    playerSurface: @Composable (PlayerController, Modifier) -> Unit,
+    playerSurface: @Composable (
+        PlayerController,
+        onBack: () -> Unit,
+        onExitFullscreen: () -> Unit,
+        Modifier,
+    ) -> Unit,
     onPlayerScreenChanged: (Boolean) -> Unit,
+    onPlayerFullscreenChanged: (Boolean) -> Unit,
     onLogout: () -> Unit,
 ) {
     val browser = remember(session) {
@@ -874,9 +969,47 @@ private fun BrowseContent(
         ).value
     }
     var playingMedia by remember(session) { mutableStateOf<MediaItem?>(null) }
+    // 全屏是页面状态而不是几何推断：横屏平板宽 > 高，按窗口比例判「已是全屏」会让返回键
+    // 永远停在「退出全屏」那一步（平板退出全屏也不会变竖屏），结果退不出播放页。
+    var playerFullscreen by remember(session) { mutableStateOf(false) }
     var playbackBusy by remember(session) { mutableStateOf(false) }
     var playbackError by remember(session) { mutableStateOf<String?>(null) }
-    var playerExpanded by rememberSaveable(
+    // 播放队列（旧版 QueueManager 的等价物）：由起播时的浏览上下文构造，播放页的
+    // 「选集」「下一集」和播完自动衔接都读它。
+    var playQueue by remember(session) { mutableStateOf<PlaybackQueue?>(null) }
+    // 清晰度有「请求」和「实际」两个值，故意分开：
+    //  - requestedBitrate 是我们**要求**的上限（本次播放会话的用户意图，会带给下一集）；
+    //  - 实际生效的档位只信协商结果（prepared.appliedBitrate）。
+    // 界面只呈现后者，所以协商没兑现时不会出现「标签换了、其实没换」。
+    var requestedBitrate by remember(session) { mutableStateOf<Int?>(null) }
+    val preparedStream = playback?.prepared?.collectAsState()?.value
+    val qualityOptions = remember(playingMedia, preparedStream) {
+        val facts = preparedStream ?: return@remember emptyList()
+        val applied = facts.appliedBitrate
+        val providerLadder = facts.qualities
+        when {
+            // provider 自己给了档位表（fnOS 的上游直链）：原样呈现，不造表。
+            !providerLadder.isNullOrEmpty() -> cn.mafei.cmp.player.ui.PlayerQualityOptions.fromProvider(
+                renditions = providerLadder.map { quality -> quality.label to quality.bitrate },
+                appliedBitrate = applied,
+            )
+            // 空表 = 这条流没有别的档位（飞牛 range 原画直连）：**不给菜单**，
+            // 否则就是旧版那个 bug —— 点了档位却还是同一个文件。
+            providerLadder != null -> emptyList()
+            // null = provider 按需重编，可以自己造档位表（Jellyfin）。
+            else -> {
+                val videoStream = playingMedia?.mediaSources
+                    ?.firstOrNull { source -> source.videoStream != null }
+                    ?.videoStream
+                cn.mafei.cmp.player.ui.PlayerQualityOptions.applicable(
+                    videoWidthPx = videoStream?.widthPx,
+                    videoHeightPx = videoStream?.heightPx,
+                    appliedBitrate = applied,
+                )
+            }
+        }
+    }
+    var playerExpanded by remember(
         session.selection.serverId.value,
         session.selection.accountId.value,
     ) { mutableStateOf(false) }
@@ -885,6 +1018,14 @@ private fun BrowseContent(
         onDispose {
             if (playerExpanded) onPlayerScreenChanged(false)
         }
+    }
+    DisposableEffect(playerExpanded, onPlayerFullscreenChanged) {
+        if (!playerExpanded) {
+            playerFullscreen = false
+            // 清晰度是**本次播放会话**的选择，不是全局偏好：看完退出就回到自动。
+            requestedBitrate = null
+        }
+        onDispose { onPlayerFullscreenChanged(false) }
     }
     var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
     // Apple presents the account surface above the current document instead of
@@ -989,7 +1130,9 @@ private fun BrowseContent(
     LaunchedEffect(state.detailId) { playbackError = null }
     LaunchedEffect(playerShellState.phase) {
         if (playerShellState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
-        if (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released) {
+        if (!playbackBusy &&
+            (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released)
+        ) {
             playerExpanded = false
         }
     }
@@ -1105,29 +1248,80 @@ private fun BrowseContent(
             if (playback != null && !playbackBusy) {
                 playbackBusy = true
                 playbackError = null
+                playingMedia = item
+                playerExpanded = true
+                // 队列：已在队列里的条目只移动指针（选集/下一集/上一集），否则按当前
+                // 浏览上下文重建（详情页/季详情点播放）。
+                val existing = playQueue?.takeIf { queue -> queue.items.any { it.id == item.id } }
+                playQueue = existing?.movedTo(item.id) ?: browser.playbackQueueFor(item)
                 scope.launch {
                     try {
                         // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
                         val generation = playback.play(
                             itemId = item.id,
                             resumePositionMs = legacyPlaybackResumePositionMs(item),
-                            options = browser.playbackOptionsFor(item),
+                            options = browser.playbackOptionsFor(item)
+                                .copy(maxStreamingBitrate = requestedBitrate),
                         )
                         if (generation == null) {
                             playbackError = "当前媒体暂时无法播放"
-                        } else {
-                            playingMedia = item
-                            playerExpanded = true
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
-                    } catch (_: Exception) {
+                    } catch (failure: Exception) {
+                        println("[MaFeiPlayback] prepare failed: $failure")
                         playbackError = "播放准备失败，请重试"
                     } finally {
                         playbackBusy = false
                     }
                 }
             }
+        }
+        val playNextEpisode: () -> Unit = {
+            playQueue?.next()?.let { next ->
+                playQueue = next
+                startPlayback(next.current)
+            }
+        }
+        val playPreviousEpisode: () -> Unit = {
+            playQueue?.previous()?.let { previous ->
+                playQueue = previous
+                startPlayback(previous.current)
+            }
+        }
+        val playEpisodeAt: (Int) -> Unit = { index ->
+            playQueue?.select(index)?.let { selected ->
+                playQueue = selected
+                startPlayback(selected.current)
+            }
+        }
+        // 清晰度：0 = 自动（恢复直连），其余请求该码率的上限。
+        // 只有协商真的产出了新流才提交请求值 —— 失败时标签继续跟随实际结果（自动/原档），
+        // 下一集也不会把这个没兑现的上限带过去。
+        val selectQuality: (Int) -> Unit = { bitrate ->
+            val ceiling = bitrate.takeIf { it > 0 }
+            // 已经是这个档：不重复协商、不重复起播（旧版同样直接返回）。
+            if (ceiling != requestedBitrate) scope.launch {
+                try {
+                    if (playback?.selectQuality(ceiling) == null) {
+                        // 协商没产出新流（被拒 / 被后续请求取代）：请求值不提交，
+                        // 界面继续显示实际在播的那一档。
+                        playbackError = "当前清晰度暂时无法切换，已保持原清晰度"
+                    } else {
+                        requestedBitrate = ceiling
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    println("[MaFeiPlayback] quality switch failed: $failure")
+                    playbackError = "切换清晰度失败，请重试"
+                }
+            }
+        }
+        // 播完自动衔接下一集（旧版队列的连续播放）。phase 由「播放中」变为
+        // 「已结束」时 effect 重启一次，因此只会自动前进一集。
+        LaunchedEffect(playerShellState.phase) {
+            if (playerShellState.phase == PlayerPhase.Ended) playNextEpisode()
         }
         val openSearch: () -> Unit = {
             if (browseBackStack.lastOrNull() != BrowseSearchRoute) {
@@ -1531,6 +1725,7 @@ private fun BrowseContent(
             }
         }
         val activeMedia = playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
+        val playerMedia = if (playerExpanded) playingMedia else activeMedia
         // The floating mini player is the legacy MusicMiniPlayer. Video keeps
         // using the full player surface, but must not reserve music chrome or
         // appear above the app navigation after playback starts.
@@ -1570,18 +1765,32 @@ private fun BrowseContent(
                 if (pendingDeleteMedia != null) Modifier.captureGlassBackdrop(deleteConfirmBackdrop) else Modifier,
             ),
         ) {
-        if (playerExpanded && activeMedia != null && playback != null) {
+        if (playerExpanded && playerMedia != null && playback != null) {
             BoundNowPlayingScreen(
                 media = NowPlayingMedia(
-                    id = activeMedia.id.value,
-                    title = activeMedia.title,
-                    subtitle = activeMedia.miniPlayerSubtitle(),
-                    description = activeMedia.overview,
+                    id = playerMedia.id.value,
+                    title = playerMedia.title,
+                    subtitle = playerMedia.miniPlayerSubtitle(),
+                    description = playerMedia.overview,
                 ),
                 controller = playback.controller,
-                onBack = { playerExpanded = false },
+                providerTracks = playback.tracks,
+                onBack = {
+                    playerExpanded = false
+                    playerFullscreen = false
+                    onPlayerFullscreenChanged(false)
+                    scope.launch {
+                        try {
+                            playback.stop()
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            playbackError = "停止播放失败，请重试"
+                        }
+                    }
+                },
                 onTogglePlay = togglePlayback,
-                onRetry = { startPlayback(activeMedia) },
+                onRetry = { startPlayback(playerMedia) },
                 onSeek = { pendingSeekPosition = it },
                 onSpeed = { speed ->
                     scope.launch {
@@ -1597,7 +1806,7 @@ private fun BrowseContent(
                 onSelectTrack = { kind, id ->
                     scope.launch {
                         try {
-                            playback.controller.selectTrack(kind, id)
+                            playback.selectTrack(kind, id)
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
@@ -1606,7 +1815,35 @@ private fun BrowseContent(
                     }
                 },
                 playerSurface = playerSurface,
+                preparing = playbackBusy,
+                playbackError = playbackError,
                 modifier = Modifier.fillMaxSize(),
+                queue = playQueue,
+                onNext = playQueue?.takeIf { it.hasNext }?.let { { playNextEpisode() } },
+                onPrevious = playQueue?.takeIf { it.hasPrevious }?.let { { playPreviousEpisode() } },
+                onSelectEpisode = playQueue?.takeIf { it.size > 1 }?.let { { playEpisodeAt(it) } },
+                qualityOptions = qualityOptions,
+                onSelectQuality = { selectQuality(it) },
+                catalogItem = playerMedia,
+                prepared = preparedStream,
+                // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
+                // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
+                fullscreen = playerFullscreen,
+                onFullscreenChanged = { requested ->
+                    playerFullscreen = requested
+                    onPlayerFullscreenChanged(requested)
+                },
+                onSelectContentMode = { mode ->
+                    scope.launch {
+                        try {
+                            playback.controller.setContentMode(mode)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            playbackError = "切换画面比例失败，请重试"
+                        }
+                    }
+                },
             )
         } else MaFeiAdaptiveShell(
             layout = layout,

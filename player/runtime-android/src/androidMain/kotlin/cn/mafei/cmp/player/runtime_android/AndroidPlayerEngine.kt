@@ -20,6 +20,14 @@ interface AndroidPlayerEngine {
 
     fun setListener(listener: AndroidPlayerEngineListener?)
     fun setSurface(surface: Any?)
+
+    /**
+     * `android.media.MediaPlayer` exposes exactly two scalings — letterbox or
+     * crop-to-fill — and only once a player is prepared, so implementations
+     * must remember the request and re-apply it to every new player instance.
+     */
+    fun setVideoScalingMode(fill: Boolean)
+
     fun setDataSource(url: String, headers: Map<String, String>)
     fun prepareAsync()
     fun start()

@@ -169,6 +169,12 @@ class MacOsAvPlayerRuntime(
         if (command is RuntimeCommand.SelectTrack) {
             throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("trackSelection")
         }
+        // AVPlayerLayer gravity is not exposed through the bundled ObjC bridge,
+        // and the desktop host attaches no video surface at all, so the picture
+        // fitting stays unavailable instead of silently doing nothing.
+        if (command is RuntimeCommand.ContentMode) {
+            throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("contentMode")
+        }
         try {
             dispatcher.execute { executeOnQueue(command) }
         } catch (rejected: java.util.concurrent.RejectedExecutionException) {
@@ -189,6 +195,7 @@ class MacOsAvPlayerRuntime(
             is RuntimeCommand.Stop -> stop(command.generation)
             is RuntimeCommand.Speed -> if (owns(command.generation)) bridge.setSpeed(player, command.value)
             is RuntimeCommand.SelectTrack -> Unit // rejected synchronously in execute()
+            is RuntimeCommand.ContentMode -> Unit // rejected synchronously in execute()
             is RuntimeCommand.AttachSurface -> {
                 val layer = surfaces.layerOf(command.handle)
                 if (player != 0L && layer != 0L) bridge.attachLayer(player, layer)

@@ -67,6 +67,10 @@ class IosPlayerRuntime(
             is RuntimeCommand.SelectTrack ->
                 // No AVFoundation track negotiation in P0; refuse honestly.
                 throw UnsupportedPlayerCapability("trackSelection")
+            is RuntimeCommand.ContentMode ->
+                // AVPlayerLayer gravity needs a bridge method the P0 injectable
+                // bridge does not declare; refuse instead of a silent no-op.
+                throw UnsupportedPlayerCapability("contentMode")
             is RuntimeCommand.AttachSurface -> {
                 val snapshot = state.value
                 val layer = surfaces.layerOf(command.handle)

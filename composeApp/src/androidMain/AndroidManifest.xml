@@ -10,7 +10,18 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name="cn.mafei.cmp.MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|navigation">
+            <!--
+                Playback fullscreen works by requesting SENSOR_LANDSCAPE
+                (MainActivity.applyOrientationPolicy). Without configChanges the
+                system would DESTROY and RECREATE the Activity on every rotation,
+                and the player page is Compose state (App.kt: playerExpanded /
+                playingMedia are plain `remember`) — so entering fullscreen would
+                silently drop the player and land back on the browse shell.
+                Declaring the geometry changes here lets Compose re-measure the
+                new window instead, exactly like the ArkUI build does.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
