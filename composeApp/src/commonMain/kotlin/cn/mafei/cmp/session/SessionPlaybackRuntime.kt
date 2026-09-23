@@ -7,6 +7,7 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
 import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.repositories.playback.ProviderPlaybackCoordinator
+import cn.mafei.cmp.data.repositories.playback.resolveNativeTrackId
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerRuntime
@@ -88,36 +89,13 @@ class SessionPlaybackRuntime private constructor(
         // one it cannot re-negotiate, belongs to the native runtime.
         val viaProvider = id == null || providerTrack?.renegotiate == true
         if (viaProvider) return coordinator.selectTrack(providerKind, id)
-        val nativeId = resolveNativeTrack(providerTrack, controller.state.value.tracks.filter { it.kind == kind })
+        val nativeId = resolveNativeTrackId(providerTrack, controller.state.value.tracks.filter { it.kind == kind })
             ?: return null
         controller.selectTrack(kind, nativeId)
         // 原生已经在播放器内部换了轨，但 provider 的选中态与当前选项还停在旧轨上：
         // 界面勾选（优先显示 provider 状态）和后续重新协商都得跟上这次切换。
         providerTrack?.let { coordinator.selectTrackLocally(providerKind, it.index) }
         return controller.state.value.generation
-    }
-
-    /**
-     * Legacy `MFPlayerView.resolveNativeTrack` precedence: exact id, then
-     * display title, then language (+codec), then a single candidate.
-     * Provider stream indexes and native track ids are different namespaces —
-     * never assume they are equal beyond the id coincidence check below.
-     */
-    private fun resolveNativeTrack(
-        providerTrack: PlaybackTrack?,
-        nativeTracks: List<cn.mafei.cmp.player.api.PlayerTrack>,
-    ): String? {
-        if (providerTrack == null || nativeTracks.isEmpty()) return null
-        nativeTracks.firstOrNull { it.id == providerTrack.index.toString() }?.let { return it.id }
-        val title = providerTrack.displayTitle?.trim()?.lowercase().orEmpty()
-        val language = providerTrack.language?.trim()?.lowercase().orEmpty()
-        if (title.isNotEmpty()) {
-            nativeTracks.firstOrNull { it.label.trim().lowercase() == title }?.let { return it.id }
-        }
-        if (language.isNotEmpty()) {
-            nativeTracks.firstOrNull { it.language?.trim()?.lowercase() == language }?.let { return it.id }
-        }
-        return nativeTracks.singleOrNull()?.id
     }
 
     /** 清晰度档位（旧版 QualityOption.bitrate）：null = 自动/直连。 */

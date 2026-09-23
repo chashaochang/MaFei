@@ -26,6 +26,8 @@ import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerReport
 import cn.mafei.cmp.player.api.PlayerReportKind
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.TrackKind
+import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
 import cn.mafei.cmp.player.facade.DefaultPlayerController
@@ -147,9 +149,9 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     override suspend fun setWatched(id: MediaId, watched: Boolean) = throw ClientConfigError("unused")
 }
 
-private class Harness {
+private class Harness(trackSelection: Boolean = false) {
     val adapter = PlaybackOnlyAdapter()
-    val runtime = FakePlayerRuntime(PlayerCapabilities(trackSelection = false))
+    val runtime = FakePlayerRuntime(PlayerCapabilities(trackSelection = trackSelection))
     val scope = CoroutineScope(Dispatchers.Unconfined + Job())
     val failures = mutableListOf<PlaybackReportFailure>()
     val coordinator = ProviderPlaybackCoordinator(
@@ -179,10 +181,13 @@ private class Harness {
 
 class ProviderPlaybackCoordinatorTest {
 
-    private fun harness(block: suspend (Harness) -> Unit) = runBlocking {
+    private fun harness(
+        trackSelection: Boolean = false,
+        block: suspend (Harness) -> Unit,
+    ) = runBlocking {
         // A hung coordinator must fail the test with a stack, never park CI.
         kotlinx.coroutines.withTimeout(10_000) {
-            val harness = Harness()
+            val harness = Harness(trackSelection)
             try {
                 block(harness)
             } finally {
@@ -202,6 +207,20 @@ class ProviderPlaybackCoordinatorTest {
         harness.runtime.emit(RuntimeEvent.Ready(generation, durationMs))
         harness.runtime.emit(RuntimeEvent.Playing(generation))
     }
+
+    /**
+     * The preselection补选 runs on the coordinator's scope:它不是 load 的同步结果，
+     * 所以要等它落地，而不是假设 emit 之后就立刻生效。
+     */
+    private suspend fun awaitNativeSelections(harness: Harness, atLeast: Int = 1) =
+        kotlinx.coroutines.withTimeout(2_000) {
+            var found: List<RuntimeCommand.SelectTrack> = emptyList()
+            while (found.size < atLeast) {
+                found = harness.runtime.commands.filterIsInstance<RuntimeCommand.SelectTrack>()
+                if (found.size < atLeast) kotlinx.coroutines.delay(5)
+            }
+            found
+        }
 
     private fun progressReport(harness: Harness, positionMs: Long = 1_000) =
         PlayerReport(currentGeneration(harness), "item-0001", PlayerReportKind.Progress, positionMs, 60_000, false)
@@ -327,6 +346,132 @@ class ProviderPlaybackCoordinatorTest {
         harness.adapter.queueReady("https://stream.test/direct-720p")
         harness.coordinator.selectQuality(2_000_000)
         assertEquals(-1, harness.adapter.preparedOptions.last().subtitleStreamIndex)
+    }
+
+    // -------------------------------------- preselected tracks at load time
+
+    @Test
+    fun preselectedDirectPlayTracksAreAppliedNativelyOnceReady() = harness(trackSelection = true) { harness ->
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/direct",
+            tracks = listOf(
+                // 直连流的内嵌轨：provider 无法靠重新协商换掉它们。
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语", renegotiate = false),
+                PlaybackTrack(
+                    2,
+                    PlaybackTrackKind.Audio,
+                    displayTitle = "英语",
+                    selected = true,
+                    renegotiate = false,
+                ),
+                PlaybackTrack(3, PlaybackTrackKind.Subtitle, displayTitle = "中文字幕", renegotiate = false),
+            ),
+        )
+
+        harness.coordinator.play(
+            ProviderKind.Jellyfin,
+            ITEM,
+            options = PlaybackOptions(audioStreamIndex = 2, subtitleStreamIndex = -1),
+        )
+        val generation = currentGeneration(harness)
+        // 真实 runtime 就是这样：轨道列表先到，随后才 Ready。
+        harness.runtime.emit(
+            RuntimeEvent.Tracks(
+                generation,
+                listOf(
+                    PlayerTrack("1", TrackKind.Audio, "国语", language = "chi"),
+                    PlayerTrack("2", TrackKind.Audio, "英语", language = "eng"),
+                    PlayerTrack("9", TrackKind.Subtitle, "中文字幕"),
+                ),
+            ),
+        )
+        emitReadyAndPlaying(harness)
+
+        // 直连流的内嵌轨只能在播放器里换：provider 的选中态对了，播放器还得被告知。
+        val selections = awaitNativeSelections(harness, atLeast = 2)
+        assertEquals(listOf("2"), selections.filter { it.kind == TrackKind.Audio }.map { it.id })
+        // 明确的关字幕同样要落到播放器上。
+        assertEquals(listOf(null), selections.filter { it.kind == TrackKind.Subtitle }.map { it.id })
+    }
+
+    @Test
+    fun preselectedTracksTheProviderNegotiatesAreNotSwitchedNatively() = harness(trackSelection = true) { harness ->
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/hls/master.m3u8",
+            tracks = listOf(
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语", renegotiate = true),
+            ),
+        )
+
+        harness.coordinator.play(
+            ProviderKind.Jellyfin,
+            ITEM,
+            options = PlaybackOptions(audioStreamIndex = 1),
+        )
+        val generation = currentGeneration(harness)
+        harness.runtime.emit(
+            RuntimeEvent.Tracks(generation, listOf(PlayerTrack("1", TrackKind.Audio, "国语"))),
+        )
+        emitReadyAndPlaying(harness)
+
+        // 转码/外挂轨由 provider 重新协商换：原生再切一次就会与选中态打架。
+        kotlinx.coroutines.delay(100)
+        assertEquals(emptyList(), harness.runtime.commands.filterIsInstance<RuntimeCommand.SelectTrack>())
+    }
+
+    @Test
+    fun aSupersededLoadDropsItsPendingNativeSelection() = harness(trackSelection = true) { harness ->
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/first",
+            tracks = listOf(
+                PlaybackTrack(
+                    2,
+                    PlaybackTrackKind.Audio,
+                    displayTitle = "英语",
+                    selected = true,
+                    renegotiate = false,
+                ),
+            ),
+        )
+        harness.coordinator.play(
+            ProviderKind.Jellyfin,
+            ITEM,
+            options = PlaybackOptions(audioStreamIndex = 2),
+        )
+        val first = currentGeneration(harness)
+
+        // 还没进入 Ready 就换了条目：上一代的补选必须失效。
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/second",
+            tracks = listOf(
+                PlaybackTrack(
+                    2,
+                    PlaybackTrackKind.Audio,
+                    displayTitle = "英语",
+                    selected = true,
+                    renegotiate = false,
+                ),
+            ),
+        )
+        harness.coordinator.play(
+            ProviderKind.Jellyfin,
+            ITEM,
+            options = PlaybackOptions(audioStreamIndex = 2),
+        )
+        val second = currentGeneration(harness)
+
+        harness.runtime.emit(
+            RuntimeEvent.Tracks(second, listOf(PlayerTrack("2", TrackKind.Audio, "英语", language = "eng"))),
+        )
+        harness.runtime.emit(RuntimeEvent.Ready(second, 60_000))
+        harness.runtime.emit(RuntimeEvent.Playing(second))
+        // 第一代已经作废：即便它此刻才"就绪"，也不该再动播放器。
+        harness.runtime.emit(RuntimeEvent.Ready(first, 60_000))
+
+        val selections = awaitNativeSelections(harness)
+        kotlinx.coroutines.delay(100)
+        assertEquals(1, selections.size)
+        assertEquals(listOf(second), harness.runtime.commands.filterIsInstance<RuntimeCommand.SelectTrack>().map { it.generation })
     }
 
     // ----------------------------------------------------- renegotiation

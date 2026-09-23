@@ -15,8 +15,11 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.player.api.PlayableResource
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlaybackGeneration
+import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerReport
 import cn.mafei.cmp.player.api.PlayerReportKind
+import cn.mafei.cmp.player.api.TrackKind
+import cn.mafei.cmp.player.api.UnsupportedPlayerCapability
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -93,6 +97,13 @@ class ProviderPlaybackCoordinator(
 
     private val reportTasks = Channel<ReportTask>(Channel.UNLIMITED)
     private var worker: Job? = null
+
+    /**
+     * Applies a track preselection that must happen INSIDE the native player
+     * (see [schedulePendingNativeTracks]). Exactly one is alive at a time;
+     * every new load, stop and release cancels the previous one.
+     */
+    private var nativeSelection: Job? = null
 
     private val reportFailuresFlow = MutableSharedFlow<PlaybackReportFailure>(extraBufferCapacity = 64)
     val reportFailures: SharedFlow<PlaybackReportFailure> = reportFailuresFlow.asSharedFlow()
@@ -179,6 +190,7 @@ class ProviderPlaybackCoordinator(
         val target = checkNotNull(controller) { "attachController before play" }
         check(!released) { "Playback coordinator released" }
         val seq = ++requestSeq
+        cancelPendingNativeTracks()
         binding = Binding()
         tracksFlow.value = emptyList()
         preparedFlow.value = null
@@ -222,6 +234,7 @@ class ProviderPlaybackCoordinator(
         )
         tracksFlow.value = ready.tracks
         preparedFlow.value = ready.toPreparedFacts()
+        schedulePendingNativeTracks(generation, ready, options)
         generation
     }
 
@@ -264,6 +277,7 @@ class ProviderPlaybackCoordinator(
         )
         tracksFlow.value = ready.tracks
         preparedFlow.value = ready.toPreparedFacts()
+        schedulePendingNativeTracks(generation, ready, options)
         generation
     }
 
@@ -298,7 +312,100 @@ class ProviderPlaybackCoordinator(
         )
         tracksFlow.value = ready.tracks
         preparedFlow.value = ready.toPreparedFacts()
+        schedulePendingNativeTracks(generation, ready, options)
         generation
+    }
+
+    /**
+     * Applies a preselection the provider CANNOT deliver by negotiation.
+     *
+     * [PlaybackPreparation.Ready.tracks] already marks the chosen track selected
+     * (the adapter read the same [PlaybackOptions]), but that is only the
+     * provider's view: a track muxed into a byte-for-byte direct stream is chosen
+     * by whoever opens the file, and the runtime starts on the file's DEFAULT
+     * track. Nothing has told it otherwise, so a direct play would silently use
+     * the default audio and show the default embedded subtitle. The legacy page
+     * closed exactly this gap (MFPlayerView applied the chosen track once the
+     * native track list arrived); without it a preselection is only half honoured
+     * — the chrome shows the picked track while a different one plays.
+     *
+     * Waits for the generation to be prepared, because a track switch before that
+     * is refused by the state machine, and is dropped as soon as a newer load
+     * supersedes it. Platforms that cannot switch tracks simply keep playing: the
+     * switch is best-effort, never a reason to fail a started session.
+     */
+    private fun schedulePendingNativeTracks(
+        generation: PlaybackGeneration,
+        ready: PlaybackPreparation.Ready,
+        requested: PlaybackOptions,
+    ) {
+        cancelPendingNativeTracks()
+        val requestedSubtitle = requested.subtitleStreamIndex
+        val pending = ready.tracks.filter { track ->
+            !track.renegotiate && when (track.kind) {
+                PlaybackTrackKind.Audio -> track.index == requested.audioStreamIndex
+                PlaybackTrackKind.Subtitle -> track.index == requestedSubtitle
+            }
+        }
+        // 明确的「关字幕」：内嵌字幕只能由播放器关掉，外挂字幕走 provider 协商。
+        val subtitlesOff = requestedSubtitle != null && requestedSubtitle < 0 &&
+            ready.tracks.none { it.kind == PlaybackTrackKind.Subtitle && it.renegotiate }
+        if (pending.isEmpty() && !subtitlesOff) return
+        nativeSelection = scope.launch {
+            val target = controller ?: return@launch
+            val settled = target.state.first { state ->
+                state.generation === generation && state.phase.canSelectTracks()
+            }
+            // 期间可能已经换了条目/停了播放：那就不属于这一代了。
+            if (!bindingState.value.handles(settled.generation)) return@launch
+            pending.forEach { track ->
+                val kind = track.kind.toPlayerTrackKind()
+                val nativeId = resolveNativeTrackId(
+                    providerTrack = track,
+                    nativeTracks = target.state.value.tracks.filter { it.kind == kind },
+                ) ?: return@forEach
+                try {
+                    target.selectTrack(kind, nativeId)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: UnsupportedPlayerCapability) {
+                    // 平台不支持换轨：保持默认轨继续播，不因此中断。
+                } catch (_: IllegalStateException) {
+                    // 播放器又回到未就绪（例如重新加载）：交给下一次调度。
+                }
+            }
+            if (subtitlesOff) {
+                try {
+                    target.selectTrack(TrackKind.Subtitle, null)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: UnsupportedPlayerCapability) {
+                } catch (_: IllegalStateException) {
+                }
+            }
+        }
+    }
+
+    private fun cancelPendingNativeTracks() {
+        nativeSelection?.cancel()
+        nativeSelection = null
+    }
+
+    private fun PlaybackTrackKind.toPlayerTrackKind(): TrackKind = when (this) {
+        PlaybackTrackKind.Audio -> TrackKind.Audio
+        PlaybackTrackKind.Subtitle -> TrackKind.Subtitle
+    }
+
+    private fun PlayerPhase.canSelectTracks(): Boolean = when (this) {
+        PlayerPhase.Ready,
+        PlayerPhase.Playing,
+        PlayerPhase.Paused,
+        PlayerPhase.Buffering,
+        PlayerPhase.Ended -> true
+        PlayerPhase.Idle,
+        PlayerPhase.Loading,
+        PlayerPhase.Error,
+        PlayerPhase.Released -> false
     }
 
     /**
@@ -339,6 +446,7 @@ class ProviderPlaybackCoordinator(
     /** Stops playback and discards the current binding; queued reports for the old binding are dropped. */
     suspend fun stop() = mutex.withLock {
         ++requestSeq
+        cancelPendingNativeTracks()
         binding = Binding()
         tracksFlow.value = emptyList()
         preparedFlow.value = null
@@ -348,6 +456,7 @@ class ProviderPlaybackCoordinator(
     /** Releases the controller and this coordinator; no report is forwarded afterwards. */
     suspend fun release() = mutex.withLock {
         ++requestSeq
+        cancelPendingNativeTracks()
         binding = Binding()
         tracksFlow.value = emptyList()
         preparedFlow.value = null
@@ -468,6 +577,7 @@ class ProviderPlaybackCoordinator(
         )
         tracksFlow.value = outcome.tracks
         preparedFlow.value = outcome.toPreparedFacts()
+        schedulePendingNativeTracks(newGeneration, outcome, snapshot.options)
         renegotiationsFlow.value += 1
     }
 
