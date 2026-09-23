@@ -2093,52 +2093,37 @@ private fun RecommendationHero(
                         )
                     }
                 }
-                if (items.size > 1) {
-                    if (layout.navigation == NavigationPlacement.Sidebar) {
-                        val visibleCount = minOf(items.size, 7)
-                        val visibleStart = (activeItemIndex - visibleCount / 2)
-                            .coerceIn(0, (items.size - visibleCount).coerceAtLeast(0))
-                        Row(
-                            Modifier.align(Alignment.BottomStart)
-                                .fillMaxWidth()
-                                .padding(bottom = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                        ) {
-                            (visibleStart until visibleStart + visibleCount).forEach { index ->
-                                Box(
-                                    Modifier.size(if (index == activeItemIndex) 7.dp else 6.dp)
-                                        .clip(RoundedCornerShape(50))
-                                        .background(
-                                            if (index == activeItemIndex) Color.White
-                                            else Color.White.copy(alpha = .42f),
-                                        ),
-                                )
-                            }
-                        }
-                    } else {
-                        Row(
-                            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                .padding(horizontal = if (layout.horizontalHero) 36.dp else 16.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            items.indices.forEach { index ->
-                                LinearProgressIndicator(
-                                    progress = {
-                                        when {
-                                            index < activeItemIndex -> 1f
-                                            index == activeItemIndex -> autoplayProgress.value
-                                            else -> 0f
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
-                                    color = Color.White,
-                                    trackColor = Color.White.copy(alpha = .22f),
-                                )
-                            }
-                        }
-                    }
-                }
                 } // END Bottom-only text/indicator
+            }
+        }
+        // The phone indicator is an overlay of the pager, not part of an
+        // individual page. Keeping it here prevents it from translating with
+        // the artwork during a horizontal swipe; only its active progress is
+        // driven by the shared autoplay clock.
+        if (layout.navigation == NavigationPlacement.Bottom && items.size > 1) {
+            Row(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = if (layout.horizontalHero) 36.dp else 16.dp,
+                        vertical = 14.dp,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items.indices.forEach { index ->
+                    LinearProgressIndicator(
+                        progress = {
+                            when {
+                                index < activeItemIndex -> 1f
+                                index == activeItemIndex -> autoplayProgress.value
+                                else -> 0f
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = .22f),
+                    )
+                }
             }
         }
         if (refreshing || refreshProgress > 0f) {
