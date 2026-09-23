@@ -61,6 +61,7 @@ class DefaultPlayerController(
     override suspend fun stop() = command { stop() }
     override suspend fun speed(value: Float) = command { speed(value) }
     override suspend fun selectTrack(kind: TrackKind, id: String?) = command { selectTrack(kind, id) }
+    override suspend fun setContentMode(mode: PlayerContentMode) = command { contentMode(mode) }
     override suspend fun attachSurface(handle: PlayerSurfaceHandle) = command { attachSurface(handle) }
     override suspend fun detachSurface(handle: PlayerSurfaceHandle) = command { detachSurface(handle) }
     override suspend fun background() = command { background() }

@@ -35,8 +35,18 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
         prepared = false; reportedStart = false; lastReportAt = null
         nativePaused = false; lastReportedPaused = false
         val generation = PlaybackGeneration()
-        state = PlayerState(PlayerPhase.Loading, generation, queue[index].id, index, queue.size)
-        return effects + engine(RuntimeCommand.Load(generation, queue[index]))
+        state = PlayerState(
+            phase = PlayerPhase.Loading,
+            generation = generation,
+            resourceId = queue[index].id,
+            queueIndex = index,
+            queueSize = queue.size,
+            // Picture fitting is a property of the viewer, not of the media: a
+            // queued next episode or a re-negotiated stream must keep the
+            // ratio the user picked.
+            contentMode = state.contentMode,
+        )
+        return effects + engine(RuntimeCommand.Load(generation, queue[index], resumePosition))
     }
 
     fun accept(event: RuntimeEvent, nowMs: Long): List<PlayerEffect> {
@@ -73,7 +83,13 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
             }
             is RuntimeEvent.Progress -> {
                 if (!prepared || event.positionMs < 0 || event.bufferedPositionMs < 0) return emptyList()
-                state = state.copy(positionMs = clamp(event.positionMs), bufferedPositionMs = clamp(event.bufferedPositionMs))
+                if (event.durationMs?.let { it < 0L } == true) return emptyList()
+                val duration = event.durationMs?.takeIf { it > 0L } ?: state.durationMs
+                state = state.copy(
+                    durationMs = duration,
+                    positionMs = clamp(event.positionMs, duration),
+                    bufferedPositionMs = clamp(event.bufferedPositionMs, duration),
+                )
                 val previous = lastReportAt
                 if (reportedStart && (previous == null || nowMs < previous || nowMs - previous >= reportIntervalMs)) {
                     lastReportAt = nowMs; return listOf(report(PlayerReportKind.Progress))
@@ -118,6 +134,19 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
         check(prepared) { "Player not ready" }
         require(id == null && kind == TrackKind.Subtitle || state.tracks.any { it.kind == kind && it.id == id }) { "Unknown track" }
         return listOf(engine(RuntimeCommand.SelectTrack(generation(), kind, id)))
+    }
+
+    /**
+     * Picture fitting. Deliberately NOT gated on [prepared]: the legacy page
+     * keeps the aspect menu live while loading, paused or after the queue
+     * ended, because the surface is already on screen in all three.
+     */
+    fun contentMode(mode: PlayerContentMode): List<PlayerEffect> {
+        active()
+        if (!capabilities.contentMode) throw UnsupportedPlayerCapability("contentMode")
+        if (state.contentMode == mode) return emptyList()
+        state = state.copy(contentMode = mode)
+        return listOf(engine(RuntimeCommand.ContentMode(mode)))
     }
     fun background(): List<PlayerEffect> {
         active(); backgrounded = true
@@ -171,6 +200,7 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
     private fun generation() = checkNotNull(state.generation)
     private fun active() = check(state.phase != PlayerPhase.Released) { "Player released" }
     private fun usable() { active(); check(state.generation != null && state.phase !in terminalPhases) { "No active resource" } }
-    private fun clamp(position: Long) = state.durationMs?.let { position.coerceAtMost(it) } ?: position
+    private fun clamp(position: Long, durationMs: Long? = state.durationMs) =
+        durationMs?.let { position.coerceAtMost(it) } ?: position
     private val terminalPhases = setOf(PlayerPhase.Idle, PlayerPhase.Ended, PlayerPhase.Error, PlayerPhase.Released)
 }

@@ -8,6 +8,8 @@ class PlayableResource(
     val url: String,
     headers: Map<String, String> = emptyMap(),
     val subtitleUrl: String? = null,
+    val allowInsecureTls: Boolean = false,
+    val multiConnectionAllowed: Boolean = true,
 ) {
     val headers: Map<String, String> = headers.toMap()
     init { require(id.isNotBlank()); require(url.isNotBlank()) }
@@ -22,8 +24,67 @@ class PlayerSurfaceHandle
 
 enum class PlayerPhase { Idle, Loading, Ready, Playing, Paused, Buffering, Ended, Error, Released }
 enum class TrackKind { Video, Audio, Subtitle }
-data class PlayerTrack(val id: String, val kind: TrackKind, val label: String, val language: String? = null)
-data class PlayerCapabilities(val seek: Boolean = true, val speed: Boolean = true, val trackSelection: Boolean = true, val backgroundPlayback: Boolean = false)
+
+/**
+ * Legacy ArkUI 「画面比例」 (`PlayerContentMode`). The picture is fitted in two
+ * places, and they never overlap:
+ *
+ * - The host (Compose) owns the geometry of the video AREA — [Original] takes
+ *   the source's own pixel size at 1:1, the `Ratio*` entries reshape the area
+ *   into a fixed frame, [Fit]/[Fill] keep the whole area.
+ * - The native surface owns only how the picture inside that area is scaled:
+ *   [fills] picks crop-to-fill, everything else letterboxes.
+ *
+ * Keeping the split here means the three ratio modes work on every backend
+ * without provider-specific negotiation.
+ */
+enum class PlayerContentMode {
+    /** 适应 — whole picture inside the area (letterbox). */
+    Fit,
+
+    /** 填满 — crop the picture to fill the area. */
+    Fill,
+
+    /** 原始比例 — source pixels at 1:1, centred; the overflow is clipped. */
+    Original,
+
+    Ratio16x9,
+    Ratio4x3,
+    Ratio21x9,
+    ;
+
+    /** True when the surface must crop instead of letterboxing. */
+    val fills: Boolean get() = this == Fill
+
+    /** Fixed area shape in width/height; null keeps the natural area. */
+    val forcedAspectRatio: Float? get() = when (this) {
+        Ratio16x9 -> 16f / 9f
+        Ratio4x3 -> 4f / 3f
+        Ratio21x9 -> 21f / 9f
+        else -> null
+    }
+}
+
+data class PlayerTrack(
+    val id: String,
+    val kind: TrackKind,
+    val label: String,
+    val language: String? = null,
+    val selected: Boolean = false,
+)
+data class PlayerCapabilities(
+    val seek: Boolean = true,
+    val speed: Boolean = true,
+    val trackSelection: Boolean = true,
+    val backgroundPlayback: Boolean = false,
+    /**
+     * The surface can apply [PlayerContentMode.fills] natively (crop vs
+     * letterbox). False keeps the 「画面比例」 menu hidden: the ratio-only half
+     * would render while 「填满」 silently letterboxed, which is worse than not
+     * offering the command.
+     */
+    val contentMode: Boolean = false,
+)
 class UnsupportedPlayerCapability(val capability: String) : IllegalStateException("Unsupported player capability: $capability")
 enum class PlayerFailure { Network, Decode, UnsupportedMedia, Engine, RuntimeClosed }
 
@@ -39,6 +100,8 @@ data class PlayerState(
     val tracks: List<PlayerTrack> = emptyList(),
     val speed: Float = 1f,
     val failure: PlayerFailure? = null,
+    /** Host-selected picture fitting; survives generation changes like the old page-local state. */
+    val contentMode: PlayerContentMode = PlayerContentMode.Fit,
 )
 
 /** Runtime callbacks must retain the generation of the originating native player/load. */
@@ -48,7 +111,13 @@ sealed interface RuntimeEvent {
     data class Playing(override val generation: PlaybackGeneration) : RuntimeEvent
     data class Paused(override val generation: PlaybackGeneration) : RuntimeEvent
     data class Buffering(override val generation: PlaybackGeneration) : RuntimeEvent
-    data class Progress(override val generation: PlaybackGeneration, val positionMs: Long, val bufferedPositionMs: Long) : RuntimeEvent
+    data class Progress(
+        override val generation: PlaybackGeneration,
+        val positionMs: Long,
+        val bufferedPositionMs: Long,
+        /** Duration can become known after Ready; carry it without replaying Ready side effects. */
+        val durationMs: Long? = null,
+    ) : RuntimeEvent
     data class Tracks(override val generation: PlaybackGeneration, val tracks: List<PlayerTrack>) : RuntimeEvent
     data class Ended(override val generation: PlaybackGeneration) : RuntimeEvent
     data class Failed(override val generation: PlaybackGeneration, val failure: PlayerFailure) : RuntimeEvent
@@ -56,13 +125,26 @@ sealed interface RuntimeEvent {
 
 /** Commands acknowledge submission, not playback success. Native runtime emits confirmation events. */
 sealed interface RuntimeCommand {
-    data class Load(val generation: PlaybackGeneration, val resource: PlayableResource) : RuntimeCommand
+    data class Load(
+        val generation: PlaybackGeneration,
+        val resource: PlayableResource,
+        val startPositionMs: Long = 0L,
+    ) : RuntimeCommand
     data class Play(val generation: PlaybackGeneration) : RuntimeCommand
     data class Pause(val generation: PlaybackGeneration) : RuntimeCommand
     data class Seek(val generation: PlaybackGeneration, val positionMs: Long) : RuntimeCommand
     data class Stop(val generation: PlaybackGeneration) : RuntimeCommand
     data class Speed(val generation: PlaybackGeneration, val value: Float) : RuntimeCommand
     data class SelectTrack(val generation: PlaybackGeneration, val kind: TrackKind, val id: String?) : RuntimeCommand
+
+    /**
+     * Surface-scoped, generation-less like [AttachSurface]: the picture fitting
+     * belongs to the video surface, which outlives individual loads. Runtimes
+     * must re-apply it to every native player they create (Android releases
+     * and rebuilds its `MediaPlayer` per load).
+     */
+    data class ContentMode(val mode: PlayerContentMode) : RuntimeCommand
+
     data class AttachSurface(val handle: PlayerSurfaceHandle) : RuntimeCommand
     data class DetachSurface(val handle: PlayerSurfaceHandle) : RuntimeCommand
     data object Release : RuntimeCommand
@@ -103,6 +185,7 @@ interface PlayerController {
     suspend fun release()
     suspend fun speed(value: Float)
     suspend fun selectTrack(kind: TrackKind, id: String?)
+    suspend fun setContentMode(mode: PlayerContentMode)
     suspend fun attachSurface(handle: PlayerSurfaceHandle)
     suspend fun detachSurface(handle: PlayerSurfaceHandle)
     suspend fun background()

@@ -4,6 +4,16 @@ import cn.mafei.cmp.player.api.*
 import kotlin.test.*
 
 class PlayerStateMachineTest {
+    @Test
+    fun loadCarriesResumePositionToRuntime() {
+        val machine = PlayerStateMachine(PlayerCapabilities())
+
+        val load = (machine.load(listOf(resource()), 0, 12_000, true).single() as PlayerEffect.Engine)
+            .command as RuntimeCommand.Load
+
+        assertEquals(12_000, load.startPositionMs)
+    }
+
     private fun resource(id: String = "one") = PlayableResource(id, "https://media.invalid/$id")
     private fun machine() = PlayerStateMachine(PlayerCapabilities())
     private fun ready(m: PlayerStateMachine): PlaybackGeneration {
@@ -157,6 +167,17 @@ class PlayerStateMachineTest {
         assertEquals(1000, m.state.bufferedPositionMs)
     }
 
+    @Test fun progressFillsDurationDiscoveredAfterReady() {
+        val m = machine(); m.load(listOf(resource()), 0, 0, true); val id = m.state.generation!!
+        m.accept(RuntimeEvent.Ready(id, null), 0)
+
+        m.accept(RuntimeEvent.Progress(id, 2_000, 8_000, 6_000), 1)
+
+        assertEquals(6_000, m.state.durationMs)
+        assertEquals(2_000, m.state.positionMs)
+        assertEquals(6_000, m.state.bufferedPositionMs)
+    }
+
     @Test fun selectingKnownTracksAndDisablingSubtitlesIsExplicit() {
         val m = machine(); val id = ready(m)
         m.accept(RuntimeEvent.Tracks(id, listOf(PlayerTrack("en", TrackKind.Audio, "English"))), 0)
@@ -230,5 +251,45 @@ class PlayerStateMachineTest {
         assertTrue(whileWaiting.paused)
         val confirmed = m.accept(RuntimeEvent.Playing(id), 20_001).filterIsInstance<PlayerEffect.Report>().single().value
         assertFalse(confirmed.paused)
+    }
+
+    @Test fun contentModeIsRefusedWhenTheSurfaceCannotApplyIt() {
+        val m = machine()
+        assertFailsWith<UnsupportedPlayerCapability> { m.contentMode(PlayerContentMode.Ratio16x9) }
+        assertEquals(PlayerContentMode.Fit, m.state.contentMode)
+    }
+
+    @Test fun contentModeEmitsOnlyOnARealChangeAndNeverNeedsPreparation() {
+        val m = PlayerStateMachine(PlayerCapabilities(contentMode = true))
+        // 尚未加载任何资源时也能设：画面比例属于画面，不属于某次加载。
+        val effects = m.contentMode(PlayerContentMode.Ratio21x9)
+        assertEquals(
+            PlayerContentMode.Ratio21x9,
+            (effects.single() as PlayerEffect.Engine).command.let { (it as RuntimeCommand.ContentMode).mode },
+        )
+        assertEquals(PlayerContentMode.Ratio21x9, m.state.contentMode)
+        assertTrue(m.contentMode(PlayerContentMode.Ratio21x9).isEmpty())
+    }
+
+    @Test fun contentModeSurvivesQueueAdvanceAndStopResetsIt() {
+        val m = PlayerStateMachine(PlayerCapabilities(contentMode = true))
+        m.load(listOf(resource("a"), resource("b")), 0, 0, true)
+        m.contentMode(PlayerContentMode.Fill)
+        val first = m.state.generation!!
+        m.accept(RuntimeEvent.Ready(first, 1000), 0)
+        // 播完自动接下一集：新代仍是同一个观看者的选择。
+        m.accept(RuntimeEvent.Ended(first), 1)
+        assertEquals(PlayerContentMode.Fill, m.state.contentMode)
+        assertNotEquals(first, m.state.generation)
+        m.stop()
+        assertEquals(PlayerContentMode.Fit, m.state.contentMode)
+    }
+
+    @Test fun contentModeIsGenerationLessSoAnExpiredGenerationCannotSmuggleIt() {
+        val m = PlayerStateMachine(PlayerCapabilities(contentMode = true))
+        m.load(listOf(resource()), 0, 0, true)
+        val command = (m.contentMode(PlayerContentMode.Fill).single() as PlayerEffect.Engine).command
+        // 与 AttachSurface 同类：它不携带 generation，运行时不得按代过滤。
+        assertIs<RuntimeCommand.ContentMode>(command)
     }
 }
