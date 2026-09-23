@@ -1233,13 +1233,18 @@ private fun BrowseContent(
             else -> null
         }
         val destinations = remember {
-            listOf(
-                MaFeiNavItem(HomeDestination, "首页", MaFeiGlyph.Home),
-                MaFeiNavItem(ChasingDestination, "追剧", MaFeiGlyph.History),
-                MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite),
-                MaFeiNavItem(LibraryDestination, "媒体库", MaFeiGlyph.Library),
-                MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account),
-            )
+            buildList {
+                add(MaFeiNavItem(HomeDestination, "首页", MaFeiGlyph.Home))
+                // 追剧页的产品结构和交互仍在设计中，暂不向用户暴露入口。
+                // 保留 ChasingBrowser、路由和数据模型，待页面方案冻结后只需打开此开关；
+                // 首页的「继续观看」仍属于播放主链路，不受这个入口开关影响。
+                if (ShowChasingDestination) {
+                    add(MaFeiNavItem(ChasingDestination, "追剧", MaFeiGlyph.History))
+                }
+                add(MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite))
+                add(MaFeiNavItem(LibraryDestination, "媒体库", MaFeiGlyph.Library))
+                add(MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account))
+            }
         }
         val libraries = state.collections.map { collection ->
             MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library)
@@ -3182,6 +3187,8 @@ private suspend fun discoveredJellyfinServerSuggestions(): List<ServerDiscoveryS
     }
 
 private const val HomeDestination = "home"
+/** Product gate: the chasing page stays implemented but hidden until its UX is finalized. */
+private const val ShowChasingDestination = false
 private const val ChasingDestination = "chasing"
 private const val FavoriteDestination = "favorite"
 private const val LibraryDestination = "library"
