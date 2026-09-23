@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1291,7 +1290,7 @@ private fun PlayerChromeModeById(id: String): PlayerContentMode =
 
 /**
  * 旧版 `PlaybackInfoCard`：盖住画面的一张技术信息卡（左对齐、72% 宽/76% 高，
- * 270~360 宽 clamp）。整层点击即关；卡片自身拦截点击，内部滚动照常。
+ * 250~360dp 宽 clamp）。整层点击即关；卡片自身拦截点击，内部滚动照常。
  */
 @Composable
 private fun PlayerPlaybackInfoCard(
@@ -1300,7 +1299,10 @@ private fun PlayerPlaybackInfoCard(
     modifier: Modifier = Modifier,
 ) {
     val dismissSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    Box(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // Clamp the viewport-relative width before applying a fixed constraint.
+        // fillMaxWidth followed by widthIn would lock in 72% and ignore the cap.
+        val cardWidth = (maxWidth * .72f).coerceIn(250.dp, 360.dp)
         Box(
             Modifier.fillMaxSize()
                 .clickable(
@@ -1311,8 +1313,7 @@ private fun PlayerPlaybackInfoCard(
                 ),
         )
         Column(
-            Modifier.fillMaxWidth(.72f)
-                .widthIn(min = 250.dp, max = 360.dp)
+            Modifier.width(cardWidth)
                 .fillMaxHeight(.76f)
                 .padding(start = 32.dp, top = 16.dp, bottom = 16.dp)
                 .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x52000000), spotColor = Color(0x52000000))
