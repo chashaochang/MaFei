@@ -8,6 +8,9 @@ import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.providers.jellyfin.core.InMemoryJellyfinSessionState
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
@@ -81,6 +84,42 @@ class JellyfinAdapterPlaybackTest {
         )
     }
 
+    @Test
+    fun qualityCeilingKeepsTranscodingWhenTheServerHonoursIt() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.PLAYBACK_INFO)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(
+                cn.mafei.cmp.core.domain.MediaId("m0102030405060708"),
+                PlaybackOptions(maxStreamingBitrate = 8_000_000),
+            ),
+        )
+        // 上限走服务端重编：选中的是那条只提供转码的源。
+        assertTrue(ready.streamUrl.contains("/videos/m0102030405060708/master.m3u8"), ready.streamUrl)
+        assertEquals(PlaybackTransport.Transcode, ready.transport)
+        assertEquals(8_000_000, ready.appliedBitrate)
+        // Jellyfin 按需求转码：档位表由界面按视频尺寸自己造（null = 可造）。
+        assertEquals(null, ready.qualities)
+    }
+
+    @Test
+    fun qualityCeilingTheServerCannotHonourStillReportsDirectPlay() = runTest {
+        // 服务端没有转码路径（只有直连源）时，界面点了 1080p 也只能直连。必须如实报
+        // DirectPlay + appliedBitrate = null，卡片才会显示「直连 / 自动」，而不是把
+        // 用户点的那一档当成事实（旧版那个 bug 就是这么来的）。
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_AUDIO_ONLY)
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(
+                cn.mafei.cmp.core.domain.MediaId("m0102030405060708"),
+                PlaybackOptions(maxStreamingBitrate = 8_000_000),
+            ),
+        )
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+        assertEquals(null, ready.appliedBitrate)
+        assertTrue(ready.streamUrl.contains("static=true"), ready.streamUrl)
+    }
+
     // ------------------------------------------------------------- prepare
 
     @Test
@@ -103,6 +142,19 @@ class JellyfinAdapterPlaybackTest {
         )
         assertEquals(cn.mafei.cmp.core.domain.PlaybackSessionId("session-0001"), ready.playSessionId)
         assertTrue(ready.headers.isEmpty())
+        assertEquals("ms0102030405060708", ready.mediaSourceId)
+        assertEquals(
+            listOf("English AAC 5.1", "Chinese AAC 2.0", "English SRT"),
+            ready.tracks.mapNotNull { it.displayTitle },
+        )
+        assertEquals(
+            listOf(1),
+            ready.tracks.filter { it.kind == PlaybackTrackKind.Audio && it.selected }.map { it.index },
+        )
+        assertEquals(
+            listOf(3),
+            ready.tracks.filter { it.kind == PlaybackTrackKind.Subtitle && it.selected }.map { it.index },
+        )
         // The server-side file path never leaks into any URL.
         assertTrue(!ready.streamUrl.contains("/media/movies"))
         assertTrue(!ready.subtitleUrl!!.contains("/media/movies"))

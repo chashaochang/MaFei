@@ -13,6 +13,7 @@ import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.core.domain.PlaybackSessionId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ResourceNotFoundError
+import cn.mafei.cmp.core.domain.mediaLanguageDisplayName
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
@@ -24,6 +25,9 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.jellyfin.facade.JellyfinFacade
@@ -443,6 +447,7 @@ class JellyfinMediaProviderAdapter(
     override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
         // 用户指定的版本/轨道随协商一起提交：服务端按选中的源/轨协商转码决策。
         val pinnedSourceId = options.mediaSourceId?.takeIf { it.isNotBlank() }
+        val bitrateCeiling = options.maxStreamingBitrate?.takeIf { it > 0 }
         val info = translate {
             facade.playback.playbackInfo(
                 userId = jellyfinUserId,
@@ -450,6 +455,12 @@ class JellyfinMediaProviderAdapter(
                 mediaSourceId = pinnedSourceId,
                 audioStreamIndex = options.audioStreamIndex,
                 subtitleStreamIndex = options.subtitleStreamIndex,
+                maxStreamingBitrate = bitrateCeiling,
+                // 旧版清晰度就是「请求这个码率的胶片」：指定档位时不再直连原文件，
+                // 让服务端按码率重编（auto/未指定时保持原来的直连优先协商）。
+                enableDirectPlay = bitrateCeiling?.let { false },
+                enableDirectStream = bitrateCeiling?.let { false },
+                enableTranscoding = bitrateCeiling?.let { true },
             )
         }
         // Any non-null error code refuses — including the SDK's Unknown
@@ -474,20 +485,39 @@ class JellyfinMediaProviderAdapter(
         val directPlay = candidates.firstOrNull { it.supportsDirectPlay == true }
         val directStream = candidates.firstOrNull { it.supportsDirectStream == true }
         val transcode = candidates.firstOrNull { !it.transcodingUrl.isNullOrBlank() }
-        val source = directPlay ?: directStream ?: transcode
+        // 指定清晰度档位时服务端重编才是用户要的那条流：转码优先。
+        val source = if (bitrateCeiling != null) {
+            transcode ?: directStream ?: directPlay
+        } else {
+            directPlay ?: directStream ?: transcode
+        }
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.NoPlayableSource,
                 detail = "PlaybackInfo offered ${info.mediaSources.size} media source(s) with no usable stream",
             )
+        // 实际是哪条路：转码 URL 只在真正用它时才叫 Transcode。这个事实要如实上报，
+        // 界面不能按「用户点了 1080p」去猜 —— 服务端可能仍直连（也就会显示「自动」）。
+        val usesTranscodingUrl = (bitrateCeiling != null && !source.transcodingUrl.isNullOrBlank()) ||
+            (directPlay == null && directStream == null)
         val streamUrl = when {
+            bitrateCeiling != null && !source.transcodingUrl.isNullOrBlank() -> try {
+                facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
+            } catch (e: IllegalArgumentException) {
+                return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
+            }
             directPlay != null || directStream != null ->
-                buildStreamUrl(item.value, source, playSessionId = info.playSessionId)
+                buildStreamUrl(item.value, source, playSessionId = info.playSessionId, options = options)
             else -> try {
                 facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
             } catch (e: IllegalArgumentException) {
                 // Unparseable or cross-origin link: rejected instead of trusted.
                 return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
             }
+        }
+        val transport = when {
+            usesTranscodingUrl -> PlaybackTransport.Transcode
+            source === directPlay -> PlaybackTransport.DirectPlay
+            else -> PlaybackTransport.DirectStream
         }
         // External text subtitles ride their own validated URL and MUST come
         // from the selected source only — another media version's tracks stay
@@ -507,6 +537,17 @@ class JellyfinMediaProviderAdapter(
         val ready = PlaybackPreparation.Ready(
             streamUrl = streamUrl,
             subtitleUrl = subtitleUrl,
+            mediaSourceId = source.id,
+            transport = transport,
+            // 只有真的走了转码，档位才算生效；退化成直连时必须报 null（界面显示「自动」）。
+            appliedBitrate = bitrateCeiling?.takeIf { transport == PlaybackTransport.Transcode },
+            // Jellyfin 按需重编，可以接受任意码率上限 —— null 表示「界面可以自己造档位表」。
+            qualities = null,
+            tracks = playbackTracks(
+                source = source,
+                options = options,
+                directRoute = bitrateCeiling == null && (directPlay != null || directStream != null),
+            ),
             headers = emptyMap(), // Jellyfin streams carry access in the URL itself
             playSessionId = info.playSessionId?.let(::PlaybackSessionId),
             reportingContext = JellyfinReportingContext(item.value, source.id).encode(),
@@ -565,6 +606,7 @@ class JellyfinMediaProviderAdapter(
         itemId: String,
         source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto,
         playSessionId: String?,
+        options: PlaybackOptions,
     ): String {
         val audio = source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
             source.mediaStreams.any { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio }
@@ -577,10 +619,81 @@ class JellyfinMediaProviderAdapter(
                 addQueryParameter("static", "true")
                 source.id?.let { addQueryParameter("mediaSourceId", it) }
                 playSessionId?.let { addQueryParameter("playSessionId", it) }
+                options.audioStreamIndex?.let { addQueryParameter("audioStreamIndex", it.toString()) }
+                options.subtitleStreamIndex?.let { addQueryParameter("subtitleStreamIndex", it.toString()) }
                 token?.let { addQueryParameter("api_key", it) }
             }
         return url.build().toEncodedString()
     }
+
+    /**
+     * Mirrors the legacy player's DisplayTitle/Title metadata and selection
+     * precedence.
+     *
+     * [renegotiate] is decided by the route this negotiation took:
+     * - direct play / direct stream serve the file byte-for-byte with
+     *   `static=true`, so Jellyfin ignores stream-index parameters — an
+     *   embedded track can only change inside the native runtime.
+     * - transcoding re-muxes per request, so any track is provider-switchable.
+     * - external subtitles always have their own delivery URL.
+     * A missing display title is composed from language/codec/channels instead
+     * of leaving the UI to render "track 3".
+     */
+    private fun playbackTracks(
+        source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto,
+        options: PlaybackOptions,
+        directRoute: Boolean,
+    ): List<PlaybackTrack> {
+        val audio = source.mediaStreams.filter {
+            it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio && it.index != null
+        }
+        val subtitles = source.mediaStreams.filter {
+            it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Subtitle && it.index != null
+        }
+        val selectedAudio = options.audioStreamIndex
+            ?: source.defaultAudioStreamIndex
+            ?: audio.firstOrNull { it.isDefault == true }?.index
+            ?: audio.firstOrNull()?.index
+        val selectedSubtitle = when (val requested = options.subtitleStreamIndex) {
+            null -> source.defaultSubtitleStreamIndex
+                ?: subtitles.firstOrNull { it.isDefault == true || it.isForced == true }?.index
+            else -> requested
+        }
+        return (audio + subtitles).map { stream ->
+            val audioTrack = stream.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio
+            val kind = if (audioTrack) PlaybackTrackKind.Audio else PlaybackTrackKind.Subtitle
+            val externalSubtitle = !audioTrack &&
+                stream.deliveryMethod == cn.mafei.cmp.providers.jellyfin.wire.SubtitleDeliveryMethod.External
+            PlaybackTrack(
+                index = checkNotNull(stream.index),
+                kind = kind,
+                displayTitle = stream.displayTitle?.takeIf { it.isNotBlank() }
+                    ?: stream.title?.takeIf { it.isNotBlank() }
+                    ?: trackFallbackName(stream),
+                title = stream.title?.takeIf { it.isNotBlank() },
+                language = stream.language?.takeIf { it.isNotBlank() },
+                codec = stream.codec?.takeIf { it.isNotBlank() },
+                channels = stream.channels,
+                selected = when (kind) {
+                    PlaybackTrackKind.Audio -> stream.index == selectedAudio
+                    PlaybackTrackKind.Subtitle -> selectedSubtitle != null && selectedSubtitle >= 0 &&
+                        stream.index == selectedSubtitle
+                },
+                isExternal = externalSubtitle,
+                renegotiate = externalSubtitle || !directRoute,
+            )
+        }
+    }
+
+    /** Composed fallback used when a provider omits DisplayTitle and Title. */
+    private fun trackFallbackName(
+        stream: cn.mafei.cmp.providers.jellyfin.wire.MediaStreamDto,
+    ): String = buildList {
+        stream.language?.takeIf { it.isNotBlank() }?.let { add(mediaLanguageDisplayName(it)) }
+        stream.codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+        stream.channels?.takeIf { it > 0 }?.let { add("${it}ch") }
+    }.joinToString(" · ").takeIf { it.isNotEmpty() }
+        ?: if (stream.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio) "音轨" else "字幕"
 
     /**
      * Picks the external subtitle track for the SELECTED source. Precedence:

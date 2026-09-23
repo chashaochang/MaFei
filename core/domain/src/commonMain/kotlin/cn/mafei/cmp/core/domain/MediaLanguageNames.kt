@@ -1,0 +1,236 @@
+package cn.mafei.cmp.core.domain
+
+/**
+ * Chinese display-name snapshot for the ISO 639 table bundled by the ArkUI app.
+ *
+ * The old implementation resolved the table's ISO 639-1 code through
+ * `Intl.DisplayNames(['zh-CN'])`. Keeping the snapshot in common code makes the
+ * result deterministic on Android, iOS, Desktop and OHOS without shrinking the
+ * set of languages understood by the app. Lives in `core:domain` because both
+ * catalog pages (feature modules) and provider adapters (data layer) name
+ * tracks from the same table.
+ */
+private data class LegacyLanguageCode(
+    val alpha2: String,
+    val terminological: String,
+    val bibliographic: String,
+    val displayName: String,
+) {
+    fun matches(code: String): Boolean =
+        code == alpha2 || code == terminological || code == bibliographic
+}
+
+/**
+ * Chinese display-name snapshot for the ISO 639 table bundled by the ArkUI app.
+ *
+ * The old implementation resolved the table's ISO 639-1 code through
+ * `Intl.DisplayNames(['zh-CN'])`. Keeping the snapshot in common code makes the
+ * result deterministic on Android, iOS, Desktop and OHOS without shrinking the
+ * set of languages understood by the detail page.
+ */
+private val legacyLanguageCodes = listOf(
+    LegacyLanguageCode("sr", "srp", "srp", "塞尔维亚语"),
+    LegacyLanguageCode("ro", "ron", "rum", "罗马尼亚语"),
+    LegacyLanguageCode("ii", "iii", "iii", "凉山彝语"),
+    LegacyLanguageCode("ty", "tah", "tah", "塔希提语"),
+    LegacyLanguageCode("tl", "tgl", "tgl", "菲律宾语"),
+    LegacyLanguageCode("yi", "yid", "yid", "意第绪语"),
+    LegacyLanguageCode("ak", "aka", "aka", "阿肯语"),
+    LegacyLanguageCode("ms", "msa", "may", "马来语"),
+    LegacyLanguageCode("ar", "ara", "ara", "阿拉伯语"),
+    LegacyLanguageCode("no", "nor", "nor", "挪威语"),
+    LegacyLanguageCode("oj", "oji", "oji", "奥吉布瓦语"),
+    LegacyLanguageCode("ff", "ful", "ful", "富拉语"),
+    LegacyLanguageCode("fa", "fas", "per", "波斯语"),
+    LegacyLanguageCode("sq", "sqi", "alb", "阿尔巴尼亚语"),
+    LegacyLanguageCode("ay", "aym", "aym", "艾马拉语"),
+    LegacyLanguageCode("az", "aze", "aze", "阿塞拜疆语"),
+    LegacyLanguageCode("zh", "zho", "chi", "中文"),
+    LegacyLanguageCode("cr", "cre", "cre", "克里语"),
+    LegacyLanguageCode("et", "est", "est", "爱沙尼亚语"),
+    LegacyLanguageCode("gn", "grn", "grn", "瓜拉尼语"),
+    LegacyLanguageCode("ik", "ipk", "ipk", "伊努皮克语"),
+    LegacyLanguageCode("iu", "iku", "iku", "因纽特语"),
+    LegacyLanguageCode("kr", "kau", "kau", "卡努里语"),
+    LegacyLanguageCode("kv", "kom", "kom", "科米语"),
+    LegacyLanguageCode("kg", "kon", "kon", "刚果语"),
+    LegacyLanguageCode("ku", "kur", "kur", "库尔德语"),
+    LegacyLanguageCode("lv", "lav", "lav", "拉脱维亚语"),
+    LegacyLanguageCode("mg", "mlg", "mlg", "马拉加斯语"),
+    LegacyLanguageCode("mn", "mon", "mon", "蒙古语"),
+    LegacyLanguageCode("om", "orm", "orm", "奥罗莫语"),
+    LegacyLanguageCode("ps", "pus", "pus", "普什图语"),
+    LegacyLanguageCode("qu", "que", "que", "克丘亚语"),
+    LegacyLanguageCode("sc", "srd", "srd", "萨丁语"),
+    LegacyLanguageCode("sw", "swa", "swa", "斯瓦希里语"),
+    LegacyLanguageCode("uz", "uzb", "uzb", "乌兹别克语"),
+    LegacyLanguageCode("za", "zha", "zha", "壮语"),
+    LegacyLanguageCode("bi", "bis", "bis", "比斯拉马语"),
+    LegacyLanguageCode("nb", "nob", "nob", "书面挪威语"),
+    LegacyLanguageCode("nn", "nno", "nno", "挪威尼诺斯克语"),
+    LegacyLanguageCode("id", "ind", "ind", "印度尼西亚语"),
+    LegacyLanguageCode("tw", "twi", "twi", "阿肯语"),
+    LegacyLanguageCode("eo", "epo", "epo", "世界语"),
+    LegacyLanguageCode("ia", "ina", "ina", "国际语"),
+    LegacyLanguageCode("ie", "ile", "ile", "国际文字（E）"),
+    LegacyLanguageCode("io", "ido", "ido", "伊多语"),
+    LegacyLanguageCode("vo", "vol", "vol", "沃拉普克语"),
+    LegacyLanguageCode("bh", "bih", "bih", "博杰普尔语"),
+    LegacyLanguageCode("he", "heb", "heb", "希伯来语"),
+    LegacyLanguageCode("sa", "san", "san", "梵语"),
+    LegacyLanguageCode("cu", "chu", "chu", "教会斯拉夫语"),
+    LegacyLanguageCode("pi", "pli", "pli", "巴利语"),
+    LegacyLanguageCode("ae", "ave", "ave", "阿维斯塔语"),
+    LegacyLanguageCode("la", "lat", "lat", "拉丁语"),
+    LegacyLanguageCode("hy", "hye", "arm", "亚美尼亚语"),
+    LegacyLanguageCode("ss", "ssw", "ssw", "斯瓦蒂语"),
+    LegacyLanguageCode("bo", "bod", "tib", "藏语"),
+    LegacyLanguageCode("nr", "nbl", "nbl", "南恩德贝勒语"),
+    LegacyLanguageCode("sl", "slv", "slv", "斯洛文尼亚语"),
+    LegacyLanguageCode("or", "ori", "ori", "奥里亚语"),
+    LegacyLanguageCode("nd", "nde", "nde", "北恩德贝勒语"),
+    LegacyLanguageCode("na", "nau", "nau", "瑙鲁语"),
+    LegacyLanguageCode("mi", "mri", "mao", "毛利语"),
+    LegacyLanguageCode("mr", "mar", "mar", "马拉地语"),
+    LegacyLanguageCode("lu", "lub", "lub", "鲁巴加丹加语"),
+    LegacyLanguageCode("rn", "run", "run", "隆迪语"),
+    LegacyLanguageCode("km", "khm", "khm", "高棉语"),
+    LegacyLanguageCode("fy", "fry", "fry", "西弗里西亚语"),
+    LegacyLanguageCode("bn", "ben", "ben", "孟加拉语"),
+    LegacyLanguageCode("av", "ava", "ava", "阿瓦尔语"),
+    LegacyLanguageCode("ab", "abk", "abk", "阿布哈西亚语"),
+    LegacyLanguageCode("aa", "aar", "aar", "阿法尔语"),
+    LegacyLanguageCode("af", "afr", "afr", "南非荷兰语"),
+    LegacyLanguageCode("am", "amh", "amh", "阿姆哈拉语"),
+    LegacyLanguageCode("an", "arg", "arg", "阿拉贡语"),
+    LegacyLanguageCode("as", "asm", "asm", "阿萨姆语"),
+    LegacyLanguageCode("bm", "bam", "bam", "班巴拉语"),
+    LegacyLanguageCode("ba", "bak", "bak", "巴什基尔语"),
+    LegacyLanguageCode("eu", "eus", "baq", "巴斯克语"),
+    LegacyLanguageCode("be", "bel", "bel", "白俄罗斯语"),
+    LegacyLanguageCode("bs", "bos", "bos", "波斯尼亚语"),
+    LegacyLanguageCode("br", "bre", "bre", "布列塔尼语"),
+    LegacyLanguageCode("bg", "bul", "bul", "保加利亚语"),
+    LegacyLanguageCode("my", "mya", "bur", "缅甸语"),
+    LegacyLanguageCode("ca", "cat", "cat", "加泰罗尼亚语"),
+    LegacyLanguageCode("ch", "cha", "cha", "查莫罗语"),
+    LegacyLanguageCode("ce", "che", "che", "车臣语"),
+    LegacyLanguageCode("ny", "nya", "nya", "齐切瓦语"),
+    LegacyLanguageCode("cv", "chv", "chv", "楚瓦什语"),
+    LegacyLanguageCode("kw", "cor", "cor", "康沃尔语"),
+    LegacyLanguageCode("co", "cos", "cos", "科西嘉语"),
+    LegacyLanguageCode("hr", "hrv", "hrv", "克罗地亚语"),
+    LegacyLanguageCode("cs", "ces", "cze", "捷克语"),
+    LegacyLanguageCode("da", "dan", "dan", "丹麦语"),
+    LegacyLanguageCode("dv", "div", "div", "迪维希语"),
+    LegacyLanguageCode("nl", "nld", "dut", "荷兰语"),
+    LegacyLanguageCode("dz", "dzo", "dzo", "宗卡语"),
+    LegacyLanguageCode("en", "eng", "eng", "英语"),
+    LegacyLanguageCode("ee", "ewe", "ewe", "埃维语"),
+    LegacyLanguageCode("fo", "fao", "fao", "法罗语"),
+    LegacyLanguageCode("fj", "fij", "fij", "斐济语"),
+    LegacyLanguageCode("fi", "fin", "fin", "芬兰语"),
+    LegacyLanguageCode("fr", "fra", "fre", "法语"),
+    LegacyLanguageCode("gl", "glg", "glg", "加利西亚语"),
+    LegacyLanguageCode("ka", "kat", "geo", "格鲁吉亚语"),
+    LegacyLanguageCode("de", "deu", "ger", "德语"),
+    LegacyLanguageCode("el", "ell", "gre", "希腊语"),
+    LegacyLanguageCode("gu", "guj", "guj", "古吉拉特语"),
+    LegacyLanguageCode("ht", "hat", "hat", "海地克里奥尔语"),
+    LegacyLanguageCode("ha", "hau", "hau", "豪萨语"),
+    LegacyLanguageCode("hz", "her", "her", "赫雷罗语"),
+    LegacyLanguageCode("hi", "hin", "hin", "印地语"),
+    LegacyLanguageCode("ho", "hmo", "hmo", "希里莫图语"),
+    LegacyLanguageCode("hu", "hun", "hun", "匈牙利语"),
+    LegacyLanguageCode("ga", "gle", "gle", "爱尔兰语"),
+    LegacyLanguageCode("ig", "ibo", "ibo", "伊博语"),
+    LegacyLanguageCode("is", "isl", "ice", "冰岛语"),
+    LegacyLanguageCode("it", "ita", "ita", "意大利语"),
+    LegacyLanguageCode("ja", "jpn", "jpn", "日语"),
+    LegacyLanguageCode("jv", "jav", "jav", "爪哇语"),
+    LegacyLanguageCode("kl", "kal", "kal", "格陵兰语"),
+    LegacyLanguageCode("kn", "kan", "kan", "卡纳达语"),
+    LegacyLanguageCode("ks", "kas", "kas", "克什米尔语"),
+    LegacyLanguageCode("kk", "kaz", "kaz", "哈萨克语"),
+    LegacyLanguageCode("ki", "kik", "kik", "吉库尤语"),
+    LegacyLanguageCode("rw", "kin", "kin", "卢旺达语"),
+    LegacyLanguageCode("ky", "kir", "kir", "柯尔克孜语"),
+    LegacyLanguageCode("ko", "kor", "kor", "韩语"),
+    LegacyLanguageCode("kj", "kua", "kua", "宽亚玛语"),
+    LegacyLanguageCode("lb", "ltz", "ltz", "卢森堡语"),
+    LegacyLanguageCode("lg", "lug", "lug", "卢干达语"),
+    LegacyLanguageCode("li", "lim", "lim", "林堡语"),
+    LegacyLanguageCode("ln", "lin", "lin", "林加拉语"),
+    LegacyLanguageCode("lo", "lao", "lao", "老挝语"),
+    LegacyLanguageCode("lt", "lit", "lit", "立陶宛语"),
+    LegacyLanguageCode("gv", "glv", "glv", "马恩语"),
+    LegacyLanguageCode("mk", "mkd", "mac", "马其顿语"),
+    LegacyLanguageCode("ml", "mal", "mal", "马拉雅拉姆语"),
+    LegacyLanguageCode("mt", "mlt", "mlt", "马耳他语"),
+    LegacyLanguageCode("mh", "mah", "mah", "马绍尔语"),
+    LegacyLanguageCode("nv", "nav", "nav", "纳瓦霍语"),
+    LegacyLanguageCode("ne", "nep", "nep", "尼泊尔语"),
+    LegacyLanguageCode("ng", "ndo", "ndo", "恩东加语"),
+    LegacyLanguageCode("oc", "oci", "oci", "奥克语"),
+    LegacyLanguageCode("os", "oss", "oss", "奥塞梯语"),
+    LegacyLanguageCode("pa", "pan", "pan", "旁遮普语"),
+    LegacyLanguageCode("pl", "pol", "pol", "波兰语"),
+    LegacyLanguageCode("pt", "por", "por", "葡萄牙语"),
+    LegacyLanguageCode("rm", "roh", "roh", "罗曼什语"),
+    LegacyLanguageCode("ru", "rus", "rus", "俄语"),
+    LegacyLanguageCode("sd", "snd", "snd", "信德语"),
+    LegacyLanguageCode("se", "sme", "sme", "北方萨米语"),
+    LegacyLanguageCode("sm", "smo", "smo", "萨摩亚语"),
+    LegacyLanguageCode("sg", "sag", "sag", "桑戈语"),
+    LegacyLanguageCode("gd", "gla", "gla", "苏格兰盖尔语"),
+    LegacyLanguageCode("sn", "sna", "sna", "绍纳语"),
+    LegacyLanguageCode("si", "sin", "sin", "僧伽罗语"),
+    LegacyLanguageCode("sk", "slk", "slo", "斯洛伐克语"),
+    LegacyLanguageCode("so", "som", "som", "索马里语"),
+    LegacyLanguageCode("st", "sot", "sot", "南索托语"),
+    LegacyLanguageCode("es", "spa", "spa", "西班牙语"),
+    LegacyLanguageCode("su", "sun", "sun", "巽他语"),
+    LegacyLanguageCode("sv", "swe", "swe", "瑞典语"),
+    LegacyLanguageCode("ta", "tam", "tam", "泰米尔语"),
+    LegacyLanguageCode("te", "tel", "tel", "泰卢固语"),
+    LegacyLanguageCode("tg", "tgk", "tgk", "塔吉克语"),
+    LegacyLanguageCode("th", "tha", "tha", "泰语"),
+    LegacyLanguageCode("ti", "tir", "tir", "提格利尼亚语"),
+    LegacyLanguageCode("tk", "tuk", "tuk", "土库曼语"),
+    LegacyLanguageCode("tn", "tsn", "tsn", "茨瓦纳语"),
+    LegacyLanguageCode("to", "ton", "ton", "汤加语"),
+    LegacyLanguageCode("tr", "tur", "tur", "土耳其语"),
+    LegacyLanguageCode("ts", "tso", "tso", "聪加语"),
+    LegacyLanguageCode("tt", "tat", "tat", "鞑靼语"),
+    LegacyLanguageCode("ug", "uig", "uig", "维吾尔语"),
+    LegacyLanguageCode("uk", "ukr", "ukr", "乌克兰语"),
+    LegacyLanguageCode("ur", "urd", "urd", "乌尔都语"),
+    LegacyLanguageCode("ve", "ven", "ven", "文达语"),
+    LegacyLanguageCode("vi", "vie", "vie", "越南语"),
+    LegacyLanguageCode("wa", "wln", "wln", "瓦隆语"),
+    LegacyLanguageCode("cy", "cym", "wel", "威尔士语"),
+    LegacyLanguageCode("wo", "wol", "wol", "沃洛夫语"),
+    LegacyLanguageCode("xh", "xho", "xho", "科萨语"),
+    LegacyLanguageCode("yo", "yor", "yor", "约鲁巴语"),
+    LegacyLanguageCode("zu", "zul", "zul", "祖鲁语"),
+)
+
+/**
+ * Language display names shared by catalog presentation and the player track
+ * panels: a provider stream's ISO 639 code must render as a name, never as a
+ * bare code or a positional "track 3" label.
+ */
+fun mediaLanguageDisplayName(code: String): String {
+    val normalized = code.trim().lowercase()
+    return when (normalized) {
+        "chs", "zh-hans" -> "简体中文"
+        "cht", "zh-hant" -> "繁体中文"
+        "jp" -> "日语"
+        "yue" -> "粤语"
+        else -> legacyLanguageCodes.firstOrNull { it.matches(normalized) }?.displayName
+            ?: normalized.substringBefore('-').takeIf { it.length == 2 }?.let { primary ->
+                legacyLanguageCodes.firstOrNull { it.alpha2 == primary }?.displayName
+            }
+            ?: "未知"
+    }
+}

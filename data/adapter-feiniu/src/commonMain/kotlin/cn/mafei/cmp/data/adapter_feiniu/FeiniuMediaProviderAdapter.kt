@@ -17,10 +17,12 @@ import cn.mafei.cmp.core.domain.PageCursor
 import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.ResourceNotFoundError
+import cn.mafei.cmp.core.domain.ServerError
 import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.core.domain.SortDirection
 import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaSortField
+import cn.mafei.cmp.core.domain.mediaLanguageDisplayName
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
 import cn.mafei.cmp.data.adapter_contract.HomeFeed
@@ -31,6 +33,10 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackQuality
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
@@ -45,7 +51,6 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonItem
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPersonItemListRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayInfoData
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayItem
-import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuPlayRecordRequest
 import cn.mafei.cmp.providers.feiniu.core.FeiniuStreamListData
 import cn.mafei.cmp.providers.feiniu.facade.FeiniuFacade
@@ -55,6 +60,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -926,64 +934,339 @@ class FeiniuMediaProviderAdapter(
     }
 
     override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
-        val info = translate { facade.playback.playInfo(resolution, itemGuid = item.value, pinnedOperation = currentOperation()) }
-        val mediaGuid = info.mediaGuid?.takeIf { it.isNotBlank() }
+        println("[MaFeiPlayback] feiniu prepare start item=${item.value}")
+        val operation = currentOperation()
+        val selectedMediaGuid = options.mediaSourceId?.trim()?.takeIf(String::isNotEmpty)
+        val initialInfo = translate {
+            facade.playback.playInfo(
+                resolution,
+                itemGuid = item.value,
+                mediaGuid = selectedMediaGuid,
+                pinnedOperation = operation,
+            )
+        }
+        println("[MaFeiPlayback] feiniu play/info completed")
+        val playableItemGuid = initialInfo.guid?.trim()?.takeIf(String::isNotEmpty) ?: item.value
+        val info = if (playableItemGuid != item.value) {
+            try {
+                translate {
+                    facade.playback.playInfo(
+                        resolution,
+                        itemGuid = playableItemGuid,
+                        mediaGuid = selectedMediaGuid,
+                        pinnedOperation = operation,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                initialInfo
+            }
+        } else {
+            initialInfo
+        }
+        val streams = translate {
+            facade.playback.streamList(resolution, playableItemGuid, beforePlay = 1)
+        }
+        println("[MaFeiPlayback] feiniu stream/list completed files=${streams.files.size}")
+        val preferredMediaGuid = selectedMediaGuid
+            ?: info.mediaGuid?.trim()?.takeIf(String::isNotEmpty)
+        val file = streams.files.firstOrNull { it.guid?.trim() == preferredMediaGuid }
+            ?: streams.files.firstOrNull()
+        val video = streams.videoStreams.firstOrNull { stream ->
+            val videoGuid = info.videoGuid?.trim()
+            !videoGuid.isNullOrEmpty() && stream.guid?.trim() == videoGuid
+        } ?: streams.videoStreams.firstOrNull { stream ->
+            val fileGuid = file?.guid?.trim()
+            !fileGuid.isNullOrEmpty() && stream.mediaGuid?.trim() == fileGuid
+        } ?: streams.videoStreams.firstOrNull()
+        val mediaGuid = file?.guid?.trim()?.takeIf(String::isNotEmpty)
+            ?: video?.mediaGuid?.trim()?.takeIf(String::isNotEmpty)
+            ?: info.mediaGuid?.trim()?.takeIf(String::isNotEmpty)
+            ?: preferredMediaGuid
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.NoPlayableSource,
                 detail = "play/info offered no media_guid for ${item.value}",
             )
-        // Detailed tracks are typed for the detail UI, but wiring user-selected
-        // versions/tracks into playback remains in the later player batch. Keep
-        // the legacy default negotiation values for now (h264/aac, 2 channels,
-        // forcedSdr 0, bitrate 0, empty resolution). startTimestamp stays 0 —
-        // PlaybackOptions has no resume-position parameter.
-        val playRequest = FeiniuPlayPlayRequest(
-            mediaGuid = mediaGuid,
-            videoGuid = info.videoGuid ?: "",
-            videoEncoder = "h264",
-            resolution = "",
-            bitrate = 0L,
-            startTimestamp = 0L,
-            audioEncoder = "aac",
-            audioGuid = info.audioGuid ?: "",
-            subtitleGuid = info.subtitleGuid ?: "",
-            channels = 2,
-            forcedSdr = 0,
-        )
-        val session = translate { facade.playback.play(resolution, playRequest, pinnedOperation = currentOperation()) }
-        val playLink = session.data.playLink
-        if (playLink.isNullOrBlank()) {
-            return PlaybackPreparation.Refused(RefusalReason.LinkMissing, detail = "play/play returned no play_link")
+        val fileName = file?.fileName?.trim().orEmpty().ifEmpty { file?.path?.trim().orEmpty() }
+        if (fileName.lowercase().endsWith(".strm")) {
+            println("[MaFeiPlayback] feiniu STRM detected")
+            resolveLegacyStrmDirectLink(
+                item = item,
+                info = info,
+                streams = streams,
+                options = options,
+                mediaGuid = mediaGuid,
+                operation = operation,
+            )?.let { ready ->
+                println("[MaFeiPlayback] feiniu STRM official stream ready")
+                preparedStreams.add(ready)
+                return ready
+            }
+            println("[MaFeiPlayback] feiniu STRM official stream unavailable, using range fallback")
         }
-        // Server-issued, EXPIRING link resolved against the serving origin;
-        // cross-origin/unparseable targets are rejected, never trusted.
-        val streamUrl = session.resolvePlayLink(resolution.preferred.baseUrl)
-            ?: return PlaybackPreparation.Refused(
-                RefusalReason.LinkRejected,
-                detail = "play_link failed same-origin validation",
-            )
-        // A rejected subtitle link drops the subtitle, never the stream.
-        val subtitleUrl = session.resolveSubtitleLink(resolution.preferred.baseUrl)
+
+        // Match the old HarmonyOS provider's default path exactly: no bitrate
+        // limit means direct-original playback. It never calls /play/play;
+        // ordinary files and failed STRM resolution use authenticated range.
+        //
+        // 这条路上没有档位可言：range 就是原文件字节，fnOS 不会为它转码。所以
+        // `qualities` 报空表（界面因此不出现清晰度菜单），`appliedBitrate` 为 null。
+        // 上一集带过来的码率上限在这里只是**不适用**，不假装生效、也不因此拒绝播放。
+        val streamUrl = facade.playback.directRangeUrl(resolution.preferred.baseUrl, mediaGuid)
+        if (options.maxStreamingBitrate != null) {
+            println("[MaFeiPlayback] feiniu range route cannot apply a bitrate ceiling; serving the original file")
+        }
         val ready = PlaybackPreparation.Ready(
             streamUrl = streamUrl,
-            subtitleUrl = subtitleUrl,
-            // Authorization + token cookie (and mode=relay on relay routes).
-            headers = facade.assets.playbackHeaders(currentOperation().credentials, session.requiresRelayCookie),
-            playSessionId = null, // Feiniu issues no play session id
+            subtitleUrl = externalSubtitleUrl(streams, info, options.subtitleStreamIndex),
+            tracks = playbackTracks(streams, info, options),
+            transport = PlaybackTransport.DirectPlay,
+            qualities = emptyList(),
+            headers = facade.assets.playbackHeaders(
+                operation.credentials,
+                resolution.preferred.requiresRelayCookie,
+            ),
+            multiConnectionAllowed = !fileName.lowercase().endsWith(".strm"),
+            playSessionId = null,
             reportingContext = FeiniuReportingContext(
                 itemGuid = info.guid?.takeIf { it.isNotBlank() } ?: item.value,
                 mediaGuid = mediaGuid,
-                videoGuid = info.videoGuid ?: "",
+                videoGuid = video?.guid?.takeIf(String::isNotBlank)
+                    ?: info.videoGuid?.takeIf(String::isNotBlank)
+                    ?: mediaGuid,
                 audioGuid = info.audioGuid ?: "",
                 subtitleGuid = info.subtitleGuid ?: "",
-                resolution = "",
-                bitrate = 0L,
+                resolution = video?.resolutionType.orEmpty(),
+                bitrate = video?.bitRate?.toLong() ?: 0L,
                 durationSeconds = info.item?.durationSeconds,
-                playLink = streamUrl,
+                playLink = "/v/api/v1/media/range/$mediaGuid",
             ).encode(),
         )
         preparedStreams.add(ready)
         return ready
+    }
+
+    /**
+     * fnOS 的轨道目录来自 `/stream` 的 stream list，选中项来自 `play/info` 的
+     * audio_guid / subtitle_guid。index 用 fnOS 自己的 stream index，重新协商时按
+     * index 反查 guid。
+     *
+     * 直连（range 原文件）路径下，音轨/内嵌字幕都在播放器手里，重新请求同一 URL
+     * 不会换轨 —— `renegotiate = false`，由原生 runtime 切换；外挂字幕有自己的
+     * `/subtitle/dl` 文件，走 provider 重新协商。
+     */
+    private fun playbackTracks(
+        streams: FeiniuStreamListData,
+        info: FeiniuPlayInfoData,
+        options: PlaybackOptions,
+    ): List<PlaybackTrack> {
+        val selectedAudioGuid = info.audioGuid?.takeIf { it.isNotBlank() }
+        val selectedSubtitleGuid = info.subtitleGuid?.takeIf { it.isNotBlank() }
+        val selectedAudioIndex = options.audioStreamIndex
+            ?: streams.audioStreams.firstOrNull { it.guid?.trim() == selectedAudioGuid }?.index
+            ?: streams.audioStreams.firstOrNull { it.isDefault == 1 }?.index
+            ?: streams.audioStreams.firstOrNull()?.index
+        val selectedSubtitleIndex = when (val requested = options.subtitleStreamIndex) {
+            null -> streams.subtitleStreams.firstOrNull { it.guid?.trim() == selectedSubtitleGuid }?.index
+                ?: streams.subtitleStreams.firstOrNull { it.isDefault == 1 }?.index
+            else -> requested
+        }
+        val audioTracks = streams.audioStreams.mapNotNull { stream ->
+            val index = stream.index ?: return@mapNotNull null
+            PlaybackTrack(
+                index = index,
+                kind = PlaybackTrackKind.Audio,
+                displayTitle = stream.title?.takeIf { it.isNotBlank() }
+                    ?: feiniuTrackFallbackName(stream.language, stream.codecName, stream.channels),
+                title = stream.title?.takeIf { it.isNotBlank() },
+                language = stream.language?.takeIf { it.isNotBlank() },
+                codec = stream.codecName?.takeIf { it.isNotBlank() },
+                channels = stream.channels,
+                selected = index == selectedAudioIndex,
+                isExternal = false,
+                // 直连原文件：换音轨只能在播放器内部完成。
+                renegotiate = false,
+            )
+        }
+        val subtitleTracks = streams.subtitleStreams.mapNotNull { stream ->
+            val index = stream.index ?: return@mapNotNull null
+            val external = stream.isExternal == 1
+            PlaybackTrack(
+                index = index,
+                kind = PlaybackTrackKind.Subtitle,
+                displayTitle = stream.title?.takeIf { it.isNotBlank() }
+                    ?: feiniuTrackFallbackName(stream.language, stream.format ?: stream.codecName, null),
+                title = stream.title?.takeIf { it.isNotBlank() },
+                language = stream.language?.takeIf { it.isNotBlank() },
+                codec = (stream.format ?: stream.codecName)?.takeIf { it.isNotBlank() },
+                channels = null,
+                selected = selectedSubtitleIndex != null && selectedSubtitleIndex >= 0 &&
+                    index == selectedSubtitleIndex,
+                isExternal = external,
+                renegotiate = external,
+            )
+        }
+        return audioTracks + subtitleTracks
+    }
+
+    /**
+     * 外挂字幕 URL：按选中轨（或默认轨）的 guid 走 fnOS 的 `/subtitle/dl`。内嵌
+     * 字幕没有独立文件，返回 null，由播放器从原文件里取。
+     */
+    private fun externalSubtitleUrl(
+        streams: FeiniuStreamListData,
+        info: FeiniuPlayInfoData,
+        requestedSubtitleIndex: Int?,
+    ): String? {
+        if (requestedSubtitleIndex != null && requestedSubtitleIndex < 0) return null // 关闭字幕
+        val selectedGuid = info.subtitleGuid?.takeIf { it.isNotBlank() }
+        val external = streams.subtitleStreams.filter { it.isExternal == 1 && !it.guid.isNullOrBlank() }
+        val track = when (requestedSubtitleIndex) {
+            null -> external.firstOrNull { it.guid?.trim() == selectedGuid }
+                ?: external.firstOrNull { it.isDefault == 1 }
+                ?: external.firstOrNull()
+            else -> external.firstOrNull { it.index == requestedSubtitleIndex }
+        } ?: return null
+        val guid = track.guid?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        return facade.assets.subtitleDownloadUrl(resolution.preferred.baseUrl, guid)
+    }
+
+    private fun feiniuTrackFallbackName(language: String?, codec: String?, channels: Int?): String =
+        buildList {
+            language?.takeIf { it.isNotBlank() }?.let { add(mediaLanguageDisplayName(it)) }
+            codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+            channels?.takeIf { it > 0 }?.let { add("${it}ch") }
+        }.joinToString(" · ").takeIf { it.isNotEmpty() } ?: "默认轨道"
+
+    /**
+     * Mechanical equivalent of the old HarmonyOS STRM path. fnOS returns 8192
+     * from play/play for direct-original STRM sources; the actual cloud URL is
+     * obtained from /stream and must never receive Feiniu credentials.
+     */
+    private suspend fun resolveLegacyStrmDirectLink(
+        item: MediaId,
+        info: FeiniuPlayInfoData,
+        streams: FeiniuStreamListData,
+        options: PlaybackOptions,
+        mediaGuid: String,
+        operation: cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot,
+    ): PlaybackPreparation.Ready? {
+        println("[MaFeiPlayback] feiniu STRM user/info start")
+        val sourceName = try {
+            translate { facade.auth.userInfo(resolution, pinnedOperation = operation) }
+                .sources.firstOrNull()?.sourceName?.trim().orEmpty()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (authentication: AuthenticationError) {
+            throw authentication
+        } catch (_: Exception) {
+            return null
+        }
+        println("[MaFeiPlayback] feiniu STRM user/info completed")
+        println("[MaFeiPlayback] feiniu STRM official /stream start")
+        val official = try {
+            translate {
+                facade.playback.officialStream(
+                    resolution = resolution,
+                    request = FeiniuOfficialStreamRequest(
+                        mediaGuid = mediaGuid,
+                        ip = FeiniuDigest.md5(sourceName),
+                        header = FeiniuOfficialStreamRequestHeader(listOf(FeiniuIdentity.USER_AGENT)),
+                        level = 1,
+                    ),
+                    pinnedOperation = operation,
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (authentication: AuthenticationError) {
+            throw authentication
+        } catch (_: Exception) {
+            return null
+        }
+        println("[MaFeiPlayback] feiniu STRM official /stream completed")
+        // fnOS 的清晰度就是上游给的一组签名直链（每个自带 resolution / bitrate）。
+        // 我们不造档位表，只把能直连的那几条摆出来，然后按用户给的上限挑一条：
+        // 不超过上限里最大的一条；都超上限就退到最小的一条（并如实上报实际档位，
+        // 界面据此显示真正在播的档，而不是用户点的那一档）。
+        val ladder = (official.directLinkQualities + official.qualities).httpQualities()
+        val ceiling = options.maxStreamingBitrate?.takeIf { it > 0 }
+        val quality = ladder.pickQuality(ceiling) ?: return null
+        val streamUrl = quality.url?.trim().orEmpty()
+        val appliedBitrate = ceiling?.let { quality.bitrate?.takeIf { bitrate -> bitrate > 0 }?.toInt() }
+        return PlaybackPreparation.Ready(
+            streamUrl = streamUrl,
+            subtitleUrl = externalSubtitleUrl(streams, info, options.subtitleStreamIndex),
+            tracks = playbackTracks(streams, info, options),
+            headers = official.header.toPlaybackHeaders(),
+            allowInsecureTls = streamUrl.startsWith("https://", ignoreCase = true),
+            multiConnectionAllowed = false,
+            playSessionId = null,
+            // fnOS 不重编：它只是把上游那条现成的流交给播放器。
+            transport = PlaybackTransport.DirectStream,
+            appliedBitrate = appliedBitrate,
+            qualities = ladder.mapNotNull { candidate ->
+                candidate.bitrate?.takeIf { it > 0 }?.toInt()?.let { bitrate ->
+                    PlaybackQuality(bitrate = bitrate, label = candidate.resolution?.takeIf(String::isNotBlank))
+                }
+            },
+            reportingContext = FeiniuReportingContext(
+                itemGuid = info.guid?.takeIf(String::isNotBlank) ?: item.value,
+                mediaGuid = mediaGuid,
+                videoGuid = info.videoGuid?.takeIf(String::isNotBlank) ?: mediaGuid,
+                audioGuid = info.audioGuid.orEmpty(),
+                subtitleGuid = info.subtitleGuid.orEmpty(),
+                resolution = quality.resolution.orEmpty(),
+                bitrate = quality.bitrate ?: 0L,
+                durationSeconds = info.item?.durationSeconds,
+                // Preserve the Feiniu resource identity for progress reports;
+                // never send the signed third-party URL back to fnOS.
+                playLink = "/v/api/v1/media/range/$mediaGuid",
+            ).encode(),
+        )
+    }
+
+    private fun List<cn.mafei.cmp.providers.feiniu.core.FeiniuDirectLinkQuality>.httpQualities() =
+        filter { quality ->
+            val url = quality.url?.trim().orEmpty()
+            url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)
+        }
+
+    /**
+     * Ceiling selection over the upstream ladder. No ceiling keeps the legacy
+     * behaviour (first reachable link); with one, the largest rendition at or
+     * below it wins, and if every rendition exceeds it the smallest one is
+     * served anyway — the caller reports its real bitrate, so the chrome shows
+     * what is actually playing. Never re-request the same link and claim a
+     * different quality.
+     */
+    private fun List<cn.mafei.cmp.providers.feiniu.core.FeiniuDirectLinkQuality>.pickQuality(
+        ceiling: Int?,
+    ): cn.mafei.cmp.providers.feiniu.core.FeiniuDirectLinkQuality? {
+        if (isEmpty()) return null
+        if (ceiling == null) return first()
+        return filter { (it.bitrate ?: 0L) in 1..ceiling.toLong() }
+            .maxByOrNull { it.bitrate ?: 0L }
+            ?: minByOrNull { it.bitrate ?: 0L }
+            ?: first()
+    }
+
+    private fun JsonObject?.toPlaybackHeaders(): Map<String, String> = buildMap {
+        this@toPlaybackHeaders?.forEach { (rawName, rawValue) ->
+            val name = rawName.trim()
+            if (name.isEmpty()) return@forEach
+            val values = when (rawValue) {
+                is JsonArray -> rawValue.mapNotNull {
+                    (it as? JsonPrimitive)?.content?.trim()?.takeIf(String::isNotEmpty)
+                }
+                is JsonPrimitive -> listOfNotNull(rawValue.content.trim().takeIf(String::isNotEmpty))
+                else -> listOf(rawValue.toString())
+            }
+            if (values.isNotEmpty()) {
+                put(name, values.joinToString(if (name.equals("Cookie", ignoreCase = true)) "; " else ", "))
+            }
+        }
     }
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {

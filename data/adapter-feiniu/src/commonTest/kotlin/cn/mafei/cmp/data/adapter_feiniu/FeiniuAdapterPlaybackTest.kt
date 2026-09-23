@@ -9,7 +9,9 @@ import cn.mafei.cmp.core.http_contract.HttpBody
 import cn.mafei.cmp.core.http_contract.HttpRequest
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
 import cn.mafei.cmp.providers.feiniu.core.FeiniuHostCandidate
@@ -22,15 +24,28 @@ import cn.mafei.cmp.providers.feiniu.testkit.FeiniuFixtures
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-private const val PLAY_NO_LINK =
-    """{"code":0,"msg":"","data":{"media_guid":"md-0001","is_subtitle_external":1}}"""
+private const val REGULAR_STREAM_LIST =
+    """{"code":0,"data":{"files":[{"guid":"md-0001","file_name":"movie.mkv","path":"/media/movie.mkv"}],"video_streams":[{"media_guid":"md-0001","guid":"vd-0001","resolution_type":"4K","bps":20000000}]}}"""
 
-private const val PLAY_CROSS_ORIGIN_LINK =
-    """{"code":0,"msg":"","data":{"media_guid":"md-0001","play_link":"https://evil.test/stream?sign=x","subtitle_link":"/v/api/v1/subtitle/dl/sb-0001"}}"""
+private const val STRM_STREAM_LIST =
+    """{"code":0,"data":{"files":[{"guid":"md-0001","file_name":"cloud/movie.strm","path":"/cloud/movie.strm"}]}}"""
+
+private const val USER_INFO_WITH_SOURCE =
+    """{"code":0,"data":{"sources":[{"source_name":"fixture-source"}]}}"""
+
+private const val OFFICIAL_STRM_DIRECT =
+    """{"code":0,"data":{"header":{"Referer":"https://cloud.test/","Cookie":["a=1","b=2"]},"direct_link_qualities":[{"url":"https://direct.cloud.test/movie.m3u8","resolution":"4K","bitrate":20000000}],"qualities":[{"url":"https://fallback.cloud.test/movie.m3u8"}]}}"""
+
+private const val OFFICIAL_STRM_QUALITY_ONLY =
+    """{"code":0,"data":{"header":{"User-Agent":["Cloud-UA"]},"qualities":[{"url":"https://quality.cloud.test/movie.mp4","resolution":"1080P","bitrate":8000000}]}}"""
+
+private const val OFFICIAL_STRM_LADDER =
+    """{"code":0,"data":{"header":{"Referer":"https://cloud.test/"},"direct_link_qualities":[{"url":"https://direct.cloud.test/movie-4k.m3u8","resolution":"4K","bitrate":20000000},{"url":"https://direct.cloud.test/movie-1080.m3u8","resolution":"1080P","bitrate":8000000},{"url":"https://direct.cloud.test/movie-720.m3u8","resolution":"720P","bitrate":4000000}]}}"""
 
 private fun bodyOf(request: HttpRequest): String = (request.body as? HttpBody.Text)?.text ?: ""
 
@@ -52,7 +67,7 @@ class FeiniuAdapterPlaybackTest {
 
         suspend fun prepareReady(itemGuid: String = "it-0001"): PlaybackPreparation.Ready {
             transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
-            transport.enqueueJson(200, FeiniuFixtures.PLAY_PLAY)
+            transport.enqueueJson(200, REGULAR_STREAM_LIST)
             return assertIs<PlaybackPreparation.Ready>(adapter.preparePlayback(MediaId(itemGuid)))
         }
     }
@@ -60,12 +75,11 @@ class FeiniuAdapterPlaybackTest {
     // ------------------------------------------------------------- prepare
 
     @Test
-    fun negotiationYieldsValidatedAbsoluteStreamAndSubtitle() = runTest {
+    fun unrestrictedPlaybackUsesLegacyDirectRangeWithoutTranscodeNegotiation() = runTest {
         val fixture = Fixture()
         val ready = fixture.prepareReady()
-        // Relative play_link resolves against the serving origin (R10/F4).
-        assertEquals("https://feiniu.test/v/api/v1/stream/fixture?sign=abc", ready.streamUrl)
-        assertEquals("https://feiniu.test/v/api/v1/subtitle/dl/sb-0001", ready.subtitleUrl)
+        assertEquals("https://feiniu.test/v/api/v1/media/range/md-0001", ready.streamUrl)
+        assertEquals(null, ready.subtitleUrl)
         assertEquals(null, ready.playSessionId) // Feiniu issues no play session id
         // The player must attach Authorization + token cookie (lower-case mirror included).
         assertEquals("fixture-token", ready.headers["Authorization"])
@@ -79,7 +93,11 @@ class FeiniuAdapterPlaybackTest {
         assertTrue(context.contains("\"audioGuid\":\"au-0001\""), context)
         assertTrue(context.contains("\"subtitleGuid\":\"sb-0001\""), context)
         assertTrue(context.contains("\"durationSeconds\":7200"), context)
-        assertTrue(context.contains("\"playLink\":\"https://feiniu.test/v/api/v1/stream/fixture?sign=abc\""), context)
+        assertTrue(context.contains("\"playLink\":\"/v/api/v1/media/range/md-0001\""), context)
+        assertEquals(
+            listOf("/v/api/v1/play/info", "/v/api/v1/stream/list/it-0001"),
+            fixture.transport.requests.map { it.url.encodedPath },
+        )
     }
 
     @Test
@@ -90,25 +108,170 @@ class FeiniuAdapterPlaybackTest {
     }
 
     @Test
-    fun missingPlayLinkIsAnExplicitRefusal() = runTest {
+    fun selectedMediaSourceIsPassedToPlayInfoAndUsedForDirectRange() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
-        fixture.transport.enqueueJson(200, PLAY_NO_LINK)
-        val refused = assertIs<PlaybackPreparation.Refused>(fixture.adapter.preparePlayback(MediaId("it-0001")))
-        assertEquals(RefusalReason.LinkMissing, refused.reason)
+        fixture.transport.enqueueJson(
+            200,
+            """{"code":0,"data":{"files":[{"guid":"md-selected","file_name":"selected.mkv"}]}}""",
+        )
+
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(
+                MediaId("it-0001"),
+                PlaybackOptions(mediaSourceId = "md-selected"),
+            ),
+        )
+
+        assertEquals("https://feiniu.test/v/api/v1/media/range/md-selected", ready.streamUrl)
+        assertEquals("fixture-token", ready.headers["Authorization"])
+        assertTrue(bodyOf(fixture.transport.requests.first()).contains("\"media_guid\":\"md-selected\""))
+        assertEquals(2, fixture.transport.requests.size)
     }
 
     @Test
-    fun crossOriginPlayLinkIsRejectedNotTrusted() = runTest {
+    fun strmUsesOfficialDirectLinkWithoutLeakingFeiniuCredentials() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
-        fixture.transport.enqueueJson(200, PLAY_CROSS_ORIGIN_LINK)
-        val refused = assertIs<PlaybackPreparation.Refused>(fixture.adapter.preparePlayback(MediaId("it-0001")))
-        assertEquals(RefusalReason.LinkRejected, refused.reason)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, OFFICIAL_STRM_DIRECT)
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+
+        assertEquals("https://direct.cloud.test/movie.m3u8", ready.streamUrl)
+        assertEquals("https://cloud.test/", ready.headers["Referer"])
+        assertEquals("a=1; b=2", ready.headers["Cookie"])
+        assertFalse(ready.headers.containsKey("Authorization"))
+        assertTrue(ready.allowInsecureTls)
+        assertFalse(ready.multiConnectionAllowed)
+        assertTrue(ready.reportingContext.orEmpty().contains("/v/api/v1/media/range/md-0001"))
+        assertEquals(
+            listOf(
+                "/v/api/v1/play/info",
+                "/v/api/v1/stream/list/it-0001",
+                "/v/api/v1/user/info",
+                "/v/api/v1/stream",
+            ),
+            fixture.transport.requests.map { it.url.encodedPath },
+        )
+        val officialBody = bodyOf(fixture.transport.requests.last())
+        assertTrue(officialBody.contains("\"ip\":\"${cn.mafei.cmp.providers.feiniu.core.FeiniuDigest.md5("fixture-source")}\""))
     }
 
     @Test
-    fun playNegotiationFailureSurfacesAsDomainError() = runTest {
+    fun strmFallsBackFromDirectQualitiesToOrdinaryQualities() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, OFFICIAL_STRM_QUALITY_ONLY)
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+
+        assertEquals("https://quality.cloud.test/movie.mp4", ready.streamUrl)
+        assertEquals("Cloud-UA", ready.headers["User-Agent"])
+        assertFalse(ready.headers.containsKey("Authorization"))
+    }
+
+    @Test
+    fun failedOfficialStrmResolutionFallsBackToAuthenticatedRange() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(500, """{"code":500,"msg":"unavailable"}""")
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+
+        assertEquals("https://feiniu.test/v/api/v1/media/range/md-0001", ready.streamUrl)
+        assertEquals("fixture-token", ready.headers["Authorization"])
+    }
+
+    @Test
+    fun strmHonoursTheRequestedCeilingByPickingTheLargestRenditionAtOrBelowIt() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, OFFICIAL_STRM_LADDER)
+
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
+        )
+
+        // 上限 8M 时给的是 1080P，而不是「第一个能直连的」（那会是 4K）。
+        assertEquals("https://direct.cloud.test/movie-1080.m3u8", ready.streamUrl)
+        assertEquals(PlaybackTransport.DirectStream, ready.transport)
+        assertEquals(8_000_000, ready.appliedBitrate)
+        assertEquals(
+            listOf(20_000_000, 8_000_000, 4_000_000),
+            ready.qualities?.map { it.bitrate },
+        )
+        assertEquals(listOf("4K", "1080P", "720P"), ready.qualities?.map { it.label })
+    }
+
+    @Test
+    fun strmWithoutACeilingKeepsTheLegacyFirstReachableLink() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, OFFICIAL_STRM_LADDER)
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+
+        assertEquals("https://direct.cloud.test/movie-4k.m3u8", ready.streamUrl)
+        // 没要求上限就不报「生效档位」：界面此时显示「自动」。
+        assertEquals(null, ready.appliedBitrate)
+    }
+
+    @Test
+    fun strmReportsTheRealBitrateWhenNoRenditionFitsTheCeiling() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, OFFICIAL_STRM_LADDER)
+
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 2_000_000)),
+        )
+
+        // 上游最小 4M：只能给最小的一档，但**如实上报 4M**，界面才不会显示 2M。
+        assertEquals("https://direct.cloud.test/movie-720.m3u8", ready.streamUrl)
+        assertEquals(4_000_000, ready.appliedBitrate)
+    }
+
+    @Test
+    fun rangeRouteReportsTheOriginalFileAndNoQualityLadder() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, REGULAR_STREAM_LIST)
+
+        // 普通文件走 range 原画：fnOS 不会为它转码，所以带着上限也只是「不适用」——
+        // 如实报空档位表（界面因此不出现清晰度菜单），绝不假装换档成功。
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
+        )
+
+        assertEquals("https://feiniu.test/v/api/v1/media/range/md-0001", ready.streamUrl)
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+        assertEquals(emptyList(), ready.qualities)
+        assertEquals(null, ready.appliedBitrate)
+    }
+
+    @Test
+    fun missingMediaSourceIsAnExplicitRefusal() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, """{"code":0,"msg":"","data":{"guid":"it-0001"}}""")
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{"files":[],"video_streams":[]}}""")
+        val refused = assertIs<PlaybackPreparation.Refused>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+        assertEquals(RefusalReason.NoPlayableSource, refused.reason)
+    }
+
+    @Test
+    fun streamCatalogFailureSurfacesAsDomainError() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
         fixture.transport.enqueueJson(500, """{"code":500,"msg":"boom"}""")
@@ -140,7 +303,7 @@ class FeiniuAdapterPlaybackTest {
         // Position ms -> record seconds (legacy FeiniuVideoPlaybackProvider:739).
         assertTrue(progressBody.contains("\"ts\":1"), progressBody)
         assertTrue(progressBody.contains("\"duration\":7200"), progressBody) // event duration wins
-        assertTrue(progressBody.contains("\"play_link\":\"https://feiniu.test/v/api/v1/stream/fixture?sign=abc\""), progressBody)
+        assertTrue(progressBody.contains("\"play_link\":\"/v/api/v1/media/range/md-0001\""), progressBody)
 
         val stopBody = bodyOf(stop)
         // Stop without an event duration falls back to the negotiated duration.
@@ -186,7 +349,7 @@ class FeiniuAdapterPlaybackTest {
         // Serves the two negotiation requests, then cancels every further one,
         // so ownership and the wire call happen on the SAME adapter instance.
         var calls = 0
-        val scripted = listOf(FeiniuFixtures.PLAY_INFO, FeiniuFixtures.PLAY_PLAY)
+        val scripted = listOf(FeiniuFixtures.PLAY_INFO, REGULAR_STREAM_LIST)
         val transport = object : cn.mafei.cmp.core.http_contract.HttpTransport {
             override suspend fun execute(request: HttpRequest): cn.mafei.cmp.core.http_contract.HttpResponse {
                 calls++

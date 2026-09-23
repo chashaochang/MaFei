@@ -10,6 +10,7 @@ import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.data.adapter_contract.OffsetPageCursorCodec
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.providers.jellyfin.core.InMemoryJellyfinSessionState
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
@@ -181,5 +182,12 @@ class JellyfinAdapterSecondLevelTest {
         )
         assertIs<PlaybackPreparation.Ready>(withSubtitle)
         assertTrue("src-b/Subtitles/3" in withSubtitle.subtitleUrl.orEmpty())
+        assertTrue("audioStreamIndex" !in withSubtitle.streamUrl)
+        assertTrue("subtitleStreamIndex=3" in withSubtitle.streamUrl)
+        assertEquals("src-b", withSubtitle.mediaSourceId)
+        assertEquals(
+            listOf(3),
+            withSubtitle.tracks.filter { it.kind == PlaybackTrackKind.Subtitle && it.selected }.map { it.index },
+        )
     }
 }
