@@ -30,6 +30,10 @@ import cn.mafei.cmp.common.ui.generated.resources.jiangxu
 import cn.mafei.cmp.common.ui.generated.resources.jellyfin_logo
 import cn.mafei.cmp.common.ui.generated.resources.movie
 import cn.mafei.cmp.common.ui.generated.resources.no_history
+import cn.mafei.cmp.common.ui.generated.resources.pony_loading_frame_0
+import cn.mafei.cmp.common.ui.generated.resources.pony_loading_frame_1
+import cn.mafei.cmp.common.ui.generated.resources.pony_loading_frame_2
+import cn.mafei.cmp.common.ui.generated.resources.pony_loading_frame_3
 import cn.mafei.cmp.common.ui.generated.resources.placeholder_folder
 import cn.mafei.cmp.common.ui.generated.resources.qrcode
 import cn.mafei.cmp.common.ui.generated.resources.shengxu
@@ -44,6 +48,13 @@ import org.jetbrains.compose.resources.DrawableResource
  */
 object MaFeiLegacyDrawables {
     val appIcon: DrawableResource get() = Res.drawable.app_icon
+    val ponyLoadingFrames: List<DrawableResource>
+        get() = listOf(
+            Res.drawable.pony_loading_frame_0,
+            Res.drawable.pony_loading_frame_1,
+            Res.drawable.pony_loading_frame_2,
+            Res.drawable.pony_loading_frame_3,
+        )
     val back: DrawableResource get() = Res.drawable.ic_back
     val playRound: DrawableResource get() = Res.drawable.ic_play_round
     val favoriteSelected: DrawableResource get() = Res.drawable.ic_like

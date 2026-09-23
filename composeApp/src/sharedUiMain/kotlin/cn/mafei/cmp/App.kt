@@ -2996,23 +2996,23 @@ private fun StaticAppCanvas(content: @Composable BoxScope.() -> Unit) {
 private fun PonyStartupLoading(exiting: Boolean) {
     val density = LocalDensity.current
     val transition = rememberInfiniteTransition(label = "pony-startup")
-    val travel by transition.animateFloat(
+    val frameProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(480, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "pony-frames",
+    )
+    val streakProgress by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1_400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pony-travel",
-    )
-    val bob by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
             animation = tween(720, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
+            repeatMode = RepeatMode.Restart,
         ),
-        label = "pony-bob",
+        label = "pony-streaks",
     )
     val breathing by transition.animateFloat(
         initialValue = 0f,
@@ -3029,11 +3029,10 @@ private fun PonyStartupLoading(exiting: Boolean) {
         label = "pony-exit",
     )
     val primary = MaterialTheme.colorScheme.primary
-    val travelPx = with(density) { 86.dp.toPx() }
-    val bobPx = with(density) { (bob * 5.dp.toPx()) }
-    val exitPx = with(density) { (30.dp * exitProgress).toPx() }
+    val frames = remember { MaFeiLegacyDrawables.ponyLoadingFrames }
+    val frame = frames[frameProgress.toInt().coerceIn(0, frames.lastIndex)]
     val imageYOffsetPx = with(density) { 18.dp.toPx() }
-    val exitYOffsetPx = with(density) { 8.dp.toPx() }
+    val exitYOffsetPx = with(density) { 12.dp.toPx() }
 
     Column(
         modifier = Modifier
@@ -3048,37 +3047,35 @@ private fun PonyStartupLoading(exiting: Boolean) {
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 360.dp)
-                .height(230.dp),
+                .height(250.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(Modifier.matchParentSize().padding(horizontal = 26.dp)) {
-                val railY = size.height * 0.78f
-                val railStart = 12.dp.toPx()
-                val railEnd = size.width - railStart
-                val railHeight = 4.dp.toPx()
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.12f),
-                    topLeft = Offset(railStart, railY - railHeight / 2f),
-                    size = Size(railEnd - railStart, railHeight),
-                    cornerRadius = CornerRadius(railHeight / 2f),
-                )
-                val markerX = railStart + (railEnd - railStart) * travel
-                drawCircle(
-                    color = primary.copy(alpha = 0.72f + breathing * 0.18f),
-                    radius = 4.dp.toPx() + breathing * 2.dp.toPx(),
-                    center = Offset(markerX, railY),
-                )
+            Canvas(Modifier.matchParentSize().padding(horizontal = 22.dp)) {
+                val lineY = size.height * 0.83f
+                val lineGap = 52.dp.toPx()
+                val lineHeight = 3.dp.toPx()
+                val phase = streakProgress * lineGap
+                repeat(5) { index ->
+                    val lineWidth = (28 + (index % 3) * 10).dp.toPx()
+                    val x = size.width - ((index * lineGap + phase) % (size.width + lineWidth))
+                    val y = lineY + ((index % 2) * 7).dp.toPx()
+                    drawRoundRect(
+                        color = primary.copy(alpha = 0.16f + breathing * 0.08f),
+                        topLeft = Offset(x, y),
+                        size = Size(lineWidth, lineHeight),
+                        cornerRadius = CornerRadius(lineHeight / 2f),
+                    )
+                }
             }
             Image(
-                painter = painterResource(MaFeiLegacyDrawables.appIcon),
+                painter = painterResource(frame),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(210.dp)
+                    .size(230.dp)
                     .graphicsLayer {
-                        translationX = (travel - 0.5f) * travelPx * 2f + exitPx
-                        translationY = -imageYOffsetPx + bobPx - exitProgress * exitYOffsetPx
-                        val scale = 0.98f + breathing * 0.025f
+                        translationY = -imageYOffsetPx - exitProgress * exitYOffsetPx
+                        val scale = 0.98f + breathing * 0.02f + exitProgress * 0.06f
                         scaleX = scale
                         scaleY = scale
                     },
