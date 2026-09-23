@@ -1,7 +1,9 @@
 package cn.mafei.cmp.feature.home
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -505,6 +507,10 @@ fun HomeScreen(
     }
     var activeHeroItem by remember(heroItems) { mutableStateOf(heroItems.firstOrNull()) }
     val heroItemKeys = remember(heroItems) { heroItems.map { it.id.value } }
+    // One clock is shared by the phone pager indicator and the wide-screen
+    // foreground indicator. Keeping it above both render paths prevents one
+    // of them from falling back to a completed bar while the other is moving.
+    val heroAutoplayProgress = remember(heroItemKeys) { Animatable(0f) }
     val heroPagerState = key(heroItemKeys) {
         rememberPagerState(
             initialPage = if (heroItems.isEmpty()) 0 else heroInitialPage(heroItems.size),
@@ -667,6 +673,7 @@ fun HomeScreen(
                     RecommendationHero(
                         items = heroItems,
                         pagerState = heroPagerState,
+                        autoplayProgress = heroAutoplayProgress,
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
@@ -946,6 +953,7 @@ fun HomeScreen(
           HomeHeroForegroundOverlay(
               items = heroItems,
               pagerState = heroPagerState,
+              autoplayProgress = heroAutoplayProgress,
               layout = layout,
               gridState = gridState,
               topPadding = safeArea.top + 12.dp,
@@ -1587,6 +1595,7 @@ fun HomeHeroWindowBackdrop(
 private fun HomeHeroForegroundOverlay(
     items: List<MediaItem>,
     pagerState: PagerState,
+    autoplayProgress: Animatable<Float, AnimationVector1D>,
     layout: MaFeiLayout,
     gridState: LazyGridState,
     topPadding: Dp,
@@ -1754,7 +1763,7 @@ private fun HomeHeroForegroundOverlay(
                             progress = {
                                 when {
                                     index < activeItemIndex -> 1f
-                                    index == activeItemIndex -> 1f
+                                    index == activeItemIndex -> autoplayProgress.value
                                     else -> 0f
                                 }
                             },
@@ -1832,6 +1841,7 @@ private fun StatusContent(
 private fun RecommendationHero(
     items: List<MediaItem>,
     pagerState: PagerState,
+    autoplayProgress: Animatable<Float, AnimationVector1D>,
     layout: MaFeiLayout,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
@@ -1878,12 +1888,16 @@ private fun RecommendationHero(
         onActiveItemChanged(items.getOrNull(activeItemIndex))
     }
     LaunchedEffect(pagerState.settledPage, itemKeys, autoplay, isUserDragging, scrolling, heroPointerPressed.value) {
+        autoplayProgress.snapTo(0f)
         if (autoplay && items.size > 1 && !isUserDragging && !scrolling && !heroPointerPressed.value) {
-            // A frame-by-frame countdown invalidated both full-screen backdrop
-            // recorders on CPF/OHOS, keeping the UI thread busy even while the
-            // home page was idle. The carousel clock only needs one wake-up;
-            // the pager transition itself remains animated and infinite.
-            delay(HeroAutoplayMillis.toLong())
+            // Animate the visible bar itself instead of waiting invisibly and
+            // filling it only when the page changes. This is the legacy
+            // carousel contract: the bar is a 6.5s linear countdown, then the
+            // pager advances with the same clock.
+            autoplayProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
+            )
             val targetPage = pagerState.settledPage + 1
             pagerState.animateScrollToPage(
                 page = targetPage,
@@ -2112,7 +2126,7 @@ private fun RecommendationHero(
                                     progress = {
                                         when {
                                             index < activeItemIndex -> 1f
-                                            index == activeItemIndex -> 1f
+                                            index == activeItemIndex -> autoplayProgress.value
                                             else -> 0f
                                         }
                                     },
