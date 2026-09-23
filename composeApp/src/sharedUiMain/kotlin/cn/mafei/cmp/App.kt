@@ -1,6 +1,7 @@
 package cn.mafei.cmp
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -10,6 +11,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -37,6 +44,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -339,6 +349,7 @@ fun App(
     var error by remember { mutableStateOf<String?>(null) }
     var starting by remember(runtime) { mutableStateOf(true) }
     var showStartupProgress by remember(runtime) { mutableStateOf(false) }
+    var startupExiting by remember(runtime) { mutableStateOf(false) }
 
     LaunchedEffect(runtime) {
         val progress = launch {
@@ -353,6 +364,8 @@ fun App(
             error = "旧版本数据迁移未完成，请稍后重试"
         } finally {
             progress.cancel()
+            startupExiting = true
+            delay(220)
             starting = false
         }
     }
@@ -382,7 +395,7 @@ fun App(
                     Surface(color = MaterialTheme.colorScheme.background) {
                         if (starting) {
                             StaticAppCanvas {
-                                if (showStartupProgress) SessionMessage("正在启动…", busy = true)
+                                if (showStartupProgress) PonyStartupLoading(exiting = startupExiting)
                             }
                         } else when (sessionState.status) {
                             ApplicationSessionStatus.NotStarted,
@@ -2977,6 +2990,106 @@ private fun StaticAppCanvas(content: @Composable BoxScope.() -> Unit) {
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         content = content,
     )
+}
+
+@Composable
+private fun PonyStartupLoading(exiting: Boolean) {
+    val density = LocalDensity.current
+    val transition = rememberInfiniteTransition(label = "pony-startup")
+    val travel by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1_400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pony-travel",
+    )
+    val bob by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(720, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pony-bob",
+    )
+    val breathing by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pony-breathing",
+    )
+    val exitProgress by animateFloatAsState(
+        targetValue = if (exiting) 1f else 0f,
+        animationSpec = tween(220, easing = LinearEasing),
+        label = "pony-exit",
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val travelPx = with(density) { 86.dp.toPx() }
+    val bobPx = with(density) { (bob * 5.dp.toPx()) }
+    val exitPx = with(density) { (30.dp * exitProgress).toPx() }
+    val imageYOffsetPx = with(density) { 18.dp.toPx() }
+    val exitYOffsetPx = with(density) { 8.dp.toPx() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .graphicsLayer { alpha = 1f - exitProgress },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 360.dp)
+                .height(230.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.matchParentSize().padding(horizontal = 26.dp)) {
+                val railY = size.height * 0.78f
+                val railStart = 12.dp.toPx()
+                val railEnd = size.width - railStart
+                val railHeight = 4.dp.toPx()
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.12f),
+                    topLeft = Offset(railStart, railY - railHeight / 2f),
+                    size = Size(railEnd - railStart, railHeight),
+                    cornerRadius = CornerRadius(railHeight / 2f),
+                )
+                val markerX = railStart + (railEnd - railStart) * travel
+                drawCircle(
+                    color = primary.copy(alpha = 0.72f + breathing * 0.18f),
+                    radius = 4.dp.toPx() + breathing * 2.dp.toPx(),
+                    center = Offset(markerX, railY),
+                )
+            }
+            Image(
+                painter = painterResource(MaFeiLegacyDrawables.appIcon),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(210.dp)
+                    .graphicsLayer {
+                        translationX = (travel - 0.5f) * travelPx * 2f + exitPx
+                        translationY = -imageYOffsetPx + bobPx - exitProgress * exitYOffsetPx
+                        val scale = 0.98f + breathing * 0.025f
+                        scaleX = scale
+                        scaleY = scale
+                    },
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "正在启动…",
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+        )
+    }
 }
 
 @Composable
