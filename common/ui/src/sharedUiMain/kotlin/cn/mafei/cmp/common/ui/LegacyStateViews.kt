@@ -62,7 +62,7 @@ fun LegacyEmptyView(
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         Image(
-            painter = painterResource(MaFeiLegacyDrawables.emptyMedia),
+            painter = painterResource(MaFeiLegacyDrawables.emptyList),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.size(170.dp),
