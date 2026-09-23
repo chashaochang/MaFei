@@ -101,7 +101,7 @@ Box(Modifier.captureGlassBackdrop(backdrop)) {
 MaFei 的空列表状态使用自己的插画语法，不采用 Material 3 的默认空状态视觉。Material 组件可以作为实现底层，但不能决定插画、形状、颜色或信息层级。
 
 - 通用空列表只通过 `common/ui` 的 `LegacyEmptyView` 展示，Feature 只传标题、副标题和事件，不复制插画或布局。
-- 当前通用资源为 `common/ui/src/commonMain/composeResources/drawable/empty_state_list.png`，通过 `MaFeiLegacyDrawables.emptyList` 暴露；替换它时保持同一语法和透明资源契约。
+- 通用资源由 `MaFeiLegacyDrawables` 暴露；替换它时保持同一语法和透明资源契约，并先完成视觉验收。
 - 默认插画必须是透明背景、无文字、无按钮、无品牌标识的轻量非交互图形；使用克制的线条和少量品牌色，保持在深色页面上的可读性。
 - 禁止使用默认 Material 图标、圆角卡片、文件夹/播放/搜索图标拼贴、蓝色渐变、玻璃高光、霓虹发光和写实 3D 物体作为通用空状态。
 - “暂无内容”“加载失败”“正在加载”是三个不同状态：空状态不表达错误，错误状态必须提供重试路径，加载状态使用独立反馈。
