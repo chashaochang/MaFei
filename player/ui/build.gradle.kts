@@ -12,4 +12,5 @@ dependencies {
     add("commonMainApi", project(":player:core"))
     add("commonMainApi", project(":common:ui"))
     add("commonMainApi", project(":common:glass"))
+    add("cpfUiMainImplementation", "org.jetbrains.androidx.navigationevent:navigationevent-compose:1.9.2-1.0.0")
 }

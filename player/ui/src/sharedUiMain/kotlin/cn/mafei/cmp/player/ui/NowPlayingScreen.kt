@@ -13,6 +13,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,8 +32,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -73,6 +85,8 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.player.api.PlayerCapabilities
+import cn.mafei.cmp.player.api.PlayerContentMode
+import cn.mafei.cmp.player.api.PlayerDeviceControls
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.api.PlayerTrack
@@ -84,23 +98,29 @@ import kotlin.math.roundToLong
 private const val PlayerAutoHideDelayMs = 4_000L
 private const val PlayerLongPressSpeed = 3f
 
+/** Legacy `PLAYER_CLOCK_INTERVAL_MS`. */
+private const val PlayerClockIntervalMs = 30_000L
+
 private val PlayerControlSurface = Color(0x52000000)
 private val PlayerControlMask = Color(0x3D000000)
 private val PlayerFullscreenControlMask = Color(0x52000000)
 private val PlayerGestureSeekSurface = Color(0x85000000)
+/** 旧版 PLAYER_GESTURE_FEEDBACK_SURFACE_COLOR：亮度/音量/倍速胶囊比 seek 卡更透。 */
+private val PlayerGestureSurface = Color(0x66000000)
 private val PlayerGestureTrack = Color(0x66FFFFFF)
 private val PlayerMenuText = Color(0xE6FFFFFF)
-private val PlayerMenuSecondaryText = Color(0x99FFFFFF)
 private val PlayerMenuDivider = Color(0x24FFFFFF)
-private val PlayerMenuCell = Color(0x26000000)
-private val PlayerMenuSelectedCell = Color(0x3DFFFFFF)
+private val PlayerInfoCardSurface = Color(0x7A101010)
+private val PlayerInfoCardBorder = Color(0x1AFFFFFF)
+private val PlayerInfoSectionTitle = Color(0xA3FFFFFF)
+private val PlayerInfoEntryLabel = Color(0xADFFFFFF)
 private val PlayerMenuMiddle = Color(0x8A000000)
 private val PlayerMenuEnd = Color(0xDC000000)
 private val PlayerAccent = Color(0xFF2173DF)
 
-private enum class PlayerChromePanel { None, Speed, Audio, Subtitle }
+private enum class PlayerChromePanel { None, More, AspectRatio, Speed, Audio, Subtitle, Episodes, Quality }
 
-private enum class PlayerChromeGlyph { More, Play, Pause, Retry, Fullscreen, Lock, Unlock, Next }
+private enum class PlayerChromeGlyph { More, Play, Pause, Retry, Fullscreen, Lock, Unlock, Next, Info, Brightness, Volume }
 
 /**
  * CMP translation of the legacy ArkUI `PlayerChrome`.
@@ -114,6 +134,7 @@ private enum class PlayerChromeGlyph { More, Play, Pause, Retry, Fullscreen, Loc
 fun NowPlayingScreen(
     media: NowPlayingMedia,
     state: PlayerState,
+    tracks: List<PlayerTrack> = state.tracks,
     capabilities: PlayerCapabilities,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -121,10 +142,42 @@ fun NowPlayingScreen(
     onSeek: (Long) -> Unit,
     onSpeed: (Float) -> Unit,
     onSelectTrack: (TrackKind, String?) -> Unit,
+    preparing: Boolean = false,
+    externalError: String? = null,
     videoSurface: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
-    onFullscreenToggle: (() -> Unit)? = null,
+    /**
+     * 请求切换全屏（旧版 `onFullscreenToggle`）。参数是**目标形态**而不是「翻一下」：
+     * 当前形态由本组件按窗口横竖算出来，所以由它决定目标，调用方只负责执行。
+     * 之前这里是个无参 toggle，接线方接成「永远请求全屏」，进全屏后返回键和按钮都失效。
+     */
+    onFullscreenRequest: ((Boolean) -> Unit)? = null,
+    /**
+     * 是否处于全屏（旧版 `AppUIState.isFullScreen`：一个**独立状态**，不是「窗口宽 > 高」）。
+     *
+     * 用窗口横竖推导会出事：横屏平板本来宽就大于高，于是永远判成全屏 —— 返回键每次都只
+     * 执行「退出全屏」，而平板退出全屏并不会变竖屏，结果**退不出播放页**。全屏与否只能由
+     * 这一层显式持有（`App.kt` 的 `playerFullscreen`），宿主再据此旋转/隐藏系统栏。
+     */
+    fullscreen: Boolean = false,
+    /** 播放队列（旧版 PlayerChrome 的 playList/currentPlayId）：选集面板与上一集/下一集。 */
+    episodes: List<cn.mafei.cmp.core.domain.MediaItem> = emptyList(),
+    episodeIndex: Int = 0,
     onNext: (() -> Unit)? = null,
+    onPrevious: (() -> Unit)? = null,
+    onSelectEpisode: ((Int) -> Unit)? = null,
+    /** 清晰度档位（旧版 QualityOption）：空 = 该provider不提供档位，按钮与面板都不出现。 */
+    qualityOptions: List<PlayerQualityOption> = emptyList(),
+    onSelectQuality: ((Int) -> Unit)? = null,
+    /** 「播放信息」卡片的来源事实；null = 该条目没有可展示的技术信息，入口不出现。 */
+    playbackFacts: PlayerPlaybackFacts? = null,
+    onSelectContentMode: ((PlayerContentMode) -> Unit)? = null,
+    /**
+     * 平台亮度/音量（旧版左侧调亮度、右侧调音量）。默认不支持：两条竖向手势都不介入，
+     * 也不会画出「改了但没生效」的反馈条。
+     */
+    deviceControls: PlayerDeviceControls =
+        PlayerDeviceControls.Unsupported,
 ) {
     val backdrop = rememberGlassBackdrop()
     val presentation = state.toNowPlayingPresentation(capabilities)
@@ -145,6 +198,27 @@ fun NowPlayingScreen(
     var longPressSpeedActive by remember(media.id, state.generation) { mutableStateOf(false) }
     var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
     var busyVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    // 竖向手势的亮度/音量反馈（旧版 PlayerGestureFeedback.Brightness/Volume）。
+    var levelFeedback by remember(media.id, state.generation) { mutableStateOf<PlayerGestureFeedback.Level?>(null) }
+    // 播放信息卡片是独立于侧栏面板的一层（旧版 isShowPlayBackInfo）：它盖住画面、
+    // 清掉控件，并且参与返回层级。
+    var playbackInfoVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    // 旧版 30 秒刷新的状态区时钟（只在全屏行里渲染）。
+    var clockText by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            clockText = cn.mafei.cmp.common.core.formatLocalClockTime(
+                cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs(),
+            )
+            delay(PlayerClockIntervalMs)
+        }
+    }
+
+    LaunchedEffect(media.id) {
+        // 平台状态（亮度/音量）在部分平台靠事件推送：进页面先要一次，手势才有基准值。
+        deviceControls.refresh()
+    }
 
     LaunchedEffect(state.positionMs, draggingSlider) {
         if (!draggingSlider) sliderPositionMs = state.positionMs.coerceAtLeast(0L)
@@ -155,8 +229,8 @@ fun NowPlayingScreen(
             controlsVisible = false
         }
     }
-    LaunchedEffect(presentation.isBusy, state.generation) {
-        if (presentation.isBusy) {
+    LaunchedEffect(preparing, presentation.isBusy, state.generation) {
+        if (preparing || presentation.isBusy) {
             // Avoid flashing a spinner when prepare/buffer completes inside one
             // or two frames; longer waits still receive a deliberate entrance.
             delay(160)
@@ -176,11 +250,67 @@ fun NowPlayingScreen(
     BoxWithConstraints(
         modifier.background(Color.Black).onSizeChanged { sceneSize = it },
     ) {
-        val fullscreen = maxWidth > maxHeight
         val durationMs = state.durationMs?.takeIf { it > 0L }
 
-        Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-            videoSurface(Modifier.fillMaxSize())
+        // Legacy PlayerPage.onBackPress priority: close the open menu/panel first,
+        // then the playback-info card (the old page reports it as menu-visible
+        // too), then leave fullscreen, and only then pop the player. Every back
+        // entry (system back and both on-screen back buttons) must share this
+        // ladder — route the chrome buttons through it too, or they shortcut layers.
+        val requestFullscreen = onFullscreenRequest
+        val handleBack: () -> Unit = {
+            when (
+                playerBackStep(
+                    panelOpen = panel != PlayerChromePanel.None,
+                    playbackInfoVisible = playbackInfoVisible,
+                    fullscreen = fullscreen,
+                    fullscreenToggleAvailable = requestFullscreen != null,
+                )
+            ) {
+                PlayerBackStep.ClosePanel -> {
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                }
+                PlayerBackStep.ClosePlaybackInfo -> {
+                    playbackInfoVisible = false
+                    showControlsTemporarily()
+                }
+                // 退全屏：明确请求 false，绝不「再切一次」。
+                PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
+                PlayerBackStep.LeavePlayer -> onBack()
+            }
+        }
+
+        PlayerNavigationBackHandler(handleBack)
+
+        // The video AREA: the surface fills whatever shape the current ratio
+        // asks for, and the page (black) shows through around it. 原始比例 uses
+        // the source's 1:1 pixel size; the ratio modes the largest fitting
+        // rectangle; everything else fills the page. The native side only ever
+        // hears "crop or letterbox" (state.contentMode.fills).
+        val videoArea = playerVideoArea(
+            mode = state.contentMode,
+            sourceWidthPx = playbackFacts?.video?.widthPx,
+            sourceHeightPx = playbackFacts?.video?.heightPx,
+        )
+        val density = androidx.compose.ui.platform.LocalDensity.current.density
+        val areaModifier = when {
+            videoArea.oneToOnePixels != null -> Modifier.size(
+                (videoArea.oneToOnePixels.width / density).dp,
+                (videoArea.oneToOnePixels.height / density).dp,
+            )
+            videoArea.aspectRatio != null -> {
+                val ratio = videoArea.aspectRatio
+                if (maxWidth / maxHeight > ratio) Modifier.fillMaxHeight().aspectRatio(ratio)
+                else Modifier.fillMaxWidth().aspectRatio(ratio)
+            }
+            else -> Modifier.fillMaxSize()
+        }
+        Box(
+            Modifier.fillMaxSize().clipToBounds().captureGlassBackdrop(backdrop),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(areaModifier) { videoSurface(Modifier.fillMaxSize()) }
         }
 
         Box(
@@ -218,36 +348,90 @@ fun NowPlayingScreen(
                     )
                 }
                 .pointerInput(media.id, state.generation, durationMs, locked, sceneSize) {
-                    val total = durationMs ?: return@pointerInput
                     if (locked || sceneSize.width <= 0) return@pointerInput
+                    val total = durationMs?.takeIf { it > 0L }
                     var accumulatedX = 0f
                     var accumulatedY = 0f
                     var dragAxis = 0
                     var startPosition = 0L
+                    // 竖向手势的基准值在按下时取一次（旧版 onVerticalStart 同做法）：亮度按
+                    // 「窗口亮度 -1 时用 0.5」兜底，音量取当时的步数。
+                    var level: PlayerGestureLevel? = null
+                    var startBrightness = PlayerDeviceControls.DEFAULT_BRIGHTNESS
+                    var startVolume = 0
+                    var maxVolume = 0
                     detectDragGestures(
-                        onDragStart = {
+                        onDragStart = { offset ->
                             accumulatedX = 0f
                             accumulatedY = 0f
                             dragAxis = 0
-                            startPosition = state.positionMs.coerceIn(0L, total)
+                            startPosition = (state.positionMs).let { if (total != null) it.coerceIn(0L, total) else it.coerceAtLeast(0L) }
+                            startBrightness = deviceControls.brightness()
+                                ?: PlayerDeviceControls.DEFAULT_BRIGHTNESS
+                            maxVolume = deviceControls.maxVolume()
+                            startVolume = deviceControls.volume() ?: 0
+                            // 平台值可能是事件推上来的：先要一次，让下一次手势拿到最新值。
+                            deviceControls.refresh()
+                            // 竖向只服务旧版那两条：左半屏=亮度、右半屏=音量。对不上的平台
+                            // 直接不介入 —— 宁可不响应，也不画一条改了没效果的反馈。
+                            val side = playerGestureLevelFor(offset.x, sceneSize.width.toFloat())
+                            level = when (side) {
+                                PlayerGestureLevel.Brightness ->
+                                    if (deviceControls.brightness() != null) side else null
+                                PlayerGestureLevel.Volume -> if (maxVolume > 0) side else null
+                            }
                         },
                         onDrag = { change, dragAmount ->
                             accumulatedX += dragAmount.x
                             accumulatedY += dragAmount.y
                             if (dragAxis == 0 && maxOf(abs(accumulatedX), abs(accumulatedY)) >= 4f) {
                                 dragAxis = if (abs(accumulatedX) >= abs(accumulatedY)) 1 else 2
+                                if (dragAxis == 2 && level == null) dragAxis = 3 // 竖向不可用时整条轴作废
                             }
-                            if (dragAxis == 1) {
+                            if (dragAxis == 1 && total != null) {
                                 change.consume()
                                 val delta = total.toDouble() * accumulatedX / sceneSize.width.toDouble()
                                 seekFeedbackMs = (startPosition + delta.roundToLong()).coerceIn(0L, total)
+                            } else if (dragAxis == 2 && level != null) {
+                                change.consume()
+                                // 旧版竖直比例 = 手指位移 / 画面高度，向上为增。
+                                val fraction = -accumulatedY / sceneSize.height.toFloat()
+                                when (level) {
+                                    PlayerGestureLevel.Brightness -> {
+                                        val value = playerGestureBrightness(startBrightness, fraction)
+                                        deviceControls.setBrightness(value)
+                                        levelFeedback = PlayerGestureFeedback.Level(
+                                            PlayerGestureLevel.Brightness,
+                                            playerGestureLevelProgress(
+                                                PlayerGestureLevel.Brightness, value, 0, 0,
+                                            ),
+                                        )
+                                    }
+                                    PlayerGestureLevel.Volume -> {
+                                        val steps =
+                                            playerGestureVolumeSteps(startVolume, maxVolume, fraction)
+                                        deviceControls.setVolume(steps)
+                                        levelFeedback = PlayerGestureFeedback.Level(
+                                            PlayerGestureLevel.Volume,
+                                            playerGestureLevelProgress(
+                                                PlayerGestureLevel.Volume, 0f, steps, maxVolume,
+                                            ),
+                                        )
+                                    }
+                                    null -> Unit
+                                }
                             }
                         },
-                        onDragCancel = { seekFeedbackMs = null },
+                        onDragCancel = {
+                            seekFeedbackMs = null
+                            levelFeedback = null
+                        },
                         onDragEnd = {
                             if (dragAxis == 1) seekFeedbackMs?.let(latestSeek)
-                            seekFeedbackMs = null
                             if (dragAxis == 1) showControlsTemporarily()
+                            seekFeedbackMs = null
+                            levelFeedback = null
+                            deviceControls.refresh()
                         },
                     )
                 },
@@ -260,7 +444,8 @@ fun NowPlayingScreen(
                 diameter = 44,
                 iconSize = 22,
                 backdrop = backdrop,
-                onClick = onBack,
+                immersive = true,
+                onClick = handleBack,
                 modifier = Modifier.align(Alignment.TopStart)
                     .padding(start = 12.dp + safeArea.start, top = 10.dp + safeArea.top),
             ) {
@@ -281,12 +466,12 @@ fun NowPlayingScreen(
                 safeTop = safeArea.top,
                 safeEnd = safeArea.end,
                 backdrop = backdrop,
-                // Legacy "more" only contains aspect ratio and playback info.
-                // Neither contract exists in the CMP player API yet, so do not
-                // remap this command to speed or track selection.
-                showMenu = false,
-                onBack = onBack,
-                onMenu = {},
+                clockText = clockText,
+                // Legacy 「更多」 holds exactly 画面比例 and 播放信息; it appears
+                // only when at least one of the two exists on this platform.
+                showMenu = capabilities.contentMode || playbackFacts != null,
+                onBack = handleBack,
+                onMenu = { panel = PlayerChromePanel.More; controlsVisible = true },
             )
         }
 
@@ -315,11 +500,34 @@ fun NowPlayingScreen(
                 },
                 onTogglePlay = latestTogglePlay,
                 onRetry = onRetry,
-                onFullscreenToggle = onFullscreenToggle,
+                onFullscreenRequest = onFullscreenRequest,
                 onNext = onNext,
-                onLock = { locked = true; controlsVisible = false; panel = PlayerChromePanel.None },
+                episodes = episodes,
+                qualityOptions = qualityOptions,
                 onPanel = { panel = it; controlsVisible = true },
                 capabilities = capabilities,
+                tracks = tracks,
+            )
+        }
+
+        AnimatedVisibility(
+            visible = fullscreen && controlsVisible && !locked,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.CenterStart),
+        ) {
+            PlayerChromeButton(
+                glyph = PlayerChromeGlyph.Lock,
+                label = "锁定",
+                diameter = 44,
+                iconSize = 22,
+                backdrop = backdrop,
+                onClick = {
+                    locked = true
+                    controlsVisible = false
+                    panel = PlayerChromePanel.None
+                },
+                modifier = Modifier.padding(start = safeArea.start + 20.dp),
             )
         }
 
@@ -339,12 +547,31 @@ fun NowPlayingScreen(
             )
         }
 
-        seekFeedbackMs?.let { target ->
-            PlayerSeekFeedback(target, durationMs ?: 1L, Modifier.align(Alignment.Center))
+        // 旧版 PlayerGestureFeedback：三种反馈互斥，seek 居中、亮度/音量与倍速在顶部同一格。
+        // 拖动进度条本身也算 Seek（旧版 onSliderChanged 同样置 feedback），所以这里把
+        // 「拖条中」并进同一个来源。
+        val seekFeedbackTarget = seekFeedbackMs ?: if (draggingSlider) sliderPositionMs else null
+        if (seekFeedbackTarget != null) {
+            PlayerSeekFeedback(seekFeedbackTarget, durationMs ?: 1L, Modifier.align(Alignment.Center))
+        }
+
+        val feedbackTopInset = (if (fullscreen) 60.dp else 32.dp) + safeArea.top
+        levelFeedback?.let { feedback ->
+            PlayerLevelFeedback(
+                level = feedback.level,
+                progress = feedback.progress,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = feedbackTopInset),
+            )
+        }
+        if (longPressSpeedActive) {
+            PlayerSpeedFeedback(
+                text = playerSpeedFeedbackText(PlayerLongPressSpeed),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = feedbackTopInset),
+            )
         }
 
         AnimatedVisibility(
-            visible = busyVisible && state.phase != PlayerPhase.Error,
+            visible = busyVisible && state.phase != PlayerPhase.Error && externalError == null,
             enter = fadeIn(tween(160)) + scaleIn(tween(180), initialScale = .92f),
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 1.04f),
             modifier = Modifier.align(Alignment.Center),
@@ -357,23 +584,34 @@ fun NowPlayingScreen(
         }
 
         AnimatedVisibility(
-            visible = presentation.showRetry,
+            visible = presentation.showRetry || externalError != null,
             enter = fadeIn(tween(180)) + scaleIn(tween(200), initialScale = .94f),
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = .98f),
             modifier = Modifier.align(Alignment.Center),
         ) {
-            PlayerError(onRetry)
+            PlayerError(
+                message = externalError ?: "视频播放失败",
+                onRetry = onRetry,
+            )
         }
 
         if (panel != PlayerChromePanel.None) {
             PlayerSidePanel(
                 panel = panel,
                 state = state,
+                tracks = tracks,
+                episodes = episodes,
+                episodeIndex = episodeIndex,
+                qualityOptions = qualityOptions,
+                fullscreen = fullscreen,
+                showAspectRatio = capabilities.contentMode,
+                showPlaybackInfo = playbackFacts != null,
                 safeEnd = safeArea.end,
                 onDismiss = {
                     panel = PlayerChromePanel.None
                     showControlsTemporarily()
                 },
+                onOpenPanel = { panel = it },
                 onSpeed = { value ->
                     latestSpeed(value)
                     panel = PlayerChromePanel.None
@@ -384,6 +622,37 @@ fun NowPlayingScreen(
                     panel = PlayerChromePanel.None
                     showControlsTemporarily()
                 },
+                onSelectEpisode = { index ->
+                    onSelectEpisode?.invoke(index)
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+                onSelectQuality = { bitrate ->
+                    onSelectQuality?.invoke(bitrate)
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+                onSelectContentMode = { mode ->
+                    onSelectContentMode?.invoke(mode)
+                    panel = PlayerChromePanel.None
+                    showControlsTemporarily()
+                },
+                onOpenPlaybackInfo = {
+                    panel = PlayerChromePanel.None
+                    playbackInfoVisible = true
+                    controlsVisible = false
+                },
+            )
+        }
+
+        if (playbackInfoVisible) {
+            PlayerPlaybackInfoCard(
+                sections = buildPlayerInfoSections(playbackFacts, state, tracks),
+                onDismiss = {
+                    playbackInfoVisible = false
+                    showControlsTemporarily()
+                },
+                modifier = Modifier.align(Alignment.CenterStart),
             )
         }
     }
@@ -397,6 +666,7 @@ private fun PlayerTopChrome(
     safeTop: androidx.compose.ui.unit.Dp,
     safeEnd: androidx.compose.ui.unit.Dp,
     backdrop: GlassBackdrop,
+    clockText: String,
     showMenu: Boolean,
     onBack: () -> Unit,
     onMenu: () -> Unit,
@@ -429,6 +699,7 @@ private fun PlayerTopChrome(
                     diameter = 44,
                     iconSize = 22,
                     backdrop = backdrop,
+                    immersive = true,
                     onClick = onBack,
                 ) {
                     MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
@@ -450,7 +721,18 @@ private fun PlayerTopChrome(
                     diameter = 44,
                     iconSize = 22,
                     backdrop = backdrop,
+                    immersive = true,
                     onClick = onMenu,
+                )
+            }
+            // 旧版把时间/电量放在「更多」之后的同一行，且只有全屏才有这一格。
+            // 电量需要平台级状态源（ArkTS batteryInfo / Android BatteryManager），
+            // 尚未接线，所以这里只画时钟；没有可用时钟时整格消失。
+            if (fullscreen && clockText.isNotEmpty()) {
+                Text(
+                    clockText,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -460,6 +742,7 @@ private fun PlayerTopChrome(
 @Composable
 private fun PlayerBottomChrome(
     state: PlayerState,
+    tracks: List<PlayerTrack>,
     presentation: NowPlayingPresentation,
     fullscreen: Boolean,
     safeStart: androidx.compose.ui.unit.Dp,
@@ -473,16 +756,18 @@ private fun PlayerBottomChrome(
     onSeek: (Long) -> Unit,
     onTogglePlay: () -> Unit,
     onRetry: () -> Unit,
-    onFullscreenToggle: (() -> Unit)?,
+    onFullscreenRequest: ((Boolean) -> Unit)?,
     onNext: (() -> Unit)?,
-    onLock: () -> Unit,
+    episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
+    qualityOptions: List<PlayerQualityOption>,
     onPanel: (PlayerChromePanel) -> Unit,
     capabilities: PlayerCapabilities,
 ) {
-    val audioTracks = state.tracks.filter { it.kind == TrackKind.Audio }
-    val subtitleTracks = state.tracks.filter { it.kind == TrackKind.Subtitle }
+    val audioTracks = tracks.filter { it.kind == TrackKind.Audio }
+    val subtitleTracks = tracks.filter { it.kind == TrackKind.Subtitle }
     val duration = state.durationMs?.takeIf { it > 0L }
     val maskHeight = if (fullscreen) 132.dp else 106.dp
+    val bottomInset = maxOf(safeBottom, if (fullscreen) 6.dp else 10.dp)
 
     Box(
         Modifier.fillMaxWidth().height(maskHeight + safeBottom)
@@ -493,24 +778,12 @@ private fun PlayerBottomChrome(
                 ),
             ),
     ) {
-        if (fullscreen) {
-            PlayerChromeButton(
-                glyph = PlayerChromeGlyph.Lock,
-                label = "锁定",
-                diameter = 44,
-                iconSize = 22,
-                backdrop = backdrop,
-                onClick = onLock,
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = safeStart + 20.dp),
-            )
-        }
-
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(
                     start = safeStart + if (fullscreen) 20.dp else 8.dp,
                     end = safeEnd + if (fullscreen) 20.dp else 8.dp,
-                    bottom = safeBottom + 14.dp,
+                    bottom = bottomInset,
                 ),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 2.dp else 0.dp),
         ) {
@@ -557,6 +830,13 @@ private fun PlayerBottomChrome(
                     if (capabilities.trackSelection && subtitleTracks.isNotEmpty()) {
                         PlayerTextControl("字幕") { onPanel(PlayerChromePanel.Subtitle) }
                     }
+                    // Legacy order: 音轨 → 字幕 → 选集 → 清晰度 → 倍速.
+                    if (episodes.size > 1) {
+                        PlayerTextControl("选集") { onPanel(PlayerChromePanel.Episodes) }
+                    }
+                    if (qualityOptions.isNotEmpty()) {
+                        PlayerTextControl("清晰度") { onPanel(PlayerChromePanel.Quality) }
+                    }
                     if (capabilities.speed) {
                         PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x") {
                             onPanel(PlayerChromePanel.Speed)
@@ -598,14 +878,15 @@ private fun PlayerBottomChrome(
                         color = Color.White,
                         style = MaterialTheme.typography.labelMedium,
                     )
-                    if (onFullscreenToggle != null) {
+                    if (onFullscreenRequest != null) {
                         PlayerChromeButton(
                             glyph = PlayerChromeGlyph.Fullscreen,
                             label = "全屏",
                             diameter = 40,
                             iconSize = 20,
                             backdrop = backdrop,
-                            onClick = onFullscreenToggle,
+                            // 旧版这个按钮进出共用（图标与文字都是「全屏」），按 toggle 走。
+                            onClick = { onFullscreenRequest(!fullscreen) },
                         )
                     }
                 }
@@ -749,36 +1030,68 @@ private fun LegacyPlayerSeekBar(
 private fun PlayerSidePanel(
     panel: PlayerChromePanel,
     state: PlayerState,
+    tracks: List<PlayerTrack>,
+    episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
+    episodeIndex: Int,
+    qualityOptions: List<PlayerQualityOption>,
+    fullscreen: Boolean,
+    showAspectRatio: Boolean,
+    showPlaybackInfo: Boolean,
     safeEnd: androidx.compose.ui.unit.Dp,
     onDismiss: () -> Unit,
+    onOpenPanel: (PlayerChromePanel) -> Unit,
     onSpeed: (Float) -> Unit,
     onSelectTrack: (TrackKind, String?) -> Unit,
+    onSelectEpisode: (Int) -> Unit,
+    onSelectQuality: (Int) -> Unit,
+    onSelectContentMode: (PlayerContentMode) -> Unit,
+    onOpenPlaybackInfo: () -> Unit,
 ) {
-    val (title, width, options) = when (panel) {
-        PlayerChromePanel.Speed -> Triple(
-            "播放速度",
+    // 选集面板按旧版取 330 宽（PLAYER_MENU_EPISODE_WIDTH），并带自己的标题区。
+    val isEpisodePanel = panel == PlayerChromePanel.Episodes
+    val isMorePanel = panel == PlayerChromePanel.More
+    val (width, options) = when (panel) {
+        PlayerChromePanel.Speed -> Pair(
             138.dp,
             listOf(3f, 2f, 1.5f, 1.25f, 1f, .75f).map { speed ->
                 PlayerPanelOption(speed.toString(), "${speed}x", abs(state.speed - speed) < .01f)
             },
         )
-        PlayerChromePanel.Audio -> Triple(
-            "音轨",
+        PlayerChromePanel.Audio -> Pair(
             220.dp,
-            state.tracks.filter { it.kind == TrackKind.Audio }.map(PlayerTrack::toPanelOption),
+            tracks.filter { it.kind == TrackKind.Audio }.map(PlayerTrack::toPanelOption),
         )
-        PlayerChromePanel.Subtitle -> Triple(
-            "字幕",
+        PlayerChromePanel.Subtitle -> Pair(
             220.dp,
-            listOf(PlayerPanelOption("", "关闭字幕")) +
-                state.tracks.filter { it.kind == TrackKind.Subtitle }.map(PlayerTrack::toPanelOption),
+            tracks.filter { it.kind == TrackKind.Subtitle }.let { subtitleTracks ->
+                listOf(PlayerPanelOption("", "关闭字幕", selected = subtitleTracks.none(PlayerTrack::selected))) +
+                    subtitleTracks.map(PlayerTrack::toPanelOption)
+            },
         )
+        PlayerChromePanel.Episodes -> Pair(330.dp, emptyList())
+        PlayerChromePanel.Quality -> Pair(
+            176.dp,
+            qualityOptions.map { option ->
+                PlayerPanelOption(option.bitrate.toString(), option.label, option.selected)
+            },
+        )
+        PlayerChromePanel.AspectRatio -> Pair(
+            176.dp,
+            playerContentModeChoices.map { mode ->
+                PlayerPanelOption(mode.name, playerContentModeLabel(mode), selected = state.contentMode == mode)
+            },
+        )
+        // 「更多」是两张入口行 + 分隔线，不是普通选项列表。
+        PlayerChromePanel.More -> Pair(270.dp, emptyList())
         PlayerChromePanel.None -> return
     }
     Row(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxHeight().clickable(onClick = onDismiss))
+        // 旧版 panelWidth()：竖屏（非全屏）面板宽 84% 而不是固定 dp，纵向留白也更窄；
+        // 全屏才用各面板自己的宽度并给右侧安全区让位。
         Column(
-            modifier = Modifier.width(width + safeEnd).fillMaxHeight()
+            modifier = (if (fullscreen) Modifier.width(width + safeEnd) else Modifier.fillMaxWidth(.84f))
+                .fillMaxHeight()
                 .background(
                     Brush.horizontalGradient(
                         0f to Color.Transparent,
@@ -786,23 +1099,51 @@ private fun PlayerSidePanel(
                         1f to PlayerMenuEnd,
                     ),
                 )
-                .padding(start = 16.dp, end = safeEnd + 16.dp, top = 18.dp, bottom = 18.dp),
+                .padding(
+                    start = 16.dp,
+                    end = if (fullscreen) safeEnd + 16.dp else 16.dp,
+                    top = if (fullscreen) 18.dp else 8.dp,
+                    bottom = if (fullscreen) 18.dp else 8.dp,
+                ),
         ) {
-            Text(
-                title,
-                modifier = Modifier.fillMaxWidth().height(38.dp),
-                color = PlayerMenuText,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                items(options, key = { it.id }) { option ->
-                    PlayerPanelOptionRow(option) {
-                        when (panel) {
-                            PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
-                            PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
-                            PlayerChromePanel.Subtitle -> onSelectTrack(TrackKind.Subtitle, option.id.ifEmpty { null })
-                            PlayerChromePanel.None -> Unit
+            when {
+                isMorePanel -> PlayerMorePanel(
+                    aspectRatioLabel = playerContentModeLabel(state.contentMode),
+                    showAspectRatio = showAspectRatio,
+                    showPlaybackInfo = showPlaybackInfo,
+                    onAspectRatio = { onOpenPanel(PlayerChromePanel.AspectRatio) },
+                    onPlaybackInfo = onOpenPlaybackInfo,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+                isEpisodePanel -> {
+                    Text(
+                        "选集",
+                        Modifier.padding(bottom = 12.dp),
+                        color = PlayerMenuText,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    PlayerEpisodePanel(
+                        episodes = episodes,
+                        episodeIndex = episodeIndex,
+                        onSelectEpisode = onSelectEpisode,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+                }
+                else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                    items(options, key = { it.id }) { option ->
+                        PlayerPanelOptionRow(option) {
+                            when (panel) {
+                                PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
+                                PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
+                                PlayerChromePanel.Subtitle -> onSelectTrack(TrackKind.Subtitle, option.id.ifEmpty { null })
+                                PlayerChromePanel.Quality -> onSelectQuality(option.id.toInt())
+                                PlayerChromePanel.AspectRatio ->
+                                    onSelectContentMode(PlayerChromeModeById(option.id))
+                                PlayerChromePanel.Episodes,
+                                PlayerChromePanel.More,
+                                PlayerChromePanel.None -> Unit
+                            }
                         }
                     }
                 }
@@ -811,29 +1152,259 @@ private fun PlayerSidePanel(
     }
 }
 
+/**
+ * 旧版「更多」面板（`PlayerChromePanel.More`）：画面比例入口 + 分隔线 + 播放信息入口。
+ * 任一入口在当前平台不存在时只画存在的那个，绝不画一条点了没反应的死行。
+ */
+@Composable
+private fun PlayerMorePanel(
+    aspectRatioLabel: String,
+    showAspectRatio: Boolean,
+    showPlaybackInfo: Boolean,
+    onAspectRatio: () -> Unit,
+    onPlaybackInfo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        if (showAspectRatio) {
+            PlayerPanelOptionRow(PlayerPanelOption("aspect", "画面比例 · $aspectRatioLabel"), onAspectRatio)
+        }
+        if (showAspectRatio && showPlaybackInfo) {
+            Box(
+                Modifier.fillMaxWidth().height(1.dp).background(PlayerMenuDivider),
+            )
+        }
+        if (showPlaybackInfo) {
+            PlayerPanelOptionRow(PlayerPanelOption("info", "播放信息"), onPlaybackInfo)
+        }
+    }
+}
+
+/** Panel option ids are the enum names, so the ratio table needs no side map. */
+private fun PlayerChromeModeById(id: String): PlayerContentMode =
+    playerContentModeChoices.firstOrNull { it.name == id }
+        ?: PlayerContentMode.Fit
+
+/**
+ * 旧版 `PlaybackInfoCard`：盖住画面的一张技术信息卡（左对齐、72% 宽/76% 高，
+ * 270~360 宽 clamp）。整层点击即关；卡片自身拦截点击，内部滚动照常。
+ */
+@Composable
+private fun PlayerPlaybackInfoCard(
+    sections: List<PlayerInfoSection>,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dismissSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(modifier.fillMaxSize()) {
+        Box(
+            Modifier.fillMaxSize()
+                .clickable(
+                    interactionSource = dismissSource,
+                    indication = null,
+                    onClickLabel = "关闭播放信息",
+                    onClick = onDismiss,
+                ),
+        )
+        Column(
+            Modifier.fillMaxWidth(.72f)
+                .widthIn(min = 250.dp, max = 360.dp)
+                .fillMaxHeight(.76f)
+                .padding(start = 32.dp, top = 16.dp, bottom = 16.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(PlayerInfoCardSurface)
+                .border(1.dp, PlayerInfoCardBorder, RoundedCornerShape(20.dp))
+                .padding(start = 14.dp, end = 12.dp, top = 14.dp, bottom = 14.dp)
+                // 卡片内部自行拦截点击，避免点在卡片上被当成关闭。
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ChromeGlyph(PlayerChromeGlyph.Info, Modifier.size(16.dp), Color.White)
+                Text(
+                    "视频信息",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Column(
+                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                sections.forEach { section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(
+                            section.title,
+                            color = PlayerInfoSectionTitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        section.entries.forEach { entry ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                                Text(
+                                    "${entry.label}：",
+                                    Modifier.width(82.dp),
+                                    color = PlayerInfoEntryLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                                Text(
+                                    entry.value,
+                                    Modifier.weight(1f),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = if (entry.label == "标题") 3 else 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 选集面板（旧版 `PlayerChromePanel.Episode`）：超过 12 集用 5 列网格快速跳集，
+ * 否则用带缩略信息的行式列表，并定位到当前集。
+ */
+@Composable
+private fun PlayerEpisodePanel(
+    episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
+    episodeIndex: Int,
+    onSelectEpisode: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (episodes.isEmpty()) return
+    if (episodes.size > PlayerEpisodeListMaxCount) {
+        val gridState = rememberLazyGridState(
+            initialFirstVisibleItemIndex = (episodeIndex - PlayerEpisodeGridColumns)
+                .coerceAtLeast(0),
+        )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(PlayerEpisodeGridColumns),
+            state = gridState,
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            gridItemsIndexed(episodes, key = { _, episode -> episode.id.value }) { index, episode ->
+                val selected = index == episodeIndex
+                Box(
+                    Modifier.height(PlayerEpisodeGridCellHeight)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) PlayerAccent else PlayerEpisodeCellSurface)
+                        .clickable { onSelectEpisode(index) }
+                        .semantics { contentDescription = episodeLabel(episode, index) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        episode.episodeNumber?.toString() ?: "${index + 1}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    } else {
+        val listState = rememberLazyListState(initialFirstVisibleItemIndex = episodeIndex.coerceAtLeast(0))
+        LazyColumn(
+            state = listState,
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(episodes, key = { _, episode -> episode.id.value }) { index, episode ->
+                val selected = index == episodeIndex
+                Row(
+                    Modifier.fillMaxWidth().height(PlayerEpisodeRowHeight)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) PlayerEpisodeSelectedSurface else Color.Transparent)
+                        .clickable { onSelectEpisode(index) }
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        episode.episodeNumber?.toString() ?: "${index + 1}",
+                        Modifier.width(28.dp),
+                        color = if (selected) PlayerAccent else PlayerMenuText,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            episode.title,
+                            color = if (selected) PlayerAccent else PlayerMenuText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        episode.runtimeMs?.takeIf { it > 0L }?.let { runtime ->
+                            Text(
+                                formatPlayerDuration(runtime),
+                                color = PlayerMenuText.copy(alpha = .66f),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    if (episode.userData.isPlayed) {
+                        Text(
+                            "已看",
+                            color = PlayerMenuText.copy(alpha = .66f),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun episodeLabel(episode: cn.mafei.cmp.core.domain.MediaItem, index: Int): String =
+    episode.episodeNumber?.let { "第 $it 集" } ?: "第 ${index + 1} 集"
+
+private const val PlayerEpisodeListMaxCount = 12
+private const val PlayerEpisodeGridColumns = 5
+private val PlayerEpisodeGridCellHeight = 42.dp
+private val PlayerEpisodeRowHeight = 56.dp
+private val PlayerEpisodeCellSurface = Color(0x33FFFFFF)
+private val PlayerEpisodeSelectedSurface = Color(0x2E2173DF)
+
 private data class PlayerPanelOption(
     val id: String,
     val label: String,
     val selected: Boolean = false,
-    val secondary: String? = null,
 )
 
-private fun PlayerTrack.toPanelOption(): PlayerPanelOption = PlayerPanelOption(id, label, secondary = language)
+private fun PlayerTrack.toPanelOption(): PlayerPanelOption = PlayerPanelOption(id, label, selected)
 
 @Composable
 private fun PlayerPanelOptionRow(option: PlayerPanelOption, onClick: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .background(if (option.selected) PlayerMenuSelectedCell else PlayerMenuCell)
+    Box(
+        Modifier.fillMaxWidth().height(44.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Text(option.label, color = PlayerMenuText, style = MaterialTheme.typography.bodyMedium)
-        option.secondary?.takeIf { it.isNotBlank() }?.let {
-            Text(it, color = PlayerMenuSecondaryText, style = MaterialTheme.typography.labelSmall)
-        }
+        Text(
+            option.label,
+            color = if (option.selected) PlayerAccent else PlayerMenuText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (option.selected) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(PlayerMenuDivider))
 }
 
 @Composable
@@ -855,22 +1426,77 @@ private fun PlayerSeekFeedback(target: Long, duration: Long, modifier: Modifier 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(formatPlayerDuration(target), color = Color.White, style = MaterialTheme.typography.labelLarge)
+        // 旧版写的是「当前 / 总时长」，只报当前值看不出还剩多少。
+        Text(
+            "${formatPlayerDuration(target)} / ${formatPlayerDuration(duration)}",
+            color = Color.White,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.labelLarge,
+        )
         Box(Modifier.width(146.dp).height(3.dp).clip(CircleShape).background(PlayerGestureTrack)) {
             Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(PlayerAccent))
         }
     }
 }
 
+/**
+ * 旧版 `player_chrome_gesture_level_feedback`：顶部居中的胶囊，图标 + 128×4 的级别条。
+ * 亮度和音量共用这一格，只有图标不同。
+ */
 @Composable
-private fun PlayerError(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+private fun PlayerLevelFeedback(
+    level: PlayerGestureLevel,
+    progress: Float,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.clip(RoundedCornerShape(21.dp)).background(PlayerGestureSurface)
+            .padding(start = 14.dp, end = 16.dp).height(42.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        ChromeGlyph(
+            if (level == PlayerGestureLevel.Brightness) PlayerChromeGlyph.Brightness else PlayerChromeGlyph.Volume,
+            Modifier.size(20.dp),
+            Color.White,
+        )
+        Box(Modifier.width(128.dp).height(4.dp).clip(CircleShape).background(PlayerGestureTrack)) {
+            Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(Color.White))
+        }
+    }
+}
+
+/** 旧版 `player_chrome_gesture_speed_feedback`：两颗播放箭头 + 文案。 */
+@Composable
+private fun PlayerSpeedFeedback(text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(17.dp)).background(PlayerGestureSurface)
+            .padding(start = 12.dp, end = 14.dp).height(34.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+            ChromeGlyph(PlayerChromeGlyph.Play, Modifier.size(14.dp), Color.White)
+            ChromeGlyph(PlayerChromeGlyph.Play, Modifier.size(14.dp), Color.White)
+        }
+        Text(
+            text,
+            color = Color.White,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+}
+
+@Composable
+private fun PlayerError(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xC9000000)).padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         ChromeGlyph(PlayerChromeGlyph.Retry, Modifier.size(34.dp), Color.White)
-        Text("视频播放失败", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+        Text(message, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         Box(
             Modifier.height(40.dp).clip(CircleShape).background(PlayerAccent)
                 .clickable(onClick = onRetry).padding(horizontal = 20.dp),
@@ -891,18 +1517,32 @@ private fun PlayerChromeButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     transparent: Boolean = false,
+    immersive: Boolean = false,
     content: (@Composable () -> Unit)? = null,
 ) {
-    LiquidButton(
-        onClick = onClick,
-        backdrop = backdrop,
-        modifier = modifier.size(diameter.dp).semantics { contentDescription = label },
-        surfaceColor = if (transparent) Color.Transparent else PlayerControlSurface,
-        height = diameter.dp,
-        horizontalPadding = ((diameter - iconSize) / 2f).dp,
-    ) {
+    val buttonModifier = modifier.size(diameter.dp).semantics { contentDescription = label }
+    val buttonContent: @Composable () -> Unit = {
         if (content != null) content()
         else if (glyph != null) ChromeGlyph(glyph, Modifier.size(iconSize.dp), Color.White)
+    }
+    if (immersive) {
+        LiquidButton(
+            onClick = onClick,
+            backdrop = backdrop,
+            modifier = buttonModifier,
+            surfaceColor = PlayerControlSurface,
+            height = diameter.dp,
+            horizontalPadding = ((diameter - iconSize) / 2f).dp,
+        ) { buttonContent() }
+    } else {
+        Box(
+            buttonModifier.clip(CircleShape)
+                .background(if (transparent) Color.Transparent else PlayerControlSurface)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            buttonContent()
+        }
     }
 }
 
@@ -974,6 +1614,52 @@ private fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier,
                     close()
                 }, color)
                 line(.76f, .18f, .76f, .82f)
+            }
+            PlayerChromeGlyph.Brightness -> {
+                drawCircle(color, size.minDimension * .2f, Offset(size.width * .5f, size.height * .5f))
+                listOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f).forEach { degrees ->
+                    val radians = degrees * kotlin.math.PI.toFloat() / 180f
+                    val dx = kotlin.math.cos(radians)
+                    val dy = kotlin.math.sin(radians)
+                    line(
+                        .5f + dx * .32f, .5f + dy * .32f,
+                        .5f + dx * .46f, .5f + dy * .46f,
+                        stroke * .8f,
+                    )
+                }
+            }
+            PlayerChromeGlyph.Volume -> {
+                drawPath(Path().apply {
+                    moveTo(size.width * .12f, size.height * .38f)
+                    lineTo(size.width * .3f, size.height * .38f)
+                    lineTo(size.width * .52f, size.height * .18f)
+                    lineTo(size.width * .52f, size.height * .82f)
+                    lineTo(size.width * .3f, size.height * .62f)
+                    lineTo(size.width * .12f, size.height * .62f)
+                    close()
+                }, color)
+                drawArc(
+                    color, -55f, 110f, false,
+                    topLeft = Offset(size.width * .42f, size.height * .3f),
+                    size = Size(size.width * .3f, size.height * .4f),
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
+                drawArc(
+                    color, -55f, 110f, false,
+                    topLeft = Offset(size.width * .5f, size.height * .2f),
+                    size = Size(size.width * .42f, size.height * .6f),
+                    style = Stroke(stroke * .8f, cap = StrokeCap.Round),
+                )
+            }
+            PlayerChromeGlyph.Info -> {
+                drawCircle(color, size.minDimension * .46f, Offset(size.width * .5f, size.height * .5f), style = Stroke(stroke))
+                drawRoundRect(
+                    color,
+                    Offset(size.width * .47f, size.height * .43f),
+                    Size(size.width * .06f, size.height * .3f),
+                    androidx.compose.ui.geometry.CornerRadius(size.width * .03f),
+                )
+                drawCircle(color, size.minDimension * .045f, Offset(size.width * .5f, size.height * .32f))
             }
         }
     }

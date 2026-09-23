@@ -111,4 +111,20 @@ class CommonCoreTest {
         assertFailsWith<IllegalArgumentException> { requireNonBlank(null, "field") }
         assertFailsWith<IllegalArgumentException> { requireNonBlank("   ", "field") }
     }
+
+    // ------------------------------------------------------- Local clock time
+
+    @Test
+    fun clockTimeIsTheTimeHalfOfTheLocalTimestamp() {
+        // 每个平台的 actual 都渲染 "yyyy-MM-dd HH:mm"，播放器状态区只要时间那半截。
+        val epochMs = 1_700_000_000_000L
+        val timestamp = formatLocalDateTime(epochMs)
+        assertEquals(timestamp.substringAfter(' '), formatLocalClockTime(epochMs))
+        assertTrue(formatLocalClockTime(epochMs).matches(Regex("\\d{2}:\\d{2}")), formatLocalClockTime(epochMs))
+    }
+
+    @Test
+    fun clockTimeStaysEmptyWhenTheTimestampIsUnformattable() {
+        assertEquals("", formatLocalClockTime(0L))
+    }
 }

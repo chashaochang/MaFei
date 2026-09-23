@@ -47,22 +47,25 @@ fun PlayerState.toNowPlayingPresentation(
             PlayerPhase.Released,
         ),
         showRetry = phase == PlayerPhase.Error,
-        status = when (phase) {
-            PlayerPhase.Idle -> "尚未播放"
-            PlayerPhase.Loading -> "正在准备播放"
-            PlayerPhase.Ready -> "可以开始播放"
-            PlayerPhase.Playing -> "正在播放"
-            PlayerPhase.Paused -> "已暂停"
-            PlayerPhase.Buffering -> "正在缓冲"
-            PlayerPhase.Ended -> "播放结束"
-            PlayerPhase.Error -> "播放出现问题"
-            PlayerPhase.Released -> "播放器已关闭"
-        },
+        status = playerPhaseStatus(phase),
         elapsed = formatPlayerDuration(clampedPosition),
         duration = duration?.let(::formatPlayerDuration) ?: "--:--",
         progress = duration?.let { (clampedPosition.toDouble() / it).toFloat() } ?: 0f,
         bufferedProgress = duration?.let { (clampedBuffered.toDouble() / it).toFloat() } ?: 0f,
     )
+}
+
+/** Shared with the 「播放信息」 card so both surfaces name a phase identically. */
+internal fun playerPhaseStatus(phase: PlayerPhase): String = when (phase) {
+    PlayerPhase.Idle -> "尚未播放"
+    PlayerPhase.Loading -> "正在准备播放"
+    PlayerPhase.Ready -> "可以开始播放"
+    PlayerPhase.Playing -> "正在播放"
+    PlayerPhase.Paused -> "已暂停"
+    PlayerPhase.Buffering -> "正在缓冲"
+    PlayerPhase.Ended -> "播放结束"
+    PlayerPhase.Error -> "播放出现问题"
+    PlayerPhase.Released -> "播放器已关闭"
 }
 
 internal fun formatPlayerDuration(milliseconds: Long): String {
