@@ -11,6 +11,7 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.providers.feiniu.core.FeiniuCredentials
@@ -46,6 +47,12 @@ private const val OFFICIAL_STRM_QUALITY_ONLY =
 
 private const val OFFICIAL_STRM_LADDER =
     """{"code":0,"data":{"header":{"Referer":"https://cloud.test/"},"direct_link_qualities":[{"url":"https://direct.cloud.test/movie-4k.m3u8","resolution":"4K","bitrate":20000000},{"url":"https://direct.cloud.test/movie-1080.m3u8","resolution":"1080P","bitrate":8000000},{"url":"https://direct.cloud.test/movie-720.m3u8","resolution":"720P","bitrate":4000000}]}}"""
+
+private const val PLAY_TRANSCODED =
+    """{"code":0,"data":{"media_guid":"md-0001","video_guid":"vd-0001","play_link":"/v/api/v1/media/hls/md-0001/master.m3u8","audio_index":1}}"""
+
+private const val PLAY_TRANSCODED_WITHOUT_LINK =
+    """{"code":0,"data":{"media_guid":"md-0001","video_guid":"vd-0001"}}"""
 
 private fun bodyOf(request: HttpRequest): String = (request.body as? HttpBody.Text)?.text ?: ""
 
@@ -249,16 +256,54 @@ class FeiniuAdapterPlaybackTest {
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
         fixture.transport.enqueueJson(200, REGULAR_STREAM_LIST)
 
-        // 普通文件走 range 原画：fnOS 不会为它转码，所以带着上限也只是「不适用」——
-        // 如实报空档位表（界面因此不出现清晰度菜单），绝不假装换档成功。
-        val ready = assertIs<PlaybackPreparation.Ready>(
-            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
-        )
+        // 没有码率上限 = 原画直连：range 就是原文件字节，这条路上没有档位可言，
+        // 所以如实报空档位表（界面因此不出现清晰度菜单）。
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
 
         assertEquals("https://feiniu.test/v/api/v1/media/range/md-0001", ready.streamUrl)
         assertEquals(PlaybackTransport.DirectPlay, ready.transport)
         assertEquals(emptyList(), ready.qualities)
         assertEquals(null, ready.appliedBitrate)
+    }
+
+    @Test
+    fun ordinaryFileWithACeilingAsksFnOsToTranscode() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, REGULAR_STREAM_LIST)
+        fixture.transport.enqueueJson(200, PLAY_TRANSCODED)
+
+        // 旧版 FeiniuVideoPlaybackProvider：有上限就 playTranscoded。普通文件的档位
+        // 只能由服务端重编产出，range 原画永远给不了。
+        val ready = assertIs<PlaybackPreparation.Ready>(
+            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
+        )
+
+        assertEquals("/v/api/v1/play/play", fixture.transport.requests.last().url.encodedPath)
+        val body = bodyOf(fixture.transport.requests.last())
+        assertTrue(body.contains("\"media_guid\":\"md-0001\""), body)
+        assertTrue(body.contains("\"bitrate\":8000000"), body)
+        assertEquals("https://feiniu.test/v/api/v1/media/hls/md-0001/master.m3u8", ready.streamUrl)
+        assertEquals(PlaybackTransport.Transcode, ready.transport)
+        assertEquals(8_000_000, ready.appliedBitrate)
+        // 服务端按需重编：档位表交给界面自己造（null），菜单因此出现。
+        assertEquals(null, ready.qualities)
+        // 转码流的轨道都在服务端选：换轨要重新协商，不能交给原生播放器。
+        assertTrue(ready.tracks.filter { it.kind == PlaybackTrackKind.Audio }.all { it.renegotiate })
+    }
+
+    @Test
+    fun transcodingWithoutAPlayLinkIsARefusalNotASilentOriginalFile() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, REGULAR_STREAM_LIST)
+        fixture.transport.enqueueJson(200, PLAY_TRANSCODED_WITHOUT_LINK)
+
+        // 用户点了档位、服务端却给不出链接：明确失败，绝不放回原画冒充换档成功。
+        val refused = assertIs<PlaybackPreparation.Refused>(
+            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
+        )
+        assertEquals(RefusalReason.NoPlayableSource, refused.reason)
     }
 
     @Test

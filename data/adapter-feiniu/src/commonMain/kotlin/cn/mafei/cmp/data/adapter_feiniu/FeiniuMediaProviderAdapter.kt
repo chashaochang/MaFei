@@ -1006,17 +1006,32 @@ class FeiniuMediaProviderAdapter(
             println("[MaFeiPlayback] feiniu STRM official stream unavailable, using range fallback")
         }
 
-        // Match the old HarmonyOS provider's default path exactly: no bitrate
-        // limit means direct-original playback. It never calls /play/play;
-        // ordinary files and failed STRM resolution use authenticated range.
-        //
-        // 这条路上没有档位可言：range 就是原文件字节，fnOS 不会为它转码。所以
-        // `qualities` 报空表（界面因此不出现清晰度菜单），`appliedBitrate` 为 null。
-        // 上一集带过来的码率上限在这里只是**不适用**，不假装生效、也不因此拒绝播放。
-        val streamUrl = facade.playback.directRangeUrl(resolution.preferred.baseUrl, mediaGuid)
-        if (options.maxStreamingBitrate != null) {
-            println("[MaFeiPlayback] feiniu range route cannot apply a bitrate ceiling; serving the original file")
+        // 旧版 FeiniuVideoPlaybackProvider 的分支，两个方向都要有：
+        //   * 没给码率上限 → 原画直连（range），也就是这条默认路径；
+        //   * 给了码率上限 → 让 fnOS 转码（POST /play/play）。
+        // 普通文件本身没有可选档位，档位只能由服务端重编产出。缺了转码分支，清晰度
+        // 菜单要么根本不出现，要么点了只是重新加载同一个原文件。
+        val requestedBitrate = options.maxStreamingBitrate?.takeIf { it > 0 }
+        if (requestedBitrate != null) {
+            println("[MaFeiPlayback] feiniu transcoded path requested bitrate=$requestedBitrate")
+            val transcoded = resolveTranscodedStream(
+                item = item,
+                info = info,
+                streams = streams,
+                options = options,
+                mediaGuid = mediaGuid,
+                video = video,
+                requestedBitrate = requestedBitrate,
+                operation = operation,
+            )
+            if (transcoded is PlaybackPreparation.Ready) preparedStreams.add(transcoded)
+            return transcoded
         }
+
+        // 原画直连：range 就是原文件字节，fnOS 不会为它转码，所以这条路上没有档位
+        // 可言 —— `qualities` 报空表（界面因此不出现清晰度菜单），`appliedBitrate`
+        // 为 null。
+        val streamUrl = facade.playback.directRangeUrl(resolution.preferred.baseUrl, mediaGuid)
         val ready = PlaybackPreparation.Ready(
             streamUrl = streamUrl,
             subtitleUrl = externalSubtitleUrl(streams, info, options.subtitleStreamIndex),
@@ -1060,18 +1075,28 @@ class FeiniuMediaProviderAdapter(
         streams: FeiniuStreamListData,
         info: FeiniuPlayInfoData,
         options: PlaybackOptions,
+        /**
+         * 转码流（`/play/play`）：音轨/字幕由 fnOS 在服务端选择，换轨必须重新请求，
+         * 所以每条轨道都 `renegotiate = true`；直连原文件则相反（内嵌轨只能由
+         * 播放器内部切换）。
+         */
+        transcoded: Boolean = false,
+        /** 转码响应：它才是「实际选了哪条轨」的权威来源。 */
+        negotiated: cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayData? = null,
     ): List<PlaybackTrack> {
         val selectedAudioGuid = info.audioGuid?.takeIf { it.isNotBlank() }
         val selectedSubtitleGuid = info.subtitleGuid?.takeIf { it.isNotBlank() }
-        val selectedAudioIndex = options.audioStreamIndex
+        val selectedAudioIndex = negotiated?.audioIndex
+            ?: options.audioStreamIndex
             ?: streams.audioStreams.firstOrNull { it.guid?.trim() == selectedAudioGuid }?.index
             ?: streams.audioStreams.firstOrNull { it.isDefault == 1 }?.index
             ?: streams.audioStreams.firstOrNull()?.index
-        val selectedSubtitleIndex = when (val requested = options.subtitleStreamIndex) {
-            null -> streams.subtitleStreams.firstOrNull { it.guid?.trim() == selectedSubtitleGuid }?.index
-                ?: streams.subtitleStreams.firstOrNull { it.isDefault == 1 }?.index
-            else -> requested
-        }
+        val selectedSubtitleIndex = negotiated?.subtitleIndex
+            ?: when (val requested = options.subtitleStreamIndex) {
+                null -> streams.subtitleStreams.firstOrNull { it.guid?.trim() == selectedSubtitleGuid }?.index
+                    ?: streams.subtitleStreams.firstOrNull { it.isDefault == 1 }?.index
+                else -> requested
+            }
         val audioTracks = streams.audioStreams.mapNotNull { stream ->
             val index = stream.index ?: return@mapNotNull null
             PlaybackTrack(
@@ -1085,8 +1110,8 @@ class FeiniuMediaProviderAdapter(
                 channels = stream.channels,
                 selected = index == selectedAudioIndex,
                 isExternal = false,
-                // 直连原文件：换音轨只能在播放器内部完成。
-                renegotiate = false,
+                // 直连原文件：换音轨只能在播放器内部完成；转码流则要 provider 重新协商。
+                renegotiate = transcoded,
             )
         }
         val subtitleTracks = streams.subtitleStreams.mapNotNull { stream ->
@@ -1104,7 +1129,8 @@ class FeiniuMediaProviderAdapter(
                 selected = selectedSubtitleIndex != null && selectedSubtitleIndex >= 0 &&
                     index == selectedSubtitleIndex,
                 isExternal = external,
-                renegotiate = external,
+                // 外挂字幕始终要 provider 给文件；转码流的字幕也在服务端选。
+                renegotiate = transcoded || external,
             )
         }
         return audioTracks + subtitleTracks
@@ -1225,6 +1251,131 @@ class FeiniuMediaProviderAdapter(
                 playLink = "/v/api/v1/media/range/$mediaGuid",
             ).encode(),
         )
+    }
+
+    /**
+     * Legacy `FeiniuVideoPlaybackProvider.playTranscoded` — POST /v/api/v1/play/play.
+     *
+     * fnOS re-encodes to the requested ceiling and answers with an expiring
+     * `play_link` plus the tracks it actually selected. This is the only way an
+     * ordinary file can offer qualities: the range route serves the original
+     * bytes and ignores every ceiling, so without this branch the chrome either
+     * hides the quality menu or shows one that changes nothing.
+     *
+     * The response is authoritative for the selected tracks — the server may
+     * answer with different indexes or an external subtitle file than the ones
+     * requested.
+     */
+    private suspend fun resolveTranscodedStream(
+        item: MediaId,
+        info: FeiniuPlayInfoData,
+        streams: FeiniuStreamListData,
+        options: PlaybackOptions,
+        mediaGuid: String,
+        video: cn.mafei.cmp.providers.feiniu.core.FeiniuVideoStream?,
+        requestedBitrate: Int,
+        operation: cn.mafei.cmp.providers.feiniu.core.FeiniuSessionSnapshot,
+    ): PlaybackPreparation {
+        val audio = selectedAudioStream(streams, info, options.audioStreamIndex)
+        val subtitle = selectedSubtitleStream(streams, info, options.subtitleStreamIndex)
+        val session = try {
+            translate {
+                facade.playback.play(
+                    resolution = resolution,
+                    request = cn.mafei.cmp.providers.feiniu.core.FeiniuPlayPlayRequest(
+                        mediaGuid = mediaGuid,
+                        videoGuid = video?.guid?.takeIf(String::isNotBlank)
+                            ?: info.videoGuid?.takeIf(String::isNotBlank)
+                            ?: mediaGuid,
+                        videoEncoder = video?.codecName?.takeIf(String::isNotBlank) ?: "h264",
+                        resolution = video?.resolutionType.orEmpty(),
+                        bitrate = requestedBitrate.toLong(),
+                        // 起播位置由播放器在 load 之后 seek；preparePlayback 这里没有位置。
+                        startTimestamp = 0L,
+                        audioEncoder = audio?.codecName?.takeIf(String::isNotBlank) ?: "aac",
+                        audioGuid = audio?.guid?.trim().orEmpty(),
+                        subtitleGuid = subtitle?.guid?.trim().orEmpty(),
+                        channels = (audio?.channels ?: 2).coerceAtLeast(1),
+                        forcedSdr = 0,
+                    ),
+                    pinnedOperation = operation,
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (authentication: AuthenticationError) {
+            throw authentication
+        } catch (failure: Exception) {
+            return PlaybackPreparation.Refused(
+                RefusalReason.NoPlayableSource,
+                detail = "fnOS play/play failed: ${failure.message}",
+            )
+        }
+        val baseUrl = resolution.preferred.baseUrl
+        // play_link 是服务端签发的临时链接：过解析器（同源、可解析），失败即拒绝。
+        val streamUrl = session.resolvePlayLink(baseUrl)
+            ?: return PlaybackPreparation.Refused(
+                RefusalReason.NoPlayableSource,
+                detail = "fnOS play/play returned no playable link for ${item.value}",
+            )
+        val negotiatedSubtitleIndex = session.data.subtitleIndex ?: options.subtitleStreamIndex
+        // 转码响应可能给出一个独立字幕文件；没有就走原来的外挂字幕 URL 构造。
+        val negotiatedSubtitleUrl = session.data.subtitleLink
+            ?.takeIf { session.data.isSubtitleExternal == 1 }
+            ?.let { session.resolveSubtitleLink(baseUrl) }
+        val subtitleUrl = negotiatedSubtitleUrl
+            ?: externalSubtitleUrl(streams, info, negotiatedSubtitleIndex)
+        val ready = PlaybackPreparation.Ready(
+            streamUrl = streamUrl,
+            subtitleUrl = subtitleUrl,
+            tracks = playbackTracks(streams, info, options, transcoded = true, negotiated = session.data),
+            headers = facade.assets.playbackHeaders(operation.credentials, session.requiresRelayCookie),
+            multiConnectionAllowed = true,
+            playSessionId = null,
+            transport = PlaybackTransport.Transcode,
+            // 档位由服务端重编产出 → 按需生成，界面可以自己造档位表。
+            qualities = null,
+            appliedBitrate = requestedBitrate,
+            reportingContext = FeiniuReportingContext(
+                itemGuid = info.guid?.takeIf { it.isNotBlank() } ?: item.value,
+                mediaGuid = session.data.mediaGuid?.takeIf { it.isNotBlank() } ?: mediaGuid,
+                videoGuid = session.data.videoGuid?.takeIf { it.isNotBlank() }
+                    ?: video?.guid?.takeIf(String::isNotBlank)
+                    ?: info.videoGuid?.takeIf(String::isNotBlank)
+                    ?: mediaGuid,
+                audioGuid = session.data.audioGuid?.takeIf { it.isNotBlank() } ?: audio?.guid.orEmpty(),
+                subtitleGuid = session.data.subtitleGuid?.takeIf { it.isNotBlank() } ?: subtitle?.guid.orEmpty(),
+                resolution = video?.resolutionType.orEmpty(),
+                bitrate = requestedBitrate.toLong(),
+                durationSeconds = info.item?.durationSeconds,
+                // 旧版同样把 play/play 返回的链接回报给 fnOS（它不是第三方云链接）。
+                playLink = session.data.playLink?.trim().orEmpty()
+                    .ifEmpty { "/v/api/v1/media/range/$mediaGuid" },
+            ).encode(),
+        )
+        return ready
+    }
+
+    private fun selectedAudioStream(
+        streams: FeiniuStreamListData,
+        info: FeiniuPlayInfoData,
+        requestedIndex: Int?,
+    ): cn.mafei.cmp.providers.feiniu.core.FeiniuAudioStream? = when (requestedIndex) {
+        null -> streams.audioStreams.firstOrNull { it.guid?.trim() == info.audioGuid?.trim() }
+            ?: streams.audioStreams.firstOrNull { it.isDefault == 1 }
+            ?: streams.audioStreams.firstOrNull()
+        else -> streams.audioStreams.firstOrNull { it.index == requestedIndex }
+    }
+
+    private fun selectedSubtitleStream(
+        streams: FeiniuStreamListData,
+        info: FeiniuPlayInfoData,
+        requestedIndex: Int?,
+    ): cn.mafei.cmp.providers.feiniu.core.FeiniuSubtitleStream? = when (requestedIndex) {
+        // 明确的「关字幕」：不带字幕轨去协商。
+        null -> streams.subtitleStreams.firstOrNull { it.guid?.trim() == info.subtitleGuid?.trim() }
+            ?: streams.subtitleStreams.firstOrNull { it.isDefault == 1 }
+        else -> if (requestedIndex < 0) null else streams.subtitleStreams.firstOrNull { it.index == requestedIndex }
     }
 
     private fun List<cn.mafei.cmp.providers.feiniu.core.FeiniuDirectLinkQuality>.httpQualities() =
