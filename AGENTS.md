@@ -14,7 +14,14 @@
 1. 用户要求今后 Codex、GLM 与 Pony Ma 分开署名；Author 和 Committer 都必须明确设置，不能只写 Co-authored-by：Codex 使用 `Codex <codex@mafei.invalid>`，GLM 使用 `GLM <glm@mafei.invalid>`，Pony Ma 使用 `Pony Ma <ponyma@mafei.invalid>`。这些是项目内身份，不是官方 GitHub bot 账号。
 2. 多 Agent 共享工作区，禁止为切换身份修改全局或仓库共享 `user.name` / `user.email`。每次提交使用命令级 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`、`GIT_COMMITTER_NAME`、`GIT_COMMITTER_EMAIL`，并显式传 `git commit --author='对应名称 <对应邮箱>'`，避免 amend 继承错误作者。
 3. 只暂存自己负责的明确路径，保留他人改动；提交前重读 HEAD/status，提交后检查 `git log -1 --format='%h Author: %an <%ae> Committer: %cn <%ce>'`。
-4. 已确认 CMP 历史已按用户授权改写，原历史有备份；旧冻结 SHA 使用 `docs/agent-git-identities-2026-09-08.md` 映射，不得恢复旧提交链或推送备份分支。进一步改写历史、删除备份或强推必须另获用户授权。
+4. 每个新提交都必须在提交正文中包含以下 Git trailer，记录实际执行提交的 Agent 和模型；模型名称必须使用运行时提供的准确 ID，不得猜测或填写泛称：
+   ```text
+   Agent: Codex
+   Model: gpt-6-sol
+   Reasoning: high
+   ```
+   `Agent` 必须与提交署名一致；`Model` 必填；`Reasoning` 可选但建议填写。GLM、Pony Ma 提交时分别填写自身身份和实际模型 ID。
+5. 已确认 CMP 历史已按用户授权改写，原历史有备份；旧冻结 SHA 使用 `docs/agent-git-identities-2026-09-08.md` 映射，不得恢复旧提交链或推送备份分支。进一步改写历史、删除备份或强推必须另获用户授权。
 
 ## CMP 与 HarmonyOS 边界
 
