@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -36,7 +37,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -49,6 +49,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -62,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -69,6 +71,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
@@ -92,18 +95,25 @@ import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.TrackKind
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
 private const val PlayerAutoHideDelayMs = 4_000L
 private const val PlayerLongPressSpeed = 3f
+private const val PlayerControlTransitionDurationMs = 180
+private const val PlayerMenuCloseDurationMs = 200
+private const val PlayerMenuOptionDurationMs = 130
+private const val PlayerMenuOptionStaggerMs = 28
+private const val PlayerEpisodeEntranceDurationMs = 180
+private const val PlayerEpisodeRowStaggerMs = 50
 
 /** Legacy `PLAYER_CLOCK_INTERVAL_MS`. */
 private const val PlayerClockIntervalMs = 30_000L
 
-private val PlayerControlSurface = Color(0x52000000)
-private val PlayerControlMask = Color(0x3D000000)
-private val PlayerFullscreenControlMask = Color(0x52000000)
+private val PlayerGlassControlTint = Color(0x18000000)
+private val PlayerControlMask = Color(0x99000000)
+private val PlayerFullscreenControlMask = Color(0xB0000000)
 private val PlayerGestureSeekSurface = Color(0x85000000)
 /** 旧版 PLAYER_GESTURE_FEEDBACK_SURFACE_COLOR：亮度/音量/倍速胶囊比 seek 卡更透。 */
 private val PlayerGestureSurface = Color(0x66000000)
@@ -186,10 +196,15 @@ fun NowPlayingScreen(
     val latestSeek by rememberUpdatedState(onSeek)
     val latestSpeed by rememberUpdatedState(onSpeed)
     val latestPlaybackSpeed by rememberUpdatedState(state.speed)
+    val animationScope = rememberCoroutineScope()
 
     var controlsVisible by remember(media.id, state.generation) { mutableStateOf(true) }
     var locked by remember(media.id, state.generation) { mutableStateOf(false) }
     var panel by remember(media.id, state.generation) { mutableStateOf(PlayerChromePanel.None) }
+    var panelContainerVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    var panelClosing by remember(media.id, state.generation) { mutableStateOf(false) }
+    var panelAnimationToken by remember(media.id, state.generation) { mutableIntStateOf(0) }
+    var openPlaybackInfoAfterPanelClose by remember(media.id, state.generation) { mutableStateOf(false) }
     var autoHideGeneration by remember(media.id, state.generation) { mutableIntStateOf(0) }
     var sliderPositionMs by remember(media.id, state.generation) { mutableLongStateOf(state.positionMs) }
     var draggingSlider by remember(media.id, state.generation) { mutableStateOf(false) }
@@ -247,6 +262,47 @@ fun NowPlayingScreen(
         }
     }
 
+    fun openPanel(next: PlayerChromePanel) {
+        if (next == PlayerChromePanel.None) return
+        panelAnimationToken++
+        panel = next
+        panelClosing = false
+        panelContainerVisible = true
+        controlsVisible = false
+    }
+
+    fun closePanel(openPlaybackInfo: Boolean = false) {
+        if (panel == PlayerChromePanel.None || panelClosing) return
+        openPlaybackInfoAfterPanelClose = openPlaybackInfo
+        panelClosing = true
+        panelAnimationToken++
+        val token = panelAnimationToken
+        val closingPanel = panel
+        val contentExitMs = playerPanelContentExitDurationMs(
+            panel = closingPanel,
+            tracks = tracks,
+            qualityOptions = qualityOptions,
+            showAspectRatio = capabilities.contentMode,
+            showPlaybackInfo = playbackFacts != null,
+        )
+        animationScope.launch {
+            delay(contentExitMs)
+            if (token != panelAnimationToken) return@launch
+            panelContainerVisible = false
+            delay(PlayerControlTransitionDurationMs.toLong())
+            if (token != panelAnimationToken) return@launch
+            panel = PlayerChromePanel.None
+            panelClosing = false
+            if (openPlaybackInfoAfterPanelClose) {
+                openPlaybackInfoAfterPanelClose = false
+                playbackInfoVisible = true
+                controlsVisible = false
+            } else {
+                showControlsTemporarily()
+            }
+        }
+    }
+
     BoxWithConstraints(
         modifier.background(Color.Black).onSizeChanged { sceneSize = it },
     ) {
@@ -268,8 +324,7 @@ fun NowPlayingScreen(
                 )
             ) {
                 PlayerBackStep.ClosePanel -> {
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
+                    closePanel()
                 }
                 PlayerBackStep.ClosePlaybackInfo -> {
                     playbackInfoVisible = false
@@ -444,7 +499,6 @@ fun NowPlayingScreen(
                 diameter = 44,
                 iconSize = 22,
                 backdrop = backdrop,
-                immersive = true,
                 onClick = handleBack,
                 modifier = Modifier.align(Alignment.TopStart)
                     .padding(start = 12.dp + safeArea.start, top = 10.dp + safeArea.top),
@@ -455,8 +509,10 @@ fun NowPlayingScreen(
 
         AnimatedVisibility(
             visible = controlsVisible && !locked,
-            enter = fadeIn() + slideInVertically { -24 },
-            exit = fadeOut() + slideOutVertically { -24 },
+            enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
+                slideInVertically(tween(PlayerControlTransitionDurationMs)) { -24 },
+            exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
+                slideOutVertically(tween(PlayerControlTransitionDurationMs)) { -24 },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             PlayerTopChrome(
@@ -471,14 +527,16 @@ fun NowPlayingScreen(
                 // only when at least one of the two exists on this platform.
                 showMenu = capabilities.contentMode || playbackFacts != null,
                 onBack = handleBack,
-                onMenu = { panel = PlayerChromePanel.More; controlsVisible = true },
+                onMenu = { openPanel(PlayerChromePanel.More) },
             )
         }
 
         AnimatedVisibility(
             visible = controlsVisible && !locked,
-            enter = fadeIn() + slideInVertically { 24 },
-            exit = fadeOut() + slideOutVertically { 24 },
+            enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
+                slideInVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
+            exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
+                slideOutVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             PlayerBottomChrome(
@@ -504,7 +562,7 @@ fun NowPlayingScreen(
                 onNext = onNext,
                 episodes = episodes,
                 qualityOptions = qualityOptions,
-                onPanel = { panel = it; controlsVisible = true },
+                onPanel = ::openPanel,
                 capabilities = capabilities,
                 tracks = tracks,
             )
@@ -526,6 +584,8 @@ fun NowPlayingScreen(
                     locked = true
                     controlsVisible = false
                     panel = PlayerChromePanel.None
+                    panelContainerVisible = false
+                    panelClosing = false
                 },
                 modifier = Modifier.padding(start = safeArea.start + 20.dp),
             )
@@ -595,64 +655,69 @@ fun NowPlayingScreen(
             )
         }
 
-        if (panel != PlayerChromePanel.None) {
-            PlayerSidePanel(
-                panel = panel,
-                state = state,
-                tracks = tracks,
-                episodes = episodes,
-                episodeIndex = episodeIndex,
-                qualityOptions = qualityOptions,
-                fullscreen = fullscreen,
-                showAspectRatio = capabilities.contentMode,
-                showPlaybackInfo = playbackFacts != null,
-                safeEnd = safeArea.end,
-                onDismiss = {
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onOpenPanel = { panel = it },
-                onSpeed = { value ->
-                    latestSpeed(value)
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onSelectTrack = { kind, id ->
-                    onSelectTrack(kind, id)
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onSelectEpisode = { index ->
-                    onSelectEpisode?.invoke(index)
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onSelectQuality = { bitrate ->
-                    onSelectQuality?.invoke(bitrate)
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onSelectContentMode = { mode ->
-                    onSelectContentMode?.invoke(mode)
-                    panel = PlayerChromePanel.None
-                    showControlsTemporarily()
-                },
-                onOpenPlaybackInfo = {
-                    panel = PlayerChromePanel.None
-                    playbackInfoVisible = true
-                    controlsVisible = false
-                },
-            )
+        AnimatedVisibility(
+            visible = panel != PlayerChromePanel.None && panelContainerVisible,
+            enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
+                slideInVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
+            exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
+                slideOutVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (panel != PlayerChromePanel.None) {
+                PlayerSidePanel(
+                    panel = panel,
+                    closing = panelClosing,
+                    state = state,
+                    tracks = tracks,
+                    episodes = episodes,
+                    episodeIndex = episodeIndex,
+                    qualityOptions = qualityOptions,
+                    fullscreen = fullscreen,
+                    showAspectRatio = capabilities.contentMode,
+                    showPlaybackInfo = playbackFacts != null,
+                    safeEnd = safeArea.end,
+                    onDismiss = { closePanel() },
+                    onOpenPanel = ::openPanel,
+                    onSpeed = { value ->
+                        latestSpeed(value)
+                        closePanel()
+                    },
+                    onSelectTrack = { kind, id ->
+                        onSelectTrack(kind, id)
+                        closePanel()
+                    },
+                    onSelectEpisode = { index ->
+                        onSelectEpisode?.invoke(index)
+                        closePanel()
+                    },
+                    onSelectQuality = { bitrate ->
+                        onSelectQuality?.invoke(bitrate)
+                        closePanel()
+                    },
+                    onSelectContentMode = { mode ->
+                        onSelectContentMode?.invoke(mode)
+                        closePanel()
+                    },
+                    onOpenPlaybackInfo = { closePanel(openPlaybackInfo = true) },
+                )
+            }
         }
 
-        if (playbackInfoVisible) {
+        AnimatedVisibility(
+            visible = playbackInfoVisible,
+            enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
+                slideInVertically(tween(PlayerControlTransitionDurationMs)) { 18 },
+            exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
+                slideOutVertically(tween(PlayerControlTransitionDurationMs)) { 18 },
+            modifier = Modifier.fillMaxSize(),
+        ) {
             PlayerPlaybackInfoCard(
                 sections = buildPlayerInfoSections(playbackFacts, state, tracks),
                 onDismiss = {
                     playbackInfoVisible = false
                     showControlsTemporarily()
                 },
-                modifier = Modifier.align(Alignment.CenterStart),
+                modifier = Modifier,
             )
         }
     }
@@ -677,6 +742,8 @@ private fun PlayerTopChrome(
             .background(
                 Brush.verticalGradient(
                     0f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
+                    .5f to (if (fullscreen) PlayerFullscreenControlMask.copy(alpha = .48f)
+                    else PlayerControlMask.copy(alpha = .42f)),
                     1f to Color.Transparent,
                 ),
             ),
@@ -699,7 +766,6 @@ private fun PlayerTopChrome(
                     diameter = 44,
                     iconSize = 22,
                     backdrop = backdrop,
-                    immersive = true,
                     onClick = onBack,
                 ) {
                     MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
@@ -721,7 +787,6 @@ private fun PlayerTopChrome(
                     diameter = 44,
                     iconSize = 22,
                     backdrop = backdrop,
-                    immersive = true,
                     onClick = onMenu,
                 )
             }
@@ -774,6 +839,8 @@ private fun PlayerBottomChrome(
             .background(
                 Brush.verticalGradient(
                     0f to Color.Transparent,
+                    .46f to (if (fullscreen) PlayerFullscreenControlMask.copy(alpha = .48f)
+                    else PlayerControlMask.copy(alpha = .42f)),
                     1f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
                 ),
             ),
@@ -882,7 +949,7 @@ private fun PlayerBottomChrome(
                         PlayerChromeButton(
                             glyph = PlayerChromeGlyph.Fullscreen,
                             label = "全屏",
-                            diameter = 40,
+                            diameter = 44,
                             iconSize = 20,
                             backdrop = backdrop,
                             // 旧版这个按钮进出共用（图标与文字都是「全屏」），按 toggle 走。
@@ -1029,6 +1096,7 @@ private fun LegacyPlayerSeekBar(
 @Composable
 private fun PlayerSidePanel(
     panel: PlayerChromePanel,
+    closing: Boolean,
     state: PlayerState,
     tracks: List<PlayerTrack>,
     episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
@@ -1047,6 +1115,11 @@ private fun PlayerSidePanel(
     onSelectContentMode: (PlayerContentMode) -> Unit,
     onOpenPlaybackInfo: () -> Unit,
 ) {
+    var entranceVisible by remember(panel) { mutableStateOf(false) }
+    LaunchedEffect(panel) {
+        delay(16)
+        entranceVisible = true
+    }
     // 选集面板按旧版取 330 宽（PLAYER_MENU_EPISODE_WIDTH），并带自己的标题区。
     val isEpisodePanel = panel == PlayerChromePanel.Episodes
     val isMorePanel = panel == PlayerChromePanel.More
@@ -1111,6 +1184,8 @@ private fun PlayerSidePanel(
                     aspectRatioLabel = playerContentModeLabel(state.contentMode),
                     showAspectRatio = showAspectRatio,
                     showPlaybackInfo = showPlaybackInfo,
+                    entranceVisible = entranceVisible,
+                    closing = closing,
                     onAspectRatio = { onOpenPanel(PlayerChromePanel.AspectRatio) },
                     onPlaybackInfo = onOpenPlaybackInfo,
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -1118,7 +1193,14 @@ private fun PlayerSidePanel(
                 isEpisodePanel -> {
                     Text(
                         "选集",
-                        Modifier.padding(bottom = 12.dp),
+                        Modifier.padding(bottom = 12.dp)
+                            .playerStaggeredEntrance(
+                                visible = entranceVisible && !closing,
+                                index = 0,
+                                count = 1,
+                                durationMs = PlayerEpisodeEntranceDurationMs,
+                                staggerMs = 0,
+                            ),
                         color = PlayerMenuText,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
@@ -1126,13 +1208,20 @@ private fun PlayerSidePanel(
                     PlayerEpisodePanel(
                         episodes = episodes,
                         episodeIndex = episodeIndex,
+                        entranceVisible = entranceVisible,
+                        closing = closing,
                         onSelectEpisode = onSelectEpisode,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                 }
                 else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                    items(options, key = { it.id }) { option ->
-                        PlayerPanelOptionRow(option) {
+                    itemsIndexed(options, key = { _, option -> option.id }) { index, option ->
+                        PlayerPanelOptionRow(
+                            option = option,
+                            entranceVisible = entranceVisible && !closing,
+                            index = index,
+                            count = options.size,
+                        ) {
                             when (panel) {
                                 PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
                                 PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
@@ -1161,13 +1250,22 @@ private fun PlayerMorePanel(
     aspectRatioLabel: String,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
+    entranceVisible: Boolean,
+    closing: Boolean,
     onAspectRatio: () -> Unit,
     onPlaybackInfo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val count = listOf(showAspectRatio, showPlaybackInfo).count { it }
     Column(modifier) {
         if (showAspectRatio) {
-            PlayerPanelOptionRow(PlayerPanelOption("aspect", "画面比例 · $aspectRatioLabel"), onAspectRatio)
+            PlayerPanelOptionRow(
+                option = PlayerPanelOption("aspect", "画面比例 · $aspectRatioLabel"),
+                entranceVisible = entranceVisible && !closing,
+                index = 0,
+                count = count,
+                onClick = onAspectRatio,
+            )
         }
         if (showAspectRatio && showPlaybackInfo) {
             Box(
@@ -1175,7 +1273,13 @@ private fun PlayerMorePanel(
             )
         }
         if (showPlaybackInfo) {
-            PlayerPanelOptionRow(PlayerPanelOption("info", "播放信息"), onPlaybackInfo)
+            PlayerPanelOptionRow(
+                option = PlayerPanelOption("info", "播放信息"),
+                entranceVisible = entranceVisible && !closing,
+                index = if (showAspectRatio) 1 else 0,
+                count = count,
+                onClick = onPlaybackInfo,
+            )
         }
     }
 }
@@ -1211,6 +1315,7 @@ private fun PlayerPlaybackInfoCard(
                 .widthIn(min = 250.dp, max = 360.dp)
                 .fillMaxHeight(.76f)
                 .padding(start = 32.dp, top = 16.dp, bottom = 16.dp)
+                .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x52000000), spotColor = Color(0x52000000))
                 .clip(RoundedCornerShape(20.dp))
                 .background(PlayerInfoCardSurface)
                 .border(1.dp, PlayerInfoCardBorder, RoundedCornerShape(20.dp))
@@ -1280,6 +1385,8 @@ private fun PlayerPlaybackInfoCard(
 private fun PlayerEpisodePanel(
     episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
     episodeIndex: Int,
+    entranceVisible: Boolean,
+    closing: Boolean,
     onSelectEpisode: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1300,6 +1407,14 @@ private fun PlayerEpisodePanel(
                 val selected = index == episodeIndex
                 Box(
                     Modifier.height(PlayerEpisodeGridCellHeight)
+                        .playerStaggeredEntrance(
+                            visible = entranceVisible && !closing,
+                            index = (index / PlayerEpisodeGridColumns).coerceAtMost(5),
+                            count = 6,
+                            durationMs = PlayerEpisodeEntranceDurationMs,
+                            staggerMs = PlayerEpisodeRowStaggerMs,
+                            offsetDp = 14,
+                        )
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (selected) PlayerAccent else PlayerEpisodeCellSurface)
                         .clickable { onSelectEpisode(index) }
@@ -1326,6 +1441,14 @@ private fun PlayerEpisodePanel(
                 val selected = index == episodeIndex
                 Row(
                     Modifier.fillMaxWidth().height(PlayerEpisodeRowHeight)
+                        .playerStaggeredEntrance(
+                            visible = entranceVisible && !closing,
+                            index = abs(index - episodeIndex).coerceAtMost(5),
+                            count = 6,
+                            durationMs = PlayerEpisodeEntranceDurationMs,
+                            staggerMs = PlayerEpisodeRowStaggerMs,
+                            offsetDp = 14,
+                        )
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (selected) PlayerEpisodeSelectedSurface else Color.Transparent)
                         .clickable { onSelectEpisode(index) }
@@ -1389,9 +1512,22 @@ private data class PlayerPanelOption(
 private fun PlayerTrack.toPanelOption(): PlayerPanelOption = PlayerPanelOption(id, label, selected)
 
 @Composable
-private fun PlayerPanelOptionRow(option: PlayerPanelOption, onClick: () -> Unit) {
+private fun PlayerPanelOptionRow(
+    option: PlayerPanelOption,
+    entranceVisible: Boolean,
+    index: Int,
+    count: Int,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier.fillMaxWidth().height(44.dp)
+            .playerStaggeredEntrance(
+                visible = entranceVisible,
+                index = index,
+                count = count,
+                durationMs = PlayerMenuOptionDurationMs,
+                staggerMs = PlayerMenuOptionStaggerMs,
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
@@ -1404,6 +1540,58 @@ private fun PlayerPanelOptionRow(option: PlayerPanelOption, onClick: () -> Unit)
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun Modifier.playerStaggeredEntrance(
+    visible: Boolean,
+    index: Int,
+    count: Int,
+    durationMs: Int,
+    staggerMs: Int,
+    offsetDp: Int = 12,
+): Modifier {
+    val safeCount = count.coerceAtLeast(1)
+    val safeIndex = index.coerceIn(0, safeCount - 1)
+    val delayMs = if (visible) safeIndex * staggerMs else (safeCount - 1 - safeIndex) * staggerMs
+    val progress by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = durationMs,
+            delayMillis = delayMs,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "player-panel-item",
+    )
+    return graphicsLayer {
+        alpha = progress
+        translationY = (1f - progress) * offsetDp.dp.toPx()
+    }
+}
+
+private fun playerPanelContentExitDurationMs(
+    panel: PlayerChromePanel,
+    tracks: List<PlayerTrack>,
+    qualityOptions: List<PlayerQualityOption>,
+    showAspectRatio: Boolean,
+    showPlaybackInfo: Boolean,
+): Long {
+    if (panel == PlayerChromePanel.Episodes) return PlayerMenuCloseDurationMs.toLong()
+    val count = when (panel) {
+        PlayerChromePanel.More -> listOf(showAspectRatio, showPlaybackInfo).count { it }
+        PlayerChromePanel.AspectRatio -> playerContentModeChoices.size
+        PlayerChromePanel.Speed -> 6
+        PlayerChromePanel.Audio -> tracks.count { it.kind == TrackKind.Audio }
+        PlayerChromePanel.Subtitle -> tracks.count { it.kind == TrackKind.Subtitle } + 1
+        PlayerChromePanel.Quality -> qualityOptions.size
+        PlayerChromePanel.Episodes,
+        PlayerChromePanel.None -> 0
+    }
+    return if (count <= 0) {
+        PlayerMenuCloseDurationMs.toLong()
+    } else {
+        ((count - 1) * PlayerMenuOptionStaggerMs + PlayerMenuOptionDurationMs).toLong()
     }
 }
 
@@ -1517,7 +1705,6 @@ private fun PlayerChromeButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     transparent: Boolean = false,
-    immersive: Boolean = false,
     content: (@Composable () -> Unit)? = null,
 ) {
     val buttonModifier = modifier.size(diameter.dp).semantics { contentDescription = label }
@@ -1525,19 +1712,21 @@ private fun PlayerChromeButton(
         if (content != null) content()
         else if (glyph != null) ChromeGlyph(glyph, Modifier.size(iconSize.dp), Color.White)
     }
-    if (immersive) {
+    if (!transparent) {
         LiquidButton(
             onClick = onClick,
             backdrop = backdrop,
             modifier = buttonModifier,
-            surfaceColor = PlayerControlSurface,
+            // A light readability tint preserves the sampled video, lens and
+            // press highlight. The previous 0x52 black fill hid all three and
+            // made the control look like a bordered transparent circle.
+            surfaceColor = PlayerGlassControlTint,
             height = diameter.dp,
             horizontalPadding = ((diameter - iconSize) / 2f).dp,
         ) { buttonContent() }
     } else {
         Box(
             buttonModifier.clip(CircleShape)
-                .background(if (transparent) Color.Transparent else PlayerControlSurface)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {

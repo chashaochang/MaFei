@@ -7,6 +7,7 @@ import cn.mafei.cmp.common.ui.generated.resources.app_icon
 import cn.mafei.cmp.common.ui.generated.resources.arrow_right
 import cn.mafei.cmp.common.ui.generated.resources.default_avatar
 import cn.mafei.cmp.common.ui.generated.resources.empty
+import cn.mafei.cmp.common.ui.generated.resources.empty_media
 import cn.mafei.cmp.common.ui.generated.resources.failed
 import cn.mafei.cmp.common.ui.generated.resources.feiniu_video_logo
 import cn.mafei.cmp.common.ui.generated.resources.history
@@ -66,6 +67,7 @@ object MaFeiLegacyDrawables {
     val privacy: DrawableResource get() = Res.drawable.ic_yinsi
     val addGroup: DrawableResource get() = Res.drawable.add_group
     val empty: DrawableResource get() = Res.drawable.empty
+    val emptyMedia: DrawableResource get() = Res.drawable.empty_media
     val failed: DrawableResource get() = Res.drawable.failed
     val noHistory: DrawableResource get() = Res.drawable.no_history
     val groupQrCode: DrawableResource get() = Res.drawable.qrcode

@@ -211,7 +211,7 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "cn.xiaobai.mafei.cmp.dev"
+        applicationId = "cn.xiaobai.mafei"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
@@ -280,6 +280,9 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg)
             packageName = "MaFei"
             packageVersion = "2.0.0"
+            macOS {
+                iconFile.set(project.file("src/desktopMain/resources/app_icon.icns"))
+            }
         }
     }
 }

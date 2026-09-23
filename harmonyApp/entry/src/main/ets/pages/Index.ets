@@ -34,9 +34,8 @@ struct Index {
         context.applicationInfo.name
       );
       const legacyCmpSettings = captureLegacyCmpSettings(context);
-      // Register the native mfplayer surface before CPF creates any ArkUIView
-      // interop nodes. Compose owns the player chrome; this builder owns only
-      // the old HarmonyOS video surface and decoder.
+      // Register the native video surface before CPF creates its ArkUIView
+      // node. CMP owns the visible player UI and interaction layer.
       registerMaFeiPlayerInteropBuilder();
       this.controller = nativeApi.MainArkUIViewController(
         context.filesDir,
@@ -59,7 +58,10 @@ struct Index {
         Compose({
           controller: this.controller,
           libraryName: 'entry',
-          onBackPressed: () => this.controller!.onBackPress()
+          // CPF invokes this callback only after Compose has declined the
+          // back event. Calling controller.onBackPress() here re-enters the
+          // same BackHandler and overflows the JS stack.
+          onBackPressed: () => false
         })
           .width('100%')
           .height('100%')
@@ -73,6 +75,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(Color.Black)
   }
 
   onPageHide(): void {
@@ -84,6 +87,14 @@ struct Index {
   }
 
   onBackPress(): boolean {
-    return this.controller ? this.controller.onBackPress() : false;
+    // Compose owns the visible player's menu/fullscreen/page back priority.
+    // Keep the native callback only as a fallback for a missing dispatcher.
+    if (this.controller?.onBackPress()) {
+      return true;
+    }
+    if (nativeApi.IsOhosPlayerScreenVisible() && nativeApi.HandleOhosPlayerBack()) {
+      return true;
+    }
+    return false;
   }
 }

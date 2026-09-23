@@ -1,4 +1,5 @@
 #include "libkn_api.h"
+#include "hilog/log.h"
 #include "napi/native_api.h"
 #include <vector>
 
@@ -92,6 +93,43 @@ static napi_value UpdateWindowInsets(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) {
+    size_t count = 1;
+    napi_value arguments[1];
+    size_t payloadLength = 0;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 1 ||
+        napi_get_value_string_utf8(env, arguments[0], nullptr, 0, &payloadLength) != napi_ok ||
+        payloadLength == 0 || payloadLength > 1024 * 1024) {
+        napi_throw_type_error(env, nullptr, "One player state JSON string is required");
+        return nullptr;
+    }
+    std::vector<char> payload(payloadLength + 1);
+    size_t copiedPayload = 0;
+    if (napi_get_value_string_utf8(
+            env,
+            arguments[0],
+            payload.data(),
+            payload.size(),
+            &copiedPayload
+        ) != napi_ok || copiedPayload != payloadLength) {
+        napi_throw_type_error(env, nullptr, "Invalid player state JSON string");
+        return nullptr;
+    }
+    const bool accepted = UpdateOhosPlayerState(payload.data());
+    if (!accepted) {
+        OH_LOG_Print(
+            LOG_APP,
+            LOG_WARN,
+            0xD003900,
+            "MaFeiPlayerBridge",
+            "Rejected stale or invalid player event"
+        );
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, accepted, &result);
+    return result;
+}
+
 static napi_value GetPlayerScreenVisible(napi_env env, napi_callback_info info) {
     size_t count = 0;
     if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
@@ -100,6 +138,28 @@ static napi_value GetPlayerScreenVisible(napi_env env, napi_callback_info info) 
     }
     napi_value result = nullptr;
     napi_get_boolean(env, IsOhosPlayerScreenVisible(), &result);
+    return result;
+}
+
+static napi_value GetPlayerFullscreenRequested(napi_env env, napi_callback_info info) {
+    size_t count = 0;
+    if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
+        napi_throw_type_error(env, nullptr, "No arguments are accepted");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, IsOhosPlayerFullscreenRequested(), &result);
+    return result;
+}
+
+static napi_value HandlePlayerBack(napi_env env, napi_callback_info info) {
+    size_t count = 0;
+    if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
+        napi_throw_type_error(env, nullptr, "No arguments are accepted");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, HandleOhosPlayerBack(), &result);
     return result;
 }
 
@@ -129,9 +189,39 @@ static napi_value Init(napi_env env, napi_value exports) {
             nullptr,
         },
         {
+            "UpdateOhosPlayerState",
+            nullptr,
+            UpdatePlayerState,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
             "IsOhosPlayerScreenVisible",
             nullptr,
             GetPlayerScreenVisible,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "IsOhosPlayerFullscreenRequested",
+            nullptr,
+            GetPlayerFullscreenRequested,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "HandleOhosPlayerBack",
+            nullptr,
+            HandlePlayerBack,
             nullptr,
             nullptr,
             nullptr,

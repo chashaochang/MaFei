@@ -96,6 +96,7 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
                 }
             }
             is RuntimeEvent.Tracks -> state = state.copy(tracks = event.tracks.toList())
+            is RuntimeEvent.Diagnostics -> state = state.copy(runtimeInfo = event.info)
             is RuntimeEvent.Failed -> return fail(event.failure)
             is RuntimeEvent.Ended -> {
                 if (!prepared) return emptyList()

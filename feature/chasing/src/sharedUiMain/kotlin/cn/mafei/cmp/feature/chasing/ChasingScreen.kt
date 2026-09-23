@@ -210,7 +210,7 @@ fun ChasingScreen(
                 state.loading -> LegacyLoadingView()
                 state.error != null && state.sections.all { it.items.isEmpty() } -> LegacyFailedView(onRetry)
                 !state.loading && state.error == null && state.followedCount == 0 ->
-                    LegacyEmptyView(title = "暂无追剧，去剧集详情页添加")
+                    LegacyEmptyView(title = "暂无追剧", subtitle = "去剧集详情页添加")
             }
         }
         MaFeiPageTitleBar(

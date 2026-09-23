@@ -90,8 +90,8 @@ class ApplicationRuntime(
     // per login used to append another identical row to the account history.
     private val login = ProviderLogin(
         transport,
-        savedConnectionFor = { provider, address, originalAddress, remoteUserId, username ->
-            savedAccount(provider, address, originalAddress, remoteUserId, username)
+        savedConnectionFor = { provider, address, originalAddress, remoteServerId, remoteUserId, username ->
+            savedAccount(provider, address, originalAddress, remoteServerId, remoteUserId, username)
         },
     )
     private val artwork = SessionArtwork(transport)
@@ -245,22 +245,28 @@ class ApplicationRuntime(
         provider: ProviderKind,
         address: String,
         originalAddress: String?,
+        remoteServerId: String?,
         remoteUserId: String?,
         username: String,
-    ): SavedConnection? = connectionCatalog.all()
-        .filter { saved ->
-            saved.server.provider == provider &&
-                savedConnectionMatchesAddress(saved, address, originalAddress) &&
+    ): SavedConnection? {
+        val stableServerId = remoteServerId?.takeIf(String::isNotBlank)?.let {
+            SessionIdentity.serverId(provider, validateSavedBaseUrl(address), it)
+        }
+        return connectionCatalog.all()
+            .filter { saved ->
+                saved.server.provider == provider &&
+                (saved.server.id == stableServerId || savedConnectionMatchesAddress(saved, address, originalAddress)) &&
                 if (remoteUserId != null) {
                     saved.remoteUserId == remoteUserId
                 } else {
                     saved.account.userName.equals(username, ignoreCase = true)
                 }
-        }
-        .maxWithOrNull(
-            compareBy<SavedConnection> { it.account.lastActiveEpochMs ?: Long.MIN_VALUE }
-                .thenBy { it.credentialKey },
-        )
+            }
+            .maxWithOrNull(
+                compareBy<SavedConnection> { it.account.lastActiveEpochMs ?: Long.MIN_VALUE }
+                    .thenBy { it.credentialKey },
+            )
+    }
 
     /**
      * Collapses the duplicate account-history rows an earlier login left behind

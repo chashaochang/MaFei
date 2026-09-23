@@ -23,4 +23,8 @@ data class PreparedStreamFacts(
     val qualities: List<PlaybackQuality>? = null,
     /** Ceiling actually in effect, or null when none is. */
     val appliedBitrate: Int? = null,
+    /** Sanitised URL scheme only; the stream URL itself never leaves the data layer. */
+    val protocol: String? = null,
+    /** Whether the negotiated stream permits the player's parallel range path. */
+    val multiConnectionAllowed: Boolean? = null,
 )

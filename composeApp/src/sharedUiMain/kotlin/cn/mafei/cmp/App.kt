@@ -248,6 +248,8 @@ private fun BoundNowPlayingScreen(
             playingMediaSourceId = prepared?.mediaSourceId,
             transport = prepared?.transport,
             providerTracks = negotiatedTracks,
+            protocol = prepared?.protocol,
+            multiConnectionAllowed = prepared?.multiConnectionAllowed,
         )
     }
     NowPlayingScreen(
@@ -597,6 +599,7 @@ private fun SignedOutFlow(
         ConnectionHistoryItem(
             key = connection.credentialKey,
             provider = connection.server.provider,
+            serverId = connection.server.id,
             displayName = connection.account.displayName,
             serverName = connection.server.name,
             address = connection.server.baseUrl,
@@ -642,10 +645,17 @@ private fun SignedOutFlow(
             historyError = null
             scope.launch {
                 try {
-                    if (!runtime.deleteSavedConnection(connection)) {
+                    if (runtime.deleteSavedConnection(connection)) {
+                        // The mutation already succeeded. Update the local source directly so
+                        // deleting the last row does not start a loading state that would remove
+                        // the shared dissolve surface before its animation finishes.
+                        historyConnections = historyConnections.filterNot {
+                            it.credentialKey == item.key
+                        }
+                        rememberedPasswordKeys = rememberedPasswordKeys - item.key
+                    } else {
                         historyError = "该账号正在使用，无法删除"
                     }
-                    loadHistory()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -697,7 +707,9 @@ private fun SignedOutFlow(
     val historyContent: @Composable () -> Unit = {
         AccountHistoryScreen(
             items = historyItems,
-            loading = historyLoading,
+            // Keep the rendered rows visible during a post-delete refresh so the shared
+            // dissolve animation is not replaced by a full-screen loading indicator.
+            loading = historyLoading && historyItems.isEmpty(),
             error = historyError,
             busy = busy,
             onBack = { backStack.removeLastOrNull() },
@@ -1470,6 +1482,7 @@ private fun BrowseContent(
                                     AccountSwitchItem(
                                         key = connection.credentialKey,
                                         provider = connection.server.provider,
+                                        serverId = connection.server.id,
                                         serverName = connection.server.name,
                                         displayName = connection.account.displayName,
                                         address = connection.server.baseUrl,

@@ -14,4 +14,10 @@ export const UpdateOhosWindowInsets: (
   bottom: number
 ) => void
 
+export const UpdateOhosPlayerState: (payload: string) => boolean
+
 export const IsOhosPlayerScreenVisible: () => boolean
+
+export const IsOhosPlayerFullscreenRequested: () => boolean
+
+export const HandleOhosPlayerBack: () => boolean

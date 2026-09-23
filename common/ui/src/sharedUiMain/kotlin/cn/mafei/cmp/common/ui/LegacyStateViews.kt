@@ -31,6 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,24 +43,49 @@ import org.jetbrains.compose.resources.painterResource
 @Composable
 fun LegacyEmptyView(
     title: String = "暂无数据",
+    subtitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val reveal = rememberLegacyStateReveal()
     Column(
-        modifier.fillMaxSize().graphicsLayer { alpha = reveal.value }.padding(bottom = 100.dp),
+        modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                alpha = reveal.value
+                val scale = .96f + reveal.value * .04f
+                scaleX = scale
+                scaleY = scale
+            }
+            .padding(horizontal = 32.dp, vertical = 40.dp)
+            .padding(bottom = 56.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         Image(
-            painter = painterResource(MaFeiLegacyDrawables.empty),
+            painter = painterResource(MaFeiLegacyDrawables.emptyMedia),
             contentDescription = null,
-            modifier = Modifier.size(240.dp),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(170.dp),
         )
+        Spacer(Modifier.height(22.dp))
         Text(
             title,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 16.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
         )
+        subtitle?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

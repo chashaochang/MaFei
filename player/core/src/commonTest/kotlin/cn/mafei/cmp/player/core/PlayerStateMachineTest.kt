@@ -48,6 +48,19 @@ class PlayerStateMachineTest {
         assertTrue(m.accept(RuntimeEvent.Ready(id, 10000), 1).isEmpty())
     }
 
+    @Test fun diagnosticsUpdateOnlyTheActiveGeneration() {
+        val m = machine()
+        val active = ready(m)
+        val info = PlayerRuntimeInfo(decoder = "ohcodec-vk", renderer = "gpu-next")
+
+        m.accept(RuntimeEvent.Diagnostics(active, info), 1)
+
+        assertEquals(info, m.state.runtimeInfo)
+        val stale = PlaybackGeneration()
+        assertTrue(m.accept(RuntimeEvent.Diagnostics(stale, PlayerRuntimeInfo(decoder = "wrong")), 2).isEmpty())
+        assertEquals(info, m.state.runtimeInfo)
+    }
+
     @Test fun invalidQueueDoesNotDestroyCurrentPlayback() {
         val m = machine(); ready(m); val before = m.state
         assertFailsWith<IllegalArgumentException> { m.load(emptyList(), 0, 0, false) }

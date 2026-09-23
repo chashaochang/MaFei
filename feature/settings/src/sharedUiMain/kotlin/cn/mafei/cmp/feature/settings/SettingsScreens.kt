@@ -61,7 +61,12 @@ import cn.mafei.cmp.common.ui.MaFeiActionBarButton
 import cn.mafei.cmp.common.ui.MaFeiActionBarScaffold
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiSavedAccountList
+import cn.mafei.cmp.common.ui.SavedAccountDeleteAffordance
+import cn.mafei.cmp.common.ui.SavedAccountListGroup
+import cn.mafei.cmp.common.ui.SavedAccountListItem
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.savedAccountListGroups
 import cn.mafei.cmp.core.domain.ProviderKind
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.roundToInt
@@ -310,21 +315,8 @@ fun AddGroupScreen(
     }
 }
 
-data class AccountSwitchItem(
-    val key: String,
-    val provider: ProviderKind,
-    val serverName: String,
-    val displayName: String,
-    val address: String,
-    val lastUsedEpochMs: Long?,
-    val isCurrent: Boolean,
-)
-
-private data class AccountSwitchGroup(
-    val key: String,
-    val title: String,
-    val items: List<AccountSwitchItem>,
-)
+typealias AccountSwitchItem = SavedAccountListItem
+internal typealias AccountSwitchGroup = SavedAccountListGroup
 
 private data class AccountProviderMenuAnchor(
     val boundsInRoot: Rect,
@@ -353,7 +345,6 @@ fun AccountSwitchScreen(
     var titleButtonBounds by remember { mutableStateOf(Rect.Zero) }
     var emptyButtonBounds by remember { mutableStateOf(Rect.Zero) }
     var providerMenuAnchor by remember { mutableStateOf<AccountProviderMenuAnchor?>(null) }
-    val accountGroups = remember(items) { accountSwitchGroups(items) }
     Box(modifier.fillMaxSize().onGloballyPositioned { rootBounds = it.boundsInRoot() }) {
         Column(
             Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -365,86 +356,57 @@ fun AccountSwitchScreen(
                     loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(Modifier.size(36.dp))
                     }
-                    items.isEmpty() -> Column(
-                        Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Image(
-                            painter = painterResource(MaFeiLegacyDrawables.noHistory),
-                            contentDescription = null,
-                            modifier = Modifier.size(200.dp),
-                            contentScale = ContentScale.Inside,
-                        )
-                        Text("暂无已保存账号", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "新增账号",
-                            Modifier.height(44.dp).clip(RoundedCornerShape(22.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                                .onGloballyPositioned { emptyButtonBounds = it.boundsInRoot() }
-                                .mafeiInteractive(
-                                    onClick = {
-                                        providerMenuAnchor = AccountProviderMenuAnchor(
-                                            boundsInRoot = emptyButtonBounds,
-                                            centerOnAnchor = true,
-                                        )
-                                    },
-                                    radiusDp = 22f,
-                                    label = "新增账号",
-                                )
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                    else -> Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Column(
-                            Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 16.dp)
+                    else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        MaFeiSavedAccountList(
+                            items = items,
+                            enabled = busyKey == null && deletingKey == null,
+                            busyKey = busyKey,
+                            deletingKey = deletingKey,
+                            deleteAffordance = SavedAccountDeleteAffordance.Button,
+                            onAccount = { item -> if (!item.isCurrent) onAccount(item) },
+                            onDelete = { item -> if (!item.isCurrent) pendingDelete = item },
+                            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 16.dp)
                                 .padding(top = 10.dp, bottom = safeArea.bottom + 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            accountGroups.forEach { group ->
-                                Column {
-                                    Text(
-                                        group.title,
-                                        Modifier.fillMaxWidth().height(40.dp)
-                                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
+                            showCurrentLabel = true,
+                            showRememberedPassword = true,
+                            emptyContent = {
+                                Column(
+                                    Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                ) {
+                                    Image(
+                                        painter = painterResource(MaFeiLegacyDrawables.noHistory),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(200.dp),
+                                        contentScale = ContentScale.Inside,
                                     )
-                                    Column(
-                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)),
-                                    ) {
-                                        group.items.forEachIndexed { index, item ->
-                                            AccountSwitchRow(
-                                                item = item,
-                                                busy = busyKey == item.key || deletingKey == item.key,
-                                                enabled = busyKey == null && deletingKey == null,
+                                    Text(
+                                        "暂无已保存账号",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 14.sp,
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(
+                                        "新增账号",
+                                        Modifier.height(44.dp).clip(RoundedCornerShape(22.dp))
+                                            .background(MaterialTheme.colorScheme.primary)
+                                            .onGloballyPositioned { emptyButtonBounds = it.boundsInRoot() }
+                                            .mafeiInteractive(
                                                 onClick = {
-                                                    if (!item.isCurrent) onAccount(item)
+                                                    providerMenuAnchor = AccountProviderMenuAnchor(
+                                                        boundsInRoot = emptyButtonBounds,
+                                                        centerOnAnchor = true,
+                                                    )
                                                 },
-                                                onDelete = {
-                                                    if (!item.isCurrent) pendingDelete = item
-                                                },
-                                            )
-                                            if (index < group.items.lastIndex) {
-                                                Box(
-                                                    Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(.5.dp)
-                                                        .background(
-                                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = .42f),
-                                                        ),
-                                                )
-                                            }
-                                        }
-                                    }
+                                                radiusDp = 22f,
+                                                label = "新增账号",
+                                            ).padding(horizontal = 24.dp, vertical = 12.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
                                 }
-                            }
-                        }
+                            },
+                        )
                     }
                 }
             }
@@ -512,23 +474,8 @@ fun AccountSwitchScreen(
     }
 }
 
-private fun accountSwitchGroups(items: List<AccountSwitchItem>): List<AccountSwitchGroup> {
-    return items.groupBy { item ->
-        val title = item.serverName.trim().ifEmpty { item.address.trim() }
-        "${item.provider}\n$title\n${item.address.trim()}"
-    }.map { (key, groupedItems) ->
-        AccountSwitchGroup(
-            key = key,
-            title = groupedItems.first().serverName.trim().ifEmpty { groupedItems.first().address.trim() },
-            items = groupedItems.sortedWith(
-                compareByDescending<AccountSwitchItem> { it.isCurrent }
-                    .thenByDescending { it.lastUsedEpochMs ?: Long.MIN_VALUE },
-            ),
-        )
-    }.sortedWith(
-        compareByDescending<AccountSwitchGroup> { group -> group.items.any { it.isCurrent } }
-            .thenByDescending { group -> group.items.firstOrNull()?.lastUsedEpochMs ?: Long.MIN_VALUE },
-    )
+internal fun accountSwitchGroups(items: List<AccountSwitchItem>): List<AccountSwitchGroup> {
+    return savedAccountListGroups(items)
 }
 
 @Composable
@@ -613,83 +560,5 @@ private fun AccountProviderMenuRow(
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
         )
-    }
-}
-
-@Composable
-private fun AccountSwitchRow(
-    item: AccountSwitchItem,
-    busy: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().height(80.dp)
-            .mafeiInteractive({ if (enabled) onClick() }, radiusDp = 0f, label = item.displayName)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Image(
-            painter = painterResource(
-                if (item.provider == ProviderKind.Jellyfin) MaFeiLegacyDrawables.jellyfinLogo
-                else MaFeiLegacyDrawables.feiniuLogo,
-            ),
-            contentDescription = null,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
-            contentScale = ContentScale.Fit,
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    item.displayName,
-                    Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (item.isCurrent) {
-                    Text(
-                        "当前账号",
-                        Modifier.clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = .12f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 12.sp,
-                    )
-                }
-            }
-            Text(
-                item.address,
-                Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (busy) {
-            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        } else if (!item.isCurrent) {
-            Box(
-                Modifier.size(32.dp).mafeiInteractive(
-                    onClick = { if (enabled) onDelete() },
-                    radiusDp = 16f,
-                    label = "删除账号",
-                ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painter = painterResource(MaFeiLegacyDrawables.delete),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant),
-                )
-            }
-        }
     }
 }

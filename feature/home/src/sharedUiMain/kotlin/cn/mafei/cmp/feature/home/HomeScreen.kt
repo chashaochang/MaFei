@@ -78,6 +78,7 @@ import kotlin.math.roundToInt
 
 private const val RecentFeedKey = "__home_recent__"
 private const val HeroAutoplayMillis = 6_500
+private const val HeroInitialPrefetchDelayMillis = 800L
 private const val HeroSnapDampingRatio = .92f
 private const val HeroSnapStiffness = 420f
 private const val HeroSnapThreshold = .58f
@@ -519,9 +520,19 @@ fun HomeScreen(
     LaunchedEffect(heroItems, prefetchBackdrop, heroPagerState) {
         val prefetch = prefetchBackdrop ?: return@LaunchedEffect
         if (heroItems.isEmpty()) return@LaunchedEffect
+        var initialEmission = true
         snapshotFlow { heroPagerState.settledPage }
             .distinctUntilChanged()
             .collectLatest { settledPage ->
+                // The visible page already loads itself. Starting two neighbour
+                // requests and decodes in the first composition competes with
+                // the first home frame on slower Android devices. Warm them
+                // after the initial scene has settled; a user page change
+                // cancels this delay and warms the new neighbourhood directly.
+                if (initialEmission) {
+                    initialEmission = false
+                    delay(HeroInitialPrefetchDelayMillis)
+                }
                 homeHeroPrefetchOrder(heroItems.size, settledPage).forEach { index ->
                     prefetch(heroItems[index])
                 }
@@ -1007,7 +1018,11 @@ fun HomeScreen(
                       feedSelectionJob.value = heroRefreshScope.launch {
                           gridState.animateScrollToItem(
                               index = anchorIndex,
-                              scrollOffset = 0,
+                              // Leave the same 8dp breathing room below the
+                              // floating strip that it has in the inline state.
+                              // Pinning the spacer at offset 0 put the first row
+                              // slightly underneath the glass tabs on phone.
+                              scrollOffset = -floatingTabsInsetPx,
                           )
                           selectFeed()
                           // selectedFeedKey replaces every poster key below
@@ -1016,7 +1031,7 @@ fun HomeScreen(
                           // item and moves the page down after the animation.
                           gridState.requestScrollToItem(
                               index = anchorIndex,
-                              scrollOffset = 0,
+                              scrollOffset = -floatingTabsInsetPx,
                           )
                       }
                   },
@@ -1907,7 +1922,12 @@ private fun RecommendationHero(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             flingBehavior = pagerFlingBehavior,
-            beyondViewportPageCount = if (items.size > 1) 1 else 0,
+            // On phone every precomposed page owns a full 960px artwork layer.
+            // Keep only the visible page in the first frame; the delayed cache
+            // warm-up above makes adjacent pages ready before autoplay.
+            beyondViewportPageCount = if (
+                layout.family != MaFeiLayoutFamily.Phone && items.size > 1
+            ) 1 else 0,
             overscrollEffect = null,
         ) { page ->
             val item = items[page % items.size]

@@ -15,7 +15,8 @@ import {
   PlayerState,
   PlayerSurface,
   PlayerContentMode,
-  PlayerTrack
+  PlayerTrack,
+  PlayerVideoInfo
 } from 'mfplayer';
 
 interface MaFeiPlayerSurfaceArgs {
@@ -58,6 +59,31 @@ interface MaFeiPlayerEventState {
   brightness?: number;
   volume?: number;
   maxVolume?: number;
+  decodeMode?: string;
+  decoder?: string;
+  renderer?: string;
+  videoCodec?: string;
+  videoCodecProfile?: string;
+  videoPixelFormat?: string;
+  videoPrimaries?: string;
+  videoTransfer?: string;
+  outputPrimaries?: string;
+  outputTransfer?: string;
+  dynamicRange?: string;
+  videoWidthPx?: number;
+  videoHeightPx?: number;
+  videoBitRate?: number;
+  audioBitRate?: number;
+  audioSampleRateHz?: number;
+  audioChannels?: number;
+  renderedDropCount?: number;
+  decoderDropCount?: number;
+  delayedFrameCount?: number;
+  downloadSpeedBytesPerSecond?: number;
+  bufferedDurationMs?: number;
+  networkSource?: boolean;
+  configuredConnections?: number;
+  activeConnections?: number;
 }
 
 // CustomBuilderAdapter: cmp-arkuiview-player-host
@@ -83,6 +109,7 @@ struct MaFeiPlayerSurfaceHost {
   private readonly controller: PlayerController = new PlayerController();
   private appliedCommandId: number = -1;
   private lastPlayerState: PlayerState = PlayerState.IDLE;
+  private lastDiagnosticsAt: number = 0;
   private readonly listener: PlayerEventListener = {
     onPlayerEvent: (event: PlayerEvent): void => this.handlePlayerEvent(event)
   };
@@ -277,6 +304,7 @@ struct MaFeiPlayerSurfaceHost {
       multiConnectionEnabled: command.multiConnectionAllowed
     };
     this.lastPlayerState = PlayerState.IDLE;
+    this.lastDiagnosticsAt = 0;
     const accepted = this.controller.load(source, options);
     hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
       'load submitted accepted=%{public}s headers=%{public}d insecureTls=%{public}s multi=%{public}s',
@@ -295,6 +323,7 @@ struct MaFeiPlayerSurfaceHost {
           // Some mfplayer backends expose their final track list at READY
           // without sending a separate TRACKS_CHANGED event.
           this.emitEvent('tracks', event);
+          this.emitDiagnostics(true);
           break;
         case PlayerState.PLAYING:
           this.emitEvent('playing', event);
@@ -321,7 +350,79 @@ struct MaFeiPlayerSurfaceHost {
     }
     if (event.type === PlayerEventType.PROGRESS_CHANGED) {
       this.emitProgress(false, event);
+      this.emitDiagnostics(false);
     }
+    if (event.type === PlayerEventType.VIDEO_INFO_CHANGED || event.type === PlayerEventType.DECODER_CHANGED) {
+      this.emitDiagnostics(true);
+    }
+  }
+
+  /** mfplayer runtime snapshot, matching the legacy player information card. */
+  private emitDiagnostics(force: boolean): void {
+    const now = Date.now();
+    if (!force && now - this.lastDiagnosticsAt < 1000) {
+      return;
+    }
+    this.lastDiagnosticsAt = now;
+    try {
+      const videoInfo: PlayerVideoInfo = this.controller.getVideoInfo();
+      const stats = this.controller.getPlaybackStats();
+      const diagnostics = this.controller.getMultiConnectionDiagnostics();
+      const directDownloadSpeed = Math.max(0, this.controller.getDownloadSpeedBps());
+      const aggregateDownloadSpeed = diagnostics !== undefined && !diagnostics.downgraded ?
+        Math.max(0, diagnostics.aggregateSpeedBps) : 0;
+      const payload: MaFeiPlayerEventState = {
+        handle: this.args.handle,
+        event: 'diagnostics',
+        positionMs: 0,
+        durationMs: 0,
+        bufferedMs: 0,
+        tracks: [],
+        decodeMode: this.controller.getDecodeMode(),
+        decoder: this.controller.getHardwareDecoder(),
+        renderer: stats.currentVo ?? '',
+        videoCodec: videoInfo.codec,
+        videoCodecProfile: videoInfo.codecProfile,
+        videoPixelFormat: videoInfo.pixelFormat,
+        videoPrimaries: videoInfo.primaries,
+        videoTransfer: videoInfo.transfer,
+        outputPrimaries: videoInfo.outputPrimaries,
+        outputTransfer: videoInfo.outputTransfer,
+        dynamicRange: this.dynamicRangeLabel(videoInfo),
+        videoWidthPx: Math.max(0, this.controller.getVideoWidth()),
+        videoHeightPx: Math.max(0, this.controller.getVideoHeight()),
+        videoBitRate: Math.max(0, stats.videoBitrate),
+        audioBitRate: Math.max(0, stats.audioBitrate),
+        audioSampleRateHz: Math.max(0, stats.audioSampleRate),
+        audioChannels: Math.max(0, stats.audioChannels),
+        renderedDropCount: Math.max(0, stats.voDropCount),
+        decoderDropCount: Math.max(0, stats.decoderDropCount),
+        delayedFrameCount: Math.max(0, stats.delayedCount),
+        downloadSpeedBytesPerSecond: aggregateDownloadSpeed > 0 ? aggregateDownloadSpeed : directDownloadSpeed,
+        bufferedDurationMs: Math.round(Math.max(0, this.controller.getBufferedDurationSec()) * 1000),
+        networkSource: this.controller.isNetworkSource(),
+        configuredConnections: diagnostics !== undefined && !diagnostics.downgraded ?
+          Math.max(0, diagnostics.configuredConnections) : 0,
+        activeConnections: diagnostics !== undefined && !diagnostics.downgraded ?
+          Math.max(0, diagnostics.activeRequests) : 0
+      };
+      nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+    } catch (_error) {
+      hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'player diagnostics unavailable');
+    }
+  }
+
+  private dynamicRangeLabel(info: PlayerVideoInfo): string {
+    if (info.dolbyVisionProfile > 0) {
+      return `Dolby Vision P${info.dolbyVisionProfile}`;
+    }
+    const range = `${info.transfer} ${info.primaries}`.trim().toUpperCase();
+    if (range.includes('VIVID')) return 'HDR Vivid';
+    if (range.includes('HDR10PLUS') || range.includes('HDR10+')) return 'HDR10+';
+    if (range.includes('HDR10')) return 'HDR10';
+    if (range.includes('HLG')) return 'HLG';
+    if (info.hdr || range.includes('HDR') || range.includes('PQ') || range.includes('2084')) return 'HDR';
+    return info.codec.trim().length > 0 ? 'SDR' : '';
   }
 
   private failureKind(event: PlayerEvent): string {

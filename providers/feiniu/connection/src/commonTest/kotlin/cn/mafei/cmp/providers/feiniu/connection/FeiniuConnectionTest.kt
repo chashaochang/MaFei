@@ -46,6 +46,27 @@ class FeiniuAddressParserTest {
     }
 
     @Test
+    fun directAddressWithoutSchemeProvidesHttpAndHttpsCandidates() {
+        assertEquals(
+            listOf(
+                "http://192.168.1.10:80",
+                "https://192.168.1.10:443",
+                "http://192.168.1.10:5666",
+                "https://192.168.1.10:5667",
+            ),
+            FeiniuAddressParser.directBaseUrls("192.168.1.10"),
+        )
+        assertEquals(
+            listOf("http://nas.example.org:8080", "https://nas.example.org:8080"),
+            FeiniuAddressParser.directBaseUrls("nas.example.org:8080"),
+        )
+        assertEquals(
+            listOf("https://nas.example.org:443"),
+            FeiniuAddressParser.directBaseUrls("https://nas.example.org"),
+        )
+    }
+
+    @Test
     fun invalidInputsAreRejected() {
         assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("") }
         assertFailsWith<FeiniuInvalidAddressError> { FeiniuAddressParser.parse("http://host?query=1") }

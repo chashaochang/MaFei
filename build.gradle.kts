@@ -189,14 +189,41 @@ fun KotlinMultiplatformExtension.configureDesktopTargetOnly() {
     configureCommonTests()
 }
 
-val verifyNoSvgResources = tasks.register<Exec>("verifyNoSvgResources") {
+val verifyNoSvgResources = tasks.register("verifyNoSvgResources") {
     group = "verification"
     description = "Rejects SVG source resources; active app artwork must use PNG."
-    commandLine(
-        "node",
-        rootProject.file("scripts/verify-no-svg-resources.mjs").absolutePath,
-        rootProject.projectDir.absolutePath,
-    )
+    val sourceRootPaths = rootProject.subprojects
+        .map { project -> project.projectDir.resolve("src").absolutePath }
+    inputs.property("projectRootPath", rootProject.projectDir.absolutePath)
+    inputs.property("sourceRootPaths", sourceRootPaths)
+    inputs.files(sourceRootPaths.map(::File))
+
+    doLast {
+        val projectRoot = File(inputs.properties.getValue("projectRootPath").toString())
+        val sourceRoots = (inputs.properties.getValue("sourceRootPaths") as List<*>)
+            .map { path -> File(path.toString()) }
+        val offenders = sourceRoots
+            .asSequence()
+            .filter(File::exists)
+            .flatMap { sourceRoot ->
+                sourceRoot.walkTopDown()
+                    .filter { file -> file.isFile && file.extension.equals("svg", ignoreCase = true) }
+            }
+            .map { file -> file.relativeTo(projectRoot).invariantSeparatorsPath }
+            .sorted()
+            .toList()
+
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("SVG resources are forbidden in active CMP modules. Convert them to PNG:")
+                    offenders.forEach { path -> appendLine(" - $path") }
+                }.trimEnd(),
+            )
+        }
+
+        logger.lifecycle("PASS: ${sourceRoots.size} active CMP modules contain no SVG source resources")
+    }
 }
 
 subprojects {

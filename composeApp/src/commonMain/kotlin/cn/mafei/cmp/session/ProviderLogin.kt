@@ -11,6 +11,7 @@ import cn.mafei.cmp.providers.feiniu.core.*
 import cn.mafei.cmp.providers.feiniu.facade.DefaultFeiniuFacade
 import cn.mafei.cmp.providers.jellyfin.core.*
 import cn.mafei.cmp.providers.jellyfin.discovery.JellyfinAddressCandidates
+import cn.mafei.cmp.providers.jellyfin.discovery.VerifiedJellyfinServer
 import cn.mafei.cmp.providers.jellyfin.facade.DefaultJellyfinFacade
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -49,16 +50,20 @@ class ProviderLogin(
      * [remoteUserId] null marks the **pre-authentication** lookup, which can only
      * match on the credentials the user typed ([username]). Jellyfin needs that
      * one: its credential namespace doubles as the DeviceId sent with the login
-     * request, and Jellyfin binds the access token to the requesting DeviceId. A
-     * non-null value is the authoritative lookup by the server's own user id.
+     * request, and Jellyfin binds the access token to the requesting DeviceId.
+     * [remoteServerId] is the provider-reported server identity when discovery or
+     * authentication has supplied it, so another address of the same Jellyfin
+     * server can still reuse the saved account. A non-null [remoteUserId] is the
+     * authoritative lookup by the server's own user id.
      */
     private val savedConnectionFor: suspend (
         provider: ProviderKind,
         address: String,
         originalAddress: String?,
+        remoteServerId: String?,
         remoteUserId: String?,
         username: String,
-    ) -> SavedConnection? = { _, _, _, _, _ -> null },
+    ) -> SavedConnection? = { _, _, _, _, _, _ -> null },
 ) {
     suspend fun authenticate(
         provider: ProviderKind,
@@ -99,8 +104,12 @@ class ProviderLogin(
                     // Only the anonymous probe uses this placeholder; the real
                     // namespace (and therefore the DeviceId) is fixed once the
                     // address is resolved and a saved account can be looked up.
-                    val url = exactUrl ?: resolveJellyfinAddress(jellyfinCandidates, newCredentialKey())
-                    jellyfin(url, name, password)
+                    val verified = if (exactUrl == null) {
+                        resolveJellyfinAddress(jellyfinCandidates, newCredentialKey())
+                    } else {
+                        null
+                    }
+                    jellyfin(exactUrl ?: requireNotNull(verified).baseUrl, verified, name, password)
                 }
                 ProviderKind.Feiniu -> feiniu(rawAddress, name, password, feiniuRoutePreference)
             }
@@ -113,7 +122,10 @@ class ProviderLogin(
         }
     }
 
-    private suspend fun resolveJellyfinAddress(candidates: List<HttpUrl>, deviceId: String): HttpUrl {
+    private suspend fun resolveJellyfinAddress(
+        candidates: List<HttpUrl>,
+        deviceId: String,
+    ): VerifiedJellyfinServer {
         for (candidate in candidates) {
             currentCoroutineContext().ensureActive()
             val facade = DefaultJellyfinFacade(
@@ -124,7 +136,7 @@ class ProviderLogin(
                 val verified = withTimeoutOrNull(JELLYFIN_PROBE_TIMEOUT_MS) {
                     facade.discovery.verifiedServerInfo(candidate)
                 }
-                if (verified != null) return verified.baseUrl
+                if (verified != null) return verified
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -137,6 +149,7 @@ class ProviderLogin(
 
     private suspend fun jellyfin(
         url: HttpUrl,
+        verified: VerifiedJellyfinServer?,
         username: String,
         password: String,
     ): AuthenticatedConnection {
@@ -148,6 +161,7 @@ class ProviderLogin(
             ProviderKind.Jellyfin,
             SessionIdentity.serverAddress(url),
             null,
+            verified?.info?.id,
             null,
             username,
         )
@@ -161,10 +175,29 @@ class ProviderLogin(
             val result = facade.auth.authenticateByName(username, password)
             currentCoroutineContext().ensureActive()
             val installed = state.current.value ?: throw ProtocolDecodingError()
+            val authenticatedSystemInfo = if (verified == null) {
+                try {
+                    facade.auth.systemInfo()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
             // installed.serverId is the server's own identity (exactly what the
             // account is keyed on remotely); it used to be dropped on the floor.
-            val connection = connection(ProviderKind.Jellyfin, url, presented, installed.serverId, installed.userId,
-                result.userName?.takeIf { it.isNotBlank() } ?: username)
+            val connection = connection(
+                provider = ProviderKind.Jellyfin,
+                url = url,
+                presented = presented,
+                remoteServerId = installed.serverId ?: verified?.info?.id ?: authenticatedSystemInfo?.id,
+                remoteId = installed.userId,
+                username = result.userName?.takeIf { it.isNotBlank() } ?: username,
+                remoteServerName = verified?.info?.serverName ?: authenticatedSystemInfo?.serverName,
+                remoteServerVersion = verified?.info?.version ?: authenticatedSystemInfo?.version,
+            )
             val binding = DefaultProviderSessionFactory(transport).restore(connection,
                 mapOf(connection.tokenAlias to SecureSecret.AuthToken("MediaBrowser", installed.accessToken)))
             return AuthenticatedConnection(connection, binding)
@@ -184,8 +217,16 @@ class ProviderLogin(
         val parsed = FeiniuAddressParser.parse(rawAddress)
         val resolution = when (parsed.kind) {
             FeiniuAddressParser.Kind.Direct -> {
-                val url = validateSavedBaseUrl(parsed.directBaseUrl)
-                FeiniuHostResolution(FeiniuHostCandidate(url.toEncodedString(), FeiniuRoute.Direct))
+                val candidates = FeiniuAddressParser.directBaseUrls(rawAddress).map { candidate ->
+                    FeiniuHostCandidate(
+                        validateSavedBaseUrl(candidate).toEncodedString(),
+                        FeiniuRoute.Direct,
+                    )
+                }
+                FeiniuHostResolution(
+                    preferred = candidates.first(),
+                    fallbacks = candidates.drop(1),
+                )
             }
             FeiniuAddressParser.Kind.FnId -> facade.connection.resolve(rawAddress, preference)
         }
@@ -237,16 +278,18 @@ class ProviderLogin(
         remoteId: String,
         username: String,
         displayName: String? = null,
+        remoteServerName: String? = null,
+        remoteServerVersion: String? = null,
         feiniuOriginalAddress: String? = null,
         feiniuResolution: FeiniuHostResolution? = null,
     ): SavedConnection {
-        // Both lookups share provider+address, and the pre-authentication one only
-        // differs by matching the typed name, so a Jellyfin request cannot end up
-        // keyed to a record other than the one whose device it just presented.
+        // Prefer the provider's stable server identity when it is available;
+        // address remains the compatibility fallback for older saved records.
         val saved = savedConnectionFor(
             provider,
             SessionIdentity.serverAddress(url),
             feiniuOriginalAddress,
+            remoteServerId,
             remoteId,
             username,
         )
@@ -258,7 +301,17 @@ class ProviderLogin(
         val serverId = saved?.server?.id ?: SessionIdentity.serverId(provider, url, remoteServerId)
         val accountId = saved?.account?.id ?: SessionIdentity.accountId(serverId, remoteId)
         val deviceId = presented?.id ?: saved?.deviceId ?: credentialKey
-        val server = Server(serverId, provider, url.host, url.toEncodedString())
+        val server = Server(
+            id = serverId,
+            provider = provider,
+            name = remoteServerName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: saved?.server?.name?.takeIf(String::isNotBlank)
+                ?: url.host,
+            baseUrl = url.toEncodedString(),
+            serverVersion = remoteServerVersion?.trim()?.takeIf { it.isNotEmpty() }
+                ?: saved?.server?.serverVersion,
+            addedEpochMs = saved?.server?.addedEpochMs,
+        )
         val account = Account(accountId, server.id, provider, username, displayName ?: username)
         // Saved routes describe this server's reachability, and the lookup above
         // already matched this exact address, so keep them for a re-saved account.

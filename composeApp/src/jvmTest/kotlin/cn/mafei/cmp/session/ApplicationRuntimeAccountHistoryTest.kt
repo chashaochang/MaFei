@@ -45,10 +45,12 @@ private class JellyfinTransport : HttpTransport {
     val requests = mutableListOf<HttpRequest>()
     override suspend fun execute(request: HttpRequest): HttpResponse {
         requests += request
-        val body = if (request.url.encodedPath.endsWith("/Users/AuthenticateByName")) {
-            """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""
-        } else {
-            """{"Items":[],"TotalRecordCount":0}"""
+        val body = when {
+            request.url.encodedPath.endsWith("/Users/AuthenticateByName") ->
+                """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""
+            request.url.encodedPath.endsWith("/System/Info") ->
+                """{"ServerName":"Living Room","Version":"10.10.7","Id":"abcd"}"""
+            else -> """{"Items":[],"TotalRecordCount":0}"""
         }
         return HttpResponse(200, HttpHeaders.EMPTY, body.encodeToByteArray(), request.url, request.url)
     }
@@ -84,8 +86,23 @@ class ApplicationRuntimeAccountHistoryTest {
         assertEquals(ServerId("jellyfin-server-abcd"), history.single().server.id)
         // One device on the server, not one per login: the second request renewed
         // the namespace the first login established.
-        assertEquals(2, deviceIds().size)
+        // Each login now also reads authenticated system info so the stored
+        // server title/version come from Jellyfin instead of the typed host.
+        assertEquals(4, deviceIds().size)
         assertEquals(setOf(first.connection.credentialKey), deviceIds().toSet())
+        assertEquals("Living Room", history.single().server.name)
+    }
+
+    @Test fun anotherAddressOfTheSameJellyfinServerReusesTheSavedAccount() = runBlocking<Unit> {
+        val first = app.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
+        val second = app.connect(ProviderKind.Jellyfin, "https://lan.media.test:8920", "Demo", "pw")
+
+        val history = app.savedConnections()
+        assertEquals(1, history.size)
+        assertEquals(first.selection, second.selection)
+        assertEquals(first.connection.credentialKey, second.connection.credentialKey)
+        assertEquals("https://lan.media.test:8920/", history.single().server.baseUrl)
+        assertEquals("Living Room", history.single().server.name)
     }
 
     @Test fun loggingInAgainCollapsesTheDuplicateRowsEarlierLoginsLeftBehind() = runBlocking<Unit> {

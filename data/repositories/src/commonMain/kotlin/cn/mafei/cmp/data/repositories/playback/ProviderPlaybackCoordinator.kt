@@ -627,6 +627,10 @@ class ProviderPlaybackCoordinator(
         transport = transport,
         qualities = qualities,
         appliedBitrate = appliedBitrate,
+        protocol = streamUrl.substringBefore("://", missingDelimiterValue = "")
+            .trim()
+            .takeIf(String::isNotEmpty),
+        multiConnectionAllowed = multiConnectionAllowed,
     )
 
     private fun PlaybackOptions.withNegotiatedDefaults(ready: PlaybackPreparation.Ready): PlaybackOptions = copy(

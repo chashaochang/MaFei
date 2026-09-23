@@ -28,6 +28,22 @@ data object FeiniuAddressParser {
         }
     }
 
+    fun directBaseUrls(raw: String): List<String> {
+        val original = raw.trim()
+        val primary = normalizeDirectBaseUrl(original)
+        if (Regex("^[a-z][a-z0-9+.-]*://", RegexOption.IGNORE_CASE).containsMatchIn(original)) {
+            return listOf(primary)
+        }
+        return buildList {
+            if (!hasExplicitPort(original)) {
+                add(normalizeDirectBaseUrl("http://$original"))
+                add(normalizeDirectBaseUrl("https://$original"))
+            }
+            add(primary)
+            add(normalizeDirectBaseUrl(original, preferHttps = true))
+        }.distinct()
+    }
+
     fun extractFnId(raw: String): String {
         val withoutScheme = raw.trim()
             .removePrefix("https://").removePrefix("http://")
@@ -62,7 +78,7 @@ data object FeiniuAddressParser {
     private fun isRelayPath(input: String): Boolean =
         Regex("^5ddd\\.com/[^/]+$", RegexOption.IGNORE_CASE).containsMatchIn(input)
 
-    private fun normalizeDirectBaseUrl(value: String): String {
+    private fun normalizeDirectBaseUrl(value: String, preferHttps: Boolean = false): String {
         if (value.contains('?') || value.contains('#')) {
             throw FeiniuInvalidAddressError("Server address must be an HTTP or HTTPS base URL", value)
         }
@@ -74,7 +90,7 @@ data object FeiniuAddressParser {
         ) {
             throw FeiniuInvalidAddressError("Server address must use HTTP or HTTPS", value)
         }
-        val normalized = normalizeHttpBaseUrl(value)
+        val normalized = normalizeHttpBaseUrl(value, preferHttps)
         val authority = normalized.substringAfter("://").substringBefore('/')
         if (authority.isEmpty() || authority.contains('@') || authority.any { it == '\t' || it == '\n' || it == '\r' || it == ' ' }) {
             throw FeiniuInvalidAddressError("Server address host is invalid", value)

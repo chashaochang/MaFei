@@ -1298,7 +1298,10 @@ private fun DetailSelectorTrigger(
     ) {
         Text(
             label,
-            Modifier.weight(1f),
+            // Keep the label and chevron as one centred group. `fill = true`
+            // consumed the whole remaining row and pushed the chevron to the
+            // button edge instead of keeping it beside the text.
+            Modifier.weight(1f, fill = false),
             color = Color.White,
             fontSize = 12.sp,
             lineHeight = 16.sp,

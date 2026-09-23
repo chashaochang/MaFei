@@ -11,6 +11,9 @@ import cn.mafei.cmp.storage.createDesktopCredentialStore
 import cn.mafei.cmp.storage.usesDesktopDevelopmentStorage
 import cn.mafei.cmp.platform.http_macos.createMacOsHttpTransport
 import cn.mafei.cmp.player.runtime_macos.createMacOsPlayerRuntime
+import mafei.composeapp.generated.resources.Res
+import mafei.composeapp.generated.resources.app_launcher_icon
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * 唯一的桌面入口：真应用 + 真实数据。
@@ -29,12 +32,13 @@ fun main() = application {
         )
     }
     Window(
+        icon = painterResource(Res.drawable.app_launcher_icon),
         state = rememberWindowState(
             width = (System.getProperty("mafei.desktop.windowWidth")?.toIntOrNull()?.coerceIn(320, 2400) ?: 1180).dp,
             height = (System.getProperty("mafei.desktop.windowHeight")?.toIntOrNull()?.coerceIn(400, 1600) ?: 780).dp,
         ),
         onCloseRequest = { runtime.requestClose { exitApplication() } },
-        title = if (usesDesktopDevelopmentStorage()) "MaFei · 开发测试（本地登录态）" else "MaFei",
+        title = if (usesDesktopDevelopmentStorage()) "马飞 · 开发测试（本地登录态）" else "马飞",
     ) {
         DesktopNavigationOwner { App(runtime) }
     }

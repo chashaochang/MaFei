@@ -71,14 +71,14 @@ fun LegacyVideoCard(
         val posterShape = RoundedCornerShape(6.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(2f / 3f)
-                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, posterShape)
                 .clip(posterShape)
-                .background(Color(0xFFCBD2D3)),
+                .background(Color(0xFFCBD2D3))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, posterShape),
         ) {
             if (poster == null) {
-                LegacyPosterPlaceholder(item.mediaType, Modifier.fillMaxSize())
+                LegacyPosterPlaceholder(item.mediaType, Modifier.fillMaxSize().clip(posterShape))
             } else {
-                poster(Modifier.fillMaxSize())
+                poster(Modifier.fillMaxSize().clip(posterShape))
             }
             item.communityRating?.takeIf { it > 0.0 }?.let { score ->
                 Text(

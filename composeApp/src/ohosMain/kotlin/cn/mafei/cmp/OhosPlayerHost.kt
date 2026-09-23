@@ -27,6 +27,7 @@ import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerDeviceControls
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.TrackKind
@@ -101,6 +102,31 @@ private data class OhosPlayerEventPayload(
     val brightness: Float? = null,
     val volume: Int? = null,
     val maxVolume: Int? = null,
+    val decodeMode: String? = null,
+    val decoder: String? = null,
+    val renderer: String? = null,
+    val videoCodec: String? = null,
+    val videoCodecProfile: String? = null,
+    val videoPixelFormat: String? = null,
+    val videoPrimaries: String? = null,
+    val videoTransfer: String? = null,
+    val outputPrimaries: String? = null,
+    val outputTransfer: String? = null,
+    val dynamicRange: String? = null,
+    val videoWidthPx: Int? = null,
+    val videoHeightPx: Int? = null,
+    val videoBitRate: Int? = null,
+    val audioBitRate: Int? = null,
+    val audioSampleRateHz: Int? = null,
+    val audioChannels: Int? = null,
+    val renderedDropCount: Long? = null,
+    val decoderDropCount: Long? = null,
+    val delayedFrameCount: Long? = null,
+    val downloadSpeedBytesPerSecond: Long? = null,
+    val bufferedDurationMs: Long? = null,
+    val networkSource: Boolean? = null,
+    val configuredConnections: Int? = null,
+    val activeConnections: Int? = null,
 )
 
 private object OhosPlayerHostState {
@@ -302,6 +328,36 @@ private object OhosPlayerHostState {
                 } ?: return@mapNotNull null
                 PlayerTrack(track.id.toString(), kind, track.label, track.language, track.selected)
             },
+        )
+        "diagnostics" -> OhosNativePlayerEvent.Diagnostics(
+            handle,
+            PlayerRuntimeInfo(
+                decodeMode = decodeMode,
+                decoder = decoder,
+                renderer = renderer,
+                videoCodec = videoCodec,
+                videoCodecProfile = videoCodecProfile,
+                videoPixelFormat = videoPixelFormat,
+                videoPrimaries = videoPrimaries,
+                videoTransfer = videoTransfer,
+                outputPrimaries = outputPrimaries,
+                outputTransfer = outputTransfer,
+                dynamicRange = dynamicRange,
+                videoWidthPx = videoWidthPx,
+                videoHeightPx = videoHeightPx,
+                videoBitRate = videoBitRate,
+                audioBitRate = audioBitRate,
+                audioSampleRateHz = audioSampleRateHz,
+                audioChannels = audioChannels,
+                renderedDropCount = renderedDropCount,
+                decoderDropCount = decoderDropCount,
+                delayedFrameCount = delayedFrameCount,
+                downloadSpeedBytesPerSecond = downloadSpeedBytesPerSecond,
+                bufferedDurationMs = bufferedDurationMs,
+                networkSource = networkSource,
+                configuredConnections = configuredConnections,
+                activeConnections = activeConnections,
+            ),
         )
         "ended" -> OhosNativePlayerEvent.Ended(handle)
         "error" -> OhosNativePlayerEvent.Failed(

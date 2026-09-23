@@ -30,14 +30,17 @@ class ProviderLoginTest {
     @Test fun jellyfinLoginUsesActualResponseAndSameDeviceIdForFreshBinding() = runBlocking<Unit> {
         val transport = Transport(
             Response("""{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"remote-server"}"""),
+            Response("""{"ServerName":"Living Room","Version":"10.10.7","Id":"remote-server"}"""),
             Response("""{"Items":[],"TotalRecordCount":0}"""),
         )
         val result = ProviderLogin(transport).authenticate(ProviderKind.Jellyfin, "https://media.test/jellyfin", " Demo ", " pw ")
-        val login = transport.requests.single()
+        val login = transport.requests.first()
         assertEquals("/jellyfin/Users/AuthenticateByName", login.url.encodedPath)
         assertEquals("""{"Username":"Demo","Pw":" pw "}""", (login.body as HttpBody.Text).text)
         assertEquals("remote-user", result.connection.remoteUserId)
         assertEquals("Demo", result.connection.account.displayName)
+        assertEquals("Living Room", result.connection.server.name)
+        assertEquals("10.10.7", result.connection.server.serverVersion)
         assertFalse(login.headers.first("Authorization")!!.contains("Token="))
         assertEquals(SecureSecret.AuthToken("MediaBrowser", "fixture-token"), result.binding.source.current().secrets[result.connection.tokenAlias])
         result.binding.adapter.collections(PageRequest())
@@ -59,7 +62,7 @@ class ProviderLoginTest {
                 }
                 val body = when {
                     request.url.encodedPath.endsWith("/System/Info/Public") ->
-                        """{"ProductName":"Jellyfin Server","Version":"10.10.7","Id":"server-id"}"""
+                        """{"ProductName":"Jellyfin Server","ServerName":"Living Room","Version":"10.10.7","Id":"server-id"}"""
                     request.url.encodedPath.endsWith("/Users/AuthenticateByName") ->
                         """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token"}"""
                     else -> error("Unexpected request")
@@ -82,6 +85,7 @@ class ProviderLoginTest {
         assertEquals("http", request.url.scheme)
         assertEquals("192.168.31.96", request.url.host)
         assertEquals(8096, request.url.port)
+        assertEquals("Living Room", result.connection.server.name)
         assertEquals("""{"Username":"xiaobai","Pw":""}""", (request.body as HttpBody.Text).text)
         result.binding.clear()
     }
@@ -216,9 +220,10 @@ class ProviderLoginTest {
         val lookups = mutableListOf<String>()
         val transport = Transport(
             Response("""{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
+            Response("""{"ServerName":"Living Room","Version":"10.10.7","Id":"abcd"}"""),
             Response("""{"Items":[],"TotalRecordCount":0}"""),
         )
-        val login = ProviderLogin(transport) { provider, address, _, remoteUserId, username ->
+        val login = ProviderLogin(transport) { provider, address, _, _, remoteUserId, username ->
             lookups += "${provider.name}|$address|${remoteUserId ?: "typed"}|$username"
             existing.takeIf {
                 provider == ProviderKind.Jellyfin &&
@@ -264,8 +269,9 @@ class ProviderLoginTest {
         )
         val transport = Transport(
             Response("""{"User":{"Id":"other-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""),
+            Response("""{"ServerName":"Living Room","Version":"10.10.7","Id":"abcd"}"""),
         )
-        val login = ProviderLogin(transport) { provider, _, _, remoteUserId, username ->
+        val login = ProviderLogin(transport) { provider, _, _, _, remoteUserId, username ->
             existing.takeIf {
                 provider == ProviderKind.Jellyfin &&
                     (remoteUserId == existing.remoteUserId || (remoteUserId == null && username == "Demo"))
@@ -283,7 +289,8 @@ class ProviderLoginTest {
 
     @Test fun firstLoginDerivesTheSameIdsForThatServerEveryTime() = runBlocking<Unit> {
         val loginBody = """{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"abcd"}"""
-        val transport = Transport(Response(loginBody), Response(loginBody))
+        val infoBody = """{"ServerName":"Living Room","Version":"10.10.7","Id":"abcd"}"""
+        val transport = Transport(Response(loginBody), Response(infoBody), Response(loginBody), Response(infoBody))
         // No hook wired: the identity still has to be the server's own, so that a
         // caller which forgets the reuse lookup still cannot fork the account.
         val first = ProviderLogin(transport).authenticate(ProviderKind.Jellyfin, "https://media.test/", "Demo", "pw")
@@ -309,7 +316,7 @@ class ProviderLoginTest {
             Response("""{"code":0,"data":{"token":"fixture-token"}}""", cookie = "session=login; Path=/"),
             Response("""{"code":0,"data":{"user_id":"user-7","username":"demo","nickname":"Cinema"}}""", cookie = "session=rotated; Path=/"),
         )
-        val login = ProviderLogin(transport) { provider, _, _, remoteUserId, _ ->
+        val login = ProviderLogin(transport) { provider, _, _, _, remoteUserId, _ ->
             existing.takeIf { provider == ProviderKind.Feiniu && remoteUserId == "user-7" }
         }
         val result = login.authenticate(ProviderKind.Feiniu, "http://media.test:5667/base", " demo ", " pw ")
@@ -334,9 +341,17 @@ class ProviderLoginTest {
             "pw",
         )
 
-        assertEquals("http://192.168.31.20:5666/", result.connection.server.baseUrl)
+        assertEquals("http://192.168.31.20/", result.connection.server.baseUrl)
         assertEquals("192.168.31.20", result.connection.feiniuOriginalAddress)
-        assertEquals(listOf("http://192.168.31.20:5666/"), result.connection.feiniuRoutes.map { it.baseUrl })
+        assertEquals(
+            listOf(
+                "http://192.168.31.20/",
+                "https://192.168.31.20/",
+                "http://192.168.31.20:5666/",
+                "https://192.168.31.20:5667/",
+            ),
+            result.connection.feiniuRoutes.map { it.baseUrl },
+        )
         result.binding.clear()
     }
 

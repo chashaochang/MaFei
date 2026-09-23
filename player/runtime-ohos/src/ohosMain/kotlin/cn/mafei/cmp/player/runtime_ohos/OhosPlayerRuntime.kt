@@ -5,6 +5,7 @@ import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
@@ -37,6 +38,11 @@ sealed interface OhosNativePlayerEvent {
     data class Tracks(
         override val handle: Long,
         val tracks: List<PlayerTrack>,
+    ) : OhosNativePlayerEvent
+
+    data class Diagnostics(
+        override val handle: Long,
+        val info: PlayerRuntimeInfo,
     ) : OhosNativePlayerEvent
 
     data class Ended(override val handle: Long) : OhosNativePlayerEvent
@@ -193,6 +199,7 @@ class OhosPlayerRuntime(
                 event.durationMs?.takeIf { it > 0L },
             )
             is OhosNativePlayerEvent.Tracks -> RuntimeEvent.Tracks(generation, event.tracks)
+            is OhosNativePlayerEvent.Diagnostics -> RuntimeEvent.Diagnostics(generation, event.info)
             is OhosNativePlayerEvent.Ended -> RuntimeEvent.Ended(generation)
             is OhosNativePlayerEvent.Failed -> RuntimeEvent.Failed(generation, event.failure)
         }

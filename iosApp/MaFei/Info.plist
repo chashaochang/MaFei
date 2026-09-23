@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-    <key>CFBundleDisplayName</key><string>MaFei</string>
+    <key>CFBundleDisplayName</key><string>马飞</string>
     <key>NSLocalNetworkUsageDescription</key><string>连接你指定的局域网媒体服务器，浏览和播放媒体。</string>
     <!-- NAS addresses are user supplied, including HTTP-only local servers. The login screen warns about cleartext. -->
     <key>NSAppTransportSecurity</key><dict>

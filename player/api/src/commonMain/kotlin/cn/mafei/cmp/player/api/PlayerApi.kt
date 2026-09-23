@@ -88,6 +88,41 @@ data class PlayerCapabilities(
 class UnsupportedPlayerCapability(val capability: String) : IllegalStateException("Unsupported player capability: $capability")
 enum class PlayerFailure { Network, Decode, UnsupportedMedia, Engine, RuntimeClosed }
 
+/**
+ * Optional facts reported by the active native engine.
+ *
+ * A backend must leave unavailable values null instead of guessing them. This
+ * keeps the shared 「播放信息」 panel useful on engines with rich diagnostics
+ * (mfplayer on HarmonyOS) without inventing rows on simpler platform players.
+ */
+data class PlayerRuntimeInfo(
+    val decodeMode: String? = null,
+    val decoder: String? = null,
+    val renderer: String? = null,
+    val videoCodec: String? = null,
+    val videoCodecProfile: String? = null,
+    val videoPixelFormat: String? = null,
+    val videoPrimaries: String? = null,
+    val videoTransfer: String? = null,
+    val outputPrimaries: String? = null,
+    val outputTransfer: String? = null,
+    val dynamicRange: String? = null,
+    val videoWidthPx: Int? = null,
+    val videoHeightPx: Int? = null,
+    val videoBitRate: Int? = null,
+    val audioBitRate: Int? = null,
+    val audioSampleRateHz: Int? = null,
+    val audioChannels: Int? = null,
+    val renderedDropCount: Long? = null,
+    val decoderDropCount: Long? = null,
+    val delayedFrameCount: Long? = null,
+    val downloadSpeedBytesPerSecond: Long? = null,
+    val bufferedDurationMs: Long? = null,
+    val networkSource: Boolean? = null,
+    val configuredConnections: Int? = null,
+    val activeConnections: Int? = null,
+)
+
 data class PlayerState(
     val phase: PlayerPhase = PlayerPhase.Idle,
     val generation: PlaybackGeneration? = null,
@@ -102,6 +137,8 @@ data class PlayerState(
     val failure: PlayerFailure? = null,
     /** Host-selected picture fitting; survives generation changes like the old page-local state. */
     val contentMode: PlayerContentMode = PlayerContentMode.Fit,
+    /** Latest engine-owned diagnostic snapshot; null on runtimes that do not expose one. */
+    val runtimeInfo: PlayerRuntimeInfo? = null,
 )
 
 /** Runtime callbacks must retain the generation of the originating native player/load. */
@@ -119,6 +156,10 @@ sealed interface RuntimeEvent {
         val durationMs: Long? = null,
     ) : RuntimeEvent
     data class Tracks(override val generation: PlaybackGeneration, val tracks: List<PlayerTrack>) : RuntimeEvent
+    data class Diagnostics(
+        override val generation: PlaybackGeneration,
+        val info: PlayerRuntimeInfo,
+    ) : RuntimeEvent
     data class Ended(override val generation: PlaybackGeneration) : RuntimeEvent
     data class Failed(override val generation: PlaybackGeneration, val failure: PlayerFailure) : RuntimeEvent
 }

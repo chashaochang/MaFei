@@ -5,6 +5,7 @@ import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
+import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
 import cn.mafei.cmp.player.api.TrackKind
@@ -113,6 +114,23 @@ class OhosPlayerRuntimeTest {
         bridge.sink?.invoke(OhosNativePlayerEvent.Ready(bridge.handle, 0))
 
         assertNull(events.filterIsInstance<RuntimeEvent.Ready>().single().durationMs)
+    }
+
+    @Test
+    fun nativeDiagnosticsAreBoundToTheCurrentGeneration() {
+        val bridge = FakeBridge()
+        val events = mutableListOf<RuntimeEvent>()
+        val runtime = OhosPlayerRuntime(PlayerCapabilities(), bridge)
+        runtime.bind { events += it }
+        val generation = PlaybackGeneration()
+        runtime.execute(RuntimeCommand.Load(generation, PlayableResource("media", "https://test/video")))
+        val info = PlayerRuntimeInfo(decoder = "ohcodec-vk", renderer = "gpu-next")
+
+        bridge.sink?.invoke(OhosNativePlayerEvent.Diagnostics(bridge.handle, info))
+
+        val diagnostics = events.filterIsInstance<RuntimeEvent.Diagnostics>().single()
+        assertTrue(diagnostics.generation === generation)
+        assertEquals(info, diagnostics.info)
     }
 
     @Test

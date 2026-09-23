@@ -22,9 +22,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)
         let orientationController = OrientationViewController()
-        let composeController = MainViewControllerKt.MainViewController { [weak orientationController] visible in
-            orientationController?.setPlayerScreenVisible(visible.boolValue)
-        }
+        let composeController = MainViewControllerKt.MainViewController(
+            onPlayerScreenChanged: { [weak orientationController] visible in
+                orientationController?.setPlayerScreenVisible(visible.boolValue)
+            },
+            onPlayerFullscreenChanged: { [weak orientationController] fullscreen in
+                orientationController?.setPlayerFullscreenRequested(fullscreen.boolValue)
+            }
+        )
         orientationController.install(composeController)
         window.rootViewController = orientationController
         self.window = window
@@ -34,6 +39,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 final class OrientationViewController: UIViewController {
     private var playerScreenVisible = false
+    private var playerFullscreenRequested = false
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
@@ -53,6 +59,7 @@ final class OrientationViewController: UIViewController {
     func setPlayerScreenVisible(_ visible: Bool) {
         guard playerScreenVisible != visible else { return }
         playerScreenVisible = visible
+        if !visible { playerFullscreenRequested = false }
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
             guard !visible,
@@ -62,6 +69,24 @@ final class OrientationViewController: UIViewController {
                 UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
             )
         } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+    }
+
+    func setPlayerFullscreenRequested(_ fullscreen: Bool) {
+        guard playerFullscreenRequested != fullscreen else { return }
+        playerFullscreenRequested = fullscreen
+        guard fullscreen,
+              playerScreenVisible,
+              UIDevice.current.userInterfaceIdiom == .phone,
+              let windowScene = view.window?.windowScene else { return }
+        if #available(iOS 16.0, *) {
+            setNeedsUpdateOfSupportedInterfaceOrientations()
+            windowScene.requestGeometryUpdate(
+                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
+            )
+        } else {
+            UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
             UIViewController.attemptRotationToDeviceOrientation()
         }
     }

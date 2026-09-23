@@ -30,6 +30,8 @@ internal fun playerPlaybackFacts(
     playingMediaSourceId: String?,
     transport: PlaybackTransport?,
     providerTracks: List<PlaybackTrack>,
+    protocol: String? = null,
+    multiConnectionAllowed: Boolean? = null,
 ): PlayerPlaybackFacts? {
     val source = item.mediaSources.firstOrNull { it.id != null && it.id == playingMediaSourceId }
         ?: item.mediaSources.firstOrNull()
@@ -38,7 +40,11 @@ internal fun playerPlaybackFacts(
     val video = source?.videoStream
     if (source == null && providerTracks.isEmpty()) return null
     return PlayerPlaybackFacts(
-        title = item.title,
+        title = item.seriesTitle
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() && it != item.title.trim() }
+            ?.let { "$it - ${item.title}" }
+            ?: item.title,
         transport = when (transport) {
             PlaybackTransport.DirectPlay -> "直连"
             // 原码流换封装：字节没重编，但已经不是原文件本身。
@@ -47,6 +53,8 @@ internal fun playerPlaybackFacts(
             null -> null
         },
         container = source?.container,
+        protocol = protocol,
+        multiConnectionAllowed = multiConnectionAllowed,
         audio = audio?.let {
             PlayerAudioFacts(
                 codec = it.codec,
