@@ -1899,6 +1899,10 @@ private fun RecommendationHero(
                 animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
             )
             val targetPage = pagerState.settledPage + 1
+            // Clear the completed countdown before Pager changes its settled
+            // page. Otherwise the new page can render one frame with the old
+            // `1f` value, then jump back to zero when this effect restarts.
+            autoplayProgress.snapTo(0f)
             pagerState.animateScrollToPage(
                 page = targetPage,
                 animationSpec = spring(
