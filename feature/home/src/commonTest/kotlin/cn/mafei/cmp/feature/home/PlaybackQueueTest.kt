@@ -96,7 +96,7 @@ class PlaybackQueueTest {
         val queue = PlaybackQueue(listOf(movie("m1"), movie("m2"), movie("m3")), index = 0)
         assertEquals(2, queue.movedTo(MediaId("m3"))?.index)
         assertNull(queue.movedTo(MediaId("missing")))
-        assertNull(queue.movedTo(MediaId("m1")))
+        assertTrue(queue.movedTo(MediaId("m1")) === queue)
     }
 
     @Test

@@ -282,7 +282,12 @@ class ProviderPlaybackCoordinatorTest {
         harness.coordinator.selectTrack(PlaybackTrackKind.Audio, "2")
 
         assertEquals(
-            PlaybackOptions(mediaSourceId = "source-a", audioStreamIndex = 2, subtitleStreamIndex = 3),
+            PlaybackOptions(
+                mediaSourceId = "source-a",
+                audioStreamIndex = 2,
+                subtitleStreamIndex = 3,
+                startPositionMs = 12_345,
+            ),
             harness.adapter.preparedOptions.last(),
         )
         val reload = harness.runtime.commands.filterIsInstance<RuntimeCommand.Load>().last()
@@ -374,7 +379,10 @@ class ProviderPlaybackCoordinatorTest {
             options = PlaybackOptions(audioStreamIndex = 2, subtitleStreamIndex = -1),
         )
         val generation = currentGeneration(harness)
-        // 真实 runtime 就是这样：轨道列表先到，随后才 Ready。
+        // 鸿蒙桥的真实顺序是 Ready 在前、Tracks 在后。补选必须等轨道目录真正到达，
+        // 不能在 Ready 时读到空列表就永久放弃。
+        harness.runtime.emit(RuntimeEvent.Ready(generation, 60_000))
+        harness.runtime.emit(RuntimeEvent.Playing(generation))
         harness.runtime.emit(
             RuntimeEvent.Tracks(
                 generation,
@@ -385,7 +393,6 @@ class ProviderPlaybackCoordinatorTest {
                 ),
             ),
         )
-        emitReadyAndPlaying(harness)
 
         // 直连流的内嵌轨只能在播放器里换：provider 的选中态对了，播放器还得被告知。
         val selections = awaitNativeSelections(harness, atLeast = 2)

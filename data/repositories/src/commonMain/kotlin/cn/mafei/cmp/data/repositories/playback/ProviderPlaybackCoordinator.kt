@@ -196,7 +196,8 @@ class ProviderPlaybackCoordinator(
         preparedFlow.value = null
         val adapter = adapterFor(provider)
         // CancellationException propagates untouched (adapter contract).
-        val outcome = adapter.preparePlayback(itemId, options)
+        val prepareOptions = options.copy(startPositionMs = resumePositionMs.coerceAtLeast(0L))
+        val outcome = adapter.preparePlayback(itemId, prepareOptions)
         println("[MaFeiPlayback] coordinator prepare completed outcome=${outcome::class.simpleName}")
         if (seq != requestSeq || released) return@withLock null // superseded while preparing
         val ready = outcome as? PlaybackPreparation.Ready
@@ -229,12 +230,12 @@ class ProviderPlaybackCoordinator(
             adapter = adapter,
             ready = ready,
             itemId = itemId,
-            options = options.withNegotiatedDefaults(ready),
+            options = prepareOptions.withNegotiatedDefaults(ready),
             renegotiations = 0,
         )
         tracksFlow.value = ready.tracks
         preparedFlow.value = ready.toPreparedFacts()
-        schedulePendingNativeTracks(generation, ready, options)
+        schedulePendingNativeTracks(generation, ready, prepareOptions)
         generation
     }
 
@@ -252,13 +253,19 @@ class ProviderPlaybackCoordinator(
             PlaybackTrackKind.Audio -> id?.toIntOrNull() ?: return@withLock null
             PlaybackTrackKind.Subtitle -> id?.toIntOrNull() ?: -1
         }
+        val state = target.state.value
         val options = when (kind) {
-            PlaybackTrackKind.Audio -> snapshot.options.copy(audioStreamIndex = selectedIndex)
-            PlaybackTrackKind.Subtitle -> snapshot.options.copy(subtitleStreamIndex = selectedIndex)
+            PlaybackTrackKind.Audio -> snapshot.options.copy(
+                audioStreamIndex = selectedIndex,
+                startPositionMs = state.positionMs,
+            )
+            PlaybackTrackKind.Subtitle -> snapshot.options.copy(
+                subtitleStreamIndex = selectedIndex,
+                startPositionMs = state.positionMs,
+            )
         }
         val outcome = adapter.preparePlayback(itemId, options)
         val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
-        val state = target.state.value
         val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
         val resource = ready.toPlayableResource(itemId)
         val generation = target.load(
@@ -291,10 +298,13 @@ class ProviderPlaybackCoordinator(
         val adapter = snapshot.adapter ?: return@withLock null
         val itemId = snapshot.itemId ?: return@withLock null
         val target = controller ?: return@withLock null
-        val options = snapshot.options.copy(maxStreamingBitrate = maxStreamingBitrate)
+        val state = target.state.value
+        val options = snapshot.options.copy(
+            maxStreamingBitrate = maxStreamingBitrate,
+            startPositionMs = state.positionMs,
+        )
         val outcome = adapter.preparePlayback(itemId, options)
         val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
-        val state = target.state.value
         val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
         val generation = target.load(
             listOf(ready.toPlayableResource(itemId)),
@@ -354,7 +364,12 @@ class ProviderPlaybackCoordinator(
         nativeSelection = scope.launch {
             val target = controller ?: return@launch
             val settled = target.state.first { state ->
-                state.generation === generation && state.phase.canSelectTracks()
+                state.generation === generation &&
+                    state.phase.canSelectTracks() &&
+                    pending.all { track ->
+                        val kind = track.kind.toPlayerTrackKind()
+                        resolveNativeTrackId(track, state.tracks.filter { it.kind == kind }) != null
+                    }
             }
             // 期间可能已经换了条目/停了播放：那就不属于这一代了。
             if (!bindingState.value.handles(settled.generation)) return@launch
@@ -362,7 +377,7 @@ class ProviderPlaybackCoordinator(
                 val kind = track.kind.toPlayerTrackKind()
                 val nativeId = resolveNativeTrackId(
                     providerTrack = track,
-                    nativeTracks = target.state.value.tracks.filter { it.kind == kind },
+                    nativeTracks = settled.tracks.filter { it.kind == kind },
                 ) ?: return@forEach
                 try {
                     target.selectTrack(kind, nativeId)
@@ -520,8 +535,9 @@ class ProviderPlaybackCoordinator(
     ) {
         val adapter = snapshot.adapter ?: return
         val itemId = snapshot.itemId ?: return
+        val options = snapshot.options.copy(startPositionMs = resumePositionMs.coerceAtLeast(0L))
         val outcome = try {
-            adapter.preparePlayback(itemId, snapshot.options)
+            adapter.preparePlayback(itemId, options)
         } catch (e: CancellationException) {
             throw e
         } catch (failure: DomainError) {
@@ -572,12 +588,12 @@ class ProviderPlaybackCoordinator(
             adapter = adapter,
             ready = outcome,
             itemId = itemId,
-            options = snapshot.options.withNegotiatedDefaults(outcome),
+            options = options.withNegotiatedDefaults(outcome),
             renegotiations = snapshot.renegotiations + 1,
         )
         tracksFlow.value = outcome.tracks
         preparedFlow.value = outcome.toPreparedFacts()
-        schedulePendingNativeTracks(newGeneration, outcome, snapshot.options)
+        schedulePendingNativeTracks(newGeneration, outcome, options)
         renegotiationsFlow.value += 1
     }
 

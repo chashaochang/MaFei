@@ -37,7 +37,11 @@ data class PlaybackQueue(
     /** Re-locates the queue after playback started from a different entry. */
     fun movedTo(itemId: MediaId): PlaybackQueue? {
         val target = items.indexOfFirst { it.id == itemId }
-        return if (target >= 0 && target != index) copy(index = target) else null
+        return when {
+            target < 0 -> null
+            target == index -> this
+            else -> copy(index = target)
+        }
     }
 
     companion object {

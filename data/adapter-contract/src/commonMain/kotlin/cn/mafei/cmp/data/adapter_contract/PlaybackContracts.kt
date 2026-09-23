@@ -24,6 +24,13 @@ data class PlaybackOptions(
      * transcoded rendition at or below that bitrate.
      */
     val maxStreamingBitrate: Int? = null,
+    /**
+     * Position at which a provider-side transcode should start. The player
+     * still seeks to the same position after loading; this hint exists for
+     * providers such as fnOS whose `/play/play` endpoint creates a stream from
+     * the requested timestamp instead of exposing a full-file rendition.
+     */
+    val startPositionMs: Long? = null,
 )
 
 /** Provider track metadata kept separate from platform-player track ids. */

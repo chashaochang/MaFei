@@ -1251,12 +1251,12 @@ private fun BrowseContent(
                 playingMedia = item
                 playerExpanded = true
                 val existing = playQueue?.takeIf { queue -> queue.items.any { it.id == item.id } }
+                val positionedQueue = existing?.movedTo(item.id)
+                // 播放器先拿到一个立即可用的队列；首页缺少季列表时，出画后再异步扩充。
+                playQueue = positionedQueue ?: PlaybackQueue.forItem(item, emptyList())
                 scope.launch {
+                    var started = false
                     try {
-                        // 队列：已在队列里的条目只移动指针（选集/下一集/上一集），否则按当前
-                        // 浏览上下文重建 —— 首页直接起播时这里会补拉该季集列表，所以得先
-                        // 建好队列再 play（它是 suspend 的）。
-                        playQueue = existing?.movedTo(item.id) ?: browser.playbackQueueFor(item)
                         // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
                         val generation = playback.play(
                             itemId = item.id,
@@ -1266,6 +1266,8 @@ private fun BrowseContent(
                         )
                         if (generation == null) {
                             playbackError = "当前媒体暂时无法播放"
+                        } else {
+                            started = true
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -1274,6 +1276,14 @@ private fun BrowseContent(
                         playbackError = "播放准备失败，请重试"
                     } finally {
                         playbackBusy = false
+                    }
+                    // 旧版也是在播放器完成 load 后扩充剧集队列。网络慢或失败都不阻塞出画；
+                    // 已有队列（上一集/下一集/选集）则直接复用，绝不重复拉整季。
+                    if (started && positionedQueue == null && item.mediaType == MediaType.Episode) {
+                        val expanded = browser.playbackQueueFor(item)
+                        if (playingMedia?.id == item.id && playerExpanded) {
+                            playQueue = expanded
+                        }
                     }
                 }
             }

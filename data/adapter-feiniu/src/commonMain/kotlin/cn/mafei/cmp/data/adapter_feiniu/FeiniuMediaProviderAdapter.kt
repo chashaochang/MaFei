@@ -1028,16 +1028,15 @@ class FeiniuMediaProviderAdapter(
             return transcoded
         }
 
-        // 原画直连：range 就是原文件字节，fnOS 不会为它转码，所以这条路上没有档位
-        // 可言 —— `qualities` 报空表（界面因此不出现清晰度菜单），`appliedBitrate`
-        // 为 null。
+        // 原画直连本身没有预制档位，但 fnOS 能按需重编，所以 `qualities = null`：
+        // 界面据此生成旧版的码率阶梯；用户选中后重新进入上面的 /play/play 分支。
         val streamUrl = facade.playback.directRangeUrl(resolution.preferred.baseUrl, mediaGuid)
         val ready = PlaybackPreparation.Ready(
             streamUrl = streamUrl,
             subtitleUrl = externalSubtitleUrl(streams, info, options.subtitleStreamIndex),
             tracks = playbackTracks(streams, info, options),
             transport = PlaybackTransport.DirectPlay,
-            qualities = emptyList(),
+            qualities = null,
             headers = facade.assets.playbackHeaders(
                 operation.credentials,
                 resolution.preferred.requiresRelayCookie,
@@ -1290,8 +1289,9 @@ class FeiniuMediaProviderAdapter(
                         videoEncoder = video?.codecName?.takeIf(String::isNotBlank) ?: "h264",
                         resolution = video?.resolutionType.orEmpty(),
                         bitrate = requestedBitrate.toLong(),
-                        // 起播位置由播放器在 load 之后 seek；preparePlayback 这里没有位置。
-                        startTimestamp = 0L,
+                        // 与旧版一致：服务端从当前秒数生成转码流，播放器加载后仍会
+                        // 再 Seek 一次，兼顾服务端切片与原生播放器的最终落点。
+                        startTimestamp = (options.startPositionMs ?: 0L).coerceAtLeast(0L) / 1_000L,
                         audioEncoder = audio?.codecName?.takeIf(String::isNotBlank) ?: "aac",
                         audioGuid = audio?.guid?.trim().orEmpty(),
                         subtitleGuid = subtitle?.guid?.trim().orEmpty(),

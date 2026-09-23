@@ -251,18 +251,18 @@ class FeiniuAdapterPlaybackTest {
     }
 
     @Test
-    fun rangeRouteReportsTheOriginalFileAndNoQualityLadder() = runTest {
+    fun rangeRouteReportsOriginalFileWithOnDemandTranscodingAvailable() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
         fixture.transport.enqueueJson(200, REGULAR_STREAM_LIST)
 
-        // 没有码率上限 = 原画直连：range 就是原文件字节，这条路上没有档位可言，
-        // 所以如实报空档位表（界面因此不出现清晰度菜单）。
+        // 没有码率上限 = 原画直连；null 表示 provider 支持按需重编，界面仍应提供
+        // 旧版清晰度阶梯，用户点中后才调用 /play/play。
         val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
 
         assertEquals("https://feiniu.test/v/api/v1/media/range/md-0001", ready.streamUrl)
         assertEquals(PlaybackTransport.DirectPlay, ready.transport)
-        assertEquals(emptyList(), ready.qualities)
+        assertEquals(null, ready.qualities)
         assertEquals(null, ready.appliedBitrate)
     }
 
@@ -276,13 +276,17 @@ class FeiniuAdapterPlaybackTest {
         // 旧版 FeiniuVideoPlaybackProvider：有上限就 playTranscoded。普通文件的档位
         // 只能由服务端重编产出，range 原画永远给不了。
         val ready = assertIs<PlaybackPreparation.Ready>(
-            fixture.adapter.preparePlayback(MediaId("it-0001"), PlaybackOptions(maxStreamingBitrate = 8_000_000)),
+            fixture.adapter.preparePlayback(
+                MediaId("it-0001"),
+                PlaybackOptions(maxStreamingBitrate = 8_000_000, startPositionMs = 123_456L),
+            ),
         )
 
         assertEquals("/v/api/v1/play/play", fixture.transport.requests.last().url.encodedPath)
         val body = bodyOf(fixture.transport.requests.last())
         assertTrue(body.contains("\"media_guid\":\"md-0001\""), body)
         assertTrue(body.contains("\"bitrate\":8000000"), body)
+        assertTrue(body.contains("\"startTimestamp\":123"), body)
         assertEquals("https://feiniu.test/v/api/v1/media/hls/md-0001/master.m3u8", ready.streamUrl)
         assertEquals(PlaybackTransport.Transcode, ready.transport)
         assertEquals(8_000_000, ready.appliedBitrate)
