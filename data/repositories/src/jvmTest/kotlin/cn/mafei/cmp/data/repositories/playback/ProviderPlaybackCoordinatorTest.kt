@@ -17,6 +17,8 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.player.api.PlayableResource
 import cn.mafei.cmp.player.api.PlaybackGeneration
@@ -52,6 +54,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     val preparedUrls = mutableListOf<String>()
     val reports = mutableListOf<Pair<PlaybackPreparation.Ready, PlaybackEvent>>()
     val preparedReadies = mutableListOf<PlaybackPreparation.Ready>()
+    val preparedOptions = mutableListOf<PlaybackOptions>()
     val stubs = ArrayDeque<StubOutcome>()
     private val preparedCallCount = AtomicInteger(0)
     private val gateCallNumbers = mutableSetOf<Int>()
@@ -70,15 +73,25 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     }
 
     sealed interface StubOutcome {
-        data class ReadyStub(val url: String, val headers: Map<String, String>) : StubOutcome
+        data class ReadyStub(
+            val url: String,
+            val headers: Map<String, String>,
+            val mediaSourceId: String? = null,
+            val tracks: List<PlaybackTrack> = emptyList(),
+        ) : StubOutcome
         data object AuthError : StubOutcome
         data object Cancelled : StubOutcome
         data object Refused : StubOutcome
     }
 
 
-    fun queueReady(streamUrl: String, headers: Map<String, String> = emptyMap()) {
-        stubs += StubOutcome.ReadyStub(streamUrl, headers)
+    fun queueReady(
+        streamUrl: String,
+        headers: Map<String, String> = emptyMap(),
+        mediaSourceId: String? = null,
+        tracks: List<PlaybackTrack> = emptyList(),
+    ) {
+        stubs += StubOutcome.ReadyStub(streamUrl, headers, mediaSourceId, tracks)
     }
 
     fun queueAuthError() {
@@ -90,6 +103,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     private fun defaultStub(): StubOutcome = StubOutcome.ReadyStub("https://stream.test/default", emptyMap())
 
     override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation {
+        preparedOptions += options
         val callNumber = preparedCallCount.incrementAndGet()
         val gate = if (callNumber in gateCallNumbers) CompletableDeferred<Unit>().also { gates += it } else null
         gate?.await()
@@ -98,6 +112,8 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
                 val ready = PlaybackPreparation.Ready(
                     streamUrl = stub.url,
                     subtitleUrl = null,
+                    mediaSourceId = stub.mediaSourceId,
+                    tracks = stub.tracks,
                     headers = stub.headers,
                     playSessionId = null,
                     reportingContext = "{\"item\":${preparedReadies.size}}",
@@ -219,8 +235,101 @@ class ProviderPlaybackCoordinatorTest {
         assertEquals("Trim-MC-token=fn-token; mode=relay", loaded.headers["Cookie"])
     }
 
-    // ----------------------------------------------------- renegotiation
+    @Test
+    fun providerTrackSelectionRenegotiatesAtCurrentPositionAndKeepsTheSource() = harness { harness ->
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/original",
+            mediaSourceId = "source-a",
+            tracks = listOf(
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语", selected = true),
+                PlaybackTrack(2, PlaybackTrackKind.Audio, displayTitle = "英语"),
+                PlaybackTrack(3, PlaybackTrackKind.Subtitle, displayTitle = "中文字幕", selected = true),
+            ),
+        )
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/english",
+            mediaSourceId = "source-a",
+            tracks = listOf(
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语"),
+                PlaybackTrack(2, PlaybackTrackKind.Audio, displayTitle = "英语", selected = true),
+                PlaybackTrack(3, PlaybackTrackKind.Subtitle, displayTitle = "中文字幕", selected = true),
+            ),
+        )
+        harness.coordinator.play(ProviderKind.Jellyfin, ITEM)
+        val initialGeneration = currentGeneration(harness)
+        harness.runtime.emit(RuntimeEvent.Ready(initialGeneration, 60_000))
+        harness.runtime.emit(RuntimeEvent.Progress(initialGeneration, 12_345, 20_000, 60_000))
 
+        harness.coordinator.selectTrack(PlaybackTrackKind.Audio, "2")
+
+        assertEquals(
+            PlaybackOptions(mediaSourceId = "source-a", audioStreamIndex = 2, subtitleStreamIndex = 3),
+            harness.adapter.preparedOptions.last(),
+        )
+        val reload = harness.runtime.commands.filterIsInstance<RuntimeCommand.Load>().last()
+        assertEquals(12_345, reload.startPositionMs)
+        assertEquals("https://stream.test/english", reload.resource.url)
+        assertEquals(
+            "英语",
+            harness.coordinator.tracks.value.single {
+                it.selected && it.kind == PlaybackTrackKind.Audio
+            }.displayTitle,
+        )
+    }
+
+    @Test
+    fun nativeTrackSwitchUpdatesThePublishedSelectionAndLaterNegotiations() = harness { harness ->
+        // 直连流的内嵌音轨只能由播放器自己换（renegotiate = false），provider 不会重新协商。
+        // 但界面信的是 provider 的选中态，后续协商也要带上新索引 —— 两个都得跟上。
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/direct",
+            tracks = listOf(
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语", selected = true),
+                PlaybackTrack(2, PlaybackTrackKind.Audio, displayTitle = "英语"),
+                PlaybackTrack(3, PlaybackTrackKind.Subtitle, displayTitle = "中文字幕", selected = true),
+            ),
+        )
+        harness.coordinator.play(ProviderKind.Feiniu, ITEM)
+        emitReadyAndPlaying(harness)
+
+        harness.coordinator.selectTrackLocally(PlaybackTrackKind.Audio, 2)
+
+        val tracks = harness.coordinator.tracks.value
+        assertEquals("英语", tracks.single { it.selected && it.kind == PlaybackTrackKind.Audio }.displayTitle)
+        assertTrue(tracks.none { it.kind == PlaybackTrackKind.Audio && it.index == 1 && it.selected })
+        // 另一类轨道不受影响。
+        assertEquals("中文字幕", tracks.single { it.selected && it.kind == PlaybackTrackKind.Subtitle }.displayTitle)
+
+        // 下一次重新协商（换清晰度）必须带上新音轨，而不是把旧索引带回去。
+        harness.adapter.queueReady("https://stream.test/direct-720p")
+        harness.coordinator.selectQuality(2_000_000)
+        val options = harness.adapter.preparedOptions.last()
+        assertEquals(2, options.audioStreamIndex)
+        assertEquals(3, options.subtitleStreamIndex)
+        assertEquals(2_000_000, options.maxStreamingBitrate)
+    }
+
+    @Test
+    fun nativeSubtitleSwitchOffClearsThePublishedSelection() = harness { harness ->
+        harness.adapter.queueReady(
+            streamUrl = "https://stream.test/direct",
+            tracks = listOf(
+                PlaybackTrack(1, PlaybackTrackKind.Audio, displayTitle = "国语", selected = true),
+                PlaybackTrack(3, PlaybackTrackKind.Subtitle, displayTitle = "中文字幕", selected = true),
+            ),
+        )
+        harness.coordinator.play(ProviderKind.Feiniu, ITEM)
+        emitReadyAndPlaying(harness)
+
+        harness.coordinator.selectTrackLocally(PlaybackTrackKind.Subtitle, -1)
+
+        assertTrue(harness.coordinator.tracks.value.none { it.kind == PlaybackTrackKind.Subtitle && it.selected })
+        harness.adapter.queueReady("https://stream.test/direct-720p")
+        harness.coordinator.selectQuality(2_000_000)
+        assertEquals(-1, harness.adapter.preparedOptions.last().subtitleStreamIndex)
+    }
+
+    // ----------------------------------------------------- renegotiation
     @Test
     fun expiredLinkRenegotiatesOnceWithTheSameAdapterAndReloads() = harness { harness ->
         harness.adapter.queueReady("https://stream.test/expired")

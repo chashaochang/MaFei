@@ -10,6 +10,8 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
+import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.player.api.PlayableResource
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlaybackGeneration
@@ -102,6 +104,23 @@ class ProviderPlaybackCoordinator(
     val completedRenegotiations: StateFlow<Int> get() = renegotiationsFlow
     private val renegotiationsFlow = MutableStateFlow(0)
 
+    /** Provider-authoritative track metadata for the current negotiated source. */
+    val tracks: StateFlow<List<PlaybackTrack>> get() = tracksFlow
+    private val tracksFlow = MutableStateFlow<List<PlaybackTrack>>(emptyList())
+
+    /**
+     * Provider facts about the stream currently bound to the player: which
+     * media source, how it is served, what ceilings it can serve, and which
+     * ceiling is actually in effect.
+     *
+     * Published next to [tracks] so the chrome REPORTS the negotiation instead
+     * of inferring it from its own last click. Deliberately a subset of
+     * [PlaybackPreparation.Ready]: stream URLs, headers and reporting contexts
+     * must never reach the UI layer.
+     */
+    val prepared: StateFlow<PreparedStreamFacts?> get() = preparedFlow
+    private val preparedFlow = MutableStateFlow<PreparedStreamFacts?>(null)
+
     private data class Binding(
         val generation: PlaybackGeneration? = null,
         val adapter: MediaProviderAdapter? = null,
@@ -156,13 +175,17 @@ class ProviderPlaybackCoordinator(
         autoplay: Boolean = true,
         options: PlaybackOptions = PlaybackOptions(),
     ): PlaybackGeneration? = mutex.withLock {
+        println("[MaFeiPlayback] coordinator prepare start provider=$provider item=${itemId.value}")
         val target = checkNotNull(controller) { "attachController before play" }
         check(!released) { "Playback coordinator released" }
         val seq = ++requestSeq
         binding = Binding()
+        tracksFlow.value = emptyList()
+        preparedFlow.value = null
         val adapter = adapterFor(provider)
         // CancellationException propagates untouched (adapter contract).
         val outcome = adapter.preparePlayback(itemId, options)
+        println("[MaFeiPlayback] coordinator prepare completed outcome=${outcome::class.simpleName}")
         if (seq != requestSeq || released) return@withLock null // superseded while preparing
         val ready = outcome as? PlaybackPreparation.Ready
         if (ready == null) {
@@ -184,23 +207,141 @@ class ProviderPlaybackCoordinator(
             url = ready.streamUrl,
             headers = ready.headers,
             subtitleUrl = ready.subtitleUrl,
+            allowInsecureTls = ready.allowInsecureTls,
+            multiConnectionAllowed = ready.multiConnectionAllowed,
         )
         val generation = target.load(listOf(resource), index = 0, resumePositionMs = resumePositionMs, autoplay = autoplay)
+        println("[MaFeiPlayback] coordinator target.load invoked item=${itemId.value}")
         binding = Binding(
             generation = generation,
             adapter = adapter,
             ready = ready,
             itemId = itemId,
-            options = options,
+            options = options.withNegotiatedDefaults(ready),
             renegotiations = 0,
         )
+        tracksFlow.value = ready.tracks
+        preparedFlow.value = ready.toPreparedFacts()
         generation
+    }
+
+    /**
+     * Re-runs provider negotiation for a user-selected provider track and
+     * reloads at the current position. Provider indexes are never passed to a
+     * native runtime as though they were native track ids.
+     */
+    suspend fun selectTrack(kind: PlaybackTrackKind, id: String?): PlaybackGeneration? = mutex.withLock {
+        val snapshot = binding
+        val adapter = snapshot.adapter ?: return@withLock null
+        val itemId = snapshot.itemId ?: return@withLock null
+        val target = controller ?: return@withLock null
+        val selectedIndex = when (kind) {
+            PlaybackTrackKind.Audio -> id?.toIntOrNull() ?: return@withLock null
+            PlaybackTrackKind.Subtitle -> id?.toIntOrNull() ?: -1
+        }
+        val options = when (kind) {
+            PlaybackTrackKind.Audio -> snapshot.options.copy(audioStreamIndex = selectedIndex)
+            PlaybackTrackKind.Subtitle -> snapshot.options.copy(subtitleStreamIndex = selectedIndex)
+        }
+        val outcome = adapter.preparePlayback(itemId, options)
+        val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
+        val state = target.state.value
+        val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
+        val resource = ready.toPlayableResource(itemId)
+        val generation = target.load(
+            listOf(resource),
+            index = 0,
+            resumePositionMs = state.positionMs,
+            autoplay = autoplay,
+        )
+        binding = Binding(
+            generation = generation,
+            adapter = adapter,
+            ready = ready,
+            itemId = itemId,
+            options = options.withNegotiatedDefaults(ready),
+            renegotiations = snapshot.renegotiations,
+        )
+        tracksFlow.value = ready.tracks
+        preparedFlow.value = ready.toPreparedFacts()
+        generation
+    }
+
+    /**
+     * Re-runs provider negotiation for a user-selected quality ceiling
+     * ([PlaybackOptions.maxStreamingBitrate], null = auto/direct) and reloads
+     * at the current position. Mirrors [selectTrack]'s stale-result guards.
+     */
+    suspend fun selectQuality(maxStreamingBitrate: Int?): PlaybackGeneration? = mutex.withLock {
+        val snapshot = binding
+        val adapter = snapshot.adapter ?: return@withLock null
+        val itemId = snapshot.itemId ?: return@withLock null
+        val target = controller ?: return@withLock null
+        val options = snapshot.options.copy(maxStreamingBitrate = maxStreamingBitrate)
+        val outcome = adapter.preparePlayback(itemId, options)
+        val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
+        val state = target.state.value
+        val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
+        val generation = target.load(
+            listOf(ready.toPlayableResource(itemId)),
+            index = 0,
+            resumePositionMs = state.positionMs,
+            autoplay = autoplay,
+        )
+        binding = Binding(
+            generation = generation,
+            adapter = adapter,
+            ready = ready,
+            itemId = itemId,
+            options = options.withNegotiatedDefaults(ready),
+            renegotiations = snapshot.renegotiations,
+        )
+        tracksFlow.value = ready.tracks
+        preparedFlow.value = ready.toPreparedFacts()
+        generation
+    }
+
+    /**
+     * Records a track switch that happened INSIDE the native player.
+     *
+     * Direct-play / direct-stream tracks are muxed into the file we already
+     * have, so re-requesting the same URL cannot change them and the switch is
+     * performed by the runtime. The provider's published selection must follow
+     * that switch, otherwise two lies appear: the chrome (which trusts the
+     * published list) keeps its checkmark on the old track, and the next
+     * re-negotiation — a quality change, a subtitle-off — re-sends the OLD
+     * index and silently restores the old track.
+     *
+     * [providerIndex] is the provider's own stream index; `-1` means subtitles
+     * off and clears the subtitle selection.
+     */
+    suspend fun selectTrackLocally(kind: PlaybackTrackKind, providerIndex: Int) = mutex.withLock {
+        val snapshot = binding
+        if (snapshot.itemId == null) return@withLock
+        val selected = { track: PlaybackTrack ->
+            when (kind) {
+                PlaybackTrackKind.Audio -> if (track.kind == kind) track.index == providerIndex else track.selected
+                PlaybackTrackKind.Subtitle ->
+                    if (track.kind == kind) providerIndex >= 0 && track.index == providerIndex else track.selected
+            }
+        }
+        val current = tracksFlow.value
+        val updated = current.map { it.copy(selected = selected(it)) }
+        if (updated != current) tracksFlow.value = updated
+        binding = snapshot.copy(
+            options = when (kind) {
+                PlaybackTrackKind.Audio -> snapshot.options.copy(audioStreamIndex = providerIndex)
+                PlaybackTrackKind.Subtitle -> snapshot.options.copy(subtitleStreamIndex = providerIndex)
+            },
+        )
     }
 
     /** Stops playback and discards the current binding; queued reports for the old binding are dropped. */
     suspend fun stop() = mutex.withLock {
         ++requestSeq
         binding = Binding()
+        tracksFlow.value = emptyList()
+        preparedFlow.value = null
         controller?.stop()
     }
 
@@ -208,6 +349,8 @@ class ProviderPlaybackCoordinator(
     suspend fun release() = mutex.withLock {
         ++requestSeq
         binding = Binding()
+        tracksFlow.value = emptyList()
+        preparedFlow.value = null
         released = true
         reportTasks.close()
         worker?.cancelAndJoin()
@@ -306,6 +449,8 @@ class ProviderPlaybackCoordinator(
             url = outcome.streamUrl,
             headers = outcome.headers,
             subtitleUrl = outcome.subtitleUrl,
+            allowInsecureTls = outcome.allowInsecureTls,
+            multiConnectionAllowed = outcome.multiConnectionAllowed,
         )
         val newGeneration = target.load(
             listOf(resource),
@@ -318,9 +463,11 @@ class ProviderPlaybackCoordinator(
             adapter = adapter,
             ready = outcome,
             itemId = itemId,
-            options = snapshot.options,
+            options = snapshot.options.withNegotiatedDefaults(outcome),
             renegotiations = snapshot.renegotiations + 1,
         )
+        tracksFlow.value = outcome.tracks
+        preparedFlow.value = outcome.toPreparedFacts()
         renegotiationsFlow.value += 1
     }
 
@@ -334,4 +481,40 @@ class ProviderPlaybackCoordinator(
         PlaybackEventKind.Progress -> PlayerReportKind.Progress
         PlaybackEventKind.Stop -> PlayerReportKind.Stop
     }
+
+    private fun PlaybackPreparation.Ready.toPlayableResource(itemId: MediaId) = PlayableResource(
+        id = itemId.value,
+        url = streamUrl,
+        headers = headers,
+        subtitleUrl = subtitleUrl,
+        allowInsecureTls = allowInsecureTls,
+        multiConnectionAllowed = multiConnectionAllowed,
+    )
+
+    /**
+     * Everything the player chrome may know about the bound stream. Kept apart
+     * from [PlaybackPreparation.Ready] so URLs, headers and reporting contexts
+     * cannot leak into UI state through an accidental `copy`.
+     */
+    private fun PlaybackPreparation.Ready.toPreparedFacts() = PreparedStreamFacts(
+        mediaSourceId = mediaSourceId,
+        transport = transport,
+        qualities = qualities,
+        appliedBitrate = appliedBitrate,
+    )
+
+    private fun PlaybackOptions.withNegotiatedDefaults(ready: PlaybackPreparation.Ready): PlaybackOptions = copy(
+        // 用户选的清晰度档位必须跨重新协商保留（媒体源/轨道同理）。
+        maxStreamingBitrate = maxStreamingBitrate,
+        mediaSourceId = ready.mediaSourceId ?: mediaSourceId,
+        audioStreamIndex = ready.tracks.firstOrNull {
+            it.kind == PlaybackTrackKind.Audio && it.selected
+        }?.index ?: audioStreamIndex,
+        subtitleStreamIndex = when {
+            subtitleStreamIndex == -1 -> -1
+            else -> ready.tracks.firstOrNull {
+                it.kind == PlaybackTrackKind.Subtitle && it.selected
+            }?.index ?: subtitleStreamIndex
+        },
+    )
 }

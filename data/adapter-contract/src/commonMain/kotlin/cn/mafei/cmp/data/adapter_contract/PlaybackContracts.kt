@@ -17,6 +17,48 @@ data class PlaybackOptions(
     val mediaSourceId: String? = null,
     val audioStreamIndex: Int? = null,
     val subtitleStreamIndex: Int? = null,
+    /**
+     * Quality ceiling in bits/second for a server-side transcode. `null` keeps
+     * the provider's own default (the legacy player's "auto": direct play when
+     * the server allows it). A concrete value asks the provider to serve a
+     * transcoded rendition at or below that bitrate.
+     */
+    val maxStreamingBitrate: Int? = null,
+)
+
+/** Provider track metadata kept separate from platform-player track ids. */
+enum class PlaybackTrackKind { Audio, Subtitle }
+
+/**
+ * One provider-declared selectable track. [index] is the provider stream
+ * index used for a fresh PlaybackInfo request; it is not assumed to equal a
+ * native player's runtime track id.
+ *
+ * [renegotiate] tells the caller HOW to switch to this track:
+ * - `true`  — the provider must be asked again (external subtitle files that
+ *   live behind their own delivery URL, or any track on a transcoded stream
+ *   where the server re-muxes per selection). The caller re-runs
+ *   `preparePlayback` and reloads.
+ * - `false` — the track is muxed inside a direct-play/direct-stream file the
+ *   player receives byte-for-byte; re-requesting the same URL cannot change
+ *   it, so the caller must switch in the native runtime ([PlayerController.selectTrack]).
+ *
+ * Adapters decide this from the stream route they negotiated — it is a fact
+ * about the prepared stream, not a UI preference.
+ */
+data class PlaybackTrack(
+    val index: Int,
+    val kind: PlaybackTrackKind,
+    val displayTitle: String? = null,
+    val title: String? = null,
+    val language: String? = null,
+    val codec: String? = null,
+    val channels: Int? = null,
+    val selected: Boolean = false,
+    /** Track ships as its own file/resource (Jellyfin `IsExternal`, Feiniu `is_external`). */
+    val isExternal: Boolean = false,
+    /** Selection requires a fresh provider negotiation; see the class contract. */
+    val renegotiate: Boolean = true,
 )
 
 /**
@@ -35,12 +77,46 @@ sealed interface PlaybackPreparation {
     data class Ready(
         val streamUrl: String,
         val subtitleUrl: String? = null,
+        /** Provider media-source id selected by this negotiation. */
+        val mediaSourceId: String? = null,
+        /**
+         * How this stream is actually served. The player chrome reports THIS,
+         * never a guess derived from the UI's own selection — a quality ceiling
+         * the server ignored still has to read as 直连.
+         */
+        val transport: PlaybackTransport? = null,
+        /**
+         * Ceiling (bits/second) this stream actually serves at or below, when
+         * the provider applied one — Jellyfin's transcoded rendition, Feiniu's
+         * chosen upstream rendition. `null` means no ceiling is in effect, so
+         * the chrome must show 自动 even if it just asked for 1080p.
+         */
+        val appliedBitrate: Int? = null,
+        /**
+         * Selectable renditions, three states:
+         *
+         * - `null`  — the provider re-encodes on demand to any ceiling, so the
+         *   chrome may synthesise its own ladder (Jellyfin).
+         * - empty   — this stream has no alternates at all; the chrome must NOT
+         *   offer a quality menu (Feiniu original-file direct play).
+         * - non-empty — exactly these renditions, in provider order.
+         *
+         * Ceilings are the [PlaybackQuality.bitrate] values and are passed back
+         * as `PlaybackOptions.maxStreamingBitrate`.
+         */
+        val qualities: List<PlaybackQuality>? = null,
+        /** Provider-authoritative audio/subtitle choices for player chrome. */
+        val tracks: List<PlaybackTrack> = emptyList(),
         /**
          * Headers the player must attach to [streamUrl]/[subtitleUrl]
          * (Feiniu: Authorization + cookie, `mode=relay` on relay routes;
          * Jellyfin: empty — its stream URLs carry access in the URL itself).
          */
         val headers: Map<String, String> = emptyMap(),
+        /** Allows a platform player to accept the provider-issued certificate for this one stream. */
+        val allowInsecureTls: Boolean = false,
+        /** Some cloud STRM providers reject or rate-limit parallel Range requests. */
+        val multiConnectionAllowed: Boolean = true,
         /** Provider play session id for progress reporting, when the provider issues one. Never sufficient alone: see [reportingContext]. */
         val playSessionId: PlaybackSessionId? = null,
         /**
@@ -64,6 +140,26 @@ sealed interface PlaybackPreparation {
         val detail: String? = null,
     ) : PlaybackPreparation
 }
+
+/** How a prepared stream is served. */
+enum class PlaybackTransport {
+    /** The original file, byte for byte. */
+    DirectPlay,
+
+    /** The original streams, remuxed by the server (same bytes, new container). */
+    DirectStream,
+
+    /** The server re-encoded the media (quality ceiling, unsupported codec). */
+    Transcode,
+}
+
+/** One provider-declared rendition of a prepared stream. */
+data class PlaybackQuality(
+    /** Ceiling in bits/second; fed back as `PlaybackOptions.maxStreamingBitrate`. */
+    val bitrate: Int,
+    /** Provider's own hint ("1080p", "4K"); the chrome adds the formatted bitrate. */
+    val label: String? = null,
+)
 
 /** Why preparation did not yield a playable stream. */
 enum class RefusalReason {
