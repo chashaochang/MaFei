@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -124,7 +123,7 @@ fun LegacyLoadingView(modifier: Modifier = Modifier) {
         modifier.fillMaxSize().graphicsLayer { alpha = reveal.value },
         contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator(Modifier.size(42.dp))
+        MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Page)
     }
 }
 
