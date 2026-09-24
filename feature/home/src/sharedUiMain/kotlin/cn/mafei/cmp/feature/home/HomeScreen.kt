@@ -685,6 +685,7 @@ fun HomeScreen(
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
+                        sharedArtworkModifier = sharedArtworkModifier,
                         autoplay = heroAutoplay && heroVisibleForAutoplay,
                         scrolling = gridScrolling,
                         onActiveItemChanged = { item ->
@@ -719,6 +720,7 @@ fun HomeScreen(
                         items = progressItems,
                         onItem = onPlay ?: onItem,
                         artwork = shelfArtwork,
+                        sharedArtworkModifier = sharedArtworkModifier,
                         kind = HomeShelfKind.Resume,
                         layout = layout,
                         leadingInset = sceneControlLeading,
@@ -732,6 +734,7 @@ fun HomeScreen(
                         items = nextUpItems,
                         onItem = onPlay ?: onItem,
                         artwork = shelfArtwork,
+                        sharedArtworkModifier = sharedArtworkModifier,
                         kind = HomeShelfKind.NextUp,
                         layout = layout,
                         leadingInset = sceneControlLeading,
@@ -1873,6 +1876,7 @@ private fun RecommendationHero(
     layout: MaFeiLayout,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     autoplay: Boolean,
     scrolling: Boolean,
     onActiveItemChanged: (MediaItem?) -> Unit,
@@ -2043,7 +2047,11 @@ private fun RecommendationHero(
                             ),
                     ) {
                         if (artwork != null) {
-                            artwork(item, Modifier.fillMaxSize())
+                            val artworkModifier = Modifier.fillMaxSize()
+                            artwork(
+                                item,
+                                sharedArtworkModifier?.invoke(item, artworkModifier) ?: artworkModifier,
+                            )
                         } else {
                             TextPoster(item.title, Modifier.fillMaxSize())
                         }
@@ -2214,6 +2222,7 @@ private fun HomeMediaShelf(
     items: List<MediaItem>,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
     kind: HomeShelfKind,
     layout: MaFeiLayout,
     leadingInset: Dp,
@@ -2240,7 +2249,15 @@ private fun HomeMediaShelf(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
-                        if (artwork != null) artwork(item, Modifier.fillMaxSize()) else TextPoster(text.title, Modifier.fillMaxSize())
+                        val posterModifier = Modifier.fillMaxSize()
+                        if (artwork != null) {
+                            artwork(
+                                item,
+                                sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
+                            )
+                        } else {
+                            TextPoster(text.title, posterModifier)
+                        }
                         if (kind == HomeShelfKind.Resume) progress(item)?.let { value ->
                             LinearProgressIndicator({ value }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
                                 color = MaterialTheme.colorScheme.primary, trackColor = Color.Black.copy(alpha = .36f))

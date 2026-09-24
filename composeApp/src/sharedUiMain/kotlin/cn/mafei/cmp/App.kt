@@ -2016,14 +2016,14 @@ private fun BrowseContent(
                         }
                     }
                 }
-                val openDetailId: (MediaId, String?) -> Unit = { id, mediaName ->
+                fun openDetailId(id: MediaId, mediaName: String?, initialItem: MediaItem? = null) {
                     if (browseBackStack.lastOrNull() !is BrowseDetailRoute) {
                         browseBackStack += BrowseDetailRoute(id.value, mediaName)
                     }
-                    scope.launch { browser.openDetail(id) }
+                    scope.launch { browser.openDetail(id, initialItem) }
                 }
                 val openDetail: (MediaItem, String?) -> Unit = { item, mediaName ->
-                    openDetailId(item.id, mediaName)
+                    openDetailId(item.id, mediaName, item)
                 }
                 val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->
                     person.id?.let { id ->
@@ -2069,6 +2069,8 @@ private fun BrowseContent(
                                                 key = "media-artwork:${item.id.value}",
                                             ),
                                             animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            boundsTransform = { _, _ -> tween(420) },
+                                            zIndexInOverlay = 1f,
                                         )
                                     }
                                 }
@@ -2098,7 +2100,11 @@ private fun BrowseContent(
                                     },
                                     onHeroItem = { item ->
                                         val target = item.legacyHomeHeroDetailTarget()
-                                        openDetailId(target.mediaId, target.mediaName)
+                                        openDetailId(
+                                            target.mediaId,
+                                            target.mediaName,
+                                            item.takeIf { it.id == target.mediaId },
+                                        )
                                     },
                                     onPlay = startPlayback,
                                     onRetry = { scope.launch { browser.refresh() } },
@@ -2369,6 +2375,8 @@ private fun BrowseContent(
                                                 key = "media-artwork:${item.id.value}",
                                             ),
                                             animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            boundsTransform = { _, _ -> tween(420) },
+                                            zIndexInOverlay = 1f,
                                         )
                                     }
                                 }

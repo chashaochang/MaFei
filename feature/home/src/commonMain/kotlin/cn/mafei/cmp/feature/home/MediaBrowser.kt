@@ -641,12 +641,15 @@ class MediaBrowser(
         ),
     )
 
-    suspend fun openDetail(id: MediaId) {
+    suspend fun openDetail(id: MediaId, initialItem: MediaItem? = null) {
         val operation = ++detailTicket
         ++detailRefreshTicket
         mutableState.value = state.value.copy(
             detailId = id,
-            detail = null,
+            // Keep the tapped card as the loading document. Besides avoiding a
+            // blank hero while the request is in flight, this gives the shared
+            // artwork transition a destination element during the route change.
+            detail = initialItem?.takeIf { it.id == id },
             detailLoading = true,
             detailError = null,
             detailSeasons = emptyList(),
