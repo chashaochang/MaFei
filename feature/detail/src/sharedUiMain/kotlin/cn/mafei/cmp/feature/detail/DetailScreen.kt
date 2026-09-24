@@ -193,6 +193,7 @@ fun DetailScreen(
     stale: Boolean = false,
     libraryName: String? = null,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
     backdropArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = artwork,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)? = null,
@@ -298,6 +299,7 @@ fun DetailScreen(
                                 libraryName = libraryName,
                                 contentMaxWidth = detailContentMaxWidth,
                                 artwork = artwork,
+                                sharedArtworkModifier = sharedArtworkModifier,
                                 backdropArtwork = backdropArtwork,
                                 logoArtwork = logoArtwork,
                                 personArtwork = personArtwork,
@@ -450,6 +452,7 @@ private fun BoxScope.DetailBody(
     libraryName: String?,
     contentMaxWidth: Dp,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     backdropArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)?,
@@ -485,6 +488,7 @@ private fun BoxScope.DetailBody(
                 collapseProgress = collapseProgress,
                 libraryName = libraryName,
                 artwork = backdropArtwork ?: artwork,
+                sharedArtworkModifier = sharedArtworkModifier,
                 logoArtwork = logoArtwork,
                 playbackSource = selectedPlaybackSource,
             )
@@ -584,6 +588,7 @@ private fun DetailHero(
     collapseProgress: Float,
     libraryName: String?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     playbackSource: DetailPlaybackSource?,
 ) {
@@ -626,7 +631,10 @@ private fun DetailHero(
             Modifier.fillMaxSize().featherBottom(.64f)
         }
         if (artwork != null) {
-            artwork(item, artworkModifier)
+            artwork(
+                item,
+                sharedArtworkModifier?.invoke(item, artworkModifier) ?: artworkModifier,
+            )
         } else {
             TextPoster(item.title, artworkModifier)
         }

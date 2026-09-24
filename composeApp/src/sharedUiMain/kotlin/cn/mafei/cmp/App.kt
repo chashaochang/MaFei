@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -160,6 +161,7 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -2036,7 +2038,9 @@ private fun BrowseContent(
                         browseBackStack += BrowseLibraryRoute(collection.id.value)
                     }
                 }
-                NavDisplay(
+                SharedTransitionLayout(Modifier.fillMaxSize()) {
+                    val sharedTransitionScope = this
+                    NavDisplay(
                     backStack = browseBackStack,
                     onBack = { popBrowseRoute() },
                     transitionSpec = {
@@ -2054,6 +2058,16 @@ private fun BrowseContent(
                     entryProvider = { route ->
                         when (route) {
                             BrowseHomeRoute -> NavEntry(route) {
+                                val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
+                                    with(sharedTransitionScope) {
+                                        modifier.sharedElement(
+                                            sharedContentState = rememberSharedContentState(
+                                                key = "media-artwork:${item.id.value}",
+                                            ),
+                                            animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                        )
+                                    }
+                                }
                                 HomeScreen(
                                     collections = state.collections,
                                     items = state.items,
@@ -2105,6 +2119,7 @@ private fun BrowseContent(
                                             targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 480 else 360,
                                         )
                                     },
+                                    sharedArtworkModifier = sharedArtworkModifier,
                                     backdropArtwork = { item, modifier ->
                                         MediaArtwork(
                                             item.landscapeArtworkCandidates(),
@@ -2338,6 +2353,16 @@ private fun BrowseContent(
                                 )
                             }
                             is BrowseDetailRoute -> NavEntry(route) {
+                                val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
+                                    with(sharedTransitionScope) {
+                                        modifier.sharedElement(
+                                            sharedContentState = rememberSharedContentState(
+                                                key = "media-artwork:${item.id.value}",
+                                            ),
+                                            animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                        )
+                                    }
+                                }
                                 val detailPlayTarget = state.detailPlayTarget?.takeIf { it.canPlay }
                                 DetailScreen(
                                     item = state.detail,
@@ -2403,6 +2428,7 @@ private fun BrowseContent(
                                             targetWidthPx = 480,
                                         )
                                     },
+                                    sharedArtworkModifier = sharedArtworkModifier,
                                     backdropArtwork = { item, modifier ->
                                         MediaArtwork(
                                             item.legacyDetailBackdropArtworkCandidates(),
@@ -2741,7 +2767,8 @@ private fun BrowseContent(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
-                )
+                    )
+                }
                 // 小屏（手机）：同一个「我的」容器，改成全屏铺开 —— 非模态，看起来和普通
                 // 页面跳转一样。
                 //

@@ -220,6 +220,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     gridState: LazyGridState,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
     backdropArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = artwork,
     shelfArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = backdropArtwork,
     // 预载轮播 item 的横版图：背景的翻页跟手序列与模糊层 Crossfade 都依赖
@@ -842,7 +843,12 @@ fun HomeScreen(
                                         onClick = { onItem(item) },
                                         status = status(item),
                                         poster = artwork?.let { painter ->
-                                            { posterModifier -> painter(item, posterModifier) }
+                                            { posterModifier ->
+                                                painter(
+                                                    item,
+                                                    sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
+                                                )
+                                            }
                                         },
                                         progress = progress(item),
                                         modifier = Modifier.width(140.dp),
@@ -891,7 +897,12 @@ fun HomeScreen(
                         onClick = { onItem(item) },
                         status = status(item),
                         poster = artwork?.let { painter ->
-                            { posterModifier -> painter(item, posterModifier) }
+                            { posterModifier ->
+                                painter(
+                                    item,
+                                    sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
+                                )
+                            }
                         },
                         progress = progress(item),
                     )
@@ -940,7 +951,14 @@ fun HomeScreen(
                 MediaCard(
                     text.title, text.subtitle, onClick = { onItem(item) },
                     status = status(item),
-                    poster = artwork?.let { painter -> { posterModifier -> painter(item, posterModifier) } },
+                    poster = artwork?.let { painter ->
+                        { posterModifier ->
+                            painter(
+                                item,
+                                sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
+                            )
+                        }
+                    },
                     progress = progress(item),
                 )
             }
