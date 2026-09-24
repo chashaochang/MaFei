@@ -50,6 +50,10 @@ fun LibraryIndexScreen(
     val contentEnd = layout.pagePaddingDp.dp + safeArea.end
     val contentBottom = safeArea.bottom +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 32.dp
+    // Keep the tail as a real list item, matching the legacy MediaTab. CPF's
+    // PullToRefreshBox can otherwise let the final LazyColumn item remain
+    // underneath the sibling Bottom Tab even when bottom content padding is set.
+    val scrollTail = contentBottom + bottomOverlayInset
     // 页面自己是记录者：内容录进 backdrop，标题栏作为它的**兄弟**来消费（自引用会栈溢出）。
     val backdrop = rememberGlassBackdrop()
 
@@ -71,7 +75,7 @@ fun LibraryIndexScreen(
                             // 让开标题栏（含状态栏），且是滚动让位：列表从栏下面穿过去。
                             top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
                             end = contentEnd,
-                            bottom = contentBottom + bottomOverlayInset,
+                            bottom = 0.dp,
                         ),
                     ) {
                         item {
@@ -87,7 +91,7 @@ fun LibraryIndexScreen(
                                 onItemClick = { index -> collections.getOrNull(index)?.let(onCollection) },
                             )
                         }
-                        item { Spacer(Modifier.height(1.dp)) }
+                        item { Spacer(Modifier.height(scrollTail)) }
                     }
                 }
             }
