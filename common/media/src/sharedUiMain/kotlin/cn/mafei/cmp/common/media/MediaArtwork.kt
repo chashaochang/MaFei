@@ -3,6 +3,7 @@ package cn.mafei.cmp.common.media
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -278,12 +279,33 @@ private fun MediaArtworkContent(
         }
     }
     val loaded = bitmap
-    Crossfade(
-        targetState = loaded,
-        modifier = modifier,
-        animationSpec = tween(180),
-        label = "artwork-reveal",
-    ) { artwork ->
+    // A recycled card whose bitmap is already in the memory cache should not
+    // replay the reveal animation. On a fast scroll dozens of cache hits can
+    // otherwise schedule Crossfade work in the same frame as the lazy layout.
+    // Keep the reveal only for a real placeholder -> decoded-image transition.
+    if (cachedBitmap != null) {
+        ArtworkContent(loaded, title, fallback, modifier, contentScale)
+    } else {
+        Crossfade(
+            targetState = loaded,
+            modifier = modifier,
+            animationSpec = tween(180),
+            label = "artwork-reveal",
+        ) { artwork ->
+            ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale)
+        }
+    }
+}
+
+@Composable
+private fun ArtworkContent(
+    artwork: ImageBitmap?,
+    title: String,
+    fallback: (@Composable (Modifier) -> Unit)?,
+    modifier: Modifier,
+    contentScale: ContentScale,
+) {
+    Box(modifier) {
         if (artwork == null) {
             if (fallback == null) TextPoster(title, Modifier.fillMaxSize())
             else fallback(Modifier.fillMaxSize())

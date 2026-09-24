@@ -1951,7 +1951,11 @@ private fun BrowseContent(
                                 artworkCache,
                                 fetchArtwork,
                                 modifier,
-                                targetWidthPx = 960,
+                                // The phone hero is a single-column visual band. A 720px
+                                // decode is enough for its viewport and avoids keeping two
+                                // 960px copies (clear hero + ambient backdrop) alive during
+                                // the first scroll.
+                                targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
                             )
                         },
                     )
@@ -2127,11 +2131,16 @@ private fun BrowseContent(
                                             artworkCache,
                                             fetchArtwork,
                                             modifier,
-                                            targetWidthPx = 960,
+                                            targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
                                         )
                                     },
                                     prefetchBackdrop = { item ->
-                                        prefetchLandscapeArtwork(item, artworkCache, fetchArtwork)
+                                        prefetchLandscapeArtwork(
+                                            item,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
+                                        )
                                     },
                                     heroBackdropState = heroBackdrop,
                                     shelfArtwork = { item, modifier ->
