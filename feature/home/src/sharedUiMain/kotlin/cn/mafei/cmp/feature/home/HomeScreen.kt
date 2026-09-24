@@ -519,6 +519,12 @@ fun HomeScreen(
             },
         )
     }
+    // The indicator commits to a new page only after the pager settles. This
+    // keeps the old bar full during the slide and swaps it to 0% atomically
+    // with the newly visible artwork instead of clearing it in advance.
+    val heroIndicatorPage = remember(heroItemKeys) {
+        mutableStateOf(heroPagerState.settledPage)
+    }
     // Only keep the settled page and its two neighbours warm. Warming every
     // remaining 960px hero after a fixed delay still competed with the first
     // user scroll on slower devices. A settled-page change cancels stale work
@@ -674,6 +680,7 @@ fun HomeScreen(
                         items = heroItems,
                         pagerState = heroPagerState,
                         autoplayProgress = heroAutoplayProgress,
+                        indicatorPage = heroIndicatorPage,
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
@@ -954,6 +961,7 @@ fun HomeScreen(
               items = heroItems,
               pagerState = heroPagerState,
               autoplayProgress = heroAutoplayProgress,
+              indicatorPage = heroIndicatorPage,
               layout = layout,
               gridState = gridState,
               topPadding = safeArea.top + 12.dp,
@@ -1596,6 +1604,7 @@ private fun HomeHeroForegroundOverlay(
     items: List<MediaItem>,
     pagerState: PagerState,
     autoplayProgress: Animatable<Float, AnimationVector1D>,
+    indicatorPage: State<Int>,
     layout: MaFeiLayout,
     gridState: LazyGridState,
     topPadding: Dp,
@@ -1641,7 +1650,7 @@ private fun HomeHeroForegroundOverlay(
         // 文字/指示器钉在占位底边（不是视口底）：这层 Box 的高度就是占位的
         // 纵向区间，BottomStart 对齐的是占位底而不是整个视口的底。
         val current = pagerState.currentPage
-        val activeItemIndex = pagerState.settledPage.mod(items.size)
+        val activeItemIndex = indicatorPage.value.mod(items.size)
         val pageRange = homeHeroPageRange(
             currentPage = current,
             itemCount = items.size,
@@ -1842,6 +1851,7 @@ private fun RecommendationHero(
     items: List<MediaItem>,
     pagerState: PagerState,
     autoplayProgress: Animatable<Float, AnimationVector1D>,
+    indicatorPage: MutableState<Int>,
     layout: MaFeiLayout,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
@@ -1882,39 +1892,53 @@ private fun RecommendationHero(
         ),
         snapPositionalThreshold = HeroSnapThreshold,
     )
-    val activeItemIndex = pagerState.settledPage % items.size
+    val settledItemIndex = pagerState.settledPage % items.size
     val isUserDragging by pagerState.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(itemKeys, activeItemIndex) {
-        onActiveItemChanged(items.getOrNull(activeItemIndex))
+    LaunchedEffect(itemKeys, settledItemIndex) {
+        onActiveItemChanged(items.getOrNull(settledItemIndex))
     }
-    LaunchedEffect(pagerState.settledPage, itemKeys, autoplay, isUserDragging, scrolling, heroPointerPressed.value) {
-        autoplayProgress.snapTo(0f)
+    LaunchedEffect(pagerState, itemKeys) {
+        var previousSettledPage: Int? = null
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { settledPage ->
+                indicatorPage.value = settledPage
+                if (previousSettledPage != null) {
+                    autoplayProgress.snapTo(0f)
+                }
+                previousSettledPage = settledPage
+            }
+    }
+    LaunchedEffect(itemKeys, autoplay, isUserDragging, scrolling, heroPointerPressed.value) {
         if (autoplay && items.size > 1 && !isUserDragging && !scrolling && !heroPointerPressed.value) {
-            // Animate the visible bar itself instead of waiting invisibly and
-            // filling it only when the page changes. This is the legacy
-            // carousel contract: the bar is a 6.5s linear countdown, then the
-            // pager advances with the same clock.
-            autoplayProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
-            )
-            val targetPage = pagerState.settledPage + 1
-            // Clear the completed countdown before Pager changes its settled
-            // page. Otherwise the new page can render one frame with the old
-            // `1f` value, then jump back to zero when this effect restarts.
-            autoplayProgress.snapTo(0f)
-            pagerState.animateScrollToPage(
-                page = targetPage,
-                animationSpec = spring(
-                    dampingRatio = HeroSnapDampingRatio,
-                    stiffness = HeroSnapStiffness,
-                    visibilityThreshold = .001f,
-                ),
-            )
-            // CPF/OHOS can occasionally finish a long frame between pages.
-            // Align only the completed automatic step; direct swipes stay native.
-            if (pagerState.settledPage != targetPage || pagerState.currentPageOffsetFraction != 0f) {
-                pagerState.scrollToPage(targetPage)
+            // Keep the countdown and the page transition in one cancellable
+            // loop. The old page remains full while Pager is sliding; only
+            // after it settles do we atomically select the next bar at 0%.
+            while (true) {
+                autoplayProgress.snapTo(0f)
+                autoplayProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
+                )
+                val targetPage = pagerState.settledPage + 1
+                pagerState.animateScrollToPage(
+                    page = targetPage,
+                    animationSpec = spring(
+                        dampingRatio = HeroSnapDampingRatio,
+                        stiffness = HeroSnapStiffness,
+                        visibilityThreshold = .001f,
+                    ),
+                )
+                // CPF/OHOS can occasionally finish a long frame between pages.
+                // Align only the completed automatic step; direct swipes stay native.
+                if (pagerState.settledPage != targetPage || pagerState.currentPageOffsetFraction != 0f) {
+                    pagerState.scrollToPage(targetPage)
+                }
+                // Commit both pieces of indicator state only after the page has
+                // settled. The completed bar therefore does not disappear ahead
+                // of the artwork transition, and the next bar starts at zero.
+                indicatorPage.value = targetPage
+                autoplayProgress.snapTo(0f)
             }
         }
     }
@@ -2105,6 +2129,7 @@ private fun RecommendationHero(
         // the artwork during a horizontal swipe; only its active progress is
         // driven by the shared autoplay clock.
         if (layout.navigation == NavigationPlacement.Bottom && items.size > 1) {
+            val indicatorItemIndex = indicatorPage.value.mod(items.size)
             Row(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -2118,8 +2143,8 @@ private fun RecommendationHero(
                     LinearProgressIndicator(
                         progress = {
                             when {
-                                index < activeItemIndex -> 1f
-                                index == activeItemIndex -> autoplayProgress.value
+                                index < indicatorItemIndex -> 1f
+                                index == indicatorItemIndex -> autoplayProgress.value
                                 else -> 0f
                             }
                         },
