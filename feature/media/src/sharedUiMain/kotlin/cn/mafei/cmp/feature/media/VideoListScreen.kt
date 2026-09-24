@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -102,6 +103,10 @@ fun VideoListScreen(
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
+    // CPF may leave the final LazyGrid row under the sibling Bottom Tab when
+    // the inset exists only as contentPadding. Keep a real tail item, matching
+    // LibraryIndexScreen, so the last card always scrolls above the dock.
+    val scrollTail = bottomPadding
     val actionBarBackdrop = if (onBack != null) rememberGlassBackdrop() else null
 
     LaunchedEffect(gridState, canLoadMore, loading, loadingMore, items.size) {
@@ -178,7 +183,7 @@ fun VideoListScreen(
                             start = safeArea.start + horizontalPadding,
                             top = 0.dp,
                             end = safeArea.end + horizontalPadding,
-                            bottom = bottomPadding,
+                            bottom = 0.dp,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
                         verticalArrangement = Arrangement.spacedBy(gap),
@@ -217,6 +222,9 @@ fun VideoListScreen(
                                     CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
                                 }
                             }
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Spacer(Modifier.fillMaxWidth().height(scrollTail))
                         }
                     }
                 }
