@@ -52,16 +52,28 @@ fun MediaCard(
                 ),
             )
             status?.let {
-                Surface(Modifier.align(Alignment.TopStart).padding(8.dp), color = Color(0xDD151921),
-                    contentColor = Color.White, shape = RoundedCornerShape(6.dp)) {
-                    Text(it, Modifier.padding(horizontal = 7.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box(
+                    Modifier.align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xDD151921)),
+                ) {
+                    Text(
+                        it,
+                        Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             progress?.takeIf { it > 0f }?.let {
-                LinearProgressIndicator(progress = { it.coerceIn(0f, 1f) }, modifier = Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth().height(3.dp), color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Black.copy(alpha = .5f))
+                MaFeiProgressLine(
+                    progress = it,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    trackColor = Color.Black.copy(alpha = .5f),
+                )
             }
         }
         Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -108,10 +120,9 @@ fun ScreenHeading(title: String, subtitle: String? = null) {
 /** [message] must be user-safe text, never a raw provider exception or URL. */
 @Composable
 fun InlineProblem(message: String, onRetry: (() -> Unit)? = null) {
-    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
-            onRetry?.let { TextButton(onClick = it) { Text("重试") } }
-        }
-    }
+    MaFeiInlineNotice(
+        message = message,
+        actionLabel = onRetry?.let { "重试" },
+        onAction = onRetry,
+    )
 }
