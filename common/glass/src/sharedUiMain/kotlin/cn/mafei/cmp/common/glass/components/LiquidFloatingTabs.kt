@@ -48,7 +48,11 @@ fun LiquidFloatingTabs(
             }
             val surfaceColor = when {
                 selected -> Color.White
-                else -> Color.Transparent
+                // Keep the page visible through the unselected pill while
+                // retaining a very low material body. A fully transparent
+                // surface has nothing to catch the edge refraction when the
+                // next row only starts entering below the tab.
+                else -> Color.Black.copy(alpha = .12f)
             }
             LiquidButton(
                 onClick = {
@@ -74,6 +78,7 @@ fun LiquidFloatingTabs(
                 },
                 backdrop = backdrop,
                 surfaceColor = surfaceColor,
+                chromaticAberration = true,
                 height = 36.dp,
                 horizontalPadding = 14.dp,
             ) {

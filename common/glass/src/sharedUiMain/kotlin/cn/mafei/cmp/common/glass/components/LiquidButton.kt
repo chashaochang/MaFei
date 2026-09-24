@@ -41,6 +41,7 @@ fun LiquidButton(
     isInteractive: Boolean = true,
     tint: Color = Color.Unspecified,
     surfaceColor: Color = Color.Unspecified,
+    chromaticAberration: Boolean = false,
     height: Dp = 48.dp,
     horizontalPadding: Dp = 16.dp,
     content: @Composable RowScope.() -> Unit
@@ -61,7 +62,11 @@ fun LiquidButton(
                 effects = {
                     vibrancy()
                     blur(2f.dp.toPx())
-                    lens(12f.dp.toPx(), 24f.dp.toPx())
+                    lens(
+                        12f.dp.toPx(),
+                        24f.dp.toPx(),
+                        chromaticAberration = chromaticAberration,
+                    )
                 },
                 layerBlock = if (isInteractive) {
                     {
