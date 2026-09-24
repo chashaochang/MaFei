@@ -1216,7 +1216,15 @@ private fun BrowseContent(
         val showingPersonDetail = currentRoute is BrowsePersonRoute
         val showingDetail = showingMediaDetail || showingPersonDetail
         // 「我的」的二级页现在住在它自己的回退栈里，不再出现在 currentRoute 上。
-        val showingFullPageRoute = showingDetail || currentRoute == BrowseSearchRoute
+        // A concrete media library is a pushed secondary page, not another
+        // bottom-tab root.  The legacy ArkUI route uses VideoListPage as a
+        // NavDestination after selecting a library, so the bottom navigation
+        // must leave the scene entirely while that list is visible.  Keeping
+        // it mounted made the list appear underneath the dock; adding more
+        // scroll padding could only mask that routing error.
+        val showingFullPageRoute = showingDetail ||
+            currentRoute == BrowseSearchRoute ||
+            currentRoute is BrowseLibraryRoute
         // 「我的」容器的两种形态：小屏（手机）全屏铺开、看起来就是普通页面跳转；其余尺寸
         // 用居中的毛玻璃模态。形态只由窗口决定，容器自己的回退栈不受影响。
         val mineFullScreen = layout.navigation == NavigationPlacement.Bottom
@@ -2312,6 +2320,8 @@ private fun BrowseContent(
                                         }
                                     },
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
+                                    bottomNavigationVisible = !showingFullPageRoute &&
+                                        layout.navigation == NavigationPlacement.Bottom,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(

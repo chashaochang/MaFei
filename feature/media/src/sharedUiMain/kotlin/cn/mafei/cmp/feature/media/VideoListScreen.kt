@@ -83,6 +83,7 @@ fun VideoListScreen(
     onLoadMore: () -> Unit,
     onItem: (MediaItem) -> Unit,
     bottomOverlayInset: Dp = 0.dp,
+    bottomNavigationVisible: Boolean = layout.navigation == NavigationPlacement.Bottom,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     // —— 管理员多选删除（legacy VideoListPage selectionMode）——
@@ -102,7 +103,7 @@ fun VideoListScreen(
     val gap = legacyMediaGridGap(contentWidth)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
-        if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
+        if (bottomNavigationVisible) 112.dp else 30.dp
     // CPF may leave the final LazyGrid row under the sibling Bottom Tab when
     // the inset exists only as contentPadding. Keep a real tail item, matching
     // LibraryIndexScreen, so the last card always scrolls above the dock.
