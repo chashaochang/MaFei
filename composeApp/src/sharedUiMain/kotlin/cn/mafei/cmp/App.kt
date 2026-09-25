@@ -3039,7 +3039,11 @@ private fun MineAccountSheet(
                     height = 36.dp,
                     horizontalPadding = 0.dp,
                 ) {
-                    MaFeiIcon(MaFeiGlyph.Close, Modifier.size(16.dp))
+                    MaFeiIcon(
+                        MaFeiGlyph.Close,
+                        Modifier.size(16.dp),
+                        MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
         }

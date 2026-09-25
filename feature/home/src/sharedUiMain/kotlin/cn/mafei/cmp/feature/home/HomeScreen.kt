@@ -118,7 +118,19 @@ private val HomeHeroMaxStretch = 160.dp
 private const val HomeHeroStretchResistance = 3f
 private val HomeFloatingTabsInlineInset = 8.dp
 private val HomeFloatingTabsSlotHeight = 56.dp
+private val HomeFloatingActionSize = 40.dp
+private val HomeFloatingActionGap = 8.dp
 private const val HomeFeedCardChromeHeightDp = 44f
+
+internal fun homeFloatingTabsEndInset(
+    pinned: Boolean,
+    hasSearch: Boolean,
+    showRefresh: Boolean,
+): Dp = when {
+    !pinned || !hasSearch -> 0.dp
+    showRefresh -> 96.dp
+    else -> 48.dp
+}
 
 internal data class HomeFloatingTabsPlacement(
     val visible: Boolean,
@@ -327,6 +339,7 @@ fun HomeScreen(
     val showHeroSlot = overview && (showHero || loading)
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
+    val showRefreshAction = refreshing && overviewHasContent
     val showStatus = stale || error != null || collections.isEmpty() ||
         if (overview) !overviewHasContent else items.isEmpty()
     val latestGap = if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp
@@ -1025,12 +1038,12 @@ fun HomeScreen(
                   .padding(
                       start = layout.pagePaddingDp.dp +
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
-                      // The inline strip is lower in the list while search
-                      // remains in the top chrome, so it owns the full row.
-                      // Reserve both fixed action slots only when pinned.
-                      // The inline strip still owns the full row.
                       end = layout.pagePaddingDp.dp + safeArea.end +
-                          if (onSearch != null && floatingTabsPlacement.pinned) 96.dp else 0.dp,
+                          homeFloatingTabsEndInset(
+                              pinned = floatingTabsPlacement.pinned,
+                              hasSearch = onSearch != null,
+                              showRefresh = showRefreshAction,
+                          ),
                   ),
               verticalAlignment = Alignment.CenterVertically,
           ) {
@@ -1099,13 +1112,16 @@ fun HomeScreen(
           ) {
               Row(
                   modifier = Modifier.align(Alignment.TopEnd),
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  horizontalArrangement = Arrangement.spacedBy(HomeFloatingActionGap),
                   verticalAlignment = Alignment.CenterVertically,
               ) {
-                  MaFeiRefreshIndicatorButton(
-                      refreshing = refreshing && overviewHasContent,
-                      backdrop = floatingTabsBackdrop,
-                  )
+                  // Remove both the idle action and its inter-item spacing.
+                  if (showRefreshAction) {
+                      MaFeiRefreshIndicatorButton(
+                          refreshing = true,
+                          backdrop = floatingTabsBackdrop,
+                      )
+                  }
                   HomeSearchButton(
                       onClick = onSearch,
                       backdrop = floatingTabsBackdrop,
@@ -1204,11 +1220,15 @@ private fun HomeSearchButton(
     LiquidButton(
         onClick = onClick,
         backdrop = backdrop,
-        modifier = modifier.size(40.dp).semantics { contentDescription = "搜索" },
-        height = 40.dp,
+        modifier = modifier.size(HomeFloatingActionSize).semantics { contentDescription = "搜索" },
+        height = HomeFloatingActionSize,
         horizontalPadding = 8.dp,
     ) {
-        MaFeiIcon(MaFeiGlyph.Search, Modifier.size(22.dp))
+        MaFeiIcon(
+            MaFeiGlyph.Search,
+            Modifier.size(22.dp),
+            MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

@@ -2,7 +2,7 @@ package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -21,7 +21,11 @@ enum class MaFeiGlyph {
 
 /** Small product-owned outline set. No new icon/font dependency on CPF. */
 @Composable
-fun MaFeiIcon(glyph: MaFeiGlyph, modifier: Modifier = Modifier, color: Color = LocalContentColor.current) {
+fun MaFeiIcon(
+    glyph: MaFeiGlyph,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+) {
     Canvas(modifier.size(24.dp)) {
         scale(size.width / 24f, size.height / 24f, Offset.Zero) {
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) =

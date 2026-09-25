@@ -1,5 +1,6 @@
 package cn.mafei.cmp.feature.home
 
+import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
@@ -10,6 +11,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class HomeHeroContentTest {
+
+    @Test
+    fun pinnedTabsReserveOnlyVisibleActions() {
+        assertEquals(48.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = true, showRefresh = false))
+        assertEquals(96.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = true, showRefresh = true))
+    }
+
+    @Test
+    fun inlineTabsKeepFullWidthAndAbsentSearchReservesNothing() {
+        for (refreshing in listOf(false, true)) {
+            assertEquals(0.dp, homeFloatingTabsEndInset(pinned = false, hasSearch = true, showRefresh = refreshing))
+            assertEquals(0.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = false, showRefresh = refreshing))
+        }
+    }
 
     @Test
     fun jellyfinRecommendationUsesMovieAndYearWithoutRating() {
