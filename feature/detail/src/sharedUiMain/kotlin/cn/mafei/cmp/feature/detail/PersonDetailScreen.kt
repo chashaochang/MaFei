@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +55,8 @@ import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.LegacyBaseItemCard
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaPerson
 import org.jetbrains.compose.resources.painterResource
@@ -134,7 +135,10 @@ fun PersonDetailScreen(
                             enter = fadeIn(tween(DetailMotionFastMillis)),
                             exit = fadeOut(tween(DetailMotionExitMillis)),
                         ) {
-                            CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                            MaFeiLoadingIndicator(
+                                modifier = Modifier.size(32.dp),
+                                style = MaFeiLoadingStyle.Page,
+                            )
                         }
                         DetailAnimatedVisibility(
                             visible = !loading && error != null,
@@ -162,15 +166,13 @@ fun PersonDetailScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                                     .widthIn(max = 720.dp).fillMaxWidth(),
                             )
-                            Box(Modifier.fillMaxWidth().height(2.dp)) {
+                            Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
                                 DetailAnimatedVisibility(
                                     visible = showSectionsLoading,
                                     enter = fadeIn(tween(DetailMotionFastMillis)),
                                     exit = fadeOut(tween(DetailMotionExitMillis)),
                                 ) {
-                                    androidx.compose.material3.LinearProgressIndicator(
-                                        Modifier.fillMaxWidth().height(2.dp),
-                                    )
+                                    MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
                                 }
                             }
                             PersonWorkSectionAnimated("电影", movies, onItem, artwork)
@@ -305,10 +307,10 @@ private fun PersonHeader(
                     label = "person-favorite-state",
                 ) { (showProgress, isFavorite) ->
                     if (showProgress) {
-                        CircularProgressIndicator(
-                            Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        MaFeiLoadingIndicator(
+                            modifier = Modifier.size(22.dp),
+                            style = MaFeiLoadingStyle.Button,
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
                     } else {
                         Image(

@@ -321,6 +321,13 @@ tasks.register<Exec>("verifyArchitecture") {
     commandLine("node", rootProject.file("scripts/verify-cmp-foundation.mjs").absolutePath)
 }
 
+tasks.register<Exec>("verifyNoNativeMaterialUi") {
+    group = "verification"
+    description = "Rejects native Material visual widgets in production CMP UI."
+    commandLine("node", rootProject.file("scripts/verify-no-native-material-ui.mjs").absolutePath,
+        rootProject.projectDir.absolutePath)
+}
+
 tasks.named("check") {
-    dependsOn("verifyArchitecture", verifyNoSvgResources)
+    dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")
 }

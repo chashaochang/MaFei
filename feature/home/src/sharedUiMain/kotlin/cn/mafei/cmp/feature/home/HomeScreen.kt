@@ -26,8 +26,8 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -935,7 +935,10 @@ fun HomeScreen(
             if (loadingMore) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                        MaFeiLoadingIndicator(
+                            modifier = Modifier.size(28.dp),
+                            style = MaFeiLoadingStyle.Inline,
+                        )
                     }
                 }
             }
@@ -968,7 +971,10 @@ fun HomeScreen(
         }
         if (!overview && loadingMore) item(span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                MaFeiLoadingIndicator(
+                    modifier = Modifier.size(28.dp),
+                    style = MaFeiLoadingStyle.Inline,
+                )
             }
         }
       }
@@ -1021,11 +1027,10 @@ fun HomeScreen(
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
                       // The inline strip is lower in the list while search
                       // remains in the top chrome, so it owns the full row.
-                      // Reserve the search hit area only after the strip pins
-                      // beside it; reserving it unconditionally clipped the
-                      // inline strip's right edge by 48dp.
+                      // Reserve both fixed action slots only when pinned.
+                      // The inline strip still owns the full row.
                       end = layout.pagePaddingDp.dp + safeArea.end +
-                          if (onSearch != null && floatingTabsPlacement.pinned) 48.dp else 0.dp,
+                          if (onSearch != null && floatingTabsPlacement.pinned) 96.dp else 0.dp,
                   ),
               verticalAlignment = Alignment.CenterVertically,
           ) {
@@ -1092,11 +1097,20 @@ fun HomeScreen(
                       end = layout.pagePaddingDp.dp + safeArea.end,
                   ),
           ) {
-              HomeSearchButton(
-                  onClick = onSearch,
-                  backdrop = floatingTabsBackdrop,
+              Row(
                   modifier = Modifier.align(Alignment.TopEnd),
-              )
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+              ) {
+                  MaFeiRefreshIndicatorButton(
+                      refreshing = refreshing && overviewHasContent,
+                      backdrop = floatingTabsBackdrop,
+                  )
+                  HomeSearchButton(
+                      onClick = onSearch,
+                      backdrop = floatingTabsBackdrop,
+                  )
+              }
           }
       }
       if (!overview) {
@@ -1139,8 +1153,11 @@ private fun HomeLatestFeedError(message: String, onRetry: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onRetry) { Text("重试") }
+        MaFeiInlineNotice(
+            message = message,
+            actionLabel = "重试",
+            onAction = onRetry,
+        )
     }
 }
 
@@ -1168,11 +1185,10 @@ private fun HomeRefreshContainer(
             content()
         }
     } else {
-        PullToRefreshBox(
+        MaFeiPullRefresh(
             isRefreshing = refreshing,
             onRefresh = onRefresh,
             modifier = modifier,
-            contentAlignment = Alignment.TopCenter,
         ) {
             content()
         }
@@ -1789,16 +1805,14 @@ private fun HomeHeroForegroundOverlay(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items.indices.forEach { index ->
-                        LinearProgressIndicator(
-                            progress = {
-                                when {
-                                    index < activeItemIndex -> 1f
-                                    index == activeItemIndex -> autoplayProgress.value
-                                    else -> 0f
-                                }
+                        MaFeiProgressLine(
+                            progress = when {
+                                index < activeItemIndex -> 1f
+                                index == activeItemIndex -> autoplayProgress.value
+                                else -> 0f
                             },
-                            modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
-                            color = Color.White,
+                            modifier = Modifier.weight(1f).height(3.dp),
+                            progressColor = Color.White,
                             trackColor = Color.White.copy(alpha = .22f),
                         )
                     }
@@ -1849,12 +1863,21 @@ private fun StatusContent(
     loading: Boolean, error: String?, stale: Boolean, overview: Boolean, onRetry: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (stale) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaFeiShape.field) {
+        if (stale) Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaFeiShape.field)
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+        ) {
             Text("离线内容 · 当前显示缓存，恢复连接后可刷新。", Modifier.fillMaxWidth().padding(14.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
         error?.let { InlineProblem(it, if (loading) null else onRetry) }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        if (loading) {
+            Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
+                MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
+            }
+        }
         if (!loading && error == null && collections.isEmpty()) {
             LibraryEmptyState("这里还没有媒体库", "这个账号暂时没有可访问的媒体库。请检查服务器中的媒体库和账号权限。")
         } else if (!loading && error == null && items.isEmpty()) {
@@ -2166,22 +2189,20 @@ private fun RecommendationHero(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items.indices.forEach { index ->
-                    LinearProgressIndicator(
-                        progress = {
-                            when {
-                                index < indicatorItemIndex -> 1f
-                                index == indicatorItemIndex -> autoplayProgress.value
-                                else -> 0f
-                            }
+                    MaFeiProgressLine(
+                        progress = when {
+                            index < indicatorItemIndex -> 1f
+                            index == indicatorItemIndex -> autoplayProgress.value
+                            else -> 0f
                         },
-                        modifier = Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)),
-                        color = Color.White,
+                        modifier = Modifier.weight(1f).height(3.dp),
+                        progressColor = Color.White,
                         trackColor = Color.White.copy(alpha = .22f),
                     )
                 }
             }
         }
-        if (refreshing || refreshProgress > 0f) {
+        if (refreshProgress > 0f) {
             Box(
                 Modifier.align(Alignment.TopCenter)
                     .padding(top = safeArea.top + 8.dp)
@@ -2190,21 +2211,11 @@ private fun RecommendationHero(
                     .background(Color.Black.copy(alpha = .30f)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (refreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 3.dp,
-                    )
-                } else {
-                    CircularProgressIndicator(
-                        progress = { refreshProgress },
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        trackColor = Color.White.copy(alpha = .20f),
-                        strokeWidth = 3.dp,
-                    )
-                }
+                MaFeiProgressRing(
+                    progress = if (refreshing) null else refreshProgress,
+                    tint = Color.White,
+                    trackColor = Color.White.copy(alpha = .20f),
+                )
             }
         }
     }
@@ -2259,8 +2270,12 @@ private fun HomeMediaShelf(
                             TextPoster(text.title, posterModifier)
                         }
                         if (kind == HomeShelfKind.Resume) progress(item)?.let { value ->
-                            LinearProgressIndicator({ value }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
-                                color = MaterialTheme.colorScheme.primary, trackColor = Color.Black.copy(alpha = .36f))
+                            MaFeiProgressLine(
+                                progress = value,
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                                progressColor = MaterialTheme.colorScheme.primary,
+                                trackColor = Color.Black.copy(alpha = .36f),
+                            )
                         }
                     }
                     Text(

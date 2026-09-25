@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -26,12 +24,12 @@ import cn.mafei.cmp.common.ui.LegacyLoadingView
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaType
 import org.jetbrains.compose.resources.DrawableResource
 
 /** Mechanical Compose translation of ArkUI `MediaTab`. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryIndexScreen(
     collections: List<MediaCollection>,
@@ -63,7 +61,7 @@ fun LibraryIndexScreen(
                 loading && collections.isEmpty() -> LegacyLoadingView(Modifier.fillMaxSize())
                 error != null && collections.isEmpty() -> LegacyFailedView(onRetry, Modifier.fillMaxSize())
                 collections.isEmpty() -> LegacyEmptyView(modifier = Modifier.fillMaxSize())
-                else -> PullToRefreshBox(
+                else -> MaFeiPullRefresh(
                     isRefreshing = refreshing,
                     onRefresh = onRetry,
                     modifier = Modifier.fillMaxSize(),

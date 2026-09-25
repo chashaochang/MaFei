@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +34,8 @@ import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiActionBar
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -108,7 +109,10 @@ private fun ServerDiscoveryContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            CircularProgressIndicator(Modifier.size(32.dp))
+            MaFeiLoadingIndicator(
+                modifier = Modifier.size(32.dp),
+                style = MaFeiLoadingStyle.Page,
+            )
             Spacer(Modifier.height(12.dp))
             Text(
                 "正在扫描局域网设备...",

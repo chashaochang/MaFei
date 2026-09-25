@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +62,8 @@ import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
@@ -189,7 +190,10 @@ fun SearchScreen(
                         Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(Modifier.size(40.dp))
+                        MaFeiLoadingIndicator(
+                            modifier = Modifier.size(40.dp),
+                            style = MaFeiLoadingStyle.Page,
+                        )
                     }
                     error != null && results.isEmpty() -> LegacyFailedView(
                         onRetry = { onSubmit(normalized) },

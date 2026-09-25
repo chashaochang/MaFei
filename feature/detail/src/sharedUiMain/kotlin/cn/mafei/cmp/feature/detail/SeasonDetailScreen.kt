@@ -33,8 +33,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -82,6 +80,9 @@ import cn.mafei.cmp.common.ui.LegacyMediaTagBadges
 import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.MaFeiProgressLine
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
@@ -426,10 +427,10 @@ private fun RowScope.SeasonPlayActionContent(
         ) {
             Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
                 if (isBusy) {
-                    CircularProgressIndicator(
-                        Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onSurface,
+                    MaFeiLoadingIndicator(
+                        modifier = Modifier.size(20.dp),
+                        style = MaFeiLoadingStyle.Button,
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 } else {
                     Image(
@@ -680,10 +681,10 @@ private fun SeasonEpisodeCard(
             if (artwork != null) artwork(item, Modifier.fillMaxSize())
             else TextPoster(item.title, Modifier.fillMaxSize())
             episodeProgress(item)?.let { progress ->
-                LinearProgressIndicator(
-                    progress = { progress },
+                MaFeiProgressLine(
+                    progress = progress,
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(4.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                    progressColor = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Black.copy(alpha = .34f),
                 )
             }

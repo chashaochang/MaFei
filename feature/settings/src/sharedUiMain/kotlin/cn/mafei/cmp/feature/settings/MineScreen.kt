@@ -24,8 +24,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +57,9 @@ import cn.mafei.cmp.common.ui.MaFeiActionBarScaffold
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.MaFeiProgressLine
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PlaybackHistoryItem
@@ -387,10 +388,10 @@ private fun MineHistoryPoster(
                 )
             }
             progress?.let { percent ->
-                LinearProgressIndicator(
-                    progress = { percent / 100f },
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                MaFeiProgressLine(
+                    progress = percent / 100f,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    progressColor = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Black.copy(alpha = .32f),
                 )
             }
@@ -582,7 +583,10 @@ fun MineHistoryScreen(
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp)
+                                    MaFeiLoadingIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        style = MaFeiLoadingStyle.Inline,
+                                    )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         "正在加载",

@@ -13,9 +13,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +35,9 @@ import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
@@ -50,7 +50,6 @@ import cn.mafei.cmp.core.domain.SortDirection
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** Mechanical Compose translation of ArkUI `FavoriteListPage(fromHome = true)`. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoriteScreen(
     items: List<MediaItem>,
@@ -121,7 +120,7 @@ fun FavoriteScreen(
                 )
                 error != null && items.isEmpty() -> LegacyFailedView(onRetry, Modifier.weight(1f))
                 items.isEmpty() -> LegacyEmptyView(modifier = Modifier.weight(1f))
-                else -> PullToRefreshBox(
+                else -> MaFeiPullRefresh(
                     isRefreshing = refreshing,
                     onRefresh = onRetry,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -150,7 +149,10 @@ fun FavoriteScreen(
                                 Modifier.fillMaxWidth().aspectRatio(2f / 3f),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                                MaFeiLoadingIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    style = MaFeiLoadingStyle.Inline,
+                                )
                             }
                         }
                     }

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +29,8 @@ import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiSavedAccountList
 import cn.mafei.cmp.common.ui.SavedAccountDeleteAffordance
 import cn.mafei.cmp.common.ui.SavedAccountListDefaults
@@ -98,10 +99,10 @@ fun AccountHistoryScreen(
             actions = {
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                     if (busy || deletingKey != null) {
-                        CircularProgressIndicator(
-                            Modifier.size(17.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = .72f),
+                        MaFeiLoadingIndicator(
+                            modifier = Modifier.size(22.dp),
+                            style = MaFeiLoadingStyle.Button,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = .72f),
                         )
                     }
                 }
@@ -125,10 +126,10 @@ private fun HistoryContent(
 ) {
     when {
         loading -> Box(modifier, contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                Modifier.size(28.dp),
-                strokeWidth = 2.4.dp,
-                color = Color.White.copy(alpha = .82f),
+            MaFeiLoadingIndicator(
+                modifier = Modifier.size(32.dp),
+                style = MaFeiLoadingStyle.Page,
+                tint = Color.White.copy(alpha = .82f),
             )
         }
 

@@ -45,8 +45,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -120,6 +118,8 @@ import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.ImageKind
@@ -512,13 +512,13 @@ private fun BoxScope.DetailBody(
                     actionsBusy = actionsBusy,
                     backdrop = backdrop,
                 )
-                Box(Modifier.fillMaxWidth().height(2.dp)) {
+                Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
                     DetailAnimatedVisibility(
                         visible = showRefreshProgress,
                         enter = fadeIn(tween(DetailMotionFastMillis)),
                         exit = fadeOut(tween(DetailMotionExitMillis)),
                     ) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                        MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
                     }
                 }
                 if (item.mediaType != MediaType.Series && playbackSources.isNotEmpty()) {
@@ -932,7 +932,11 @@ private fun DetailPlayContents(label: String, remaining: String, busy: Boolean) 
         ) {
             Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
                 if (isBusy) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                    MaFeiLoadingIndicator(
+                        modifier = Modifier.size(20.dp),
+                        style = MaFeiLoadingStyle.Button,
+                        tint = Color.White,
+                    )
                 } else {
                     Image(
                         painter = painterResource(MaFeiLegacyDrawables.playRound),
@@ -1185,7 +1189,9 @@ private fun SeriesSections(
             enter = fadeIn(tween(DetailMotionFastMillis)),
             exit = fadeOut(tween(DetailMotionExitMillis)),
         ) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+            Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
+                MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
+            }
         }
         DetailAnimatedVisibility(
             visible = seasons.isEmpty() && !loading && error != null,

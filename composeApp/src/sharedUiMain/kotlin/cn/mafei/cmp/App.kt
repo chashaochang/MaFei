@@ -24,7 +24,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -97,6 +98,8 @@ import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiNavItem
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.LegacyPosterPlaceholder
 import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.core.domain.ImageKind
@@ -374,9 +377,12 @@ fun App(
     CompositionLocalProvider(LocalApplicationRuntime provides runtime) {
         if (probe) {
             Column(Modifier.fillMaxSize()) {
-                TextButton(
-                    onClick = { probe = false },
-                    modifier = Modifier.safeDrawingPadding().padding(horizontal = 12.dp),
+                Row(
+                    modifier = Modifier
+                        .safeDrawingPadding()
+                        .padding(horizontal = 12.dp)
+                        .mafeiInteractive(onClick = { probe = false }, label = "返回映光影院"),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     MaFeiIcon(MaFeiGlyph.Back, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -394,7 +400,7 @@ fun App(
             MaFeiTheme {
                 val health = rememberGlassRenderHealth()
                 GlassRenderingEnvironment(health) {
-                    Surface(color = MaterialTheme.colorScheme.background) {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                         if (starting) {
                             StaticAppCanvas {
                                 if (showStartupProgress) PonyStartupLoading(exiting = startupExiting)

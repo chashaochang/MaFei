@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,6 +60,8 @@ import cn.mafei.cmp.common.ui.MaFeiActionBarButton
 import cn.mafei.cmp.common.ui.MaFeiActionBarScaffold
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiSavedAccountList
 import cn.mafei.cmp.common.ui.SavedAccountDeleteAffordance
 import cn.mafei.cmp.common.ui.SavedAccountListGroup
@@ -354,7 +355,10 @@ fun AccountSwitchScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(Modifier.size(36.dp))
+                        MaFeiLoadingIndicator(
+                            modifier = Modifier.size(40.dp),
+                            style = MaFeiLoadingStyle.Page,
+                        )
                     }
                     else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         MaFeiSavedAccountList(

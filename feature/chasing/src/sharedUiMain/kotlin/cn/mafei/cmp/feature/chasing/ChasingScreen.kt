@@ -18,11 +18,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,13 +48,14 @@ import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyLoadingView
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.MaFeiProgressLine
+import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
 
 /** Mechanical Compose translation of ArkUI `ChasingTab(fromHome = true)`. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChasingScreen(
     state: ChasingState,
@@ -98,7 +96,7 @@ fun ChasingScreen(
     // 避免把玻璃消费者重新录进同一个 layer 形成自采样递归。
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-            PullToRefreshBox(
+            MaFeiPullRefresh(
                 isRefreshing = state.refreshing,
                 onRefresh = onRetry,
                 modifier = Modifier.fillMaxSize(),
@@ -406,10 +404,10 @@ private fun ChasingHorizontalCard(
             contentAlignment = Alignment.BottomCenter,
         ) {
             artwork?.invoke(item.media, Modifier.fillMaxSize())
-            LinearProgressIndicator(
-                progress = { item.progressPercent.coerceIn(0, 100) / 100f },
+            MaFeiProgressLine(
+                progress = item.progressPercent.coerceIn(0, 100) / 100f,
                 modifier = Modifier.fillMaxWidth().height(4.dp),
-                color = Color(0xFF3B82F6),
+                progressColor = Color(0xFF3B82F6),
                 trackColor = Color.Transparent,
             )
         }

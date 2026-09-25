@@ -32,7 +32,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,6 +85,8 @@ import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.generated.resources.Res
 import cn.mafei.cmp.feature.connect.generated.resources.mafei_app_icon
@@ -486,10 +487,10 @@ private fun CompactLoginForm(
             else Color.White.copy(alpha = .055f),
         ) {
             if (busy) {
-                CircularProgressIndicator(
-                    Modifier.size(17.dp),
-                    strokeWidth = 2.dp,
-                    color = Color.White.copy(alpha = .78f),
+                MaFeiLoadingIndicator(
+                    modifier = Modifier.size(22.dp),
+                    style = MaFeiLoadingStyle.Button,
+                    tint = Color.White.copy(alpha = .78f),
                 )
                 Spacer(Modifier.width(9.dp))
             }
