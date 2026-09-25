@@ -69,6 +69,13 @@ fun LiquidBottomTabs(
     onTabSelected: (index: Int) -> Unit,
     backdrop: GlassBackdrop,
     tabsCount: Int,
+    /**
+     * Number of slots used to calculate the expanded dock width. Keeping this
+     * independent from [tabsCount] lets a destination set lose an item without
+     * making the glass dock jump in width; the visible tabs still divide the
+     * dock equally.
+     */
+    widthBaselineTabCount: Int = tabsCount,
     modifier: Modifier = Modifier,
     style: LiquidBottomTabsStyle = LiquidBottomTabsStyle.Standard,
     compactProgress: () -> Float = { 0f },
@@ -94,16 +101,15 @@ fun LiquidBottomTabs(
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
         val collapseProgress = compactProgress().fastCoerceIn(0f, 1f)
-        // The catalog sample fills its host and normally contains four or five
-        // destinations. MaFei currently has two primary destinations, so using
-        // the full 430 dp host would turn each selected droplet into a 211 dp
-        // slab. Keep a stable per-destination rhythm and only compress when the
-        // available width cannot fit it. This is count-driven, not a per-screen
-        // tuning table.
+        // Keep a stable per-destination rhythm and only compress when the
+        // available width cannot fit it. The app passes its former four-slot
+        // baseline while rendering three destinations, so removing 收藏 does
+        // not resize the dock and each visible tab remains an equal third.
         val compactEffectInset = if (style == LiquidBottomTabsStyle.Compact) 24f else 0f
         val availableDockWidth = (maxWidth.value - compactEffectInset * 2f).coerceAtLeast(1f)
         val itemRhythm = if (style == LiquidBottomTabsStyle.Compact) 52f else 72f
-        val expandedDockWidth = min(availableDockWidth, 8f + tabsCount * itemRhythm).dp
+        val widthTabCount = widthBaselineTabCount.coerceAtLeast(tabsCount)
+        val expandedDockWidth = min(availableDockWidth, 8f + widthTabCount * itemRhythm).dp
         val dockWidth = expandedDockWidth + (58.dp - expandedDockWidth) * collapseProgress
         val expandedDockHeight = if (style == LiquidBottomTabsStyle.Compact) 52.dp else 64.dp
         val dockHeight = expandedDockHeight + (58.dp - expandedDockHeight) * collapseProgress

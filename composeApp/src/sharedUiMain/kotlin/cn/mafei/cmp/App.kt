@@ -1142,7 +1142,9 @@ private fun BrowseContent(
         libraryGridState.scrollToItem(0)
     }
     LaunchedEffect(currentRoute) {
-        if (currentRoute == BrowseFavoriteRoute) browser.refreshFavorites()
+        if (currentRoute == BrowseFavoriteRoute || currentRoute == BrowseLibraryIndexRoute) {
+            browser.refreshFavorites()
+        }
         if (currentRoute == BrowseChasingRoute) chasingBrowser.refresh()
     }
     // Legacy MineTab refreshes its independent resume + completed preview every
@@ -1233,6 +1235,7 @@ private fun BrowseContent(
         // scroll padding could only mask that routing error.
         val showingFullPageRoute = showingDetail ||
             currentRoute == BrowseSearchRoute ||
+            currentRoute == BrowseFavoriteRoute ||
             currentRoute is BrowseLibraryRoute
         // 「我的」容器的两种形态：小屏（手机）全屏铺开、看起来就是普通页面跳转；其余尺寸
         // 用居中的毛玻璃模态。形态只由窗口决定，容器自己的回退栈不受影响。
@@ -1258,7 +1261,6 @@ private fun BrowseContent(
                 if (ShowChasingDestination) {
                     add(MaFeiNavItem(ChasingDestination, "追剧", MaFeiGlyph.History))
                 }
-                add(MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite))
                 add(MaFeiNavItem(LibraryDestination, "媒体库", MaFeiGlyph.Library))
                 add(MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account))
             }
@@ -2208,11 +2210,17 @@ private fun BrowseContent(
                             BrowseLibraryIndexRoute -> NavEntry(route) {
                                 LibraryIndexScreen(
                                     collections = state.collections,
+                                    favoriteCount = state.favoriteTotalEstimate ?: state.favoriteItems.size,
                                     loading = state.loading,
                                     refreshing = state.refreshing,
                                     error = state.error,
                                     layout = layout,
                                     onCollection = browseCollection,
+                                    onFavorite = {
+                                        if (browseBackStack.lastOrNull() != BrowseFavoriteRoute) {
+                                            browseBackStack += BrowseFavoriteRoute
+                                        }
+                                    },
                                     onRetry = { scope.launch { browser.refresh() } },
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),

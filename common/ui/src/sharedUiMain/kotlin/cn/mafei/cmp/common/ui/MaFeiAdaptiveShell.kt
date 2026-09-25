@@ -947,6 +947,7 @@ private fun BottomNavigationLayer(
         onTabSelected = { index -> destinations.getOrNull(index)?.let { onDestination(it.key) } },
         backdrop = backdrop,
         tabsCount = destinations.size,
+        widthBaselineTabCount = 4,
         compactProgress = { resolvedCompactProgress },
         modifier = modifier,
     ) {

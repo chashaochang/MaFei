@@ -33,10 +33,12 @@ import org.jetbrains.compose.resources.DrawableResource
 @Composable
 fun LibraryIndexScreen(
     collections: List<MediaCollection>,
+    favoriteCount: Int,
     loading: Boolean,
     error: String?,
     layout: MaFeiLayout,
     onCollection: (MediaCollection) -> Unit,
+    onFavorite: () -> Unit,
     onRetry: () -> Unit,
     refreshing: Boolean = false,
     bottomOverlayInset: Dp = 0.dp,
@@ -76,6 +78,20 @@ fun LibraryIndexScreen(
                             bottom = 0.dp,
                         ),
                     ) {
+                        item {
+                            LegacyListGroup(
+                                items = listOf(
+                                    LegacyListGroupItem(
+                                        title = "收藏",
+                                        icon = MaFeiLegacyDrawables.favoriteUnselected,
+                                        trailing = favoriteCount.toString(),
+                                        accessibilityLabel = "打开收藏",
+                                    ),
+                                ),
+                                onItemClick = { onFavorite() },
+                            )
+                        }
+                        item { Spacer(Modifier.height(12.dp)) }
                         item {
                             LegacyListGroup(
                                 items = collections.map { collection ->

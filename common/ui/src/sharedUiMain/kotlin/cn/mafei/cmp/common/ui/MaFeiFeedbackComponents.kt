@@ -237,25 +237,26 @@ fun MaFeiRefreshIndicatorButton(
     backdrop: GlassBackdrop,
     modifier: Modifier = Modifier,
 ) {
-    // Keep geometry, but dispose the animation and backdrop consumer when idle.
-    Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
-        androidx.compose.animation.AnimatedVisibility(
-            visible = refreshing,
-            enter = androidx.compose.animation.fadeIn(tween(140)),
-            exit = androidx.compose.animation.fadeOut(tween(180)),
+    // Idle refresh must not reserve a phantom slot beside the search action.
+    // AnimatedVisibility still keeps the 40 dp child during the short exit
+    // animation, then removes it from layout entirely.
+    androidx.compose.animation.AnimatedVisibility(
+        visible = refreshing,
+        modifier = modifier,
+        enter = androidx.compose.animation.fadeIn(tween(140)),
+        exit = androidx.compose.animation.fadeOut(tween(180)),
+    ) {
+        LiquidButton(
+            onClick = null,
+            backdrop = backdrop,
+            isInteractive = false,
+            modifier = Modifier.size(40.dp).clearAndSetSemantics {
+                if (refreshing) contentDescription = "正在刷新首页"
+            },
+            height = 40.dp,
+            horizontalPadding = 8.dp,
         ) {
-            LiquidButton(
-                onClick = null,
-                backdrop = backdrop,
-                isInteractive = false,
-                modifier = Modifier.size(40.dp).clearAndSetSemantics {
-                    if (refreshing) contentDescription = "正在刷新首页"
-                },
-                height = 40.dp,
-                horizontalPadding = 8.dp,
-            ) {
-                MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Button, tint = Color.White)
-            }
+            MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Button, tint = Color.White)
         }
     }
 }
