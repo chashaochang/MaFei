@@ -1974,38 +1974,46 @@ private fun RecommendationHero(
                 previousSettledPage = settledPage
             }
     }
-    LaunchedEffect(itemKeys, autoplay, isUserDragging, scrolling, heroPointerPressed.value) {
-        if (autoplay && items.size > 1 && !isUserDragging && !scrolling && !heroPointerPressed.value) {
-            // Keep the countdown and the page transition in one cancellable
-            // loop. The old page remains full while Pager is sliding; only
-            // after it settles do we atomically select the next bar at 0%.
-            while (true) {
-                autoplayProgress.snapTo(0f)
-                autoplayProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
-                )
-                val targetPage = pagerState.settledPage + 1
-                pagerState.animateScrollToPage(
-                    page = targetPage,
-                    animationSpec = spring(
-                        dampingRatio = HeroSnapDampingRatio,
-                        stiffness = HeroSnapStiffness,
-                        visibilityThreshold = .001f,
-                    ),
-                )
-                // CPF/OHOS can occasionally finish a long frame between pages.
-                // Align only the completed automatic step; direct swipes stay native.
-                if (pagerState.settledPage != targetPage || pagerState.currentPageOffsetFraction != 0f) {
-                    pagerState.scrollToPage(targetPage)
+    LaunchedEffect(itemKeys, autoplay, scrolling) {
+        if (!autoplay || items.size <= 1 || scrolling) return@LaunchedEffect
+        // User input cancels the current countdown, but releasing the gesture
+        // must start a fresh countdown reliably. Keeping the loop inside
+        // collectLatest avoids depending on a transient drag-state recomposition
+        // to recreate the LaunchedEffect itself.
+        snapshotFlow { isUserDragging || heroPointerPressed.value }
+            .distinctUntilChanged()
+            .collectLatest { userInteracting ->
+                if (userInteracting) return@collectLatest
+                // Keep the countdown and the page transition in one cancellable
+                // loop. The old page remains full while Pager is sliding; only
+                // after it settles do we atomically select the next bar at 0%.
+                while (true) {
+                    autoplayProgress.snapTo(0f)
+                    autoplayProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
+                    )
+                    val targetPage = pagerState.settledPage + 1
+                    pagerState.animateScrollToPage(
+                        page = targetPage,
+                        animationSpec = spring(
+                            dampingRatio = HeroSnapDampingRatio,
+                            stiffness = HeroSnapStiffness,
+                            visibilityThreshold = .001f,
+                        ),
+                    )
+                    // CPF/OHOS can occasionally finish a long frame between pages.
+                    // Align only the completed automatic step; direct swipes stay native.
+                    if (pagerState.settledPage != targetPage || pagerState.currentPageOffsetFraction != 0f) {
+                        pagerState.scrollToPage(targetPage)
+                    }
+                    // Commit both pieces of indicator state only after the page has
+                    // settled. The completed bar therefore does not disappear ahead
+                    // of the artwork transition, and the next bar starts at zero.
+                    indicatorPage.value = targetPage
+                    autoplayProgress.snapTo(0f)
                 }
-                // Commit both pieces of indicator state only after the page has
-                // settled. The completed bar therefore does not disappear ahead
-                // of the artwork transition, and the next bar starts at zero.
-                indicatorPage.value = targetPage
-                autoplayProgress.snapTo(0f)
             }
-        }
     }
     Box(
         Modifier
