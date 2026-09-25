@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import org.jetbrains.compose.resources.decodeToImageBitmap
+import kotlin.math.abs
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -105,6 +106,25 @@ class ArtworkMemoryCache {
      * cache simply falls back to the normal suspending load path.
      */
     internal fun peek(candidates: List<MediaImage>, targetWidthPx: Int): ImageBitmap? {
+        return peekInternal(candidates, targetWidthPx, allowOtherWidth = false)
+    }
+
+    /**
+     * Warm-start probe for a destination that requests a different size than
+     * the source card. A home poster may already have the exact same URL at
+     * 360/480px while a detail hero asks for 720px. Reusing that bitmap for the
+     * first frame avoids replacing the shared-transition image with TextPoster;
+     * the normal load still runs afterwards to fill the requested-size entry.
+     */
+    internal fun peekAnyWidth(candidates: List<MediaImage>, targetWidthPx: Int): ImageBitmap? {
+        return peekInternal(candidates, targetWidthPx, allowOtherWidth = true)
+    }
+
+    private fun peekInternal(
+        candidates: List<MediaImage>,
+        targetWidthPx: Int,
+        allowOtherWidth: Boolean,
+    ): ImageBitmap? {
         if (!mutex.tryLock()) return null
         return try {
             val width = targetWidthPx.coerceIn(MinArtworkWidthPx, MaxArtworkWidthPx)
@@ -114,10 +134,28 @@ class ArtworkMemoryCache {
                 images[key] = hit
                 return hit
             }
+            if (allowOtherWidth) {
+                for (candidate in candidates) {
+                    val prefix = "${candidate.url}#w="
+                    val key = images.keys
+                        .asSequence()
+                        .filter { it.startsWith(prefix) }
+                        .minByOrNull { cachedWidth(it, width) }
+                        ?: continue
+                    val hit = images.remove(key) ?: continue
+                    images[key] = hit
+                    return hit
+                }
+            }
             null
         } finally {
             mutex.unlock()
         }
+    }
+
+    private fun cachedWidth(key: String, requestedWidth: Int): Int {
+        val width = key.substringAfter("#w=", "").toIntOrNull() ?: return Int.MAX_VALUE
+        return abs(width - requestedWidth)
     }
 
     private suspend fun cached(key: String): ImageBitmap? = mutex.withLock {
@@ -174,6 +212,8 @@ fun MediaArtwork(
     contentScale: ContentScale = ContentScale.Crop,
     fallback: (@Composable (Modifier) -> Unit)? = null,
     targetWidthPx: Int? = null,
+    warmStartImages: List<MediaImage> = emptyList(),
+    revealDurationMillis: Int = DefaultArtworkRevealMillis,
 ) = MediaArtwork(
     images = listOfNotNull(image),
     title = title,
@@ -183,6 +223,8 @@ fun MediaArtwork(
     contentScale = contentScale,
     fallback = fallback,
     targetWidthPx = targetWidthPx,
+    warmStartImages = warmStartImages,
+    revealDurationMillis = revealDurationMillis,
 )
 
 /**
@@ -203,13 +245,19 @@ fun MediaArtwork(
     contentScale: ContentScale = ContentScale.Crop,
     fallback: (@Composable (Modifier) -> Unit)? = null,
     targetWidthPx: Int? = null,
+    warmStartImages: List<MediaImage> = emptyList(),
+    revealDurationMillis: Int = DefaultArtworkRevealMillis,
 ) {
     val candidates = remember(images) {
         images.filter { it.url.isNotBlank() }.distinctBy { it.url }
     }
+    val warmCandidates = remember(warmStartImages) {
+        warmStartImages.filter { it.url.isNotBlank() }.distinctBy { it.url }
+    }
     if (targetWidthPx != null) {
         MediaArtworkContent(
             candidates = candidates,
+            warmCandidates = warmCandidates,
             title = title,
             cache = cache,
             fetch = fetch,
@@ -217,6 +265,7 @@ fun MediaArtwork(
             contentScale = contentScale,
             fallback = fallback,
             requestedWidthPx = remember(targetWidthPx) { artworkWidthBucket(targetWidthPx) },
+            revealDurationMillis = revealDurationMillis,
         )
     } else {
         BoxWithConstraints(modifier) {
@@ -231,6 +280,7 @@ fun MediaArtwork(
             }
             MediaArtworkContent(
                 candidates = candidates,
+                warmCandidates = warmCandidates,
                 title = title,
                 cache = cache,
                 fetch = fetch,
@@ -238,6 +288,7 @@ fun MediaArtwork(
                 contentScale = contentScale,
                 fallback = fallback,
                 requestedWidthPx = requestedWidthPx,
+                revealDurationMillis = revealDurationMillis,
             )
         }
     }
@@ -246,6 +297,7 @@ fun MediaArtwork(
 @Composable
 private fun MediaArtworkContent(
     candidates: List<MediaImage>,
+    warmCandidates: List<MediaImage>,
     title: String,
     cache: ArtworkMemoryCache,
     fetch: suspend (MediaImage, Int) -> ByteArray?,
@@ -253,27 +305,55 @@ private fun MediaArtworkContent(
     contentScale: ContentScale,
     fallback: (@Composable (Modifier) -> Unit)?,
     requestedWidthPx: Int,
+    revealDurationMillis: Int,
 ) {
     val cachedBitmap = remember(candidates, cache, requestedWidthPx) {
         cache.peek(candidates, requestedWidthPx)
     }
-    val bitmap by produceState<ImageBitmap?>(cachedBitmap, candidates, cache, requestedWidthPx) {
-        value = cachedBitmap
-        if (value == null && candidates.isNotEmpty()) {
+    val warmBitmap = remember(candidates, warmCandidates, cache, requestedWidthPx, cachedBitmap) {
+        if (cachedBitmap == null) {
+            cache.peekAnyWidth(warmCandidates, requestedWidthPx)
+                ?: cache.peekAnyWidth(candidates, requestedWidthPx)
+        } else {
+            null
+        }
+    }
+    val initialBitmap = cachedBitmap ?: warmBitmap
+    val bitmap by produceState<ImageBitmap?>(
+        initialBitmap,
+        candidates,
+        cache,
+        requestedWidthPx,
+        warmCandidates,
+    ) {
+        value = initialBitmap
+        // A warm bitmap is only the first frame. Still request the target-size
+        // image so a 360px home poster does not permanently become a blurry
+        // 720px detail hero.
+        if (cachedBitmap == null && candidates.isNotEmpty()) {
             // Match the legacy retry budget while allowing a known-good
             // alternate image to win immediately after a 404/decode miss.
+            var destinationLoaded = false
             for (attempt in 0..ArtworkRetryCount) {
                 for (candidate in candidates) {
-                    try {
-                        value = cache.load(candidate, requestedWidthPx, fetch)
+                    val resolved = try {
+                        cache.load(candidate, requestedWidthPx, fetch)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
-                        value = null // Broken artwork must not break browsing.
+                        null // Broken artwork must not break browsing.
                     }
-                    if (value != null) break
+                    // Keep the warm source image visible while the destination
+                    // request is missing or malformed. Only a real decoded
+                    // destination replaces it; a failed request must not turn
+                    // the already useful first frame back into TextPoster.
+                    if (resolved != null) {
+                        value = resolved
+                        destinationLoaded = true
+                        break
+                    }
                 }
-                if (value != null || attempt == ArtworkRetryCount) break
+                if (destinationLoaded || attempt == ArtworkRetryCount) break
                 delay(ArtworkRetryDelayMs * (attempt + 1))
             }
         }
@@ -289,7 +369,7 @@ private fun MediaArtworkContent(
         Crossfade(
             targetState = loaded,
             modifier = modifier,
-            animationSpec = tween(180),
+            animationSpec = tween(revealDurationMillis),
             label = "artwork-reveal",
         ) { artwork ->
             ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale)
@@ -365,9 +445,17 @@ suspend fun prefetchLandscapeArtwork(
     cache: ArtworkMemoryCache,
     fetch: suspend (MediaImage, Int) -> ByteArray?,
     targetWidthPx: Int = 960,
+) = prefetchArtwork(item.landscapeArtworkCandidates(), cache, fetch, targetWidthPx)
+
+/** Prefetch an explicitly ordered artwork chain without changing its fallback semantics. */
+suspend fun prefetchArtwork(
+    images: List<MediaImage>,
+    cache: ArtworkMemoryCache,
+    fetch: suspend (MediaImage, Int) -> ByteArray?,
+    targetWidthPx: Int = 960,
 ) {
     val requested = artworkWidthBucket(targetWidthPx)
-    val candidates = item.landscapeArtworkCandidates()
+    val candidates = images
         .filter { it.url.isNotBlank() }
         .distinctBy { it.url }
     for (candidate in candidates) {
@@ -405,6 +493,7 @@ private fun artworkCacheKey(url: String, widthPx: Int): String = "$url#w=$widthP
 private const val MinArtworkWidthPx = 96
 private const val MaxArtworkWidthPx = 960
 private const val DefaultArtworkWidthPx = 480
+private const val DefaultArtworkRevealMillis = 180
 private const val ArtworkRetryCount = 2
 private const val ArtworkRetryDelayMs = 300L
 private val ArtworkFailureTtl = 30.seconds

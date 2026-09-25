@@ -90,6 +90,7 @@ import cn.mafei.cmp.common.media.legacyDetailBackdropArtworkCandidates
 import cn.mafei.cmp.common.media.legacyPrimaryArtworkCandidates
 import cn.mafei.cmp.common.media.legacyPrimaryThenBackdropArtworkCandidates
 import cn.mafei.cmp.common.media.posterArtworkCandidates
+import cn.mafei.cmp.common.media.prefetchArtwork
 import cn.mafei.cmp.common.media.prefetchLandscapeArtwork
 import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.common.ui.MaFeiAdaptiveShell
@@ -1390,6 +1391,15 @@ private fun BrowseContent(
         // (now unreachable from the sidebar) legacy route. Secondary entries close
         // the sheet first so the pushed page is not hidden behind the modal.
         val mineContent: @Composable (Modifier) -> Unit = { mineModifier ->
+            // Navigation 3 keeps the outgoing entry composed during a transition.
+            // Read the route at event time so a late pointer delivered to that
+            // stale entry cannot mutate the active session.
+            fun mineRootAction(action: () -> Unit): () -> Unit = {
+                if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) action()
+            }
+            fun mineRootMediaAction(action: (MediaItem) -> Unit): (MediaItem) -> Unit = { item ->
+                if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) action(item)
+            }
             LegacyMineScreen(
                 profile = MineProfile(
                     userName = session.connection.account.displayName,
@@ -1403,35 +1413,37 @@ private fun BrowseContent(
                 historyError = state.historyError,
                 layout = layout,
                 busy = busy,
-                onHistoryItem = startPlayback,
-                onHistoryRetry = { scope.launch { browser.loadHistoryPreview() } },
+                onHistoryItem = mineRootMediaAction(startPlayback),
+                onHistoryRetry = mineRootAction { scope.launch { browser.loadHistoryPreview() } },
                 // 「我的」里的二级页推到**容器自己的**回退栈上，容器不关闭 —— 模态 / 全屏
                 // 两种呈现共用同一条栈。
                 onHistoryMore = {
-                    if (mineBackStack.lastOrNull() != BrowseMineHistoryRoute) {
+                    if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) {
                         mineBackStack += BrowseMineHistoryRoute
                     }
                 },
-                onSwitchAccount = {
+                onSwitchAccount = mineRootAction {
                     loadAccounts()
                     if (mineBackStack.lastOrNull() != BrowseAccountSwitchRoute) {
                         mineBackStack += BrowseAccountSwitchRoute
                     }
                 },
-                onSettings = {
+                onSettings = mineRootAction {
                     if (mineBackStack.lastOrNull() != BrowseSettingsRoute) {
                         mineBackStack += BrowseSettingsRoute
                     }
                 },
-                onPrivacy = { uriHandler.openUri(PRIVACY_AGREEMENT_URL) },
-                onAddGroup = {
+                onPrivacy = mineRootAction { uriHandler.openUri(PRIVACY_AGREEMENT_URL) },
+                onAddGroup = mineRootAction {
                     if (mineBackStack.lastOrNull() != BrowseAddGroupRoute) {
                         mineBackStack += BrowseAddGroupRoute
                     }
                 },
                 onLogout = {
-                    minePresented = false
-                    onLogout()
+                    if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) {
+                        minePresented = false
+                        onLogout()
+                    }
                 },
                 modifier = mineModifier,
                 avatar = session.connection.account.avatarImage?.let { image ->
@@ -2038,6 +2050,20 @@ private fun BrowseContent(
                     if (browseBackStack.lastOrNull() !is BrowseDetailRoute) {
                         browseBackStack += BrowseDetailRoute(id.value, mediaName)
                     }
+                    // Start the landscape request as soon as a home card is
+                    // tapped. The portrait card remains the shared-transition
+                    // first frame; the detail Hero can then fade in the real
+                    // Backdrop without waiting for the detail JSON round trip.
+                    initialItem?.let { tappedItem ->
+                        scope.launch {
+                            prefetchArtwork(
+                                tappedItem.legacyDetailBackdropArtworkCandidates(),
+                                artworkCache,
+                                fetchArtwork,
+                                targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
+                            )
+                        }
+                    }
                     scope.launch { browser.openDetail(id, initialItem) }
                 }
                 val openDetail: (MediaItem, String?) -> Unit = { item, mediaName ->
@@ -2472,6 +2498,8 @@ private fun BrowseContent(
                                             fetchArtwork,
                                             modifier,
                                             targetWidthPx = 720,
+                                            warmStartImages = item.posterArtworkCandidates(),
+                                            revealDurationMillis = 360,
                                         )
                                     },
                                     logoArtwork = { item, modifier ->
@@ -2658,6 +2686,8 @@ private fun BrowseContent(
                                                 fetchArtwork,
                                                 modifier,
                                                 targetWidthPx = 720,
+                                                warmStartImages = item.posterArtworkCandidates(),
+                                                revealDurationMillis = 360,
                                             )
                                         },
                                         episodeArtwork = { item, modifier ->
@@ -2761,6 +2791,8 @@ private fun BrowseContent(
                                             fetchArtwork,
                                             modifier,
                                             targetWidthPx = 720,
+                                            warmStartImages = item.posterArtworkCandidates(),
+                                            revealDurationMillis = 360,
                                         )
                                     },
                                     logoArtwork = { item, modifier ->
@@ -3177,9 +3209,32 @@ private fun SessionMessage(
     Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(message)
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            onRetry?.let { OutlinedButton(it, enabled = !busy) { Text("重试恢复") } }
-            onCleanup?.let { TextButton(it, enabled = !busy) { Text("完成退出，重新登录") } }
+            if (busy) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Button)
+                    Text("正在处理", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            onRetry?.let {
+                Text(
+                    "重试恢复",
+                    Modifier.mafeiInteractive(it, enabled = !busy, radiusDp = 20f, label = "重试恢复")
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (busy) .45f else 1f),
+                )
+            }
+            onCleanup?.let {
+                Text(
+                    "完成退出，重新登录",
+                    Modifier.mafeiInteractive(it, enabled = !busy, radiusDp = 20f, label = "完成退出，重新登录")
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (busy) .45f else 1f),
+                )
+            }
         }
     }
 }
