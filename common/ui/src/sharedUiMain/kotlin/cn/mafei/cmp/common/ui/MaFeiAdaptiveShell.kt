@@ -307,6 +307,7 @@ fun MaFeiAdaptiveShell(
                 accountActions = accountActions,
                 sideScroll = sideScroll,
                 compact = rail && !sidebarExpanded,
+                consumeBottomSafeArea = !sidebar,
                 showCloseButton = persistentNavigationExpanded,
                 onClose = { sidebarExpanded = false },
                 onExpand = { sidebarExpanded = true },
@@ -385,6 +386,7 @@ fun MaFeiAdaptiveShell(
                         accountActions = accountActions,
                         sideScroll = sideScroll,
                         compact = false,
+                        consumeBottomSafeArea = true,
                         showCloseButton = false,
                         onClose = {},
                         onExpand = {},
@@ -472,6 +474,7 @@ private fun SidebarPanel(
     accountActions: @Composable () -> Unit,
     sideScroll: ScrollState,
     compact: Boolean,
+    consumeBottomSafeArea: Boolean,
     showCloseButton: Boolean,
     onClose: () -> Unit,
     onExpand: () -> Unit,
@@ -513,12 +516,13 @@ private fun SidebarPanel(
         val sidebarHeaderInset = 48.dp
         val sidebarBottomInset = if (compact) 64.dp else 88.dp
         Column(
-            // 顶部与底部都消费窗口安全区，再各留 8dp 呼吸。底部手势条即使透明也仍是
-            // 系统交互区域，账号入口不能压进去；此前只留 8dp 会让 MatePad 上 80dp
-            // 账号卡片进入手势区，滚动到尾部时尤其像是整块侧栏错位。
+            // The wide persistent sidebar already owns a fixed-height account
+            // entry at the bottom. Adding the tablet bottom safe area to that
+            // fixed block made the account region visibly too tall; drawer/rail
+            // variants still consume it because their chrome floats over content.
             Modifier.fillMaxSize().padding(
                 top = windowSafeArea.top + 8.dp,
-                bottom = windowSafeArea.bottom + 8.dp,
+                bottom = (if (consumeBottomSafeArea) windowSafeArea.bottom else 0.dp) + 8.dp,
             ),
         ) {
             Box(Modifier.fillMaxSize()) {
