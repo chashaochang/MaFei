@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 const root = resolve(process.argv[2] ?? process.cwd());
-const scanRoots = ['common', 'feature', 'composeApp']
+const scanRoots = ['common', 'feature', 'player', 'composeApp']
   .map((path) => resolve(root, path))
   .filter(existsSync);
 const ignoredFiles = new Set([

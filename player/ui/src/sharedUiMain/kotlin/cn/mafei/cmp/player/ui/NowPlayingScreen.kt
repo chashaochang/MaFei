@@ -44,7 +44,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,6 +85,8 @@ import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
+import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
+import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerDeviceControls
@@ -635,10 +636,9 @@ fun NowPlayingScreen(
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 1.04f),
             modifier = Modifier.align(Alignment.Center),
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(40.dp),
-                color = Color.White,
-                strokeWidth = 3.dp,
+            MaFeiLoadingIndicator(
+                style = MaFeiLoadingStyle.Page,
+                tint = Color.White,
             )
         }
 
