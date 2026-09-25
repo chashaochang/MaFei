@@ -1959,6 +1959,7 @@ private fun RecommendationHero(
     )
     val settledItemIndex = pagerState.settledPage % items.size
     val isUserDragging by pagerState.interactionSource.collectIsDraggedAsState()
+    val automaticPagerScroll = remember { mutableStateOf(false) }
     LaunchedEffect(itemKeys, settledItemIndex) {
         onActiveItemChanged(items.getOrNull(settledItemIndex))
     }
@@ -1980,7 +1981,10 @@ private fun RecommendationHero(
         // must start a fresh countdown reliably. Keeping the loop inside
         // collectLatest avoids depending on a transient drag-state recomposition
         // to recreate the LaunchedEffect itself.
-        snapshotFlow { isUserDragging || heroPointerPressed.value }
+        snapshotFlow {
+            isUserDragging || heroPointerPressed.value ||
+                (pagerState.isScrollInProgress && !automaticPagerScroll.value)
+        }
             .distinctUntilChanged()
             .collectLatest { userInteracting ->
                 if (userInteracting) return@collectLatest
@@ -1994,14 +1998,19 @@ private fun RecommendationHero(
                         animationSpec = tween(HeroAutoplayMillis, easing = LinearEasing),
                     )
                     val targetPage = pagerState.settledPage + 1
-                    pagerState.animateScrollToPage(
-                        page = targetPage,
-                        animationSpec = spring(
-                            dampingRatio = HeroSnapDampingRatio,
-                            stiffness = HeroSnapStiffness,
-                            visibilityThreshold = .001f,
-                        ),
-                    )
+                    automaticPagerScroll.value = true
+                    try {
+                        pagerState.animateScrollToPage(
+                            page = targetPage,
+                            animationSpec = spring(
+                                dampingRatio = HeroSnapDampingRatio,
+                                stiffness = HeroSnapStiffness,
+                                visibilityThreshold = .001f,
+                            ),
+                        )
+                    } finally {
+                        automaticPagerScroll.value = false
+                    }
                     // CPF/OHOS can occasionally finish a long frame between pages.
                     // Align only the completed automatic step; direct swipes stay native.
                     if (pagerState.settledPage != targetPage || pagerState.currentPageOffsetFraction != 0f) {
