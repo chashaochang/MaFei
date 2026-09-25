@@ -1972,8 +1972,13 @@ private fun BrowseContent(
                 val popBrowseRoute: () -> Unit = {
                     val route = browseBackStack.lastOrNull()
                     val revealed = browseBackStack.getOrNull(browseBackStack.lastIndex - 1)
+                    val deferDetailClear = route is BrowseDetailRoute
                     when (route) {
-                        is BrowseDetailRoute -> browser.back()
+                        // Keep the detail document composed while NavDisplay runs
+                        // the pop transition. Clearing it here would remove the
+                        // shared-element source before it can travel back to the
+                        // home card.
+                        is BrowseDetailRoute -> Unit
                         is BrowsePersonRoute -> browser.clearPerson()
                         BrowseSearchRoute -> {
                             searchJob?.cancel()
@@ -1984,6 +1989,13 @@ private fun BrowseContent(
                     }
                     if (browseBackStack.size > 1) {
                         browseBackStack.removeLastOrNull()
+                        if (deferDetailClear) {
+                            val expectedStack = browseBackStack.toList()
+                            scope.launch {
+                                delay(BrowseSharedReturnDurationMs)
+                                if (browseBackStack == expectedStack) browser.back()
+                            }
+                        }
                         when (revealed) {
                             BrowseHomeRoute -> {
                                 // Returning reveals the existing home document with
@@ -2997,6 +3009,7 @@ private fun MineAccountSheet(
 /** 弹窗顶部导航区（关闭按钮所在条带）的高度：所有子页面内容在此之下。 */
 private val MineSheetTopBarHeight = 56.dp
 private const val MineSheetCornerDp = 22f
+private const val BrowseSharedReturnDurationMs = 460L
 
 /** 弹窗容器的投影高度（正常背景容器靠它从遮罩上浮起来）。 */
 private val MineSheetElevation = 24.dp
