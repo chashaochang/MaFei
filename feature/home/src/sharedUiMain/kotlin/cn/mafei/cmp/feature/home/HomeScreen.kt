@@ -111,6 +111,11 @@ private val HomeHeroClearFadeDistance = 96.dp
 // Keep that physical depth on phone instead of reusing the wide-screen mask's
 // 64%-100% range, which starts fading a 430dp phone hero far above its bottom.
 private val HomePhoneHeroFeatherHeight = 96.dp
+// Wide layouts need a little more vertical breathing room than the phone
+// composition: the artwork, copy block and progress indicator share one hero
+// interval. Keep this adjustment local to the large-screen home hero so the
+// phone's established 430dp rhythm does not change.
+private val HomeLargeHeroHeightBonus = 36.dp
 private const val HomeHeroKey = "home-recommendation-hero"
 private const val LatestFeedAnchorKey = "home-latest-feed-anchor"
 private val HomeHeroRefreshThreshold = 64.dp
@@ -121,6 +126,13 @@ private val HomeFloatingTabsSlotHeight = 56.dp
 private val HomeFloatingActionSize = 40.dp
 private val HomeFloatingActionGap = 8.dp
 private const val HomeFeedCardChromeHeightDp = 44f
+
+private fun homeHeroHeight(layout: MaFeiLayout): Dp =
+    if (layout.family == MaFeiLayoutFamily.Phone) {
+        layout.heroHeightDp.dp
+    } else {
+        layout.heroHeightDp.dp + HomeLargeHeroHeightBonus
+    }
 
 internal fun homeFloatingTabsEndInset(
     pinned: Boolean,
@@ -587,7 +599,7 @@ fun HomeScreen(
                 MaFeiLayoutFamily.Tablet -> 44.dp
                 MaFeiLayoutFamily.Desktop -> 48.dp
             }
-            state.heroHeight = layout.heroHeightDp.dp
+            state.heroHeight = homeHeroHeight(layout)
             state.clearCarouselEnabled = layout.family != MaFeiLayoutFamily.Phone
         }
     }
@@ -1005,7 +1017,7 @@ fun HomeScreen(
               layout = layout,
               gridState = gridState,
               topPadding = safeArea.top + 12.dp,
-              heroHeight = layout.heroHeightDp.dp,
+              heroHeight = homeHeroHeight(layout),
               extraHeight = heroExtraHeight,
               windowWidth = navigationChrome.windowWidthDp ?: maxWidth,
               precomposeNeighbours = heroVisibleForAutoplay,
@@ -1851,7 +1863,7 @@ private fun HomeHeroPlaceholder(layout: MaFeiLayout) {
                     Modifier.requiredWidth((layout.gridWidthDp + layout.pagePaddingDp * 2f).dp)
                 } else Modifier.fillMaxWidth()
             )
-            .height(layout.heroHeightDp.dp)
+            .height(homeHeroHeight(layout))
             .background(
                 Brush.linearGradient(
                     listOf(
@@ -2037,7 +2049,7 @@ private fun RecommendationHero(
                     else -> Modifier.fillMaxWidth()
                 }
             )
-            .height(layout.heroHeightDp.dp + extraHeight)
+            .height(homeHeroHeight(layout) + extraHeight)
             // 轮播图已下沉到背景层：这里只保留占位尺寸、手势与文字浮层，
             // 不再裁圆角 —— 图片是页面背景的一部分，不是悬浮卡片。
             .then(pagerPressTracker),
