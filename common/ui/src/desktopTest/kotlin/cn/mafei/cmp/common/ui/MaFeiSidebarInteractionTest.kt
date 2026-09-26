@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -40,7 +41,9 @@ class MaFeiSidebarInteractionTest {
                     layout = mafeiLayout(widthDp = 1194f, heightDp = 834f),
                     destinations = destinations,
                     selectedDestination = "home",
+                    topTabDestinations = destinations.filter { it.key != "mine" && it.key != "library" },
                     onDestination = {},
+                    onSearch = {},
                     libraries = listOf(MaFeiNavItem("movies", "电影", MaFeiGlyph.Library)),
                     selectedLibrary = null,
                     onLibrary = {},
@@ -64,7 +67,10 @@ class MaFeiSidebarInteractionTest {
         val topTabCenterX = (topTabBounds.left + topTabBounds.right) / 2f
         assertTrue(abs(topTabCenterX - rootCenterX) <= 0.5f)
         composeRule.onNodeWithText("首页").assertIsDisplayed()
-        composeRule.onNodeWithText("媒体库").assertIsDisplayed()
+        composeRule.onNodeWithText("收藏").assertIsDisplayed()
+        composeRule.onAllNodesWithText("媒体库").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("搜索").assertIsDisplayed()
+        composeRule.onAllNodesWithText("我的").assertCountEquals(0)
         composeRule.onNodeWithContentDescription("展开侧边栏").assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("收起侧边栏").assertIsDisplayed()
@@ -104,5 +110,34 @@ class MaFeiSidebarInteractionTest {
         )
             .fetchSemanticsNode().boundsInRoot
         assertTrue(drawerBounds.width < rootWidth * .45f)
+    }
+
+    @Test
+    fun largeNavigationIsNotHiddenByAFullPageRoute() {
+        composeRule.setContent {
+            MaterialTheme {
+                MaFeiAdaptiveShell(
+                    layout = mafeiLayout(widthDp = 1194f, heightDp = 834f),
+                    destinations = destinations,
+                    selectedDestination = "library",
+                    onDestination = {},
+                    libraries = listOf(MaFeiNavItem("movies", "电影", MaFeiGlyph.Library)),
+                    selectedLibrary = "movies",
+                    onLibrary = {},
+                    accountLabel = "Account",
+                    // A detail/library route hides the phone dock only. The
+                    // persistent large-screen navigation remains addressable.
+                    showBottomNavigation = false,
+                    background = {},
+                    accountActions = {},
+                    scene = { Surface(Modifier.fillMaxSize()) { Text("secondary") } },
+                    overlay = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("收起侧边栏").assertIsDisplayed()
+        composeRule.onNodeWithText("我的媒体库").assertIsDisplayed()
+        composeRule.onNodeWithText("电影").assertIsDisplayed()
     }
 }

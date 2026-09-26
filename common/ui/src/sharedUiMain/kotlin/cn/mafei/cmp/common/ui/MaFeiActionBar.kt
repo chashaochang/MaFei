@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
-import cn.mafei.cmp.common.design_system.NavigationPlacement
+import cn.mafei.cmp.common.design_system.isPhoneNavigation
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidActionBar
@@ -45,6 +46,30 @@ private val MaFeiActionBarVerticalInsetDp = 10.dp
  * 旧版的 ActionBar 就是 56dp，页面用 `Blank(safeTop + ACTION_BAR_HEIGHT)` 给它让位。
  */
 val MaFeiPageTitleBarHeight = 56.dp
+
+/**
+ * Height reserved by a page below the shell's collapsed primary top bar.
+ * Root pages on a drawer/collapsed-sidebar window have two chrome rows: the
+ * shell destination strip first, then the page title bar.
+ */
+@Composable
+fun mafeiPageTitleBarContentHeight(): Dp {
+    return if (LocalMaFeiNavigationChrome.current.topTabsVisible) {
+        MaFeiTopChromeHeightDp * 2
+    } else {
+        MaFeiPageTitleBarHeight
+    }
+}
+
+/** Height occupied by the shell's primary top-tab row, without a page title row. */
+@Composable
+fun mafeiPrimaryTopBarHeight(): Dp {
+    return if (LocalMaFeiNavigationChrome.current.topTabsVisible) {
+        MaFeiTopChromeHeightDp
+    } else {
+        0.dp
+    }
+}
 
 /**
  * 一级页面（媒体库 / 收藏 / 我的）共用的顶部标题：无返回按钮、玻璃材质。
@@ -66,6 +91,7 @@ fun MaFeiPageTitleBar(
         title = title,
         onBack = null,
         backdrop = backdrop,
+        stackedTitleAlignStart = true,
         modifier = modifier,
     )
 }
@@ -89,14 +115,24 @@ fun MaFeiActionBar(
     titleAlpha: Float = 1f,
     contentColor: Color = Color.Unspecified,
     centerTitleOnScreen: Boolean = true,
+    // On a large shell the second row is the page title row. Keep every page
+    // title aligned to the content edge by default; phone/ordinary single-row
+    // action bars are unaffected because this flag is only read when the
+    // stacked header is active.
+    stackedTitleAlignStart: Boolean = true,
     titleContent: (@Composable BoxScope.(buttonBackdrop: GlassBackdrop) -> Unit)? = null,
     actions: @Composable RowScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
-    // 中屏（Drawer）下没有持久侧栏，顶部让给 Tab 条那一行的高度，所以二级页头部改成
-    // 双行：返回按钮与 Tab 条同排，标题另起一行居中。大屏（Sidebar/Rail）与手机保持
-    // 单行 64dp，避免宽窗口里出现一条空荡荡的高栏。
-    val stackedTitle = LocalMaFeiNavigationChrome.current.placement == NavigationPlacement.Drawer
+    // 壳层显示一级顶栏时，页面头部改成双行：顶栏在第一行，页面标题/返回按钮在第二行。
+    // 没有一级顶栏时（详情、手机或展开侧栏），保持单行，避免凭空增加纵向空白。
+    val navigationChrome = LocalMaFeiNavigationChrome.current
+    val stackedTitle = navigationChrome.topTabsVisible
+    // On tablets/desktops the sidebar owns the primary navigation, so every
+    // page title follows the content edge even when the sidebar is expanded
+    // and there is no stacked top-tab row yet. Phones keep the centered legacy
+    // action-bar title.
+    val largeWindow = navigationChrome.effectiveLayout?.isPhoneNavigation == false
     val barHeight = actionBarHeightDp(stackedTitle)
     val resolvedContentColor = if (contentColor.isSpecified) contentColor
     else MaterialTheme.colorScheme.onSurface
@@ -116,9 +152,16 @@ fun MaFeiActionBar(
         // 单行 64dp 的 10dp 内边距，否则按钮会压到第二行的标题上。
         verticalInset = if (stackedTitle) (MaFeiTopChromeHeightDp - 44.dp) / 2
         else MaFeiActionBarVerticalInsetDp,
-        centerTitleOnScreen = centerTitleOnScreen,
+        // Wide layouts use the content edge for titles. Keep the phone's
+        // screen-centred reservation only on the single-row phone bar.
+        centerTitleOnScreen = centerTitleOnScreen && !largeWindow,
         stackedTitle = stackedTitle,
-        navigation = onBack?.let { back ->
+        stackedTitleAlignStart = stackedTitleAlignStart,
+        // When the collapsed large-screen shell owns the first row, its Tab
+        // strip already renders the matching 40dp back button. Do not compose
+        // a second ActionBar button on top of it; phone and expanded-sidebar
+        // layouts still use this page-owned button.
+        navigation = onBack?.takeUnless { stackedTitle }?.let { back ->
             { buttonBackdrop ->
                 LiquidActionBarButton(
                     onClick = back,
@@ -135,7 +178,18 @@ fun MaFeiActionBar(
             }
         },
         title = { buttonBackdrop ->
-            Box(Modifier.fillMaxSize().alpha(titleAlpha), contentAlignment = Alignment.Center) {
+            val alignTitleStart = (stackedTitle || largeWindow) && stackedTitleAlignStart
+            val titleAlignment = if (alignTitleStart) {
+                Alignment.CenterStart
+            } else {
+                Alignment.Center
+            }
+            Box(
+                Modifier.fillMaxSize()
+                    .alpha(titleAlpha)
+                    .padding(start = if (alignTitleStart) 8.dp else 0.dp),
+                contentAlignment = titleAlignment,
+            ) {
                 if (titleContent == null) {
                     Text(
                         title,
@@ -168,8 +222,8 @@ fun MaFeiActionBarScaffold(
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     val backdrop = rememberGlassBackdrop()
-    // 与 MaFeiActionBar 用同一条规则决定头部高度，否则中屏双行头部会把内容顶掉。
-    val stackedTitle = LocalMaFeiNavigationChrome.current.placement == NavigationPlacement.Drawer
+    // 与 MaFeiActionBar 用同一条规则决定头部高度，否则双层头部会把内容顶掉。
+    val stackedTitle = LocalMaFeiNavigationChrome.current.topTabsVisible
     Box(modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)

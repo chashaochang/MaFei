@@ -64,13 +64,16 @@ fun Modifier.mafeiInteractive(
         )
     }
     // Background-sized click targets (for example the hero pager) explicitly
-    // opt out of feedback. Avoid installing three interaction collectors and
-    // animation states on those nodes.
-    if (!visualFeedback) return@composed this.then(clickableModifier)
+    // opt out of visual feedback, so avoid collecting interaction state for
+    // them altogether.
+    if (!visualFeedback) {
+        return@composed this.then(clickableModifier)
+    }
+
+    val pressed by source.collectIsPressedAsState()
 
     val hovered by source.collectIsHoveredAsState()
     val focused by source.collectIsFocusedAsState()
-    val pressed by source.collectIsPressedAsState()
     val active = enabled && LocalWindowInfo.current.isWindowFocused
     // 描边只留给「键盘聚焦」：悬停时再画一圈主色描边在深色界面上像一圈蓝边（侧边栏
     // 展开按钮上最明显），很脏。鼠标停在按钮上时也不需要焦点环 —— 指针本身就是指示。

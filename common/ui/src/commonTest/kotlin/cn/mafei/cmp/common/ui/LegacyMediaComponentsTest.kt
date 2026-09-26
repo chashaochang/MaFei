@@ -62,4 +62,13 @@ class LegacyMediaComponentsTest {
         assertEquals("9.0", formatLegacyRating(8.96))
         assertEquals("8.9", formatLegacyRating(8.94))
     }
+
+    @Test
+    fun mediaGridAddsColumnsAsTabletContentWidthGrows() {
+        assertEquals(4, legacyMediaColumns(719f))
+        assertEquals(5, legacyMediaColumns(720f))
+        assertEquals(6, legacyMediaColumns(840f))
+        assertEquals(6, legacyMediaColumns(1199f))
+        assertEquals(8, legacyMediaColumns(1200f))
+    }
 }

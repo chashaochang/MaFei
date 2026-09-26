@@ -39,22 +39,22 @@ import com.kyant.shapes.Capsule
 fun LiquidSelectionDroplet(
     backdrop: GlassBackdrop,
     animation: DampedDragAnimation,
-    /** 相邻两级之间液滴要走的距离（Tab 的等宽）。 */
+    /** 相邻两级之间液滴要走的距离（等宽轨道的默认值）。 */
     travelPerStep: Dp,
+    /** Optional pixel-position mapping for tracks whose tabs have different widths. */
+    translationXInPx: ((Float) -> Float)? = null,
     modifier: Modifier = Modifier,
 ) {
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
     val travelPx = with(LocalDensity.current) { travelPerStep.toPx() }
     Box(
         modifier
+            // Translation is a placement transform. Keep it outside the
+            // backdrop layer so variable-width tracks can move the droplet
+            // without changing the source coordinate system.
             .graphicsLayer {
-                translationX = animation.value * travelPx
-                // 速度拉伸：横向按速度放大、纵向相应收紧，液滴才有"被甩出去"的感觉。
-                val velocity = animation.velocity / 10f
-                scaleX = animation.scaleX
-                scaleY = animation.scaleY
-                scaleX /= 1f - (velocity * .75f).coerceIn(-.2f, .2f)
-                scaleY *= 1f - (velocity * .25f).coerceIn(-.2f, .2f)
+                translationX = translationXInPx?.invoke(animation.value)
+                    ?: animation.value * travelPx
             }
             .drawBackdrop(
                 backdrop = backdrop.layer,
@@ -64,6 +64,11 @@ fun LiquidSelectionDroplet(
                     lens(
                         10.dp.toPx() * progress,
                         14.dp.toPx() * progress,
+                        // Keep the capsule's upper/lower surface in the
+                        // refracted image. Without the depth term a uniform
+                        // strip background mostly reads as a scale change,
+                        // even when the droplet itself is large enough.
+                        depthEffect = true,
                         chromaticAberration = true,
                     )
                 },
@@ -75,6 +80,19 @@ fun LiquidSelectionDroplet(
                         alpha = animation.pressProgress,
                     )
                 },
+                // Scale must be applied through drawBackdrop's layerBlock,
+                // not an outer graphicsLayer. The backdrop shader uses this
+                // block to inverse-transform the sampled source; applying it
+                // outside leaves the lens source in the old coordinate space
+                // and visibly pushes text toward the lower-right corner.
+                layerBlock = {
+                    // 速度拉伸：横向按速度放大、纵向相应收紧，液滴才有"被甩出去"的感觉。
+                    val velocity = animation.velocity / 10f
+                    scaleX = animation.scaleX
+                    scaleY = animation.scaleY
+                    scaleX /= 1f - (velocity * .75f).coerceIn(-.2f, .2f)
+                    scaleY *= 1f - (velocity * .25f).coerceIn(-.2f, .2f)
+                },
                 onDrawSurface = {
                     // 与 `LiquidBottomTabs` 的选中液滴一致：静止时是一层 10% 的黑/白，
                     // 按下过程中淡出，把"实心块"让位给折射 + 高光。
@@ -83,6 +101,10 @@ fun LiquidSelectionDroplet(
                         else Color.White.copy(alpha = .10f),
                         alpha = 1f - animation.pressProgress,
                     )
+                    // Match the standard LiquidBottomTabs selection layer:
+                    // pressing adds the same subtle dark depth wash beneath
+                    // the highlight instead of using a separate top-bar tint.
+                    drawRect(Color.Black.copy(alpha = .03f * animation.pressProgress))
                 },
             ),
     )

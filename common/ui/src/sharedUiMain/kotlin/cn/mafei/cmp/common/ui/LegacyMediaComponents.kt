@@ -378,12 +378,20 @@ fun legacyBaseItemSubtitle(item: MediaItem): String {
     return item.year?.toString().orEmpty()
 }
 
+/**
+ * Content-width grid density shared by media, favorites, search and home.
+ * The input is the width remaining after navigation and page padding, so the
+ * thresholds are deliberately lower than the legacy full-window breakpoints.
+ * This keeps poster cards around 130–190dp instead of stretching them on wide
+ * windows, while retaining the legacy 2/3/4/5/6/8/12 progression.
+ */
 fun legacyMediaColumns(contentWidthDp: Float): Int = when {
     contentWidthDp < 320f -> 2
     contentWidthDp < 600f -> 3
-    contentWidthDp < 840f -> 4
-    contentWidthDp < 1440f -> 6
-    contentWidthDp < 1920f -> 8
+    contentWidthDp < 720f -> 4
+    contentWidthDp < 840f -> 5
+    contentWidthDp < 1200f -> 6
+    contentWidthDp < 1800f -> 8
     else -> 12
 }
 

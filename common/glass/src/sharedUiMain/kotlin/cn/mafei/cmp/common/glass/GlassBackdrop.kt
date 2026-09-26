@@ -11,6 +11,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
@@ -24,6 +25,7 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.isRenderEffectSupported
 import com.kyant.backdrop.isRuntimeShaderSupported
+import com.kyant.shapes.Capsule
 
 /** Opaque product handle: vendor graphics layers never cross the glass boundary. */
 @Stable
@@ -49,6 +51,32 @@ fun rememberGlassBackdrop(): GlassBackdrop {
 /** Capture background siblings only; never record a consumer into its own source. */
 fun Modifier.captureGlassBackdrop(backdrop: GlassBackdrop): Modifier =
     layerBackdrop(requireNotNull(backdrop.captureLayer) { "A combined glass backdrop cannot be used as a recorder" })
+
+/**
+ * Shared liquid navigation track. The vendor backdrop remains inside
+ * common:glass; UI shells only provide the page backdrop, tint and optional
+ * pressed transform. The caller can put [captureGlassBackdrop] before this
+ * modifier on a sibling row to record the track for a selection droplet.
+ */
+fun Modifier.liquidTrackSurface(
+    backdrop: GlassBackdrop,
+    tint: Color,
+    layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
+): Modifier =
+    // Do not put a fixed-size clip outside drawBackdrop. Its layerBlock is the
+    // real pressed transform; an outer clip would cut off the enlarged capsule
+    // and its highlight, leaving only the sampled content visibly expanded.
+    // drawBackdrop already owns the capsule mask, matching LiquidBottomTabs.
+    drawBackdrop(
+        backdrop = backdrop.layer,
+        shape = { Capsule() },
+        effects = {
+            blur(12.dp.toPx() * .9f)
+            lens(16.dp.toPx(), 8.dp.toPx() * .9f)
+        },
+        layerBlock = layerBlock,
+        onDrawSurface = { drawRect(tint) },
+    )
 
 /**
  * One backdrop holding every [backdrops] material, for a glass child that must

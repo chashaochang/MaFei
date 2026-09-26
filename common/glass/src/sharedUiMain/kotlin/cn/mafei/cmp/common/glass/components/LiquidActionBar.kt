@@ -58,6 +58,8 @@ fun LiquidActionBar(
      * = 2 × 顶部导航栏高度，返回与 Tab 一行、标题在下一行。
      */
     stackedTitle: Boolean = false,
+    /** Align a first-level title with the content leading edge in the stacked header. */
+    stackedTitleAlignStart: Boolean = false,
     navigation: (@Composable BoxScope.(buttonBackdrop: GlassBackdrop) -> Unit)? = null,
     title: @Composable BoxScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
     actions: @Composable RowScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
@@ -123,7 +125,11 @@ fun LiquidActionBar(
                 // 第二行：居中标题，独占整行，所以不再让开两侧按钮。
                 Box(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(rowHeight),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = if (stackedTitleAlignStart) {
+                        Alignment.CenterStart
+                    } else {
+                        Alignment.Center
+                    },
                 ) {
                     title(buttonBackdrop)
                 }

@@ -27,6 +27,8 @@ class DampedDragAnimation(
     val onDragStarted: DampedDragAnimation.(position: Offset) -> Unit,
     val onDragStopped: DampedDragAnimation.() -> Unit,
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
+    /** Override vertical expansion without widening variable-width tab labels. */
+    val pressedScaleY: Float = pressedScale,
 ) {
 
     private val valueAnimationSpec =
@@ -90,7 +92,7 @@ class DampedDragAnimation(
         animationScope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
             launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
-            launch { scaleYAnimation.animateTo(pressedScale, scaleYAnimationSpec) }
+            launch { scaleYAnimation.animateTo(pressedScaleY, scaleYAnimationSpec) }
         }
     }
 
