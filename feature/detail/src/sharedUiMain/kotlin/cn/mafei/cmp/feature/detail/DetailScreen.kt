@@ -100,6 +100,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiShape
+import cn.mafei.cmp.common.design_system.NavigationEdge
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.glass.GlassBackdrop
@@ -247,12 +248,18 @@ fun DetailScreen(
         // app-level canvas and the whole-window background stays continuous.
         val chrome = LocalMaFeiNavigationChrome.current
         val effectiveLayout = chrome.effectiveLayout
-        val atmosphereBleed = if (effectiveLayout?.navigation == NavigationPlacement.Sidebar) {
-            (effectiveLayout?.navigationWidthDp ?: 0f).dp
-        } else {
-            0.dp
-        }
-        val atmosphereWidth = maxWidth + atmosphereBleed
+        val atmosphereBleed = effectiveLayout?.let { layout ->
+            if (layout.navigation == NavigationPlacement.Sidebar ||
+                layout.navigation == NavigationPlacement.Rail
+            ) layout.navigationWidthDp.dp else 0.dp
+        } ?: 0.dp
+        val atmosphereLeadingBleed = if (
+            effectiveLayout?.navigationEdge == NavigationEdge.Leading
+        ) atmosphereBleed else 0.dp
+        val atmosphereTrailingBleed = if (
+            effectiveLayout?.navigationEdge == NavigationEdge.Trailing
+        ) atmosphereBleed else 0.dp
+        val atmosphereWidth = maxWidth + atmosphereLeadingBleed + atmosphereTrailingBleed
         // Legacy keeps the hero full-width and constrains only the reading area.
         val detailContentMaxWidth = 720.dp
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
@@ -260,7 +267,7 @@ fun DetailScreen(
                 DetailAtmosphere(
                     item = item,
                     artwork = atmosphereArtwork,
-                    bleed = atmosphereBleed,
+                    leadingBleed = atmosphereLeadingBleed,
                     expandedWidth = atmosphereWidth,
                     unblurred = largeDetailLayout,
                 )
@@ -402,12 +409,12 @@ internal fun detailOuterHorizontalInset(): Dp =
 private fun DetailAtmosphere(
     item: MediaItem?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
-    bleed: Dp = 0.dp,
+    leadingBleed: Dp = 0.dp,
     expandedWidth: Dp? = null,
     unblurred: Boolean = false,
 ) {
     val atmosphereModifier = Modifier
-        .offset(x = -bleed)
+        .offset(x = -leadingBleed)
         .then(if (expandedWidth != null) Modifier.requiredWidth(expandedWidth) else Modifier.fillMaxWidth())
         .fillMaxHeight()
         // requiredWidth, not width: the incoming constraint is the content pane, so
@@ -550,7 +557,12 @@ private fun BoxScope.DetailBody(
                     ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                Spacer(Modifier.height(16.dp))
+                // On large screens the project header owns the complete gap
+                // below the navigation chrome. The phone keeps the legacy
+                // spacer so its original Hero rhythm is unchanged.
+                if (!simplifiedLargeLayout) {
+                    Spacer(Modifier.height(16.dp))
+                }
                 DetailActions(
                     item = item,
                     playTarget = playTarget,
