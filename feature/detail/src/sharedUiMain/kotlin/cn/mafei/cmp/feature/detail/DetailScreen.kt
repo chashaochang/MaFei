@@ -124,6 +124,7 @@ import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
@@ -205,6 +206,8 @@ fun DetailScreen(
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
     val scrollState = rememberScrollState()
+    val largeDetailLayout = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
     val heroStretch = rememberLegacyHeroStretch(scrollState)
     val density = LocalDensity.current
     val startPx = remember(density) { with(density) { 72.dp.toPx() } }
@@ -254,7 +257,13 @@ fun DetailScreen(
         val detailContentMaxWidth = 720.dp
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-                DetailAtmosphere(item, atmosphereArtwork, atmosphereBleed, atmosphereWidth)
+                DetailAtmosphere(
+                    item = item,
+                    artwork = atmosphereArtwork,
+                    bleed = atmosphereBleed,
+                    expandedWidth = atmosphereWidth,
+                    unblurred = largeDetailLayout,
+                )
             }
             AnimatedContent(
                 targetState = item != null,
@@ -309,6 +318,7 @@ fun DetailScreen(
                                 onOpenOverview = { overviewSheetVisible = true },
                                 onOpenMediaInfo = { mediaInfoSheetVisible = true },
                                 backdrop = backdrop,
+                                simplifiedLargeLayout = largeDetailLayout,
                                 heroExtraHeight = heroStretch.extraHeight,
                                 heroScrollConnection = heroStretch.connection,
                             )
@@ -394,6 +404,7 @@ private fun DetailAtmosphere(
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     bleed: Dp = 0.dp,
     expandedWidth: Dp? = null,
+    unblurred: Boolean = false,
 ) {
     val atmosphereModifier = Modifier
         .offset(x = -bleed)
@@ -414,15 +425,17 @@ private fun DetailAtmosphere(
                         scaleX = 1.18f
                         scaleY = 1.18f
                         alpha = .95f
-                        // Legacy native detail darkens the atmosphere before text
-                        // is drawn. Keeping this independent of app theme lets the
-                        // media page use one reliable white ink hierarchy.
+                        // Keep the artwork dark enough for the existing white
+                        // detail ink. Large screens only remove the blur; they
+                        // keep this contrast treatment unchanged.
                         val brightness = if (darkMode) .58f else .72f
                         colorFilter = ColorFilter.colorMatrix(
                             ColorMatrix().apply { setToScale(brightness, brightness, brightness, 1f) },
                         )
                     }
-                        .blur(DetailAtmosphereBlurRadius),
+                    .let { modifier ->
+                        if (unblurred) modifier else modifier.blur(DetailAtmosphereBlurRadius)
+                    },
             )
         }
         Box(
@@ -477,6 +490,7 @@ private fun BoxScope.DetailBody(
     onOpenOverview: () -> Unit,
     onOpenMediaInfo: () -> Unit,
     backdrop: GlassBackdrop,
+    simplifiedLargeLayout: Boolean,
     heroExtraHeight: Dp,
     heroScrollConnection: NestedScrollConnection,
 ) {
@@ -493,23 +507,36 @@ private fun BoxScope.DetailBody(
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .nestedScroll(heroScrollConnection)
+                .then(
+                    if (simplifiedLargeLayout) Modifier
+                    else Modifier.nestedScroll(heroScrollConnection),
+                )
                 // The legacy hero owns the top-edge stretch. Compose's default
                 // overscroll translates the whole scroll layer after a fast
                 // return from the bottom, which pulls the hero away from the
                 // viewport top instead of stretching it in place.
                 .verticalScroll(scrollState, overscrollEffect = null),
         ) {
-            DetailHero(
-                item = item,
-                height = 430.dp + heroExtraHeight,
-                collapseProgress = collapseProgress,
-                libraryName = libraryName,
-                artwork = backdropArtwork ?: artwork,
-                sharedArtworkModifier = sharedArtworkModifier,
-                logoArtwork = logoArtwork,
-                playbackSource = selectedPlaybackSource,
-            )
+            if (simplifiedLargeLayout) {
+                DetailProjectHeader(
+                    item = item,
+                    libraryName = libraryName,
+                    logoArtwork = logoArtwork,
+                    playbackSource = selectedPlaybackSource,
+                    safeAreaTop = safeArea.top,
+                )
+            } else {
+                DetailHero(
+                    item = item,
+                    height = 430.dp + heroExtraHeight,
+                    collapseProgress = collapseProgress,
+                    libraryName = libraryName,
+                    artwork = backdropArtwork ?: artwork,
+                    sharedArtworkModifier = sharedArtworkModifier,
+                    logoArtwork = logoArtwork,
+                    playbackSource = selectedPlaybackSource,
+                )
+            }
 
             Column(
                 Modifier
@@ -598,6 +625,82 @@ private fun BoxScope.DetailBody(
                 ) {
                     InlineProblem(error, onRetry)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Large-screen detail header.  The page uses the current artwork as its
+ * full-window background, so there is no second hero image competing with it.
+ * The project mark/title keeps the same source and typography as the legacy
+ * hero, but is aligned to the shared page gutter at the upper leading edge.
+ */
+@Composable
+private fun DetailProjectHeader(
+    item: MediaItem,
+    libraryName: String?,
+    logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    playbackSource: DetailPlaybackSource?,
+    safeAreaTop: Dp,
+) {
+    val horizontalPadding = detailPageHorizontalPadding()
+    val hasLogo = item.images.any { it.kind == ImageKind.Logo }
+    val usesCalligraphy = item.title.any { it in '\u3400'..'\u9fff' }
+    val calligraphyFont = if (usesCalligraphy) {
+        FontFamily(Font(Res.font.ma_shan_zheng_regular))
+    } else {
+        null
+    }
+    Box(
+        Modifier
+            .widthIn(max = 720.dp)
+            .fillMaxWidth()
+            .padding(
+                start = horizontalPadding,
+                end = horizontalPadding,
+                top = safeAreaTop + mafeiPageTitleBarContentHeight() + 20.dp,
+                bottom = 24.dp,
+            ),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (hasLogo && logoArtwork != null) {
+                Box(Modifier.width(196.dp).height(76.dp)) {
+                    logoArtwork(item, Modifier.fillMaxSize())
+                }
+            } else {
+                detailSubtitle(item).takeIf { it.isNotBlank() }?.let { subtitle ->
+                    Text(
+                        subtitle,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    item.title,
+                    Modifier.semantics { heading() },
+                    color = Color.White,
+                    fontSize = if (usesCalligraphy) 68.sp else 38.sp,
+                    lineHeight = if (usesCalligraphy) 72.sp else 44.sp,
+                    fontFamily = calligraphyFont,
+                    fontWeight = if (usesCalligraphy) FontWeight.Normal else FontWeight.Bold,
+                    textAlign = TextAlign.Start,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        shadow = Shadow(Color.Black.copy(alpha = .82f), Offset(0f, 3f), 10f),
+                    ),
+                )
+            }
+            DetailMetadata(item, libraryName, Color.White)
+            if (item.mediaType != MediaType.Series && playbackSource != null && playbackSource.tagKeys.isNotEmpty()) {
+                DetailHeroMediaTags(playbackSource.tagKeys)
             }
         }
     }
