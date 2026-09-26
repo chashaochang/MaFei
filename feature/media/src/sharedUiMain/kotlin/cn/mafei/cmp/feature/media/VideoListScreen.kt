@@ -53,6 +53,7 @@ import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.legacyMediaColumns
@@ -85,6 +86,8 @@ fun VideoListScreen(
     bottomNavigationVisible: Boolean = layout.navigation == NavigationPlacement.Bottom,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
+    /** Home feeds are already provider-sorted and do not expose library sort controls. */
+    showSortControls: Boolean = true,
     // —— 管理员多选删除（legacy VideoListPage selectionMode）——
     canDeleteMedia: Boolean = false,
     deleteBusy: Boolean = false,
@@ -99,6 +102,7 @@ fun VideoListScreen(
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     var showSort by remember { mutableStateOf(false) }
     val contentWidth = layout.gridWidthDp
+    val columns = legacyMediaColumns(contentWidth)
     val gap = legacyMediaGridGap(contentWidth)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
@@ -107,7 +111,10 @@ fun VideoListScreen(
     // the inset exists only as contentPadding. Keep a real tail item, matching
     // LibraryIndexScreen, so the last card always scrolls above the dock.
     val scrollTail = bottomPadding
-    val actionBarBackdrop = if (onBack != null) rememberGlassBackdrop() else null
+    // A secondary library page always owns a title bar on every form factor.
+    // The large shell handles root navigation, so [onBack] may be null there;
+    // that must not remove the page title itself.
+    val actionBarBackdrop = rememberGlassBackdrop()
 
     LaunchedEffect(gridState, canLoadMore, loading, loadingMore, items.size) {
         snapshotFlow {
@@ -122,14 +129,13 @@ fun VideoListScreen(
         Column(
             Modifier.fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .let { contentModifier ->
-                    if (actionBarBackdrop == null) contentModifier
-                    else contentModifier.captureGlassBackdrop(actionBarBackdrop)
-                },
+                .captureGlassBackdrop(actionBarBackdrop),
         ) {
-            if (actionBarBackdrop != null) {
-                Spacer(Modifier.height(safeArea.top + 56.dp))
-            }
+            // Root pages on a collapsed large shell have the primary top-tab
+            // row plus this page title row. Keep the list below both rows;
+            // using the phone-sized 56dp reservation here hid the title and
+            // placed the first sort row under the top tabs.
+            Spacer(Modifier.height(safeArea.top + mafeiPageTitleBarContentHeight()))
             if (selectionMode) {
                 SelectionBar(
                     selectedCount = selectedIds.size,
@@ -138,11 +144,11 @@ fun VideoListScreen(
                     onDelete = onDeleteSelected,
                     modifier = Modifier.padding(
                         start = safeArea.start + horizontalPadding,
-                        top = if (actionBarBackdrop == null) safeArea.top else 0.dp,
+                        top = 0.dp,
                         end = safeArea.end + horizontalPadding,
                     ),
                 )
-            } else {
+            } else if (showSortControls) {
                 LegacySortRow(
                     label = sortChoices.firstOrNull { it.value.field == selectedSort.field }?.label ?: "按添加日期",
                     // ArkUI VideoListViewModel updates this from
@@ -154,7 +160,7 @@ fun VideoListScreen(
                     onToggleDirection = onToggleSortDirection,
                     modifier = Modifier.padding(
                         start = safeArea.start + horizontalPadding,
-                        top = if (actionBarBackdrop == null) safeArea.top else 0.dp,
+                        top = 0.dp,
                         end = safeArea.end + horizontalPadding,
                     ),
                 )
@@ -162,7 +168,7 @@ fun VideoListScreen(
 
             when {
                 loading && items.isEmpty() -> LegacyMediaGridSkeleton(
-                    columns = legacyMediaColumns(contentWidth),
+                    columns = columns,
                     startPadding = safeArea.start + horizontalPadding,
                     endPadding = safeArea.end + horizontalPadding,
                     bottomPadding = bottomPadding,
@@ -176,7 +182,7 @@ fun VideoListScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(legacyMediaColumns(contentWidth)),
+                        columns = GridCells.Fixed(columns),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
@@ -233,14 +239,12 @@ fun VideoListScreen(
                 }
             }
         }
-        if (actionBarBackdrop != null) {
-            MaFeiActionBar(
-                title = title,
-                onBack = onBack,
-                backdrop = actionBarBackdrop,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        }
+        MaFeiActionBar(
+            title = title,
+            onBack = onBack,
+            backdrop = actionBarBackdrop,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 
     if (showSort) {

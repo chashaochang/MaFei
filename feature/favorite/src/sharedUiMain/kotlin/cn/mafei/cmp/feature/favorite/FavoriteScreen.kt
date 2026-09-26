@@ -34,7 +34,7 @@ import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
-import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
@@ -75,6 +75,7 @@ fun FavoriteScreen(
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     var showSort by remember { mutableStateOf(false) }
     val contentWidth = layout.gridWidthDp
+    val columns = legacyMediaColumns(contentWidth)
     val gap = legacyMediaGridGap(contentWidth)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
@@ -104,14 +105,14 @@ fun FavoriteScreen(
                 onToggleDirection = onToggleSortDirection,
                 modifier = Modifier.padding(
                     start = safeArea.start + horizontalPadding,
-                    top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
+                    top = safeArea.top + mafeiPageTitleBarContentHeight() + 12.dp,
                     end = safeArea.end + horizontalPadding,
                 ),
             )
 
             when {
                 loading && items.isEmpty() -> LegacyMediaGridSkeleton(
-                    columns = legacyMediaColumns(contentWidth),
+                    columns = columns,
                     startPadding = safeArea.start + horizontalPadding,
                     endPadding = safeArea.end + horizontalPadding,
                     topPadding = 12.dp,
@@ -126,7 +127,7 @@ fun FavoriteScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(legacyMediaColumns(contentWidth)),
+                        columns = GridCells.Fixed(columns),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(

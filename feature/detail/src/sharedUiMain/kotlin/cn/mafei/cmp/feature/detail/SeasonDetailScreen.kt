@@ -175,7 +175,11 @@ fun SeasonDetailScreen(
                 Column(
                     Modifier.align(Alignment.CenterHorizontally)
                         .widthIn(max = 720.dp).fillMaxWidth()
-                        .padding(bottom = safeArea.bottom + 30.dp),
+                        .padding(
+                            start = detailOuterHorizontalInset(),
+                            end = detailOuterHorizontalInset(),
+                            bottom = safeArea.bottom + 30.dp,
+                        ),
                 ) {
                     SeasonActions(
                         season = season,
@@ -278,6 +282,7 @@ private fun SeasonHero(
     landscapeArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     extraHeight: androidx.compose.ui.unit.Dp,
 ) {
+    val horizontalPadding = detailPageHorizontalPadding()
     Box(Modifier.fillMaxWidth().height(430.dp + extraHeight)) {
         if (landscapeArtwork != null) {
             landscapeArtwork(season, Modifier.fillMaxSize().seasonFeatherBottom())
@@ -296,7 +301,7 @@ private fun SeasonHero(
         )
         Row(
             Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                .padding(start = horizontalPadding, end = horizontalPadding, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Bottom,
         ) {

@@ -23,7 +23,7 @@ import cn.mafei.cmp.common.ui.LegacyListGroupItem
 import cn.mafei.cmp.common.ui.LegacyLoadingView
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
-import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaType
@@ -73,7 +73,7 @@ fun LibraryIndexScreen(
                         contentPadding = PaddingValues(
                             start = contentStart,
                             // 让开标题栏（含状态栏），且是滚动让位：列表从栏下面穿过去。
-                            top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
+                            top = safeArea.top + mafeiPageTitleBarContentHeight() + 12.dp,
                             end = contentEnd,
                             bottom = 0.dp,
                         ),

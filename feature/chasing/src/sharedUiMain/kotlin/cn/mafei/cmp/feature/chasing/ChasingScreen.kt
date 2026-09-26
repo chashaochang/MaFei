@@ -47,7 +47,7 @@ import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyLoadingView
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
-import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.MaFeiProgressLine
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.common.ui.mafeiInteractive
@@ -105,7 +105,7 @@ fun ChasingScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = safeArea.top + MaFeiPageTitleBarHeight + 12.dp,
+                        top = safeArea.top + mafeiPageTitleBarContentHeight() + 12.dp,
                         bottom = bottomPadding,
                     ),
                 ) {

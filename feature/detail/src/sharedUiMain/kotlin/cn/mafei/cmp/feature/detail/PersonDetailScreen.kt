@@ -57,6 +57,7 @@ import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaPerson
 import org.jetbrains.compose.resources.painterResource
@@ -88,6 +89,8 @@ fun PersonDetailScreen(
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val horizontalPadding = detailPageHorizontalPadding()
+    val outerHorizontalInset = detailOuterHorizontalInset()
     val showInitialLoading = rememberDelayedDetailLoading(loading && person == null)
     val showSectionsLoading = rememberDelayedDetailLoading(sectionsLoading)
     val backdrop = rememberGlassBackdrop()
@@ -123,9 +126,9 @@ fun PersonDetailScreen(
                 if (!hasPerson) {
                     Box(
                         Modifier.fillMaxSize().padding(
-                            top = safeArea.top + 56.dp,
-                            start = 16.dp,
-                            end = 16.dp,
+                            top = safeArea.top + mafeiPageTitleBarContentHeight(),
+                            start = horizontalPadding,
+                            end = horizontalPadding,
                             bottom = safeArea.bottom,
                         ),
                         contentAlignment = Alignment.Center,
@@ -153,7 +156,12 @@ fun PersonDetailScreen(
                     person?.let { loadedPerson ->
                         Column(
                             Modifier.fillMaxWidth().verticalScroll(scrollState)
-                                .padding(top = safeArea.top + 56.dp, bottom = safeArea.bottom + 30.dp),
+                                .padding(
+                                    start = outerHorizontalInset,
+                                    end = outerHorizontalInset,
+                                    top = safeArea.top + mafeiPageTitleBarContentHeight(),
+                                    bottom = safeArea.bottom + 30.dp,
+                                ),
                         ) {
                             PersonHeader(
                                 person = loadedPerson,

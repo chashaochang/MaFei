@@ -121,6 +121,8 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.TextPoster
+import cn.mafei.cmp.common.ui.legacyMediaColumns
+import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaItem
@@ -153,7 +155,7 @@ import kotlin.math.roundToInt
  *
  * The legacy screen is the specification: a fixed blurred artwork atmosphere,
  * a 430vp feathered hero, compact playback actions, three-line overview sheet,
- * three-column seasons and the original cast rhythm. Wide windows retain the
+ * width-driven season grid and the original cast rhythm. Wide windows retain the
  * same 720vp reading column instead of inventing a second desktop layout.
  */
 @Composable
@@ -371,6 +373,21 @@ fun DetailScreen(
     }
 }
 
+/**
+ * Detail pages use the same horizontal rhythm as Home/MediaList: 16dp on a
+ * phone and the layout policy's page padding on tablet/desktop. The legacy
+ * detail components already contain their 16dp inner gutter, so callers add
+ * only the difference when the large-screen token is wider.
+ */
+@Composable
+internal fun detailPageHorizontalPadding(): Dp {
+    return (LocalMaFeiNavigationChrome.current.effectiveLayout?.pagePaddingDp ?: 16f).dp
+}
+
+@Composable
+internal fun detailOuterHorizontalInset(): Dp =
+    (detailPageHorizontalPadding() - 16.dp).coerceAtLeast(0.dp)
+
 @Composable
 private fun DetailAtmosphere(
     item: MediaItem?,
@@ -464,6 +481,7 @@ private fun BoxScope.DetailBody(
     heroScrollConnection: NestedScrollConnection,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val outerHorizontalInset = detailOuterHorizontalInset()
     val showRefreshProgress = rememberDelayedDetailLoading(loading)
     val selectedPlaybackSource = playbackSources.firstOrNull { it.id == selectedMediaSourceId }
         ?: playbackSources.firstOrNull()
@@ -498,7 +516,11 @@ private fun BoxScope.DetailBody(
                     .align(Alignment.CenterHorizontally)
                     .widthIn(max = contentMaxWidth)
                     .fillMaxWidth()
-                    .padding(bottom = safeArea.bottom + 30.dp),
+                    .padding(
+                        start = outerHorizontalInset,
+                        end = outerHorizontalInset,
+                        bottom = safeArea.bottom + 30.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -592,6 +614,7 @@ private fun DetailHero(
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     playbackSource: DetailPlaybackSource?,
 ) {
+    val horizontalPadding = detailPageHorizontalPadding()
     val titleOpacity = when {
         collapseProgress <= .72f -> 1f
         else -> (1f - (collapseProgress - .72f) / .22f).coerceIn(0f, 1f)
@@ -653,7 +676,7 @@ private fun DetailHero(
             Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                .padding(start = horizontalPadding, end = horizontalPadding, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.Start,
         ) {
@@ -1164,21 +1187,34 @@ private fun SeriesSections(
                     )
                 }
                 Spacer(Modifier.height(20.dp))
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                ) {
-                    seasons.chunked(3).forEach { rowSeasons ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowSeasons.forEach { season ->
-                                SeasonCard(
-                                    season = season,
-                                    artwork = artwork,
-                                    onClick = { onSeasonSelected(season) },
-                                    modifier = Modifier.weight(1f),
-                                )
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val horizontalPadding = 16.dp
+                    val availableWidth = (maxWidth - horizontalPadding * 2).coerceAtLeast(1.dp)
+                    // Reuse the same density progression as media/favorite/search
+                    // grids. The actual constrained width is used here, so the
+                    // count follows sidebar state and window resizing instead of
+                    // guessing from a device category.
+                    val columns = legacyMediaColumns(availableWidth.value)
+                    val gap = legacyMediaGridGap(availableWidth.value)
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+                        verticalArrangement = Arrangement.spacedBy(gap),
+                    ) {
+                        seasons.chunked(columns).forEach { rowSeasons ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(gap),
+                            ) {
+                                rowSeasons.forEach { season ->
+                                    SeasonCard(
+                                        season = season,
+                                        artwork = artwork,
+                                        onClick = { onSeasonSelected(season) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                repeat(columns - rowSeasons.size) { Spacer(Modifier.weight(1f)) }
                             }
-                            repeat(3 - rowSeasons.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
@@ -2046,7 +2082,10 @@ private fun LegacyDetailSkeleton(modifier: Modifier = Modifier) {
     val contentMaxWidth = skeletonLayout
         ?.takeIf { it.navigation != NavigationPlacement.Bottom }
         ?.gridWidthDp?.dp ?: 720.dp
-    Column(modifier.widthIn(max = contentMaxWidth).fillMaxWidth()) {
+    Column(
+        modifier.widthIn(max = contentMaxWidth).fillMaxWidth()
+            .padding(horizontal = detailOuterHorizontalInset()),
+    ) {
         Box(Modifier.fillMaxWidth().height(350.dp).background(skeleton))
         Column(
             Modifier.fillMaxWidth().padding(16.dp),

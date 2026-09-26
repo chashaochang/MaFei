@@ -63,6 +63,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
+import cn.mafei.cmp.common.design_system.isPhoneNavigation
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
@@ -94,6 +95,7 @@ import cn.mafei.cmp.common.media.prefetchArtwork
 import cn.mafei.cmp.common.media.prefetchLandscapeArtwork
 import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.common.ui.MaFeiAdaptiveShell
+import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
@@ -516,6 +518,10 @@ private data object BrowseFavoriteRoute : BrowseRoute
 @Serializable
 private data object BrowseLibraryIndexRoute : BrowseRoute
 
+/** The home "最近添加 / 更多" feed. This is a list of the home feed, not the library index. */
+@Serializable
+private data object BrowseLatestRoute : BrowseRoute
+
 @Serializable
 private data object BrowseSearchRoute : BrowseRoute
 
@@ -564,17 +570,36 @@ private data object BrowseUserAgreementRoute : BrowseRoute
 @Serializable
 private data class BrowseLibraryRoute(val collectionId: String) : BrowseRoute
 
+/**
+ * The shell selection is part of the navigation route, not of the browser's
+ * mutable collection state.  A home shelf can open a detail while the last
+ * selected collection is still, for example, 短剧; using that mutable state
+ * for the sidebar would then highlight the wrong library.
+ */
+@Serializable
+private enum class BrowseDetailOrigin {
+    Home,
+    Chasing,
+    Favorite,
+    Search,
+    Library,
+}
+
 @Serializable
 private data class BrowseDetailRoute(
     val mediaId: String,
     /** Legacy VideoDetailPage route parameter used in the secondary metadata line. */
     val mediaName: String? = null,
+    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
+    val libraryId: String? = null,
 ) : BrowseRoute
 
 @Serializable
 private data class BrowsePersonRoute(
     val personId: String,
     val personName: String,
+    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
+    val libraryId: String? = null,
 ) : BrowseRoute
 
 @Serializable
@@ -583,6 +608,8 @@ private data class BrowseSeasonRoute(
     val seasonId: String,
     /** Preserved through series -> season -> episode exactly like the ArkUI route chain. */
     val mediaName: String? = null,
+    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
+    val libraryId: String? = null,
 ) : BrowseRoute
 
 @Serializable
@@ -591,7 +618,40 @@ private data class BrowseEpisodeRoute(
     val seasonId: String,
     val episodeId: String,
     val mediaName: String? = null,
+    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
+    val libraryId: String? = null,
 ) : BrowseRoute
+
+private data class BrowseShellContext(
+    val destination: String,
+    val libraryId: String? = null,
+    val origin: BrowseDetailOrigin? = null,
+)
+
+private fun BrowseDetailOrigin.shellContext(libraryId: String?): BrowseShellContext = when (this) {
+    BrowseDetailOrigin.Home -> BrowseShellContext(HomeDestination, origin = this)
+    BrowseDetailOrigin.Chasing -> BrowseShellContext(ChasingDestination, origin = this)
+    BrowseDetailOrigin.Favorite -> BrowseShellContext(FavoriteDestination, origin = this)
+    // Search is rendered by the home content host, but has no selected sidebar
+    // destination while it is open.
+    BrowseDetailOrigin.Search -> BrowseShellContext("", origin = this)
+    BrowseDetailOrigin.Library -> BrowseShellContext(LibraryDestination, libraryId, this)
+}
+
+private fun BrowseRoute.shellContext(): BrowseShellContext = when (this) {
+    BrowseHomeRoute -> BrowseDetailOrigin.Home.shellContext(null)
+    BrowseChasingRoute -> BrowseDetailOrigin.Chasing.shellContext(null)
+    BrowseFavoriteRoute -> BrowseDetailOrigin.Favorite.shellContext(null)
+    BrowseLatestRoute -> BrowseDetailOrigin.Home.shellContext(null)
+    BrowseSearchRoute -> BrowseDetailOrigin.Search.shellContext(null)
+    BrowseLibraryIndexRoute -> BrowseDetailOrigin.Library.shellContext(null)
+    is BrowseLibraryRoute -> BrowseDetailOrigin.Library.shellContext(collectionId)
+    is BrowseDetailRoute -> origin.shellContext(libraryId)
+    is BrowsePersonRoute -> origin.shellContext(libraryId)
+    is BrowseSeasonRoute -> origin.shellContext(libraryId)
+    is BrowseEpisodeRoute -> origin.shellContext(libraryId)
+    else -> BrowseShellContext(MineDestination)
+}
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -967,6 +1027,7 @@ private fun BrowseContent(
     val chasingListState = rememberLazyListState()
     val favoriteGridState = rememberLazyGridState()
     val libraryGridState = rememberLazyGridState()
+    val latestGridState = rememberLazyGridState()
     val searchGridState = rememberLazyGridState()
     var searchJob by remember(session) { mutableStateOf<Job?>(null) }
     var searchHistories by remember(session) { mutableStateOf(emptyList<String>()) }
@@ -1072,6 +1133,15 @@ private fun BrowseContent(
         mutableStateListOf<BrowseRoute>(BrowseHomeRoute)
     }
     val currentRoute = browseBackStack.lastOrNull() ?: BrowseHomeRoute
+    // Keep the chrome selection derived from the route that opened the page.
+    // `state.selectedCollection` is provider/browser state and may still point
+    // at the last library even when the user opened a Home shelf item.
+    val shellContext = currentRoute.shellContext()
+    val libraryTabId = rememberLibraryTabId(
+        currentLibraryId = shellContext.libraryId,
+        serverId = session.selection.serverId.value,
+        accountId = session.selection.accountId.value,
+    )
     // 首页轮播背景的窗口级状态：背景画在 shell 窗口画布上（全窗、与侧栏让位
     // 无关），HomeScreen 只往里喂实时状态（items/pager/滚动跟随参数）。
     val heroBackdrop = remember { HomeHeroBackdropState() }
@@ -1081,24 +1151,11 @@ private fun BrowseContent(
     val mineBackStack = remember(session.selection.serverId.value, session.selection.accountId.value) {
         mutableStateListOf<BrowseRoute>(BrowseMineRoute)
     }
-    val destination = when (currentRoute) {
-        BrowseHomeRoute, BrowseSearchRoute -> HomeDestination
-        BrowseChasingRoute -> ChasingDestination
-        BrowseFavoriteRoute -> FavoriteDestination
-        BrowseMineRoute,
-        BrowseMineHistoryRoute,
-        BrowseAccountSwitchRoute,
-        BrowseAddAccountRoute,
-        is BrowseConnectAccountRoute,
-        BrowseServerDiscoveryRoute,
-        BrowseSettingsRoute,
-        BrowseFeiniuConnectionPreferenceRoute,
-        BrowseAppearanceRoute,
-        BrowseAddGroupRoute,
-        BrowseAboutPrivacyRoute,
-        BrowseUserAgreementRoute -> MineDestination
-        else -> LibraryDestination
-    }
+    val destination = shellContext.destination
+    // `destination` already carries Search's intentionally empty selection;
+    // keep a named value because the shell and the content host use it for
+    // different decisions below.
+    val shellDestination = destination
     val chromeCompactProgress = remember(
         destination,
         homeGridState,
@@ -1234,12 +1291,15 @@ private fun BrowseContent(
         // it mounted made the list appear underneath the dock; adding more
         // scroll padding could only mask that routing error.
         val showingFullPageRoute = showingDetail ||
+            currentRoute == BrowseLatestRoute ||
             currentRoute == BrowseSearchRoute ||
             currentRoute == BrowseFavoriteRoute ||
             currentRoute is BrowseLibraryRoute
         // 「我的」容器的两种形态：小屏（手机）全屏铺开、看起来就是普通页面跳转；其余尺寸
         // 用居中的毛玻璃模态。形态只由窗口决定，容器自己的回退栈不受影响。
-        val mineFullScreen = layout.navigation == NavigationPlacement.Bottom
+        // Phone owns a full-screen Mine stack; tablet/desktop keep the root
+        // shell visible while child content changes in the content stack.
+        val mineFullScreen = layout.isPhoneNavigation
         val routedSeason = (currentRoute as? BrowseSeasonRoute)?.let { route ->
             state.detailSeasons.firstOrNull { it.id.value == route.seasonId }
         }
@@ -1265,8 +1325,36 @@ private fun BrowseContent(
                 add(MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account))
             }
         }
+        // 收藏 is a content entry in the full sidebar, but it is grouped into
+        // 媒体库 on the phone bottom bar. Keep that distinction explicit
+        // instead of reintroducing a fourth bottom tab.
+        val sidebarDestinations = remember(destinations) {
+            destinations.toMutableList().apply {
+                add(1, MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite))
+            }
+        }
         val libraries = state.collections.map { collection ->
             MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library)
+        }
+        // The collapsed large-screen bar follows the iPadOS-style shell:
+        // it always keeps Home and Favorite. A third text tab is added only
+        // after a concrete secondary library has been selected; the generic
+        // library index is intentionally not duplicated in this bar.
+        val topTabDestinations = buildList {
+            destinations.firstOrNull { it.key == HomeDestination }?.let(::add)
+            if (ShowChasingDestination) {
+                destinations.firstOrNull { it.key == ChasingDestination }?.let(::add)
+            }
+            sidebarDestinations.firstOrNull { it.key == FavoriteDestination }?.let(::add)
+            if (libraryTabId != null) {
+                libraries.firstOrNull { it.key == libraryTabId }?.let(::add)
+            }
+        }
+        val topTabSelectedDestination = when {
+            currentRoute is BrowseLibraryRoute -> currentRoute.collectionId
+            shellContext.libraryId != null -> shellContext.libraryId
+            destination == LibraryDestination -> ""
+            else -> shellDestination
         }
         val selectDestination: (String) -> Unit = { next ->
             if (next == MineDestination) {
@@ -1284,11 +1372,20 @@ private fun BrowseContent(
                 if (next == HomeDestination) {
                     scope.launch { homeGridState.scrollToItem(0) }
                 }
+                val selectedLibrary = libraries.firstOrNull { it.key == next }
                 browseBackStack.clear()
-                browseBackStack += when (next) {
-                    HomeDestination -> BrowseHomeRoute
-                    ChasingDestination -> BrowseChasingRoute
-                    FavoriteDestination -> BrowseFavoriteRoute
+                browseBackStack += when {
+                    selectedLibrary != null -> {
+                        state.collections.firstOrNull { it.id.value == selectedLibrary.key }?.let { collection ->
+                            if (collection.id != state.selectedCollection) {
+                                scope.launch { browser.select(collection.id) }
+                            }
+                        }
+                        BrowseLibraryRoute(selectedLibrary.key)
+                    }
+                    next == HomeDestination -> BrowseHomeRoute
+                    next == ChasingDestination -> BrowseChasingRoute
+                    next == FavoriteDestination -> BrowseFavoriteRoute
                     else -> BrowseLibraryIndexRoute
                 }
             }
@@ -1389,6 +1486,11 @@ private fun BrowseContent(
                 browseBackStack += BrowseSearchRoute
             }
         }
+        val openLatest: () -> Unit = {
+            if (browseBackStack.lastOrNull() != BrowseLatestRoute) {
+                browseBackStack += BrowseLatestRoute
+            }
+        }
         // One source for the account surface, shared by the modal sheet and the
         // (now unreachable from the sidebar) legacy route. Secondary entries close
         // the sheet first so the pushed page is not hidden behind the modal.
@@ -1472,6 +1574,11 @@ private fun BrowseContent(
             if (mineBackStack.size > 1) mineBackStack.removeLastOrNull()
         }
         val mineNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
+            // Registered before NavDisplay so child routes/sheets handle Back
+            // first; at the account root it closes the whole account surface.
+            cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = minePresented) {
+                minePresented = false
+            }
             NavDisplay(
                 backStack = mineBackStack,
                 onBack = { popMineRoute() },
@@ -1829,6 +1936,84 @@ private fun BrowseContent(
             direction = state.favoriteSort.direction,
         )
 
+        // The browse stack belongs to this root shell, not to an individual
+        // page entry. Keep the pop operation here so the OHOS ability Back
+        // bridge and Navigation 3 use exactly the same transition/data rules.
+        val popBrowseRoute: () -> Unit = {
+            val route = browseBackStack.lastOrNull()
+            val revealed = browseBackStack.getOrNull(browseBackStack.lastIndex - 1)
+            val deferDetailClear = route is BrowseDetailRoute
+            when (route) {
+                // Keep the detail document composed while NavDisplay runs the
+                // pop transition so the shared-element source remains alive.
+                is BrowseDetailRoute -> Unit
+                is BrowsePersonRoute -> browser.clearPerson()
+                BrowseSearchRoute -> {
+                    searchJob?.cancel()
+                    searchJob = null
+                    browser.clearSearch()
+                }
+                else -> Unit
+            }
+            if (browseBackStack.size > 1) {
+                browseBackStack.removeLastOrNull()
+                if (deferDetailClear) {
+                    val expectedStack = browseBackStack.toList()
+                    scope.launch {
+                        delay(BrowseSharedReturnDurationMs)
+                        if (browseBackStack == expectedStack) browser.back()
+                    }
+                }
+                when (revealed) {
+                    BrowseHomeRoute -> scope.launch { browser.refreshHome() }
+                    is BrowseDetailRoute -> scope.launch {
+                        val id = MediaId(revealed.mediaId)
+                        if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
+                    }
+                    is BrowseEpisodeRoute -> scope.launch {
+                        val id = MediaId(revealed.episodeId)
+                        if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
+                    }
+                    is BrowseSeasonRoute -> scope.launch {
+                        val seriesId = MediaId(revealed.seriesId)
+                        val seasonId = MediaId(revealed.seasonId)
+                        val requiresRestore = state.detail?.id != seriesId ||
+                            state.selectedSeasonId != seasonId
+                        if (state.detail?.id != seriesId) browser.openDetail(seriesId)
+                        if (browser.state.value.selectedSeasonId != seasonId) {
+                            browser.selectSeason(seasonId)
+                        }
+                        if (!requiresRestore) browser.refreshDetail(seriesId)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+
+        // On a collapsed large-screen shell, secondary routes keep the same
+        // top-tab row. Its leading slot is the route back action; root pages
+        // deliberately leave that slot as the sidebar-expander instead.
+        val collapsedTopBarBack: (() -> Unit)? = when {
+            (showingDetail || currentRoute == BrowseLatestRoute) && browseBackStack.size > 1 -> popBrowseRoute
+            minePresented && mineBackStack.size > 1 -> popMineRoute
+            else -> null
+        }
+
+        // Root fallback for the tablet/desktop shell. Child sheet/player
+        // handlers are registered deeper in the Navigation 3 tree and win
+        // first; this handler only owns the root surface and route stacks.
+        MaFeiBackHandler(
+            enabled = minePresented || browseBackStack.size > 1,
+            onBack = {
+                when {
+                    minePresented && mineBackStack.size > 1 -> popMineRoute()
+                    browseBackStack.size > 1 -> popBrowseRoute()
+                    minePresented -> minePresented = false
+                }
+            },
+        )
+
+
         // 删除确认弹窗的玻璃源：捕获层包住外壳/播放器，弹窗是它的**兄弟** —— 记录者与
         // 消费者绝不能在同一棵子树里（详见 N1 崩溃规则）。只在弹窗出现时挂捕获，平时零开销。
         Box(Modifier.fillMaxSize()) {
@@ -1920,28 +2105,33 @@ private fun BrowseContent(
         } else MaFeiAdaptiveShell(
             layout = layout,
             destinations = destinations,
-            selectedDestination = if (minePresented) MineDestination else destination,
+            sidebarDestinations = sidebarDestinations,
+            topTabDestinations = topTabDestinations,
+            topTabSelectedDestination = topTabSelectedDestination,
+            selectedDestination = if (minePresented) MineDestination else shellDestination,
             onDestination = selectDestination,
+            onTopBarBack = collapsedTopBarBack,
             accountName = session.connection.account.displayName,
             libraries = libraries,
-            selectedLibrary = state.selectedCollection?.value,
-            onLibrary = { id ->
-                if (showingPersonDetail) browser.clearPerson()
-                if (state.detailId != null) browser.back()
-                state.collections.firstOrNull { it.id.value == id }?.let { collection ->
-                    if (collection.id != state.selectedCollection) {
-                        scope.launch { browser.select(collection.id) }
-                    }
-                    browseBackStack.clear()
-                    browseBackStack += BrowseLibraryRoute(collection.id.value)
-                }
-            },
+            // Do not read the browser's last selected collection here.  A
+            // Home/Favorite/Search detail must keep its opening root selected,
+            // even while that mutable provider state still contains another
+            // library.
+            selectedLibrary = shellContext.libraryId,
+            onLibrary = selectDestination,
             accountLabel = "${session.connection.account.displayName}\n${session.connection.server.name}",
-            // 小屏上「我的」容器是场景里的全屏页：根页和标签页一样保留底部标签栏（MineScreen
-            // 自己留了 112dp），但它里面的二级页在本重构之前本来就是"整页路由"，那时标签栏
-            // 是收起来的，所以这里也让它们把标签栏收走 —— 否则那些页面的最后一行会被压住。
-            showBottomNavigation = !showingFullPageRoute &&
-                !(minePresented && mineFullScreen && mineBackStack.size > 1),
+            // 只在手机上隐藏 Bottom Tab。Drawer/Sidebar/Rail 的导航入口必须始终保留：
+            // 具体媒体库、搜索和详情页虽然是全屏内容，但用户仍需要通过顶部 Tab、抽屉
+            // 或常驻侧栏切换根页面；之前把 showingFullPageRoute 直接传进外壳，会连大屏
+            // 导航一起隐藏，进入媒体库列表后就像导航栈被清空了一样。
+            showBottomNavigation = !layout.isPhoneNavigation ||
+                (!showingFullPageRoute &&
+                    !(minePresented && mineFullScreen && mineBackStack.size > 1)),
+            // Search is the primary shell action represented by the final
+            // icon in the collapsed top bar. Keep that bar mounted with the
+            // search action selected; only pushed details and the Mine stack
+            // switch a collapsed large sidebar to the compact rail.
+            contentNavigationActive = showingDetail || currentRoute == BrowseLatestRoute || minePresented,
             onSearch = openSearch,
             selectedSearch = currentRoute == BrowseSearchRoute,
             // The compact dock is the other half of the mini-player morph.
@@ -1983,74 +2173,20 @@ private fun BrowseContent(
             },
             accountActions = {},
             scene = {
-                val popBrowseRoute: () -> Unit = {
-                    val route = browseBackStack.lastOrNull()
-                    val revealed = browseBackStack.getOrNull(browseBackStack.lastIndex - 1)
-                    val deferDetailClear = route is BrowseDetailRoute
-                    when (route) {
-                        // Keep the detail document composed while NavDisplay runs
-                        // the pop transition. Clearing it here would remove the
-                        // shared-element source before it can travel back to the
-                        // home card.
-                        is BrowseDetailRoute -> Unit
-                        is BrowsePersonRoute -> browser.clearPerson()
-                        BrowseSearchRoute -> {
-                            searchJob?.cancel()
-                            searchJob = null
-                            browser.clearSearch()
-                        }
-                        else -> Unit
-                    }
-                    if (browseBackStack.size > 1) {
-                        browseBackStack.removeLastOrNull()
-                        if (deferDetailClear) {
-                            val expectedStack = browseBackStack.toList()
-                            scope.launch {
-                                delay(BrowseSharedReturnDurationMs)
-                                if (browseBackStack == expectedStack) browser.back()
-                            }
-                        }
-                        when (revealed) {
-                            BrowseHomeRoute -> {
-                                // Returning reveals the existing home document with
-                                // its established scroll position immediately. Data
-                                // catches up independently without global loading,
-                                // route reconstruction or a visible refresh jump.
-                                scope.launch { browser.refreshHome() }
-                            }
-                            is BrowseDetailRoute -> scope.launch {
-                                val id = MediaId(revealed.mediaId)
-                                if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
-                            }
-                            is BrowseEpisodeRoute -> scope.launch {
-                                val id = MediaId(revealed.episodeId)
-                                if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
-                            }
-                            is BrowseSeasonRoute -> scope.launch {
-                                val seriesId = MediaId(revealed.seriesId)
-                                val seasonId = MediaId(revealed.seasonId)
-                                val requiresRestore = state.detail?.id != seriesId ||
-                                    state.selectedSeasonId != seasonId
-                                if (state.detail?.id != seriesId) {
-                                    // Episode detail temporarily owns the single
-                                    // provider detail slot. Restore its parent once;
-                                    // all ordinary child returns stay in-place below.
-                                    browser.openDetail(seriesId)
-                                }
-                                if (browser.state.value.selectedSeasonId != seasonId) {
-                                    browser.selectSeason(seasonId)
-                                }
-                                if (!requiresRestore) {
-                                    browser.refreshDetail(seriesId)
-                                }
-                            }
-                            else -> Unit
-                        }
-                    }
-                }
-                fun openDetailId(id: MediaId, mediaName: String?, initialItem: MediaItem? = null) {
+                fun openDetailId(
+                    id: MediaId,
+                    mediaName: String?,
+                    initialItem: MediaItem? = null,
+                    origin: BrowseDetailOrigin = shellContext.origin ?: BrowseDetailOrigin.Home,
+                    libraryId: String? = shellContext.libraryId,
+                ) {
                     if (browseBackStack.lastOrNull() !is BrowseDetailRoute) {
-                        browseBackStack += BrowseDetailRoute(id.value, mediaName)
+                        browseBackStack += BrowseDetailRoute(
+                            mediaId = id.value,
+                            mediaName = mediaName,
+                            origin = origin,
+                            libraryId = libraryId,
+                        )
                     }
                     // Start the landscape request as soon as a home card is
                     // tapped. The portrait card remains the shared-transition
@@ -2068,12 +2204,22 @@ private fun BrowseContent(
                     }
                     scope.launch { browser.openDetail(id, initialItem) }
                 }
-                val openDetail: (MediaItem, String?) -> Unit = { item, mediaName ->
-                    openDetailId(item.id, mediaName, item)
+                fun openDetail(
+                    item: MediaItem,
+                    mediaName: String?,
+                    origin: BrowseDetailOrigin = shellContext.origin ?: BrowseDetailOrigin.Home,
+                    libraryId: String? = shellContext.libraryId,
+                ) {
+                    openDetailId(item.id, mediaName, item, origin, libraryId)
                 }
                 val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->
                     person.id?.let { id ->
-                        val route = BrowsePersonRoute(id.value, person.name)
+                        val route = BrowsePersonRoute(
+                            personId = id.value,
+                            personName = person.name,
+                            origin = shellContext.origin ?: BrowseDetailOrigin.Home,
+                            libraryId = shellContext.libraryId,
+                        )
                         if (browseBackStack.lastOrNull() != route) {
                             browseBackStack += route
                             scope.launch { browser.openPerson(id, person.name) }
@@ -2155,7 +2301,10 @@ private fun BrowseContent(
                                     onPlay = startPlayback,
                                     onRetry = { scope.launch { browser.refresh() } },
                                     onLoadMore = { scope.launch { browser.loadMore() } },
+                                    // The library shelf still opens the library index. The
+                                    // separate home latest shelf uses its own list route.
                                     onOpenLibrary = { selectDestination(LibraryDestination) },
+                                    onOpenLatest = openLatest,
                                     onSearch = openSearch,
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
@@ -2203,6 +2352,57 @@ private fun BrowseContent(
                                             fetchArtwork,
                                             modifier,
                                             targetWidthPx = 480,
+                                        )
+                                    },
+                                )
+                            }
+                            BrowseLatestRoute -> NavEntry(route) {
+                                VideoListScreen(
+                                    title = "最近添加",
+                                    items = state.homeFeed.latest,
+                                    selectedSort = MediaSort(
+                                        MediaSortField.DateAdded,
+                                        SortDirection.Descending,
+                                    ),
+                                    sortChoices = listOf(
+                                        LegacySortChoice(
+                                            "按添加日期",
+                                            MediaSort(
+                                                MediaSortField.DateAdded,
+                                                SortDirection.Descending,
+                                            ),
+                                        ),
+                                    ),
+                                    loading = state.homeFeed.latest.isEmpty() &&
+                                        state.homeError == null &&
+                                        (state.loading || state.refreshing),
+                                    refreshing = false,
+                                    loadingMore = false,
+                                    error = state.homeError,
+                                    canLoadMore = false,
+                                    layout = layout,
+                                    gridState = latestGridState,
+                                    onBack = popBrowseRoute.takeIf { layout.isPhoneNavigation },
+                                    onSortSelected = {},
+                                    onToggleSortDirection = {},
+                                    onRetry = { scope.launch { browser.refreshHome() } },
+                                    onLoadMore = {},
+                                    onItem = { item -> openDetail(item, "最近添加") },
+                                    showSortControls = false,
+                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
+                                    bottomNavigationVisible = !showingFullPageRoute &&
+                                        layout.isPhoneNavigation,
+                                    modifier = Modifier.fillMaxSize(),
+                                    artwork = { item, modifier ->
+                                        MediaArtwork(
+                                            item.preferredPoster(),
+                                            item.title,
+                                            artworkCache,
+                                            fetchArtwork,
+                                            modifier,
+                                            fallback = { fallbackModifier ->
+                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                            },
                                         )
                                     },
                                 )
@@ -2361,7 +2561,7 @@ private fun BrowseContent(
                                     error = state.error,
                                     canLoadMore = state.nextCursor != null,                                    layout = layout,
                                     gridState = libraryGridState,
-                                    onBack = popBrowseRoute.takeIf { layout.navigation == NavigationPlacement.Bottom },
+                                    onBack = popBrowseRoute.takeIf { layout.isPhoneNavigation },
                                     onSortSelected = { sort ->
                                         scope.launch { browser.setLibrarySort(sort) }
                                     },
@@ -2403,7 +2603,7 @@ private fun BrowseContent(
                                     },
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     bottomNavigationVisible = !showingFullPageRoute &&
-                                        layout.navigation == NavigationPlacement.Bottom,
+                                        layout.isPhoneNavigation,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
@@ -2477,9 +2677,11 @@ private fun BrowseContent(
                                     onSeasonSelected = { season ->
                                         if (browseBackStack.lastOrNull() !is BrowseSeasonRoute) {
                                             browseBackStack += BrowseSeasonRoute(
-                                                route.mediaId,
-                                                season.id.value,
-                                                route.mediaName,
+                                                seriesId = route.mediaId,
+                                                seasonId = season.id.value,
+                                                mediaName = route.mediaName,
+                                                origin = route.origin,
+                                                libraryId = route.libraryId,
                                             )
                                         }
                                     },
@@ -2650,9 +2852,11 @@ private fun BrowseContent(
                                             val lastIndex = browseBackStack.lastIndex
                                             if (lastIndex >= 0) {
                                                 browseBackStack[lastIndex] = BrowseSeasonRoute(
-                                                    route.seriesId,
-                                                    nextSeason.id.value,
-                                                    route.mediaName,
+                                                    seriesId = route.seriesId,
+                                                    seasonId = nextSeason.id.value,
+                                                    mediaName = route.mediaName,
+                                                    origin = route.origin,
+                                                    libraryId = route.libraryId,
                                                 )
                                             }
                                         },
@@ -2662,6 +2866,8 @@ private fun BrowseContent(
                                                 seasonId = route.seasonId,
                                                 episodeId = episode.id.value,
                                                 mediaName = route.mediaName,
+                                                origin = route.origin,
+                                                libraryId = route.libraryId,
                                             )
                                         },
                                         onPlayFirst = playTarget?.takeIf { playback != null }?.let { item ->
@@ -2876,13 +3082,13 @@ private fun BrowseContent(
                         },
                         modifier = Modifier
                             .align(
-                                if (layout.navigation == NavigationPlacement.Bottom) Alignment.BottomCenter
+                                if (layout.isPhoneNavigation) Alignment.BottomCenter
                                 else Alignment.BottomEnd,
                             )
                             .padding(
-                                start = safeArea.start + if (layout.navigation == NavigationPlacement.Bottom) 16.dp else 24.dp,
+                                start = safeArea.start + if (layout.isPhoneNavigation) 16.dp else 24.dp,
                                 end = safeArea.end + 16.dp,
-                                bottom = safeArea.bottom + if (layout.navigation == NavigationPlacement.Bottom && !showingDetail) 88.dp else 24.dp,
+                                bottom = safeArea.bottom + if (layout.isPhoneNavigation && !showingDetail) 88.dp else 24.dp,
                             )
                             .widthIn(max = 430.dp)
                             .fillMaxWidth(),

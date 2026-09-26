@@ -235,6 +235,7 @@ fun HomeScreen(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenLatest: () -> Unit = onOpenLibrary,
     onSearch: (() -> Unit)? = null,
     onHeroItemChanged: (MediaItem?) -> Unit = {},
     onBrowseCollection: (MediaCollection) -> Unit = onCollection,
@@ -333,16 +334,11 @@ fun HomeScreen(
         }
     }
     val showFeedPlaceholders = (loading || latestFeedLoading) && displayed.isEmpty()
-    // 网格列数是**结构度量**：只跟 family/navigation 走，与侧栏展开状态无关。
-    // 侧栏收起/展开只把内容整体平移，不重排网格。
-    val latestColumns = when (layout.family) {
-        MaFeiLayoutFamily.Phone -> layout.posterColumns.coerceIn(2, 3)
-        MaFeiLayoutFamily.Tablet -> when (layout.navigation) {
-            NavigationPlacement.Drawer -> 4
-            else -> 6
-        }
-        MaFeiLayoutFamily.Desktop -> 5
-    }
+    // Grid density follows the usable content width. Collapsing/expanding the
+    // sidebar only changes the available width; each window size therefore
+    // gets an appropriate number of posters instead of a fixed five-column
+    // desktop grid with oversized cards.
+    val latestColumns = legacyMediaColumns(layout.gridWidthDp)
     // The current HarmonyOS home uses the recommendation hero on phone as well
     // as on wide layouts.  Do not replace it with a generic app header.
     val showHero = overview && heroItems.isNotEmpty()
@@ -677,7 +673,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
       ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(if (overview) latestColumns else layout.posterColumns),
+            columns = GridCells.Fixed(if (overview) latestColumns else legacyMediaColumns(layout.gridWidthDp)),
             state = gridState,
             modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
             overscrollEffect = null,
@@ -689,8 +685,11 @@ fun HomeScreen(
                     overview && layout.family == MaFeiLayoutFamily.Phone -> safeArea.top + 12.dp
                     // Sidebar/Rail layouts share the same top margin as the
                     // sidebar panel so the hero and sidebar are vertically
-                    // aligned. Phone bleeds to the top for the hero effect.
-                    overview && layout.navigation != NavigationPlacement.Bottom -> safeArea.top + 12.dp
+                    // aligned. The collapsed top tabs are a floating overlay,
+                    // not a content row; reserving their 52dp here makes the
+                    // hero and "继续观看" jump down when the sidebar closes.
+                    overview && layout.navigation != NavigationPlacement.Bottom ->
+                        safeArea.top + 12.dp
                     overview -> 0.dp
                     else -> safeArea.top + HomeActionBarHeight + 12.dp
                 },
@@ -829,7 +828,7 @@ fun HomeScreen(
                                     .mafeiInteractive(
                                         onClick = {
                                             val target = selectedFeedCollection
-                                            if (target != null) onBrowseCollection(target) else onOpenLibrary()
+                                            if (target != null) onBrowseCollection(target) else onOpenLatest()
                                         },
                                         radiusDp = 18f,
                                         label = "更多",

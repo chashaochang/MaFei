@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiLayout
+import cn.mafei.cmp.common.design_system.isPhoneNavigation
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
 import cn.mafei.cmp.common.glass.GlassRole
@@ -60,6 +62,7 @@ import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.MaFeiActionBar
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
@@ -98,6 +101,30 @@ fun SearchScreen(
     val actionBarBackdrop = rememberGlassBackdrop()
 
     val pageHorizontalPadding = if (layout.gridWidthDp < 600f) 16.dp else 24.dp
+    val columns = legacyMediaColumns(layout.gridWidthDp)
+    val phoneNavigation = layout.isPhoneNavigation
+    val titleBarHeight = mafeiPageTitleBarContentHeight()
+    // On wide windows the input is content below the page title, not its replacement.
+    val contentTop = safeArea.top + titleBarHeight + if (phoneNavigation) 16.dp else 72.dp
+    val searchField: @Composable (GlassBackdrop) -> Unit = { fieldBackdrop ->
+        SearchField(
+            value = text,
+            onValueChange = { value ->
+                text = value
+                onQueryChange(value)
+            },
+            onSubmit = {
+                val normalized = text.trim()
+                if (normalized.isNotEmpty()) {
+                    keyboard?.hide()
+                    onSubmit(normalized)
+                }
+            },
+            focusRequester = focusRequester,
+            backdrop = fieldBackdrop,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 
     Box(modifier.fillMaxSize()) {
         Box(
@@ -110,7 +137,7 @@ fun SearchScreen(
             )
             Column(
                 Modifier.fillMaxSize()
-                    .padding(top = safeArea.top + 72.dp),
+                    .padding(top = contentTop),
             ) {
                 val normalized = text.trim()
                 if (normalized.isEmpty()) {
@@ -228,7 +255,7 @@ fun SearchScreen(
                         } else {
                             val gap = if (layout.gridWidthDp < 320f) 12.dp else 16.dp
                             LazyVerticalGrid(
-                                columns = GridCells.Fixed(legacyMediaColumns(layout.gridWidthDp)),
+                                columns = GridCells.Fixed(columns),
                                 state = gridState,
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(
@@ -260,30 +287,28 @@ fun SearchScreen(
 
         MaFeiActionBar(
             title = "搜索",
-            onBack = onBack,
+            // Search is a primary shell action on large windows: the shell's
+            // expand control owns navigation there. Phone search remains a
+            // full-screen page and keeps the normal back button.
+            onBack = onBack.takeIf { phoneNavigation },
             backdrop = actionBarBackdrop,
-            centerTitleOnScreen = false,
-            titleContent = { buttonBackdrop ->
-                SearchField(
-                    value = text,
-                    onValueChange = { value ->
-                        text = value
-                        onQueryChange(value)
-                    },
-                    onSubmit = {
-                        val normalized = text.trim()
-                        if (normalized.isNotEmpty()) {
-                            keyboard?.hide()
-                            onSubmit(normalized)
-                        }
-                    },
-                    focusRequester = focusRequester,
-                    backdrop = buttonBackdrop,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
+            centerTitleOnScreen = !phoneNavigation,
+            titleContent = if (phoneNavigation) {
+                { buttonBackdrop -> searchField(buttonBackdrop) }
+            } else null,
             modifier = Modifier.align(Alignment.TopCenter),
         )
+        if (!phoneNavigation) {
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(
+                    top = safeArea.top + titleBarHeight + 8.dp,
+                    start = safeArea.start + pageHorizontalPadding,
+                    end = safeArea.end + pageHorizontalPadding,
+                ),
+            ) {
+                searchField(actionBarBackdrop)
+            }
+        }
     }
 
     if (showClearDialog) {
@@ -322,7 +347,7 @@ private fun SearchField(
             cornerRadiusDp = 24f,
         ),
         tint = MaterialTheme.colorScheme.surface,
-        modifier = modifier.fillMaxWidth().height(48.dp),
+        modifier = modifier.fillMaxWidth().height(48.dp).testTag("searchInput"),
     ) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 15.dp),
