@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -304,7 +305,15 @@ fun LegacySortRow(
     }
 }
 
-/** Bottom-aligned list dialog translated from ArkUI `ListDialog`. */
+/**
+ * Sort choices translated from ArkUI `ListDialog`.
+ *
+ * The phone presentation intentionally remains a bottom sheet. On tablet and
+ * desktop the same modal is a centered panel, matching the rest of the app's
+ * large-window modal convention. The breakpoint comes from the navigation
+ * chrome rather than a device type, so fold/unfold and window resizing follow
+ * the same rule automatically.
+ */
 @Composable
 fun <T> LegacySortSheet(
     choices: List<LegacySortChoice<T>>,
@@ -312,17 +321,26 @@ fun <T> LegacySortSheet(
     onSelected: (T) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom } == true
+    val panelShape = if (largeWindow) {
+        RoundedCornerShape(24.dp)
+    } else {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         BoxWithConstraints(
             Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomCenter,
+            contentAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter,
         ) {
             Column(
-                Modifier.fillMaxWidth().heightIn(max = maxHeight * .4f)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                Modifier.widthIn(max = if (largeWindow) 560.dp else Dp.Infinity)
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight * if (largeWindow) .62f else .4f)
+                    .clip(panelShape)
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(bottom = 20.dp),
             ) {

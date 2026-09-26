@@ -1268,6 +1268,9 @@ internal fun BoxScope.OverviewSheetOverlay(
     val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
+    val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+    val sheetAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black.copy(alpha = .28f))
@@ -1281,8 +1284,10 @@ internal fun BoxScope.OverviewSheetOverlay(
         backdrop = backdrop,
         spec = OverviewSheetSurfaceSpec,
         tint = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
-            .then(sheetDrag)
+        modifier = Modifier.align(sheetAlignment)
+            .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
+            .widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
+            .then(if (largeWindow) Modifier else sheetDrag)
             .clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
@@ -1554,6 +1559,9 @@ private fun BoxScope.DetailPickerSheetOverlay(
     val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
+    val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+    val sheetAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
             interactionSource = dismissInteraction,
@@ -1562,7 +1570,9 @@ private fun BoxScope.DetailPickerSheetOverlay(
         ),
     )
     BoxWithConstraints(
-        Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth(),
+        Modifier.align(sheetAlignment)
+            .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
+            .widthIn(max = 720.dp).fillMaxWidth(),
     ) {
         val sheetMaxHeight = maxHeight * .70f
         val listMaxHeight = (sheetMaxHeight - 76.dp).coerceAtLeast(120.dp)
@@ -1570,7 +1580,8 @@ private fun BoxScope.DetailPickerSheetOverlay(
             backdrop = backdrop,
             spec = OverviewSheetSurfaceSpec,
             tint = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight).then(sheetDrag).clickable(
+            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
+                .then(if (largeWindow) Modifier else sheetDrag).clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
                 onClick = {},
@@ -1852,6 +1863,9 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
+    val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+    val sheetAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
             interactionSource = dismissInteraction,
@@ -1863,8 +1877,10 @@ internal fun BoxScope.MediaInfoSheetOverlay(
         backdrop = backdrop,
         spec = OverviewSheetSurfaceSpec,
         tint = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
-            .then(sheetDrag)
+        modifier = Modifier.align(sheetAlignment)
+            .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
+            .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
+            .then(if (largeWindow) Modifier else sheetDrag)
             .clickable(
                 interactionSource = sheetInteraction,
                 indication = null,
