@@ -136,6 +136,12 @@ fun MaFeiActionBar(
     val barHeight = actionBarHeightDp(stackedTitle)
     val resolvedContentColor = if (contentColor.isSpecified) contentColor
     else MaterialTheme.colorScheme.onSurface
+    // LiquidActionBar already reserves 16dp inside the safe-area inset. The
+    // page grids/details use the layout's full page padding (32dp on tablet
+    // and desktop), so only the remainder belongs on the title itself.
+    val largeTitleStartInset = (
+        (navigationChrome.effectiveLayout?.pagePaddingDp ?: 16f) - 16f
+    ).coerceAtLeast(0f).dp
     LiquidActionBar(
         backdrop = backdrop,
         topInset = safeArea.top,
@@ -187,7 +193,7 @@ fun MaFeiActionBar(
             Box(
                 Modifier.fillMaxSize()
                     .alpha(titleAlpha)
-                    .padding(start = if (alignTitleStart) 8.dp else 0.dp),
+                    .padding(start = if (alignTitleStart) largeTitleStartInset else 0.dp),
                 contentAlignment = titleAlignment,
             ) {
                 if (titleContent == null) {
