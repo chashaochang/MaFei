@@ -138,7 +138,7 @@ fun MaFeiAdaptiveShell(
     topTabSelectedDestination: String = selectedDestination,
     onDestination: (String) -> Unit,
     onSearch: (() -> Unit)? = null,
-    /** Back action shown in the leading slot of the collapsed top-tab row. */
+    /** Back action shown in the full-width first row beside the collapsed top-tab strip. */
     onTopBarBack: (() -> Unit)? = null,
     selectedSearch: Boolean = false,
     libraries: List<MaFeiNavItem>,
@@ -200,10 +200,11 @@ fun MaFeiAdaptiveShell(
     }
     val persistentNavigationExpanded = (sidebar || rail) && sidebarExpanded
     // The collapsed large-screen shell always keeps the primary top-tab row.
-    // On a secondary route the same row changes its leading action from
-    // "expand sidebar" to "back"; the page's ActionBar then supplies the
-    // second row of the stacked header. A collapsed tablet/desktop sidebar is
-    // fully hidden; the compact icon rail belongs only to CompactRail.
+    // On a secondary route the full-width first row adds a separate back
+    // control; the top-tab strip keeps its own expand-sidebar control. The
+    // page's ActionBar then supplies the second row of the stacked header.
+    // A collapsed tablet/desktop sidebar is fully hidden; the compact icon rail
+    // belongs only to CompactRail.
     val topTabsVisible = (drawer || sidebar) &&
         (drawer || !sidebarExpanded)
     val leadingEdge = layout.navigationEdge == NavigationEdge.Leading
@@ -1021,10 +1022,10 @@ private fun MediumTopTabs(
         }
     }
     // 这条导航对应小屏的底部导航，所以 Tab 胶囊按内容自适应宽度。
-    // 一级页的展开按钮仍属于胶囊首项；二级页的返回按钮则是胶囊左侧的独立控制，
-    // 不能再压在胶囊上面。这样返回按钮才是真正的“顶部导航条最左侧”。
+    // 展开按钮始终属于顶栏胶囊首项；二级页的返回按钮是另一层导航上的独立控制，
+    // 不能拿返回按钮替换掉顶栏自己的展开按钮。
     val tabTrackWidth = MediumTopStripInset * 2 +
-        (if (onBack == null) MediumTopExpandWidth else 0.dp) +
+        MediumTopExpandWidth +
         tabWidths.fold(0.dp) { total, width -> total + width }
     val tabGroupWidth = tabTrackWidth
     // 外壳把这个条放在顶部导航区的**顶端**，所以这里自己撑满导航高度并垂直居中 ——
@@ -1045,20 +1046,18 @@ private fun MediumTopTabs(
     // row. The recorder must never receive pointer/semantics modifiers: it is
     // only a backdrop source for the liquid droplet.
     val renderTabContent: @Composable RowScope.(interactive: Boolean) -> Unit = { interactive ->
-        val expandInteraction = if (interactive && onBack == null) {
+        val expandInteraction = if (interactive) {
             Modifier
                 .semantics { contentDescription = "展开侧边栏" }
                 .mafeiInteractive(onOpenDrawer, radiusDp = 17f, label = "展开侧边栏")
         } else {
             Modifier
         }
-        if (onBack == null) {
-            Box(
-                Modifier.width(MediumTopExpandWidth).fillMaxHeight().then(expandInteraction),
-                contentAlignment = Alignment.Center,
-            ) {
-                SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
-            }
+        Box(
+            Modifier.width(MediumTopExpandWidth).fillMaxHeight().then(expandInteraction),
+            contentAlignment = Alignment.Center,
+        ) {
+            SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
         }
         destinations.forEachIndexed { index, item ->
             val selected = index == selectedIndex
@@ -1198,12 +1197,9 @@ private fun MediumTopTabs(
                 modifier = Modifier
                     .alpha(if (selectedIndex >= 0) 1f else 0f)
                     .align(Alignment.CenterStart)
-                    // 胶囊内留白 + 一级页展开按钮的占位：二级页从独立返回按钮
-                    // 右侧的第一个 Tab 开始。
-                    .offset(
-                        x = MediumTopStripInset +
-                            if (onBack == null) MediumTopExpandWidth else 0.dp,
-                    )
+                    // 胶囊内留白 + 顶栏展开按钮的占位。二级页的返回键属于
+                    // 另一层全宽导航，不参与这里的 Tab 几何计算。
+                    .offset(x = MediumTopStripInset + MediumTopExpandWidth)
                     // Match the bottom dock's geometry: the top track is 40dp,
                     // while its selection capsule has 4dp of breathing room on
                     // both sides inside the 52dp chrome. The previous 34dp
@@ -1216,13 +1212,18 @@ private fun MediumTopTabs(
         if (onBack != null) {
             // The top navigation row is full width. On a secondary route the
             // back control belongs to its far-left leading slot, while the
-            // destination capsule remains independently centered.
+            // destination capsule remains independently centered. The leading
+            // edge uses the same page gutter as the second-row title and the
+            // route content; it is not tied to the capsule's measured width.
+            val pageHorizontalInset = LocalMaFeiNavigationChrome.current.effectiveLayout
+                ?.pagePaddingDp?.dp
+                ?: MaFeiLargePageHorizontalInsetDp
             LiquidButton(
                 onClick = onBack,
                 backdrop = backdrop,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = LocalMaFeiSafeArea.current.start)
+                    .padding(start = LocalMaFeiSafeArea.current.start + pageHorizontalInset)
                     .size(40.dp)
                     .semantics { contentDescription = "返回" },
                 height = 40.dp,

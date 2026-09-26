@@ -78,6 +78,39 @@ class MaFeiSidebarInteractionTest {
     }
 
     @Test
+    fun collapsedSecondaryKeepsBackControlSeparateFromTopTabExpander() {
+        composeRule.setContent {
+            MaterialTheme {
+                MaFeiAdaptiveShell(
+                    layout = mafeiLayout(widthDp = 1194f, heightDp = 834f),
+                    destinations = destinations,
+                    selectedDestination = "home",
+                    topTabDestinations = destinations.filter { it.key != "mine" && it.key != "library" },
+                    onDestination = {},
+                    onTopBarBack = {},
+                    contentNavigationActive = true,
+                    onSearch = {},
+                    libraries = listOf(MaFeiNavItem("movies", "电影", MaFeiGlyph.Library)),
+                    selectedLibrary = null,
+                    onLibrary = {},
+                    accountLabel = "Account",
+                    background = {},
+                    accountActions = {},
+                    scene = { Surface(Modifier.fillMaxSize()) { Text("secondary") } },
+                    overlay = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("收起侧边栏").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        // The back control is a full-row navigation control; the tab capsule
+        // still owns its independent sidebar-expander control.
+        composeRule.onNodeWithContentDescription("展开侧边栏").assertIsDisplayed()
+    }
+
+    @Test
     fun mediumDrawerUsesLegacyOverlayPanel() {
         composeRule.setContent {
             MaterialTheme {

@@ -57,6 +57,12 @@ class MaFeiLayoutTest {
         assertTrue(layout.horizontalHero)
     }
 
+    @Test fun largePagesUseTheSharedHorizontalInsetToken() {
+        assertEquals(MaFeiLargePageHorizontalInsetDp.value, mafeiLayout(800f, 600f).pagePaddingDp)
+        assertEquals(MaFeiLargePageHorizontalInsetDp.value, mafeiLayout(1600f, 1000f).pagePaddingDp)
+        assertEquals(MaFeiPhonePageHorizontalInsetDp.value, mafeiLayout(390f, 844f).pagePaddingDp)
+    }
+
     @Test fun tabletRotationReevaluatesCurrentWindowAndReflowsDensity() {
         val portrait = mafeiLayout(834f, 1194f)
         val landscape = mafeiLayout(1194f, 834f)

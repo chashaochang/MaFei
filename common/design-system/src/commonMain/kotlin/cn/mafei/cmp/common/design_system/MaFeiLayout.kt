@@ -1,8 +1,17 @@
 package cn.mafei.cmp.common.design_system
 
+import androidx.compose.ui.unit.dp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+
+/**
+ * Shared horizontal page gutters.  Every medium/large page and its chrome use
+ * this same token, so a title, a leading navigation control, and the content
+ * below it share one vertical alignment line.
+ */
+val MaFeiPhonePageHorizontalInsetDp = 16.dp
+val MaFeiLargePageHorizontalInsetDp = 32.dp
 
 /**
  * The navigation presentation selected from usable-window geometry.
@@ -124,10 +133,10 @@ fun mafeiLayout(widthDp: Float, heightDp: Float, fontScale: Float = 1f): MaFeiLa
         // Keep the dense rhythm of the original HarmonyOS phone client.
         // 16dp still leaves a comfortable gesture edge while avoiding the
         // oversized gutters that made shelves and three-column grids cramped.
-        MaFeiLayoutFamily.Phone -> 16f
+        MaFeiLayoutFamily.Phone -> MaFeiPhonePageHorizontalInsetDp.value
         // Legacy HORIZONTAL_CARD_SPACE is 8dp on phone and 16dp on MD+.
-        MaFeiLayoutFamily.Tablet -> 32f
-        MaFeiLayoutFamily.Desktop -> 32f
+        MaFeiLayoutFamily.Tablet -> MaFeiLargePageHorizontalInsetDp.value
+        MaFeiLayoutFamily.Desktop -> MaFeiLargePageHorizontalInsetDp.value
     }
     val availableContentWidth = (width - navWidth).coerceAtLeast(1f)
     // Keep the full usable width on desktop. Density is controlled by

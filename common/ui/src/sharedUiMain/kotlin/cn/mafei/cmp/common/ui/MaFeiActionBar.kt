@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.design_system.MaFeiLargePageHorizontalInsetDp
+import cn.mafei.cmp.common.design_system.MaFeiPhonePageHorizontalInsetDp
 import cn.mafei.cmp.common.design_system.isPhoneNavigation
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
@@ -139,9 +141,13 @@ fun MaFeiActionBar(
     // LiquidActionBar already reserves 16dp inside the safe-area inset. The
     // page grids/details use the layout's full page padding (32dp on tablet
     // and desktop), so only the remainder belongs on the title itself.
-    val largeTitleStartInset = (
-        (navigationChrome.effectiveLayout?.pagePaddingDp ?: 16f) - 16f
-    ).coerceAtLeast(0f).dp
+    val pageHorizontalInset = navigationChrome.effectiveLayout?.pagePaddingDp?.dp
+        ?: if (largeWindow) MaFeiLargePageHorizontalInsetDp
+        else MaFeiPhonePageHorizontalInsetDp
+    // LiquidActionBar already contributes its own 16dp content gutter. The
+    // remainder is the shared large-screen page margin used by both the title
+    // and any page-owned leading control.
+    val largeTitleStartInset = (pageHorizontalInset - 16.dp).coerceAtLeast(0.dp)
     LiquidActionBar(
         backdrop = backdrop,
         topInset = safeArea.top,
@@ -169,10 +175,12 @@ fun MaFeiActionBar(
         // layouts still use this page-owned button.
         navigation = onBack?.takeUnless { stackedTitle }?.let { back ->
             { buttonBackdrop ->
-                LiquidActionBarButton(
-                    onClick = back,
-                    backdrop = buttonBackdrop,
-                    modifier = Modifier.semantics { contentDescription = "返回" },
+                    LiquidActionBarButton(
+                        onClick = back,
+                        backdrop = buttonBackdrop,
+                        modifier = Modifier
+                            .padding(start = if (largeWindow) largeTitleStartInset else 0.dp)
+                            .semantics { contentDescription = "返回" },
                 ) {
                     Image(
                         painter = painterResource(MaFeiLegacyDrawables.back),
