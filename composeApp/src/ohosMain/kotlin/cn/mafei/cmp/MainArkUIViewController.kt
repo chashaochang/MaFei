@@ -1,9 +1,12 @@
 package cn.mafei.cmp
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeArkUIViewController
+import androidx.navigationevent.NavigationEventInput
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -35,6 +38,25 @@ import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
 private val ohosWindowFeatures = mutableStateOf(MaFeiWindowFeatures())
 private var ohosPlayerScreenVisible = false
 private var ohosPlayerFullscreenRequested = false
+private var ohosSystemBackInput: OhosSystemBackInput? = null
+
+/**
+ * Ability fallback input for the root Navigation 3 dispatcher. Dispatch through
+ * the handler chain (including sheets and player menus), never pop a route here.
+ */
+private class OhosSystemBackInput : NavigationEventInput() {
+    private var hasEnabledHandlers = false
+
+    override fun onHasEnabledHandlersChanged(hasEnabledHandlers: Boolean) {
+        this.hasEnabledHandlers = hasEnabledHandlers
+    }
+
+    fun dispatchBack(): Boolean {
+        if (!hasEnabledHandlers) return false
+        dispatchOnBackCompleted()
+        return true
+    }
+}
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("IsOhosPlayerScreenVisible")
@@ -43,6 +65,11 @@ fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
 @OptIn(ExperimentalNativeApi::class)
 @CName("IsOhosPlayerFullscreenRequested")
 fun IsOhosPlayerFullscreenRequested(): Boolean = ohosPlayerFullscreenRequested
+
+@OptIn(ExperimentalNativeApi::class)
+@CName("HandleOhosComposeBack")
+fun HandleOhosComposeBack(): Boolean =
+    ohosSystemBackInput?.dispatchBack() == true
 
 @OptIn(ExperimentalNativeApi::class)
 @CName("UpdateOhosWindowInsets")
@@ -147,6 +174,18 @@ fun MainArkUIViewController(
         // ComposeArkUIViewController has no Android ViewTree owner. Install a
         // platform-backed root so Navigation 3 receives HarmonyOS back events.
         val navigationOwner = rememberNavigationEventDispatcherOwner(parent = null)
+        val systemBackInput = remember(navigationOwner) { OhosSystemBackInput() }
+        DisposableEffect(navigationOwner, systemBackInput) {
+            val dispatcher = navigationOwner.navigationEventDispatcher
+            dispatcher.addInput(systemBackInput)
+            ohosSystemBackInput = systemBackInput
+            onDispose {
+                if (ohosSystemBackInput === systemBackInput) {
+                    ohosSystemBackInput = null
+                }
+                dispatcher.removeInput(systemBackInput)
+            }
+        }
         val windowFeatures by ohosWindowFeatures
         CompositionLocalProvider(
             LocalNavigationEventDispatcherOwner provides navigationOwner,

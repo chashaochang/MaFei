@@ -152,6 +152,17 @@ static napi_value GetPlayerFullscreenRequested(napi_env env, napi_callback_info 
     return result;
 }
 
+static napi_value HandleComposeBack(napi_env env, napi_callback_info info) {
+    size_t count = 0;
+    if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
+        napi_throw_type_error(env, nullptr, "No arguments are accepted");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, HandleOhosComposeBack(), &result);
+    return result;
+}
+
 static napi_value HandlePlayerBack(napi_env env, napi_callback_info info) {
     size_t count = 0;
     if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
@@ -212,6 +223,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "IsOhosPlayerFullscreenRequested",
             nullptr,
             GetPlayerFullscreenRequested,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "HandleOhosComposeBack",
+            nullptr,
+            HandleComposeBack,
             nullptr,
             nullptr,
             nullptr,

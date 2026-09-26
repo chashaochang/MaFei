@@ -20,4 +20,6 @@ export const IsOhosPlayerScreenVisible: () => boolean
 
 export const IsOhosPlayerFullscreenRequested: () => boolean
 
+export const HandleOhosComposeBack: () => boolean
+
 export const HandleOhosPlayerBack: () => boolean

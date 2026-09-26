@@ -87,9 +87,12 @@ struct Index {
   }
 
   onBackPress(): boolean {
-    // Compose owns the visible player's menu/fullscreen/page back priority.
-    // Keep the native callback only as a fallback for a missing dispatcher.
+    // Native dialogs/IME and CPF callbacks get first refusal. The fallback
+    // enters the same Navigation 3 handler chain, preserving overlay priority.
     if (this.controller?.onBackPress()) {
+      return true;
+    }
+    if (nativeApi.HandleOhosComposeBack()) {
       return true;
     }
     if (nativeApi.IsOhosPlayerScreenVisible() && nativeApi.HandleOhosPlayerBack()) {
