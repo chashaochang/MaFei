@@ -613,6 +613,7 @@ private fun BoxScope.DetailBody(
                     onTogglePlayed = onTogglePlayed,
                     actionsBusy = actionsBusy,
                     backdrop = backdrop,
+                    largeLayout = simplifiedLargeLayout,
                 )
                 Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
                     DetailAnimatedVisibility(
@@ -636,6 +637,7 @@ private fun BoxScope.DetailBody(
                         pickerKind = pickerKind,
                         onOpenPicker = onOpenPicker,
                         backdrop = backdrop,
+                        largeLayout = simplifiedLargeLayout,
                     )
                 }
                 if (item.overview?.isNotBlank() == true) {
@@ -753,7 +755,7 @@ private fun DetailProjectHeader(
             }
             DetailMetadata(item, libraryName, Color.White)
             if (item.mediaType != MediaType.Series && playbackSource != null && playbackSource.tagKeys.isNotEmpty()) {
-                DetailHeroMediaTags(playbackSource.tagKeys)
+                DetailHeroMediaTags(playbackSource.tagKeys, centered = false)
             }
         }
     }
@@ -901,10 +903,17 @@ private fun DetailHero(
 }
 
 @Composable
-private fun DetailHeroMediaTags(tags: List<DetailVideoTag>) {
+private fun DetailHeroMediaTags(
+    tags: List<DetailVideoTag>,
+    centered: Boolean = true,
+) {
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = if (centered) {
+            Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.spacedBy(14.dp)
+        },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         tags.forEach { tag ->
@@ -999,9 +1008,13 @@ private fun DetailActions(
     onTogglePlayed: (() -> Unit)?,
     actionsBusy: Boolean,
     backdrop: GlassBackdrop,
+    largeLayout: Boolean,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        Modifier
+            .then(if (largeLayout) Modifier.widthIn(max = 560.dp) else Modifier)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1011,7 +1024,11 @@ private fun DetailActions(
             onPlay = onPlay,
             busy = playbackBusy,
             backdrop = backdrop,
-            modifier = Modifier.weight(1f),
+            modifier = if (largeLayout) {
+                Modifier.widthIn(max = 360.dp).weight(1f)
+            } else {
+                Modifier.weight(1f)
+            },
         )
         DetailIconAction(
             icon = if (item.userData.isFavorite) {
@@ -1443,6 +1460,7 @@ private fun PlaybackSelectionSection(
     pickerKind: DetailPickerKind?,
     onOpenPicker: (DetailPickerKind) -> Unit,
     backdrop: GlassBackdrop,
+    largeLayout: Boolean,
 ) {
     val primary = sources.firstOrNull { it.id == selectedMediaSourceId } ?: sources.firstOrNull() ?: return
     val multiSource = sources.size > 1 && onSelectMediaSource != null
@@ -1456,7 +1474,11 @@ private fun PlaybackSelectionSection(
     }?.compactLabel ?: "无字幕"
 
     Row(
-        Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
+        Modifier
+            .then(if (largeLayout) Modifier.widthIn(max = 560.dp) else Modifier)
+            .fillMaxWidth()
+            .height(44.dp)
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (multiSource) {
