@@ -258,7 +258,9 @@ fun DetailScreen(
         val atmosphereTrailingBleed = if (
             effectiveLayout?.navigationEdge == NavigationEdge.Trailing
         ) atmosphereBleed else 0.dp
-        // Legacy keeps the hero full-width and constrains only the reading area.
+        // Phone keeps the legacy reading width. Large screens use the whole
+        // available content pane so metadata and media/file information do not
+        // leave an artificial empty column on the trailing side.
         val detailContentMaxWidth = 720.dp
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
@@ -544,6 +546,11 @@ private fun BoxScope.DetailBody(
     // the app theme while it still sits on cover art.
     CompositionLocalProvider(LocalContentColor provides Color.White) {
         val contentAlignment = if (simplifiedLargeLayout) Alignment.Start else Alignment.CenterHorizontally
+        val contentWidthModifier = if (simplifiedLargeLayout) {
+            Modifier.fillMaxWidth()
+        } else {
+            Modifier.widthIn(max = contentMaxWidth).fillMaxWidth()
+        }
         Column(
             Modifier
                 .align(Alignment.TopCenter)
@@ -583,8 +590,7 @@ private fun BoxScope.DetailBody(
             Column(
                 Modifier
                     .align(contentAlignment)
-                    .widthIn(max = contentMaxWidth)
-                    .fillMaxWidth()
+                    .then(contentWidthModifier)
                     .padding(
                         start = outerHorizontalInset,
                         end = outerHorizontalInset,
@@ -702,7 +708,6 @@ private fun DetailProjectHeader(
     }
     Box(
         modifier
-            .widthIn(max = 720.dp)
             .fillMaxWidth()
             .padding(
                 start = horizontalPadding,
