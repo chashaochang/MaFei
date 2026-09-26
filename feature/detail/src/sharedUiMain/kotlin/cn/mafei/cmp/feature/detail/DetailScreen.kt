@@ -31,9 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -77,6 +75,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -259,7 +258,6 @@ fun DetailScreen(
         val atmosphereTrailingBleed = if (
             effectiveLayout?.navigationEdge == NavigationEdge.Trailing
         ) atmosphereBleed else 0.dp
-        val atmosphereWidth = maxWidth + atmosphereLeadingBleed + atmosphereTrailingBleed
         // Legacy keeps the hero full-width and constrains only the reading area.
         val detailContentMaxWidth = 720.dp
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
@@ -268,7 +266,7 @@ fun DetailScreen(
                     item = item,
                     artwork = atmosphereArtwork,
                     leadingBleed = atmosphereLeadingBleed,
-                    expandedWidth = atmosphereWidth,
+                    trailingBleed = atmosphereTrailingBleed,
                     unblurred = largeDetailLayout,
                 )
             }
@@ -410,17 +408,17 @@ private fun DetailAtmosphere(
     item: MediaItem?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     leadingBleed: Dp = 0.dp,
-    expandedWidth: Dp? = null,
+    trailingBleed: Dp = 0.dp,
     unblurred: Boolean = false,
 ) {
-    val atmosphereModifier = Modifier
-        .offset(x = -leadingBleed)
-        .then(if (expandedWidth != null) Modifier.requiredWidth(expandedWidth) else Modifier.fillMaxWidth())
-        .fillMaxHeight()
-        // requiredWidth, not width: the incoming constraint is the content pane, so
-        // a plain width() would clamp the bleed and re-open the strip the home
-        // ambient already fixed. Clip so the 1.18-scaled artwork cannot spill.
-        .clipToBounds()
+    val atmosphereModifier = if (leadingBleed > 0.dp || trailingBleed > 0.dp) {
+        Modifier
+            .fillMaxSize()
+            .detailAtmosphereBleed(leadingBleed, trailingBleed)
+            .clipToBounds()
+    } else {
+        Modifier.fillMaxSize().clipToBounds()
+    }
     Box(atmosphereModifier.background(MaterialTheme.colorScheme.background)) {
         if (item != null && artwork != null) {
             val darkMode = isSystemInDarkTheme()
@@ -454,6 +452,28 @@ private fun DetailAtmosphere(
                 ),
             ),
         )
+    }
+}
+
+/**
+ * Measures the artwork at the full window width while reporting the route's
+ * original content-pane size to its parent. `requiredWidth` cannot be used for
+ * this: Compose centres an over-constrained child before applying its offset,
+ * which leaves an uncovered strip on the opposite edge.
+ */
+private fun Modifier.detailAtmosphereBleed(
+    leading: Dp,
+    trailing: Dp,
+): Modifier = layout { measurable, constraints ->
+    val leadingPx = leading.roundToPx()
+    val trailingPx = trailing.roundToPx()
+    val paneWidth = constraints.maxWidth
+    val windowWidth = (paneWidth + leadingPx + trailingPx).coerceAtLeast(1)
+    val placeable = measurable.measure(
+        constraints.copy(minWidth = windowWidth, maxWidth = windowWidth),
+    )
+    layout(paneWidth, constraints.maxHeight) {
+        placeable.placeRelative(-leadingPx, 0)
     }
 }
 
@@ -531,6 +551,7 @@ private fun BoxScope.DetailBody(
                     logoArtwork = logoArtwork,
                     playbackSource = selectedPlaybackSource,
                     safeAreaTop = safeArea.top,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             } else {
                 DetailHero(
@@ -655,6 +676,7 @@ private fun DetailProjectHeader(
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     playbackSource: DetailPlaybackSource?,
     safeAreaTop: Dp,
+    modifier: Modifier = Modifier,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
     val hasLogo = item.images.any { it.kind == ImageKind.Logo }
@@ -665,7 +687,7 @@ private fun DetailProjectHeader(
         null
     }
     Box(
-        Modifier
+        modifier
             .widthIn(max = 720.dp)
             .fillMaxWidth()
             .padding(

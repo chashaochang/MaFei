@@ -2741,7 +2741,7 @@ private fun BrowseContent(
                                             cache = artworkCache,
                                             fetch = fetchArtwork,
                                             modifier = modifier,
-                                            targetWidthPx = 240,
+                                            targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
                                         )
                                     },
                                 )
@@ -2931,7 +2931,7 @@ private fun BrowseContent(
                                                 cache = artworkCache,
                                                 fetch = fetchArtwork,
                                                 modifier = modifier,
-                                                targetWidthPx = 240,
+                                                targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
                                             )
                                         },
                                     )
@@ -3038,7 +3038,7 @@ private fun BrowseContent(
                                             cache = artworkCache,
                                             fetch = fetchArtwork,
                                             modifier = modifier,
-                                            targetWidthPx = 240,
+                                            targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
                                         )
                                     },
                                 )
