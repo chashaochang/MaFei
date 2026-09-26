@@ -1020,12 +1020,13 @@ private fun MediumTopTabs(
             indicator.animateToValue(targetStart)
         }
     }
-    // 这条导航对应小屏的底部导航，所以 Tab 组按 bottom dock 的规则来：**宽度随内容自适应**
-    // （`内边距 ×2 + 展开按钮 + 每个 Tab 的文字宽度 + 固定左右 padding`），居中浮着，而
-    // 不是把所有项塞进固定宽度的格子。
-    // 展开按钮留在同一颗胶囊里（它是这组导航的第一项），分开会读成两个不相干的控件。
-    val tabGroupWidth = MediumTopStripInset * 2 + MediumTopExpandWidth +
+    // 这条导航对应小屏的底部导航，所以 Tab 胶囊按内容自适应宽度。
+    // 一级页的展开按钮仍属于胶囊首项；二级页的返回按钮则是胶囊左侧的独立控制，
+    // 不能再压在胶囊上面。这样返回按钮才是真正的“顶部导航条最左侧”。
+    val tabTrackWidth = MediumTopStripInset * 2 +
+        (if (onBack == null) MediumTopExpandWidth else 0.dp) +
         tabWidths.fold(0.dp) { total, width -> total + width }
+    val tabGroupWidth = tabTrackWidth
     // 外壳把这个条放在顶部导航区的**顶端**，所以这里自己撑满导航高度并垂直居中 ——
     // 否则 40dp 的玻璃条会贴着状态栏，看着偏上。
     //
@@ -1038,34 +1039,24 @@ private fun MediumTopTabs(
     // while pressed. Keep the same width-dependent panel curve here; only the
     // droplet itself remains outside this layer so it is not scaled twice.
     val panelPressedScale = with(LocalDensity.current) {
-        1f + 16.dp.toPx() / tabGroupWidth.toPx()
+        1f + 16.dp.toPx() / tabTrackWidth.toPx()
     }
     // Keep one source of truth for the visible row and the hidden recorder
     // row. The recorder must never receive pointer/semantics modifiers: it is
     // only a backdrop source for the liquid droplet.
     val renderTabContent: @Composable RowScope.(interactive: Boolean) -> Unit = { interactive ->
-        val leadingAction = onBack ?: onOpenDrawer
-        val leadingDescription = if (onBack == null) "展开侧边栏" else "返回"
-        val expandInteraction = if (interactive) {
+        val expandInteraction = if (interactive && onBack == null) {
             Modifier
-                .semantics { contentDescription = leadingDescription }
-                .mafeiInteractive(leadingAction, radiusDp = 17f, label = leadingDescription)
+                .semantics { contentDescription = "展开侧边栏" }
+                .mafeiInteractive(onOpenDrawer, radiusDp = 17f, label = "展开侧边栏")
         } else {
             Modifier
         }
-        // A secondary route keeps the leading slot in the track as an empty
-        // spacer. The actual back button is overlaid below, outside the track's
-        // scaling/backdrop layer. If it lived inside this Row, the pressed-track
-        // transform would also scale its static geometry, making it look smaller
-        // than the sidebar collapse button until it was pressed.
-        Box(
-            Modifier
-                .width(MediumTopExpandWidth)
-                .fillMaxHeight()
-                .then(if (onBack == null) expandInteraction else Modifier),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (onBack == null) {
+        if (onBack == null) {
+            Box(
+                Modifier.width(MediumTopExpandWidth).fillMaxHeight().then(expandInteraction),
+                contentAlignment = Alignment.Center,
+            ) {
                 SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
             }
         }
@@ -1146,7 +1137,7 @@ private fun MediumTopTabs(
                 Modifier
                     .align(Alignment.Center)
                     .height(MediumTopStripHeight)
-                    .width(tabGroupWidth),
+                    .width(tabTrackWidth),
             ) {
                 // Record the complete track (material, edge highlight and labels)
                 // as a sibling source. This is the same source/consumer split used
@@ -1159,7 +1150,7 @@ private fun MediumTopTabs(
                         .captureGlassBackdrop(tabsBackdrop)
                         .liquidTrackSurface(backdrop, trackColor)
                         .fillMaxHeight()
-                        .width(tabGroupWidth)
+                        .width(tabTrackWidth)
                         .padding(horizontal = MediumTopStripInset),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -1181,7 +1172,7 @@ private fun MediumTopTabs(
                             },
                         )
                         .fillMaxHeight()
-                        .width(tabGroupWidth)
+                        .width(tabTrackWidth)
                         .padding(horizontal = MediumTopStripInset),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -1207,8 +1198,12 @@ private fun MediumTopTabs(
                 modifier = Modifier
                     .alpha(if (selectedIndex >= 0) 1f else 0f)
                     .align(Alignment.CenterStart)
-                    // 行内留白 + 展开按钮的占位：液滴从第一个 Tab 的左边缘起步。
-                    .offset(x = MediumTopStripInset + MediumTopExpandWidth)
+                    // 胶囊内留白 + 一级页展开按钮的占位：二级页从独立返回按钮
+                    // 右侧的第一个 Tab 开始。
+                    .offset(
+                        x = MediumTopStripInset +
+                            if (onBack == null) MediumTopExpandWidth else 0.dp,
+                    )
                     // Match the bottom dock's geometry: the top track is 40dp,
                     // while its selection capsule has 4dp of breathing room on
                     // both sides inside the 52dp chrome. The previous 34dp
@@ -1217,29 +1212,28 @@ private fun MediumTopTabs(
                     .height(MaFeiTopChromeHeightDp - 8.dp)
                     .width(indicatorWidth),
             )
-            if (onBack != null) {
-                // Keep this button as a sibling of the track and droplet so its
-                // 40dp geometry matches the sidebar control in both idle and
-                // pressed states. The leading slot above remains reserved so
-                // destination tabs keep their existing positions.
-                LiquidButton(
-                    onClick = onBack,
-                    backdrop = backdrop,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = MediumTopStripInset)
-                        .size(40.dp)
-                        .semantics { contentDescription = "返回" },
-                    height = 40.dp,
-                    horizontalPadding = 0.dp,
-                ) {
-                    Image(
-                        painter = painterResource(MaFeiLegacyDrawables.back),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
-                    )
-                }
+        }
+        if (onBack != null) {
+            // The top navigation row is full width. On a secondary route the
+            // back control belongs to its far-left leading slot, while the
+            // destination capsule remains independently centered.
+            LiquidButton(
+                onClick = onBack,
+                backdrop = backdrop,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = LocalMaFeiSafeArea.current.start)
+                    .size(40.dp)
+                    .semantics { contentDescription = "返回" },
+                height = 40.dp,
+                horizontalPadding = 0.dp,
+            ) {
+                Image(
+                    painter = painterResource(MaFeiLegacyDrawables.back),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+                )
             }
         }
     }
