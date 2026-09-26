@@ -14,6 +14,22 @@ import kotlin.math.min
  */
 enum class NavigationPlacement { Bottom, Drawer, Sidebar, Rail }
 
+/**
+ * Navigation shell selected from the current window shape.
+ *
+ * The shell is deliberately separate from [NavigationPlacement]. Placement is
+ * geometry (where the chrome is drawn); this value is the ownership boundary
+ * for navigation state. Phone routes own a bottom-tab stack, while tablet and
+ * desktop routes keep the root navigation chrome outside the content stack.
+ */
+enum class MaFeiNavigationMode {
+    PhoneBottom,
+    TabletDrawer,
+    TabletSidebar,
+    DesktopSidebar,
+    CompactRail,
+}
+
 /** The physical window edge owned by persistent navigation chrome. */
 enum class NavigationEdge { Leading, Trailing }
 
@@ -38,17 +54,37 @@ data class MaFeiLayout(
     val fontScale: Float = 1f,
 )
 
+val MaFeiLayout.navigationMode: MaFeiNavigationMode
+    get() = when {
+        navigation == NavigationPlacement.Bottom -> MaFeiNavigationMode.PhoneBottom
+        navigation == NavigationPlacement.Drawer -> MaFeiNavigationMode.TabletDrawer
+        navigation == NavigationPlacement.Rail -> MaFeiNavigationMode.CompactRail
+        family == MaFeiLayoutFamily.Tablet -> MaFeiNavigationMode.TabletSidebar
+        else -> MaFeiNavigationMode.DesktopSidebar
+    }
+
+val MaFeiLayout.isPhoneNavigation: Boolean
+    get() = navigationMode == MaFeiNavigationMode.PhoneBottom
+
+val MaFeiLayout.hasPersistentNavigation: Boolean
+    get() = navigationMode == MaFeiNavigationMode.TabletSidebar ||
+        navigationMode == MaFeiNavigationMode.DesktopSidebar ||
+        navigationMode == MaFeiNavigationMode.CompactRail
+
 /** Recompute width-driven metrics after the shell resolves runtime navigation chrome. */
 fun MaFeiLayout.withUsableWidth(usableWidthDp: Float): MaFeiLayout {
     val width = usableWidthDp.takeIf { it.isFinite() }?.coerceAtLeast(1f) ?: 1f
     val scale = fontScale.takeIf { it.isFinite() }?.coerceAtLeast(1f) ?: 1f
-    val contentMaxWidth = when (family) {
-        MaFeiLayoutFamily.Phone, MaFeiLayoutFamily.Tablet -> width
-        MaFeiLayoutFamily.Desktop -> min(width, 1440f)
-    }
+    // Desktop windows are not capped at an arbitrary 1440dp. The poster grid
+    // is width-driven, so a wider Mac/OHOS PC window gains columns instead of
+    // stretching the same six cards across a larger surface.
+    val contentMaxWidth = width
     val gridWidth = (contentMaxWidth - pagePaddingDp * 2).coerceAtLeast(1f)
-    val minPoster = (if (family == MaFeiLayoutFamily.Phone) 100f else 164f) * scale.coerceAtMost(2f)
-    val columns = floor((gridWidth + gapDp) / (minPoster + gapDp)).toInt().coerceIn(1, 6)
+    // Tablet/desktop posters use the legacy ~130dp visual rhythm. The
+    // sidebar is already removed from [gridWidth], so keeping 150dp here
+    // leaves a landscape tablet at only four or five columns.
+    val minPoster = (if (family == MaFeiLayoutFamily.Phone) 100f else 130f) * scale.coerceAtMost(2f)
+    val columns = floor((gridWidth + gapDp) / (minPoster + gapDp)).toInt().coerceIn(1, 12)
     return copy(
         contentMaxWidthDp = contentMaxWidth,
         gridWidthDp = gridWidth,
@@ -94,16 +130,16 @@ fun mafeiLayout(widthDp: Float, heightDp: Float, fontScale: Float = 1f): MaFeiLa
         MaFeiLayoutFamily.Desktop -> 32f
     }
     val availableContentWidth = (width - navWidth).coerceAtLeast(1f)
-    val contentMaxWidth = when (family) {
-        MaFeiLayoutFamily.Phone, MaFeiLayoutFamily.Tablet -> availableContentWidth
-        MaFeiLayoutFamily.Desktop -> 1440f
-    }
+    // Keep the full usable width on desktop. Density is controlled by
+    // [posterColumns], not by shrinking the content pane to a fixed maximum.
+    val contentMaxWidth = availableContentWidth
     val gridWidth = (min(availableContentWidth, contentMaxWidth) - padding * 2).coerceAtLeast(1f)
     val gap = if (family == MaFeiLayoutFamily.Phone) 10f else 20f
     // The original phone client deliberately used a dense three-poster rhythm.
-    // Very narrow cover displays still fall back to two columns naturally.
-    val minPoster = (if (family == MaFeiLayoutFamily.Phone) 100f else 164f) * scale.coerceAtMost(2f)
-    val columns = floor((gridWidth + gap) / (minPoster + gap)).toInt().coerceIn(1, 6)
+    // Wider windows progressively move through the legacy 4/6/8/12-column
+    // densities instead of making each poster wider.
+    val minPoster = (if (family == MaFeiLayoutFamily.Phone) 100f else 130f) * scale.coerceAtMost(2f)
+    val columns = floor((gridWidth + gap) / (minPoster + gap)).toInt().coerceIn(1, 12)
     return MaFeiLayout(
         family = family,
         navigation = navigation,

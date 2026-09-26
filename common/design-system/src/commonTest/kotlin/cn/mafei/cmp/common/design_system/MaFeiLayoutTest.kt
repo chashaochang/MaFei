@@ -17,6 +17,23 @@ class MaFeiLayoutTest {
         assertEquals(NavigationPlacement.Sidebar, desktop.navigation)
     }
 
+    @Test fun navigationModeOwnsTheFormFactorBoundary() {
+        assertEquals(MaFeiNavigationMode.PhoneBottom, mafeiLayout(390f, 844f).navigationMode)
+        assertEquals(MaFeiNavigationMode.TabletDrawer, mafeiLayout(800f, 600f).navigationMode)
+        assertEquals(MaFeiNavigationMode.TabletSidebar, mafeiLayout(1200f, 800f).navigationMode)
+        assertEquals(MaFeiNavigationMode.DesktopSidebar, mafeiLayout(1600f, 1000f).navigationMode)
+        assertEquals(MaFeiNavigationMode.CompactRail, mafeiLayout(
+            mafeiAdaptiveWindow(
+                MaFeiWindowEnvironment(
+                    widthDp = 900f,
+                    heightDp = 1_000f,
+                    foldPosture = MaFeiFoldPosture.Flat,
+                    displayRole = MaFeiDisplayRole.Inner,
+                ),
+            ),
+        ).navigationMode)
+    }
+
     @Test fun breakpointEdgesAreDeterministic() {
         assertEquals(NavigationPlacement.Bottom, mafeiLayout(599f, 800f).navigation)
         assertEquals(NavigationPlacement.Drawer, mafeiLayout(600f, 800f).navigation)
@@ -89,12 +106,13 @@ class MaFeiLayoutTest {
         assertEquals(NavigationPlacement.Bottom, smallFold.navigation)
     }
 
-    @Test fun ultraWideDesktopCapsContentAndPosterDensity() {
+    @Test fun ultraWideDesktopAddsPosterColumnsInsteadOfStretchingCards() {
         val layout = mafeiLayout(2560f, 1440f)
 
-        assertEquals(1440f, layout.contentMaxWidthDp)
-        assertEquals(1376f, layout.gridWidthDp)
-        assertEquals(6, layout.posterColumns)
+        assertEquals(2320f, layout.contentMaxWidthDp)
+        assertEquals(2256f, layout.gridWidthDp)
+        assertEquals(12, layout.posterColumns)
+        assertTrue(mafeiLayout(1728f, 1000f).posterColumns < layout.posterColumns)
     }
 
     @Test fun largeTextGetsFewerColumnsAndMoreRoom() {
