@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -101,7 +100,10 @@ fun LegacyVideoCard(
         Text(
             title,
             Modifier.fillMaxWidth().padding(top = 8.dp),
-            color = LocalContentColor.current,
+            // The card can be rendered directly in the adaptive shell scene,
+            // outside a MaFeiSurface. Do not depend on a parent content-color
+            // provider here; Material's fallback is black on the dark canvas.
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
@@ -112,7 +114,7 @@ fun LegacyVideoCard(
         Text(
             subtitle,
             Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = LocalContentColor.current.copy(alpha = .68f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             maxLines = 1,
@@ -178,7 +180,7 @@ fun LegacyBaseItemCard(
         Text(
             item.title,
             Modifier.fillMaxWidth().padding(top = 8.dp),
-            color = LocalContentColor.current,
+            color = MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
@@ -189,7 +191,7 @@ fun LegacyBaseItemCard(
         Text(
             legacyBaseItemSubtitle(item),
             Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = LocalContentColor.current.copy(alpha = .68f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             maxLines = 1,
