@@ -430,10 +430,15 @@ private fun DetailAtmosphere(
                         scaleX = 1.18f
                         scaleY = 1.18f
                         alpha = .95f
-                        // Keep the artwork dark enough for the existing white
-                        // detail ink. Large screens only remove the blur; they
-                        // keep this contrast treatment unchanged.
-                        val brightness = if (darkMode) .58f else .72f
+                        // The large-screen detail page is unblurred by design,
+                        // so it needs a stronger contrast pass for the white
+                        // title and metadata. Phone values remain unchanged.
+                        val brightness = when {
+                            unblurred && darkMode -> .46f
+                            unblurred -> .58f
+                            darkMode -> .58f
+                            else -> .72f
+                        }
                         colorFilter = ColorFilter.colorMatrix(
                             ColorMatrix().apply { setToScale(brightness, brightness, brightness, 1f) },
                         )
@@ -445,11 +450,19 @@ private fun DetailAtmosphere(
         }
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to DetailAtmosphereInk.copy(alpha = .19f),
-                    .56f to DetailAtmosphereInk.copy(alpha = .34f),
-                    1f to DetailAtmosphereInk.copy(alpha = .41f),
-                ),
+                if (unblurred) {
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = .28f),
+                        .56f to Color.Black.copy(alpha = .46f),
+                        1f to Color.Black.copy(alpha = .58f),
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        0f to DetailAtmosphereInk.copy(alpha = .19f),
+                        .56f to DetailAtmosphereInk.copy(alpha = .34f),
+                        1f to DetailAtmosphereInk.copy(alpha = .41f),
+                    )
+                },
             ),
         )
     }
@@ -530,6 +543,7 @@ private fun BoxScope.DetailBody(
     // text therefore shares one white ink hierarchy instead of switching with
     // the app theme while it still sits on cover art.
     CompositionLocalProvider(LocalContentColor provides Color.White) {
+        val contentAlignment = if (simplifiedLargeLayout) Alignment.Start else Alignment.CenterHorizontally
         Column(
             Modifier
                 .align(Alignment.TopCenter)
@@ -551,7 +565,7 @@ private fun BoxScope.DetailBody(
                     logoArtwork = logoArtwork,
                     playbackSource = selectedPlaybackSource,
                     safeAreaTop = safeArea.top,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    modifier = Modifier.align(contentAlignment),
                 )
             } else {
                 DetailHero(
@@ -568,7 +582,7 @@ private fun BoxScope.DetailBody(
 
             Column(
                 Modifier
-                    .align(Alignment.CenterHorizontally)
+                    .align(contentAlignment)
                     .widthIn(max = contentMaxWidth)
                     .fillMaxWidth()
                     .padding(
