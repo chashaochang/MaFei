@@ -5,9 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.*
@@ -32,6 +37,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.onSizeChanged
 import cn.mafei.cmp.common.glass.components.LiquidSelectionDroplet
 import cn.mafei.cmp.common.glass.components.mafeiProgressiveBlur
 import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
@@ -41,8 +47,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -51,16 +61,28 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.util.fastRoundToInt
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
 import cn.mafei.cmp.common.glass.components.LiquidButton
@@ -88,6 +110,8 @@ data class MaFeiNavigationChrome(
     val contentLeadingInset: Dp,
     val contentTrailingInset: Dp,
     val sidebarExpanded: Boolean = true,
+    /** Whether the shell is currently presenting the collapsed primary top bar. */
+    val topTabsVisible: Boolean = false,
     val effectiveLayout: MaFeiLayout? = null,
     val windowWidthDp: Dp? = null,
 )
@@ -109,14 +133,25 @@ fun MaFeiAdaptiveShell(
     layout: MaFeiLayout,
     destinations: List<MaFeiNavItem>,
     selectedDestination: String,
+    sidebarDestinations: List<MaFeiNavItem> = destinations,
+    topTabDestinations: List<MaFeiNavItem> = destinations,
+    topTabSelectedDestination: String = selectedDestination,
     onDestination: (String) -> Unit,
+    onSearch: (() -> Unit)? = null,
+    /** Back action shown in the leading slot of the collapsed top-tab row. */
+    onTopBarBack: (() -> Unit)? = null,
+    selectedSearch: Boolean = false,
     libraries: List<MaFeiNavItem>,
     selectedLibrary: String?,
     onLibrary: (String) -> Unit,
     accountLabel: String,
     showBottomNavigation: Boolean = true,
-    onSearch: (() -> Unit)? = null,
-    selectedSearch: Boolean = false,
+    /**
+     * True while the root content has pushed a detail/secondary route. On a
+     * large shell this changes the leading control of the retained top-tab
+     * strip to a back action when the full sidebar is collapsed.
+     */
+    contentNavigationActive: Boolean = false,
     bottomNavigationCompactProgress: () -> Float = { 0f },
     /**
      * 「页面内容已经滚过顶部」的进度（0..1）。一级页面的标题随内容一起滚走，内容一旦
@@ -138,23 +173,39 @@ fun MaFeiAdaptiveShell(
 ) {
     val backdrop = rememberGlassBackdrop()
     val sideScroll = rememberScrollState()
-    val sidebar = layout.navigation == NavigationPlacement.Sidebar
-    val drawer = layout.navigation == NavigationPlacement.Drawer
-    val rail = layout.navigation == NavigationPlacement.Rail
-    val bottomNavigationVisible = layout.navigation == NavigationPlacement.Bottom && showBottomNavigation
+    // Keep form-factor ownership explicit. A page route may hide the phone
+    // bottom tabs, but it must never hide the root navigation owned by a
+    // tablet/desktop shell.
+    val navigationMode = layout.navigationMode
+    val phone = navigationMode == MaFeiNavigationMode.PhoneBottom
+    val drawer = navigationMode == MaFeiNavigationMode.TabletDrawer
+    val sidebar = navigationMode == MaFeiNavigationMode.TabletSidebar ||
+        navigationMode == MaFeiNavigationMode.DesktopSidebar
+    val rail = navigationMode == MaFeiNavigationMode.CompactRail
+    val bottomNavigationVisible = phone && showBottomNavigation
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
     var sidebarExpanded by rememberSaveable { mutableStateOf(true) }
     val safeArea = currentMaFeiSafeArea()
-    LaunchedEffect(layout.navigation) {
+    val density = LocalDensity.current
+    val sidebarWidthPx = with(density) { MaFeiExpandedSidebarWidthDp.toPx() }
+    var topTabsGroupWidthPx by remember { mutableStateOf(0f) }
+    LaunchedEffect(navigationMode) {
         // Legacy HomeScreen restores the expanded sidebar when a window enters
         // LargeSidebar from MediumDrawer/phone, rather than retaining a stale
         // collapsed state across a form-factor change.
-        if (layout.navigation == NavigationPlacement.Sidebar) sidebarExpanded = true
-        if (layout.navigation == NavigationPlacement.Rail) sidebarExpanded = false
+        if (navigationMode == MaFeiNavigationMode.TabletSidebar ||
+            navigationMode == MaFeiNavigationMode.DesktopSidebar
+        ) sidebarExpanded = true
+        if (navigationMode == MaFeiNavigationMode.CompactRail) sidebarExpanded = false
     }
     val persistentNavigationExpanded = (sidebar || rail) && sidebarExpanded
-    /** 顶部 Tab 条是否在场：中屏（Drawer）与收起态的大屏侧栏都走它。 */
-    val topTabsVisible = (drawer || sidebar) && showBottomNavigation && (drawer || !sidebarExpanded)
+    // The collapsed large-screen shell always keeps the primary top-tab row.
+    // On a secondary route the same row changes its leading action from
+    // "expand sidebar" to "back"; the page's ActionBar then supplies the
+    // second row of the stacked header. A collapsed tablet/desktop sidebar is
+    // fully hidden; the compact icon rail belongs only to CompactRail.
+    val topTabsVisible = (drawer || sidebar) &&
+        (drawer || !sidebarExpanded)
     val leadingEdge = layout.navigationEdge == NavigationEdge.Leading
     // 内容让位量必须**就是面板的宽度**（两处共用 MaFeiExpandedSidebarWidthDp 常量，
     // 避免再漂移）。收起态让位归零：侧栏消失后内容回到全屏位置，顶部胶囊 Tab 是
@@ -168,23 +219,70 @@ fun MaFeiAdaptiveShell(
         rail && !sidebarExpanded && !leadingEdge -> layout.navigationWidthDp.dp
         else -> 0.dp
     }
+    // The persistent sidebar and the collapsed top strip are one navigation
+    // surface in the large-screen design. Drive both ends of the handoff from
+    // the same transition so neither one appears as an unrelated fade.
+    val sidebarTransition = updateTransition(
+        targetState = sidebarExpanded,
+        label = "mafei-sidebar-top-tabs-morph",
+    )
+    val sidebarMorphProgress by sidebarTransition.animateFloat(
+        transitionSpec = { tween(520, easing = FastOutSlowInEasing) },
+        label = "mafei-sidebar-morph-progress",
+    ) { expanded -> if (expanded) 1f else 0f }
+    // Overlap the shape change, the visual handoff and the final travel. Hard
+    // phase boundaries made the previous version read as "shrink, then slide".
+    // Smooth-step windows keep velocity continuous in both directions.
+    val sidebarCollapseProgress = (1f - sidebarMorphProgress).coerceIn(0f, 1f)
+    val sidebarPanelMorphProgress = mafeiSmoothStep(sidebarCollapseProgress / .72f)
+    val topTabsRevealProgress = mafeiSmoothStep((sidebarCollapseProgress - .18f) / .50f)
+    val topTabsTravelProgress = mafeiSmoothStep((sidebarCollapseProgress - .68f) / .32f)
+    val sidebarFadeProgress = mafeiSmoothStep((sidebarCollapseProgress - .58f) / .30f)
+    // The compact endpoint is the measured top-tab group, not an arbitrary
+    // percentage of the sidebar. This keeps the two silhouettes coincident on
+    // every window width and for every tab-label combination.
+    val compactSidebarWidthProgress = if (topTabsGroupWidthPx > 0f) {
+        (topTabsGroupWidthPx / sidebarWidthPx).coerceIn(.18f, 1f)
+    } else {
+        .18f
+    }
+    val sidebarPanelWidthProgress =
+        1f - (1f - compactSidebarWidthProgress) * sidebarPanelMorphProgress
+    val sidebarContentWidthProgress =
+        sidebarPanelWidthProgress * (1f - topTabsTravelProgress)
+    val sidebarVisualAlpha = 1f - sidebarFadeProgress
     val animatedContentLeadingInset = animateDpAsState(
         targetValue = contentLeadingInset,
-        animationSpec = tween(300),
+        animationSpec = tween(380, easing = FastOutSlowInEasing),
         label = "mafei-sidebar-content-inset",
     )
     val animatedContentTrailingInset = animateDpAsState(
         targetValue = contentTrailingInset,
-        animationSpec = tween(300),
+        animationSpec = tween(380, easing = FastOutSlowInEasing),
         label = "mafei-navigation-content-inset",
     )
+    // A persistent sidebar uses the same progress for its visual fold and for
+    // the horizontal content gutter. Keeping this derived from the morph
+    // transition prevents the page from lagging one frame behind the chrome.
+    val synchronizedContentLeadingInset = if (sidebar && leadingEdge) {
+        MaFeiExpandedSidebarWidthDp * sidebarContentWidthProgress
+    } else {
+        animatedContentLeadingInset.value
+    }
+    val synchronizedContentTrailingInset = if (sidebar && !leadingEdge) {
+        MaFeiExpandedSidebarWidthDp * sidebarContentWidthProgress
+    } else {
+        animatedContentTrailingInset.value
+    }
     val navigationPanelWidth by animateDpAsState(
         targetValue = when {
             sidebar && !sidebarExpanded -> 0.dp
             persistentNavigationExpanded -> MaFeiExpandedSidebarWidthDp
             else -> 56.dp
         },
-        animationSpec = tween(300),
+        // This value also keeps the panel composed until the morph completes.
+        // A shorter duration removes the layer early and creates a visible pop.
+        animationSpec = tween(520, easing = FastOutSlowInEasing),
         label = "mafei-navigation-panel-width",
     )
     CompositionLocalProvider(LocalShellBackdrop provides backdrop, LocalMaFeiSafeArea provides safeArea) {
@@ -217,6 +315,7 @@ fun MaFeiAdaptiveShell(
             contentLeadingInset = contentLeadingInset,
             contentTrailingInset = contentTrailingInset,
             sidebarExpanded = sidebarExpanded,
+            topTabsVisible = topTabsVisible,
             effectiveLayout = effectiveLayout,
             windowWidthDp = maxWidth,
         )
@@ -228,13 +327,13 @@ fun MaFeiAdaptiveShell(
             Box(
                 Modifier.fillMaxSize().padding(
                     start = when {
-                        layout.navigation == NavigationPlacement.Bottom -> 0.dp
-                        leadingEdge -> animatedContentLeadingInset.value + safeArea.start
+                        phone -> 0.dp
+                        leadingEdge -> synchronizedContentLeadingInset + safeArea.start
                         else -> 0.dp
                     },
                     end = when {
-                        layout.navigation == NavigationPlacement.Bottom -> 0.dp
-                        !leadingEdge -> animatedContentTrailingInset.value + safeArea.end
+                        phone -> 0.dp
+                        !leadingEdge -> synchronizedContentTrailingInset + safeArea.end
                         else -> 0.dp
                     },
                 ),
@@ -248,7 +347,7 @@ fun MaFeiAdaptiveShell(
                 // 纵向让位** —— 否则侧栏收起（Tab 条随之出现）会把整个内容区往下
                 // 推 52dp，看起来就是"内容往左下方跑"。横向让位（侧栏）照旧由
                 // 外层 padding 动画负责。
-                val routeSafeArea = if (layout.navigation == NavigationPlacement.Bottom) {
+                val routeSafeArea = if (phone) {
                     safeArea
                 } else {
                     if (leadingEdge) {
@@ -277,24 +376,35 @@ fun MaFeiAdaptiveShell(
             backdrop = backdrop,
             height = safeArea.top + if (topTabsVisible) MaFeiTopChromeHeightDp else 16.dp,
             contentStartInset = if (leadingEdge) {
-                animatedContentLeadingInset.value + safeArea.start
+                synchronizedContentLeadingInset + safeArea.start
             } else {
                 0.dp
             },
             contentEndInset = if (leadingEdge) {
                 0.dp
             } else {
-                animatedContentTrailingInset.value + safeArea.end
+                synchronizedContentTrailingInset + safeArea.end
             },
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
         overlay(backdrop)
 
-        val sidebarPanelVisible = !(sidebar && navigationPanelWidth <= 0.dp)
+        // The sidebar and the compact top strip are one navigation surface.
+        // The strip is composed during the handoff, but its actual geometry is
+        // transformed inside MediumTopTabs (the measured capsule), not on the
+        // full-screen centering container. That keeps both elements in one
+        // coordinate system while the sidebar changes shape underneath it.
+        val topTabsMorphVisible = drawer ||
+            (sidebar && (topTabsVisible || sidebarMorphProgress < .999f))
+        val windowWidthPx = with(density) { maxWidth.toPx() }
+        // Keep the panel in the composition for the whole morph. On expansion
+        // it must be present on the first frame; on collapse it disappears only
+        // after the scale transition has reached its compact endpoint.
+        val sidebarPanelVisible = !sidebar || sidebarExpanded || navigationPanelWidth > 0.dp
         if ((sidebar || rail) && sidebarPanelVisible) {
             SidebarPanel(
-                destinations = destinations,
+                destinations = sidebarDestinations,
                 libraries = libraries,
                 selectedDestination = selectedDestination,
                 selectedLibrary = selectedLibrary,
@@ -306,7 +416,7 @@ fun MaFeiAdaptiveShell(
                 accountName = accountName,
                 accountActions = accountActions,
                 sideScroll = sideScroll,
-                compact = rail && !sidebarExpanded,
+                compact = rail,
                 consumeBottomSafeArea = !sidebar,
                 showCloseButton = persistentNavigationExpanded,
                 onClose = { sidebarExpanded = false },
@@ -320,29 +430,67 @@ fun MaFeiAdaptiveShell(
                         start = if (leadingEdge) safeArea.start else 0.dp,
                         end = if (!leadingEdge) safeArea.end else 0.dp,
                     )
-                    .width(navigationPanelWidth),
+                    // Keep the measured panel stable while its layer follows a
+                    // bubble-shaped clipping mask into the compact top capsule.
+                    // The child layout never scales: text and icons retain their
+                    // positions while the lower content is progressively hidden.
+                    .width(if (sidebar) MaFeiExpandedSidebarWidthDp else navigationPanelWidth)
+                    .graphicsLayer {
+                        if (sidebar) {
+                            shape = SidebarBubbleMorphShape(
+                                progress = sidebarCollapseProgress,
+                                compactWidthProgress = compactSidebarWidthProgress,
+                                compactTop = safeArea.top,
+                                compactHeight = MaFeiTopChromeHeightDp,
+                                leadingEdge = leadingEdge,
+                            )
+                            clip = true
+                            alpha = sidebarVisualAlpha
+                        }
+                    },
             )
         }
 
-        if ((drawer || sidebar) && showBottomNavigation) {
-            AnimatedVisibility(
-                visible = drawer || !sidebarExpanded,
-                enter = fadeIn(tween(180)),
-                exit = fadeOut(tween(180)),
-                modifier = Modifier
+        // Draw the measured top-tab capsule above the shrinking panel. During
+        // the first phase it grows into the exact rectangle occupied by the
+        // panel; during the second phase the panel fades away and this same
+        // capsule travels to the window centre. Expansion is the exact reverse.
+        if ((drawer || sidebar) && topTabsMorphVisible) {
+            Box(
+                Modifier
                     .align(Alignment.TopCenter)
-                    .padding(
-                        top = safeArea.top,
-                    ),
+                    .padding(top = safeArea.top),
             ) {
                 MediumTopTabs(
-                    destinations = destinations,
-                    selectedDestination = selectedDestination,
+                    destinations = topTabDestinations,
+                    selectedDestination = topTabSelectedDestination,
                     onDestination = onDestination,
+                    onSearch = onSearch,
+                    selectedSearch = selectedSearch,
+                    onBack = onTopBarBack.takeIf { contentNavigationActive },
                     onOpenDrawer = {
                         if (drawer) drawerOpen = true else sidebarExpanded = true
                     },
                     backdrop = backdrop,
+                    morphModifier = if (sidebar && !drawer) {
+                        Modifier
+                            .alpha(topTabsRevealProgress)
+                            .onSizeChanged { topTabsGroupWidthPx = it.width.toFloat() }
+                            .graphicsLayer {
+                                // Transform the real measured capsule. Its
+                                // edge position is therefore the same edge
+                                // reached by the sidebar's leading transform.
+                                val travel = ((windowWidthPx - size.width) / 2f)
+                                    .coerceAtLeast(0f)
+                                translationX = if (leadingEdge) {
+                                    -travel * (1f - topTabsTravelProgress)
+                                } else {
+                                    travel * (1f - topTabsTravelProgress)
+                                }
+                            }
+                    } else {
+                        Modifier
+                    },
                 )
             }
         }
@@ -351,7 +499,7 @@ fun MaFeiAdaptiveShell(
             // Keep the modal above MediumTopTabs. The legacy Drawer opens a
             // full-screen scrim with a 240dp panel, never an embedded sheet.
             AnimatedVisibility(
-                visible = drawerOpen && showBottomNavigation,
+                visible = drawerOpen,
                 enter = slideInHorizontally { -it } + fadeIn(),
                 exit = slideOutHorizontally { -it } + fadeOut(),
                 modifier = Modifier.fillMaxSize(),
@@ -362,7 +510,7 @@ fun MaFeiAdaptiveShell(
                         .mafeiInteractive({ drawerOpen = false }, label = "关闭侧边栏"),
                 ) {
                     SidebarPanel(
-                        destinations = destinations,
+                        destinations = sidebarDestinations,
                         libraries = libraries,
                         selectedDestination = selectedDestination,
                         selectedLibrary = selectedLibrary,
@@ -743,152 +891,513 @@ private fun MediumTopTabs(
     destinations: List<MaFeiNavItem>,
     selectedDestination: String,
     onDestination: (String) -> Unit,
+    onSearch: (() -> Unit)?,
+    selectedSearch: Boolean,
+    onBack: (() -> Unit)?,
     onOpenDrawer: () -> Unit,
     backdrop: GlassBackdrop,
+    morphModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val testModifier = modifier.testTag("mediumTopTabs")
-    val selectedIndex = destinations.indexOfFirst { it.key == selectedDestination }.coerceAtLeast(0)
+    // A route such as Search has no top-strip tab. Keep the tab labels
+    // unselected instead of silently falling back to Home; the sidebar owns
+    // the explicit Search selection in that state.
+    val destinationIndex = destinations.indexOfFirst { it.key == selectedDestination }
     val indicatorScope = rememberCoroutineScope()
     // 选中液滴是一层真玻璃，采样的源必须是"页面 + 本条导航栏自己的材质"。少了后者，液滴
     // 底下会直接透出滚动列表的内容 —— 看起来就是选中项"没有背景"。
     //
-    // 导出层由一个**没有子节点**的材质层承担：导出会记录该子树的全部绘制，液滴若也在被
-    // 记录的子树里，源里就包含"读取自己"，skiko 的 drawable 图会递归到栈溢出
-    // （`GlassSurface` 文档：never record a consumer into its own source）。这里材质层为空、
-    // 液滴是它的兄弟，所以安全。
-    val stripMaterial = rememberGlassBackdrop()
-    val dropletBackdrop = rememberCombinedGlassBackdrop(backdrop, stripMaterial)
-    val lastIndex = (destinations.size - 1).coerceAtLeast(0)
-    // 指示器的手势挂在**每个 Tab** 上（液滴画在标签下面，拿不到事件），所以拖拽量要按
-    // Tab 的等宽换算成"走了几格"。按住时先出现液滴（`press()`），再横向拖动 → 液滴跟着走
-    // 并按速度拉伸，松手吸附到最近一格并选中它 —— 与底部导航的手感一致。
-    val tabWidthPx = with(LocalDensity.current) { MediumTopTabWidth.toPx() }
+    // Record a sibling copy of the complete strip for the droplet. Without
+    // this layer the droplet only samples the page and can scale it, but has
+    // no top/bottom edge or label content to refract.
+    val tabsBackdrop = rememberGlassBackdrop()
+    val dropletBackdrop = rememberCombinedGlassBackdrop(backdrop, tabsBackdrop)
+    // 指示器的手势挂在**每个 Tab** 上（液滴画在标签下面，拿不到事件）。顶栏文字项不
+    // 使用底部导航那种等宽格子：宽度由文字测量结果 + 固定左右 padding 决定，拖拽轨道
+    // 也使用这些真实的起点/中心点，避免长媒体库名称仍被塞进 80dp 的固定按钮。
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val hasSearch = onSearch != null
+    val tabWidths = remember(destinations, hasSearch, density, textMeasurer) {
+        buildList {
+            val maxLabelWidthPx = with(density) { MediumTopMaxLabelWidth.roundToPx() }
+            destinations.forEach { item ->
+                val measured = textMeasurer.measure(
+                    text = AnnotatedString(item.label),
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                    constraints = Constraints(maxWidth = maxLabelWidthPx),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                add(
+                    with(density) { measured.size.width.toDp() } +
+                        MediumTopTabHorizontalPadding * 2,
+                )
+            }
+            if (hasSearch) add(MediumTopSearchWidth)
+        }
+    }
+    val tabStartsDp = remember(tabWidths) {
+        buildList {
+            var cursor = 0.dp
+            tabWidths.forEach { width ->
+                add(cursor)
+                cursor += width
+            }
+        }
+    }
+    val tabStartsPx = remember(tabStartsDp, density) {
+        tabStartsDp.map { with(density) { it.toPx() } }
+    }
+    val tabCentersPx = remember(tabStartsPx, tabWidths, density) {
+        tabStartsPx.indices.map { index ->
+            tabStartsPx[index] + with(density) { tabWidths[index].toPx() } / 2f
+        }
+    }
+    val maxStartPx = tabStartsPx.lastOrNull() ?: 0f
     val latestOnDestination by rememberUpdatedState(onDestination)
+    val latestOnSearch by rememberUpdatedState(onSearch)
     val latestKeys = rememberUpdatedState(destinations.map { it.key })
-    val indicator = remember(indicatorScope, destinations.size) {
+    val searchIndex = if (onSearch != null) destinations.size else -1
+    val tabCount = destinations.size + if (onSearch != null) 1 else 0
+    val selectedIndex = if (selectedSearch && searchIndex >= 0) searchIndex else destinationIndex
+    val indicatorIndex = selectedIndex.coerceAtLeast(0)
+    val indicatorWidth by animateDpAsState(
+        targetValue = tabWidths.getOrNull(indicatorIndex) ?: 0.dp,
+        animationSpec = tween(180),
+        label = "medium-top-tab-width",
+    )
+    val latestTabStartsPx = rememberUpdatedState(tabStartsPx)
+    val latestTabCentersPx = rememberUpdatedState(tabCentersPx)
+    val latestSelectedWidthPx = rememberUpdatedState(
+        tabWidths.getOrNull(indicatorIndex)?.let { with(density) { it.toPx() } } ?: 0f,
+    )
+    val indicator = remember(indicatorScope, tabCount, tabWidths) {
         // 只在**真的拖动过**时才在松手时改选中：单击也会走 onDragStart/onDragStopped
         // （`inspectDragGestures` 不设滑动阈值），那只该由 Tab 自己的点击负责，否则会多
         // 出一次没必要的按压回弹。
         var dragged = false
         DampedDragAnimation(
             animationScope = indicatorScope,
-            initialValue = selectedIndex.toFloat(),
-            valueRange = 0f..lastIndex.toFloat(),
+            initialValue = tabStartsPx.getOrNull(indicatorIndex) ?: 0f,
+            valueRange = 0f..maxStartPx,
             visibilityThreshold = .001f,
             initialScale = 1f,
-            pressedScale = 1.12f,
+            // Keep horizontal growth restrained so neighbouring labels stay
+            // readable, but let the lens rise above/below the 40dp track.
+            // The vertical overshoot is what makes the track's upper/lower
+            // edges readable through the pressed droplet.
+            pressedScale = 1.24f,
+            pressedScaleY = 1.38f,
             onDragStarted = { dragged = false },
             onDragStopped = {
                 if (dragged) {
-                    val index = targetValue.fastRoundToInt().coerceIn(0, lastIndex)
-                    animateToValue(index.toFloat())
-                    latestKeys.value.getOrNull(index)?.let { latestOnDestination(it) }
+                    val targetCenter = targetValue + latestSelectedWidthPx.value / 2f
+                    val index = latestTabCentersPx.value.indices.minByOrNull { candidate ->
+                        kotlin.math.abs(latestTabCentersPx.value[candidate] - targetCenter)
+                    } ?: 0
+                    val targetStart = latestTabStartsPx.value.getOrNull(index) ?: 0f
+                    animateToValue(targetStart)
+                    if (index == searchIndex) {
+                        latestOnSearch?.invoke()
+                    } else {
+                        latestKeys.value.getOrNull(index)?.let { latestOnDestination(it) }
+                    }
                 }
             },
             onDrag = { _, dragAmount ->
                 if (dragAmount.x != 0f) dragged = true
-                if (lastIndex > 0) {
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidthPx).coerceIn(0f, lastIndex.toFloat()),
-                    )
+                if (maxStartPx > 0f) {
+                    updateValue((targetValue + dragAmount.x).coerceIn(0f, maxStartPx))
                 }
             },
         )
     }
-    LaunchedEffect(selectedIndex, destinations.size) {
-        if (indicator.value != selectedIndex.toFloat()) {
-            indicator.animateToValue(selectedIndex.toFloat())
+    LaunchedEffect(indicatorIndex, tabCount, tabStartsPx) {
+        val targetStart = tabStartsPx.getOrNull(indicatorIndex) ?: 0f
+        if (indicator.value != targetStart) {
+            indicator.animateToValue(targetStart)
         }
     }
     // 这条导航对应小屏的底部导航，所以 Tab 组按 bottom dock 的规则来：**宽度随内容自适应**
-    // （`内边距 ×2 + 展开按钮 + N × 等宽`），居中浮着，而不是拉满整条窗口宽度。拉满会把
-    // 内容挤在左半边、右侧留一大片空玻璃。
+    // （`内边距 ×2 + 展开按钮 + 每个 Tab 的文字宽度 + 固定左右 padding`），居中浮着，而
+    // 不是把所有项塞进固定宽度的格子。
     // 展开按钮留在同一颗胶囊里（它是这组导航的第一项），分开会读成两个不相干的控件。
     val tabGroupWidth = MediumTopStripInset * 2 + MediumTopExpandWidth +
-        MediumTopTabWidth * destinations.size
+        tabWidths.fold(0.dp) { total, width -> total + width }
     // 外壳把这个条放在顶部导航区的**顶端**，所以这里自己撑满导航高度并垂直居中 ——
     // 否则 40dp 的玻璃条会贴着状态栏，看着偏上。
     //
     // 分层（自下而上）：玻璃条材质 → 选中液滴 → 展开按钮与 Tab 标签。
     // 液滴必须画在标签**下面**：`drawBackdrop` 是把折射后的背景铺满整个形状，画在上层
     // 会把选中项的标签整个盖掉（只剩一颗空胶囊）。上游 `LiquidBottomTabs` 靠"再记录一份
-    // 不可见的染色副本给液滴采样"来实现玻璃里放大的标签，代价是整条内容画两遍、还要
-    // 一个额外的记录层；这里改用"标签压在液滴上"，静止态观感与 bottom tab 的选中态一致
-    // （浅色玻璃胶囊 + 强调色文字），结构上也不再有自引用风险。
-    Box(
-        testModifier.fillMaxWidth().height(MaFeiTopChromeHeightDp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.height(MediumTopStripHeight).width(tabGroupWidth)) {
-            MaFeiSurface(
-                GlassSurfaceSpec(
-                    GlassRole.Navigation,
-                    GlassLevel.Full,
-                    tintAlpha = .16f,
-                    intensity = .9f,
-                    cornerRadiusDp = 20f,
-                ),
-                Modifier.fillMaxSize(),
-                backdrop,
-                // 只导出材质（内容为空）：给上面的液滴采样。内容留在这一层外面，避免自引用。
-                exportedBackdrop = stripMaterial,
-            ) {}
-            // 液滴：真玻璃（折射 + 色散 + 按下高光/阴影），位移与缩放由阻尼弹簧驱动。
+    // 不可见的内容副本给液滴采样"来实现玻璃里放大的标签；顶栏也采用这个安全的兄弟记录层，
+    // 而不是把液滴放进自己的采样源里造成自引用。
+    // Bottom tabs scale both the navigation surface and its selection droplet
+    // while pressed. Keep the same width-dependent panel curve here; only the
+    // droplet itself remains outside this layer so it is not scaled twice.
+    val panelPressedScale = with(LocalDensity.current) {
+        1f + 16.dp.toPx() / tabGroupWidth.toPx()
+    }
+    // Keep one source of truth for the visible row and the hidden recorder
+    // row. The recorder must never receive pointer/semantics modifiers: it is
+    // only a backdrop source for the liquid droplet.
+    val renderTabContent: @Composable RowScope.(interactive: Boolean) -> Unit = { interactive ->
+        val leadingAction = onBack ?: onOpenDrawer
+        val leadingDescription = if (onBack == null) "展开侧边栏" else "返回"
+        val expandInteraction = if (interactive) {
+            Modifier
+                .semantics { contentDescription = leadingDescription }
+                .mafeiInteractive(leadingAction, radiusDp = 17f, label = leadingDescription)
+        } else {
+            Modifier
+        }
+        // A secondary route keeps the leading slot in the track as an empty
+        // spacer. The actual back button is overlaid below, outside the track's
+        // scaling/backdrop layer. If it lived inside this Row, the pressed-track
+        // transform would also scale its static geometry, making it look smaller
+        // than the sidebar collapse button until it was pressed.
+        Box(
+            Modifier
+                .width(MediumTopExpandWidth)
+                .fillMaxHeight()
+                .then(if (onBack == null) expandInteraction else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (onBack == null) {
+                SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
+            }
+        }
+        destinations.forEachIndexed { index, item ->
+            val selected = index == selectedIndex
+            val tabInteraction = if (interactive) {
+                Modifier
+                    .mediumTopTabGesture(
+                        animation = indicator,
+                        onClick = { onDestination(item.key) },
+                    )
+                    .semantics { this.selected = selected }
+                    .semantics { onClick(item.label) { onDestination(item.key); true } }
+            } else {
+                Modifier
+            }
+            Box(
+                Modifier
+                    .width(tabWidths[index])
+                    .fillMaxHeight()
+                    .then(tabInteraction),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    item.label,
+                    Modifier.padding(horizontal = MediumTopTabHorizontalPadding),
+                    color = if (selected) MediumTopTabAccent
+                    else MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
+        }
+        onSearch?.let { action ->
+            val searchInteraction = if (interactive) {
+                Modifier
+                    .mediumTopTabGesture(
+                        animation = indicator,
+                        onClick = action,
+                    )
+                    .semantics {
+                        contentDescription = "搜索"
+                        selected = selectedSearch
+                        onClick("搜索") { action(); true }
+                    }
+            } else {
+                Modifier
+            }
+            Box(
+                Modifier
+                    .width(tabWidths[destinations.size])
+                    .fillMaxHeight()
+                    .then(searchInteraction),
+                contentAlignment = Alignment.Center,
+            ) {
+                NavigationIcon(
+                    glyph = MaFeiGlyph.Search,
+                    selected = selectedSearch,
+                    modifier = Modifier.size(20.dp),
+                    color = if (selectedSearch) MediumTopTabAccent
+                    else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+    Box(testModifier.fillMaxWidth().height(MaFeiTopChromeHeightDp), contentAlignment = Alignment.Center) {
+        // Keep an extra 6dp above and below the 40dp track. The pressed
+        // droplet is allowed to occupy this top-chrome space instead of
+        // being clipped by the track's own layout bounds.
+        Box(
+            morphModifier
+                .requiredHeight(MaFeiTopChromeHeightDp)
+                .width(tabGroupWidth),
+        ) {
+            val trackColor = MaterialTheme.colorScheme.surface.copy(alpha = .16f)
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .height(MediumTopStripHeight)
+                    .width(tabGroupWidth),
+            ) {
+                // Record the complete track (material, edge highlight and labels)
+                // as a sibling source. This is the same source/consumer split used
+                // by LiquidBottomTabs; recording only a MaFeiSurface leaves the
+                // droplet with no track edge to refract.
+                Row(
+                    Modifier
+                        .clearAndSetSemantics {}
+                        .alpha(0f)
+                        .captureGlassBackdrop(tabsBackdrop)
+                        .liquidTrackSurface(backdrop, trackColor)
+                        .fillMaxHeight()
+                        .width(tabGroupWidth)
+                        .padding(horizontal = MediumTopStripInset),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    renderTabContent(false)
+                }
+                // The visible track uses the same backdrop material. Its scale is
+                // applied through drawBackdrop's layerBlock so the sampled source
+                // and the pressed geometry remain in the same coordinate space.
+                Row(
+                    Modifier
+                        .liquidTrackSurface(
+                            backdrop = backdrop,
+                            tint = trackColor,
+                            layerBlock = {
+                                val progress = indicator.pressProgress.coerceIn(0f, 1f)
+                                val scale = 1f + (panelPressedScale - 1f) * progress
+                                scaleX = scale
+                                scaleY = scale
+                            },
+                        )
+                        .fillMaxHeight()
+                        .width(tabGroupWidth)
+                        .padding(horizontal = MediumTopStripInset),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 目的地 Tab：文字自适应宽度 + 一颗沿真实轨道滑动的液滴选中指示器。
+                    // 不用 LiquidBottomTabs：那个组件自带蓝色强调色与自己的几何，套上来会把这条
+                    // 导航的样子改掉；这里只取"选中指示器滑动 + 真玻璃液滴"这一核心手感。
+                    renderTabContent(true)
+                }
+            }
+            // Draw the liquid consumer after the visible row, just like the
+            // bottom dock. Its sibling recorder above prevents self-sampling,
+            // while this order lets the lens visibly bend the row's labels and
+            // the capsule's upper/lower edges instead of leaving the effect
+            // hidden underneath the text.
             LiquidSelectionDroplet(
                 backdrop = dropletBackdrop,
                 animation = indicator,
-                travelPerStep = MediumTopTabWidth,
+                // The animation value is the pixel position on the variable-
+                // width track; the callback keeps the shared glass component
+                // independent from the top-bar layout policy.
+                travelPerStep = 1.dp,
+                translationXInPx = { it },
                 modifier = Modifier
+                    .alpha(if (selectedIndex >= 0) 1f else 0f)
                     .align(Alignment.CenterStart)
                     // 行内留白 + 展开按钮的占位：液滴从第一个 Tab 的左边缘起步。
                     .offset(x = MediumTopStripInset + MediumTopExpandWidth)
-                    .height(MediumTopStripHeight - MediumTopStripInset * 2)
-                    .width(MediumTopTabWidth),
+                    // Match the bottom dock's geometry: the top track is 40dp,
+                    // while its selection capsule has 4dp of breathing room on
+                    // both sides inside the 52dp chrome. The previous 34dp
+                    // height made the droplet look like a thin strip glued to
+                    // the track edge.
+                    .height(MaFeiTopChromeHeightDp - 8.dp)
+                    .width(indicatorWidth),
             )
-            Row(
-                Modifier.fillMaxHeight().padding(horizontal = MediumTopStripInset),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier.width(MediumTopExpandWidth).fillMaxHeight()
-                        .semantics { contentDescription = "展开侧边栏" }
-                        .mafeiInteractive(onOpenDrawer, radiusDp = 17f, label = "展开侧边栏"),
-                    contentAlignment = Alignment.Center,
+            if (onBack != null) {
+                // Keep this button as a sibling of the track and droplet so its
+                // 40dp geometry matches the sidebar control in both idle and
+                // pressed states. The leading slot above remains reserved so
+                // destination tabs keep their existing positions.
+                LiquidButton(
+                    onClick = onBack,
+                    backdrop = backdrop,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = MediumTopStripInset)
+                        .size(40.dp)
+                        .semantics { contentDescription = "返回" },
+                    height = 40.dp,
+                    horizontalPadding = 0.dp,
                 ) {
-                    SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
-                }
-                // 目的地 Tab：等宽 + 一颗滑动的液滴选中指示器。
-                // 不用 LiquidBottomTabs：那个组件自带蓝色强调色与自己的几何，套上来会把这条
-                // 导航的样子改掉；这里只取"选中指示器滑动 + 真玻璃液滴"这一核心手感。
-                destinations.forEachIndexed { index, item ->
-                    val selected = index == selectedIndex
-                    Box(
-                        Modifier.width(MediumTopTabWidth).fillMaxHeight()
-                            .semantics { this.selected = selected }
-                            .mafeiInteractive(
-                                { onDestination(item.key) },
-                                radiusDp = 17f,
-                                label = item.label,
-                            )
-                            .then(indicator.modifier),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            item.label,
-                            // 选中样式对齐液态玻璃 bottom tab：选中内容用它的强调色染色
-                            // （`LiquidBottomTabs` 里深色主题硬编码 0xFF0091FF），底下那颗
-                            // 浅色液滴由同层的滑动指示器担任。
-                            color = if (selected) MediumTopTabAccent
-                            else MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                        )
-                    }
+                    Image(
+                        painter = painterResource(MaFeiLegacyDrawables.back),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+                    )
                 }
             }
         }
+    }
+}
+
+/**
+ * The top strip uses one pointer owner per item. A separate clickable and drag
+ * observer can compete for the same Desktop pointer stream; in that setup a
+ * normal click may work while a drag is cancelled. This modifier distinguishes
+ * the two gestures while leaving the semantics action available to keyboard
+ * and assistive input.
+ */
+private fun Modifier.mediumTopTabGesture(
+    animation: DampedDragAnimation,
+    onClick: () -> Unit,
+): Modifier = pointerInput(animation) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        animation.onDragStarted.invoke(animation, down.position)
+        animation.press()
+        var pointerId = down.id
+        var previous = down.position
+        var dragged = false
+        var completed = false
+        try {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                if (!change.pressed) {
+                    if (dragged) animation.onDragStopped.invoke(animation) else onClick()
+                    completed = true
+                    break
+                }
+                val delta = change.position - previous
+                if (delta.x != 0f || delta.y != 0f) {
+                    previous = change.position
+                    if (kotlin.math.abs(change.position.x - down.position.x) > 3f) {
+                        dragged = true
+                        animation.onDrag.invoke(animation, size, delta)
+                    }
+                }
+            }
+        } finally {
+            animation.release()
+            // A cancelled gesture must not invoke either navigation callback.
+            if (!completed) dragged = false
+        }
+    }
+}
+
+private fun mafeiSmoothStep(value: Float): Float {
+    val progress = value.coerceIn(0f, 1f)
+    return progress * progress * (3f - 2f * progress)
+}
+
+/**
+ * Clips the fixed sidebar content with an organic bubble that is pulled into
+ * the top navigation capsule. Nothing inside the panel is scaled or moved:
+ * lower rows disappear behind the rising mask and reappear in place when the
+ * sidebar expands.
+ */
+private data class SidebarBubbleMorphShape(
+    val progress: Float,
+    val compactWidthProgress: Float,
+    val compactTop: Dp,
+    val compactHeight: Dp,
+    val leadingEdge: Boolean,
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val collapse = progress.coerceIn(0f, 1f)
+        val widthProgress = mafeiSmoothStep((collapse - .06f) / .78f)
+        // The bottom is pulled away before the top edge moves, which hides the
+        // lower rows instead of compressing them into the remaining space.
+        val bottomProgress = mafeiSmoothStep(collapse / .76f)
+        val topProgress = mafeiSmoothStep((collapse - .12f) / .72f)
+        val roundProgress = mafeiSmoothStep((collapse - .10f) / .70f)
+
+        val targetTop = with(density) { compactTop.toPx() }
+        val targetHeight = with(density) { compactHeight.toPx() }
+        val targetBottom = targetTop + targetHeight
+        val targetWidth = size.width * compactWidthProgress.coerceIn(.18f, 1f)
+
+        val top = targetTop * topProgress
+        val bottom = size.height + (targetBottom - size.height) * bottomProgress
+        val width = size.width + (targetWidth - size.width) * widthProgress
+        val height = (bottom - top).coerceAtLeast(1f)
+        val radius = (kotlin.math.min(width, height) / 2f) * roundProgress
+        // The free edge bows towards the page during the middle of the morph.
+        // It returns to zero at both endpoints, leaving a rectangle expanded
+        // and a capsule collapsed.
+        val bell = 4f * collapse * (1f - collapse)
+        val bulge = with(density) { 34.dp.toPx() } * bell
+        val kappa = .5522848f
+
+        fun physicalX(logicalX: Float): Float =
+            if (leadingEdge) logicalX else size.width - logicalX
+
+        val path = Path()
+        path.moveTo(physicalX(radius), top)
+        path.lineTo(physicalX(width - radius), top)
+        path.cubicTo(
+            physicalX(width - radius + radius * kappa),
+            top,
+            physicalX(width),
+            top + radius - radius * kappa,
+            physicalX(width),
+            top + radius,
+        )
+
+        val middle = top + height / 2f
+        path.cubicTo(
+            physicalX(width + bulge * .55f),
+            top + height * .24f,
+            physicalX(width + bulge),
+            top + height * .36f,
+            physicalX(width + bulge),
+            middle,
+        )
+        path.cubicTo(
+            physicalX(width + bulge),
+            top + height * .64f,
+            physicalX(width + bulge * .55f),
+            bottom - height * .24f,
+            physicalX(width),
+            bottom - radius,
+        )
+        path.cubicTo(
+            physicalX(width),
+            bottom - radius + radius * kappa,
+            physicalX(width - radius + radius * kappa),
+            bottom,
+            physicalX(width - radius),
+            bottom,
+        )
+        path.lineTo(physicalX(radius), bottom)
+        path.cubicTo(
+            physicalX(radius - radius * kappa),
+            bottom,
+            physicalX(0f),
+            bottom - radius + radius * kappa,
+            physicalX(0f),
+            bottom - radius,
+        )
+        path.lineTo(physicalX(0f), top + radius)
+        path.cubicTo(
+            physicalX(0f),
+            top + radius - radius * kappa,
+            physicalX(radius - radius * kappa),
+            top,
+            physicalX(radius),
+            top,
+        )
+        path.close()
+        return Outline.Generic(path)
     }
 }
 
@@ -910,8 +1419,14 @@ private val MediumTopStripInset = 3.dp
 /** 条首的"展开侧边栏"按钮占位宽度。 */
 private val MediumTopExpandWidth = 40.dp
 
-/** 顶部 Tab 的等宽宽度 —— 与供应商切换胶囊同宽，保证两条导航的手感一致。 */
-private val MediumTopTabWidth = 80.dp
+/** 顶部文字 Tab 的固定左右内边距；按钮宽度由文字测量结果自适应。 */
+private val MediumTopTabHorizontalPadding = 14.dp
+
+/** 长媒体库名称仍保持一行，超出后由 Text 的省略策略处理。 */
+private val MediumTopMaxLabelWidth = 180.dp
+
+/** 顶部最后一个搜索项是纯图标，保留固定触控宽度。 */
+private val MediumTopSearchWidth = 48.dp
 
 /** 选中强调色：取值与 `LiquidBottomTabs` 深色主题一致（那边是硬编码）。 */
 private val MediumTopTabAccent = Color(0xFF0091FF)
