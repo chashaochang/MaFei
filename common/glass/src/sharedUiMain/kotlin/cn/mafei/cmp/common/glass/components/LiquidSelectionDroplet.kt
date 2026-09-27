@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.lens
@@ -46,7 +45,6 @@ fun LiquidSelectionDroplet(
     translationXInPx: ((Float) -> Float)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val glassIntensity = LocalGlassIntensity.current
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
     val travelPx = with(LocalDensity.current) { travelPerStep.toPx() }
     Box(
@@ -64,8 +62,8 @@ fun LiquidSelectionDroplet(
                 effects = {
                     val progress = animation.pressProgress.coerceAtLeast(.001f)
                     lens(
-                        10.dp.toPx() * progress * glassIntensity,
-                        14.dp.toPx() * progress * glassIntensity,
+                        10.dp.toPx() * progress,
+                        14.dp.toPx() * progress,
                         // Keep the capsule's upper/lower surface in the
                         // refracted image. Without the depth term a uniform
                         // strip background mostly reads as a scale change,
@@ -74,12 +72,12 @@ fun LiquidSelectionDroplet(
                         chromaticAberration = true,
                     )
                 },
-                highlight = { Highlight.Default.copy(alpha = animation.pressProgress * glassIntensity) },
-                shadow = { Shadow(alpha = animation.pressProgress * glassIntensity) },
+                highlight = { Highlight.Default.copy(alpha = animation.pressProgress) },
+                shadow = { Shadow(alpha = animation.pressProgress) },
                 innerShadow = {
                     InnerShadow(
-                        radius = 8.dp * animation.pressProgress * glassIntensity,
-                        alpha = animation.pressProgress * glassIntensity,
+                        radius = 8.dp * animation.pressProgress,
+                        alpha = animation.pressProgress,
                     )
                 },
                 // Scale must be applied through drawBackdrop's layerBlock,
@@ -99,14 +97,14 @@ fun LiquidSelectionDroplet(
                     // 与 `LiquidBottomTabs` 的选中液滴一致：静止时是一层 10% 的黑/白，
                     // 按下过程中淡出，把"实心块"让位给折射 + 高光。
                     drawRect(
-                        if (isLightTheme) Color.Black.copy(alpha = .10f * glassIntensity)
-                        else Color.White.copy(alpha = .10f * glassIntensity),
-                        alpha = (1f - animation.pressProgress) * glassIntensity,
+                        if (isLightTheme) Color.Black.copy(alpha = .10f)
+                        else Color.White.copy(alpha = .10f),
+                        alpha = 1f - animation.pressProgress,
                     )
                     // Match the standard LiquidBottomTabs selection layer:
                     // pressing adds the same subtle dark depth wash beneath
                     // the highlight instead of using a separate top-bar tint.
-                    drawRect(Color.Black.copy(alpha = .03f * animation.pressProgress * glassIntensity))
+                    drawRect(Color.Black.copy(alpha = .03f * animation.pressProgress))
                 },
             ),
     )

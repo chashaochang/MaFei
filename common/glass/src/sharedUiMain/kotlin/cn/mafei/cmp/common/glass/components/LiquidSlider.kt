@@ -175,8 +175,8 @@ fun LiquidSlider(
                         val progress = dampedDragAnimation.pressProgress
                         blur(8f.dp.toPx() * (1f - progress) * glassIntensity)
                         lens(
-                            10f.dp.toPx() * progress * glassIntensity,
-                            14f.dp.toPx() * progress * glassIntensity,
+                            10f.dp.toPx() * progress,
+                            14f.dp.toPx() * progress,
                             chromaticAberration = true
                         )
                     },
@@ -185,7 +185,7 @@ fun LiquidSlider(
                         Highlight.Ambient.copy(
                             width = Highlight.Ambient.width / 1.5f,
                             blurRadius = Highlight.Ambient.blurRadius / 1.5f,
-                            alpha = progress * glassIntensity
+                            alpha = progress
                         )
                     },
                     shadow = {
@@ -197,8 +197,8 @@ fun LiquidSlider(
                     innerShadow = {
                         val progress = dampedDragAnimation.pressProgress
                         InnerShadow(
-                            radius = 4f.dp * progress * glassIntensity,
-                            alpha = progress * glassIntensity
+                            radius = 4f.dp * progress,
+                            alpha = progress
                         )
                     },
                     layerBlock = {
@@ -210,7 +210,7 @@ fun LiquidSlider(
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
-                        drawRect(Color.White.copy(alpha = (1f - progress) * glassIntensity))
+                        drawRect(Color.White.copy(alpha = 1f - progress))
                     }
                 )
                 .size(40f.dp, 24f.dp)

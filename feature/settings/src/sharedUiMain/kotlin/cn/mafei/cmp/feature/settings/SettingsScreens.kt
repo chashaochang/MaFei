@@ -164,7 +164,7 @@ private fun LiquidGlassIntensitySetting(
             )
         }
         Text(
-            "调节液态玻璃的透明与模糊强度",
+            "调节液态玻璃的背景模糊强度",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
             lineHeight = 18.sp,
@@ -209,8 +209,8 @@ private fun LiquidGlassIntensitySetting(
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("完全透明", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text("液态玻璃 + 高斯模糊", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text("无背景模糊", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text("高斯模糊最强", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }

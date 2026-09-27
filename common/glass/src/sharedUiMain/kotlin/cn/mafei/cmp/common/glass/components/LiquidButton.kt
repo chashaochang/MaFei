@@ -62,11 +62,11 @@ fun LiquidButton(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
                 effects = {
-                    if (glassIntensity > 0.001f) vibrancy()
+                    vibrancy()
                     blur(2f.dp.toPx() * glassIntensity)
                     lens(
-                        12f.dp.toPx() * glassIntensity,
-                        24f.dp.toPx() * glassIntensity,
+                        12f.dp.toPx(),
+                        24f.dp.toPx(),
                         chromaticAberration = chromaticAberration,
                     )
                 },
@@ -100,11 +100,11 @@ fun LiquidButton(
                 },
                 onDrawSurface = {
                     if (tint.isSpecified) {
-                        drawRect(tint.copy(alpha = tint.alpha * glassIntensity), blendMode = BlendMode.Hue)
-                        drawRect(tint.copy(alpha = 0.75f * glassIntensity))
+                        drawRect(tint, blendMode = BlendMode.Hue)
+                        drawRect(tint.copy(alpha = 0.75f))
                     }
                     if (surfaceColor.isSpecified) {
-                        drawRect(surfaceColor.copy(alpha = surfaceColor.alpha * glassIntensity))
+                        drawRect(surfaceColor)
                     }
                 }
             )

@@ -96,9 +96,9 @@ fun LiquidActionBar(
                 backdrop = backdrop.layer,
                 tint = tintColor,
                 blurRadius = 4.dp * glassIntensity,
-                tintIntensity = (if (isLightTheme) .72f else .68f) * glassIntensity,
+                tintIntensity = if (isLightTheme) .72f else .68f,
                 gradientStartFraction = 1f / 3f,
-                opacity = materialAlpha * glassIntensity,
+                opacity = materialAlpha,
                 exportedBackdrop = progressiveBackdrop,
             ),
         )

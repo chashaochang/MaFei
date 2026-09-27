@@ -35,18 +35,18 @@ fun LiquidMiniBarSurface(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
                 effects = {
-                    if (glassIntensity > 0.001f) vibrancy()
+                    vibrancy()
                     blur(8.dp.toPx() * glassIntensity)
                     lens(
-                        16.dp.toPx() * glassIntensity,
-                        28.dp.toPx() * glassIntensity,
+                        16.dp.toPx(),
+                        28.dp.toPx(),
                         chromaticAberration = true,
                     )
                 },
-                shadow = { Shadow(alpha = .18f * glassIntensity) },
-                innerShadow = { InnerShadow(radius = 5.dp * glassIntensity, alpha = .25f * glassIntensity) },
+                shadow = { Shadow(alpha = .18f) },
+                innerShadow = { InnerShadow(radius = 5.dp, alpha = .25f) },
                 onDrawSurface = {
-                    drawRect(Color.White.copy(alpha = .2f * glassIntensity))
+                    drawRect(Color.White.copy(alpha = .2f))
                 },
             )
             .clip(Capsule())

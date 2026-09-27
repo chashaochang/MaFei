@@ -9,7 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 
-/** Default product-wide glass strength: a balanced mix of transparency and blur. */
+/** Default product-wide liquid-glass background blur: a balanced setting. */
 const val DefaultGlassIntensity = 0.5f
 
 /**
@@ -35,8 +35,8 @@ fun rememberGlassRenderHealth(): GlassRenderHealth = remember { GlassRenderHealt
 internal val LocalGlassRenderHealth = staticCompositionLocalOf<GlassRenderHealth?> { null }
 
 /**
- * Product-wide liquid-glass strength. Zero keeps the surface geometry but removes
- * its sampled material; one uses the component's full liquid-glass recipe.
+ * Product-wide liquid-glass background-blur strength. The liquid material itself
+ * (lens, highlight, shadow and tint) remains enabled at every value.
  */
 internal val LocalGlassIntensity = staticCompositionLocalOf { DefaultGlassIntensity }
 
