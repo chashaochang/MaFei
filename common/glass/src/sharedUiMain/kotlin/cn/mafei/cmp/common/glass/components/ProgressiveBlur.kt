@@ -1,6 +1,7 @@
 package cn.mafei.cmp.common.glass.components
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -8,6 +9,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
@@ -97,11 +99,14 @@ fun Modifier.mafeiProgressiveBlur(
     tintIntensity: Float = 0.8f,
     gradientStartFraction: Float = 0.5f,
     opacity: Float = 1f,
-): Modifier = progressiveBlur(
-    backdrop = backdrop.layer,
-    tint = tint,
-    blurRadius = blurRadius,
-    tintIntensity = tintIntensity,
-    gradientStartFraction = gradientStartFraction,
-    opacity = opacity,
-)
+): Modifier = composed {
+    val glassIntensity = LocalGlassIntensity.current
+    progressiveBlur(
+        backdrop = backdrop.layer,
+        tint = tint,
+        blurRadius = blurRadius * glassIntensity,
+        tintIntensity = tintIntensity,
+        gradientStartFraction = gradientStartFraction,
+        opacity = opacity,
+    )
+}

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -63,6 +64,7 @@ fun LiquidAlertDialog(
     modifier: Modifier = Modifier,
     confirmContentColor: Color = Color.White,
 ) {
+    val glassIntensity = LocalGlassIntensity.current
     Column(
         modifier
             .widthIn(min = 280.dp, max = 360.dp)
@@ -75,7 +77,7 @@ fun LiquidAlertDialog(
                         brightness = if (isLightTheme) .2f else 0f,
                         saturation = 1.5f,
                     )
-                    blur(if (isLightTheme) 16f.dp.toPx() else 8f.dp.toPx())
+                    blur((if (isLightTheme) 16f.dp.toPx() else 8f.dp.toPx()) * glassIntensity)
                     lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
                 },
                 highlight = { Highlight.Plain },
