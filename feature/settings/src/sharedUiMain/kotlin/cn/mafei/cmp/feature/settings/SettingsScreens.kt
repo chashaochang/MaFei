@@ -88,7 +88,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     feiniuRoutePreferenceTitle: String? = null,
     onOpenFeiniuPreference: (() -> Unit)? = null,
-    liquidGlassIntensity: Float = DefaultGlassIntensity,
+    liquidGlassIntensity: () -> Float = { DefaultGlassIntensity },
     onLiquidGlassIntensityChanged: (Float) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
@@ -115,7 +115,7 @@ fun SettingsScreen(
                 //     onItemClick = { onOpenAppearance() },
                 // )
                 LiquidGlassIntensitySetting(
-                    value = liquidGlassIntensity,
+                    value = liquidGlassIntensity(),
                     onValueChange = onLiquidGlassIntensityChanged,
                 )
                 if (feiniuRoutePreferenceTitle != null && onOpenFeiniuPreference != null) {

@@ -1848,7 +1848,7 @@ private fun BrowseContent(
                                         } else {
                                         null
                                     },
-                                    liquidGlassIntensity = currentLiquidGlassIntensity.value,
+                                    liquidGlassIntensity = { currentLiquidGlassIntensity.value },
                                     onLiquidGlassIntensityChanged = { value ->
                                         currentLiquidGlassIntensityChanged.value(value)
                                     },
