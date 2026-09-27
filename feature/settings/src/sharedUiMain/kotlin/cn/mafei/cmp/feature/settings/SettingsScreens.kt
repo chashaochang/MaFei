@@ -77,6 +77,7 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.ui.savedAccountListGroups
 import cn.mafei.cmp.core.domain.ProviderKind
 import org.jetbrains.compose.resources.painterResource
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Mechanical Compose translation of ArkUI `SettingPage`. */
@@ -138,6 +139,8 @@ private fun LiquidGlassIntensitySetting(
 ) {
     val progress = value.coerceIn(0f, 1f)
     val percent = (progress * 100f).roundToInt()
+    val defaultProgress = DefaultGlassIntensity
+    val defaultSnapThreshold = 0.045f
     val latestOnValueChange = rememberUpdatedState(onValueChange)
     Column(
         Modifier
@@ -177,9 +180,15 @@ private fun LiquidGlassIntensitySetting(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         fun update(position: Offset) {
-                            latestOnValueChange.value(
-                                (position.x / size.width.toFloat()).coerceIn(0f, 1f),
-                            )
+                            val rawProgress = (position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                            val snappedProgress = if (
+                                abs(rawProgress - defaultProgress) <= defaultSnapThreshold
+                            ) {
+                                defaultProgress
+                            } else {
+                                rawProgress
+                            }
+                            latestOnValueChange.value(snappedProgress)
                         }
                         update(down.position)
                         down.consume()
@@ -203,14 +212,34 @@ private fun LiquidGlassIntensitySetting(
                     .background(MaterialTheme.colorScheme.primary),
             )
             Box(
+                Modifier
+                    .offset(x = (maxWidth - 2.dp) * defaultProgress)
+                    .width(2.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .58f)),
+            )
+            Box(
                 Modifier.offset(x = knobOffset).size(knobSize)
                     .clip(RoundedCornerShape(knobSize / 2))
                     .background(MaterialTheme.colorScheme.onSurface),
             )
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Box(Modifier.fillMaxWidth()) {
             Text("无背景模糊", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text("高斯模糊最强", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(
+                "默认",
+                Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "高斯模糊最强",
+                Modifier.align(Alignment.CenterEnd),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
         }
     }
 }
