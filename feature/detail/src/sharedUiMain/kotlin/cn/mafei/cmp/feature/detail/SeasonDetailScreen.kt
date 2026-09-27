@@ -34,8 +34,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -46,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
@@ -67,11 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.design_system.NavigationEdge
+import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
-import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.components.LiquidFloatingTabs
@@ -83,7 +84,9 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiProgressLine
+import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.ui.TextPoster
+import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PersonRef
@@ -126,6 +129,20 @@ fun SeasonDetailScreen(
     val safeArea = LocalMaFeiSafeArea.current
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
+    val largeDetailLayout = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+    val effectiveLayout = LocalMaFeiNavigationChrome.current.effectiveLayout
+    val atmosphereBleed = effectiveLayout?.let { layout ->
+        if (layout.navigation == NavigationPlacement.Sidebar ||
+            layout.navigation == NavigationPlacement.Rail
+        ) layout.navigationWidthDp.dp else 0.dp
+    } ?: 0.dp
+    val atmosphereLeadingBleed = if (
+        effectiveLayout?.navigationEdge == NavigationEdge.Leading
+    ) atmosphereBleed else 0.dp
+    val atmosphereTrailingBleed = if (
+        effectiveLayout?.navigationEdge == NavigationEdge.Trailing
+    ) atmosphereBleed else 0.dp
     val scrollState = rememberScrollState()
     val heroStretch = rememberLegacyHeroStretch(scrollState)
     val density = LocalDensity.current
@@ -153,65 +170,89 @@ fun SeasonDetailScreen(
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop)) {
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-                SeasonAtmosphere(season, atmosphereArtwork)
-            }
-            Column(
-                Modifier.fillMaxWidth()
-                    .nestedScroll(heroStretch.connection)
-                    // Hero stretching replaces the platform overscroll visual;
-                    // running both moves the entire page during a fast return
-                    // to the top instead of keeping the hero's top edge fixed.
-                    .verticalScroll(scrollState, overscrollEffect = null),
-            ) {
-                SeasonHero(
-                    seriesName = seriesName,
-                    series = series,
-                    season = season,
-                    libraryName = libraryName,
-                    posterArtwork = posterArtwork,
-                    landscapeArtwork = landscapeArtwork,
-                    extraHeight = heroStretch.extraHeight,
+                DetailAtmosphere(
+                    item = season,
+                    artwork = atmosphereArtwork,
+                    leadingBleed = atmosphereLeadingBleed,
+                    trailingBleed = atmosphereTrailingBleed,
+                    unblurred = largeDetailLayout,
                 )
+            }
+            CompositionLocalProvider(LocalContentColor provides Color.White) {
                 Column(
-                    Modifier.align(Alignment.CenterHorizontally)
-                        .widthIn(max = 720.dp).fillMaxWidth()
-                        .padding(
-                            start = detailOuterHorizontalInset(),
-                            end = detailOuterHorizontalInset(),
-                            bottom = safeArea.bottom + 30.dp,
-                        ),
+                    Modifier.fillMaxWidth()
+                        .then(if (largeDetailLayout) Modifier else Modifier.nestedScroll(heroStretch.connection))
+                        // Hero stretching replaces the platform overscroll visual;
+                        // running both moves the entire page during a fast return
+                        // to the top instead of keeping the hero's top edge fixed.
+                        .verticalScroll(scrollState, overscrollEffect = null),
                 ) {
-                    SeasonActions(
-                        season = season,
-                        target = playTarget ?: episodes.firstOrNull(),
-                        onPlay = onPlayFirst,
-                        onTogglePlayed = onTogglePlayed,
-                        playbackBusy = playbackBusy,
-                        actionsBusy = actionsBusy,
-                        backdrop = backdrop,
-                    )
-                    season.overview?.takeIf { it.isNotBlank() }?.let {
-                        Spacer(Modifier.height(20.dp))
-                        OverviewSection(
-                            overview = it,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            onOpen = { overviewSheetVisible = true },
+                    if (largeDetailLayout) {
+                        SeasonProjectHeader(
+                            seriesName = seriesName,
+                            series = series,
+                            season = season,
+                            libraryName = libraryName,
+                            safeAreaTop = safeArea.top,
+                            modifier = Modifier.align(Alignment.Start),
+                        )
+                    } else {
+                        SeasonHero(
+                            seriesName = seriesName,
+                            series = series,
+                            season = season,
+                            libraryName = libraryName,
+                            posterArtwork = posterArtwork,
+                            landscapeArtwork = landscapeArtwork,
+                            extraHeight = heroStretch.extraHeight,
                         )
                     }
-                    Spacer(Modifier.height(24.dp))
-                    SeasonEpisodeSection(
-                        seasons = seasons,
-                        season = season,
-                        episodes = episodes,
-                        loading = loading,
-                        onSeasonSelected = onSeasonSelected,
-                        onEpisodeSelected = onEpisodeSelected,
-                        artwork = episodeArtwork,
-                        backdrop = backdrop,
-                    )
-                    if (season.people.isNotEmpty()) {
-                        Spacer(Modifier.height(20.dp))
-                        LegacyPeopleSection(season.people, personArtwork, onPersonSelected)
+                    Column(
+                        Modifier
+                            .align(if (largeDetailLayout) Alignment.Start else Alignment.CenterHorizontally)
+                            .then(
+                                if (largeDetailLayout) Modifier.fillMaxWidth()
+                                else Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+                            )
+                            .padding(
+                                start = detailOuterHorizontalInset(),
+                                end = detailOuterHorizontalInset(),
+                                bottom = safeArea.bottom + 30.dp,
+                            ),
+                    ) {
+                        SeasonActions(
+                            season = season,
+                            target = playTarget ?: episodes.firstOrNull(),
+                            onPlay = onPlayFirst,
+                            onTogglePlayed = onTogglePlayed,
+                            playbackBusy = playbackBusy,
+                            actionsBusy = actionsBusy,
+                            backdrop = backdrop,
+                            largeLayout = largeDetailLayout,
+                        )
+                        season.overview?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(Modifier.height(DetailSectionSpacing))
+                            OverviewSection(
+                                overview = it,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                onOpen = { overviewSheetVisible = true },
+                            )
+                        }
+                        Spacer(Modifier.height(DetailSectionSpacing))
+                        SeasonEpisodeSection(
+                            seasons = seasons,
+                            season = season,
+                            episodes = episodes,
+                            loading = loading,
+                            onSeasonSelected = onSeasonSelected,
+                            onEpisodeSelected = onEpisodeSelected,
+                            artwork = episodeArtwork,
+                            backdrop = backdrop,
+                        )
+                        if (season.people.isNotEmpty()) {
+                            Spacer(Modifier.height(DetailSectionSpacing))
+                            LegacyPeopleSection(season.people, personArtwork, onPersonSelected)
+                        }
                     }
                 }
             }
@@ -244,31 +285,55 @@ fun SeasonDetailScreen(
     }
 }
 
+/**
+ * Large-screen season header follows the video detail header: the current
+ * artwork remains the page atmosphere and the reading content starts at the
+ * shared leading gutter instead of introducing a second hero card.
+ */
 @Composable
-private fun SeasonAtmosphere(
+private fun SeasonProjectHeader(
+    seriesName: String,
+    series: MediaItem,
     season: MediaItem,
-    artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    libraryName: String?,
+    safeAreaTop: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
 ) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (artwork != null) {
-            artwork(
-                season,
-                Modifier.fillMaxSize().graphicsLayer {
-                    scaleX = 1.18f
-                    scaleY = 1.18f
-                    alpha = .95f
-                }.blur(128.dp),
-            )
-        }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to MaterialTheme.colorScheme.background.copy(alpha = .22f),
-                    .56f to MaterialTheme.colorScheme.background.copy(alpha = .34f),
-                    1f to MaterialTheme.colorScheme.background.copy(alpha = .72f),
-                ),
+    val horizontalPadding = detailPageHorizontalPadding()
+    Box(
+        modifier
+            .fillMaxWidth()
+            .padding(
+                start = horizontalPadding,
+                end = horizontalPadding,
+                top = safeAreaTop + mafeiPageTitleBarContentHeight() + 20.dp,
+                bottom = 24.dp,
             ),
-        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                seriesName,
+                color = Color.White.copy(alpha = .82f),
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                season.title,
+                Modifier.semantics { heading() },
+                color = Color.White,
+                fontSize = 44.sp,
+                lineHeight = 50.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            DetailMetadata(series, libraryName, Color.White)
+        }
     }
 }
 
@@ -355,16 +420,28 @@ private fun SeasonActions(
     playbackBusy: Boolean,
     actionsBusy: Boolean,
     backdrop: GlassBackdrop,
+    largeLayout: Boolean,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        Modifier
+            .then(if (largeLayout) Modifier.widthIn(max = LargeDetailControlWidth) else Modifier)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val progress = target?.seasonPlaybackProgress()
         val remaining = target?.seasonRemainingTime().orEmpty()
         val label = target?.episodeNumber?.let { "第 $it 集" } ?: "播放"
-        Box(Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(25.dp))) {
+        Box(
+            Modifier
+                .then(
+                    if (largeLayout) Modifier.widthIn(max = LargeDetailPlayWidth).weight(1f)
+                    else Modifier.weight(1f),
+                )
+                .height(50.dp)
+                .clip(RoundedCornerShape(25.dp)),
+        ) {
             if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
                 Box(
                     Modifier.fillMaxWidth(progress).fillMaxHeight()
@@ -386,7 +463,7 @@ private fun SeasonActions(
             } else {
                 GlassSurface(
                     backdrop = backdrop,
-                    spec = SeasonActionSurfaceSpec,
+                    spec = DetailActionSurfaceSpec,
                     tint = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxSize().alpha(.48f).semantics {
                         contentDescription = label
@@ -435,7 +512,7 @@ private fun RowScope.SeasonPlayActionContent(
                     MaFeiLoadingIndicator(
                         modifier = Modifier.size(20.dp),
                         style = MaFeiLoadingStyle.Button,
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        tint = Color.White,
                     )
                 } else {
                     Image(
@@ -448,7 +525,7 @@ private fun RowScope.SeasonPlayActionContent(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     currentLabel,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -458,7 +535,7 @@ private fun RowScope.SeasonPlayActionContent(
                     Text(
                         currentRemaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
                             .replace(" 分钟", "分"),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
+                        color = Color.White.copy(alpha = .78f),
                         fontSize = 12.sp,
                         maxLines = 1,
                     )
@@ -495,7 +572,7 @@ private fun SeasonWatchedAction(
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
                 colorFilter = ColorFilter.tint(
-                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
                 ),
             )
         }
@@ -515,7 +592,7 @@ private fun SeasonWatchedAction(
     } else {
         GlassSurface(
             backdrop = backdrop,
-            spec = SeasonActionSurfaceSpec,
+            spec = DetailActionSurfaceSpec,
             tint = MaterialTheme.colorScheme.surface,
             modifier = Modifier.size(44.dp).alpha(.48f).semantics {
                 contentDescription = label
@@ -566,7 +643,7 @@ private fun SeasonEpisodeSection(
             )
             Text(
                 "共${seasons.size.coerceAtLeast(1)}季",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = LocalContentColor.current.copy(alpha = .68f),
                 fontSize = 13.sp,
             )
         }
@@ -704,7 +781,7 @@ private fun SeasonEpisodeCard(
         Text(
             legacyEpisodeCardTitle(item),
             Modifier.fillMaxWidth().padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurface,
+            color = LocalContentColor.current,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
@@ -713,7 +790,7 @@ private fun SeasonEpisodeCard(
         Text(
             item.overview.orEmpty(),
             Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = LocalContentColor.current.copy(alpha = .68f),
             fontSize = 12.sp,
             lineHeight = 16.sp,
             maxLines = 2,
@@ -723,7 +800,7 @@ private fun SeasonEpisodeCard(
             Text(
                 legacyEpisodeDuration(runtime),
                 Modifier.fillMaxWidth().padding(top = 4.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = LocalContentColor.current.copy(alpha = .68f),
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -790,11 +867,3 @@ private fun Modifier.seasonFeatherBottom(): Modifier =
                 blendMode = BlendMode.DstIn,
             )
         }
-
-private val SeasonActionSurfaceSpec = GlassSurfaceSpec(
-    role = GlassRole.Overlay,
-    level = GlassLevel.Full,
-    tintAlpha = .18f,
-    intensity = .86f,
-    cornerRadiusDp = 25f,
-)

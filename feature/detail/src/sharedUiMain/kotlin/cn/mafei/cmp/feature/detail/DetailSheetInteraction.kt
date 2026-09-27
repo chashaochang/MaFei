@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
+import cn.mafei.cmp.common.design_system.NavigationPlacement
+import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import kotlinx.coroutines.Job
@@ -148,14 +150,18 @@ internal fun DetailSheetHeader(
     onDismiss: () -> Unit,
     contentColor: Color = LocalContentColor.current,
 ) {
+    val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
     Column(Modifier.fillMaxWidth()) {
+        if (!largeWindow) {
+            Box(
+                Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
+            )
+        }
         Box(
-            Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
-        )
-        Box(
-            Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(top = if (largeWindow) 0.dp else 4.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(

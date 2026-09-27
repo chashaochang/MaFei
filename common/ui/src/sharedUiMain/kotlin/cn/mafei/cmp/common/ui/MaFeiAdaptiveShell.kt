@@ -85,7 +85,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
-import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.components.LiquidBottomTab
 import cn.mafei.cmp.common.glass.components.LiquidBottomTabs
 import cn.mafei.cmp.common.ui.generated.resources.Res
@@ -670,7 +669,10 @@ private fun SidebarPanel(
             // fixed block made the account region visibly too tall; drawer/rail
             // variants still consume it because their chrome floats over content.
             Modifier.fillMaxSize().padding(
-                top = windowSafeArea.top + 8.dp,
+                // Match the 44dp control's 10dp inset in MaFeiActionBar. The
+                // sidebar header is the same navigation row, not a separate
+                // 40dp toolbar with a smaller hit target.
+                top = windowSafeArea.top + MaFeiActionBarVerticalInsetDp,
                 bottom = (if (consumeBottomSafeArea) windowSafeArea.bottom else 0.dp) + 8.dp,
             ),
         ) {
@@ -755,23 +757,27 @@ private fun SidebarPanel(
                     .padding(bottom = 24.dp),
             ) {
                 if (compact) {
-                    Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.fillMaxWidth().height(MaFeiNavigationControlSizeDp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         // 展开按钮：液态玻璃圆钮（侧栏在 backdrop 记录者之外，
                         // 这里是合法消费者）。
-                        LiquidButton(
+                        MaFeiActionBarButton(
                             onClick = onExpand,
                             backdrop = sidebarControlBackdrop,
-                            modifier = Modifier.size(40.dp)
-                                .semantics { contentDescription = "展开侧边栏" },
-                            height = 40.dp,
-                            horizontalPadding = 0.dp,
+                            contentDescription = "展开侧边栏",
                         ) {
-                            SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
+                            SidebarIcon(
+                                Modifier.size(MaFeiNavigationControlIconSizeDp),
+                                MaterialTheme.colorScheme.onSurface,
+                            )
                         }
                     }
                 } else {
                     Row(
-                        Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 12.dp),
+                        Modifier.fillMaxWidth().height(MaFeiNavigationControlSizeDp)
+                            .padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -792,15 +798,15 @@ private fun SidebarPanel(
                         Spacer(Modifier.width(8.dp))
                         Spacer(Modifier.weight(1f))
                         if (showCloseButton) {
-                            LiquidButton(
+                            MaFeiActionBarButton(
                                 onClick = onClose,
                                 backdrop = sidebarControlBackdrop,
-                                modifier = Modifier.size(40.dp)
-                                    .semantics { contentDescription = "收起侧边栏" },
-                                height = 40.dp,
-                                horizontalPadding = 0.dp,
+                                contentDescription = "收起侧边栏",
                             ) {
-                                SidebarIcon(Modifier.size(18.dp), MaterialTheme.colorScheme.onSurface)
+                                SidebarIcon(
+                                    Modifier.size(MaFeiNavigationControlIconSizeDp),
+                                    MaterialTheme.colorScheme.onSurface,
+                                )
                             }
                         }
                     }
@@ -1218,21 +1224,18 @@ private fun MediumTopTabs(
             val pageHorizontalInset = LocalMaFeiNavigationChrome.current.effectiveLayout
                 ?.pagePaddingDp?.dp
                 ?: MaFeiLargePageHorizontalInsetDp
-            LiquidButton(
+            MaFeiActionBarButton(
                 onClick = onBack,
                 backdrop = backdrop,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = LocalMaFeiSafeArea.current.start + pageHorizontalInset)
-                    .size(40.dp)
-                    .semantics { contentDescription = "返回" },
-                height = 40.dp,
-                horizontalPadding = 0.dp,
+                    .padding(start = LocalMaFeiSafeArea.current.start + pageHorizontalInset),
+                contentDescription = "返回",
             ) {
                 Image(
                     painter = painterResource(MaFeiLegacyDrawables.back),
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(MaFeiNavigationControlIconSizeDp),
                     colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
                 )
             }

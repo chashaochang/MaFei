@@ -41,7 +41,11 @@ import org.jetbrains.compose.resources.painterResource
 
 /** Material's top app bar height, and the inset that centres a 48dp control in it. */
 private val MaFeiActionBarHeightDp = 64.dp
-private val MaFeiActionBarVerticalInsetDp = 10.dp
+internal val MaFeiActionBarVerticalInsetDp = 10.dp
+
+/** Shared geometry for the sidebar controls and secondary-page back controls. */
+internal val MaFeiNavigationControlSizeDp = 44.dp
+internal val MaFeiNavigationControlIconSizeDp = 20.dp
 
 /**
  * 一级页面标题栏的高度（不含状态栏）。取值与旧版 `UIConstants.ACTION_BAR_HEIGHT = 56` 一致 ——
@@ -162,7 +166,9 @@ fun MaFeiActionBar(
         barHeight = barHeight,
         // 双行头部里第一行只有 52dp，44dp 的按钮要在里面居中（上下各 4dp），不能沿用
         // 单行 64dp 的 10dp 内边距，否则按钮会压到第二行的标题上。
-        verticalInset = if (stackedTitle) (MaFeiTopChromeHeightDp - 44.dp) / 2
+        verticalInset = if (stackedTitle) {
+            (MaFeiTopChromeHeightDp - MaFeiNavigationControlSizeDp) / 2
+        }
         else MaFeiActionBarVerticalInsetDp,
         // Wide layouts use the content edge for titles. Keep the phone's
         // screen-centred reservation only on the single-row phone bar.

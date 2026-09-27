@@ -297,7 +297,7 @@ class VideoDetailPresentationTest {
     }
 
     @Test
-    fun emitsTheLegacyHeroMediaTagsInStreamOrderWithoutDuplicates() {
+    fun emitsCanonicalHeroMediaTagsWithoutConfusingChannelsWithFormats() {
         val source = MediaSourceInfo(
             id = "tags",
             streams = listOf(
@@ -325,14 +325,14 @@ class VideoDetailPresentationTest {
             listOf(
                 DetailVideoTag.Tag4K,
                 DetailVideoTag.DolbyVision,
-                DetailVideoTag.DolbySurround,
+                DetailVideoTag.Surround71,
             ),
             presentDetailPlaybackSources(ProviderKind.Jellyfin, listOf(source)).single().tagKeys,
         )
     }
 
     @Test
-    fun keepsTheLegacy1080HdrStereoAndDtsTagOrder() {
+    fun emitsSpecificHdrAndDtsHdTagsBeforeChannelTags() {
         val source = MediaSourceInfo(
             id = "tags",
             streams = listOf(
@@ -353,11 +353,57 @@ class VideoDetailPresentationTest {
         assertEquals(
             listOf(
                 DetailVideoTag.Tag1080,
-                DetailVideoTag.Hdr,
+                DetailVideoTag.Hdr10,
+                DetailVideoTag.DtsHdMa,
                 DetailVideoTag.Stereo,
-                DetailVideoTag.Dts,
             ),
             presentDetailPlaybackSources(ProviderKind.Feiniu, listOf(source)).single().tagKeys,
+        )
+    }
+
+    @Test
+    fun derivesTheExtendedBadgeSetOnlyFromExplicitStreamMetadata() {
+        val source = MediaSourceInfo(
+            id = "rich-tags",
+            streams = listOf(
+                MediaStreamInfo(
+                    kind = MediaStreamKind.Video,
+                    widthPx = 7680,
+                    heightPx = 4320,
+                    codec = "hevc",
+                    videoRangeType = "HDR10Plus",
+                    displayTitle = "IMAX Enhanced",
+                ),
+                MediaStreamInfo(
+                    kind = MediaStreamKind.Audio,
+                    codec = "DTS:X",
+                    channelLayout = "7.1",
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                DetailVideoTag.Tag8K,
+                DetailVideoTag.Hdr10Plus,
+                DetailVideoTag.Hevc,
+                DetailVideoTag.ImaxEnhanced,
+                DetailVideoTag.DtsX,
+                DetailVideoTag.Surround71,
+            ),
+            presentDetailPlaybackSources(ProviderKind.Jellyfin, listOf(source)).single().tagKeys,
+        )
+    }
+
+    @Test
+    fun restoresBadgesFromExplicitProviderLabelsWhenStreamsAreNotReady() {
+        assertEquals(
+            listOf(
+                DetailVideoTag.Tag4K,
+                DetailVideoTag.DolbyVision,
+                DetailVideoTag.Dts,
+            ),
+            detailVideoTagsFromProviderLabels(listOf("2160P", "DolbyVision", "DTS")),
         )
     }
 

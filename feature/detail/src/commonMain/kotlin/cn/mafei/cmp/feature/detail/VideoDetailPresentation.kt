@@ -37,17 +37,36 @@ internal data class DetailInfoSection(
     val cards: List<DetailInfoCard>,
 )
 
-/** Exact tag keys emitted by the legacy BaseVideoDetailPresentationAdapter. */
+/**
+ * Media-quality badges shown on the detail page.
+ *
+ * These are presentation values, not a persisted or provider-facing
+ * contract. They must be derived from actual stream metadata: a channel
+ * layout is not an audio format (5.1 is not Atmos and 7.1 is not Dolby
+ * Surround).
+ */
 internal enum class DetailVideoTag {
-    Tag1080,
+    Tag8K,
     Tag4K,
-    Stereo,
-    Hdr,
-    Sdr,
-    Dts,
+    Tag1440,
+    Tag1080,
+    Tag720,
     DolbyVision,
+    Hdr,
+    Hdr10,
+    Hdr10Plus,
+    Sdr,
+    Hevc,
+    ImaxEnhanced,
+    Dts,
+    DtsX,
+    DtsHdMa,
     DolbyAtmos,
-    DolbySurround,
+    DolbyTrueHd,
+    DolbyDigital,
+    Stereo,
+    Surround51,
+    Surround71,
 }
 
 internal data class DetailPlaybackSource(
@@ -159,7 +178,7 @@ internal fun presentDetailPlaybackSources(
         addedDate = source.dateAddedEpochMs?.let {
             formatLocalDateTime(it, includeTime = provider != ProviderKind.Feiniu)
         }.orEmpty(),
-        tagKeys = videoTags(source.streams),
+        tagKeys = videoTags(source),
         audioOptions = audios.mapIndexed { index, stream -> audioOption(provider, stream, index) },
         subtitleOptions = listOf(noSubtitleOption()) +
             subtitles.mapIndexed { index, stream -> subtitleOption(provider, stream, index) },
@@ -492,15 +511,21 @@ private fun resolutionLabel(video: MediaStreamInfo?): String {
     video ?: return ""
     val explicit = video.resolutionType?.trim()?.uppercase().orEmpty()
     if (explicit.isNotEmpty()) {
-        return if (explicit.contains("2160") || explicit.contains("UHD")) "4K" else explicit
+        return when {
+            explicit.contains("4320") || explicit.contains("8K") -> "8K"
+            explicit.contains("2160") || explicit.contains("UHD") -> "4K"
+            else -> explicit
+        }
     }
     val width = video.widthPx ?: 0
     val height = video.heightPx ?: 0
     return when {
+        width >= 7000 || height >= 3800 -> "8K"
         width >= 3800 || height >= 2000 -> "4K"
         width >= 2500 || height >= 1400 -> "1440P"
         width >= 1900 || height >= 1000 -> "1080P"
         width >= 1200 || height >= 700 -> "720P"
+        video.displayTitle.orEmpty().uppercase().let { it.contains("8K") || it.contains("4320") } -> "8K"
         video.displayTitle.orEmpty().uppercase().let { it.contains("4K") || it.contains("2160") || it.contains("UHD") } -> "4K"
         video.displayTitle.orEmpty().contains("1440", ignoreCase = true) -> "1440P"
         video.displayTitle.orEmpty().uppercase().let { it.contains("1080") || it.contains("FHD") } -> "1080P"
@@ -561,40 +586,145 @@ private fun audioChannelText(audio: MediaStreamInfo): String {
     }
 }
 
-/** Mechanical translation of legacy BaseVideoDetailPresentationAdapter.videoTags. */
-private fun videoTags(streams: List<MediaStreamInfo>): List<DetailVideoTag> = buildList {
-    streams.forEach { stream ->
+private fun videoTags(source: MediaSourceInfo): List<DetailVideoTag> {
+    val present = linkedSetOf<DetailVideoTag>()
+    source.streams.forEach { stream ->
         when (stream.kind) {
             MediaStreamKind.Video -> {
-                when (resolutionLabel(stream)) {
-                    "4K" -> addTag(DetailVideoTag.Tag4K)
-                    "1080P" -> addTag(DetailVideoTag.Tag1080)
-                }
-                when (dynamicRangeLabel(stream)) {
-                    "杜比" -> addTag(DetailVideoTag.DolbyVision)
-                    "HDR" -> addTag(DetailVideoTag.Hdr)
-                    "SDR" -> addTag(DetailVideoTag.Sdr)
-                }
+                resolutionTag(stream)?.let(present::add)
+                dynamicRangeTag(stream)?.let(present::add)
+                val text = streamText(stream)
+                if (text.contains("IMAX ENHANCED")) present += DetailVideoTag.ImaxEnhanced
+                if (text.hasHevcCodec()) present += DetailVideoTag.Hevc
             }
 
             MediaStreamKind.Audio -> {
-                val layout = stream.channelLayout.orEmpty().lowercase()
-                val codec = stream.codec.orEmpty().lowercase()
-                if (layout.contains("stereo")) addTag(DetailVideoTag.Stereo)
-                if (codec.contains("dts")) {
-                    addTag(DetailVideoTag.Dts)
-                } else if (codec.contains("dolby") || codec.contains("ac3") || codec.contains("eac3")) {
-                    when {
-                        layout.contains("7.1") -> addTag(DetailVideoTag.DolbySurround)
-                        layout.contains("5.1") -> addTag(DetailVideoTag.DolbyAtmos)
-                    }
-                }
+                audioFormatTags(stream).forEach(present::add)
+                audioChannelTag(stream)?.let(present::add)
             }
 
             else -> Unit
         }
     }
+
+    // Keep the visual order stable even when providers return streams in a
+    // different order: resolution, range, codec, format, channels.
+    return DetailVideoTag.values().filter(present::contains)
 }
+
+/**
+ * Provider catalog summaries sometimes arrive before the detailed stream
+ * list. Use their explicit labels as a display fallback so the hero does not
+ * temporarily lose badges while the detailed source is still incomplete.
+ */
+internal fun detailVideoTagsFromProviderLabels(labels: List<String>): List<DetailVideoTag> {
+    val present = linkedSetOf<DetailVideoTag>()
+    labels.forEach { label ->
+        val text = label.trim().uppercase()
+        when {
+            text.contains("4320") || text.contains("8K") -> present += DetailVideoTag.Tag8K
+            text.contains("2160") || text.contains("4K") || text.contains("UHD") -> present += DetailVideoTag.Tag4K
+            text.contains("1440") -> present += DetailVideoTag.Tag1440
+            text.contains("1080") || text.contains("FHD") -> present += DetailVideoTag.Tag1080
+            text.contains("720") -> present += DetailVideoTag.Tag720
+        }
+        when {
+            text.contains("DOLBY VISION") || text.contains("DOLBYVISION") || text.contains("DOVI") ->
+                present += DetailVideoTag.DolbyVision
+            text.contains("HDR10PLUS") || text.contains("HDR10+") -> present += DetailVideoTag.Hdr10Plus
+            text.contains("HDR10") -> present += DetailVideoTag.Hdr10
+            text == "HDR" || text.contains("HLG") || text.contains("VIVID") -> present += DetailVideoTag.Hdr
+            text == "SDR" -> present += DetailVideoTag.Sdr
+        }
+        if (text.contains("HEVC") || text.contains("H265") || text.contains("H.265")) {
+            present += DetailVideoTag.Hevc
+        }
+        if (text.contains("IMAX ENHANCED")) present += DetailVideoTag.ImaxEnhanced
+        when {
+            text.contains("DTS:X") || text.contains("DTS X") || text.contains("DTSX") ->
+                present += DetailVideoTag.DtsX
+            text.contains("DTS-HD MA") || text.contains("DTSHD MA") ||
+                text.contains("DTS-HD MASTER AUDIO") -> present += DetailVideoTag.DtsHdMa
+            text.contains("DTS") -> present += DetailVideoTag.Dts
+        }
+        if (text.contains("ATMOS")) present += DetailVideoTag.DolbyAtmos
+        if (text.contains("TRUEHD") || text.contains("TRUE HD")) present += DetailVideoTag.DolbyTrueHd
+        if (text.contains("DOLBY DIGITAL")) present += DetailVideoTag.DolbyDigital
+        when {
+            text.contains("7.1") -> present += DetailVideoTag.Surround71
+            text.contains("5.1") -> present += DetailVideoTag.Surround51
+            text.contains("STEREO") -> present += DetailVideoTag.Stereo
+        }
+    }
+    return DetailVideoTag.values().filter(present::contains)
+}
+
+private fun resolutionTag(video: MediaStreamInfo): DetailVideoTag? = when (resolutionLabel(video)) {
+    "8K", "4320P" -> DetailVideoTag.Tag8K
+    "4K", "2160P" -> DetailVideoTag.Tag4K
+    "1440P" -> DetailVideoTag.Tag1440
+    "1080P" -> DetailVideoTag.Tag1080
+    "720P" -> DetailVideoTag.Tag720
+    else -> null
+}
+
+private fun dynamicRangeTag(video: MediaStreamInfo): DetailVideoTag? {
+    if (dynamicRangeLabel(video) == "杜比") return DetailVideoTag.DolbyVision
+    val normalized = listOf(video.videoRangeType, video.displayTitle, video.colorTransfer)
+        .joinToString(" ") { it.orEmpty() }
+        .uppercase()
+    return when {
+        normalized.contains("HDR10PLUS") || normalized.contains("HDR10+") -> DetailVideoTag.Hdr10Plus
+        normalized.contains("HDR10") -> DetailVideoTag.Hdr10
+        listOf("HDR", "HLG", "VIVID", "PQ", "2084").any(normalized::contains) -> DetailVideoTag.Hdr
+        normalized.contains("SDR") -> DetailVideoTag.Sdr
+        else -> null
+    }
+}
+
+private fun audioFormatTags(stream: MediaStreamInfo): List<DetailVideoTag> {
+    val text = streamText(stream)
+    val tags = buildList {
+        when {
+            text.contains("DTS:X") || text.contains("DTS X") || text.contains("DTSX") -> add(DetailVideoTag.DtsX)
+            text.contains("DTS-HD MA") || text.contains("DTSHD MA") ||
+                text.contains("DTS-HD MASTER AUDIO") -> add(DetailVideoTag.DtsHdMa)
+            text.contains("DTS") -> add(DetailVideoTag.Dts)
+        }
+        if (text.contains("ATMOS")) add(DetailVideoTag.DolbyAtmos)
+        if (text.contains("TRUEHD") || text.contains("TRUE HD")) {
+            add(DetailVideoTag.DolbyTrueHd)
+        }
+        if (!text.contains("ATMOS") && !text.contains("TRUEHD") && !text.contains("TRUE HD") &&
+            (text.contains("DOLBY DIGITAL") ||
+                (text.contains("AC3") && !text.contains("EAC3")))
+        ) {
+            add(DetailVideoTag.DolbyDigital)
+        }
+    }
+    return tags
+}
+
+private fun audioChannelTag(stream: MediaStreamInfo): DetailVideoTag? {
+    val text = streamText(stream)
+    return when {
+        text.contains("7.1") || stream.channels == 8 -> DetailVideoTag.Surround71
+        text.contains("5.1") || stream.channels == 6 -> DetailVideoTag.Surround51
+        text.contains("STEREO") || stream.channels == 2 -> DetailVideoTag.Stereo
+        else -> null
+    }
+}
+
+private fun streamText(stream: MediaStreamInfo): String = listOf(
+    stream.codec,
+    stream.profile,
+    stream.title,
+    stream.displayTitle,
+    stream.audioType,
+    stream.channelLayout,
+).joinToString(" ") { it.orEmpty() }.uppercase()
+
+private fun String.hasHevcCodec(): Boolean = listOf("HEVC", "H265", "H.265", "X265").any(::contains)
 
 private fun fileSize(provider: ProviderKind, bytes: Long): String {
     if (bytes <= 0L) return ""
@@ -651,10 +781,6 @@ private fun MutableList<String>.addUnique(value: String?) {
     val normalized = value?.trim().orEmpty()
     if (normalized.isEmpty() || any { it.equals(normalized, ignoreCase = true) }) return
     add(normalized)
-}
-
-private fun MutableList<DetailVideoTag>.addTag(value: DetailVideoTag) {
-    if (value !in this) add(value)
 }
 
 /** Same sentinel handling and ISO 639 coverage as the legacy LanguageUtil. */

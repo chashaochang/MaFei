@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,9 +76,11 @@ import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -3096,11 +3099,12 @@ private fun BrowseContent(
                 }
             },
             modal = { backdrop ->
-                // 大屏：居中的正常背景模态（容器不上玻璃）。同一个 mineNavContent，
+                // 大屏：居中的详情页同规格模态。复用同一个 mineNavContent，
                 // 所以来回切形态时里面停在哪一页、翻了几层都保持不变。
                 if (minePresented && !mineFullScreen) {
                     MineAccountSheet(
                         layout = layout,
+                        backdrop = backdrop,
                         onDismiss = { minePresented = false },
                         content = mineNavContent,
                     )
@@ -3168,13 +3172,14 @@ private fun MineFullScreenHost(
 @Composable
 private fun MineAccountSheet(
     layout: MaFeiLayout,
+    backdrop: GlassBackdrop,
     onDismiss: () -> Unit,
     content: @Composable (Modifier) -> Unit,
 ) {
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val sheetWidth = (maxWidth - 96.dp).coerceIn(280.dp, 620.dp)
-        val sheetHeight = (maxHeight - 72.dp).coerceAtMost(760.dp).coerceAtLeast(320.dp)
+        val sheetWidth = (maxWidth - 48.dp).coerceIn(280.dp, 720.dp)
+        val sheetHeight = (maxHeight * .70f).coerceAtLeast(320.dp)
         // The sheet is narrower than the window: recompute the content rhythm for
         // the panel so poster columns and hero metrics fit instead of inheriting
         // the full-window grid.
@@ -3202,30 +3207,23 @@ private fun MineAccountSheet(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            // 大屏弹窗**容器**用正常背景（不透明主题色 + 圆角 + 投影），不是
-            // 液态玻璃 —— 浮层容器不上玻璃是定下的规格（玻璃只留给容器内的
-            // 交互件，例如右上角的关闭按钮）。
             Box(
                 Modifier
                     .width(sheetWidth)
                     .height(sheetHeight)
-                    .shadow(MineSheetElevation, RoundedCornerShape(MineSheetCornerDp))
                     .clip(RoundedCornerShape(MineSheetCornerDp))
                     .pointerInput(Unit) { detectTapGestures { } }
                     .semantics { contentDescription = "我的" },
             ) {
-                // 局部记录者：把**弹窗自己这一层**（容器背景 + 子页面内容）录成
-                // backdrop。关闭按钮直接取这层映射 —— 玻璃模糊的是它下面的弹窗
-                // 内容，而不是采样窗口 backdrop 看穿到窗口背景。
                 val sheetBackdrop = rememberGlassBackdrop()
-                Box(Modifier.fillMaxSize().captureGlassBackdrop(sheetBackdrop)) {
-                    Box(
-                        Modifier.fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
-                    )
-                    // 弹窗内的页面没有窗口安全区（不在状态栏下），但统一为顶部导航区
-                    // （关闭按钮所在的那条）让位 —— 所有子页面从这里往下排，不会被
-                    // 关闭按钮压住。
+                val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetBackdrop)
+                GlassSurface(
+                    backdrop = backdrop,
+                    spec = MineAccountSheetSurfaceSpec,
+                    tint = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxSize(),
+                    exportedBackdrop = sheetBackdrop,
+                ) {
                     CompositionLocalProvider(LocalMaFeiSafeArea provides MaFeiSafeArea()) {
                         content(
                             Modifier.fillMaxSize().padding(top = MineSheetTopBarHeight)
@@ -3233,21 +3231,45 @@ private fun MineAccountSheet(
                         )
                     }
                 }
-                // 右上角关闭按钮：液态玻璃按钮，取下层（弹窗）映射。
+                // 移动端保留底部弹窗拖拽指示器；大屏居中弹窗只保留标题和关闭按钮。
+                val largeWindow = layout.navigation != NavigationPlacement.Bottom
+                Box(
+                    Modifier.fillMaxWidth().height(MineSheetTopBarHeight),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (!largeWindow) {
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
+                            )
+                        }
+                        Text(
+                            "我的",
+                            Modifier.fillMaxWidth().padding(top = if (largeWindow) 0.dp else 4.dp),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            fontSize = 18.sp,
+                            lineHeight = 24.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        )
+                    }
+                }
                 LiquidButton(
                     onClick = onDismiss,
-                    backdrop = sheetBackdrop,
+                    backdrop = closeButtonBackdrop,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .size(36.dp)
+                        .padding(top = 8.dp, end = 8.dp)
+                        .size(44.dp)
                         .semantics { contentDescription = "关闭我的" },
-                    height = 36.dp,
+                    height = 44.dp,
                     horizontalPadding = 0.dp,
                 ) {
                     MaFeiIcon(
                         MaFeiGlyph.Close,
-                        Modifier.size(16.dp),
+                        Modifier.size(20.dp),
                         MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -3258,11 +3280,16 @@ private fun MineAccountSheet(
 
 /** 弹窗顶部导航区（关闭按钮所在条带）的高度：所有子页面内容在此之下。 */
 private val MineSheetTopBarHeight = 56.dp
-private const val MineSheetCornerDp = 22f
+private const val MineSheetCornerDp = 24f
 private const val BrowseSharedReturnDurationMs = 460L
 
-/** 弹窗容器的投影高度（正常背景容器靠它从遮罩上浮起来）。 */
-private val MineSheetElevation = 24.dp
+private val MineAccountSheetSurfaceSpec = GlassSurfaceSpec(
+    role = GlassRole.Dialog,
+    level = GlassLevel.Opaque,
+    tintAlpha = 1f,
+    intensity = 0f,
+    cornerRadiusDp = MineSheetCornerDp,
+)
 
 private const val PRIVACY_AGREEMENT_URL =
     "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1915508141466875008"

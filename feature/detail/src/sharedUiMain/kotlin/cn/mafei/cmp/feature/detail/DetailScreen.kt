@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -87,6 +88,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -104,6 +106,7 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
+import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
@@ -136,13 +139,22 @@ import cn.mafei.cmp.feature.detail.generated.resources.Res
 import cn.mafei.cmp.feature.detail.generated.resources.ma_shan_zheng_regular
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_1080
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_4k
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_5dot1
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_7dot1
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_720
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_atmos
-import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_surround
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_digital
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_truehd
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dolby_vision
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dts
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dts_hd_ma
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_dts_x
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_hdr
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_hdr10
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_hdr10_plus
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_hevc
+import cn.mafei.cmp.feature.detail.generated.resources.video_tag_imax_enhanced
 import cn.mafei.cmp.feature.detail.generated.resources.video_tag_sdr
-import cn.mafei.cmp.feature.detail.generated.resources.video_tag_stereo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
@@ -406,7 +418,7 @@ internal fun detailOuterHorizontalInset(): Dp =
     (detailPageHorizontalPadding() - 16.dp).coerceAtLeast(0.dp)
 
 @Composable
-private fun DetailAtmosphere(
+internal fun DetailAtmosphere(
     item: MediaItem?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     leadingBleed: Dp = 0.dp,
@@ -571,6 +583,7 @@ private fun BoxScope.DetailBody(
                     libraryName = libraryName,
                     logoArtwork = logoArtwork,
                     playbackSource = selectedPlaybackSource,
+                    backdrop = backdrop,
                     safeAreaTop = safeArea.top,
                     modifier = Modifier.align(contentAlignment),
                 )
@@ -584,6 +597,7 @@ private fun BoxScope.DetailBody(
                     sharedArtworkModifier = sharedArtworkModifier,
                     logoArtwork = logoArtwork,
                     playbackSource = selectedPlaybackSource,
+                    backdrop = backdrop,
                 )
             }
 
@@ -615,17 +629,21 @@ private fun BoxScope.DetailBody(
                     backdrop = backdrop,
                     largeLayout = simplifiedLargeLayout,
                 )
-                Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
-                    DetailAnimatedVisibility(
-                        visible = showRefreshProgress,
-                        enter = fadeIn(tween(DetailMotionFastMillis)),
-                        exit = fadeOut(tween(DetailMotionExitMillis)),
+                DetailAnimatedVisibility(
+                    visible = showRefreshProgress,
+                    modifier = Modifier.fillMaxWidth(),
+                    enter = fadeIn(tween(DetailMotionFastMillis)),
+                    exit = fadeOut(tween(DetailMotionExitMillis)),
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().height(20.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                         MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
                     }
                 }
                 if (item.mediaType != MediaType.Series && playbackSources.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(DetailActionSelectorSpacing))
                     PlaybackSelectionSection(
                         sources = playbackSources,
                         selectedMediaSourceId = selectedPlaybackSource?.id,
@@ -641,15 +659,17 @@ private fun BoxScope.DetailBody(
                     )
                 }
                 if (item.overview?.isNotBlank() == true) {
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(DetailSectionSpacing))
                     OverviewSection(
                         overview = item.overview,
                         modifier = Modifier.padding(horizontal = 16.dp),
                         onOpen = onOpenOverview,
                     )
-                    Spacer(Modifier.height(12.dp))
                 }
-                if (item.mediaType == MediaType.Series) {
+                if (item.mediaType == MediaType.Series &&
+                    (seasons.isNotEmpty() || sectionsLoading || sectionsError != null)
+                ) {
+                    Spacer(Modifier.height(DetailSectionSpacing))
                     SeriesSections(
                         seasons = seasons,
                         loading = sectionsLoading,
@@ -659,20 +679,20 @@ private fun BoxScope.DetailBody(
                     )
                 }
                 if (item.people.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(DetailSectionSpacing))
                     LegacyPeopleSection(item.people, personArtwork, onPersonSelected)
                 }
                 if (item.mediaType != MediaType.Series && selectedPlaybackSource != null &&
                     (selectedPlaybackSource.hasFileInformation || selectedPlaybackSource.hasVideoInformation)
                 ) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(DetailSectionSpacing))
                     MediaInfoSection(
                         source = selectedPlaybackSource,
                         onOpenDetails = onOpenMediaInfo,
                     )
                 }
                 if (onOpenExternalUrl != null && item.externalUrls.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(DetailSectionSpacing))
                     ExternalLinksSection(item.externalUrls, onOpenExternalUrl)
                 }
                 if (item.overview.isNullOrBlank() && item.mediaType != MediaType.Series && item.people.isEmpty() &&
@@ -697,10 +717,13 @@ private fun DetailProjectHeader(
     libraryName: String?,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     playbackSource: DetailPlaybackSource?,
+    backdrop: GlassBackdrop,
     safeAreaTop: Dp,
     modifier: Modifier = Modifier,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
+    val heroTags = detailHeroTags(item, playbackSource)
+    val largeTypography = usesLargeDetailTypography()
     val hasLogo = item.images.any { it.kind == ImageKind.Logo }
     val usesCalligraphy = item.title.any { it in '\u3400'..'\u9fff' }
     val calligraphyFont = if (usesCalligraphy) {
@@ -731,8 +754,8 @@ private fun DetailProjectHeader(
                     Text(
                         subtitle,
                         color = Color.White,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
+                        fontSize = if (largeTypography) 16.sp else 14.sp,
+                        lineHeight = if (largeTypography) 22.sp else 20.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -741,8 +764,18 @@ private fun DetailProjectHeader(
                     item.title,
                     Modifier.semantics { heading() },
                     color = Color.White,
-                    fontSize = if (usesCalligraphy) 68.sp else 38.sp,
-                    lineHeight = if (usesCalligraphy) 72.sp else 44.sp,
+                    fontSize = when {
+                        usesCalligraphy && largeTypography -> 72.sp
+                        usesCalligraphy -> 68.sp
+                        largeTypography -> 44.sp
+                        else -> 38.sp
+                    },
+                    lineHeight = when {
+                        usesCalligraphy && largeTypography -> 76.sp
+                        usesCalligraphy -> 72.sp
+                        largeTypography -> 50.sp
+                        else -> 44.sp
+                    },
                     fontFamily = calligraphyFont,
                     fontWeight = if (usesCalligraphy) FontWeight.Normal else FontWeight.Bold,
                     textAlign = TextAlign.Start,
@@ -754,8 +787,13 @@ private fun DetailProjectHeader(
                 )
             }
             DetailMetadata(item, libraryName, Color.White)
-            if (item.mediaType != MediaType.Series && playbackSource != null && playbackSource.tagKeys.isNotEmpty()) {
-                DetailHeroMediaTags(playbackSource.tagKeys, centered = false)
+            if (item.mediaType != MediaType.Series && heroTags.isNotEmpty()) {
+                DetailHeroMediaTags(
+                    heroTags,
+                    backdrop,
+                    centered = false,
+                    modifier = Modifier.padding(top = DetailHeroTagSpacing),
+                )
             }
         }
     }
@@ -771,8 +809,11 @@ private fun DetailHero(
     sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     playbackSource: DetailPlaybackSource?,
+    backdrop: GlassBackdrop,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
+    val heroTags = detailHeroTags(item, playbackSource)
+    val largeTypography = usesLargeDetailTypography()
     val titleOpacity = when {
         collapseProgress <= .72f -> 1f
         else -> (1f - (collapseProgress - .72f) / .22f).coerceIn(0f, 1f)
@@ -870,8 +911,8 @@ private fun DetailHero(
                         Text(
                             subtitle,
                             color = Color.White,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
+                            fontSize = if (largeTypography) 16.sp else 14.sp,
+                            lineHeight = if (largeTypography) 22.sp else 20.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -880,8 +921,18 @@ private fun DetailHero(
                         item.title,
                         Modifier.fillMaxWidth().semantics { heading() },
                         color = Color.White,
-                        fontSize = if (usesCalligraphy) 68.sp else 38.sp,
-                        lineHeight = if (usesCalligraphy) 72.sp else 44.sp,
+                        fontSize = when {
+                            usesCalligraphy && largeTypography -> 72.sp
+                            usesCalligraphy -> 68.sp
+                            largeTypography -> 44.sp
+                            else -> 38.sp
+                        },
+                        lineHeight = when {
+                            usesCalligraphy && largeTypography -> 76.sp
+                            usesCalligraphy -> 72.sp
+                            largeTypography -> 50.sp
+                            else -> 44.sp
+                        },
                         fontFamily = calligraphyFont,
                         fontWeight = if (usesCalligraphy) FontWeight.Normal else FontWeight.Bold,
                         textAlign = TextAlign.Center,
@@ -895,50 +946,151 @@ private fun DetailHero(
             }
 
             DetailMetadata(item, libraryName, Color.White)
-            if (item.mediaType != MediaType.Series && playbackSource != null && playbackSource.tagKeys.isNotEmpty()) {
-                DetailHeroMediaTags(playbackSource.tagKeys)
+            if (item.mediaType != MediaType.Series && heroTags.isNotEmpty()) {
+                DetailHeroMediaTags(
+                    heroTags,
+                    backdrop,
+                    modifier = Modifier.padding(top = DetailHeroTagSpacing),
+                )
             }
         }
     }
 }
 
+/**
+ * The catalog can render before PlaybackInfo has a complete stream list. Keep
+ * the badges visible in that window by falling back to the provider's explicit
+ * summary labels; never invent a badge from the title or artwork URL.
+ */
+private fun detailHeroTags(
+    item: MediaItem,
+    playbackSource: DetailPlaybackSource?,
+): List<DetailVideoTag> {
+    val summaryTags = detailVideoTagsFromProviderLabels(
+        buildList {
+            addAll(item.tags)
+            playbackSource?.let { source ->
+                addAll(
+                    listOf(
+                        source.compactLabel,
+                        source.summary,
+                        source.videoSummary,
+                        source.audioSummary,
+                    ),
+                )
+                source.source.name?.let(::add)
+            }
+        },
+    )
+    val detailedTags = playbackSource?.tagKeys.orEmpty()
+    return DetailVideoTag.values().filter { it in detailedTags || it in summaryTags }
+}
+
 @Composable
 private fun DetailHeroMediaTags(
     tags: List<DetailVideoTag>,
+    backdrop: GlassBackdrop,
     centered: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        Modifier.fillMaxWidth(),
+        modifier.fillMaxWidth(),
         horizontalArrangement = if (centered) {
-            Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
+            Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
         } else {
-            Arrangement.spacedBy(14.dp)
+            Arrangement.spacedBy(6.dp)
         },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         tags.forEach { tag ->
-            Image(
-                painter = painterResource(tag.drawable),
-                contentDescription = null,
-                modifier = Modifier.height(21.dp),
-                colorFilter = ColorFilter.tint(Color.White),
-            )
+            DetailMediaBadge(tag.badgeSpec(), backdrop)
         }
     }
 }
 
-private val DetailVideoTag.drawable: DrawableResource
-    get() = when (this) {
-        DetailVideoTag.Tag1080 -> Res.drawable.video_tag_1080
-        DetailVideoTag.Tag4K -> Res.drawable.video_tag_4k
-        DetailVideoTag.Stereo -> Res.drawable.video_tag_stereo
-        DetailVideoTag.Hdr -> Res.drawable.video_tag_hdr
-        DetailVideoTag.Sdr -> Res.drawable.video_tag_sdr
-        DetailVideoTag.Dts -> Res.drawable.video_tag_dts
-        DetailVideoTag.DolbyVision -> Res.drawable.video_tag_dolby_vision
-        DetailVideoTag.DolbyAtmos -> Res.drawable.video_tag_dolby_atmos
-        DetailVideoTag.DolbySurround -> Res.drawable.video_tag_dolby_surround
+private data class DetailMediaBadgeSpec(
+    val label: String,
+    val websiteAsset: DrawableResource? = null,
+    val tint: Color? = null,
+)
+
+private fun DetailVideoTag.badgeSpec(): DetailMediaBadgeSpec = when (this) {
+    DetailVideoTag.Tag8K -> DetailMediaBadgeSpec("8K")
+    DetailVideoTag.Tag4K -> DetailMediaBadgeSpec("4K", Res.drawable.video_tag_4k)
+    DetailVideoTag.Tag1440 -> DetailMediaBadgeSpec("1440P")
+    DetailVideoTag.Tag1080 -> DetailMediaBadgeSpec("1080P", Res.drawable.video_tag_1080)
+    DetailVideoTag.Tag720 -> DetailMediaBadgeSpec("720P", Res.drawable.video_tag_720)
+    DetailVideoTag.Hdr -> DetailMediaBadgeSpec("HDR", Res.drawable.video_tag_hdr)
+    DetailVideoTag.Hdr10 -> DetailMediaBadgeSpec("HDR10", Res.drawable.video_tag_hdr10)
+    DetailVideoTag.Hdr10Plus -> DetailMediaBadgeSpec("HDR10+", Res.drawable.video_tag_hdr10_plus)
+    DetailVideoTag.Sdr -> DetailMediaBadgeSpec("SDR", Res.drawable.video_tag_sdr)
+    DetailVideoTag.Hevc -> DetailMediaBadgeSpec("HEVC", Res.drawable.video_tag_hevc)
+    DetailVideoTag.Stereo -> DetailMediaBadgeSpec("立体声")
+    DetailVideoTag.Surround51 -> DetailMediaBadgeSpec("5.1", Res.drawable.video_tag_5dot1)
+    DetailVideoTag.Surround71 -> DetailMediaBadgeSpec("7.1", Res.drawable.video_tag_7dot1)
+    DetailVideoTag.DolbyVision -> DetailMediaBadgeSpec("Dolby Vision", Res.drawable.video_tag_dolby_vision)
+    DetailVideoTag.DolbyAtmos -> DetailMediaBadgeSpec("Dolby Atmos", Res.drawable.video_tag_dolby_atmos)
+    DetailVideoTag.DolbyTrueHd -> DetailMediaBadgeSpec("Dolby TrueHD", Res.drawable.video_tag_dolby_truehd)
+    DetailVideoTag.DolbyDigital -> DetailMediaBadgeSpec("Dolby Digital", Res.drawable.video_tag_dolby_digital)
+    DetailVideoTag.Dts -> DetailMediaBadgeSpec("DTS", Res.drawable.video_tag_dts)
+    DetailVideoTag.DtsX -> DetailMediaBadgeSpec("DTS:X", Res.drawable.video_tag_dts_x)
+    DetailVideoTag.DtsHdMa -> DetailMediaBadgeSpec("DTS-HD MA", Res.drawable.video_tag_dts_hd_ma)
+    DetailVideoTag.ImaxEnhanced -> DetailMediaBadgeSpec("IMAX Enhanced", Res.drawable.video_tag_imax_enhanced)
+}
+
+@Composable
+private fun DetailMediaBadge(
+    spec: DetailMediaBadgeSpec,
+    backdrop: GlassBackdrop,
+) {
+    val largeTypography = usesLargeDetailTypography()
+    GlassSurface(
+        backdrop = backdrop,
+        spec = DetailBadgeGlassSpec,
+        tint = Color.White,
+        modifier = Modifier
+            .height(22.dp)
+            .semantics { contentDescription = spec.label },
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (spec.websiteAsset != null) {
+                Image(
+                    painter = painterResource(spec.websiteAsset),
+                    contentDescription = null,
+                    modifier = Modifier.height(18.dp),
+                    contentScale = ContentScale.Fit,
+                    colorFilter = spec.tint?.let(ColorFilter::tint),
+                )
+            } else {
+                Text(
+                    text = spec.label,
+                    color = Color(0xFF111111),
+                    fontSize = if (largeTypography) 14.sp else 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontStyle = FontStyle.Italic,
+                    letterSpacing = .1.sp,
+                    lineHeight = if (largeTypography) 16.sp else 14.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
+        }
     }
+}
+
+private val DetailBadgeGlassSpec = GlassSurfaceSpec(
+    role = GlassRole.Card,
+    level = GlassLevel.Reduced,
+    tintAlpha = .56f,
+    intensity = .82f,
+    cornerRadiusDp = 6f,
+    material = GlassMaterial.Frosted,
+)
 
 private fun Modifier.featherBottom(startFraction: Float): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -957,7 +1109,10 @@ private fun Modifier.featherBottom(startFraction: Float): Modifier =
         }
 
 @Composable
-private fun DetailMetadata(item: MediaItem, libraryName: String?, color: Color) {
+internal fun DetailMetadata(item: MediaItem, libraryName: String?, color: Color) {
+    val largeTypography = usesLargeDetailTypography()
+    val metadataFontSize = if (largeTypography) 15.sp else 13.sp
+    val metadataLineHeight = if (largeTypography) 21.sp else 18.sp
     val primaryInfo = buildList {
         item.officialRating?.takeIf { it.isNotBlank() }?.let(::add)
         addAll(item.genres.filter { it.isNotBlank() })
@@ -979,8 +1134,8 @@ private fun DetailMetadata(item: MediaItem, libraryName: String?, color: Color) 
                     append(primaryInfo)
                 },
                 color = color,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
+                fontSize = metadataFontSize,
+                lineHeight = metadataLineHeight,
                 maxLines = 1,
             )
         }
@@ -990,8 +1145,8 @@ private fun DetailMetadata(item: MediaItem, libraryName: String?, color: Color) 
             Text(
                 secondaryInfo,
                 color = color,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
+                fontSize = metadataFontSize,
+                lineHeight = metadataLineHeight,
                 maxLines = 1,
             )
         }
@@ -1012,7 +1167,7 @@ private fun DetailActions(
 ) {
     Row(
         Modifier
-            .then(if (largeLayout) Modifier.widthIn(max = 560.dp) else Modifier)
+            .then(if (largeLayout) Modifier.widthIn(max = LargeDetailControlWidth) else Modifier)
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1025,7 +1180,7 @@ private fun DetailActions(
             busy = playbackBusy,
             backdrop = backdrop,
             modifier = if (largeLayout) {
-                Modifier.widthIn(max = 360.dp).weight(1f)
+                Modifier.widthIn(max = LargeDetailPlayWidth).weight(1f)
             } else {
                 Modifier.weight(1f)
             },
@@ -1240,12 +1395,13 @@ internal fun OverviewSection(
     onOpen: () -> Unit,
 ) {
     val text = overview?.takeIf { it.isNotBlank() } ?: return
+    val largeTypography = usesLargeDetailTypography()
     val textColor = LocalContentColor.current.copy(alpha = .86f)
     val moreColor = MaterialTheme.colorScheme.primary
     val textStyle = MaterialTheme.typography.bodyMedium.copy(
         color = textColor,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
+        fontSize = if (largeTypography) 15.sp else 13.sp,
+        lineHeight = if (largeTypography) 22.sp else 18.sp,
     )
     val textMeasurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -1345,6 +1501,7 @@ private fun SeriesSections(
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     onSeasonSelected: (MediaItem) -> Unit,
 ) {
+    val largeTypography = usesLargeDetailTypography()
     val showLoading = rememberDelayedDetailLoading(loading)
     Column(Modifier.fillMaxWidth()) {
         DetailAnimatedVisibility(
@@ -1355,16 +1512,15 @@ private fun SeriesSections(
         ) {
             Column(Modifier.fillMaxWidth()) {
                 if (seasons.size > 1) {
-                    Spacer(Modifier.height(20.dp))
                     Text(
                         "共${seasons.size}季",
                         Modifier.padding(horizontal = 16.dp).semantics { heading() },
-                        fontSize = 15.sp,
-                        lineHeight = 21.sp,
+                        fontSize = if (largeTypography) 18.sp else 15.sp,
+                        lineHeight = if (largeTypography) 24.sp else 21.sp,
                         fontWeight = FontWeight.Medium,
                     )
+                    Spacer(Modifier.height(DetailSectionContentSpacing))
                 }
-                Spacer(Modifier.height(20.dp))
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val horizontalPadding = 16.dp
                     val availableWidth = (maxWidth - horizontalPadding * 2).coerceAtLeast(1.dp)
@@ -1475,10 +1631,10 @@ private fun PlaybackSelectionSection(
 
     Row(
         Modifier
-            .then(if (largeLayout) Modifier.widthIn(max = 560.dp) else Modifier)
+            .then(if (largeLayout) Modifier.widthIn(max = LargeDetailControlWidth) else Modifier)
             .fillMaxWidth()
             .height(44.dp)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (multiSource) {
@@ -1488,6 +1644,7 @@ private fun PlaybackSelectionSection(
                 expanded = pickerKind == DetailPickerKind.Source,
                 onClick = { onOpenPicker(DetailPickerKind.Source) },
                 backdrop = backdrop,
+                largeTypography = largeLayout,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1498,6 +1655,7 @@ private fun PlaybackSelectionSection(
                 expanded = pickerKind == DetailPickerKind.Subtitle,
                 onClick = { onOpenPicker(DetailPickerKind.Subtitle) },
                 backdrop = backdrop,
+                largeTypography = largeLayout,
                 modifier = Modifier.weight(1f),
             )
             DetailSelectorTrigger(
@@ -1506,6 +1664,7 @@ private fun PlaybackSelectionSection(
                 expanded = pickerKind == DetailPickerKind.Audio,
                 onClick = { onOpenPicker(DetailPickerKind.Audio) },
                 backdrop = backdrop,
+                largeTypography = largeLayout,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1519,6 +1678,7 @@ private fun DetailSelectorTrigger(
     expanded: Boolean,
     onClick: () -> Unit,
     backdrop: GlassBackdrop,
+    largeTypography: Boolean,
     modifier: Modifier = Modifier,
 ) {
     LiquidButton(
@@ -1536,8 +1696,8 @@ private fun DetailSelectorTrigger(
             // button edge instead of keeping it beside the text.
             Modifier.weight(1f, fill = false),
             color = Color.White,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            fontSize = if (largeTypography) 14.sp else 12.sp,
+            lineHeight = if (largeTypography) 18.sp else 16.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -1780,6 +1940,7 @@ internal fun MediaInfoSection(
     onOpenDetails: () -> Unit,
 ) {
     if (!source.hasFileInformation && !source.hasVideoInformation) return
+    val largeTypography = usesLargeDetailTypography()
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.Start,
@@ -1789,8 +1950,8 @@ internal fun MediaInfoSection(
                 "文件信息",
                 Modifier.semantics { heading() },
                 color = LocalContentColor.current,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
+                fontSize = if (largeTypography) 18.sp else 15.sp,
+                lineHeight = if (largeTypography) 24.sp else 21.sp,
                 fontWeight = FontWeight.Medium,
             )
             Column(
@@ -1800,20 +1961,20 @@ internal fun MediaInfoSection(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                DetailInformationValue("文件位置", source.filePath)
-                DetailInformationValue("文件大小", source.fileSize)
-                DetailInformationValue("文件创建日期", source.fileCreatedDate)
-                DetailInformationValue("添加日期", source.addedDate)
+                DetailInformationValue("文件位置", source.filePath, largeTypography = largeTypography)
+                DetailInformationValue("文件大小", source.fileSize, largeTypography = largeTypography)
+                DetailInformationValue("文件创建日期", source.fileCreatedDate, largeTypography = largeTypography)
+                DetailInformationValue("添加日期", source.addedDate, largeTypography = largeTypography)
             }
         }
         if (source.hasVideoInformation) {
-            if (source.hasFileInformation) Spacer(Modifier.height(16.dp))
+            if (source.hasFileInformation) Spacer(Modifier.height(DetailMediaSubsectionSpacing))
             Text(
                 "视频信息",
                 Modifier.semantics { heading() },
                 color = LocalContentColor.current,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
+                fontSize = if (largeTypography) 18.sp else 15.sp,
+                lineHeight = if (largeTypography) 24.sp else 21.sp,
                 fontWeight = FontWeight.Medium,
             )
             Column(
@@ -1823,9 +1984,9 @@ internal fun MediaInfoSection(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                DetailInformationValue("视频", source.videoSummary, multiline = true)
-                DetailInformationValue("音频", source.audioSummary, multiline = true)
-                DetailInformationValue("字幕", source.subtitleSummary, multiline = true)
+                DetailInformationValue("视频", source.videoSummary, multiline = true, largeTypography = largeTypography)
+                DetailInformationValue("音频", source.audioSummary, multiline = true, largeTypography = largeTypography)
+                DetailInformationValue("字幕", source.subtitleSummary, multiline = true, largeTypography = largeTypography)
                 if (source.infoSections.isNotEmpty()) {
                     Box(Modifier.fillMaxWidth().height(.5.dp).background(Color.White.copy(alpha = .18f)))
                     Row(
@@ -1858,20 +2019,26 @@ private fun DetailInformationValue(
     label: String,
     value: String,
     multiline: Boolean = false,
+    largeTypography: Boolean = false,
 ) {
     if (value.isBlank()) return
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             label,
             color = Color.White.copy(alpha = .60f),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
+            fontSize = if (largeTypography) 13.sp else 12.sp,
+            lineHeight = if (largeTypography) 19.sp else 18.sp,
         )
         Text(
             value,
             color = Color.White.copy(alpha = .88f),
-            fontSize = 12.sp,
-            lineHeight = if (multiline) 20.sp else 18.sp,
+            fontSize = if (largeTypography) 14.sp else 12.sp,
+            lineHeight = when {
+                multiline && largeTypography -> 22.sp
+                multiline -> 20.sp
+                largeTypography -> 20.sp
+                else -> 18.sp
+            },
         )
     }
 }
@@ -1993,13 +2160,14 @@ private fun ExternalLinksSection(
     links: List<cn.mafei.cmp.core.domain.MediaExternalUrl>,
     onOpenUrl: (String) -> Unit,
 ) {
+    val largeTypography = usesLargeDetailTypography()
     Column(Modifier.fillMaxWidth()) {
         Text(
             "链接",
             Modifier.padding(horizontal = 16.dp).semantics { heading() },
             color = LocalContentColor.current,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
+            fontSize = if (largeTypography) 18.sp else 15.sp,
+            lineHeight = if (largeTypography) 24.sp else 21.sp,
             fontWeight = FontWeight.Medium,
         )
         Row(
@@ -2015,7 +2183,7 @@ private fun ExternalLinksSection(
                         .clickable(onClick = { onOpenUrl(link.url) })
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     color = Color.White.copy(alpha = .88f),
-                    fontSize = 12.sp,
+                    fontSize = if (largeTypography) 14.sp else 12.sp,
                 )
             }
         }
@@ -2028,36 +2196,47 @@ internal fun LegacyPeopleSection(
     artwork: (@Composable (PersonRef, Modifier) -> Unit)?,
     onPersonSelected: (PersonRef) -> Unit = {},
 ) {
+    val largeLayout = LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+    val avatarSize = if (largeLayout) 99.dp else 66.dp
+    val itemSpacing = if (largeLayout) 18.dp else 12.dp
+    val textSpacing = if (largeLayout) 12.dp else 8.dp
+    val rowHeight = if (largeLayout) 195.dp else 130.dp
+    val titleSize = if (largeLayout) 18.sp else 15.sp
+    val nameSize = if (largeLayout) 14.sp else 12.sp
+    val roleSize = if (largeLayout) 12.sp else 10.sp
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
         Text(
             "演职人员",
             Modifier.padding(start = 16.dp).semantics { heading() },
             color = LocalContentColor.current,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
+            fontSize = titleSize,
+            lineHeight = if (largeLayout) 24.sp else 21.sp,
             fontWeight = FontWeight.Medium,
         )
         LazyRow(
-            Modifier.fillMaxWidth().height(130.dp).padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(rowHeight)
+                .padding(vertical = if (largeLayout) 15.dp else 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
         ) {
-            item { Spacer(Modifier.width(8.dp)) }
             items(
                 people,
                 key = { it.id?.value ?: "${it.name}:${it.role.orEmpty()}:${it.personType}" },
             ) { person ->
                 Column(
-                    Modifier.width(66.dp).mafeiInteractive(
+                    Modifier.width(avatarSize).mafeiInteractive(
                         onClick = { onPersonSelected(person) },
                         enabled = person.id != null,
-                        radiusDp = 33f,
+                        radiusDp = avatarSize.value / 2f,
                         label = "查看${person.name}",
                     ),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(textSpacing),
                 ) {
                     Box(
-                        Modifier.size(66.dp).clip(CircleShape)
+                        Modifier.size(avatarSize).clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -2073,10 +2252,10 @@ internal fun LegacyPeopleSection(
                     }
                     Text(
                         person.name,
-                        Modifier.width(66.dp),
+                        Modifier.width(avatarSize),
                         color = LocalContentColor.current,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
+                        fontSize = nameSize,
+                        lineHeight = if (largeLayout) 18.sp else 15.sp,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -2084,17 +2263,16 @@ internal fun LegacyPeopleSection(
                     )
                     Text(
                         person.legacyRoleLabel(),
-                        Modifier.width(66.dp),
+                        Modifier.width(avatarSize),
                         color = LocalContentColor.current.copy(alpha = .68f),
-                        fontSize = 10.sp,
-                        lineHeight = 13.sp,
+                        fontSize = roleSize,
+                        lineHeight = if (largeLayout) 16.sp else 13.sp,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            item { Spacer(Modifier.width(8.dp)) }
         }
     }
 }
@@ -2116,9 +2294,9 @@ private const val LegacyOverviewMoreTag = "legacy-overview-more"
 
 private val OverviewSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Full,
-    tintAlpha = .76f,
-    intensity = 1f,
+    level = GlassLevel.Opaque,
+    tintAlpha = 1f,
+    intensity = 0f,
     cornerRadiusDp = 24f,
 )
 
@@ -2341,7 +2519,20 @@ private fun formatRating(value: Double): String {
 
 private fun smoothStep(value: Float): Float = value * value * (3f - 2f * value)
 
-private val DetailActionSurfaceSpec = GlassSurfaceSpec(
+internal val LargeDetailControlWidth = 320.dp
+internal val LargeDetailPlayWidth = 180.dp
+internal val DetailHeroTagSpacing = 6.dp
+internal val DetailActionSelectorSpacing = 12.dp
+internal val DetailSectionSpacing = 28.dp
+internal val DetailSectionContentSpacing = 12.dp
+internal val DetailMediaSubsectionSpacing = 20.dp
+
+@Composable
+internal fun usesLargeDetailTypography(): Boolean =
+    LocalMaFeiNavigationChrome.current.effectiveLayout
+        ?.let { it.navigation != NavigationPlacement.Bottom } == true
+
+internal val DetailActionSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Overlay,
     level = GlassLevel.Full,
     tintAlpha = .18f,

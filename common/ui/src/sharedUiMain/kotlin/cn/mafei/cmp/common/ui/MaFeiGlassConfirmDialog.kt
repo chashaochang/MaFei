@@ -3,9 +3,18 @@ package cn.mafei.cmp.common.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -22,18 +31,17 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.components.LiquidAlertDialog
 
 /**
- * Modal confirmation in the upstream liquid material — see [LiquidAlertDialog],
- * whose panel this places in the calling window.
+ * Modal confirmation panel. The panel intentionally uses an opaque surface:
+ * application dialogs must stay readable and must not add a sampled-glass edge.
  *
- * A separate dialog window has no capture source, so the material can only be
- * real inside the window that owns [backdrop] (the mine/overview sheets do the
- * same). This wrapper owns what the app adds to the upstream panel: theme colors,
- * a full-window dim, dismissal by scrim/Escape, and the tap that must not fall
- * through the panel.
+ * [backdrop] remains in the signature for source compatibility with existing
+ * callers; it is deliberately not consumed by the dialog background.
  */
 @Composable
 fun MaFeiGlassConfirmDialog(
@@ -49,9 +57,7 @@ fun MaFeiGlassConfirmDialog(
 ) {
     val scheme = MaterialTheme.colorScheme
     val isLightTheme = scheme.background.luminance() > .5f
-    // Upstream values; only the accent follows the product's palette.
-    val containerColor = if (isLightTheme) Color(0xFFFAFAFA).copy(alpha = .60f)
-        else Color(0xFF121212).copy(alpha = .40f)
+    val containerColor = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242428)
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)
         else Color(0xFF121212).copy(alpha = .56f)
     val focusRequester = remember { FocusRequester() }
@@ -75,23 +81,56 @@ fun MaFeiGlassConfirmDialog(
             .testTag("mafeiGlassConfirmScrim"),
         contentAlignment = Alignment.Center,
     ) {
-        LiquidAlertDialog(
-            backdrop = backdrop,
-            title = title,
-            message = content,
-            confirmText = confirmText,
-            dismissText = dismissText,
-            onConfirm = onConfirm,
-            onDismiss = onDismiss,
-            contentColor = scheme.onSurface,
-            accentColor = if (destructive) scheme.error else scheme.primary,
-            confirmContentColor = if (destructive) scheme.onError else scheme.onPrimary,
-            containerColor = containerColor,
-            isLightTheme = isLightTheme,
-            // The panel swallows its own taps so pressing inside never dismisses.
-            modifier = Modifier
+        Column(
+            Modifier
+                .widthIn(min = 280.dp, max = 360.dp)
+                .fillMaxWidth()
+                .background(containerColor, RoundedCornerShape(24.dp))
+                // The panel swallows its own taps so pressing inside never dismisses.
                 .pointerInput(Unit) { detectTapGestures { } }
                 .testTag("mafeiGlassConfirmCard"),
-        )
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                title,
+                color = scheme.onSurface,
+                fontSize = 20.sp,
+                lineHeight = 26.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp),
+            )
+            Text(
+                content,
+                color = scheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Text(
+                    dismissText,
+                    Modifier.height(44.dp).mafeiInteractive(
+                        onDismiss,
+                        radiusDp = 22f,
+                        label = dismissText,
+                    ).padding(horizontal = 18.dp, vertical = 12.dp),
+                    color = scheme.primary,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    confirmText,
+                    Modifier.height(44.dp).mafeiInteractive(
+                        onConfirm,
+                        radiusDp = 22f,
+                        label = confirmText,
+                    ).padding(horizontal = 18.dp, vertical = 12.dp),
+                    color = if (destructive) scheme.error else scheme.primary,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
     }
 }
