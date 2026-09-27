@@ -1012,6 +1012,14 @@ private fun BrowseContent(
     onPlayerFullscreenChanged: (Boolean) -> Unit,
     onLogout: () -> Unit,
 ) {
+    // Navigation 3 keeps an existing NavEntry composed while its parent route
+    // remains on the stack. Keep the setting in a stable State holder so the
+    // already-composed SettingsScreen observes drag/click updates immediately;
+    // passing the primitive directly would leave the entry showing the value
+    // captured when it was first pushed and only appear updated after leaving
+    // and re-entering the page.
+    val currentLiquidGlassIntensity = rememberUpdatedState(liquidGlassIntensity)
+    val currentLiquidGlassIntensityChanged = rememberUpdatedState(onLiquidGlassIntensityChanged)
     val browser = remember(session) {
         MediaBrowser(
             repository = runtime.sessions.media,
@@ -1840,8 +1848,10 @@ private fun BrowseContent(
                                         } else {
                                         null
                                     },
-                                    liquidGlassIntensity = liquidGlassIntensity,
-                                    onLiquidGlassIntensityChanged = onLiquidGlassIntensityChanged,
+                                    liquidGlassIntensity = currentLiquidGlassIntensity.value,
+                                    onLiquidGlassIntensityChanged = { value ->
+                                        currentLiquidGlassIntensityChanged.value(value)
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
