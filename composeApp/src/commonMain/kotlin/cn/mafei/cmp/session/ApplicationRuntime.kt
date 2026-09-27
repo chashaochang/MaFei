@@ -357,6 +357,31 @@ class ApplicationRuntime(
         settings.putString(APPEARANCE_MODE_KEY, value)
     }
 
+    /** Product-wide Liquid Glass strength, persisted as a 0..100 percentage. */
+    suspend fun loadGlassIntensity(): Float {
+        check(!isClosed) { "Application is closed" }
+        return try {
+            settings.getString(GLASS_INTENSITY_KEY)
+                ?.toIntOrNull()
+                ?.coerceIn(0, 100)
+                ?.div(100f)
+                ?: DEFAULT_GLASS_INTENSITY
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            failureReporter("glass-intensity-read", failure)
+            DEFAULT_GLASS_INTENSITY
+        }
+    }
+
+    suspend fun saveGlassIntensity(value: Float) {
+        check(!isClosed) { "Application is closed" }
+        settings.putString(
+            GLASS_INTENSITY_KEY,
+            (value.coerceIn(0f, 1f) * 100f).toInt().toString(),
+        )
+    }
+
     /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
     suspend fun loadFeiniuRoutePreference(): FeiniuRoutePreference {
         check(!isClosed) { "Application is closed" }
@@ -761,6 +786,8 @@ class ApplicationRuntime(
     private companion object {
         const val APPEARANCE_MODE_KEY = "mafei.ui.appearance-mode.v1"
         val APPEARANCE_MODES = setOf("auto", "light", "dark")
+        const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
+        const val DEFAULT_GLASS_INTENSITY = .5f
         const val FEINIU_ROUTE_PREFERENCE_KEY = "pref_feiniu_connection_preference"
         const val FEINIU_ROUTE_SPEED = "speed"
         const val FEINIU_ROUTE_PUBLIC = "public"

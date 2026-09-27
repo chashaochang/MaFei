@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 
+/** Default product-wide glass strength: a balanced mix of transparency and blur. */
+const val DefaultGlassIntensity = 0.5f
+
 /**
  * Shell/window-owned failure latch. A recoverable blur/lens initialization
  * exception makes every surface in this scope opaque until the scope is rebuilt.
@@ -31,8 +34,22 @@ fun rememberGlassRenderHealth(): GlassRenderHealth = remember { GlassRenderHealt
 
 internal val LocalGlassRenderHealth = staticCompositionLocalOf<GlassRenderHealth?> { null }
 
+/**
+ * Product-wide liquid-glass strength. Zero keeps the surface geometry but removes
+ * its sampled material; one uses the component's full liquid-glass recipe.
+ */
+internal val LocalGlassIntensity = staticCompositionLocalOf { DefaultGlassIntensity }
+
 /** No process-global latch: independent windows have independent rendering health. */
 @Composable
-fun GlassRenderingEnvironment(health: GlassRenderHealth, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGlassRenderHealth provides health, content = content)
+fun GlassRenderingEnvironment(
+    health: GlassRenderHealth,
+    intensity: Float = DefaultGlassIntensity,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalGlassRenderHealth provides health,
+        LocalGlassIntensity provides intensity.coerceIn(0f, 1f),
+        content = content,
+    )
 }

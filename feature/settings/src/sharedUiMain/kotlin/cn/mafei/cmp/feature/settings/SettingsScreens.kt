@@ -2,9 +2,11 @@ package cn.mafei.cmp.feature.settings
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiGlassDefaults
+import cn.mafei.cmp.common.glass.DefaultGlassIntensity
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
@@ -80,6 +83,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     feiniuRoutePreferenceTitle: String? = null,
     onOpenFeiniuPreference: (() -> Unit)? = null,
+    liquidGlassIntensity: Float = DefaultGlassIntensity,
+    onLiquidGlassIntensityChanged: (Float) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -104,6 +109,10 @@ fun SettingsScreen(
                 //     items = listOf(LegacyListGroupItem("外观与显示", trailing = DarkAppearanceTitle)),
                 //     onItemClick = { onOpenAppearance() },
                 // )
+                LiquidGlassIntensitySetting(
+                    value = liquidGlassIntensity,
+                    onValueChange = onLiquidGlassIntensityChanged,
+                )
                 if (feiniuRoutePreferenceTitle != null && onOpenFeiniuPreference != null) {
                     LegacyListGroup(
                         items = listOf(
@@ -113,6 +122,84 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Product-level Liquid Glass control; deliberately uses no Material Slider. */
+@Composable
+private fun LiquidGlassIntensitySetting(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    val progress = value.coerceIn(0f, 1f)
+    val percent = (progress * 100f).roundToInt()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Liquid Glass",
+                Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "$percent%",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+        }
+        Text(
+            "调节液态玻璃的透明与模糊强度",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+        )
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures { position ->
+                        onValueChange((position.x / size.width).coerceIn(0f, 1f))
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectDragGestures { change, _ ->
+                        onValueChange((change.position.x / size.width).coerceIn(0f, 1f))
+                    }
+                },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val trackHeight = 6.dp
+            val knobSize = 22.dp
+            val knobOffset = (maxWidth - knobSize) * progress
+            Box(
+                Modifier.fillMaxWidth().height(trackHeight).clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .16f)),
+            )
+            Box(
+                Modifier.fillMaxWidth(progress).height(trackHeight).clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Box(
+                Modifier.offset(x = knobOffset).size(knobSize)
+                    .clip(RoundedCornerShape(knobSize / 2))
+                    .background(MaterialTheme.colorScheme.onSurface),
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("完全透明", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text("液态玻璃 + 高斯模糊", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }

@@ -153,6 +153,20 @@ class ApplicationSessionsTest {
         } finally { root.close(); h.close() }
     }
 
+    @Test fun glassIntensityDefaultsToMiddleAndPersistsClampedPercentage() = runBlocking<Unit> {
+        val h = Harness()
+        val root = ApplicationRuntime(h.settings, h.secrets, h.transport, Dispatchers.Unconfined)
+        try {
+            assertEquals(.5f, root.loadGlassIntensity())
+            root.saveGlassIntensity(.82f)
+            assertEquals(.82f, root.loadGlassIntensity())
+            root.saveGlassIntensity(2f)
+            assertEquals(1f, root.loadGlassIntensity())
+            root.saveGlassIntensity(-1f)
+            assertEquals(0f, root.loadGlassIntensity())
+        } finally { root.close(); h.close() }
+    }
+
     @Test fun lateOldResponseCannotPublishAfterAccountSwitch() = runBlocking<Unit> {
         withTimeout(5000) {
             val h = Harness(); val entered = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()

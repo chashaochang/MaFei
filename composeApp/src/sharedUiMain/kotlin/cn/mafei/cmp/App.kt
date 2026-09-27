@@ -74,6 +74,7 @@ import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
+import cn.mafei.cmp.common.glass.DefaultGlassIntensity
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassSurface
@@ -361,6 +362,12 @@ fun App(
     var starting by remember(runtime) { mutableStateOf(true) }
     var showStartupProgress by remember(runtime) { mutableStateOf(false) }
     var startupExiting by remember(runtime) { mutableStateOf(false) }
+    var liquidGlassIntensity by remember(runtime) { mutableFloatStateOf(DefaultGlassIntensity) }
+    var glassIntensitySaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(runtime) {
+        liquidGlassIntensity = runtime.loadGlassIntensity()
+    }
 
     LaunchedEffect(runtime) {
         val progress = launch {
@@ -405,7 +412,7 @@ fun App(
             SideEffect { onThemeChanged(true) }
             MaFeiTheme {
                 val health = rememberGlassRenderHealth()
-                GlassRenderingEnvironment(health) {
+                GlassRenderingEnvironment(health, intensity = liquidGlassIntensity) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                         if (starting) {
                             StaticAppCanvas {
@@ -433,6 +440,15 @@ fun App(
                                             runtime = runtime,
                                             session = session,
                                             busy = busy,
+                                            liquidGlassIntensity = liquidGlassIntensity,
+                                            onLiquidGlassIntensityChanged = { value ->
+                                                liquidGlassIntensity = value
+                                                glassIntensitySaveJob?.cancel()
+                                                glassIntensitySaveJob = scope.launch {
+                                                    delay(180)
+                                                    runtime.saveGlassIntensity(value)
+                                                }
+                                            },
                                             playerSurface = playerSurface,
                                             onPlayerScreenChanged = onPlayerScreenChanged,
                                             onPlayerFullscreenChanged = onPlayerFullscreenChanged,
@@ -984,6 +1000,8 @@ private fun BrowseContent(
     runtime: ApplicationRuntime,
     session: ApplicationSession,
     busy: Boolean,
+    liquidGlassIntensity: Float,
+    onLiquidGlassIntensityChanged: (Float) -> Unit,
     playerSurface: @Composable (
         PlayerController,
         onBack: () -> Unit,
@@ -1819,9 +1837,11 @@ private fun BrowseContent(
                                                 mineBackStack += BrowseFeiniuConnectionPreferenceRoute
                                             }
                                         }
-                                    } else {
+                                        } else {
                                         null
                                     },
+                                    liquidGlassIntensity = liquidGlassIntensity,
+                                    onLiquidGlassIntensityChanged = onLiquidGlassIntensityChanged,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

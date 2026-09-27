@@ -38,6 +38,7 @@ import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.DampedDragAnimation
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -90,7 +91,8 @@ fun LiquidBottomTabs(
     // MaFei supports an in-app theme override, so the system appearance is not
     // a reliable source of truth for glass tint and selection contrast.
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
-    val containerAlpha = .4f
+    val glassIntensity = LocalGlassIntensity.current
+    val containerAlpha = .4f * glassIntensity
     val containerColor =
         if (isLightTheme) Color(0xFFFAFAFA).copy(containerAlpha)
         else Color(0xFF121212).copy(containerAlpha)
@@ -211,10 +213,10 @@ fun LiquidBottomTabs(
                         shape = { Capsule() },
                         effects = {
                             vibrancy()
-                            blur((8f * panelEffectScale).dp.toPx())
+                            blur((8f * panelEffectScale).dp.toPx() * glassIntensity)
                             lens(
-                                (24f * panelEffectScale).dp.toPx(),
-                                (24f * panelEffectScale).dp.toPx(),
+                                (24f * panelEffectScale).dp.toPx() * glassIntensity,
+                                (24f * panelEffectScale).dp.toPx() * glassIntensity,
                             )
                         },
                         layerBlock = {
@@ -256,15 +258,15 @@ fun LiquidBottomTabs(
                             effects = {
                                 val progress = dampedDragAnimation.pressProgress
                                 vibrancy()
-                                blur((8f * panelEffectScale).dp.toPx())
+                                blur((8f * panelEffectScale).dp.toPx() * glassIntensity)
                                 lens(
-                                    (24f * panelEffectScale).dp.toPx() * progress,
-                                    (24f * panelEffectScale).dp.toPx() * progress
+                                    (24f * panelEffectScale).dp.toPx() * progress * glassIntensity,
+                                    (24f * panelEffectScale).dp.toPx() * progress * glassIntensity
                                 )
                             },
                             highlight = {
                                 val progress = dampedDragAnimation.pressProgress
-                                Highlight.Default.copy(alpha = progress)
+                                Highlight.Default.copy(alpha = progress * glassIntensity)
                             },
                             onDrawSurface = { drawRect(containerColor) }
                         )
@@ -298,24 +300,24 @@ fun LiquidBottomTabs(
                             val progress = dampedDragAnimation.pressProgress
                             val refractionProgress = progress.coerceAtLeast(0.001f)
                             lens(
-                                (10f * selectionEffectScale).dp.toPx() * refractionProgress,
-                                (14f * selectionEffectScale).dp.toPx() * refractionProgress,
+                                (10f * selectionEffectScale).dp.toPx() * refractionProgress * glassIntensity,
+                                (14f * selectionEffectScale).dp.toPx() * refractionProgress * glassIntensity,
                                 chromaticAberration = true
                             )
                         },
                         highlight = {
                             val progress = dampedDragAnimation.pressProgress
-                            Highlight.Default.copy(alpha = progress)
+                            Highlight.Default.copy(alpha = progress * glassIntensity)
                         },
                         shadow = {
                             val progress = dampedDragAnimation.pressProgress
-                            Shadow(alpha = progress)
+                            Shadow(alpha = progress * glassIntensity)
                         },
                         innerShadow = {
                             val progress = dampedDragAnimation.pressProgress
                             InnerShadow(
-                                radius = (8f * selectionEffectScale).dp * progress,
-                                alpha = progress
+                                radius = (8f * selectionEffectScale).dp * progress * glassIntensity,
+                                alpha = progress * glassIntensity
                             )
                         },
                         layerBlock = {
@@ -328,11 +330,11 @@ fun LiquidBottomTabs(
                         onDrawSurface = {
                             val progress = dampedDragAnimation.pressProgress
                             drawRect(
-                                if (isLightTheme) Color.Black.copy(0.1f)
-                                else Color.White.copy(0.1f),
-                                alpha = 1f - progress
+                                if (isLightTheme) Color.Black.copy(0.1f * glassIntensity)
+                                else Color.White.copy(0.1f * glassIntensity),
+                                alpha = (1f - progress) * glassIntensity
                             )
-                            drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                            drawRect(Color.Black.copy(alpha = 0.03f * progress * glassIntensity))
                         }
                     )
                     .height(dockHeight - 8.dp)

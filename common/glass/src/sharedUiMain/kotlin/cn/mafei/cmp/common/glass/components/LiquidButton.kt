@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.util.fastCoerceAtMost
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -46,6 +47,7 @@ fun LiquidButton(
     horizontalPadding: Dp = 16.dp,
     content: @Composable RowScope.() -> Unit
 ) {
+    val glassIntensity = LocalGlassIntensity.current
     val animationScope = rememberCoroutineScope()
 
     val interactiveHighlight = remember(animationScope) {
@@ -61,10 +63,10 @@ fun LiquidButton(
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(2f.dp.toPx())
+                    blur(2f.dp.toPx() * glassIntensity)
                     lens(
-                        12f.dp.toPx(),
-                        24f.dp.toPx(),
+                        12f.dp.toPx() * glassIntensity,
+                        24f.dp.toPx() * glassIntensity,
                         chromaticAberration = chromaticAberration,
                     )
                 },
@@ -98,11 +100,11 @@ fun LiquidButton(
                 },
                 onDrawSurface = {
                     if (tint.isSpecified) {
-                        drawRect(tint, blendMode = BlendMode.Hue)
-                        drawRect(tint.copy(alpha = 0.75f))
+                        drawRect(tint.copy(alpha = tint.alpha * glassIntensity), blendMode = BlendMode.Hue)
+                        drawRect(tint.copy(alpha = 0.75f * glassIntensity))
                     }
                     if (surfaceColor.isSpecified) {
-                        drawRect(surfaceColor)
+                        drawRect(surfaceColor.copy(alpha = surfaceColor.alpha * glassIntensity))
                     }
                 }
             )

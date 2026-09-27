@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -27,6 +28,7 @@ fun LiquidMiniBarSurface(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val glassIntensity = LocalGlassIntensity.current
     Box(
         modifier
             .drawBackdrop(
@@ -34,13 +36,17 @@ fun LiquidMiniBarSurface(
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(8.dp.toPx())
-                    lens(16.dp.toPx(), 28.dp.toPx(), chromaticAberration = true)
+                    blur(8.dp.toPx() * glassIntensity)
+                    lens(
+                        16.dp.toPx() * glassIntensity,
+                        28.dp.toPx() * glassIntensity,
+                        chromaticAberration = true,
+                    )
                 },
-                shadow = { Shadow(alpha = .18f) },
-                innerShadow = { InnerShadow(radius = 5.dp, alpha = .25f) },
+                shadow = { Shadow(alpha = .18f * glassIntensity) },
+                innerShadow = { InnerShadow(radius = 5.dp * glassIntensity, alpha = .25f * glassIntensity) },
                 onDrawSurface = {
-                    drawRect(Color.White.copy(alpha = .2f))
+                    drawRect(Color.White.copy(alpha = .2f * glassIntensity))
                 },
             )
             .clip(Capsule())

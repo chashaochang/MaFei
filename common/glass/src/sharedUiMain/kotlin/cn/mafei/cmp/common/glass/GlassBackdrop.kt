@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -63,20 +64,23 @@ fun Modifier.liquidTrackSurface(
     tint: Color,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
 ): Modifier =
-    // Do not put a fixed-size clip outside drawBackdrop. Its layerBlock is the
-    // real pressed transform; an outer clip would cut off the enlarged capsule
-    // and its highlight, leaving only the sampled content visibly expanded.
-    // drawBackdrop already owns the capsule mask, matching LiquidBottomTabs.
-    drawBackdrop(
-        backdrop = backdrop.layer,
-        shape = { Capsule() },
-        effects = {
-            blur(12.dp.toPx() * .9f)
-            lens(16.dp.toPx(), 8.dp.toPx() * .9f)
-        },
-        layerBlock = layerBlock,
-        onDrawSurface = { drawRect(tint) },
-    )
+    composed {
+        val glassIntensity = LocalGlassIntensity.current
+        // Do not put a fixed-size clip outside drawBackdrop. Its layerBlock is the
+        // real pressed transform; an outer clip would cut off the enlarged capsule
+        // and its highlight, leaving only the sampled content visibly expanded.
+        // drawBackdrop already owns the capsule mask, matching LiquidBottomTabs.
+        drawBackdrop(
+            backdrop = backdrop.layer,
+            shape = { Capsule() },
+            effects = {
+                blur(12.dp.toPx() * .9f * glassIntensity)
+                lens(16.dp.toPx() * glassIntensity, 8.dp.toPx() * .9f * glassIntensity)
+            },
+            layerBlock = layerBlock,
+            onDrawSurface = { drawRect(tint) },
+        )
+    }
 
 /**
  * One backdrop holding every [backdrops] material, for a glass child that must
@@ -125,6 +129,8 @@ fun GlassSurface(
     val health = LocalGlassRenderHealth.current ?: rememberGlassRenderHealth()
     val level = if (health.effectFailed) GlassLevel.Opaque
         else resolveGlassLevel(spec.level, currentGlassCapability(), backdrop != null)
+    val glassIntensity = LocalGlassIntensity.current
+    val effectIntensity = (spec.intensity * glassIntensity).coerceIn(0f, 1f)
     val shape = RoundedCornerShape(spec.cornerRadiusDp.coerceAtLeast(0f).dp)
     val export = exportedBackdrop?.let {
         requireNotNull(it.captureLayer) { "A combined glass backdrop cannot be used as a recorder" }
@@ -132,6 +138,10 @@ fun GlassSurface(
     val liquid = spec.material == GlassMaterial.Liquid
     val material = if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
+    } else if (glassIntensity <= 0.001f) {
+        // Keep the component's layout and hit target, but make the material
+        // completely transparent at the minimum preference value.
+        Modifier
     } else {
         Modifier
             // 投影只属于"浮在页面上的液态玻璃"。贴边通栏的面板加投影只会让朝内容的那条边
@@ -153,11 +163,11 @@ fun GlassSurface(
             shape = { shape },
             effects = {
                 val applied = health.guard.run {
-                    blur(12.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
+                    blur(12.dp.toPx() * effectIntensity)
                     // 纯高斯模糊（Frosted）不折射：折射在贴边面板的四条边上会画出可见的
                     // 边（"上下左右都有线"），而整屏高度的折射没有视觉收益。
                     if (level == GlassLevel.Full && liquid) {
-                        lens(16.dp.toPx(), 8.dp.toPx() * spec.intensity.coerceIn(0f, 1f))
+                        lens(16.dp.toPx() * effectIntensity, 8.dp.toPx() * effectIntensity)
                     }
                 }
                 if (!applied) {
@@ -172,11 +182,18 @@ fun GlassSurface(
             shadow = null,
             onDrawSurface = {
                 // Do not wait for recomposition to make the failed frame readable.
-                drawRect(tint.copy(alpha = if (health.effectFailed) 1f else spec.tintAlpha.coerceIn(0f, 1f)))
+                drawRect(
+                    tint.copy(
+                        alpha = if (health.effectFailed) 1f
+                        else (spec.tintAlpha * glassIntensity).coerceIn(0f, 1f),
+                    ),
+                )
                 if (!health.effectFailed && level != GlassLevel.Opaque && liquid) {
                     val radius = spec.cornerRadiusDp.coerceAtLeast(0f).dp.toPx()
                     drawRoundRect(
-                        color = Color.White.copy(alpha = if (level == GlassLevel.Full) .22f else .14f),
+                        color = Color.White.copy(
+                            alpha = (if (level == GlassLevel.Full) .22f else .14f) * glassIntensity,
+                        ),
                         cornerRadius = CornerRadius(radius, radius),
                         style = Stroke(width = 1.dp.toPx()),
                     )

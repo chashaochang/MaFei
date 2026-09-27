@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.max
@@ -65,6 +66,7 @@ fun LiquidActionBar(
     actions: @Composable RowScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
 ) {
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
+    val glassIntensity = LocalGlassIntensity.current
     val tintColor = if (isLightTheme) Color.White else Color(0xFF202124)
     val progressiveBackdrop = rememberLayerBackdrop()
     val combinedBackdrop = rememberCombinedBackdrop(backdrop.layer, progressiveBackdrop)
@@ -93,9 +95,10 @@ fun LiquidActionBar(
             Modifier.fillMaxSize().progressiveBlur(
                 backdrop = backdrop.layer,
                 tint = tintColor,
-                tintIntensity = if (isLightTheme) .72f else .68f,
+                blurRadius = 4.dp * glassIntensity,
+                tintIntensity = (if (isLightTheme) .72f else .68f) * glassIntensity,
                 gradientStartFraction = 1f / 3f,
-                opacity = materialAlpha,
+                opacity = materialAlpha * glassIntensity,
                 exportedBackdrop = progressiveBackdrop,
             ),
         )
