@@ -152,34 +152,34 @@ internal fun DetailSheetHeader(
 ) {
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
         ?.let { it.navigation != NavigationPlacement.Bottom } == true
-    Column(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().height(if (largeWindow) 56.dp else 64.dp)) {
         if (!largeWindow) {
             Box(
-                Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp)
+                Modifier.align(Alignment.TopCenter).padding(top = 8.dp).width(36.dp).height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
             )
         }
         Box(
-            Modifier.fillMaxWidth().padding(top = if (largeWindow) 0.dp else 4.dp, bottom = 8.dp),
+            Modifier.fillMaxSize().padding(horizontal = 52.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                title, Modifier.fillMaxWidth().padding(horizontal = 52.dp).semantics { heading() },
+                title, Modifier.fillMaxWidth().semantics { heading() },
                 color = contentColor,
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium,
             )
-            LiquidButton(
-                onClick = onDismiss,
-                backdrop = backdrop,
-                modifier = Modifier.align(Alignment.CenterEnd).size(44.dp)
-                    .semantics { contentDescription = "关闭$title" },
-                height = 44.dp,
-                horizontalPadding = 0.dp,
-            ) {
-                MaFeiIcon(MaFeiGlyph.Close, Modifier.size(20.dp), color = contentColor)
-            }
+        }
+        LiquidButton(
+            onClick = onDismiss,
+            backdrop = backdrop,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp).size(44.dp)
+                .semantics { contentDescription = "关闭$title" },
+            height = 44.dp,
+            horizontalPadding = 0.dp,
+        ) {
+            MaFeiIcon(MaFeiGlyph.Close, Modifier.size(20.dp), color = contentColor)
         }
     }
 }

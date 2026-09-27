@@ -113,7 +113,6 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
-import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.common.ui.LegacyVideoCard
@@ -123,6 +122,9 @@ import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.LocalShellBackdrop
+import cn.mafei.cmp.common.ui.LocalMaFeiWindowModalHost
+import cn.mafei.cmp.common.ui.MaFeiWindowModalPortal
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
@@ -237,6 +239,7 @@ fun DetailScreen(
     var mediaInfoSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
     var pickerKind by remember(item?.id?.value) { mutableStateOf<DetailPickerKind?>(null) }
     val sheetVisible = overviewSheetVisible || mediaInfoSheetVisible || pickerKind != null
+    val useWindowModalHost = largeDetailLayout && LocalMaFeiWindowModalHost.current != null
     val dismissTopSheet: () -> Unit = {
         when {
             pickerKind != null -> pickerKind = null
@@ -362,42 +365,79 @@ fun DetailScreen(
             message = actionsError ?: playbackError,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-        if (overviewSheetVisible) {
-            OverviewSheetOverlay(
-                overview = item?.overview,
-                backdrop = actionBarBackdrop,
-                onDismiss = { overviewSheetVisible = false },
-            )
+        if (!useWindowModalHost) {
+            if (overviewSheetVisible) {
+                OverviewSheetOverlay(
+                    overview = item?.overview,
+                    backdrop = actionBarBackdrop,
+                    onDismiss = { overviewSheetVisible = false },
+                )
+            }
+            if (mediaInfoSheetVisible && selectedPlaybackSource != null) {
+                MediaInfoSheetOverlay(
+                    sections = selectedPlaybackSource.infoSections,
+                    backdrop = actionBarBackdrop,
+                    onDismiss = { mediaInfoSheetVisible = false },
+                )
+            }
+            pickerKind?.let { kind ->
+                DetailPickerSheetOverlay(
+                    kind = kind,
+                    sources = playbackSources,
+                    selectedSource = selectedPlaybackSource,
+                    selectedAudioStreamIndex = selectedAudioStreamIndex,
+                    selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
+                    backdrop = actionBarBackdrop,
+                    onDismiss = { pickerKind = null },
+                    onSelectSource = { sourceId ->
+                        pickerKind = null
+                        onSelectMediaSource?.invoke(sourceId)
+                    },
+                    onSelectAudio = { streamIndex ->
+                        pickerKind = null
+                        onSelectAudioTrack?.invoke(streamIndex)
+                    },
+                    onSelectSubtitle = { streamIndex ->
+                        pickerKind = null
+                        onSelectSubtitleTrack?.invoke(streamIndex)
+                    },
+                )
+            }
         }
-        if (mediaInfoSheetVisible && selectedPlaybackSource != null) {
-            MediaInfoSheetOverlay(
-                sections = selectedPlaybackSource.infoSections,
-                backdrop = actionBarBackdrop,
-                onDismiss = { mediaInfoSheetVisible = false },
-            )
-        }
-        pickerKind?.let { kind ->
-            DetailPickerSheetOverlay(
-                kind = kind,
-                sources = playbackSources,
-                selectedSource = selectedPlaybackSource,
-                selectedAudioStreamIndex = selectedAudioStreamIndex,
-                selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
-                backdrop = actionBarBackdrop,
-                onDismiss = { pickerKind = null },
-                onSelectSource = { sourceId ->
-                    pickerKind = null
-                    onSelectMediaSource?.invoke(sourceId)
-                },
-                onSelectAudio = { streamIndex ->
-                    pickerKind = null
-                    onSelectAudioTrack?.invoke(streamIndex)
-                },
-                onSelectSubtitle = { streamIndex ->
-                    pickerKind = null
-                    onSelectSubtitleTrack?.invoke(streamIndex)
-                },
-            )
+        MaFeiWindowModalPortal(visible = useWindowModalHost && sheetVisible) { modalBackdrop ->
+            when {
+                overviewSheetVisible -> OverviewSheetOverlay(
+                    overview = item?.overview,
+                    backdrop = modalBackdrop,
+                    onDismiss = { overviewSheetVisible = false },
+                )
+                mediaInfoSheetVisible && selectedPlaybackSource != null -> MediaInfoSheetOverlay(
+                    sections = selectedPlaybackSource.infoSections,
+                    backdrop = modalBackdrop,
+                    onDismiss = { mediaInfoSheetVisible = false },
+                )
+                pickerKind != null -> DetailPickerSheetOverlay(
+                    kind = pickerKind!!,
+                    sources = playbackSources,
+                    selectedSource = selectedPlaybackSource,
+                    selectedAudioStreamIndex = selectedAudioStreamIndex,
+                    selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
+                    backdrop = modalBackdrop,
+                    onDismiss = { pickerKind = null },
+                    onSelectSource = { sourceId ->
+                        pickerKind = null
+                        onSelectMediaSource?.invoke(sourceId)
+                    },
+                    onSelectAudio = { streamIndex ->
+                        pickerKind = null
+                        onSelectAudioTrack?.invoke(streamIndex)
+                    },
+                    onSelectSubtitle = { streamIndex ->
+                        pickerKind = null
+                        onSelectSubtitleTrack?.invoke(streamIndex)
+                    },
+                )
+            }
         }
     }
 }
@@ -1443,7 +1483,9 @@ internal fun BoxScope.OverviewSheetOverlay(
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
-    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    // The close button samples the dialog's own frosted material. Sampling the
+    // page backdrop here makes the button visually leak through the dialog.
+    val closeButtonBackdrop = sheetMaterialBackdrop
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
@@ -1459,7 +1501,7 @@ internal fun BoxScope.OverviewSheetOverlay(
             ),
     )
     GlassSurface(
-        backdrop = backdrop,
+        backdrop = LocalShellBackdrop.current ?: backdrop,
         spec = OverviewSheetSurfaceSpec,
         tint = MaterialTheme.colorScheme.surface,
         modifier = Modifier.align(sheetAlignment)
@@ -1743,7 +1785,7 @@ private fun BoxScope.DetailPickerSheetOverlay(
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
-    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    val closeButtonBackdrop = sheetMaterialBackdrop
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
@@ -1761,77 +1803,77 @@ private fun BoxScope.DetailPickerSheetOverlay(
             .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
             .widthIn(max = 720.dp).fillMaxWidth(),
     ) {
-        val sheetMaxHeight = maxHeight * .70f
-        val listMaxHeight = (sheetMaxHeight - 76.dp).coerceAtLeast(120.dp)
-        GlassSurface(
-            backdrop = backdrop,
-            spec = OverviewSheetSurfaceSpec,
-            tint = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
-                .then(if (largeWindow) Modifier else sheetDrag).clickable(
-                interactionSource = sheetInteraction,
-                indication = null,
-                onClick = {},
-            ),
-            exportedBackdrop = sheetMaterialBackdrop,
-        ) {
-            Column(
-                Modifier.fillMaxWidth().padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 10.dp,
-                    bottom = safeArea.bottom + 10.dp,
+            val sheetMaxHeight = maxHeight * .70f
+            val listMaxHeight = (sheetMaxHeight - 76.dp).coerceAtLeast(120.dp)
+            GlassSurface(
+                backdrop = LocalShellBackdrop.current ?: backdrop,
+                spec = OverviewSheetSurfaceSpec,
+                tint = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
+                    .then(if (largeWindow) Modifier else sheetDrag).clickable(
+                    interactionSource = sheetInteraction,
+                    indication = null,
+                    onClick = {},
                 ),
+                exportedBackdrop = sheetMaterialBackdrop,
             ) {
-                DetailSheetHeader(
-                    title = when (kind) {
-                        DetailPickerKind.Source -> "选择播放版本"
-                        DetailPickerKind.Subtitle -> "字幕"
-                        DetailPickerKind.Audio -> "音频"
-                    },
-                    backdrop = closeButtonBackdrop,
-                    onDismiss = onDismiss,
-                    contentColor = Color.White,
-                )
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(contentScrollState),
-                    verticalArrangement = Arrangement.spacedBy(
-                        if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
+                    Modifier.fillMaxWidth().padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 10.dp,
+                        bottom = safeArea.bottom + 10.dp,
                     ),
                 ) {
-                    when (kind) {
-                        DetailPickerKind.Source -> sources.forEach { option ->
-                            DetailSourceOptionRow(
-                                option = option,
-                                selected = option.id == source.id,
-                                onClick = { onSelectSource(option.id) },
-                            )
-                        }
-
-                        DetailPickerKind.Subtitle -> {
-                            val selectedIndex = selectedSubtitleStreamIndex ?: source.defaultSubtitleStreamIndex
-                            source.subtitleOptions.forEach { option ->
-                                DetailTrackOptionRow(
+                    DetailSheetHeader(
+                        title = when (kind) {
+                            DetailPickerKind.Source -> "选择播放版本"
+                            DetailPickerKind.Subtitle -> "字幕"
+                            DetailPickerKind.Audio -> "音频"
+                        },
+                        backdrop = closeButtonBackdrop,
+                        onDismiss = onDismiss,
+                        contentColor = Color.White,
+                    )
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(contentScrollState),
+                        verticalArrangement = Arrangement.spacedBy(
+                            if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
+                        ),
+                    ) {
+                        when (kind) {
+                            DetailPickerKind.Source -> sources.forEach { option ->
+                                DetailSourceOptionRow(
                                     option = option,
-                                    selected = option.streamIndex == selectedIndex,
-                                    onClick = { onSelectSubtitle(option.streamIndex) },
+                                    selected = option.id == source.id,
+                                    onClick = { onSelectSource(option.id) },
                                 )
                             }
-                        }
 
-                        DetailPickerKind.Audio -> {
-                            val selectedIndex = selectedAudioStreamIndex ?: source.defaultAudioStreamIndex
-                            source.audioOptions.forEach { option ->
-                                DetailTrackOptionRow(
-                                    option = option,
-                                    selected = option.streamIndex == selectedIndex,
-                                    onClick = { onSelectAudio(option.streamIndex) },
-                                )
+                            DetailPickerKind.Subtitle -> {
+                                val selectedIndex = selectedSubtitleStreamIndex ?: source.defaultSubtitleStreamIndex
+                                source.subtitleOptions.forEach { option ->
+                                    DetailTrackOptionRow(
+                                        option = option,
+                                        selected = option.streamIndex == selectedIndex,
+                                        onClick = { onSelectSubtitle(option.streamIndex) },
+                                    )
+                                }
+                            }
+
+                            DetailPickerKind.Audio -> {
+                                val selectedIndex = selectedAudioStreamIndex ?: source.defaultAudioStreamIndex
+                                source.audioOptions.forEach { option ->
+                                    DetailTrackOptionRow(
+                                        option = option,
+                                        selected = option.streamIndex == selectedIndex,
+                                        onClick = { onSelectAudio(option.streamIndex) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
         }
     }
 }
@@ -2054,7 +2096,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     val dismissInteraction = remember { MutableInteractionSource() }
     val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
-    val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetMaterialBackdrop)
+    val closeButtonBackdrop = sheetMaterialBackdrop
     val contentScrollState = rememberScrollState()
     val sheetDrag = rememberDetailSheetDrag(contentScrollState, onDismiss)
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
@@ -2068,52 +2110,52 @@ internal fun BoxScope.MediaInfoSheetOverlay(
         ),
     )
     GlassSurface(
-        backdrop = backdrop,
-        spec = OverviewSheetSurfaceSpec,
-        tint = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.align(sheetAlignment)
-            .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
-            .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
-            .then(if (largeWindow) Modifier else sheetDrag)
-            .clickable(
-                interactionSource = sheetInteraction,
-                indication = null,
-                onClick = {},
-            ),
-        exportedBackdrop = sheetMaterialBackdrop,
-    ) {
-        Column(
-            Modifier.fillMaxSize().padding(
-                start = 16.dp,
-                end = 16.dp,
-                top = 10.dp,
-                bottom = safeArea.bottom + 10.dp,
-            ),
+            backdrop = LocalShellBackdrop.current ?: backdrop,
+            spec = OverviewSheetSurfaceSpec,
+            tint = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.align(sheetAlignment)
+                .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
+                .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
+                .then(if (largeWindow) Modifier else sheetDrag)
+                .clickable(
+                    interactionSource = sheetInteraction,
+                    indication = null,
+                    onClick = {},
+                ),
+            exportedBackdrop = sheetMaterialBackdrop,
         ) {
-            DetailSheetHeader(
-                "文件媒体信息",
-                closeButtonBackdrop,
-                onDismiss,
-                contentColor = Color.White,
-            )
             Column(
-                Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                Modifier.fillMaxSize().padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 10.dp,
+                    bottom = safeArea.bottom + 10.dp,
+                ),
             ) {
-                sections.forEach { section ->
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            section.title,
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        section.cards.forEach { card -> DetailInfoCard(card) }
+                DetailSheetHeader(
+                    "文件媒体信息",
+                    closeButtonBackdrop,
+                    onDismiss,
+                    contentColor = Color.White,
+                )
+                Column(
+                    Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    sections.forEach { section ->
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                section.title,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            section.cards.forEach { card -> DetailInfoCard(card) }
+                        }
                     }
+                    Spacer(Modifier.height(6.dp))
                 }
-                Spacer(Modifier.height(6.dp))
             }
-        }
     }
 }
 
@@ -2294,10 +2336,11 @@ private const val LegacyOverviewMoreTag = "legacy-overview-more"
 
 private val OverviewSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Opaque,
-    tintAlpha = 1f,
-    intensity = 0f,
+    level = GlassLevel.Reduced,
+    tintAlpha = .72f,
+    intensity = 1f,
     cornerRadiusDp = 24f,
+    material = GlassMaterial.Frosted,
 )
 
 private val DetailAtmosphereBlurRadius = 48.dp

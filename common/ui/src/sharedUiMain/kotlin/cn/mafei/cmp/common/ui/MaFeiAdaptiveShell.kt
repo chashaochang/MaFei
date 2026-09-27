@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -124,6 +125,51 @@ val LocalMaFeiNavigationChrome = staticCompositionLocalOf {
  * 只有根层能同时采到背景与内容。shell 之外为 null。 */
 val LocalShellBackdrop = staticCompositionLocalOf<cn.mafei.cmp.common.glass.GlassBackdrop?> { null }
 
+internal data class MaFeiWindowModalEntry(
+    val owner: Any,
+    val content: @Composable BoxScope.(GlassBackdrop) -> Unit,
+)
+
+/**
+ * Window-level modal portal shared by pages hosted inside a navigation pane.
+ * Pages publish modal content here; [MaFeiAdaptiveShell] renders it after the
+ * sidebar/top bar so a large-screen dialog is centered in the whole window.
+ */
+class MaFeiWindowModalHostState internal constructor() {
+    internal var entry by mutableStateOf<MaFeiWindowModalEntry?>(null)
+        private set
+
+    internal fun present(
+        owner: Any,
+        content: @Composable BoxScope.(GlassBackdrop) -> Unit,
+    ) {
+        entry = MaFeiWindowModalEntry(owner, content)
+    }
+
+    internal fun dismiss(owner: Any) {
+        if (entry?.owner === owner) entry = null
+    }
+}
+
+val LocalMaFeiWindowModalHost = staticCompositionLocalOf<MaFeiWindowModalHostState?> { null }
+
+/** Publishes [content] into the shell's topmost modal layer while [visible]. */
+@Composable
+fun MaFeiWindowModalPortal(
+    visible: Boolean,
+    content: @Composable BoxScope.(GlassBackdrop) -> Unit,
+) {
+    val host = LocalMaFeiWindowModalHost.current
+    val owner = remember { Any() }
+    val latestContent = rememberUpdatedState(content)
+    DisposableEffect(host, owner, visible) {
+        if (host != null && visible) {
+            host.present(owner) { backdrop -> latestContent.value(this, backdrop) }
+        }
+        onDispose { host?.dismiss(owner) }
+    }
+}
+
 /** Geometry-only shell; session, navigation state and scroll state belong to caller.
  * Background is recorded once, separately from all its glass consumers.
  */
@@ -171,6 +217,7 @@ fun MaFeiAdaptiveShell(
     modal: @Composable (GlassBackdrop) -> Unit = {},
 ) {
     val backdrop = rememberGlassBackdrop()
+    val windowModalHost = remember { MaFeiWindowModalHostState() }
     val sideScroll = rememberScrollState()
     // Keep form-factor ownership explicit. A page route may hide the phone
     // bottom tabs, but it must never hide the root navigation owned by a
@@ -285,7 +332,11 @@ fun MaFeiAdaptiveShell(
         animationSpec = tween(520, easing = FastOutSlowInEasing),
         label = "mafei-navigation-panel-width",
     )
-    CompositionLocalProvider(LocalShellBackdrop provides backdrop, LocalMaFeiSafeArea provides safeArea) {
+    CompositionLocalProvider(
+        LocalShellBackdrop provides backdrop,
+        LocalMaFeiSafeArea provides safeArea,
+        LocalMaFeiWindowModalHost provides windowModalHost,
+    ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // 布局度量（family、列数、contentMaxWidth、hero 判定）只按**全窗口宽**算一次，
         // 与侧栏让位量无关：侧栏是浮在内容区之上的东西，出现时把内容整体挤到右边，
@@ -564,6 +615,17 @@ fun MaFeiAdaptiveShell(
                 )
                     .widthIn(max = 430.dp).fillMaxWidth(),
             )
+        }
+
+        windowModalHost.entry?.let { entry ->
+            CompositionLocalProvider(
+                LocalMaFeiNavigationChrome provides navigationChrome,
+                LocalMaFeiSafeArea provides safeArea,
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    entry.content(this, backdrop)
+                }
+            }
         }
 
         modal(backdrop)

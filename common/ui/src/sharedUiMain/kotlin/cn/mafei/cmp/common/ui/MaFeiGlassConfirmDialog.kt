@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,13 +34,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassLevel
+import cn.mafei.cmp.common.glass.GlassMaterial
+import cn.mafei.cmp.common.glass.GlassRole
+import cn.mafei.cmp.common.glass.GlassSurface
+import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 
 /**
- * Modal confirmation panel. The panel intentionally uses an opaque surface:
- * application dialogs must stay readable and must not add a sampled-glass edge.
+ * Modal confirmation panel. The panel uses a Gaussian-blurred frosted surface:
+ * application dialogs must stay readable without adding liquid-glass refraction.
  *
  * [backdrop] remains in the signature for source compatibility with existing
- * callers; it is deliberately not consumed by the dialog background.
+ * callers and supplies the Gaussian-blur source for the dialog surface.
  */
 @Composable
 fun MaFeiGlassConfirmDialog(
@@ -61,6 +65,14 @@ fun MaFeiGlassConfirmDialog(
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)
         else Color(0xFF121212).copy(alpha = .56f)
     val focusRequester = remember { FocusRequester() }
+    val surfaceSpec = GlassSurfaceSpec(
+        role = GlassRole.Dialog,
+        level = GlassLevel.Reduced,
+        tintAlpha = .72f,
+        intensity = 1f,
+        cornerRadiusDp = 24f,
+        material = GlassMaterial.Frosted,
+    )
     LaunchedEffect(Unit) {
         runCatching { focusRequester.requestFocus() }
     }
@@ -81,55 +93,66 @@ fun MaFeiGlassConfirmDialog(
             .testTag("mafeiGlassConfirmScrim"),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            Modifier
+        GlassSurface(
+            backdrop = backdrop,
+            spec = surfaceSpec,
+            tint = containerColor,
+            modifier = Modifier
                 .widthIn(min = 280.dp, max = 360.dp)
                 .fillMaxWidth()
-                .background(containerColor, RoundedCornerShape(24.dp))
                 // The panel swallows its own taps so pressing inside never dismisses.
                 .pointerInput(Unit) { detectTapGestures { } }
                 .testTag("mafeiGlassConfirmCard"),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                title,
-                color = scheme.onSurface,
-                fontSize = 20.sp,
-                lineHeight = 26.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp),
-            )
-            Text(
-                content,
-                color = scheme.onSurfaceVariant,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.padding(horizontal = 24.dp),
-            )
-            Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.End,
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                Box(
+                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        title,
+                        color = scheme.onSurface,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
                 Text(
-                    dismissText,
-                    Modifier.height(44.dp).mafeiInteractive(
-                        onDismiss,
-                        radiusDp = 22f,
-                        label = dismissText,
-                    ).padding(horizontal = 18.dp, vertical = 12.dp),
-                    color = scheme.primary,
-                    fontWeight = FontWeight.Medium,
+                    content,
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp),
                 )
-                Text(
-                    confirmText,
-                    Modifier.height(44.dp).mafeiInteractive(
-                        onConfirm,
-                        radiusDp = 22f,
-                        label = confirmText,
-                    ).padding(horizontal = 18.dp, vertical = 12.dp),
-                    color = if (destructive) scheme.error else scheme.primary,
-                    fontWeight = FontWeight.Medium,
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    Text(
+                        dismissText,
+                        Modifier.height(44.dp).mafeiInteractive(
+                            onDismiss,
+                            radiusDp = 22f,
+                            label = dismissText,
+                        ).padding(horizontal = 18.dp, vertical = 12.dp),
+                        color = scheme.primary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        confirmText,
+                        Modifier.height(44.dp).mafeiInteractive(
+                            onConfirm,
+                            radiusDp = 22f,
+                            label = confirmText,
+                        ).padding(horizontal = 18.dp, vertical = 12.dp),
+                        color = if (destructive) scheme.error else scheme.primary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
     }

@@ -83,6 +83,7 @@ import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
+import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.design_system.MaFeiSurface
@@ -3208,7 +3209,12 @@ private fun MineAccountSheet(
 ) {
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val sheetWidth = (maxWidth - 48.dp).coerceIn(280.dp, 720.dp)
+        val largeWindow = layout.navigation != NavigationPlacement.Bottom
+        val sheetWidth = if (largeWindow) {
+            (maxWidth - 48.dp).coerceIn(280.dp, 720.dp)
+        } else {
+            maxWidth
+        }
         val sheetHeight = (maxHeight * .70f).coerceAtLeast(320.dp)
         // The sheet is narrower than the window: recompute the content rhythm for
         // the panel so poster columns and hero metrics fit instead of inheriting
@@ -3235,7 +3241,7 @@ private fun MineAccountSheet(
                         false
                     }
                 },
-            contentAlignment = Alignment.Center,
+            contentAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter,
         ) {
             Box(
                 Modifier
@@ -3246,7 +3252,7 @@ private fun MineAccountSheet(
                     .semantics { contentDescription = "我的" },
             ) {
                 val sheetBackdrop = rememberGlassBackdrop()
-                val closeButtonBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetBackdrop)
+                val closeButtonBackdrop = sheetBackdrop
                 GlassSurface(
                     backdrop = backdrop,
                     spec = MineAccountSheetSurfaceSpec,
@@ -3262,36 +3268,33 @@ private fun MineAccountSheet(
                     }
                 }
                 // 移动端保留底部弹窗拖拽指示器；大屏居中弹窗只保留标题和关闭按钮。
-                val largeWindow = layout.navigation != NavigationPlacement.Bottom
                 Box(
                     Modifier.fillMaxWidth().height(MineSheetTopBarHeight),
-                    contentAlignment = Alignment.TopCenter,
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (!largeWindow) {
-                            Spacer(Modifier.height(8.dp))
-                            Box(
-                                Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
-                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
-                            )
-                        }
-                        Text(
-                            "我的",
-                            Modifier.fillMaxWidth().padding(top = if (largeWindow) 0.dp else 4.dp),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            fontSize = 18.sp,
-                            lineHeight = 24.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    if (!largeWindow) {
+                        Box(
+                            Modifier.align(Alignment.TopCenter).padding(top = 8.dp).width(36.dp).height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
                         )
                     }
+                    Text(
+                        "我的",
+                        Modifier.fillMaxWidth().padding(horizontal = 52.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        fontSize = 18.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    )
                 }
                 LiquidButton(
                     onClick = onDismiss,
                     backdrop = closeButtonBackdrop,
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp)
                         .size(44.dp)
                         .semantics { contentDescription = "关闭我的" },
                     height = 44.dp,
@@ -3315,10 +3318,11 @@ private const val BrowseSharedReturnDurationMs = 460L
 
 private val MineAccountSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Opaque,
-    tintAlpha = 1f,
-    intensity = 0f,
+    level = GlassLevel.Reduced,
+    tintAlpha = .72f,
+    intensity = 1f,
     cornerRadiusDp = MineSheetCornerDp,
+    material = GlassMaterial.Frosted,
 )
 
 private const val PRIVACY_AGREEMENT_URL =
