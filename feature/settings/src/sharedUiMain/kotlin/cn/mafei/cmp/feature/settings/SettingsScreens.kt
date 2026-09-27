@@ -2,8 +2,10 @@ package cn.mafei.cmp.feature.settings
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -46,6 +49,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiGlassDefaults
@@ -134,6 +138,7 @@ private fun LiquidGlassIntensitySetting(
 ) {
     val progress = value.coerceIn(0f, 1f)
     val percent = (progress * 100f).roundToInt()
+    val latestOnValueChange = rememberUpdatedState(onValueChange)
     Column(
         Modifier
             .fillMaxWidth()
@@ -169,13 +174,19 @@ private fun LiquidGlassIntensitySetting(
                 .fillMaxWidth()
                 .height(36.dp)
                 .pointerInput(Unit) {
-                    detectTapGestures { position ->
-                        onValueChange((position.x / size.width).coerceIn(0f, 1f))
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        onValueChange((change.position.x / size.width).coerceIn(0f, 1f))
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        fun update(position: Offset) {
+                            latestOnValueChange.value(
+                                (position.x / size.width.toFloat()).coerceIn(0f, 1f),
+                            )
+                        }
+                        update(down.position)
+                        down.consume()
+                        drag(down.id) { change ->
+                            update(change.position)
+                            change.consume()
+                        }
                     }
                 },
             contentAlignment = Alignment.CenterStart,

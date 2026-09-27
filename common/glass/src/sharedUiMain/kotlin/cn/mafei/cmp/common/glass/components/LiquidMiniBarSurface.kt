@@ -35,7 +35,7 @@ fun LiquidMiniBarSurface(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
                 effects = {
-                    vibrancy()
+                    if (glassIntensity > 0.001f) vibrancy()
                     blur(8.dp.toPx() * glassIntensity)
                     lens(
                         16.dp.toPx() * glassIntensity,

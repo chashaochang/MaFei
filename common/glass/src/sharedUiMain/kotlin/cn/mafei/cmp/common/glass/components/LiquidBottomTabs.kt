@@ -212,7 +212,7 @@ fun LiquidBottomTabs(
                         backdrop = vendorBackdrop,
                         shape = { Capsule() },
                         effects = {
-                            vibrancy()
+                            if (glassIntensity > 0.001f) vibrancy()
                             blur((8f * panelEffectScale).dp.toPx() * glassIntensity)
                             lens(
                                 (24f * panelEffectScale).dp.toPx() * glassIntensity,
@@ -257,7 +257,7 @@ fun LiquidBottomTabs(
                             shape = { Capsule() },
                             effects = {
                                 val progress = dampedDragAnimation.pressProgress
-                                vibrancy()
+                                if (glassIntensity > 0.001f) vibrancy()
                                 blur((8f * panelEffectScale).dp.toPx() * glassIntensity)
                                 lens(
                                     (24f * panelEffectScale).dp.toPx() * progress * glassIntensity,

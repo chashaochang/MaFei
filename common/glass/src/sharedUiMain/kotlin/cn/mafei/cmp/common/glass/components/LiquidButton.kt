@@ -62,7 +62,7 @@ fun LiquidButton(
                 backdrop = backdrop.layer,
                 shape = { Capsule() },
                 effects = {
-                    vibrancy()
+                    if (glassIntensity > 0.001f) vibrancy()
                     blur(2f.dp.toPx() * glassIntensity)
                     lens(
                         12f.dp.toPx() * glassIntensity,
