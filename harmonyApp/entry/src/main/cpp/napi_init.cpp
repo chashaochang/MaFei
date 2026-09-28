@@ -206,6 +206,22 @@ static napi_value HandlePlayerBack(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value HandlePlayerKey(napi_env env, napi_callback_info info) {
+    size_t count = 2;
+    napi_value arguments[2];
+    int32_t keyCode = 0;
+    int32_t action = 0;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 2 ||
+        napi_get_value_int32(env, arguments[0], &keyCode) != napi_ok ||
+        napi_get_value_int32(env, arguments[1], &action) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "A key code and key action are required");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_get_boolean(env, HandleOhosPlayerKey(keyCode, action), &result);
+    return result;
+}
+
 EXTERN_C_START
 static napi_value Init(napi_env env, napi_value exports) {
     androidx_compose_ui_arkui_init(env, exports);
@@ -295,6 +311,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "HandleOhosPlayerBack",
             nullptr,
             HandlePlayerBack,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "HandleOhosPlayerKey",
+            nullptr,
+            HandlePlayerKey,
             nullptr,
             nullptr,
             nullptr,

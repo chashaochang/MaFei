@@ -32,3 +32,5 @@ export const GetOhosPlayerOrientationRevision: () => number
 export const HandleOhosComposeBack: () => boolean
 
 export const HandleOhosPlayerBack: () => boolean
+
+export const HandleOhosPlayerKey: (keyCode: number, action: number) => boolean

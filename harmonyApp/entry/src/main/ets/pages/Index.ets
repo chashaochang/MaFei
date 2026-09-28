@@ -1,4 +1,4 @@
-import { ArkUIViewController, Compose } from '@cpf-kmp-cmp/compose';
+import { ArkUIViewController, Compose, forwardHostKeyEvent } from '@cpf-kmp-cmp/compose';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import nativeApi from 'libentry.so';
 import { registerMaFeiPlayerInteropBuilder } from '../player/PlayerInterop';
@@ -76,6 +76,21 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
+    .focusable(true)
+    // ArkUI owns the host window's keyboard focus. Forward native events at
+    // the page boundary so Compose can route Space, arrows, Enter and Escape
+    // to the focused player overlay.
+    .onKeyEvent((event) => {
+      const composeHandled = this.controller !== undefined &&
+        forwardHostKeyEvent(this.controller as ArkUIViewController, event);
+      if (composeHandled) {
+        return true;
+      }
+      if (nativeApi.IsOhosPlayerScreenVisible()) {
+        return nativeApi.HandleOhosPlayerKey(event.keyCode, event.type);
+      }
+      return false;
+    })
   }
 
   onPageHide(): void {

@@ -151,6 +151,9 @@ private object OhosPlayerHostState {
     private var activeHandle = 0L
     private var eventSink: ((OhosNativePlayerEvent) -> Unit)? = null
     private var systemBackHandler: (() -> Unit)? = null
+    private var playing = false
+    private var positionMs = 0L
+    private var durationMs = 0L
     private val pendingPreviewRequests = mutableMapOf<Long, CompletableDeferred<PlayerSeekPreviewFrame?>>()
 
     val command: OhosPlayerCommandState
@@ -189,6 +192,9 @@ private object OhosPlayerHostState {
     fun create(): Long {
         val handle = nextHandle++
         activeHandle = handle
+        playing = false
+        positionMs = 0L
+        durationMs = 0L
         logOhosPlayer("host create handle=$handle")
         return handle
     }
@@ -325,6 +331,42 @@ private object OhosPlayerHostState {
         return true
     }
 
+    /**
+     * ArkUI receives physical keyboard events before CPF's Compose key node on
+     * OHOS PC. Keep a small host fallback for the player controls so keyboard
+     * playback never depends on the focus bridge being available on a given
+     * CPF renderer/device combination.
+     */
+    fun handleKey(keyCode: Int, action: Int): Boolean {
+        if (activeHandle == 0L) return false
+        // Consume the key-up as well; otherwise Harmony's window manager may
+        // interpret Escape/Enter after the player has already handled it.
+        if (action != 0) return true
+        when (keyCode) {
+            OhosKeyCode.Space,
+            OhosKeyCode.Enter -> {
+                if (playing) {
+                    pause(activeHandle)
+                } else {
+                    play(activeHandle, null)
+                }
+                playing = !playing
+                return true
+            }
+            OhosKeyCode.Left -> {
+                seek(activeHandle, (positionMs - 10_000L).coerceAtLeast(0L))
+                return true
+            }
+            OhosKeyCode.Right -> {
+                val end = durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+                seek(activeHandle, (positionMs + 10_000L).coerceAtMost(end))
+                return true
+            }
+            OhosKeyCode.Escape -> return handleSystemBack()
+            else -> return false
+        }
+    }
+
     fun report(raw: String): Boolean {
         val payload = runCatching { json.decodeFromString<OhosPlayerEventPayload>(raw) }.getOrNull()
             ?: return false
@@ -357,6 +399,15 @@ private object OhosPlayerHostState {
             return true
         }
         if (payload.handle != activeHandle) return false
+        when (payload.event) {
+            "playing" -> playing = true
+            "paused", "ended", "error" -> playing = false
+            "progress" -> {
+                positionMs = payload.positionMs.coerceAtLeast(0L)
+                durationMs = payload.durationMs.coerceAtLeast(0L)
+            }
+            "ready" -> durationMs = payload.durationMs.coerceAtLeast(0L)
+        }
         eventSink?.invoke(payload.toNativeEvent() ?: return false)
         return true
     }
@@ -467,6 +518,14 @@ private object OhosPlayerHostState {
     }
 }
 
+private object OhosKeyCode {
+    const val Left = 2014
+    const val Right = 2015
+    const val Space = 2050
+    const val Enter = 2054
+    const val Escape = 2070
+}
+
 /** Stable ArkTS -> Kotlin low-frequency event entry point. */
 @OptIn(ExperimentalNativeApi::class, kotlinx.cinterop.ExperimentalForeignApi::class)
 @CName("UpdateOhosPlayerState")
@@ -479,6 +538,12 @@ fun UpdateOhosPlayerState(payload: CPointer<ByteVar>?): Boolean {
 @OptIn(ExperimentalNativeApi::class)
 @CName("HandleOhosPlayerBack")
 fun HandleOhosPlayerBack(): Boolean = OhosPlayerHostState.handleSystemBack()
+
+/** ArkUI host fallback for physical PC keyboard input. */
+@OptIn(ExperimentalNativeApi::class)
+@CName("HandleOhosPlayerKey")
+fun HandleOhosPlayerKey(keyCode: Int, action: Int): Boolean =
+    OhosPlayerHostState.handleKey(keyCode, action)
 
 private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
     override fun bind(eventSink: (OhosNativePlayerEvent) -> Unit) = OhosPlayerHostState.bind(eventSink)

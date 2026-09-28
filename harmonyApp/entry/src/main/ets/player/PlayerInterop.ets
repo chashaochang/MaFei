@@ -381,9 +381,12 @@ struct MaFeiPlayerSurfaceHost {
     };
     const options: PlayerOptions = {
       useHardwareDecode: true,
-      // mfplayer 1.5.0-rc1 is Buffer-first. Keep the explicit mode here so
-      // the host does not silently fall back to the deprecated Surface route.
-      renderMode: PlayerRenderMode.BUFFER,
+      // The HarmonyOS PC emulator does not expose a usable Vulkan surface;
+      // the buffer/gpu path crashes inside libmpv during pl_vulkan_create.
+      // Keep the native surface path for the OHOS host so the PC emulator and
+      // real windowed devices use the same decoder/output route. CMP still
+      // owns all visible controls above this surface.
+      renderMode: PlayerRenderMode.SURFACE,
       // The shared PlayerStateMachine sends Play/Seek only after READY.
       autoPlay: false,
       startPositionMs: Math.max(0, command.positionMs),
