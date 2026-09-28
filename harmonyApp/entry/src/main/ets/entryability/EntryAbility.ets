@@ -15,6 +15,7 @@ export default class EntryAbility extends UIAbility {
   private lastPlayerScreenVisible: boolean = false;
   private systemBarsHidden: boolean = false;
   private playerDecorHidden: boolean = false;
+  private playerWindowMaximizedByUs: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -108,6 +109,36 @@ export default class EntryAbility extends UIAbility {
         this.playerDecorHidden = hideFreeformDecor;
       } catch (error) {
         hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to configure player window decor: %{public}s',
+          JSON.stringify(error));
+      }
+    }
+
+    // A real HarmonyOS PC/2-in-1 player fullscreen must expand the host
+    // window, not only hide system bars. Remember whether this transition was
+    // initiated by the player so leaving fullscreen restores the user's
+    // previous floating window instead of unexpectedly unmaximizing a window
+    // they had already maximized themselves.
+    if (deviceInfo.deviceType === '2in1') {
+      try {
+        const status = windowClass.getWindowStatus();
+        if (fullscreen && !this.playerWindowMaximizedByUs &&
+            status === window.WindowStatusType.FLOATING) {
+          this.playerWindowMaximizedByUs = true;
+          windowClass.maximize(window.MaximizePresentation.ENTER_IMMERSIVE_DISABLE_TITLE_AND_DOCK_HOVER)
+            .catch((error: Object) => {
+              this.playerWindowMaximizedByUs = false;
+              hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to maximize player window: %{public}s',
+                JSON.stringify(error));
+            });
+        } else if (!fullscreen && this.playerWindowMaximizedByUs) {
+          this.playerWindowMaximizedByUs = false;
+          windowClass.recover().catch((error: Object) => {
+            hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to recover player window: %{public}s',
+              JSON.stringify(error));
+          });
+        }
+      } catch (error) {
+        hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to query player window status: %{public}s',
           JSON.stringify(error));
       }
     }
