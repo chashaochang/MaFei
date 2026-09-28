@@ -16,9 +16,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -70,6 +75,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
@@ -218,6 +231,7 @@ fun NowPlayingScreen(
     val latestSpeed by rememberUpdatedState(onSpeed)
     val latestPlaybackSpeed by rememberUpdatedState(state.speed)
     val animationScope = rememberCoroutineScope()
+    val playerFocusRequester = remember { FocusRequester() }
 
     var controlsVisible by remember(media.id, state.generation) { mutableStateOf(true) }
     var locked by remember(media.id, state.generation) { mutableStateOf(false) }
@@ -234,6 +248,7 @@ fun NowPlayingScreen(
     var longPressSpeedActive by remember(media.id, state.generation) { mutableStateOf(false) }
     var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
     var busyVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    var lastPointerActivityMs by remember(media.id, state.generation) { mutableLongStateOf(0L) }
     // 竖向手势的亮度/音量反馈（旧版 PlayerGestureFeedback.Brightness/Volume）。
     var levelFeedback by remember(media.id, state.generation) { mutableStateOf<PlayerGestureFeedback.Level?>(null) }
     // 播放信息卡片是独立于侧栏面板的一层（旧版 isShowPlayBackInfo）：它盖住画面、
@@ -254,6 +269,13 @@ fun NowPlayingScreen(
     LaunchedEffect(media.id) {
         // 平台状态（亮度/音量）在部分平台靠事件推送：进页面先要一次，手势才有基准值。
         deviceControls.refresh()
+    }
+
+    // Desktop keyboards should operate the player without stealing the video
+    // surface's pointer gestures. The overlay owns focus, while the runtime
+    // remains the only source of playback truth.
+    LaunchedEffect(media.id, state.generation) {
+        runCatching { playerFocusRequester.requestFocus() }
     }
 
     LaunchedEffect(state.positionMs, draggingSlider) {
@@ -399,6 +421,52 @@ fun NowPlayingScreen(
 
         Box(
             Modifier.fillMaxSize()
+                .focusRequester(playerFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> {
+                            handleBack()
+                            true
+                        }
+                        Key.Spacebar -> {
+                            latestTogglePlay()
+                            showControlsTemporarily()
+                            true
+                        }
+                        Key.DirectionLeft,
+                        Key.DirectionRight -> {
+                            if (!presentation.canSeek || durationMs == null) {
+                                false
+                            } else {
+                                val step = if (event.key == Key.DirectionLeft) -10_000L else 10_000L
+                                val target = (state.positionMs + step).coerceIn(0L, durationMs)
+                                latestSeek(target)
+                                showControlsTemporarily()
+                                true
+                            }
+                        }
+                        else -> false
+                    }
+                }
+                .pointerInput(media.id, state.generation, locked) {
+                    // A desktop pointer should bring the chrome back without
+                    // requiring a click. Touch and drag gestures keep their
+                    // existing handlers below; this observer never consumes.
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Move && !locked) {
+                                val now = cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs()
+                                if (now - lastPointerActivityMs >= 250L) {
+                                    lastPointerActivityMs = now
+                                    showControlsTemporarily()
+                                }
+                            }
+                        }
+                    }
+                }
                 .pointerInput(media.id, state.generation, locked) {
                     detectTapGestures(
                         onTap = {
@@ -1251,6 +1319,12 @@ private fun PlayerSidePanel(
             Modifier.align(Alignment.CenterEnd)
                 .width((width + safeEnd).coerceAtMost(420.dp))
                 .fillMaxHeight(.84f)
+                .shadow(
+                    elevation = 24.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    ambientColor = Color.Black.copy(alpha = .34f),
+                    spotColor = Color.Black.copy(alpha = .42f),
+                )
         } else {
             Modifier.align(Alignment.CenterEnd)
                 .then(if (fullscreen) Modifier.width(width + safeEnd) else Modifier.fillMaxWidth(.84f))
@@ -1631,6 +1705,15 @@ private fun PlayerPanelOptionRow(
     count: Int,
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
+    val surface = when {
+        pressed -> PlayerMenuSelectedSurface.copy(alpha = .46f)
+        hovered -> Color.White.copy(alpha = .10f)
+        option.selected -> PlayerMenuSelectedSurface
+        else -> Color.Transparent
+    }
     Box(
         Modifier.fillMaxWidth().height(44.dp)
             .playerStaggeredEntrance(
@@ -1641,14 +1724,19 @@ private fun PlayerPanelOptionRow(
                 staggerMs = PlayerMenuOptionStaggerMs,
             )
             .clip(RoundedCornerShape(10.dp))
-            .background(if (option.selected) PlayerMenuSelectedSurface else Color.Transparent)
-            .clickable(onClick = onClick)
+            .background(surface)
+            .hoverable(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             option.label,
-            color = if (option.selected) Color.White else PlayerMenuText,
+            color = if (option.selected || hovered || pressed) Color.White else PlayerMenuText,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (option.selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -1711,11 +1799,32 @@ private fun playerPanelContentExitDurationMs(
 
 @Composable
 private fun PlayerTextControl(text: String, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
+    val surfaceAlpha = when {
+        pressed -> .18f
+        hovered -> .11f
+        else -> 0f
+    }
     Box(
-        Modifier.height(36.dp).clip(CircleShape).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        Modifier.height(36.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = surfaceAlpha))
+            .hoverable(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Color.White, style = MaterialTheme.typography.labelMedium)
+        Text(
+            text,
+            color = Color.White.copy(alpha = if (hovered || pressed) 1f else .92f),
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 
@@ -1821,6 +1930,9 @@ private fun PlayerChromeButton(
     transparent: Boolean = false,
     content: (@Composable () -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
     val buttonModifier = modifier.size(diameter.dp).semantics { contentDescription = label }
     val buttonContent: @Composable () -> Unit = {
         if (content != null) content()
@@ -1830,18 +1942,35 @@ private fun PlayerChromeButton(
         LiquidButton(
             onClick = onClick,
             backdrop = backdrop,
-            modifier = buttonModifier,
+            modifier = buttonModifier.hoverable(interactionSource),
             // A light readability tint preserves the sampled video, lens and
             // press highlight. The previous 0x52 black fill hid all three and
             // made the control look like a bordered transparent circle.
-            surfaceColor = PlayerGlassControlTint,
+            surfaceColor = if (hovered) {
+                Color.White.copy(alpha = .16f)
+            } else {
+                PlayerGlassControlTint
+            },
             height = diameter.dp,
             horizontalPadding = ((diameter - iconSize) / 2f).dp,
         ) { buttonContent() }
     } else {
         Box(
-            buttonModifier.clip(CircleShape)
-                .clickable(onClick = onClick),
+            buttonModifier
+                .clip(CircleShape)
+                .background(
+                    when {
+                        pressed -> Color.White.copy(alpha = .18f)
+                        hovered -> Color.White.copy(alpha = .10f)
+                        else -> Color.Transparent
+                    },
+                )
+                .hoverable(interactionSource)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             buttonContent()
