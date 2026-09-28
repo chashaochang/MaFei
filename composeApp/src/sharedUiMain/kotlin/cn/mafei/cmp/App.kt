@@ -1262,13 +1262,6 @@ private fun BrowseContent(
     }
 
     LaunchedEffect(browser) { browser.start() }
-    LaunchedEffect(currentRoute, state.collections) {
-        if (currentRoute == BrowseLatestRoute) {
-            state.collections.forEach { collection ->
-                launch { browser.loadHomeLatest(collection.id) }
-            }
-        }
-    }
     LaunchedEffect(runtime, session) {
         searchHistories = try {
             runtime.searchHistory()
@@ -1377,6 +1370,13 @@ private fun BrowseContent(
                     )
                 } else {
                     base
+                }
+            }
+        }
+        LaunchedEffect(currentRoute, state.collections, layout.isPhoneNavigation) {
+            if (currentRoute == BrowseLatestRoute && !layout.isPhoneNavigation) {
+                state.collections.forEach { collection ->
+                    launch { browser.loadHomeLatest(collection.id) }
                 }
             }
         }
@@ -2467,37 +2467,91 @@ private fun BrowseContent(
                                 )
                             }
                             BrowseLatestRoute -> NavEntry(route) {
-                                HomeLatestByLibraryScreen(
-                                    collections = state.collections,
-                                    latestByCollection = state.homeLatestByCollection,
-                                    loadingCollections = state.homeLatestLoading,
-                                    errors = state.homeLatestErrors,
-                                    layout = layout,
-                                    gridState = latestGridState,
-                                    // Expanded sidebars do not show the collapsed shell tab row;
-                                    // let the page action bar own the back affordance there.
-                                    onBack = popBrowseRoute,
-                                    onRetry = {
-                                        state.collections.forEach { collection ->
-                                            scope.launch { browser.loadHomeLatest(collection.id) }
-                                        }
-                                    },
-                                    onItem = { item -> openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
-                                    bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
-                                    modifier = Modifier.fillMaxSize(),
-                                    artwork = { item, modifier ->
-                                        MediaArtwork(
-                                            item.preferredPoster(),
-                                            item.title,
-                                            artworkCache,
-                                            fetchArtwork,
-                                            modifier,
-                                            fallback = { fallbackModifier ->
-                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
-                                            },
-                                        )
-                                    },
-                                )
+                                if (layout.isPhoneNavigation) {
+                                    VideoListScreen(
+                                        title = "最近添加",
+                                        items = state.homeFeed.latest,
+                                        selectedSort = MediaSort(
+                                            MediaSortField.DateAdded,
+                                            SortDirection.Descending,
+                                        ),
+                                        sortChoices = listOf(
+                                            LegacySortChoice(
+                                                "按添加日期",
+                                                MediaSort(
+                                                    MediaSortField.DateAdded,
+                                                    SortDirection.Descending,
+                                                ),
+                                            ),
+                                        ),
+                                        loading = state.homeFeed.latest.isEmpty() &&
+                                            state.homeError == null &&
+                                            (state.loading || state.refreshing),
+                                        refreshing = false,
+                                        loadingMore = false,
+                                        error = state.homeError,
+                                        canLoadMore = false,
+                                        layout = layout,
+                                        gridState = latestGridState,
+                                        onBack = popBrowseRoute,
+                                        onSortSelected = {},
+                                        onToggleSortDirection = {},
+                                        onRetry = { scope.launch { browser.refreshHome() } },
+                                        onLoadMore = {},
+                                        onItem = { item -> openDetail(item, "最近添加") },
+                                        showSortControls = false,
+                                        bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
+                                        bottomNavigationVisible = !showingFullPageRoute &&
+                                            layout.isPhoneNavigation,
+                                        modifier = Modifier.fillMaxSize(),
+                                        artwork = { item, modifier ->
+                                            MediaArtwork(
+                                                item.preferredPoster(),
+                                                item.title,
+                                                artworkCache,
+                                                fetchArtwork,
+                                                modifier,
+                                                fallback = { fallbackModifier ->
+                                                    LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                                },
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    HomeLatestByLibraryScreen(
+                                        collections = state.collections,
+                                        latestByCollection = state.homeLatestByCollection,
+                                        loadingCollections = state.homeLatestLoading,
+                                        errors = state.homeLatestErrors,
+                                        layout = layout,
+                                        gridState = latestGridState,
+                                        // Expanded sidebars do not show the collapsed shell tab row;
+                                        // let the page action bar own the back affordance there.
+                                        onBack = popBrowseRoute,
+                                        onRetry = {
+                                            state.collections.forEach { collection ->
+                                                scope.launch { browser.loadHomeLatest(collection.id) }
+                                            }
+                                        },
+                                        onItem = { item ->
+                                            openDetail(item, item.legacyHomeLatestMediaName(state.collections))
+                                        },
+                                        bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
+                                        modifier = Modifier.fillMaxSize(),
+                                        artwork = { item, modifier ->
+                                            MediaArtwork(
+                                                item.preferredPoster(),
+                                                item.title,
+                                                artworkCache,
+                                                fetchArtwork,
+                                                modifier,
+                                                fallback = { fallbackModifier ->
+                                                    LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
+                                                },
+                                            )
+                                        },
+                                    )
+                                }
                             }
                             BrowseLibraryIndexRoute -> NavEntry(route) {
                                 LibraryIndexScreen(
