@@ -1,6 +1,7 @@
 package cn.mafei.cmp.feature.settings
 
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -90,6 +91,8 @@ fun SettingsScreen(
     onOpenFeiniuPreference: (() -> Unit)? = null,
     liquidGlassIntensity: () -> Float = { DefaultGlassIntensity },
     onLiquidGlassIntensityChanged: (Float) -> Unit = {},
+    homeCarouselVisible: () -> Boolean = { true },
+    onHomeCarouselVisibleChanged: (Boolean) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -118,6 +121,10 @@ fun SettingsScreen(
                     value = liquidGlassIntensity(),
                     onValueChange = onLiquidGlassIntensityChanged,
                 )
+                HomeCarouselSetting(
+                    enabled = homeCarouselVisible(),
+                    onEnabledChange = onHomeCarouselVisibleChanged,
+                )
                 if (feiniuRoutePreferenceTitle != null && onOpenFeiniuPreference != null) {
                     LegacyListGroup(
                         items = listOf(
@@ -127,6 +134,76 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/** A plain settings row: the carousel is content, not a glass surface. */
+@Composable
+private fun HomeCarouselSetting(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    val thumbOffset by animateDpAsState(
+        targetValue = if (enabled) 24.dp else 4.dp,
+        label = "home-carousel-toggle",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(68.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
+            .mafeiInteractive(
+                onClick = { onEnabledChange(!enabled) },
+                radiusDp = 16f,
+                label = "首页轮播图",
+            )
+            .semantics {
+                contentDescription = "首页轮播图"
+                selected = enabled
+            }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "首页轮播图",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "显示首页顶部推荐内容",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(
+            Modifier
+                .width(52.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (enabled) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = .18f),
+                ),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier
+                    .offset(x = thumbOffset)
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (enabled) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+            )
         }
     }
 }

@@ -238,6 +238,7 @@ fun HomeScreen(
     onLoadMore: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenLatest: () -> Unit = onOpenLibrary,
+    showHomeHero: Boolean = true,
     onSearch: (() -> Unit)? = null,
     onHeroItemChanged: (MediaItem?) -> Unit = {},
     onBrowseCollection: (MediaCollection) -> Unit = onCollection,
@@ -354,10 +355,10 @@ fun HomeScreen(
     val latestColumns = legacyMediaColumns(layout.gridWidthDp)
     // The current HarmonyOS home uses the recommendation hero on phone as well
     // as on wide layouts.  Do not replace it with a generic app header.
-    val showHero = overview && heroItems.isNotEmpty()
+    val showHero = overview && showHomeHero && heroItems.isNotEmpty()
     // Keep the first lazy item stable while the provider loads. Otherwise the
     // tabs become the initial anchor and stay pinned when the real hero arrives.
-    val showHeroSlot = overview && (showHero || loading)
+    val showHeroSlot = overview && showHomeHero && (showHero || loading)
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
     val showRefreshAction = refreshing && overviewHasContent
@@ -378,13 +379,13 @@ fun HomeScreen(
             ),
         )
     }
-    LaunchedEffect(overview, showHero) {
+    LaunchedEffect(overview, showHomeHero, showHero) {
         // Align once immediately and once when the first real hero is ready.
         // The latter closes the one-frame anchor race without interrupting
         // later provider refreshes or a user's established scroll position.
         if (overview && initialHeroAlignmentPending) {
             gridState.scrollToItem(0)
-            if (showHero) initialHeroAlignmentPending = false
+            if (showHero || !showHomeHero) initialHeroAlignmentPending = false
         }
     }
     LaunchedEffect(gridState, paginationEnabled, displayed.size) {
@@ -564,9 +565,9 @@ fun HomeScreen(
     // remaining 960px hero after a fixed delay still competed with the first
     // user scroll on slower devices. A settled-page change cancels stale work
     // and advances this three-image window instead.
-    LaunchedEffect(heroItems, prefetchBackdrop, heroPagerState) {
+    LaunchedEffect(heroItems, prefetchBackdrop, heroPagerState, showHomeHero) {
         val prefetch = prefetchBackdrop ?: return@LaunchedEffect
-        if (heroItems.isEmpty()) return@LaunchedEffect
+        if (!showHomeHero || heroItems.isEmpty()) return@LaunchedEffect
         var initialEmission = true
         snapshotFlow { heroPagerState.settledPage }
             .distinctUntilChanged()

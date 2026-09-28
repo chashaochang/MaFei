@@ -373,9 +373,15 @@ fun App(
     var startupExiting by remember(runtime) { mutableStateOf(false) }
     var liquidGlassIntensity by remember(runtime) { mutableFloatStateOf(DefaultGlassIntensity) }
     var glassIntensitySaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
+    var homeCarouselVisible by remember(runtime) { mutableStateOf(true) }
+    var homeCarouselSaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(runtime) {
         liquidGlassIntensity = runtime.loadGlassIntensity()
+    }
+
+    LaunchedEffect(runtime) {
+        homeCarouselVisible = runtime.loadHomeCarouselVisible()
     }
 
     LaunchedEffect(runtime) {
@@ -458,6 +464,14 @@ fun App(
                                                 glassIntensitySaveJob = scope.launch {
                                                     delay(180)
                                                     runtime.saveGlassIntensity(value)
+                                                }
+                                            },
+                                            homeCarouselVisible = homeCarouselVisible,
+                                            onHomeCarouselVisibleChanged = { visible ->
+                                                homeCarouselVisible = visible
+                                                homeCarouselSaveJob?.cancel()
+                                                homeCarouselSaveJob = scope.launch {
+                                                    runtime.saveHomeCarouselVisible(visible)
                                                 }
                                             },
                                             playerSurface = playerSurface,
@@ -1034,6 +1048,8 @@ private fun BrowseContent(
     busy: Boolean,
     liquidGlassIntensity: Float,
     onLiquidGlassIntensityChanged: (Float) -> Unit,
+    homeCarouselVisible: Boolean,
+    onHomeCarouselVisibleChanged: (Boolean) -> Unit,
     playerSurface: @Composable (
         PlayerController,
         onBack: () -> Unit,
@@ -1900,6 +1916,8 @@ private fun BrowseContent(
                                     onLiquidGlassIntensityChanged = { value ->
                                         currentLiquidGlassIntensityChanged.value(value)
                                     },
+                                    homeCarouselVisible = { homeCarouselVisible },
+                                    onHomeCarouselVisibleChanged = onHomeCarouselVisibleChanged,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -2232,7 +2250,7 @@ private fun BrowseContent(
                 // 首页轮播背景画在窗口画布上：全窗、与侧栏让位无关。轮播背景是
                 // 「窗口的背景」而不是「被侧栏挤开的内容区里伸回去的补丁」——
                 // 侧栏收不收起，它都逐像素静止。
-                if (currentRoute == BrowseHomeRoute && !showingDetail) {
+                if (currentRoute == BrowseHomeRoute && !showingDetail && homeCarouselVisible) {
                     HomeHeroWindowBackdrop(
                         state = heroBackdrop,
                         artwork = { item, modifier ->
@@ -2367,6 +2385,7 @@ private fun BrowseContent(
                                     stale = state.stale || state.homeStale,
                                     canLoadMore = state.nextCursor != null,
                                     overview = true,
+                                    showHomeHero = homeCarouselVisible,
                                     layout = layout,
                                     onCollection = { collection -> scope.launch { browser.loadHomeLatest(collection.id) } },
                                     onBrowseCollection = browseCollection,

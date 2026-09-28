@@ -10,6 +10,8 @@ import cn.mafei.cmp.core.secure_credential_api.CredentialAccessException
 import cn.mafei.cmp.core.secure_credential_api.CredentialFailureKind
 import cn.mafei.cmp.core.secure_credential_api.SecureSecret
 import cn.mafei.cmp.core.storage_api.SettingsStorage
+import cn.mafei.cmp.core.storage_api.getBoolean
+import cn.mafei.cmp.core.storage_api.putBoolean
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.session.SessionRepository
 import cn.mafei.cmp.player.api.PlayerRuntime
@@ -380,6 +382,24 @@ class ApplicationRuntime(
             GLASS_INTENSITY_KEY,
             (value.coerceIn(0f, 1f) * 100f).toInt().toString(),
         )
+    }
+
+    /** Whether the home page should render its recommendation carousel. */
+    suspend fun loadHomeCarouselVisible(): Boolean {
+        check(!isClosed) { "Application is closed" }
+        return try {
+            settings.getBoolean(HOME_CAROUSEL_VISIBLE_KEY, default = true)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            failureReporter("home-carousel-visibility-read", failure)
+            true
+        }
+    }
+
+    suspend fun saveHomeCarouselVisible(value: Boolean) {
+        check(!isClosed) { "Application is closed" }
+        settings.putBoolean(HOME_CAROUSEL_VISIBLE_KEY, value)
     }
 
     /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
@@ -788,6 +808,7 @@ class ApplicationRuntime(
         val APPEARANCE_MODES = setOf("auto", "light", "dark")
         const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
         const val DEFAULT_GLASS_INTENSITY = .5f
+        const val HOME_CAROUSEL_VISIBLE_KEY = "mafei.ui.home-carousel-visible.v1"
         const val FEINIU_ROUTE_PREFERENCE_KEY = "pref_feiniu_connection_preference"
         const val FEINIU_ROUTE_SPEED = "speed"
         const val FEINIU_ROUTE_PUBLIC = "public"
