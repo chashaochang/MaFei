@@ -13,6 +13,9 @@ import kotlin.math.min
 val MaFeiPhonePageHorizontalInsetDp = 16.dp
 val MaFeiLargePageHorizontalInsetDp = 32.dp
 
+/** Shared width of the persistent PC/tablet sidebar and its content gutter. */
+val MaFeiPersistentSidebarWidthDp = 240.dp
+
 /**
  * The navigation presentation selected from usable-window geometry.
  *
@@ -127,7 +130,7 @@ fun mafeiLayout(widthDp: Float, heightDp: Float, fontScale: Float = 1f): MaFeiLa
         NavigationPlacement.Rail -> 80f
         // 面板贴窗口边缘通栏、没有悬浮边距，所以"导航宽度"就是侧栏材质本身的宽度。
         // 加 12dp 的悬浮边距会让内容与侧栏之间空出一条缝。
-        NavigationPlacement.Sidebar -> 240f
+        NavigationPlacement.Sidebar -> MaFeiPersistentSidebarWidthDp.value
     }
     val padding = when (family) {
         // Keep the dense rhythm of the original HarmonyOS phone client.

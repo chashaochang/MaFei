@@ -225,6 +225,10 @@ fun MaFeiAdaptiveShell(
     val navigationMode = layout.navigationMode
     val phone = navigationMode == MaFeiNavigationMode.PhoneBottom
     val drawer = navigationMode == MaFeiNavigationMode.TabletDrawer
+    // Desktop keeps a persistent sidebar. It does not use the tablet/iPadOS
+    // collapse-to-top-tabs handoff; the desktop host also owns a minimum size
+    // so resizing stays within this shell.
+    val desktop = layout.family == MaFeiLayoutFamily.Desktop
     val sidebar = navigationMode == MaFeiNavigationMode.TabletSidebar ||
         navigationMode == MaFeiNavigationMode.DesktopSidebar
     val rail = navigationMode == MaFeiNavigationMode.CompactRail
@@ -251,7 +255,7 @@ fun MaFeiAdaptiveShell(
     // page's ActionBar then supplies the second row of the stacked header.
     // A collapsed tablet/desktop sidebar is fully hidden; the compact icon rail
     // belongs only to CompactRail.
-    val topTabsVisible = (drawer || sidebar) &&
+    val topTabsVisible = !desktop && (drawer || sidebar) &&
         (drawer || !sidebarExpanded)
     val leadingEdge = layout.navigationEdge == NavigationEdge.Leading
     // 内容让位量必须**就是面板的宽度**（两处共用 MaFeiExpandedSidebarWidthDp 常量，
@@ -446,8 +450,8 @@ fun MaFeiAdaptiveShell(
         // transformed inside MediumTopTabs (the measured capsule), not on the
         // full-screen centering container. That keeps both elements in one
         // coordinate system while the sidebar changes shape underneath it.
-        val topTabsMorphVisible = drawer ||
-            (sidebar && (topTabsVisible || sidebarMorphProgress < .999f))
+        val topTabsMorphVisible = drawer || (!desktop &&
+            (sidebar && (topTabsVisible || sidebarMorphProgress < .999f)))
         val windowWidthPx = with(density) { maxWidth.toPx() }
         // Keep the panel in the composition for the whole morph. On expansion
         // it must be present on the first frame; on collapse it disappears only
@@ -469,7 +473,7 @@ fun MaFeiAdaptiveShell(
                 sideScroll = sideScroll,
                 compact = rail,
                 consumeBottomSafeArea = !sidebar,
-                showCloseButton = persistentNavigationExpanded,
+                showCloseButton = persistentNavigationExpanded && !desktop,
                 onClose = { sidebarExpanded = false },
                 onExpand = { sidebarExpanded = true },
                 modifier = Modifier
@@ -1468,7 +1472,7 @@ internal val MaFeiTopChromeHeightDp = 52.dp
  * 展开态侧栏（大屏常驻侧栏）的宽度。内容让位量必须与它相等 —— 面板贴窗口边缘通栏、
  * 没有悬浮边距，所以"面板宽度"和"内容起点"是同一个数。
  */
-internal val MaFeiExpandedSidebarWidthDp = 240.dp
+internal val MaFeiExpandedSidebarWidthDp = MaFeiPersistentSidebarWidthDp
 
 /** 顶部玻璃条本体的高度（导航区里垂直居中）。 */
 private val MediumTopStripHeight = 40.dp

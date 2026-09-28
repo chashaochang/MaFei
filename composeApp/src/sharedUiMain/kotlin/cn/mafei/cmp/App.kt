@@ -65,6 +65,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
+import cn.mafei.cmp.common.design_system.MaFeiPersistentSidebarWidthDp
 import cn.mafei.cmp.common.design_system.isPhoneNavigation
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
@@ -1297,19 +1298,32 @@ private fun BrowseContent(
         val fontScale = LocalDensity.current.fontScale
         val windowFeatures = LocalMaFeiWindowFeatures.current
         val layout = remember(maxWidth, maxHeight, fontScale, windowFeatures) {
-            mafeiLayout(
-                mafeiAdaptiveWindow(
-                    MaFeiWindowEnvironment(
-                        widthDp = maxWidth.value,
-                        heightDp = maxHeight.value,
-                        fontScale = fontScale,
-                        safeInsets = windowFeatures.safeInsets,
-                        occlusions = windowFeatures.occlusions,
-                        foldPosture = windowFeatures.foldPosture,
-                        displayRole = windowFeatures.displayRole,
-                    ),
+            val adaptiveWindow = mafeiAdaptiveWindow(
+                MaFeiWindowEnvironment(
+                    widthDp = maxWidth.value,
+                    heightDp = maxHeight.value,
+                    fontScale = fontScale,
+                    safeInsets = windowFeatures.safeInsets,
+                    occlusions = windowFeatures.occlusions,
+                    foldPosture = windowFeatures.foldPosture,
+                    displayRole = windowFeatures.displayRole,
                 ),
             )
+            mafeiLayout(adaptiveWindow).let { base ->
+                // The desktop host owns a minimum window size and therefore
+                // must not fall back to the tablet drawer when the user
+                // resizes the window within the supported desktop range.
+                // Content density still follows the actual width below.
+                if (windowFeatures.desktopWindow) {
+                    base.copy(
+                        family = MaFeiLayoutFamily.Desktop,
+                        navigation = NavigationPlacement.Sidebar,
+                        navigationWidthDp = MaFeiPersistentSidebarWidthDp.value,
+                    )
+                } else {
+                    base
+                }
+            }
         }
         val showingMediaDetail = currentRoute is BrowseDetailRoute ||
             currentRoute is BrowseSeasonRoute || currentRoute is BrowseEpisodeRoute

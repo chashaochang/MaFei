@@ -12,6 +12,12 @@ data class MaFeiWindowFeatures(
     val occlusions: List<MaFeiRectDp> = emptyList(),
     val foldPosture: MaFeiFoldPosture = MaFeiFoldPosture.Unknown,
     val displayRole: MaFeiDisplayRole = MaFeiDisplayRole.Default,
+    /**
+     * Host role for desktop windows. This is not a device/model switch: the
+     * desktop host also clamps its minimum window size, while the shared
+     * layout still reflows from the current window bounds.
+     */
+    val desktopWindow: Boolean = false,
 )
 
 val LocalMaFeiWindowFeatures = staticCompositionLocalOf { MaFeiWindowFeatures() }
