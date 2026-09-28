@@ -140,6 +140,7 @@ import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.feature.favorite.FavoriteScreen
 import cn.mafei.cmp.feature.home.HomeHeroBackdropState
 import cn.mafei.cmp.feature.home.HomeHeroWindowBackdrop
+import cn.mafei.cmp.feature.home.HomeLatestByLibraryScreen
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.LibraryIndexScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
@@ -1261,6 +1262,13 @@ private fun BrowseContent(
     }
 
     LaunchedEffect(browser) { browser.start() }
+    LaunchedEffect(currentRoute, state.collections) {
+        if (currentRoute == BrowseLatestRoute) {
+            state.collections.forEach { collection ->
+                launch { browser.loadHomeLatest(collection.id) }
+            }
+        }
+    }
     LaunchedEffect(runtime, session) {
         searchHistories = try {
             runtime.searchHistory()
@@ -2459,41 +2467,23 @@ private fun BrowseContent(
                                 )
                             }
                             BrowseLatestRoute -> NavEntry(route) {
-                                VideoListScreen(
-                                    title = "最近添加",
-                                    items = state.homeFeed.latest,
-                                    selectedSort = MediaSort(
-                                        MediaSortField.DateAdded,
-                                        SortDirection.Descending,
-                                    ),
-                                    sortChoices = listOf(
-                                        LegacySortChoice(
-                                            "按添加日期",
-                                            MediaSort(
-                                                MediaSortField.DateAdded,
-                                                SortDirection.Descending,
-                                            ),
-                                        ),
-                                    ),
-                                    loading = state.homeFeed.latest.isEmpty() &&
-                                        state.homeError == null &&
-                                        (state.loading || state.refreshing),
-                                    refreshing = false,
-                                    loadingMore = false,
-                                    error = state.homeError,
-                                    canLoadMore = false,
+                                HomeLatestByLibraryScreen(
+                                    collections = state.collections,
+                                    latestByCollection = state.homeLatestByCollection,
+                                    loadingCollections = state.homeLatestLoading,
+                                    errors = state.homeLatestErrors,
                                     layout = layout,
                                     gridState = latestGridState,
-                                    onBack = popBrowseRoute.takeIf { layout.isPhoneNavigation },
-                                    onSortSelected = {},
-                                    onToggleSortDirection = {},
-                                    onRetry = { scope.launch { browser.refreshHome() } },
-                                    onLoadMore = {},
-                                    onItem = { item -> openDetail(item, "最近添加") },
-                                    showSortControls = false,
+                                    // Expanded sidebars do not show the collapsed shell tab row;
+                                    // let the page action bar own the back affordance there.
+                                    onBack = popBrowseRoute,
+                                    onRetry = {
+                                        state.collections.forEach { collection ->
+                                            scope.launch { browser.loadHomeLatest(collection.id) }
+                                        }
+                                    },
+                                    onItem = { item -> openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
-                                    bottomNavigationVisible = !showingFullPageRoute &&
-                                        layout.isPhoneNavigation,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
