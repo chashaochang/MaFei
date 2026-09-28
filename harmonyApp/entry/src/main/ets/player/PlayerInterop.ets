@@ -11,6 +11,7 @@ import {
   PlayerEventListener,
   PlayerEventType,
   PlayerOptions,
+  PlayerRenderMode,
   PlayerSource,
   PlayerState,
   PlayerSurface,
@@ -292,7 +293,9 @@ struct MaFeiPlayerSurfaceHost {
     };
     const options: PlayerOptions = {
       useHardwareDecode: true,
-      preferSurface: true,
+      // mfplayer 1.5.0-rc1 is Buffer-first. Keep the explicit mode here so
+      // the host does not silently fall back to the deprecated Surface route.
+      renderMode: PlayerRenderMode.BUFFER,
       // The shared PlayerStateMachine sends Play/Seek only after READY.
       autoPlay: false,
       startPositionMs: Math.max(0, command.positionMs),
