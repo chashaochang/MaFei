@@ -80,6 +80,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassLevel
+import cn.mafei.cmp.common.glass.GlassMaterial
+import cn.mafei.cmp.common.glass.GlassRole
+import cn.mafei.cmp.common.glass.GlassSurface
+import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
@@ -119,18 +124,34 @@ private val PlayerGestureSeekSurface = Color(0x85000000)
 private val PlayerGestureSurface = Color(0x66000000)
 private val PlayerGestureTrack = Color(0x66FFFFFF)
 private val PlayerMenuText = Color(0xE6FFFFFF)
-private val PlayerMenuDivider = Color(0x24FFFFFF)
+private val PlayerMenuDivider = Color(0x45FFFFFF)
+private val PlayerMenuSelectedSurface = Color(0x542173DF)
 private val PlayerInfoCardSurface = Color(0x7A101010)
 private val PlayerInfoCardBorder = Color(0x1AFFFFFF)
 private val PlayerInfoSectionTitle = Color(0xA3FFFFFF)
 private val PlayerInfoEntryLabel = Color(0xADFFFFFF)
-private val PlayerMenuMiddle = Color(0x8A000000)
-private val PlayerMenuEnd = Color(0xDC000000)
+// The menu is a readable information surface, not a liquid-glass control. It
+// samples and blurs the playing picture, then adds only a dark tint; there is
+// no lens/refraction, highlight border, or pressed water-drop effect here.
+private val PlayerMenuTint = Color(0xFF111318)
 private val PlayerAccent = Color(0xFF2173DF)
 
 private enum class PlayerChromePanel { None, More, AspectRatio, Speed, Audio, Subtitle, Episodes, Quality }
 
-private enum class PlayerChromeGlyph { More, Play, Pause, Retry, Fullscreen, Lock, Unlock, Next, Info, Brightness, Volume }
+private enum class PlayerChromeGlyph {
+    More,
+    Play,
+    Pause,
+    Retry,
+    Fullscreen,
+    Lock,
+    Unlock,
+    Previous,
+    Next,
+    Info,
+    Brightness,
+    Volume,
+}
 
 /**
  * CMP translation of the legacy ArkUI `PlayerChrome`.
@@ -307,6 +328,14 @@ fun NowPlayingScreen(
         modifier.background(Color.Black).onSizeChanged { sceneSize = it },
     ) {
         val durationMs = state.durationMs?.takeIf { it > 0L }
+        // The player used to switch to its richer control set only after the
+        // explicit fullscreen request. On tablets and desktop the player page
+        // already owns the whole window, so that left the wide layout with the
+        // phone's minimal play/progress row and hid tracks, episodes, quality,
+        // speed and the previous-item action. Keep the breakpoint geometric:
+        // the same code works for a tablet, a foldable inner display, and a
+        // resizable Mac window without checking a device or platform name.
+        val largeWindow = useWideNowPlayingLayout(maxWidth.value, maxHeight.value)
 
         // Legacy PlayerPage.onBackPress priority: close the open menu/panel first,
         // then the playback-info card (the old page reports it as menu-visible
@@ -518,6 +547,7 @@ fun NowPlayingScreen(
             PlayerTopChrome(
                 title = media.title,
                 fullscreen = fullscreen,
+                largeWindow = largeWindow,
                 safeStart = safeArea.start,
                 safeTop = safeArea.top,
                 safeEnd = safeArea.end,
@@ -543,6 +573,7 @@ fun NowPlayingScreen(
                 state = state,
                 presentation = presentation,
                 fullscreen = fullscreen,
+                largeWindow = largeWindow,
                 safeStart = safeArea.start,
                 safeEnd = safeArea.end,
                 safeBottom = safeArea.bottom,
@@ -560,6 +591,7 @@ fun NowPlayingScreen(
                 onRetry = onRetry,
                 onFullscreenRequest = onFullscreenRequest,
                 onNext = onNext,
+                onPrevious = onPrevious,
                 episodes = episodes,
                 qualityOptions = qualityOptions,
                 onPanel = ::openPanel,
@@ -672,8 +704,10 @@ fun NowPlayingScreen(
                     episodeIndex = episodeIndex,
                     qualityOptions = qualityOptions,
                     fullscreen = fullscreen,
+                    largeWindow = largeWindow,
                     showAspectRatio = capabilities.contentMode,
                     showPlaybackInfo = playbackFacts != null,
+                    backdrop = backdrop,
                     safeEnd = safeArea.end,
                     onDismiss = { closePanel() },
                     onOpenPanel = ::openPanel,
@@ -712,6 +746,7 @@ fun NowPlayingScreen(
         ) {
             PlayerPlaybackInfoCard(
                 sections = buildPlayerInfoSections(playbackFacts, state, tracks),
+                largeWindow = largeWindow,
                 onDismiss = {
                     playbackInfoVisible = false
                     showControlsTemporarily()
@@ -726,6 +761,7 @@ fun NowPlayingScreen(
 private fun PlayerTopChrome(
     title: String,
     fullscreen: Boolean,
+    largeWindow: Boolean,
     safeStart: androidx.compose.ui.unit.Dp,
     safeTop: androidx.compose.ui.unit.Dp,
     safeEnd: androidx.compose.ui.unit.Dp,
@@ -737,7 +773,11 @@ private fun PlayerTopChrome(
 ) {
     Box(
         Modifier.fillMaxWidth()
-            .height((if (fullscreen) 96.dp else 88.dp) + safeTop)
+            .height((when {
+                largeWindow -> 104.dp
+                fullscreen -> 96.dp
+                else -> 88.dp
+            }) + safeTop)
             .background(
                 Brush.verticalGradient(
                     0f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
@@ -750,8 +790,10 @@ private fun PlayerTopChrome(
         Row(
             modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
                 .padding(
+                    // 非全屏返回按钮独立绘制在 x=12、宽 44 的位置；标题从同一
+                    // 行的 68dp 起步，保证返回按钮右缘到标题左缘的间距固定。
                     start = if (fullscreen) safeStart + 20.dp else safeStart + 68.dp,
-                    end = safeEnd + 12.dp,
+                    end = safeEnd + if (largeWindow) 24.dp else 12.dp,
                     top = safeTop + if (fullscreen) 16.dp else 10.dp,
                 )
                 .height(44.dp),
@@ -774,7 +816,8 @@ private fun PlayerTopChrome(
                 text = title,
                 modifier = Modifier.weight(1f),
                 color = Color.White,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (largeWindow) MaterialTheme.typography.titleMedium
+                else MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -809,6 +852,7 @@ private fun PlayerBottomChrome(
     tracks: List<PlayerTrack>,
     presentation: NowPlayingPresentation,
     fullscreen: Boolean,
+    largeWindow: Boolean,
     safeStart: androidx.compose.ui.unit.Dp,
     safeEnd: androidx.compose.ui.unit.Dp,
     safeBottom: androidx.compose.ui.unit.Dp,
@@ -822,6 +866,7 @@ private fun PlayerBottomChrome(
     onRetry: () -> Unit,
     onFullscreenRequest: ((Boolean) -> Unit)?,
     onNext: (() -> Unit)?,
+    onPrevious: (() -> Unit)?,
     episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
     qualityOptions: List<PlayerQualityOption>,
     onPanel: (PlayerChromePanel) -> Unit,
@@ -830,8 +875,16 @@ private fun PlayerBottomChrome(
     val audioTracks = tracks.filter { it.kind == TrackKind.Audio }
     val subtitleTracks = tracks.filter { it.kind == TrackKind.Subtitle }
     val duration = state.durationMs?.takeIf { it > 0L }
-    val maskHeight = if (fullscreen) 132.dp else 106.dp
-    val bottomInset = maxOf(safeBottom, if (fullscreen) 6.dp else 10.dp)
+    // Wide windows keep the full player control set even before the user
+    // enters explicit fullscreen. Fullscreen is an orientation/window-state
+    // request; it must not also decide whether core playback controls exist.
+    val extendedControls = fullscreen || largeWindow
+    val maskHeight = when {
+        largeWindow -> 164.dp
+        fullscreen -> 132.dp
+        else -> 106.dp
+    }
+    val bottomInset = maxOf(safeBottom, if (extendedControls) 10.dp else 10.dp)
 
     Box(
         Modifier.fillMaxWidth().height(maskHeight + safeBottom)
@@ -853,27 +906,39 @@ private fun PlayerBottomChrome(
                 ),
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 2.dp else 0.dp),
         ) {
-            if (fullscreen) {
-                PlayerTimelineRow(
-                    state = state,
-                    positionMs = sliderPositionMs,
-                    durationMs = duration,
+                if (extendedControls) {
+                    PlayerTimelineRow(
+                        state = state,
+                        positionMs = sliderPositionMs,
+                        durationMs = duration,
+                        enabled = presentation.canSeek,
                     thumbDiameter = 14,
                     onDraggingChanged = onDraggingChanged,
                     onPositionChanged = onSliderPositionChanged,
                     onSeek = onSeek,
-                    modifier = Modifier.height(28.dp),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                        modifier = Modifier.height(if (largeWindow) 34.dp else 28.dp),
+                    )
+                    Row(
+                    modifier = Modifier.fillMaxWidth().height(if (largeWindow) 52.dp else 36.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (largeWindow) 8.dp else 4.dp),
                 ) {
+                    if (onPrevious != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Previous,
+                            label = "上一集",
+                            diameter = if (largeWindow) 42 else 30,
+                            iconSize = if (largeWindow) 20 else 16,
+                            backdrop = backdrop,
+                            transparent = true,
+                            onClick = onPrevious,
+                        )
+                    }
                     PlayerChromeButton(
                         glyph = playbackGlyph(presentation),
                         label = playbackLabel(presentation),
-                        diameter = 30,
-                        iconSize = 16,
+                        diameter = if (largeWindow) 48 else 30,
+                        iconSize = if (largeWindow) 22 else 16,
                         backdrop = backdrop,
                         transparent = true,
                         onClick = if (presentation.showRetry) onRetry else onTogglePlay,
@@ -882,8 +947,8 @@ private fun PlayerBottomChrome(
                         PlayerChromeButton(
                             glyph = PlayerChromeGlyph.Next,
                             label = "下一集",
-                            diameter = 30,
-                            iconSize = 16,
+                            diameter = if (largeWindow) 42 else 30,
+                            iconSize = if (largeWindow) 20 else 16,
                             backdrop = backdrop,
                             transparent = true,
                             onClick = onNext,
@@ -908,6 +973,17 @@ private fun PlayerBottomChrome(
                             onPanel(PlayerChromePanel.Speed)
                         }
                     }
+                    if (largeWindow && onFullscreenRequest != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Fullscreen,
+                            label = "全屏",
+                            diameter = 42,
+                            iconSize = 20,
+                            backdrop = backdrop,
+                            transparent = true,
+                            onClick = { onFullscreenRequest(!fullscreen) },
+                        )
+                    }
                 }
             } else {
                 Row(
@@ -921,6 +997,7 @@ private fun PlayerBottomChrome(
                         diameter = 46,
                         iconSize = 24,
                         backdrop = backdrop,
+                        transparent = true,
                         onClick = if (presentation.showRetry) onRetry else onTogglePlay,
                     )
                     Text(
@@ -951,6 +1028,7 @@ private fun PlayerBottomChrome(
                             diameter = 44,
                             iconSize = 20,
                             backdrop = backdrop,
+                            transparent = true,
                             // 旧版这个按钮进出共用（图标与文字都是「全屏」），按 toggle 走。
                             onClick = { onFullscreenRequest(!fullscreen) },
                         )
@@ -966,6 +1044,7 @@ private fun PlayerTimelineRow(
     state: PlayerState,
     positionMs: Long,
     durationMs: Long?,
+    enabled: Boolean,
     thumbDiameter: Int,
     onDraggingChanged: (Boolean) -> Unit,
     onPositionChanged: (Long) -> Unit,
@@ -982,7 +1061,7 @@ private fun PlayerTimelineRow(
             valueMs = positionMs,
             bufferedMs = state.bufferedPositionMs,
             totalMs = durationMs,
-            enabled = durationMs != null,
+            enabled = enabled && durationMs != null,
             thumbDiameter = thumbDiameter,
             onDraggingChanged = onDraggingChanged,
             onValueChanged = onPositionChanged,
@@ -1102,8 +1181,10 @@ private fun PlayerSidePanel(
     episodeIndex: Int,
     qualityOptions: List<PlayerQualityOption>,
     fullscreen: Boolean,
+    largeWindow: Boolean,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
+    backdrop: GlassBackdrop,
     safeEnd: androidx.compose.ui.unit.Dp,
     onDismiss: () -> Unit,
     onOpenPanel: (PlayerChromePanel) -> Unit,
@@ -1157,28 +1238,49 @@ private fun PlayerSidePanel(
         PlayerChromePanel.More -> Pair(270.dp, emptyList())
         PlayerChromePanel.None -> return
     }
-    Row(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).fillMaxHeight().clickable(onClick = onDismiss))
-        // 旧版 panelWidth()：竖屏（非全屏）面板宽 84% 而不是固定 dp，纵向留白也更窄；
-        // 全屏才用各面板自己的宽度并给右侧安全区让位。
-        Column(
-            modifier = (if (fullscreen) Modifier.width(width + safeEnd) else Modifier.fillMaxWidth(.84f))
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier.fillMaxSize()
+                .background(if (largeWindow) Color(0x42000000) else Color.Transparent)
+                .clickable(onClick = onDismiss),
+        )
+        // Phone keeps the legacy edge sheet. A wide player uses the same
+        // content and actions in a centred-height, right-aligned panel so the
+        // controls do not become a full-height phone drawer on a tablet/Mac.
+        val panelModifier = if (largeWindow) {
+            Modifier.align(Alignment.CenterEnd)
+                .width((width + safeEnd).coerceAtMost(420.dp))
+                .fillMaxHeight(.84f)
+        } else {
+            Modifier.align(Alignment.CenterEnd)
+                .then(if (fullscreen) Modifier.width(width + safeEnd) else Modifier.fillMaxWidth(.84f))
                 .fillMaxHeight()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color.Transparent,
-                        .42f to PlayerMenuMiddle,
-                        1f to PlayerMenuEnd,
-                    ),
-                )
-                .padding(
-                    start = 16.dp,
-                    end = if (fullscreen) safeEnd + 16.dp else 16.dp,
-                    top = if (fullscreen) 18.dp else 8.dp,
-                    bottom = if (fullscreen) 18.dp else 8.dp,
-                ),
+        }
+        GlassSurface(
+            backdrop = backdrop,
+            spec = GlassSurfaceSpec(
+                role = GlassRole.PlayerOverlay,
+                level = GlassLevel.Full,
+                tintAlpha = if (largeWindow) .62f else .68f,
+                // The setting remains global: this surface follows the same
+                // blur intensity as every other app glass surface.
+                intensity = 1f,
+                cornerRadiusDp = if (largeWindow) 24f else 0f,
+                material = GlassMaterial.Frosted,
+            ),
+            tint = PlayerMenuTint,
+            modifier = panelModifier,
         ) {
-            when {
+            Column(
+                Modifier.fillMaxSize().padding(
+                    start = if (largeWindow) 24.dp else 16.dp,
+                    end = if (largeWindow) safeEnd + 24.dp
+                    else if (fullscreen) safeEnd + 16.dp else 16.dp,
+                    top = if (largeWindow) 24.dp else if (fullscreen) 18.dp else 8.dp,
+                    bottom = if (largeWindow) 24.dp else if (fullscreen) 18.dp else 8.dp,
+                ),
+            ) {
+                when {
                 isMorePanel -> PlayerMorePanel(
                     aspectRatioLabel = playerContentModeLabel(state.contentMode),
                     showAspectRatio = showAspectRatio,
@@ -1213,24 +1315,25 @@ private fun PlayerSidePanel(
                         modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                 }
-                else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                    itemsIndexed(options, key = { _, option -> option.id }) { index, option ->
-                        PlayerPanelOptionRow(
-                            option = option,
-                            entranceVisible = entranceVisible && !closing,
-                            index = index,
-                            count = options.size,
-                        ) {
-                            when (panel) {
-                                PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
-                                PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
-                                PlayerChromePanel.Subtitle -> onSelectTrack(TrackKind.Subtitle, option.id.ifEmpty { null })
-                                PlayerChromePanel.Quality -> onSelectQuality(option.id.toInt())
-                                PlayerChromePanel.AspectRatio ->
-                                    onSelectContentMode(PlayerChromeModeById(option.id))
-                                PlayerChromePanel.Episodes,
-                                PlayerChromePanel.More,
-                                PlayerChromePanel.None -> Unit
+                    else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+                        itemsIndexed(options, key = { _, option -> option.id }) { index, option ->
+                            PlayerPanelOptionRow(
+                                option = option,
+                                entranceVisible = entranceVisible && !closing,
+                                index = index,
+                                count = options.size,
+                            ) {
+                                when (panel) {
+                                    PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
+                                    PlayerChromePanel.Audio -> onSelectTrack(TrackKind.Audio, option.id)
+                                    PlayerChromePanel.Subtitle -> onSelectTrack(TrackKind.Subtitle, option.id.ifEmpty { null })
+                                    PlayerChromePanel.Quality -> onSelectQuality(option.id.toInt())
+                                    PlayerChromePanel.AspectRatio ->
+                                        onSelectContentMode(PlayerChromeModeById(option.id))
+                                    PlayerChromePanel.Episodes,
+                                    PlayerChromePanel.More,
+                                    PlayerChromePanel.None -> Unit
+                                }
                             }
                         }
                     }
@@ -1296,13 +1399,18 @@ private fun PlayerChromeModeById(id: String): PlayerContentMode =
 private fun PlayerPlaybackInfoCard(
     sections: List<PlayerInfoSection>,
     onDismiss: () -> Unit,
+    largeWindow: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val dismissSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     BoxWithConstraints(modifier.fillMaxSize()) {
         // Clamp the viewport-relative width before applying a fixed constraint.
         // fillMaxWidth followed by widthIn would lock in 72% and ignore the cap.
-        val cardWidth = (maxWidth * .72f).coerceIn(250.dp, 360.dp)
+        val cardWidth = if (largeWindow) {
+            (maxWidth * .56f).coerceIn(360.dp, 560.dp)
+        } else {
+            (maxWidth * .72f).coerceIn(250.dp, 360.dp)
+        }
         Box(
             Modifier.fillMaxSize()
                 .clickable(
@@ -1314,8 +1422,11 @@ private fun PlayerPlaybackInfoCard(
         )
         Column(
             Modifier.width(cardWidth)
-                .fillMaxHeight(.76f)
-                .padding(start = 32.dp, top = 16.dp, bottom = 16.dp)
+                .fillMaxHeight(if (largeWindow) .72f else .76f)
+                .then(
+                    if (largeWindow) Modifier.align(Alignment.Center)
+                    else Modifier.padding(start = 32.dp, top = 16.dp, bottom = 16.dp),
+                )
                 .shadow(16.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x52000000), spotColor = Color(0x52000000))
                 .clip(RoundedCornerShape(20.dp))
                 .background(PlayerInfoCardSurface)
@@ -1529,13 +1640,15 @@ private fun PlayerPanelOptionRow(
                 durationMs = PlayerMenuOptionDurationMs,
                 staggerMs = PlayerMenuOptionStaggerMs,
             )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (option.selected) PlayerMenuSelectedSurface else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             option.label,
-            color = if (option.selected) PlayerAccent else PlayerMenuText,
+            color = if (option.selected) Color.White else PlayerMenuText,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (option.selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -1795,6 +1908,15 @@ private fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier,
                         size.width * .7f, size.height * .43f,
                     )
                 }, color, style = Stroke(stroke, cap = StrokeCap.Round))
+            }
+            PlayerChromeGlyph.Previous -> {
+                drawPath(Path().apply {
+                    moveTo(size.width * .82f, size.height * .18f)
+                    lineTo(size.width * .34f, size.height * .5f)
+                    lineTo(size.width * .82f, size.height * .82f)
+                    close()
+                }, color)
+                line(.24f, .18f, .24f, .82f)
             }
             PlayerChromeGlyph.Next -> {
                 drawPath(Path().apply {
