@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -39,7 +38,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidMiniBarSurface
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import com.kyant.shapes.Capsule
 import com.kyant.shapes.RoundedRectangle
 import kotlin.math.min
@@ -137,11 +136,11 @@ fun LiquidMiniPlayer(
                         .fillMaxHeight()
                         .width(42.dp)
                         .clip(Capsule())
-                        .clickable(
-                            enabled = !presentation.isBusy || presentation.isPlaying,
-                            role = Role.Button,
-                            onClickLabel = if (presentation.isPlaying) "暂停" else "播放",
+                        .mafeiInteractive(
                             onClick = onTogglePlay,
+                            enabled = !presentation.isBusy || presentation.isPlaying,
+                            radiusDp = 21f,
+                            label = if (presentation.isPlaying) "暂停" else "播放",
                         ),
                     contentAlignment = Alignment.Center,
                 ) {

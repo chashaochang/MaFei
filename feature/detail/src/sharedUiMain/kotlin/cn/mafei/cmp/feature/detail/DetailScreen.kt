@@ -1892,7 +1892,7 @@ private fun DetailSourceOptionRow(
     Row(
         Modifier.fillMaxWidth().height(68.dp).clip(RoundedCornerShape(12.dp))
             .background(Color.White.copy(alpha = .04f))
-            .clickable(onClick = onClick),
+            .mafeiInteractive(onClick = onClick, radiusDp = 12f, label = option.title),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -1939,7 +1939,7 @@ private fun DetailTrackOptionRow(
     Row(
         Modifier.fillMaxWidth().height(66.dp).clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = .04f))
-            .clickable(onClick = onClick)
+            .mafeiInteractive(onClick = onClick, radiusDp = 8f, label = option.title)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2038,7 +2038,7 @@ internal fun MediaInfoSection(
                     Box(Modifier.fillMaxWidth().height(.5.dp).background(Color.White.copy(alpha = .18f)))
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onOpenDetails)
+                            .mafeiInteractive(onClick = onOpenDetails, radiusDp = 8f, label = "查看全部媒体信息")
                             .padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -2229,7 +2229,11 @@ private fun ExternalLinksSection(
                     link.name,
                     Modifier.clip(RoundedCornerShape(4.dp))
                         .background(DetailInformationBackground)
-                        .clickable(onClick = { onOpenUrl(link.url) })
+                        .mafeiInteractive(
+                            onClick = { onOpenUrl(link.url) },
+                            radiusDp = 4f,
+                            label = "打开${link.name}",
+                        )
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     color = Color.White.copy(alpha = .88f),
                     fontSize = if (largeTypography) 14.sp else 12.sp,

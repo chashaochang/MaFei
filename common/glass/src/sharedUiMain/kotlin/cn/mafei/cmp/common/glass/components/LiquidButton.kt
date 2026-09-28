@@ -2,14 +2,18 @@ package cn.mafei.cmp.common.glass.components
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -50,6 +54,8 @@ fun LiquidButton(
 ) {
     val glassIntensity = LocalGlassIntensity.current
     val animationScope = rememberCoroutineScope()
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
 
     val interactiveHighlight = remember(animationScope) {
         InteractiveHighlight(
@@ -111,11 +117,19 @@ fun LiquidButton(
             )
             .then(
                 if (onClick != null) Modifier.clickable(
-                    interactionSource = null,
+                    interactionSource = interactionSource,
                     indication = if (isInteractive) null else LocalIndication.current,
                     role = Role.Button,
                     onClick = onClick,
                 ) else Modifier
+            )
+            .then(
+                if (isInteractive && onClick != null) {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        if (hovered) drawRect(Color.White.copy(alpha = .045f))
+                    }
+                } else Modifier
             )
             .then(
                 if (isInteractive && onClick != null) {

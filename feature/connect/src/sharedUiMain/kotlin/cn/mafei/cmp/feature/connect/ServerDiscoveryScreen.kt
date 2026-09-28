@@ -1,8 +1,6 @@
 package cn.mafei.cmp.feature.connect
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +33,7 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -186,15 +184,14 @@ private fun ServerDiscoveryItem(
     suggestion: ServerDiscoverySuggestion,
     onSelectServer: (String) -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                role = Role.Button,
-            ) { onSelectServer(suggestion.address) }
+            .mafeiInteractive(
+                onClick = { onSelectServer(suggestion.address) },
+                radiusDp = 8f,
+                label = "选择服务器 ${suggestion.name}",
+            )
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {

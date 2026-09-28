@@ -54,6 +54,7 @@ import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.legacyMediaColumns
@@ -288,7 +289,7 @@ private fun SelectionBar(
             "取消",
             Modifier
                 .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onExit)
+                .mafeiInteractive(onClick = onExit, radiusDp = 10f, label = "取消选择")
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
@@ -297,7 +298,12 @@ private fun SelectionBar(
             if (deleteBusy) "删除中…" else "删除",
             Modifier
                 .clip(RoundedCornerShape(10.dp))
-                .clickable(enabled = selectedCount > 0 && !deleteBusy, onClick = onDelete)
+                .mafeiInteractive(
+                    onClick = onDelete,
+                    enabled = selectedCount > 0 && !deleteBusy,
+                    radiusDp = 10f,
+                    label = "删除已选媒体",
+                )
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             color = if (selectedCount > 0 && !deleteBusy) {
                 Color(0xFFFF6B5E)

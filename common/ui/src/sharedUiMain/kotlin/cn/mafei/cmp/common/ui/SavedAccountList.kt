@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -207,6 +209,7 @@ private fun SavedAccountRow(
     onDissolved: () -> Unit,
 ) {
     val interaction = remember(item.key) { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
     val dissolve = remember(item.key) { Animatable(0f) }
     LaunchedEffect(dissolving) {
         if (dissolving) {
@@ -244,7 +247,10 @@ private fun SavedAccountRow(
                 onLongClick = if (
                     deleteAffordance == SavedAccountDeleteAffordance.LongPress && !item.isCurrent
                 ) onDelete else null,
-            ).alpha(if (enabled) 1f else .52f).padding(horizontal = 16.dp, vertical = 13.dp),
+            ).drawWithContent {
+                drawContent()
+                if (hovered && enabled && !busy) drawRect(Color.White.copy(alpha = .045f))
+            }.alpha(if (enabled) 1f else .52f).padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Image(

@@ -108,6 +108,7 @@ import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerDeviceControls
@@ -2036,7 +2037,8 @@ private fun PlayerError(message: String, onRetry: () -> Unit, modifier: Modifier
         Text(message, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         Box(
             Modifier.height(40.dp).clip(CircleShape).background(PlayerAccent)
-                .clickable(onClick = onRetry).padding(horizontal = 20.dp),
+                .mafeiInteractive(onClick = onRetry, radiusDp = 20f, label = "重试")
+                .padding(horizontal = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text("重试", color = Color.White, style = MaterialTheme.typography.labelLarge)

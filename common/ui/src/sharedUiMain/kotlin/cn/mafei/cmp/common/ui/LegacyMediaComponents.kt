@@ -3,7 +3,6 @@ package cn.mafei.cmp.common.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -325,7 +324,11 @@ fun LegacySortRow(
     ) {
         Text(
             label,
-            Modifier.height(46.dp).clickable(onClick = onOpenSort).padding(vertical = 13.dp),
+            Modifier.height(46.dp).mafeiInteractive(
+                onClick = onOpenSort,
+                radiusDp = 8f,
+                label = "打开排序",
+            ).padding(vertical = 13.dp),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             maxLines = 1,
@@ -336,7 +339,11 @@ fun LegacySortRow(
             ),
             contentDescription = if (descending) "降序" else "升序",
             tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 6.dp).size(16.dp).clickable(onClick = onToggleDirection),
+            modifier = Modifier.padding(start = 6.dp).size(16.dp).mafeiInteractive(
+                onClick = onToggleDirection,
+                radiusDp = 8f,
+                label = "切换排序方向",
+            ),
         )
         Text(
             totalCount,
@@ -401,10 +408,14 @@ fun <T> LegacySortSheet(
                     itemsIndexed(choices) { _, choice ->
                         Text(
                             choice.label,
-                            Modifier.fillMaxWidth().clickable {
-                                onSelected(choice.value)
-                                onDismiss()
-                            }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth().mafeiInteractive(
+                                onClick = {
+                                    onSelected(choice.value)
+                                    onDismiss()
+                                },
+                                radiusDp = 8f,
+                                label = choice.label,
+                            ).padding(horizontal = 16.dp, vertical = 10.dp),
                             color = if (choice.value == selected) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 16.sp,

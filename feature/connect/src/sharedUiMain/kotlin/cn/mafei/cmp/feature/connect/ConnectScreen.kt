@@ -5,10 +5,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -87,6 +90,7 @@ import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.generated.resources.Res
 import cn.mafei.cmp.feature.connect.generated.resources.mafei_app_icon
@@ -392,6 +396,8 @@ private fun CompactLoginForm(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val rememberPasswordInteraction = remember { MutableInteractionSource() }
+    val rememberPasswordHovered by rememberPasswordInteraction.collectIsHoveredAsState()
     Column(
         modifier.padding(top = 30.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -409,16 +415,13 @@ private fun CompactLoginForm(
             focusRequestKey = serverAddressFocusRequest,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
             trailing = onOpenHistory?.let { openHistory -> {
-                val historyInteraction = remember { MutableInteractionSource() }
                 Box(
-                    Modifier.size(44.dp)
-                        .clickable(
-                            enabled = !busy,
-                            interactionSource = historyInteraction,
-                            indication = null,
-                            role = Role.Button,
-                            onClick = openHistory,
-                        )
+                    Modifier.size(44.dp).mafeiInteractive(
+                        onClick = openHistory,
+                        enabled = !busy,
+                        radiusDp = 22f,
+                        label = "账号历史",
+                    )
                         .semantics { contentDescription = "账号历史" },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -458,7 +461,15 @@ private fun CompactLoginForm(
                 enabled = !busy,
                 role = Role.Checkbox,
                 onValueChange = onRememberPasswordChange,
-            ).padding(vertical = 2.dp),
+            ).hoverable(rememberPasswordInteraction).drawWithContent {
+                drawContent()
+                if (rememberPasswordHovered && !busy) {
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = .045f),
+                        cornerRadius = CornerRadius(8.dp.toPx()),
+                    )
+                }
+            }.padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -501,15 +512,13 @@ private fun CompactLoginForm(
             )
         }
         if (provider == ProviderKind.Jellyfin && onOpenServerDiscovery != null) {
-            val discoveryInteraction = remember { MutableInteractionSource() }
             Box(
                 Modifier.fillMaxWidth().height(44.dp)
-                    .clickable(
-                        enabled = !busy,
-                        interactionSource = discoveryInteraction,
-                        indication = null,
-                        role = Role.Button,
+                    .mafeiInteractive(
                         onClick = onOpenServerDiscovery,
+                        enabled = !busy,
+                        radiusDp = 10f,
+                        label = "发现局域网内的设备",
                     ),
                 contentAlignment = Alignment.CenterStart,
             ) {
