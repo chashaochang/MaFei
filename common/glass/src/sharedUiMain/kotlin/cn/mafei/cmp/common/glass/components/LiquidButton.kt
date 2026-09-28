@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.util.fastCoerceAtMost
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassBlurTokens
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import com.kyant.backdrop.drawBackdrop
@@ -63,7 +64,7 @@ fun LiquidButton(
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(2f.dp.toPx() * glassIntensity)
+                    blur(GlassBlurTokens.button.toPx() * glassIntensity)
                     lens(
                         12f.dp.toPx(),
                         24f.dp.toPx(),
