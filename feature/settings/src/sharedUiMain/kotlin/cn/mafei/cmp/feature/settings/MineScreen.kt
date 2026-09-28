@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
@@ -205,9 +206,10 @@ private fun MineProfileHeader(
     profile: MineProfile,
     avatar: (@Composable (Modifier) -> Unit)?,
 ) {
+    val popupColors = LocalMaFeiPopupColors.current
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
+            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -289,9 +291,10 @@ private fun MineHistorySection(
     onMore: () -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
 ) {
+    val popupColors = LocalMaFeiPopupColors.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
+            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -354,6 +357,7 @@ private fun MineHistoryPoster(
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
 ) {
+    val popupColors = LocalMaFeiPopupColors.current
     val badgeText = item.movieRatingText ?: item.updateBadgeText
     val progress = item.progressPercent
     Column(
@@ -362,7 +366,7 @@ private fun MineHistoryPoster(
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(popupColors?.container ?: MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (artwork != null) artwork(item.media, Modifier.fillMaxSize())
             else Image(
@@ -410,12 +414,18 @@ private fun MineHistoryPoster(
 
 @Composable
 private fun MineHistoryLoadingSection(columns: Int) {
+    val popupColors = LocalMaFeiPopupColors.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
+            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("最近在看", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "最近在看",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+        )
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             repeat(2) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -439,9 +449,10 @@ private fun MineHistoryLoadingSection(columns: Int) {
 
 @Composable
 private fun MineHistoryErrorSection(onRetry: () -> Unit) {
+    val popupColors = LocalMaFeiPopupColors.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
+            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(

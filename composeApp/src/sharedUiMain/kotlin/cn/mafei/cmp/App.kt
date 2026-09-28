@@ -24,6 +24,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -87,7 +88,8 @@ import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.design_system.MaFeiSurface
-import cn.mafei.cmp.common.design_system.withUsableWidth
+import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
+import cn.mafei.cmp.common.design_system.MaFeiPopupReferenceColors
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.MediaArtwork
@@ -3207,21 +3209,21 @@ private fun MineAccountSheet(
     onDismiss: () -> Unit,
     content: @Composable (Modifier) -> Unit,
 ) {
-    val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val largeWindow = layout.navigation != NavigationPlacement.Bottom
         val sheetWidth = if (largeWindow) {
-            (maxWidth - 48.dp).coerceIn(280.dp, 720.dp)
+            // Keep the modal visually subordinate to the page behind it. The
+            // previous large-screen width is the baseline, then the sheet is
+            // reduced to roughly two thirds of that width.
+            ((maxWidth - 48.dp).coerceIn(280.dp, 720.dp) * (2f / 3f))
+                .coerceAtLeast(280.dp)
         } else {
             maxWidth
         }
-        val sheetHeight = (maxHeight * .70f).coerceAtLeast(320.dp)
-        // The sheet is narrower than the window: recompute the content rhythm for
-        // the panel so poster columns and hero metrics fit instead of inheriting
-        // the full-window grid.
-        val sheetLayout = remember(layout, sheetWidth) {
-            layout.withUsableWidth(with(density) { sheetWidth.toPx() / density.density })
-        }
+        val sheetHeight = (maxHeight * .74f).coerceAtLeast(320.dp)
+        val topBarHeight = if (largeWindow) MineSheetLargeTopBarHeight else MineSheetTopBarHeight
+        val closeButtonTopInset = (topBarHeight - 44.dp) / 2f
+        val closeButtonEndInset = if (largeWindow) 16.dp else 8.dp
         val focusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) {
             runCatching { focusRequester.requestFocus() }
@@ -3256,20 +3258,30 @@ private fun MineAccountSheet(
                 GlassSurface(
                     backdrop = backdrop,
                     spec = MineAccountSheetSurfaceSpec,
-                    tint = MaterialTheme.colorScheme.surface,
+                    // The modal is a canvas; its list groups/cards use surface.
+                    // Using surface here as well made every item disappear into
+                    // the popup body.
+                    tint = MaFeiPopupReferenceColors.container,
                     modifier = Modifier.fillMaxSize(),
                     exportedBackdrop = sheetBackdrop,
                 ) {
-                    CompositionLocalProvider(LocalMaFeiSafeArea provides MaFeiSafeArea()) {
+                    CompositionLocalProvider(
+                        LocalMaFeiSafeArea provides MaFeiSafeArea(),
+                        LocalMaFeiPopupColors provides MaFeiPopupReferenceColors,
+                        // MineScreen is also rendered as a window-level dark
+                        // surface. Keep its loading/empty labels in the same
+                        // light ink hierarchy as the rest of the popup.
+                        LocalContentColor provides Color.White,
+                    ) {
                         content(
-                            Modifier.fillMaxSize().padding(top = MineSheetTopBarHeight)
+                            Modifier.fillMaxSize().padding(top = topBarHeight)
                                 .testTag("mineAccountSheetContent"),
                         )
                     }
                 }
                 // 移动端保留底部弹窗拖拽指示器；大屏居中弹窗只保留标题和关闭按钮。
                 Box(
-                    Modifier.fillMaxWidth().height(MineSheetTopBarHeight),
+                    Modifier.fillMaxWidth().height(topBarHeight),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (!largeWindow) {
@@ -3282,7 +3294,7 @@ private fun MineAccountSheet(
                     Text(
                         "我的",
                         Modifier.fillMaxWidth().padding(horizontal = 52.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = Color.White,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         fontSize = 18.sp,
                         lineHeight = 24.sp,
@@ -3293,8 +3305,8 @@ private fun MineAccountSheet(
                     onClick = onDismiss,
                     backdrop = closeButtonBackdrop,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(top = closeButtonTopInset, end = closeButtonEndInset)
                         .size(44.dp)
                         .semantics { contentDescription = "关闭我的" },
                     height = 44.dp,
@@ -3303,7 +3315,7 @@ private fun MineAccountSheet(
                     MaFeiIcon(
                         MaFeiGlyph.Close,
                         Modifier.size(20.dp),
-                        MaterialTheme.colorScheme.onSurface,
+                        Color.White,
                     )
                 }
             }
@@ -3313,14 +3325,17 @@ private fun MineAccountSheet(
 
 /** 弹窗顶部导航区（关闭按钮所在条带）的高度：所有子页面内容在此之下。 */
 private val MineSheetTopBarHeight = 56.dp
+// Keep the 12dp inset used by the reference while centering the 44dp control:
+// (68 - 44) / 2 = 12dp on both sides.
+private val MineSheetLargeTopBarHeight = 68.dp
 private const val MineSheetCornerDp = 24f
 private const val BrowseSharedReturnDurationMs = 460L
 
 private val MineAccountSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Reduced,
-    tintAlpha = .72f,
-    intensity = 1f,
+    level = GlassLevel.Opaque,
+    tintAlpha = 1f,
+    intensity = 0f,
     cornerRadiusDp = MineSheetCornerDp,
     material = GlassMaterial.Frosted,
 )

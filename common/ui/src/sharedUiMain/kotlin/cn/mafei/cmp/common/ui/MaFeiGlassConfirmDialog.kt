@@ -41,11 +41,11 @@ import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 
 /**
- * Modal confirmation panel. The panel uses a Gaussian-blurred frosted surface:
- * application dialogs must stay readable without adding liquid-glass refraction.
+ * Modal confirmation panel with an opaque dialog surface. Application dialogs
+ * stay readable without liquid-glass refraction or page bleed-through.
  *
  * [backdrop] remains in the signature for source compatibility with existing
- * callers and supplies the Gaussian-blur source for the dialog surface.
+ * callers; the opaque dialog intentionally does not sample it.
  */
 @Composable
 fun MaFeiGlassConfirmDialog(
@@ -61,15 +61,18 @@ fun MaFeiGlassConfirmDialog(
 ) {
     val scheme = MaterialTheme.colorScheme
     val isLightTheme = scheme.background.luminance() > .5f
-    val containerColor = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242428)
+    // Dialogs are their own dark canvas; nested cards/list groups use `surface`.
+    // Keeping those semantic layers distinct prevents popup content from
+    // visually merging into one flat block.
+    val containerColor = scheme.background
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)
         else Color(0xFF121212).copy(alpha = .56f)
     val focusRequester = remember { FocusRequester() }
     val surfaceSpec = GlassSurfaceSpec(
         role = GlassRole.Dialog,
-        level = GlassLevel.Reduced,
-        tintAlpha = .72f,
-        intensity = 1f,
+        level = GlassLevel.Opaque,
+        tintAlpha = 1f,
+        intensity = 0f,
         cornerRadiusDp = 24f,
         material = GlassMaterial.Frosted,
     )

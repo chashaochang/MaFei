@@ -1437,7 +1437,7 @@ internal fun OverviewSection(
     val text = overview?.takeIf { it.isNotBlank() } ?: return
     val largeTypography = usesLargeDetailTypography()
     val textColor = LocalContentColor.current.copy(alpha = .86f)
-    val moreColor = MaterialTheme.colorScheme.primary
+    val moreColor = Color.White.copy(alpha = .92f)
     val textStyle = MaterialTheme.typography.bodyMedium.copy(
         color = textColor,
         fontSize = if (largeTypography) 15.sp else 13.sp,
@@ -1503,7 +1503,7 @@ internal fun BoxScope.OverviewSheetOverlay(
     GlassSurface(
         backdrop = LocalShellBackdrop.current ?: backdrop,
         spec = OverviewSheetSurfaceSpec,
-        tint = MaterialTheme.colorScheme.surface,
+        tint = MaterialTheme.colorScheme.background,
         modifier = Modifier.align(sheetAlignment)
             .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
             .widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
@@ -1515,22 +1515,25 @@ internal fun BoxScope.OverviewSheetOverlay(
             ),
         exportedBackdrop = sheetMaterialBackdrop,
     ) {
-        Column(
-            Modifier.fillMaxSize().padding(
-                start = 16.dp,
-                end = 16.dp,
-                top = 10.dp,
-                bottom = safeArea.bottom + 10.dp,
-            ),
-        ) {
-            DetailSheetHeader("简介", closeButtonBackdrop, onDismiss)
-            Text(
-                text,
-                Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                textAlign = TextAlign.Start,
-            )
+        CompositionLocalProvider(LocalContentColor provides Color.White) {
+            Column(
+                Modifier.fillMaxSize().padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 10.dp,
+                    bottom = safeArea.bottom + 10.dp,
+                ),
+            ) {
+                DetailSheetHeader("简介", closeButtonBackdrop, onDismiss)
+                Text(
+                    text,
+                    Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
+                    color = Color.White.copy(alpha = .92f),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Start,
+                )
+            }
         }
     }
 }
@@ -1808,7 +1811,7 @@ private fun BoxScope.DetailPickerSheetOverlay(
             GlassSurface(
                 backdrop = LocalShellBackdrop.current ?: backdrop,
                 spec = OverviewSheetSurfaceSpec,
-                tint = MaterialTheme.colorScheme.surface,
+                tint = MaterialTheme.colorScheme.background,
                 modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
                     .then(if (largeWindow) Modifier else sheetDrag).clickable(
                     interactionSource = sheetInteraction,
@@ -1817,58 +1820,60 @@ private fun BoxScope.DetailPickerSheetOverlay(
                 ),
                 exportedBackdrop = sheetMaterialBackdrop,
             ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 10.dp,
-                        bottom = safeArea.bottom + 10.dp,
-                    ),
-                ) {
-                    DetailSheetHeader(
-                        title = when (kind) {
-                            DetailPickerKind.Source -> "选择播放版本"
-                            DetailPickerKind.Subtitle -> "字幕"
-                            DetailPickerKind.Audio -> "音频"
-                        },
-                        backdrop = closeButtonBackdrop,
-                        onDismiss = onDismiss,
-                        contentColor = Color.White,
-                    )
+                CompositionLocalProvider(LocalContentColor provides Color.White) {
                     Column(
-                        Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(contentScrollState),
-                        verticalArrangement = Arrangement.spacedBy(
-                            if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
+                        Modifier.fillMaxWidth().padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 10.dp,
+                            bottom = safeArea.bottom + 10.dp,
                         ),
                     ) {
-                        when (kind) {
-                            DetailPickerKind.Source -> sources.forEach { option ->
-                                DetailSourceOptionRow(
-                                    option = option,
-                                    selected = option.id == source.id,
-                                    onClick = { onSelectSource(option.id) },
-                                )
-                            }
-
-                            DetailPickerKind.Subtitle -> {
-                                val selectedIndex = selectedSubtitleStreamIndex ?: source.defaultSubtitleStreamIndex
-                                source.subtitleOptions.forEach { option ->
-                                    DetailTrackOptionRow(
+                        DetailSheetHeader(
+                            title = when (kind) {
+                                DetailPickerKind.Source -> "选择播放版本"
+                                DetailPickerKind.Subtitle -> "字幕"
+                                DetailPickerKind.Audio -> "音频"
+                            },
+                            backdrop = closeButtonBackdrop,
+                            onDismiss = onDismiss,
+                            contentColor = Color.White,
+                        )
+                        Column(
+                            Modifier.fillMaxWidth().heightIn(max = listMaxHeight).verticalScroll(contentScrollState),
+                            verticalArrangement = Arrangement.spacedBy(
+                                if (kind == DetailPickerKind.Source) 4.dp else 12.dp,
+                            ),
+                        ) {
+                            when (kind) {
+                                DetailPickerKind.Source -> sources.forEach { option ->
+                                    DetailSourceOptionRow(
                                         option = option,
-                                        selected = option.streamIndex == selectedIndex,
-                                        onClick = { onSelectSubtitle(option.streamIndex) },
+                                        selected = option.id == source.id,
+                                        onClick = { onSelectSource(option.id) },
                                     )
                                 }
-                            }
 
-                            DetailPickerKind.Audio -> {
-                                val selectedIndex = selectedAudioStreamIndex ?: source.defaultAudioStreamIndex
-                                source.audioOptions.forEach { option ->
-                                    DetailTrackOptionRow(
-                                        option = option,
-                                        selected = option.streamIndex == selectedIndex,
-                                        onClick = { onSelectAudio(option.streamIndex) },
-                                    )
+                                DetailPickerKind.Subtitle -> {
+                                    val selectedIndex = selectedSubtitleStreamIndex ?: source.defaultSubtitleStreamIndex
+                                    source.subtitleOptions.forEach { option ->
+                                        DetailTrackOptionRow(
+                                            option = option,
+                                            selected = option.streamIndex == selectedIndex,
+                                            onClick = { onSelectSubtitle(option.streamIndex) },
+                                        )
+                                    }
+                                }
+
+                                DetailPickerKind.Audio -> {
+                                    val selectedIndex = selectedAudioStreamIndex ?: source.defaultAudioStreamIndex
+                                    source.audioOptions.forEach { option ->
+                                        DetailTrackOptionRow(
+                                            option = option,
+                                            selected = option.streamIndex == selectedIndex,
+                                            onClick = { onSelectAudio(option.streamIndex) },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2112,7 +2117,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     GlassSurface(
             backdrop = LocalShellBackdrop.current ?: backdrop,
             spec = OverviewSheetSurfaceSpec,
-            tint = MaterialTheme.colorScheme.surface,
+            tint = MaterialTheme.colorScheme.background,
             modifier = Modifier.align(sheetAlignment)
                 .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
                 .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
@@ -2124,36 +2129,38 @@ internal fun BoxScope.MediaInfoSheetOverlay(
                 ),
             exportedBackdrop = sheetMaterialBackdrop,
         ) {
-            Column(
-                Modifier.fillMaxSize().padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 10.dp,
-                    bottom = safeArea.bottom + 10.dp,
-                ),
-            ) {
-                DetailSheetHeader(
-                    "文件媒体信息",
-                    closeButtonBackdrop,
-                    onDismiss,
-                    contentColor = Color.White,
-                )
+            CompositionLocalProvider(LocalContentColor provides Color.White) {
                 Column(
-                    Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    Modifier.fillMaxSize().padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 10.dp,
+                        bottom = safeArea.bottom + 10.dp,
+                    ),
                 ) {
-                    sections.forEach { section ->
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                section.title,
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            section.cards.forEach { card -> DetailInfoCard(card) }
+                    DetailSheetHeader(
+                        "文件媒体信息",
+                        closeButtonBackdrop,
+                        onDismiss,
+                        contentColor = Color.White,
+                    )
+                    Column(
+                        Modifier.fillMaxWidth().weight(1f).verticalScroll(contentScrollState),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        sections.forEach { section ->
+                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    section.title,
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                section.cards.forEach { card -> DetailInfoCard(card) }
+                            }
                         }
+                        Spacer(Modifier.height(6.dp))
                     }
-                    Spacer(Modifier.height(6.dp))
                 }
             }
     }
@@ -2336,9 +2343,9 @@ private const val LegacyOverviewMoreTag = "legacy-overview-more"
 
 private val OverviewSheetSurfaceSpec = GlassSurfaceSpec(
     role = GlassRole.Dialog,
-    level = GlassLevel.Reduced,
-    tintAlpha = .72f,
-    intensity = 1f,
+    level = GlassLevel.Opaque,
+    tintAlpha = 1f,
+    intensity = 0f,
     cornerRadiusDp = 24f,
     material = GlassMaterial.Frosted,
 )

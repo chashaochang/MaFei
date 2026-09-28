@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -48,11 +49,15 @@ fun LegacyListGroup(
     modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
+    val popupColors = LocalMaFeiPopupColors.current
+    val groupColor = popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f)
+    val primaryText = popupColors?.primaryText ?: MaterialTheme.colorScheme.onSurface
+    val secondaryText = popupColors?.secondaryText ?: MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)),
+            .background(groupColor),
     ) {
         items.forEachIndexed { index, item ->
             Row(
@@ -74,7 +79,7 @@ fun LegacyListGroup(
                             painter = painterResource(item.icon),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant),
+                        colorFilter = ColorFilter.tint(secondaryText),
                         )
                     }
                     Spacer(Modifier.width(10.dp))
@@ -82,7 +87,7 @@ fun LegacyListGroup(
                 Text(
                     item.title,
                     Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = primaryText,
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
                     fontWeight = FontWeight.Medium,
@@ -92,7 +97,7 @@ fun LegacyListGroup(
                 if (item.trailing.isNotBlank()) {
                     Text(
                         item.trailing,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryText,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         maxLines = 1,
@@ -105,7 +110,7 @@ fun LegacyListGroup(
                         painter = painterResource(MaFeiLegacyDrawables.arrowRight),
                         contentDescription = null,
                         modifier = Modifier.size(22.dp),
-                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .72f)),
+                        colorFilter = ColorFilter.tint(secondaryText.copy(alpha = .72f)),
                     )
                 }
             }

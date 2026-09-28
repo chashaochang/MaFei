@@ -9,8 +9,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -148,7 +146,7 @@ internal fun DetailSheetHeader(
     title: String,
     backdrop: GlassBackdrop,
     onDismiss: () -> Unit,
-    contentColor: Color = LocalContentColor.current,
+    contentColor: Color = Color.White,
 ) {
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
         ?.let { it.navigation != NavigationPlacement.Bottom } == true
@@ -157,7 +155,7 @@ internal fun DetailSheetHeader(
             Box(
                 Modifier.align(Alignment.TopCenter).padding(top = 8.dp).width(36.dp).height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
+                    .background(Color.White.copy(alpha = .36f)),
             )
         }
         Box(
