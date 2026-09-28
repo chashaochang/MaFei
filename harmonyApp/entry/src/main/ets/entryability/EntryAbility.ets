@@ -11,6 +11,8 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window;
   private orientationPoller?: number;
   private requestedOrientation?: window.Orientation;
+  private lastPlayerOrientationRevision: number = -1;
+  private lastPlayerScreenVisible: boolean = false;
   private systemBarsHidden: boolean = false;
   private playerDecorHidden: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
@@ -55,14 +57,30 @@ export default class EntryAbility extends UIAbility {
   private applyOrientationPolicy(windowClass: window.Window): void {
     const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
     const playerFullscreen = playerVisible && nativeApi.IsOhosPlayerFullscreenRequested();
+    const orientationRevision = nativeApi.GetOhosPlayerOrientationRevision();
+    const compactDisplay = this.isCompactDisplay(windowClass);
     // Freeform tablet/2-in-1 windows keep their window orientation and use
     // window-level fullscreen. Phones and ordinary tablets use the player
     // button as an orientation toggle; the rest of the app keeps its natural
     // orientation on large screens.
+    if (!playerVisible) {
+      this.lastPlayerScreenVisible = false;
+      this.lastPlayerOrientationRevision = orientationRevision;
+    } else if (!this.isWindowedPlayerHost(windowClass) && !compactDisplay) {
+      if (!this.lastPlayerScreenVisible) {
+        // Preserve the orientation that was already active when playback
+        // opened. The first explicit button request is handled below.
+        this.lastPlayerScreenVisible = true;
+        this.lastPlayerOrientationRevision = orientationRevision;
+        return;
+      }
+      if (this.lastPlayerOrientationRevision === orientationRevision) return;
+      this.lastPlayerOrientationRevision = orientationRevision;
+    }
     const orientation = this.isWindowedPlayerHost(windowClass) ?
-      window.Orientation.UNSPECIFIED : this.isCompactDisplay(windowClass) ?
+      window.Orientation.UNSPECIFIED : playerVisible ?
       (playerFullscreen ? window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.PORTRAIT) :
-      (playerFullscreen ? window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.UNSPECIFIED);
+      window.Orientation.UNSPECIFIED;
     if (orientation === this.requestedOrientation) return;
     this.requestedOrientation = orientation;
     windowClass.setPreferredOrientation(orientation).catch((error: Object) => {
@@ -149,10 +167,12 @@ export default class EntryAbility extends UIAbility {
       // Freeform tablet windows also have a native title bar. Only the
       // HarmonyOS PC/2-in-1 device class uses the custom desktop shell.
       const desktopHost = deviceInfo.deviceType === '2in1';
+      const windowedHost = this.isWindowedPlayerHost(windowClass);
       nativeApi.UpdateOhosWindowMetrics(
         this.pxToVp(windowClass, width),
         this.pxToVp(windowClass, properties.windowRect.height),
-        desktopHost
+        desktopHost,
+        windowedHost
       );
       const leftPx = Math.max(
         0,

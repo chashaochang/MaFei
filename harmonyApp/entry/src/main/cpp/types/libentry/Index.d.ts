@@ -17,7 +17,8 @@ export const UpdateOhosWindowInsets: (
 export const UpdateOhosWindowMetrics: (
   width: number,
   height: number,
-  desktopHost: boolean
+  desktopHost: boolean,
+  windowedHost: boolean
 ) => void
 
 export const UpdateOhosPlayerState: (payload: string) => boolean
@@ -25,6 +26,8 @@ export const UpdateOhosPlayerState: (payload: string) => boolean
 export const IsOhosPlayerScreenVisible: () => boolean
 
 export const IsOhosPlayerFullscreenRequested: () => boolean
+
+export const GetOhosPlayerOrientationRevision: () => number
 
 export const HandleOhosComposeBack: () => boolean
 

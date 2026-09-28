@@ -38,6 +38,7 @@ import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
 private val ohosWindowFeatures = mutableStateOf(MaFeiWindowFeatures())
 private var ohosPlayerScreenVisible = false
 private var ohosPlayerFullscreenRequested = false
+private var ohosPlayerOrientationRevision = 0L
 private var ohosSystemBackInput: OhosSystemBackInput? = null
 
 /**
@@ -66,6 +67,11 @@ fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
 @CName("IsOhosPlayerFullscreenRequested")
 fun IsOhosPlayerFullscreenRequested(): Boolean = ohosPlayerFullscreenRequested
 
+/** Increments for every explicit player orientation-button request. */
+@OptIn(ExperimentalNativeApi::class)
+@CName("GetOhosPlayerOrientationRevision")
+fun GetOhosPlayerOrientationRevision(): Long = ohosPlayerOrientationRevision
+
 @OptIn(ExperimentalNativeApi::class)
 @CName("HandleOhosComposeBack")
 fun HandleOhosComposeBack(): Boolean =
@@ -92,12 +98,18 @@ fun UpdateOhosWindowInsets(left: Double, top: Double, right: Double, bottom: Dou
  */
 @OptIn(ExperimentalNativeApi::class)
 @CName("UpdateOhosWindowMetrics")
-fun UpdateOhosWindowMetrics(widthDp: Double, _heightDp: Double, desktopHost: Boolean) {
+fun UpdateOhosWindowMetrics(
+    widthDp: Double,
+    _heightDp: Double,
+    desktopHost: Boolean,
+    windowedHost: Boolean,
+) {
     val width = widthDp.takeIf { it.isFinite() }?.coerceAtLeast(0.0)?.toFloat() ?: 0f
     ohosWindowFeatures.value = ohosWindowFeatures.value.copy(
         // The width guard keeps narrow 2-in-1 windows in the tablet layout;
         // the host guard keeps both full-screen and freeform tablets out of PC.
         desktopWindow = desktopHost && width >= 1000f,
+        windowedHost = windowedHost,
     )
 }
 
@@ -224,6 +236,7 @@ fun MainArkUIViewController(
                 },
                 onPlayerFullscreenChanged = { fullscreen ->
                     ohosPlayerFullscreenRequested = fullscreen
+                    ohosPlayerOrientationRevision++
                 },
             )
         }

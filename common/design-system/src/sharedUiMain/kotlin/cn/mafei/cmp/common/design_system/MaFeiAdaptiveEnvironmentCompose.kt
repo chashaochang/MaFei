@@ -18,6 +18,8 @@ data class MaFeiWindowFeatures(
      * layout still reflows from the current window bounds.
      */
     val desktopWindow: Boolean = false,
+    /** A tablet/2-in-1 freeform window with native window chrome. */
+    val windowedHost: Boolean = false,
 )
 
 val LocalMaFeiWindowFeatures = staticCompositionLocalOf { MaFeiWindowFeatures() }

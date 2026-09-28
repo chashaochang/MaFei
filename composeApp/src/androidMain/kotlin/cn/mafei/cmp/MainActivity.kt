@@ -47,16 +47,26 @@ class MainActivity : ComponentActivity() {
             }, onPlayerScreenChanged = { visible ->
                 if (playerScreenVisible != visible) {
                     playerScreenVisible = visible
-                    if (!visible) playerFullscreenRequested = false
+                    if (!visible) {
+                        playerFullscreenRequested = false
+                    } else if (!isCompactScreen()) {
+                        // A tablet may already be landscape when playback is
+                        // opened. Seed the toggle from the actual window so
+                        // entering the player never rotates it by itself.
+                        playerFullscreenRequested =
+                            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    }
                     applyOrientationPolicy()
                     applySystemBarPolicy()
                 }
             }, onPlayerFullscreenChanged = { fullscreen ->
-                if (playerFullscreenRequested != fullscreen) {
-                    playerFullscreenRequested = fullscreen
-                    applyOrientationPolicy()
-                    applySystemBarPolicy()
-                }
+                // Do not deduplicate this callback: on a landscape tablet,
+                // tapping the orientation control targets portrait, which is
+                // represented by the same false value used before the first
+                // tap. The callback itself is the user's explicit request.
+                playerFullscreenRequested = fullscreen
+                applyOrientationPolicy()
+                applySystemBarPolicy()
             })
         }
     }
@@ -110,8 +120,8 @@ class MainActivity : ComponentActivity() {
  *   全屏 is the only landscape mode (the legacy page only calls
  *   `enableFullscreen()` from the fullscreen toggle);
  * - fullscreen: sensor landscape, so the two landscapes can still flip;
- * - large screens keep their natural orientation outside the player and use
- *   sensor landscape while the player is fullscreen.
+ * - large screens keep their natural orientation outside the player; while
+ *   the player is visible, its control toggles portrait/landscape.
  *
  * The windowed case used to be FULL_SENSOR, which made "exit fullscreen" a
  * no-op on a phone held sideways: nothing can snap the window back to portrait
@@ -123,6 +133,7 @@ internal fun mafeiRequestedOrientation(
     playerFullscreenRequested: Boolean = false,
 ): Int = when {
     playerScreenVisible && playerFullscreenRequested -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    playerScreenVisible && !compactScreen -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     !compactScreen -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 }

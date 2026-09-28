@@ -94,19 +94,21 @@ static napi_value UpdateWindowInsets(napi_env env, napi_callback_info info) {
 }
 
 static napi_value UpdateWindowMetrics(napi_env env, napi_callback_info info) {
-    size_t count = 3;
-    napi_value arguments[3];
+    size_t count = 4;
+    napi_value arguments[4];
     double width = 0.0;
     double height = 0.0;
     bool desktopHost = false;
-    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 3 ||
+    bool windowedHost = false;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 4 ||
         napi_get_value_double(env, arguments[0], &width) != napi_ok ||
         napi_get_value_double(env, arguments[1], &height) != napi_ok ||
-        napi_get_value_bool(env, arguments[2], &desktopHost) != napi_ok) {
-        napi_throw_type_error(env, nullptr, "Two logical window dimensions and desktop host state are required");
+        napi_get_value_bool(env, arguments[2], &desktopHost) != napi_ok ||
+        napi_get_value_bool(env, arguments[3], &windowedHost) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "Window dimensions, desktop host state and windowed host state are required");
         return nullptr;
     }
-    UpdateOhosWindowMetrics(width, height, desktopHost);
+    UpdateOhosWindowMetrics(width, height, desktopHost, windowedHost);
     napi_value result = nullptr;
     napi_get_undefined(env, &result);
     return result;
@@ -168,6 +170,17 @@ static napi_value GetPlayerFullscreenRequested(napi_env env, napi_callback_info 
     }
     napi_value result = nullptr;
     napi_get_boolean(env, IsOhosPlayerFullscreenRequested(), &result);
+    return result;
+}
+
+static napi_value GetPlayerOrientationRevision(napi_env env, napi_callback_info info) {
+    size_t count = 0;
+    if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
+        napi_throw_type_error(env, nullptr, "No arguments are accepted");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    napi_create_int64(env, GetOhosPlayerOrientationRevision(), &result);
     return result;
 }
 
@@ -252,6 +265,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "IsOhosPlayerFullscreenRequested",
             nullptr,
             GetPlayerFullscreenRequested,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "GetOhosPlayerOrientationRevision",
+            nullptr,
+            GetPlayerOrientationRevision,
             nullptr,
             nullptr,
             nullptr,

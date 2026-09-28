@@ -91,6 +91,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
@@ -162,6 +163,7 @@ private enum class PlayerChromeGlyph {
     Previous,
     Next,
     Info,
+    Orientation,
     Brightness,
     Volume,
 }
@@ -358,6 +360,12 @@ fun NowPlayingScreen(
         // the same code works for a tablet, a foldable inner display, and a
         // resizable Mac window without checking a device or platform name.
         val largeWindow = useWideNowPlayingLayout(maxWidth.value, maxHeight.value)
+        // Normal tablets use this control to rotate the player; desktop hosts
+        // keep a real window-fullscreen action.
+        val windowFeatures = LocalMaFeiWindowFeatures.current
+        val tabletWindow = !windowFeatures.desktopWindow && !windowFeatures.windowedHost &&
+            minOf(maxWidth.value, maxHeight.value) >= 600f
+        val landscapeWindow = maxWidth.value > maxHeight.value
 
         // Legacy PlayerPage.onBackPress priority: close the open menu/panel first,
         // then the playback-info card (the old page reports it as menu-visible
@@ -658,6 +666,8 @@ fun NowPlayingScreen(
                 onTogglePlay = latestTogglePlay,
                 onRetry = onRetry,
                 onFullscreenRequest = onFullscreenRequest,
+                tabletWindow = tabletWindow,
+                landscapeWindow = landscapeWindow,
                 onNext = onNext,
                 onPrevious = onPrevious,
                 episodes = episodes,
@@ -933,6 +943,8 @@ private fun PlayerBottomChrome(
     onTogglePlay: () -> Unit,
     onRetry: () -> Unit,
     onFullscreenRequest: ((Boolean) -> Unit)?,
+    tabletWindow: Boolean,
+    landscapeWindow: Boolean,
     onNext: (() -> Unit)?,
     onPrevious: (() -> Unit)?,
     episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
@@ -1043,13 +1055,20 @@ private fun PlayerBottomChrome(
                     }
                     if (largeWindow && onFullscreenRequest != null) {
                         PlayerChromeButton(
-                            glyph = PlayerChromeGlyph.Fullscreen,
-                            label = "全屏",
+                            glyph = if (tabletWindow) PlayerChromeGlyph.Orientation
+                            else PlayerChromeGlyph.Fullscreen,
+                            label = if (tabletWindow) {
+                                if (landscapeWindow) "竖屏" else "横屏"
+                            } else "全屏",
                             diameter = 42,
                             iconSize = 20,
                             backdrop = backdrop,
                             transparent = true,
-                            onClick = { onFullscreenRequest(!fullscreen) },
+                            onClick = {
+                                onFullscreenRequest(
+                                    if (tabletWindow) !landscapeWindow else !fullscreen,
+                                )
+                            },
                         )
                     }
                 }
@@ -1059,6 +1078,17 @@ private fun PlayerBottomChrome(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    if (onPrevious != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Previous,
+                            label = "上一集",
+                            diameter = 38,
+                            iconSize = 18,
+                            backdrop = backdrop,
+                            transparent = true,
+                            onClick = onPrevious,
+                        )
+                    }
                     PlayerChromeButton(
                         glyph = playbackGlyph(presentation),
                         label = playbackLabel(presentation),
@@ -1068,6 +1098,17 @@ private fun PlayerBottomChrome(
                         transparent = true,
                         onClick = if (presentation.showRetry) onRetry else onTogglePlay,
                     )
+                    if (onNext != null) {
+                        PlayerChromeButton(
+                            glyph = PlayerChromeGlyph.Next,
+                            label = "下一集",
+                            diameter = 38,
+                            iconSize = 18,
+                            backdrop = backdrop,
+                            transparent = true,
+                            onClick = onNext,
+                        )
+                    }
                     Text(
                         formatPlayerDuration(if (draggingSlider) sliderPositionMs else state.positionMs),
                         color = Color.White,
@@ -1091,14 +1132,20 @@ private fun PlayerBottomChrome(
                     )
                     if (onFullscreenRequest != null) {
                         PlayerChromeButton(
-                            glyph = PlayerChromeGlyph.Fullscreen,
-                            label = "全屏",
+                            glyph = if (tabletWindow) PlayerChromeGlyph.Orientation
+                            else PlayerChromeGlyph.Fullscreen,
+                            label = if (tabletWindow) {
+                                if (landscapeWindow) "竖屏" else "横屏"
+                            } else "全屏",
                             diameter = 44,
                             iconSize = 20,
                             backdrop = backdrop,
                             transparent = true,
-                            // 旧版这个按钮进出共用（图标与文字都是「全屏」），按 toggle 走。
-                            onClick = { onFullscreenRequest(!fullscreen) },
+                            onClick = {
+                                onFullscreenRequest(
+                                    if (tabletWindow) !landscapeWindow else !fullscreen,
+                                )
+                            },
                         )
                     }
                 }
@@ -2020,6 +2067,43 @@ private fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier,
                 line(.62f, .12f, .88f, .12f); line(.88f, .12f, .88f, .38f)
                 line(.12f, .62f, .12f, .88f); line(.12f, .88f, .38f, .88f)
                 line(.62f, .88f, .88f, .88f); line(.88f, .62f, .88f, .88f)
+            }
+            PlayerChromeGlyph.Orientation -> {
+                // Screen-rotation glyph: a small device frame makes this
+                // distinct from the generic refresh/sync icon at a glance.
+                drawRoundRect(
+                    color,
+                    topLeft = Offset(size.width * .36f, size.height * .27f),
+                    size = Size(size.width * .28f, size.height * .46f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width * .05f),
+                    style = Stroke(width = stroke),
+                )
+                drawArc(
+                    color,
+                    startAngle = 35f,
+                    sweepAngle = 220f,
+                    useCenter = false,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+                drawArc(
+                    color,
+                    startAngle = 215f,
+                    sweepAngle = 220f,
+                    useCenter = false,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+                drawPath(Path().apply {
+                    moveTo(size.width * .80f, size.height * .22f)
+                    lineTo(size.width * .90f, size.height * .20f)
+                    lineTo(size.width * .86f, size.height * .30f)
+                    close()
+                }, color)
+                drawPath(Path().apply {
+                    moveTo(size.width * .20f, size.height * .78f)
+                    lineTo(size.width * .10f, size.height * .80f)
+                    lineTo(size.width * .14f, size.height * .70f)
+                    close()
+                }, color)
             }
             PlayerChromeGlyph.Lock, PlayerChromeGlyph.Unlock -> {
                 drawRoundRect(

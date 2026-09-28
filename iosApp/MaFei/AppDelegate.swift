@@ -42,8 +42,20 @@ final class OrientationViewController: UIViewController {
     private var playerFullscreenRequested = false
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return .all }
-        return playerScreenVisible ? .allButUpsideDown : .portrait
+        switch UIDevice.current.userInterfaceIdiom {
+        case .phone:
+            return playerScreenVisible ? .allButUpsideDown : .portrait
+        case .pad:
+            // iPad keeps all orientations outside the player. Inside the
+            // player, the shared tablet control explicitly selects portrait
+            // or landscape; do not leave the host unconstrained after the
+            // Compose state has changed.
+            return playerScreenVisible
+                ? (playerFullscreenRequested ? .landscape : .portrait)
+                : .all
+        default:
+            return .all
+        }
     }
 
     override var shouldAutorotate: Bool { true }
@@ -59,25 +71,39 @@ final class OrientationViewController: UIViewController {
     func setPlayerScreenVisible(_ visible: Bool) {
         guard playerScreenVisible != visible else { return }
         playerScreenVisible = visible
-        if !visible { playerFullscreenRequested = false }
+        if !visible {
+            playerFullscreenRequested = false
+        } else if UIDevice.current.userInterfaceIdiom == .pad,
+                  let orientation = view.window?.windowScene?.interfaceOrientation {
+            // Keep the orientation that was already active when playback
+            // opened. The tablet button changes it; opening the player does
+            // not implicitly rotate the window.
+            playerFullscreenRequested = orientation.isLandscape
+        }
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
-            guard !visible,
-                  UIDevice.current.userInterfaceIdiom == .phone,
-                  let windowScene = view.window?.windowScene else { return }
-            windowScene.requestGeometryUpdate(
-                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-            )
+            guard let windowScene = view.window?.windowScene else { return }
+            if !visible && UIDevice.current.userInterfaceIdiom == .phone {
+                windowScene.requestGeometryUpdate(
+                    UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+                )
+            } else if visible && UIDevice.current.userInterfaceIdiom == .pad {
+                windowScene.requestGeometryUpdate(
+                    UIWindowScene.GeometryPreferences.iOS(
+                        interfaceOrientations: playerFullscreenRequested ? .landscape : .portrait
+                    )
+                )
+            }
         } else {
             UIViewController.attemptRotationToDeviceOrientation()
         }
     }
 
     func setPlayerFullscreenRequested(_ fullscreen: Bool) {
-        guard playerFullscreenRequested != fullscreen else { return }
         playerFullscreenRequested = fullscreen
         guard playerScreenVisible,
-              UIDevice.current.userInterfaceIdiom == .phone,
+              UIDevice.current.userInterfaceIdiom == .phone ||
+                  UIDevice.current.userInterfaceIdiom == .pad,
               let windowScene = view.window?.windowScene else { return }
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()

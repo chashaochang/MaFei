@@ -59,13 +59,13 @@ class OrientationPolicyTest {
             mafeiRequestedOrientation(compactScreen = false, playerScreenVisible = false),
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
             mafeiRequestedOrientation(compactScreen = false, playerScreenVisible = true),
         )
     }
 
     @Test
-    fun largeScreenPlayerUsesLandscapeOnlyWhileFullscreen() {
+    fun largeScreenPlayerButtonTogglesPortraitAndLandscape() {
         assertEquals(
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             mafeiRequestedOrientation(
@@ -75,7 +75,7 @@ class OrientationPolicyTest {
             ),
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
             mafeiRequestedOrientation(
                 compactScreen = false,
                 playerScreenVisible = true,
