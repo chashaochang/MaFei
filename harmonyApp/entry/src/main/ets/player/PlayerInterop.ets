@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { audio } from '@kit.AudioKit';
 import { image } from '@kit.ImageKit';
@@ -381,12 +381,12 @@ struct MaFeiPlayerSurfaceHost {
     };
     const options: PlayerOptions = {
       useHardwareDecode: true,
-      // The HarmonyOS PC emulator does not expose a usable Vulkan surface;
-      // the buffer/gpu path crashes inside libmpv during pl_vulkan_create.
-      // Keep the native surface path for the OHOS host so the PC emulator and
-      // real windowed devices use the same decoder/output route. CMP still
-      // owns all visible controls above this surface.
-      renderMode: PlayerRenderMode.SURFACE,
+      // The HarmonyOS 2-in-1/PC host does not expose a usable Vulkan surface;
+      // its buffer/gpu path crashes inside libmpv during pl_vulkan_create.
+      // Keep the compatibility surface path for that host only. Phones and
+      // tablets retain the buffer path used by the existing native player.
+      renderMode: deviceInfo.deviceType === '2in1' ?
+        PlayerRenderMode.SURFACE : PlayerRenderMode.BUFFER,
       // The shared PlayerStateMachine sends Play/Seek only after READY.
       autoPlay: false,
       startPositionMs: Math.max(0, command.positionMs),
