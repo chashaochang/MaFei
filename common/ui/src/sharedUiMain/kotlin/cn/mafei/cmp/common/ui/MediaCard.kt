@@ -45,6 +45,8 @@ fun MediaCard(
     onPlay: (() -> Unit)? = null,
     onToggleWatched: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
+    isWatched: Boolean = false,
+    isFavorite: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -101,6 +103,8 @@ fun MediaCard(
                     onPlay = onPlay ?: onClick,
                     onToggleWatched = onToggleWatched,
                     onToggleFavorite = onToggleFavorite,
+                    isWatched = isWatched,
+                    isFavorite = isFavorite,
                 )
             }
         }
@@ -120,14 +124,17 @@ fun MediaCard(
  * poster remains the visual material and the actions stay legible above it.
  */
 @Composable
-internal fun MediaCardHoverOverlay(
+fun MediaCardHoverOverlay(
     title: String,
     onPlay: () -> Unit,
     onToggleWatched: (() -> Unit)?,
     onToggleFavorite: (() -> Unit)?,
+    isWatched: Boolean = false,
+    isFavorite: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     Box(
-        Modifier.fillMaxSize()
+        modifier.fillMaxSize()
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Black.copy(alpha = .54f)),
     ) {
@@ -154,13 +161,15 @@ internal fun MediaCardHoverOverlay(
         ) {
             CardHoverAction(
                 glyph = MaFeiGlyph.Watched,
-                label = "设置已观看",
+                label = if (isWatched) "标记为未观看" else "设置已观看",
                 onClick = onToggleWatched,
+                selected = isWatched,
             )
             CardHoverAction(
                 glyph = MaFeiGlyph.Favorite,
-                label = "收藏",
+                label = if (isFavorite) "取消收藏" else "收藏",
                 onClick = onToggleFavorite,
+                selected = isFavorite,
             )
         }
     }
@@ -171,6 +180,7 @@ private fun CardHoverAction(
     glyph: MaFeiGlyph,
     label: String,
     onClick: (() -> Unit)?,
+    selected: Boolean,
 ) {
     Box(
         Modifier.size(34.dp).mafeiInteractive(
@@ -182,7 +192,15 @@ private fun CardHoverAction(
         ),
         contentAlignment = Alignment.Center,
     ) {
-        MaFeiIcon(glyph, Modifier.size(27.dp), Color.White.copy(alpha = if (onClick != null) 1f else .72f))
+        MaFeiIcon(
+            glyph,
+            Modifier.size(27.dp),
+            when {
+                selected -> MaterialTheme.colorScheme.primary
+                onClick != null -> Color.White
+                else -> Color.White.copy(alpha = .72f)
+            },
+        )
     }
 }
 

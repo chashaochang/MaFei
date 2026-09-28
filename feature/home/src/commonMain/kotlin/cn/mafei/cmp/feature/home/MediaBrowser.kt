@@ -132,6 +132,9 @@ class MediaBrowser(
     private var historyCompletedRetryInitial = false
     private var historyPageSize = HistoryPageSize
     private val historySeriesCache = mutableMapOf<MediaId, HistorySeriesCacheEntry>()
+    private enum class UserDataAction { Watched, Favorite }
+    private data class UserDataActionKey(val id: MediaId, val action: UserDataAction)
+    private val userDataActionLocks = mutableSetOf<UserDataActionKey>()
 
     suspend fun start() {
         if (initialized) return
@@ -994,12 +997,12 @@ class MediaBrowser(
 
     suspend fun toggleWatched(item: MediaItem) {
         if (!capabilities.watchedEdit) return
-        mutateDetail(item, favorite = null, watched = !item.userData.isPlayed)
+        mutateListItem(item, UserDataAction.Watched)
     }
 
     suspend fun toggleFavorite(item: MediaItem) {
         if (!capabilities.favoritesEdit) return
-        mutateDetail(item, favorite = !item.userData.isFavorite, watched = null)
+        mutateListItem(item, UserDataAction.Favorite)
     }
 
     // ------------------------------------------------------------- watch history
@@ -1433,6 +1436,57 @@ class MediaBrowser(
         }
     }
 
+    /**
+     * Mutates a card action without requiring the item to be the currently
+     * opened detail. The old implementation reused [mutateDetail], whose
+     * stale-detail guard silently discarded list actions because ordinary
+     * library/home items are not part of the detail state. Keep one lock per
+     * media/action pair so a favorite request cannot block a watched request
+     * for the same card, and publish the optimistic state through every feed
+     * before the provider round trip completes.
+     */
+    private suspend fun mutateListItem(item: MediaItem, action: UserDataAction) {
+        val key = UserDataActionKey(item.id, action)
+        if (!userDataActionLocks.add(key)) return
+        val current = state.value.userDataFor(item.id) ?: item.userData
+        val previous = when (action) {
+            UserDataAction.Watched -> current.isPlayed
+            UserDataAction.Favorite -> current.isFavorite
+        }
+        val target = !previous
+        mutableState.value = state.value.replaceUserData(item.id) { data ->
+            when (action) {
+                UserDataAction.Watched -> data.copy(isPlayed = target)
+                UserDataAction.Favorite -> data.copy(isFavorite = target)
+            }
+        }
+        try {
+            when (action) {
+                UserDataAction.Watched -> repository.setWatched(session, item.id, target)
+                UserDataAction.Favorite -> repository.setFavorite(session, item.id, target)
+            }
+        } catch (cancelled: CancellationException) {
+            mutableState.value = state.value.replaceUserData(item.id) { data ->
+                when (action) {
+                    UserDataAction.Watched -> data.copy(isPlayed = previous)
+                    UserDataAction.Favorite -> data.copy(isFavorite = previous)
+                }
+            }
+            throw cancelled
+        } catch (failure: Exception) {
+            mutableState.value = state.value.replaceUserData(item.id) { data ->
+                when (action) {
+                    UserDataAction.Watched -> data.copy(isPlayed = previous)
+                    UserDataAction.Favorite -> data.copy(isFavorite = previous)
+                }
+            }.copy(
+                detailActionError = browseError(failure).takeIf { state.value.detail?.id == item.id },
+            )
+        } finally {
+            userDataActionLocks.remove(key)
+        }
+    }
+
     private suspend fun loadSeriesSections(seriesId: MediaId, detail: MediaItem, operation: Long) {
         mutableState.value = state.value.copy(detailSectionsLoading = true, detailSectionsError = null)
         try {
@@ -1669,21 +1723,32 @@ private fun HomeFeed.mergeUnchangedSections(fresh: HomeFeed): HomeFeed {
 }
 
 private fun MediaBrowserState.replaceUserData(id: MediaId, userData: MediaUserData): MediaBrowserState {
-    fun List<MediaItem>.replace() = map { item -> if (item.id == id) item.copy(userData = userData) else item }
+    return replaceUserData(id) { userData }
+}
+
+private fun MediaBrowserState.replaceUserData(
+    id: MediaId,
+    transform: (MediaUserData) -> MediaUserData,
+): MediaBrowserState {
+    fun List<MediaItem>.replace() = map { item ->
+        if (item.id == id) item.copy(userData = transform(item.userData)) else item
+    }
     fun List<PlaybackHistoryItem>.replaceHistory() = map { item ->
-        if (item.media.id == id) item.copy(media = item.media.copy(userData = userData)) else item
+        if (item.media.id == id) item.copy(media = item.media.copy(userData = transform(item.media.userData))) else item
     }
     return copy(
         items = items.replace(),
         favoriteItems = favoriteItems.replace(),
         searchItems = searchItems.replace(),
-        detail = detail?.let { item -> if (item.id == id) item.copy(userData = userData) else item },
+        detail = detail?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
         selectedSeasonDetail = selectedSeasonDetail?.let { item ->
-            if (item.id == id) item.copy(userData = userData) else item
+            if (item.id == id) item.copy(userData = transform(item.userData)) else item
         },
-        detailPlayTarget = detailPlayTarget?.let { item -> if (item.id == id) item.copy(userData = userData) else item },
+        detailPlayTarget = detailPlayTarget?.let { item ->
+            if (item.id == id) item.copy(userData = transform(item.userData)) else item
+        },
         selectedSeasonPlayTarget = selectedSeasonPlayTarget?.let { item ->
-            if (item.id == id) item.copy(userData = userData) else item
+            if (item.id == id) item.copy(userData = transform(item.userData)) else item
         },
         detailSeasons = detailSeasons.replace(),
         detailEpisodes = detailEpisodes.replace(),
@@ -1696,6 +1761,25 @@ private fun MediaBrowserState.replaceUserData(id: MediaId, userData: MediaUserDa
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.replace() },
         historyItems = historyItems.replaceHistory(),
     )
+}
+
+private fun MediaBrowserState.userDataFor(id: MediaId): MediaUserData? {
+    fun List<MediaItem>.find() = firstOrNull { it.id == id }?.userData
+    return items.find()
+        ?: favoriteItems.find()
+        ?: searchItems.find()
+        ?: detail?.takeIf { it.id == id }?.userData
+        ?: selectedSeasonDetail?.takeIf { it.id == id }?.userData
+        ?: detailPlayTarget?.takeIf { it.id == id }?.userData
+        ?: selectedSeasonPlayTarget?.takeIf { it.id == id }?.userData
+        ?: detailSeasons.find()
+        ?: detailEpisodes.find()
+        ?: homeFeed.recommendations.find()
+        ?: homeFeed.resume.find()
+        ?: homeFeed.nextUp.find()
+        ?: homeFeed.latest.find()
+        ?: homeLatestByCollection.values.asSequence().flatMap { it.asSequence() }.firstOrNull { it.id == id }?.userData
+        ?: historyItems.firstOrNull { it.media.id == id }?.media?.userData
 }
 
 private fun MediaBrowserState.containsMedia(id: MediaId): Boolean =

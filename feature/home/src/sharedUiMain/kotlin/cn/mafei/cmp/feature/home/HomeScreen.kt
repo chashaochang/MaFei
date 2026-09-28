@@ -12,6 +12,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -764,6 +767,9 @@ fun HomeScreen(
                         kind = HomeShelfKind.Resume,
                         layout = layout,
                         leadingInset = sceneControlLeading,
+                        onPlay = onPlay,
+                        onToggleWatched = onToggleWatched,
+                        onToggleFavorite = onToggleFavorite,
                     )
                 }
             }
@@ -778,6 +784,9 @@ fun HomeScreen(
                         kind = HomeShelfKind.NextUp,
                         layout = layout,
                         leadingInset = sceneControlLeading,
+                        onPlay = onPlay,
+                        onToggleWatched = onToggleWatched,
+                        onToggleFavorite = onToggleFavorite,
                     )
                 }
             }
@@ -809,17 +818,27 @@ fun HomeScreen(
 
         if (overview) {
             if (!showFloatingTabs) {
-                // Desktop sidebar layout: "Recently Added" is a horizontal
-                // shelf with a "See More" action, not a scrolling grid.
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Desktop sidebar layout keeps each provider media library as
+                // its own recent-additions shelf. A single merged row loses
+                // the library context and made the More action jump to an
+                // unrelated global route.
+                collections.forEach { collection ->
+                    val collectionItems = homeLatestByCollection[collection.id].orEmpty()
+                    val collectionLoading = collection.id in homeLatestLoading ||
+                        (collection.id !in homeLatestByCollection && collection.id !in homeLatestErrors)
+                    val collectionError = homeLatestErrors[collection.id]
+                    item(
+                        key = "home-latest-shelf:${collection.id.value}",
+                        span = { GridItemSpan(maxLineSpan) },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = sceneControlLeading),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "最近添加",
+                                "最近添加 · ${collection.name}",
                                 Modifier.semantics { heading() },
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 20.sp,
@@ -843,12 +862,7 @@ fun HomeScreen(
                                     )
                                     .mafeiInteractive(
                                         onClick = {
-                                            // This is the home "最近添加" shelf, so
-                                            // "更多" always opens its dedicated
-                                            // secondary list route. It must not
-                                            // inherit a stale phone tab selection
-                                            // and jump into that library instead.
-                                            onOpenLatest()
+                                            onBrowseCollection(collection)
                                         },
                                         radiusDp = 18f,
                                         label = "更多",
@@ -870,19 +884,19 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        if (showFeedPlaceholders) {
+                        if (collectionLoading && collectionItems.isEmpty()) {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(horizontal = sceneControlLeading),
                             ) {
                                 items(HomeLoadingPlaceholderCount) { MediaPlaceholder(Modifier.width(140.dp)) }
                             }
-                        } else if (displayed.isNotEmpty()) {
+                        } else if (collectionItems.isNotEmpty()) {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(horizontal = sceneControlLeading),
                             ) {
-                                items(displayed, key = { it.id.value }) { item ->
+                                items(collectionItems, key = { it.id.value }) { item ->
                                     val text = homeLatestText(item)
                                     MediaCard(
                                         text.title,
@@ -901,15 +915,17 @@ fun HomeScreen(
                                         onPlay = onPlay?.let { play -> { play(item) } },
                                         onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
                                         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
+                                        isWatched = item.userData.isPlayed,
+                                        isFavorite = item.userData.isFavorite,
                                         modifier = Modifier.width(140.dp),
                                     )
                                 }
                             }
                         } else {
-                            val feedError = latestFeedError?.takeIf { !latestFeedLoading }
+                            val feedError = collectionError?.takeIf { !collectionLoading }
                             if (feedError != null) {
                                 HomeLatestFeedError(feedError) {
-                                    selectedFeedCollection?.let(onCollection)
+                                    onCollection(collection)
                                 }
                             } else {
                                 Box(
@@ -918,13 +934,14 @@ fun HomeScreen(
                                     contentAlignment = Alignment.CenterStart,
                                 ) {
                                     Text(
-                                        if (selectedFeedKey == RecentFeedKey) "暂无最近添加内容" else "该媒体库暂无内容",
+                                        "该媒体库暂无最近添加内容",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -958,6 +975,8 @@ fun HomeScreen(
                         onPlay = onPlay?.let { play -> { play(item) } },
                         onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
                         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
+                        isWatched = item.userData.isPlayed,
+                        isFavorite = item.userData.isFavorite,
                     )
                 }
             } else {
@@ -1019,6 +1038,8 @@ fun HomeScreen(
                     onPlay = onPlay?.let { play -> { play(item) } },
                     onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
                     onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
+                    isWatched = item.userData.isPlayed,
+                    isFavorite = item.userData.isFavorite,
                 )
             }
         }
@@ -2357,26 +2378,62 @@ private fun HomeMediaShelf(
     kind: HomeShelfKind,
     layout: MaFeiLayout,
     leadingInset: Dp,
+    onPlay: ((MediaItem) -> Unit)? = null,
+    onToggleWatched: ((MediaItem) -> Unit)? = null,
+    onToggleFavorite: ((MediaItem) -> Unit)? = null,
+    onOpenMore: (() -> Unit)? = null,
 ) {
     val width = if (layout.family == MaFeiLayoutFamily.Phone) 160.dp else 240.dp
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            title,
-            Modifier
-                .padding(horizontal = leadingInset)
-                .semantics { heading() },
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 20.sp,
-            lineHeight = 26.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = leadingInset),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                Modifier.semantics { heading() },
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 20.sp,
+                lineHeight = 26.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            )
+            if (onOpenMore != null) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .10f))
+                        .border(
+                            0.5.dp,
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = .20f),
+                            RoundedCornerShape(18.dp),
+                        )
+                        .mafeiInteractive(onClick = onOpenMore, radiusDp = 18f, label = "更多")
+                        .height(36.dp)
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("更多", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                    MaFeiIcon(MaFeiGlyph.Chevron, Modifier.size(14.dp), MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp),
             contentPadding = PaddingValues(horizontal = leadingInset),
         ) {
             items(items, key = { it.id.value }) { item ->
                 val text = homeShelfText(item, kind)
+                val interactionSource = remember(item.id) { MutableInteractionSource() }
+                val hovered by interactionSource.collectIsHoveredAsState()
+                val focused by interactionSource.collectIsFocusedAsState()
                 Column(
-                    Modifier.width(width).mafeiInteractive({ onItem(item) }, label = "查看${text.title}"),
+                    Modifier.width(width).mafeiInteractive(
+                        onClick = { onItem(item) },
+                        label = "查看${text.title}",
+                        interactionSource = interactionSource,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
@@ -2397,10 +2454,20 @@ private fun HomeMediaShelf(
                                 trackColor = Color.Black.copy(alpha = .36f),
                             )
                         }
+                        if (hovered || focused) {
+                            MediaCardHoverOverlay(
+                                title = text.title,
+                                onPlay = { (onPlay ?: onItem)(item) },
+                                onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                                onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
+                                isWatched = item.userData.isPlayed,
+                                isFavorite = item.userData.isFavorite,
+                            )
+                        }
                     }
                     Text(
                         text.title,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         lineHeight = 19.sp,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
@@ -2421,7 +2488,7 @@ private fun HomeMediaShelf(
     }
 }
 
-private enum class HomeShelfKind { Resume, NextUp }
+private enum class HomeShelfKind { Resume, NextUp, Recent }
 
 private data class HomeCardText(val title: String, val subtitle: String)
 
@@ -2444,6 +2511,7 @@ private fun homeShelfText(item: MediaItem, kind: HomeShelfKind): HomeCardText {
         HomeShelfKind.NextUp -> if (item.mediaType == MediaType.Episode) {
             HomeCardText(item.cardTitle, item.episodeCardLine ?: item.metaLine)
         } else HomeCardText(item.title, item.metaLine)
+        HomeShelfKind.Recent -> homeLatestText(item)
     }
 }
 

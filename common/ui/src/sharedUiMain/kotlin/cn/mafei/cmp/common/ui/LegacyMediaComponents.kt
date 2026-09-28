@@ -119,6 +119,8 @@ fun LegacyVideoCard(
                     onPlay = onPlay ?: onClick,
                     onToggleWatched = onToggleWatched,
                     onToggleFavorite = onToggleFavorite,
+                    isWatched = item.userData.isPlayed,
+                    isFavorite = item.userData.isFavorite,
                 )
             }
         }
@@ -218,6 +220,8 @@ fun LegacyBaseItemCard(
                     onPlay = onPlay ?: onClick,
                     onToggleWatched = onToggleWatched,
                     onToggleFavorite = onToggleFavorite,
+                    isWatched = item.userData.isPlayed,
+                    isFavorite = item.userData.isFavorite,
                 )
             }
         }

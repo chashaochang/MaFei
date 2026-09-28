@@ -1377,7 +1377,7 @@ private fun BrowseContent(
             }
         }
         LaunchedEffect(currentRoute, state.collections, layout.isPhoneNavigation) {
-            if (currentRoute == BrowseLatestRoute && !layout.isPhoneNavigation) {
+            if (currentRoute == BrowseHomeRoute && !layout.isPhoneNavigation) {
                 state.collections.forEach { collection ->
                     launch { browser.loadHomeLatest(collection.id) }
                 }
