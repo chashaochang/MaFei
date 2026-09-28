@@ -402,6 +402,55 @@ class ProviderPlaybackCoordinatorTest {
     }
 
     @Test
+    fun providerDefaultEmbeddedSubtitleIsAppliedNativelyWithoutExplicitSelection() =
+        harness(trackSelection = true) { harness ->
+            harness.adapter.queueReady(
+                streamUrl = "https://stream.test/direct",
+                tracks = listOf(
+                    PlaybackTrack(
+                        1,
+                        PlaybackTrackKind.Audio,
+                        displayTitle = "国语",
+                        selected = true,
+                        renegotiate = false,
+                    ),
+                    PlaybackTrack(
+                        3,
+                        PlaybackTrackKind.Subtitle,
+                        displayTitle = "中文字幕",
+                        selected = true,
+                        renegotiate = false,
+                    ),
+                ),
+            )
+
+            // No explicit audio/subtitle options: these are the provider's
+            // server defaults and must still be applied to the native player.
+            harness.coordinator.play(ProviderKind.Jellyfin, ITEM)
+            val generation = currentGeneration(harness)
+            harness.runtime.emit(
+                RuntimeEvent.Tracks(
+                    generation,
+                    listOf(
+                        PlayerTrack("1", TrackKind.Audio, "国语"),
+                        PlayerTrack("3", TrackKind.Subtitle, "中文字幕"),
+                    ),
+                ),
+            )
+            harness.runtime.emit(RuntimeEvent.Ready(generation, 60_000))
+
+            val selections = awaitNativeSelections(harness, atLeast = 2)
+            assertEquals(
+                listOf("1"),
+                selections.filter { it.kind == TrackKind.Audio }.map { it.id },
+            )
+            assertEquals(
+                listOf("3"),
+                selections.filter { it.kind == TrackKind.Subtitle }.map { it.id },
+            )
+        }
+
+    @Test
     fun preselectedTracksTheProviderNegotiatesAreNotSwitchedNatively() = harness(trackSelection = true) { harness ->
         harness.adapter.queueReady(
             streamUrl = "https://stream.test/hls/master.m3u8",

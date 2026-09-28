@@ -351,11 +351,14 @@ class ProviderPlaybackCoordinator(
     ) {
         cancelPendingNativeTracks()
         val requestedSubtitle = requested.subtitleStreamIndex
+        // The provider's selected flag is authoritative even when the caller
+        // did not pass an explicit track index. This is the server's default
+        // track (often an embedded subtitle); without this initial native
+        // sync, it is only applied after the user opens the menu and selects it
+        // again. Explicit indexes still resolve to the provider-selected
+        // result after negotiation, so a provider may normalize an index.
         val pending = ready.tracks.filter { track ->
-            !track.renegotiate && when (track.kind) {
-                PlaybackTrackKind.Audio -> track.index == requested.audioStreamIndex
-                PlaybackTrackKind.Subtitle -> track.index == requestedSubtitle
-            }
+            !track.renegotiate && track.selected
         }
         // 明确的「关字幕」：内嵌字幕只能由播放器关掉，外挂字幕走 provider 协商。
         val subtitlesOff = requestedSubtitle != null && requestedSubtitle < 0 &&
