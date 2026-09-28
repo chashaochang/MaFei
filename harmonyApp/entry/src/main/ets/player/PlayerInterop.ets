@@ -1,6 +1,8 @@
 import { common } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { audio } from '@kit.AudioKit';
+import { image } from '@kit.ImageKit';
 import { window } from '@kit.ArkUI';
 import { registerComposeInteropBuilder } from '@cpf-kmp-cmp/compose/src/main/ets/compose/ArkUIView';
 import nativeApi from 'libentry.so';
@@ -19,6 +21,7 @@ import {
   PlayerTrack,
   PlayerVideoInfo
 } from 'mfplayer';
+import { VideoFramePreviewHelper } from './VideoFramePreviewHelper';
 
 interface MaFeiPlayerSurfaceArgs {
   commandId: number;
@@ -35,6 +38,7 @@ interface MaFeiPlayerSurfaceArgs {
   contentMode: string;
   /** setBrightness 用 0..1；setVolume 用步数。 */
   level: number;
+  previewRequestId: number;
 }
 
 const PLAYER_LOG_DOMAIN = 0x4D46;
@@ -60,6 +64,10 @@ interface MaFeiPlayerEventState {
   brightness?: number;
   volume?: number;
   maxVolume?: number;
+  previewRequestId?: number;
+  previewData?: string;
+  previewWidthPx?: number;
+  previewHeightPx?: number;
   decodeMode?: string;
   decoder?: string;
   renderer?: string;
@@ -108,6 +116,7 @@ struct MaFeiPlayerSurfaceHost {
 
   private playerWindow: window.Window | undefined = undefined;
   private readonly controller: PlayerController = new PlayerController();
+  private readonly previewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper();
   private appliedCommandId: number = -1;
   private lastPlayerState: PlayerState = PlayerState.IDLE;
   private lastDiagnosticsAt: number = 0;
@@ -141,6 +150,7 @@ struct MaFeiPlayerSurfaceHost {
     context.eventHub.off('onForeground', this.onHostForeground);
     this.controller.removeListener(this.listener);
     this.controller.release();
+    void this.previewHelper.release();
   }
 
   onArgsChanged(): void {
@@ -199,6 +209,9 @@ struct MaFeiPlayerSurfaceHost {
         break;
       case 'deviceState':
         void this.emitDeviceState();
+        break;
+      case 'preview':
+        void this.emitPreview(command);
         break;
       default:
         break;
@@ -279,6 +292,81 @@ struct MaFeiPlayerSurfaceHost {
     nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
   }
 
+  private async emitPreview(command: MaFeiPlayerSurfaceArgs): Promise<void> {
+    const requestId = command.previewRequestId;
+    if (requestId <= 0 || command.url.trim().length === 0) {
+      return;
+    }
+    const pixelMap = await this.previewHelper.fetchFrameByTime(
+      command.url,
+      Math.max(0, command.positionMs),
+      command.headers,
+    );
+    if (pixelMap === undefined) {
+      this.emitPreviewResult(command.handle, requestId);
+      return;
+    }
+    let packer: image.ImagePacker | undefined = undefined;
+    try {
+      const imageInfo = await pixelMap.getImageInfo();
+      packer = image.createImagePacker();
+      const packed = await packer.packing(pixelMap, {
+        format: 'image/jpeg',
+        quality: 82
+      });
+      this.emitPreviewResult(
+        command.handle,
+        requestId,
+        this.encodeBase64(packed),
+        imageInfo.size.width,
+        imageInfo.size.height,
+      );
+    } catch (error) {
+      hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
+        'preview encode failed %{public}s', `${JSON.stringify(error as BusinessError)}`);
+      this.emitPreviewResult(command.handle, requestId);
+    } finally {
+      if (packer !== undefined) {
+        packer.release();
+      }
+      pixelMap.release();
+    }
+  }
+
+  private emitPreviewResult(handle: number, requestId: number, data: string = '',
+    width: number = 0, height: number = 0): void {
+    const payload: MaFeiPlayerEventState = {
+      handle: handle,
+      event: 'preview',
+      positionMs: 0,
+      durationMs: 0,
+      bufferedMs: 0,
+      tracks: [],
+      previewRequestId: requestId,
+      previewData: data,
+      previewWidthPx: width,
+      previewHeightPx: height
+    };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+  }
+
+  private encodeBase64(buffer: ArrayBuffer): string {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const bytes = new Uint8Array(buffer);
+    let result: string = '';
+    for (let index = 0; index < bytes.length; index += 3) {
+      const first = bytes[index];
+      const second = index + 1 < bytes.length ? bytes[index + 1] : 0;
+      const third = index + 2 < bytes.length ? bytes[index + 2] : 0;
+      const combined = (first << 16) | (second << 8) | third;
+      result += alphabet.charAt((combined >> 18) & 63);
+      result += alphabet.charAt((combined >> 12) & 63);
+      result += index + 1 < bytes.length ? alphabet.charAt((combined >> 6) & 63) : '=';
+      result += index + 2 < bytes.length ? alphabet.charAt(combined & 63) : '=';
+    }
+    return result;
+  }
+
   private load(command: MaFeiPlayerSurfaceArgs): void {
     const url = command.url.trim();
     if (url.length === 0) return;
@@ -309,6 +397,11 @@ struct MaFeiPlayerSurfaceHost {
     this.lastPlayerState = PlayerState.IDLE;
     this.lastDiagnosticsAt = 0;
     const accepted = this.controller.load(source, options);
+    if (accepted) {
+      // Warm the extractor while mfplayer prepares the same authenticated
+      // source, so the first drag does not also pay metadata discovery cost.
+      void this.previewHelper.prepare(url, command.headers);
+    }
     hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
       'load submitted accepted=%{public}s headers=%{public}d insecureTls=%{public}s multi=%{public}s',
       `${accepted}`, command.headers.length, `${command.allowInsecureTls}`, `${command.multiConnectionAllowed}`);

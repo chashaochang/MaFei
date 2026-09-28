@@ -6,6 +6,7 @@ import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
+import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
@@ -76,6 +77,7 @@ interface OhosNativePlayerBridge {
     fun pause(handle: Long)
     fun stop(handle: Long)
     fun seek(handle: Long, positionMs: Long)
+    suspend fun previewFrame(handle: Long, positionMs: Long): PlayerSeekPreviewFrame? = null
     fun setSpeed(handle: Long, speed: Float)
     fun selectTrack(handle: Long, kind: TrackKind, id: String?)
 
@@ -97,6 +99,12 @@ class OhosPlayerRuntime(
     override val capabilities: PlayerCapabilities,
     private val bridge: OhosNativePlayerBridge,
 ) : PlayerRuntime {
+
+    override suspend fun previewFrame(positionMs: Long): PlayerSeekPreviewFrame? {
+        val snapshot = state.value
+        if (snapshot.released || snapshot.handle == 0L) return null
+        return bridge.previewFrame(snapshot.handle, positionMs.coerceAtLeast(0L))
+    }
 
     private val sink = AtomicReference<((RuntimeEvent) -> Unit)?>(null)
     private val state = AtomicReference(RuntimeSnapshot())

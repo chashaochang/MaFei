@@ -28,6 +28,7 @@ import cn.mafei.cmp.player.api.PlayerDeviceControls
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
+import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.TrackKind
@@ -37,7 +38,10 @@ import cn.mafei.cmp.player.runtime_ohos.OhosPlayerRuntime
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.toKString
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.experimental.ExperimentalNativeApi
@@ -74,6 +78,8 @@ private data class OhosPlayerCommandState(
     val contentMode: String = "Fit",
     /** 亮度 0..1 / 音量步数，配合 action = setBrightness / setVolume。 */
     val level: Float = 0f,
+    /** Non-zero only for a one-shot native frame preview request. */
+    val previewRequestId: Long = 0L,
 )
 
 @Serializable
@@ -102,6 +108,10 @@ private data class OhosPlayerEventPayload(
     val brightness: Float? = null,
     val volume: Int? = null,
     val maxVolume: Int? = null,
+    val previewRequestId: Long = 0L,
+    val previewData: String? = null,
+    val previewWidthPx: Int = 0,
+    val previewHeightPx: Int = 0,
     val decodeMode: String? = null,
     val decoder: String? = null,
     val renderer: String? = null,
@@ -137,9 +147,11 @@ private object OhosPlayerHostState {
     private var commandState by mutableStateOf(OhosPlayerCommandState())
     private var nextHandle = 1L
     private var nextCommandId = 0L
+    private var nextPreviewRequestId = 0L
     private var activeHandle = 0L
     private var eventSink: ((OhosNativePlayerEvent) -> Unit)? = null
     private var systemBackHandler: (() -> Unit)? = null
+    private val pendingPreviewRequests = mutableMapOf<Long, CompletableDeferred<PlayerSeekPreviewFrame?>>()
 
     val command: OhosPlayerCommandState
         get() = commandState
@@ -226,6 +238,27 @@ private object OhosPlayerHostState {
         publish(handle = handle, action = "seek", positionMs = positionMs.coerceAtLeast(0L))
     }
 
+    suspend fun previewFrame(handle: Long, positionMs: Long): PlayerSeekPreviewFrame? {
+        if (handle == 0L || handle != activeHandle) return null
+        val requestId = ++nextPreviewRequestId
+        val result = CompletableDeferred<PlayerSeekPreviewFrame?>()
+        pendingPreviewRequests[requestId] = result
+        publish(
+            handle = handle,
+            action = "preview",
+            positionMs = positionMs.coerceAtLeast(0L),
+            previewRequestId = requestId,
+        )
+        return try {
+            // A native extractor must never hold the seek gesture indefinitely.
+            withTimeoutOrNull(1_500L) { result.await() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } finally {
+            pendingPreviewRequests.remove(requestId)
+        }
+    }
+
     fun speed(handle: Long, speed: Float) {
         if (handle != activeHandle) return
         publish(handle = handle, action = "speed", speed = speed)
@@ -281,6 +314,8 @@ private object OhosPlayerHostState {
         if (handle != activeHandle) return
         publishAction(handle, "release")
         activeHandle = 0L
+        pendingPreviewRequests.values.forEach { request -> request.complete(null) }
+        pendingPreviewRequests.clear()
     }
 
     fun handleSystemBack(): Boolean {
@@ -300,6 +335,25 @@ private object OhosPlayerHostState {
             }
             deviceVolume = payload.volume
             deviceMaxVolume = payload.maxVolume?.coerceAtLeast(0) ?: 0
+            return true
+        }
+        if (payload.event == "preview") {
+            val request = pendingPreviewRequests.remove(payload.previewRequestId) ?: return false
+            val frame = payload.previewData
+                ?.let(::decodeBase64)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { bytes ->
+                    runCatching {
+                        PlayerSeekPreviewFrame(
+                            encodedTile = bytes,
+                            frameWidthPx = payload.previewWidthPx,
+                            frameHeightPx = payload.previewHeightPx,
+                            tileColumn = 0,
+                            tileRow = 0,
+                        )
+                    }.getOrNull()
+                }
+            request.complete(frame)
             return true
         }
         if (payload.handle != activeHandle) return false
@@ -389,6 +443,7 @@ private object OhosPlayerHostState {
         trackId: Int = commandState.trackId,
         contentMode: String = commandState.contentMode,
         level: Float = commandState.level,
+        previewRequestId: Long = commandState.previewRequestId,
     ) {
         nextCommandId += 1L
         logOhosPlayer("host publish command=$nextCommandId action=$action handle=$handle")
@@ -406,6 +461,7 @@ private object OhosPlayerHostState {
             trackId = trackId,
             contentMode = contentMode,
             level = level,
+            previewRequestId = previewRequestId,
         )
         commandState = next
     }
@@ -452,6 +508,8 @@ private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
     override fun pause(handle: Long) = OhosPlayerHostState.pause(handle)
     override fun stop(handle: Long) = OhosPlayerHostState.stop(handle)
     override fun seek(handle: Long, positionMs: Long) = OhosPlayerHostState.seek(handle, positionMs)
+    override suspend fun previewFrame(handle: Long, positionMs: Long): PlayerSeekPreviewFrame? =
+        OhosPlayerHostState.previewFrame(handle, positionMs)
     override fun setSpeed(handle: Long, speed: Float) = OhosPlayerHostState.speed(handle, speed)
     override fun selectTrack(handle: Long, kind: TrackKind, id: String?) =
         OhosPlayerHostState.selectTrack(handle, kind, id)
@@ -546,7 +604,31 @@ private fun OhosPlayerCommandState.toJsParameter(): JsObject {
         "trackId"(trackId)
         "contentMode"(contentMode)
         "level"(level)
+        "previewRequestId"(previewRequestId.nApiValue())
     }
+}
+
+private fun decodeBase64(value: String): ByteArray? {
+    val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    val table = IntArray(256) { -1 }
+    alphabet.forEachIndexed { index, char -> table[char.code] = index }
+    val clean = value.filterNot { it == '=' || it.isWhitespace() }
+    if (clean.isEmpty() || clean.length % 4 == 1) return null
+    val output = ByteArray((clean.length * 6) / 8)
+    var accumulator = 0
+    var bits = 0
+    var offset = 0
+    for (char in clean) {
+        val digit = char.code.takeIf { it < table.size }?.let { table[it] } ?: return null
+        if (digit < 0) return null
+        accumulator = (accumulator shl 6) or digit
+        bits += 6
+        if (bits >= 8) {
+            bits -= 8
+            output[offset++] = (accumulator shr bits).toByte()
+        }
+    }
+    return output.copyOf(offset)
 }
 
 /**

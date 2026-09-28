@@ -11,6 +11,7 @@ import cn.mafei.cmp.data.repositories.playback.resolveNativeTrackId
 import cn.mafei.cmp.player.api.PlaybackGeneration
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerRuntime
+import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.TrackKind
 import cn.mafei.cmp.player.facade.DefaultPlayerController
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,7 @@ class SessionPlaybackRuntime private constructor(
     val controller: PlayerController,
     private val coordinator: ProviderPlaybackCoordinator,
     private val provider: ProviderKind,
+    private val runtime: PlayerRuntime,
 ) {
     val reportFailures get() = coordinator.reportFailures
 
@@ -104,6 +106,10 @@ class SessionPlaybackRuntime private constructor(
 
     suspend fun stop() = coordinator.stop()
 
+    /** Native fallback for providers without a server-side preview source. */
+    suspend fun previewFrame(positionMs: Long): PlayerSeekPreviewFrame? =
+        runtime.previewFrame(positionMs)
+
     /** Releases player and coordinator. Idempotent; no report afterwards. */
     suspend fun release() = coordinator.release()
 
@@ -128,7 +134,7 @@ class SessionPlaybackRuntime private constructor(
                 reportIntervalMs = reportIntervalMs,
             )
             coordinator.attachController(controller)
-            return SessionPlaybackRuntime(controller, coordinator, provider)
+            return SessionPlaybackRuntime(controller, coordinator, provider, runtime)
         }
     }
 }

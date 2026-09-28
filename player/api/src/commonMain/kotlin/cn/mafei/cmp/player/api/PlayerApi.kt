@@ -219,6 +219,13 @@ interface PlayerRuntime {
     val capabilities: PlayerCapabilities
     fun bind(eventSink: (RuntimeEvent) -> Unit)
     fun execute(command: RuntimeCommand)
+
+    /**
+     * Optional native frame extraction for direct streams. Providers that have
+     * a server-side preview source should be preferred; this is the platform
+     * fallback used by OHOS for authenticated HTTP video resources.
+     */
+    suspend fun previewFrame(positionMs: Long): PlayerSeekPreviewFrame? = null
 }
 
 enum class PlayerReportKind { Start, Progress, Stop }

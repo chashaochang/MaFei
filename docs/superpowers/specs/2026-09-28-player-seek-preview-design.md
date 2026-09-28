@@ -7,12 +7,12 @@
 ## 范围与边界
 
 - Jellyfin：优先使用服务器生成的 Trickplay tile。播放器拖动时按媒体源和时间计算 tile sheet 与单帧位置。
-- Feiniu/其他 Provider：本批只保留无预览降级，不把播放 URL 当作可取帧地址。
-- OHOS 原生直连取帧：保留为后续平台桥接任务；本批不把 ArkTS PixelMap 强行穿过 CMP 公共契约。
+- Feiniu/其他 Provider：不从 Provider 播放 URL 自己拼取帧地址；在 OHOS 上由播放器宿主使用已经鉴权的直连资源做原生取帧，其他平台继续安全降级。
+- OHOS 原生直连取帧：通过专属 ArkUI 宿主桥回传压缩帧字节，PixelMap 不进入 CMP 公共契约。
 
 ## 数据流
 
-`MediaProviderAdapter.previewFrame(item, positionMs, mediaSourceId)` 返回经过 Provider 鉴权的 JPEG tile 与裁剪元数据；`MediaRepository` 仅转发当前会话调用。Compose App 将它映射为播放器 API 的无 Provider 类型预览帧，播放器 UI 在拖动时节流、取消过期请求并绘制裁剪区域。
+`MediaProviderAdapter.previewFrame(item, positionMs, mediaSourceId)` 返回经过 Provider 鉴权的 JPEG tile 与裁剪元数据；没有 Provider 预览时，OHOS `PlayerRuntime` 从当前已加载的直连资源调用 `AVMetadataExtractor`，回传一张 JPEG 帧。两条路径最终都映射为播放器 API 的无 Provider 类型预览帧，播放器 UI 在拖动时节流、取消过期请求并绘制裁剪区域。
 
 ## 失败与性能
 

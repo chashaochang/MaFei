@@ -2207,7 +2207,7 @@ private fun BrowseContent(
                             tileColumn = frame.tileColumn,
                             tileRow = frame.tileRow,
                         )
-                    }
+                    } ?: playback.previewFrame(positionMs)
                 },
                 // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
                 // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。

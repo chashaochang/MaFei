@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Restore real Jellyfin Trickplay frame previews while dragging the shared CMP seek bar, with a safe no-preview fallback.
+**Goal:** Restore real frame previews while dragging the shared CMP seek bar: Jellyfin uses Trickplay tiles, while OHOS can extract a frame from an already authenticated direct resource, with a safe no-preview fallback elsewhere.
 
-**Architecture:** Provider adapters own metadata lookup, authentication, tile URL construction and sheet caching. The repository forwards the account-scoped call. App maps provider bytes to a player API preview value; player UI debounces requests and crops the decoded sheet above the existing seek feedback.
+**Architecture:** Provider adapters own metadata lookup, authentication, tile URL construction and sheet caching. The repository forwards the account-scoped call. If the adapter returns null, the OHOS runtime asks its ArkUI host to extract a frame from the active playable resource. App maps either result to a player API preview value; player UI debounces requests and crops the decoded image above the existing seek feedback.
 
 **Tech Stack:** Kotlin Multiplatform, kotlinx.serialization, Compose Multiplatform, existing `HttpTransport`, Jellyfin 10.10 Trickplay endpoint.
 
