@@ -220,6 +220,7 @@ private fun BoundNowPlayingScreen(
         PlayerController,
         onBack: () -> Unit,
         onExitFullscreen: () -> Unit,
+        fullscreen: Boolean,
         Modifier,
     ) -> Unit,
     preparing: Boolean,
@@ -310,6 +311,7 @@ private fun BoundNowPlayingScreen(
                 controller,
                 onBack,
                 { onFullscreenChanged(false) },
+                fullscreen,
                 surfaceModifier,
             )
         },
@@ -351,12 +353,15 @@ fun App(
         PlayerController,
         onBack: () -> Unit,
         onExitFullscreen: () -> Unit,
+        fullscreen: Boolean,
         Modifier,
-    ) -> Unit = { _, _, _, modifier ->
+    ) -> Unit = { _, _, _, _, modifier ->
         Box(modifier.background(Color.Black))
     },
     onPlayerScreenChanged: (Boolean) -> Unit = {},
     onPlayerFullscreenChanged: (Boolean) -> Unit = {},
+    windowControls: @Composable RowScope.() -> Unit = {},
+    windowDragArea: @Composable (@Composable () -> Unit) -> Unit = { content -> content() },
 ) {
     val sessionState by runtime.sessions.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -432,6 +437,8 @@ fun App(
                                 error = error,
                                 onBusyChange = { busy = it },
                                 onErrorChange = { error = it },
+                                windowControls = windowControls,
+                                windowDragArea = windowDragArea,
                             )
 
                             ApplicationSessionStatus.Ready -> {
@@ -456,6 +463,8 @@ fun App(
                                             playerSurface = playerSurface,
                                             onPlayerScreenChanged = onPlayerScreenChanged,
                                             onPlayerFullscreenChanged = onPlayerFullscreenChanged,
+                                            windowControls = windowControls,
+                                            windowDragArea = windowDragArea,
                                             onLogout = {
                                                 if (!busy) {
                                                     busy = true
@@ -684,6 +693,8 @@ private fun SignedOutFlow(
     error: String?,
     onBusyChange: (Boolean) -> Unit,
     onErrorChange: (String?) -> Unit,
+    windowControls: @Composable RowScope.() -> Unit,
+    windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val backStack = remember { mutableStateListOf<SignedOutRoute>(ConnectRoute) }
@@ -994,6 +1005,23 @@ private fun SignedOutFlow(
                 },
             )
         }
+        // An undecorated Mac window also needs a close/minimize/maximize hit
+        // area before an account is connected. The signed-in shell places the
+        // same controls in its sidebar header; the signed-out flow keeps only
+        // the compact chrome row so the login content remains unchanged.
+        Box(
+            Modifier.align(Alignment.TopStart)
+                .padding(top = currentMaFeiSafeArea().top + 10.dp, start = 12.dp),
+        ) {
+            windowDragArea {
+                Row(
+                    Modifier.height(44.dp).width(74.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    windowControls()
+                }
+            }
+        }
         }
     }
 }
@@ -1010,10 +1038,13 @@ private fun BrowseContent(
         PlayerController,
         onBack: () -> Unit,
         onExitFullscreen: () -> Unit,
+        fullscreen: Boolean,
         Modifier,
     ) -> Unit,
     onPlayerScreenChanged: (Boolean) -> Unit,
     onPlayerFullscreenChanged: (Boolean) -> Unit,
+    windowControls: @Composable RowScope.() -> Unit,
+    windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
     onLogout: () -> Unit,
 ) {
     // Navigation 3 keeps an existing NavEntry composed while its parent route
@@ -2222,6 +2253,8 @@ private fun BrowseContent(
                 }
             },
             accountActions = {},
+            windowControls = windowControls,
+            windowDragArea = windowDragArea,
             scene = {
                 fun openDetailId(
                     id: MediaId,

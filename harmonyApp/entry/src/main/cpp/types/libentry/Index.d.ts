@@ -14,6 +14,12 @@ export const UpdateOhosWindowInsets: (
   bottom: number
 ) => void
 
+export const UpdateOhosWindowMetrics: (
+  width: number,
+  height: number,
+  desktopHost: boolean
+) => void
+
 export const UpdateOhosPlayerState: (payload: string) => boolean
 
 export const IsOhosPlayerScreenVisible: () => boolean

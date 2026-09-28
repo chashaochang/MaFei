@@ -2,6 +2,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { KeyboardAvoidMode, window } from '@kit.ArkUI';
 import { display } from '@kit.ArkUI';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import nativeApi from 'libentry.so';
 
 const DOMAIN = 0x4D46;
@@ -11,6 +12,7 @@ export default class EntryAbility extends UIAbility {
   private orientationPoller?: number;
   private requestedOrientation?: window.Orientation;
   private systemBarsHidden: boolean = false;
+  private playerDecorHidden: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -30,15 +32,37 @@ export default class EntryAbility extends UIAbility {
     return Math.min(widthVp, heightVp) < 600;
   }
 
+  /**
+   * A freeform tablet window has desktop-like window chrome, but it must not
+   * be classified as the 2-in-1 desktop shell. It does, however, use the
+   * same player fullscreen behavior as a real HarmonyOS PC: the fullscreen
+   * action hides the system bars instead of trying to rotate the host window.
+   */
+  private isFreeformWindow(windowClass: window.Window): boolean {
+    try {
+      return windowClass.isInFreeWindowMode();
+    } catch (_) {
+      // Older window managers do not expose freeform mode.
+      return false;
+    }
+  }
+
+  private isWindowedPlayerHost(windowClass: window.Window): boolean {
+    if (deviceInfo.deviceType === '2in1') return true;
+    return this.isFreeformWindow(windowClass);
+  }
+
   private applyOrientationPolicy(windowClass: window.Window): void {
     const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
-    // 手机：只有全屏才是横屏。旧版 PlayerFullscreenHelper 只在全屏时锁横屏，
-    // 退出全屏时 setMainWindowPortrait —— 窗口态必须锁竖屏，否则横着拿的手机上
-    // 「退出全屏」看不出任何变化（跟随传感器会一直留在横屏）。
-    const orientation = this.isCompactDisplay(windowClass) ?
-      (playerVisible && nativeApi.IsOhosPlayerFullscreenRequested() ?
-        window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.PORTRAIT) :
-      window.Orientation.UNSPECIFIED;
+    const playerFullscreen = playerVisible && nativeApi.IsOhosPlayerFullscreenRequested();
+    // Freeform tablet/2-in-1 windows keep their window orientation and use
+    // window-level fullscreen. Phones and ordinary tablets use the player
+    // button as an orientation toggle; the rest of the app keeps its natural
+    // orientation on large screens.
+    const orientation = this.isWindowedPlayerHost(windowClass) ?
+      window.Orientation.UNSPECIFIED : this.isCompactDisplay(windowClass) ?
+      (playerFullscreen ? window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.PORTRAIT) :
+      (playerFullscreen ? window.Orientation.AUTO_ROTATION_LANDSCAPE : window.Orientation.UNSPECIFIED);
     if (orientation === this.requestedOrientation) return;
     this.requestedOrientation = orientation;
     windowClass.setPreferredOrientation(orientation).catch((error: Object) => {
@@ -48,12 +72,27 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 全屏要真的收掉系统栏。旧版 `PlayerPage.enterFullscreen()` 就是
-   * `setWindowSystemBarEnable([])`，退出时 `restoreSystemBars()` —— 平板上全屏不旋转，
-   * 系统栏的收放才是「全屏」唯一可见的形态变化。
+   * Only freeform/2-in-1 hosts use window-level fullscreen. Phones and normal
+   * tablets keep their bars and let the player button change orientation.
    */
   private applySystemBarPolicy(windowClass: window.Window): void {
-    const fullscreen = nativeApi.IsOhosPlayerScreenVisible() && nativeApi.IsOhosPlayerFullscreenRequested();
+    const freeform = this.isFreeformWindow(windowClass);
+    const fullscreen = this.isWindowedPlayerHost(windowClass) &&
+      nativeApi.IsOhosPlayerScreenVisible() && nativeApi.IsOhosPlayerFullscreenRequested();
+    // A freeform tablet keeps its native titlebar in normal playback, but a
+    // player fullscreen request should consume that chrome as well as the
+    // status/navigation bars. The 2-in-1 host already hides its decor at
+    // startup because its controls live in the shared desktop shell.
+    const hideFreeformDecor = freeform && deviceInfo.deviceType !== '2in1' && fullscreen;
+    if (hideFreeformDecor !== this.playerDecorHidden) {
+      try {
+        windowClass.setWindowDecorVisible(!hideFreeformDecor);
+        this.playerDecorHidden = hideFreeformDecor;
+      } catch (error) {
+        hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to configure player window decor: %{public}s',
+          JSON.stringify(error));
+      }
+    }
     if (fullscreen === this.systemBarsHidden) {
       return;
     }
@@ -107,6 +146,14 @@ export default class EntryAbility extends UIAbility {
       const navigation = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       const cutout = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
       const width = properties.windowRect.width;
+      // Freeform tablet windows also have a native title bar. Only the
+      // HarmonyOS PC/2-in-1 device class uses the custom desktop shell.
+      const desktopHost = deviceInfo.deviceType === '2in1';
+      nativeApi.UpdateOhosWindowMetrics(
+        this.pxToVp(windowClass, width),
+        this.pxToVp(windowClass, properties.windowRect.height),
+        desktopHost
+      );
       const leftPx = Math.max(
         0,
         system.leftRect.left + system.leftRect.width,
@@ -155,6 +202,25 @@ export default class EntryAbility extends UIAbility {
       }
       try {
         const loadedWindow = mainWindow ?? windowStage.getMainWindowSync();
+        try {
+          // In freeform HarmonyOS PC/tablet windows the system titlebar is
+          // only chrome around the CMP canvas. Hide that strip while keeping
+          // the system close/minimize/maximize buttons on the right; the
+          // shared Compose shell owns the left-side product navigation. This
+          // keeps Harmony aligned with the custom Mac chrome without
+          // reimplementing system window actions in ArkTS.
+          if (deviceInfo.deviceType === '2in1') {
+            loadedWindow.setWindowDecorVisible(false);
+            loadedWindow.setWindowDecorHeight(52);
+            loadedWindow.setWindowTitleButtonVisible(true, true, true);
+            loadedWindow.setWindowTitleMoveEnabled(true);
+          }
+        } catch (chromeError) {
+          // Phones and older tablet window managers do not expose freeform
+          // titlebar controls. Their normal edge-to-edge path is unchanged.
+          hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to configure window chrome: %{public}s',
+            JSON.stringify(chromeError));
+        }
         // Keep the full-screen Compose canvas stable while the IME animates.
         // The connection screen owns focused-field avoidance inside its
         // scrollable foreground; resizing the host also re-crops the full-screen
@@ -213,6 +279,7 @@ export default class EntryAbility extends UIAbility {
       this.orientationPoller = undefined;
     }
     this.requestedOrientation = undefined;
+    this.playerDecorHidden = false;
     const mainWindow = this.mainWindow;
     this.mainWindow = undefined;
     if (!mainWindow) return;

@@ -207,6 +207,10 @@ fun MaFeiAdaptiveShell(
     /** 侧栏底部账号卡片显示的用户名（当前登录账号的 display name）。 */
     accountName: String? = null,
     accountActions: @Composable () -> Unit,
+    /** Optional desktop window controls rendered in the sidebar's chrome row. */
+    windowControls: @Composable RowScope.() -> Unit = {},
+    /** Host-provided drag wrapper for a custom, undecorated desktop titlebar. */
+    windowDragArea: @Composable (@Composable () -> Unit) -> Unit = { content -> content() },
     scene: @Composable () -> Unit,
     overlay: @Composable (GlassBackdrop) -> Unit,
     /**
@@ -379,20 +383,21 @@ fun MaFeiAdaptiveShell(
         // sampled every frame without recursively recording the glass itself.
         Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
             background()
-            Box(
-                Modifier.fillMaxSize().padding(
-                    start = when {
-                        phone -> 0.dp
-                        leadingEdge -> synchronizedContentLeadingInset + safeArea.start
-                        else -> 0.dp
-                    },
-                    end = when {
-                        phone -> 0.dp
-                        !leadingEdge -> synchronizedContentTrailingInset + safeArea.end
-                        else -> 0.dp
-                    },
-                ),
-            ) {
+                Box(
+                    Modifier.fillMaxSize().padding(
+                        start = when {
+                            phone -> 0.dp
+                            leadingEdge -> synchronizedContentLeadingInset + safeArea.start
+                            else -> 0.dp
+                        },
+                        end = when {
+                            phone -> 0.dp
+                            !leadingEdge -> synchronizedContentTrailingInset + safeArea.end
+                            else -> 0.dp
+                        },
+                        top = if (desktop) MaFeiNavigationControlSizeDp else 0.dp,
+                    ),
+                ) {
                 // Persistent navigation chrome owns its physical avoid
                 // area. Route content must not consume that same inset again.
                 // The route owns content layout, but it must not compose controls
@@ -411,7 +416,7 @@ fun MaFeiAdaptiveShell(
                         safeArea.copy(end = 0.dp)
                     }
                 }
-                CompositionLocalProvider(LocalMaFeiSafeArea provides routeSafeArea) {
+        CompositionLocalProvider(LocalMaFeiSafeArea provides routeSafeArea) {
                     CompositionLocalProvider(LocalMaFeiNavigationChrome provides navigationChrome) {
                         scene()
                     }
@@ -419,29 +424,53 @@ fun MaFeiAdaptiveShell(
             }
         }
 
-        // 顶部导航区的毛玻璃：内容滚过状态栏之后才浮现（`opacity = 已滚动进度`）。
-        // 画在捕获层之后、导航之前，所以它模糊的是**真实的滚动内容**（海报、标题），
-        // 而不是往上盖一块灰色。高度取"状态栏 + 顶部导航栏"，Tab 形态下正好覆盖 Tab 条
-        // 身后的整条区域，让内容从 Tab 条下面滚过去。
+        // The undecorated Mac window has no native title bar. Reserve the same
+        // 44dp strip used by the sidebar header on the content side as a real
+        // drag surface. Keeping it outside the scene means a pointer on the
+        // hero artwork still clicks the artwork instead of being interpreted as
+        // a window move; the artwork itself starts immediately below the strip.
+        if (desktop) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = synchronizedContentLeadingInset + safeArea.start)
+                    .fillMaxWidth()
+                    .height(MaFeiNavigationControlSizeDp),
+            ) {
+                windowDragArea {
+                    Spacer(Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // 状态栏的渐进模糊：内容滚动后只处理真实的物理状态栏安全区。
+        // 顶部 Tab / ActionBar 是独立的玻璃消费者，不能再在它下面叠一层同色渐变，
+        // 否则平板滚动时会出现一条灰色阴影，并把状态栏的层级误读成顶部导航栏。
         //
         // 横向只铺在**内容区**：持久侧栏占据的那一栏没有滚动内容，给它也铺一层会让顶部
         // 看起来整条都在模糊。左右缩进必须与上面内容 Box 的那份完全一致。
-        TopChromeProgressiveBlur(
-            progress = topChromeScrolledProgress,
-            backdrop = backdrop,
-            height = safeArea.top + if (topTabsVisible) MaFeiTopChromeHeightDp else 16.dp,
-            contentStartInset = if (leadingEdge) {
-                synchronizedContentLeadingInset + safeArea.start
-            } else {
-                0.dp
-            },
-            contentEndInset = if (leadingEdge) {
-                0.dp
-            } else {
-                synchronizedContentTrailingInset + safeArea.end
-            },
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
+        // This fade belongs to the physical system-status-bar avoid area.
+        // Undecorated Mac windows and Harmony freeform/PC windows report no
+        // top inset; drawing the old 16dp fallback there produced a stray dark
+        // band even though no status bar existed.
+        if (safeArea.top > 0.dp) {
+            TopChromeProgressiveBlur(
+                progress = topChromeScrolledProgress,
+                backdrop = backdrop,
+                topInset = safeArea.top,
+                contentStartInset = if (leadingEdge) {
+                    synchronizedContentLeadingInset + safeArea.start
+                } else {
+                    0.dp
+                },
+                contentEndInset = if (leadingEdge) {
+                    0.dp
+                } else {
+                    synchronizedContentTrailingInset + safeArea.end
+                },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
 
         overlay(backdrop)
 
@@ -476,6 +505,9 @@ fun MaFeiAdaptiveShell(
                 showCloseButton = persistentNavigationExpanded && !desktop,
                 onClose = { sidebarExpanded = false },
                 onExpand = { sidebarExpanded = true },
+                windowControls = windowControls,
+                windowDragArea = windowDragArea,
+                desktop = desktop,
                 modifier = Modifier
                     .align(if (leadingEdge) Alignment.TopStart else Alignment.TopEnd)
                     // 面板本身贴满窗口的上下边（安全区不再作为外边距，改成面板**内部**的
@@ -593,6 +625,9 @@ fun MaFeiAdaptiveShell(
                         showCloseButton = false,
                         onClose = {},
                         onExpand = {},
+                        windowControls = {},
+                        windowDragArea = { content -> content() },
+                        desktop = false,
                         modifier = Modifier
                             .testTag("drawerSidebarPanel")
                             .align(Alignment.TopStart)
@@ -650,7 +685,7 @@ fun MaFeiAdaptiveShell(
 private fun TopChromeProgressiveBlur(
     progress: () -> Float,
     backdrop: GlassBackdrop,
-    height: Dp,
+    topInset: Dp,
     contentStartInset: Dp,
     contentEndInset: Dp,
     modifier: Modifier = Modifier,
@@ -661,8 +696,8 @@ private fun TopChromeProgressiveBlur(
     Box(
         modifier
             .fillMaxWidth()
+            .height(topInset)
             .padding(start = contentStartInset, end = contentEndInset)
-            .height(height)
             .mafeiProgressiveBlur(
                 backdrop = backdrop,
                 tint = tint,
@@ -692,6 +727,9 @@ private fun SidebarPanel(
     showCloseButton: Boolean,
     onClose: () -> Unit,
     onExpand: () -> Unit,
+    windowControls: @Composable RowScope.() -> Unit,
+    windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
+    desktop: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // 媒体库列表的展开/收起由侧边栏自己持有，不上升为外壳状态。
@@ -738,7 +776,7 @@ private fun SidebarPanel(
                 // Match the 44dp control's 10dp inset in MaFeiActionBar. The
                 // sidebar header is the same navigation row, not a separate
                 // 40dp toolbar with a smaller hit target.
-                top = windowSafeArea.top + MaFeiActionBarVerticalInsetDp,
+                top = windowSafeArea.top + if (desktop) 2.dp else MaFeiActionBarVerticalInsetDp,
                 bottom = (if (consumeBottomSafeArea) windowSafeArea.bottom else 0.dp) + 8.dp,
             ),
         ) {
@@ -842,27 +880,37 @@ private fun SidebarPanel(
                     }
                 } else {
                     Row(
-                        Modifier.fillMaxWidth().height(MaFeiNavigationControlSizeDp)
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Modifier.fillMaxWidth()
+                            .height(if (desktop) 36.dp else MaFeiNavigationControlSizeDp)
+                            .padding(horizontal = if (desktop) 10.dp else 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (desktop) 6.dp else 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // Window controls must remain outside the draggable surface.
+                        // WindowDraggableArea consumes the pointer stream by design;
+                        // wrapping this whole row made the Mac traffic lights look
+                        // clickable while swallowing their hover/click events.
+                        windowControls()
                         Image(
                             painterResource(Res.drawable.app_icon),
                             contentDescription = null,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(if (desktop) 24.dp else 32.dp),
                             contentScale = ContentScale.Fit,
                         )
                         Text(
                             "马飞",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Normal,
+                            fontSize = if (desktop) 14.sp else 16.sp,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.width(if (desktop) 4.dp else 8.dp))
+                        // Only the empty remainder is draggable. The logo, title,
+                        // close button and traffic lights keep their own input.
+                        windowDragArea {
+                            Spacer(Modifier.weight(1f).fillMaxHeight())
+                        }
                         if (showCloseButton) {
                             MaFeiActionBarButton(
                                 onClick = onClose,

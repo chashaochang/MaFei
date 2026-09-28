@@ -85,6 +85,22 @@ fun UpdateOhosWindowInsets(left: Double, top: Double, right: Double, bottom: Dou
     )
 }
 
+/**
+ * Publishes the current OHOS host class and width. A tablet freeform window
+ * can be wide and can have a native title bar, so it must stay on the tablet
+ * shell; only a real HarmonyOS PC/2-in-1 host gets the desktop shell.
+ */
+@OptIn(ExperimentalNativeApi::class)
+@CName("UpdateOhosWindowMetrics")
+fun UpdateOhosWindowMetrics(widthDp: Double, _heightDp: Double, desktopHost: Boolean) {
+    val width = widthDp.takeIf { it.isFinite() }?.coerceAtLeast(0.0)?.toFloat() ?: 0f
+    ohosWindowFeatures.value = ohosWindowFeatures.value.copy(
+        // The width guard keeps narrow 2-in-1 windows in the tablet layout;
+        // the host guard keeps both full-screen and freeform tablets out of PC.
+        desktopWindow = desktopHost && width >= 1000f,
+    )
+}
+
 @OptIn(ExperimentalNativeApi::class, ExperimentalForeignApi::class)
 @CName("MainArkUIViewController")
 fun MainArkUIViewController(
@@ -193,11 +209,12 @@ fun MainArkUIViewController(
         ) {
             App(
                 runtime = runtime,
-                playerSurface = { controller, onBack, onExitFullscreen, modifier ->
+                playerSurface = { controller, onBack, onExitFullscreen, fullscreen, modifier ->
                     OhosPlayerSurface(
                         controller = controller,
                         onBack = onBack,
                         onExitFullscreen = onExitFullscreen,
+                        fullscreen = fullscreen,
                         modifier = modifier,
                     )
                 },

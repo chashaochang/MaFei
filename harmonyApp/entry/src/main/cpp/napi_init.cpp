@@ -93,6 +93,25 @@ static napi_value UpdateWindowInsets(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value UpdateWindowMetrics(napi_env env, napi_callback_info info) {
+    size_t count = 3;
+    napi_value arguments[3];
+    double width = 0.0;
+    double height = 0.0;
+    bool desktopHost = false;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 3 ||
+        napi_get_value_double(env, arguments[0], &width) != napi_ok ||
+        napi_get_value_double(env, arguments[1], &height) != napi_ok ||
+        napi_get_value_bool(env, arguments[2], &desktopHost) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "Two logical window dimensions and desktop host state are required");
+        return nullptr;
+    }
+    UpdateOhosWindowMetrics(width, height, desktopHost);
+    napi_value result = nullptr;
+    napi_get_undefined(env, &result);
+    return result;
+}
+
 static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) {
     size_t count = 1;
     napi_value arguments[1];
@@ -193,6 +212,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "UpdateOhosWindowInsets",
             nullptr,
             UpdateWindowInsets,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "UpdateOhosWindowMetrics",
+            nullptr,
+            UpdateWindowMetrics,
             nullptr,
             nullptr,
             nullptr,

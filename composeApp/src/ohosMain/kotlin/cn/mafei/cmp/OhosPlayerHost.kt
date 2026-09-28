@@ -483,6 +483,7 @@ fun OhosPlayerSurface(
     controller: PlayerController,
     onBack: () -> Unit,
     onExitFullscreen: () -> Unit,
+    fullscreen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val command = OhosPlayerHostState.command
@@ -502,7 +503,10 @@ fun OhosPlayerSurface(
     }
 
     BoxWithConstraints(modifier) {
-        val fullscreen = maxWidth > maxHeight
+        // A landscape window is not necessarily fullscreen (notably on a
+        // tablet in freeform mode). The shared player owns the explicit
+        // fullscreen state, so back must use that state instead of guessing
+        // from the current bounds.
         val systemBackHandler = remember(fullscreen) {
             {
                 if (fullscreen) latestOnExitFullscreen() else latestOnBack()

@@ -76,17 +76,21 @@ final class OrientationViewController: UIViewController {
     func setPlayerFullscreenRequested(_ fullscreen: Bool) {
         guard playerFullscreenRequested != fullscreen else { return }
         playerFullscreenRequested = fullscreen
-        guard fullscreen,
-              playerScreenVisible,
+        guard playerScreenVisible,
               UIDevice.current.userInterfaceIdiom == .phone,
               let windowScene = view.window?.windowScene else { return }
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
             windowScene.requestGeometryUpdate(
-                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
+                UIWindowScene.GeometryPreferences.iOS(
+                    interfaceOrientations: fullscreen ? .landscape : .portrait
+                )
             )
         } else {
-            UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
+            UIDevice.current.setValue(
+                (fullscreen ? UIInterfaceOrientation.landscapeRight : .portrait).rawValue,
+                forKey: "orientation"
+            )
             UIViewController.attemptRotationToDeviceOrientation()
         }
     }

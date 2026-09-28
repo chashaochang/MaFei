@@ -28,6 +28,10 @@
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
         "orientation": "auto_rotation_unspecified",
+        // Freeform windows use the desktop shell. Keep the window above the
+        // shared large-screen minimum so the sidebar and content pane never
+        // collapse into an unusable overlap.
+        "minWindowWidth": 1000,
         "supportWindowMode": [
           "floating",
           "split",

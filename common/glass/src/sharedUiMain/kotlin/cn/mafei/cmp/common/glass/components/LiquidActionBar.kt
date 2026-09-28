@@ -67,7 +67,11 @@ fun LiquidActionBar(
 ) {
     val isLightTheme = MaterialTheme.colorScheme.background.luminance() >= .5f
     val glassIntensity = LocalGlassIntensity.current
-    val tintColor = if (isLightTheme) Color.White else Color(0xFF202124)
+    // The material spans the safe area and the action row as one continuous
+    // gradient. The backdrop is still sampled underneath, so the status-bar
+    // content remains visible through the material; the tint follows the page
+    // theme instead of introducing a separate gray strip.
+    val tintColor = if (isLightTheme) Color.White else MaterialTheme.colorScheme.background
     val progressiveBackdrop = rememberLayerBackdrop()
     val combinedBackdrop = rememberCombinedBackdrop(backdrop.layer, progressiveBackdrop)
     val buttonBackdrop = remember(combinedBackdrop) { GlassBackdrop(combinedBackdrop, null) }

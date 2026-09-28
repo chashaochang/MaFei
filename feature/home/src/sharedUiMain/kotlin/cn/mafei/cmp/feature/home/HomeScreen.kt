@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -48,6 +47,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
@@ -77,6 +78,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 private const val RecentFeedKey = "__home_recent__"
 private const val HeroAutoplayMillis = 6_500
@@ -1022,24 +1024,6 @@ fun HomeScreen(
               precomposeNeighbours = heroVisibleForAutoplay,
           )
       }
-      // 浮层导航（置顶 Tab 条 / 搜索按钮 / 二级页头部）必须留在**捕获层之外**：它们采样
-      // `floatingTabsBackdrop`，而这个捕获层记录的正是它里面那个 Box 的内容 —— 采样的
-      // 节点如果也在被记录的子树里，记录内容就包含"读取自己"，skiko 的 drawable 图会
-      // 递归到 native 栈耗尽（Stack Guard）直接 SIGILL。层记录者与其消费者必须是兄弟。
-      if (floatingTabsPlacement.visible && floatingTabsPlacement.pinned && showFloatingTabs) {
-          Box(
-              Modifier.align(Alignment.TopCenter)
-                  .fillMaxWidth()
-                  .height(safeArea.top + 76.dp)
-                  .background(
-                      Brush.verticalGradient(
-                          0f to MaterialTheme.colorScheme.background.copy(alpha = .38f),
-                          .58f to MaterialTheme.colorScheme.background.copy(alpha = .20f),
-                          1f to Color.Transparent,
-                      ),
-                  ),
-          )
-      }
       if (overview && overviewHasContent && floatingTabsPlacement.visible && showFloatingTabs) {
           Row(
               modifier = Modifier.align(Alignment.TopCenter)
@@ -1945,14 +1929,75 @@ private fun RecommendationHero(
     // interactionSource 不产生 drag 事件，collectIsDraggedAsState 检测不到，
     // 这里用独立的 down/up 跟踪补上「按下即暂停」的语义。
     val heroPointerPressed = remember { mutableStateOf(false) }
-    val pagerPressTracker = Modifier.pointerInput(itemKeys) {
+    // A mouse drag starts on the same surface as the hero click target. Keep a
+    // one-gesture suppression bit so releasing after a swipe cannot also open
+    // the page that happened to be underneath the pointer.
+    val heroClickSuppressed = remember { mutableStateOf(false) }
+    val heroGestureScope = rememberCoroutineScope()
+    val pagerPressTracker = Modifier.pointerInput(itemKeys, pagerState) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Initial,
+            )
             heroPointerPressed.value = true
+            val mouseDrag = down.type == PointerType.Mouse
+            heroClickSuppressed.value = false
+            val startPage = pagerState.currentPage
+            var totalDragX = 0f
+            var dragging = false
             try {
-                waitForUpOrCancellation()
+                if (!mouseDrag) {
+                    // Keep the existing pager's touch/trackpad path untouched;
+                    // this observer only fills the desktop mouse gap.
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        pressed = event.changes
+                            .firstOrNull { it.id == down.id }
+                            ?.pressed == true
+                    }
+                } else {
+                    // HorizontalPager's child clickable consumes the mouse down
+                    // before the pager's draggable sees it. Observe the stream in
+                    // the Initial pass and take ownership only after horizontal
+                    // slop, so a normal click still opens the selected item.
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null) {
+                            pressed = false
+                            continue
+                        }
+                        pressed = change.pressed
+                        if (!pressed) continue
+                        val deltaX = change.position.x - change.previousPosition.x
+                        if (deltaX == 0f) continue
+                        totalDragX += deltaX
+                        if (!dragging && abs(totalDragX) > viewConfiguration.touchSlop) {
+                            dragging = true
+                            heroClickSuppressed.value = true
+                        }
+                        // Once slop is crossed the child clickable sees a
+                        // consumed position change and cancels its click. The
+                        // actual page settle runs in the regular composition
+                        // scope below, outside AwaitPointerEventScope.
+                        if (dragging) change.consume()
+                    }
+                }
             } finally {
                 heroPointerPressed.value = false
+            }
+            if (mouseDrag && dragging) {
+                val targetPage = if (totalDragX < 0f) {
+                    startPage + 1
+                } else {
+                    startPage - 1
+                }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
+                heroGestureScope.launch {
+                    pagerState.animateScrollToPage(targetPage)
+                }
             }
         }
     }
@@ -2068,7 +2113,7 @@ private fun RecommendationHero(
             val item = items[page % items.size]
             Box(
                 Modifier.fillMaxSize().mafeiInteractive(
-                    onClick = { onItem(item) },
+                    onClick = { if (!heroClickSuppressed.value) onItem(item) },
                     radiusDp = 0f,
                     label = "查看${item.title}",
                     // 全宽轮播是背景的一部分：hover 染色/微放大/按压 ripple 在
