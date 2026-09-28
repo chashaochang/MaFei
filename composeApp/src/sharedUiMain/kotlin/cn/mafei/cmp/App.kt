@@ -2428,6 +2428,12 @@ private fun BrowseContent(
                                         )
                                     },
                                     onPlay = startPlayback,
+                                    onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                        { item -> scope.launch { browser.toggleWatched(item) } }
+                                    } else null,
+                                    onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                        { item -> scope.launch { browser.toggleFavorite(item) } }
+                                    } else null,
                                     onRetry = { scope.launch { browser.refresh() } },
                                     onLoadMore = { scope.launch { browser.loadMore() } },
                                     // The library shelf still opens the library index. The
@@ -2518,6 +2524,13 @@ private fun BrowseContent(
                                         onRetry = { scope.launch { browser.refreshHome() } },
                                         onLoadMore = {},
                                         onItem = { item -> openDetail(item, "最近添加") },
+                                        onPlay = startPlayback,
+                                        onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                            { item -> scope.launch { browser.toggleWatched(item) } }
+                                        } else null,
+                                        onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                            { item -> scope.launch { browser.toggleFavorite(item) } }
+                                        } else null,
                                         showSortControls = false,
                                         bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                         bottomNavigationVisible = !showingFullPageRoute &&
@@ -2555,6 +2568,13 @@ private fun BrowseContent(
                                         onItem = { item ->
                                             openDetail(item, item.legacyHomeLatestMediaName(state.collections))
                                         },
+                                        onPlay = startPlayback,
+                                        onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                            { item -> scope.launch { browser.toggleWatched(item) } }
+                                        } else null,
+                                        onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                            { item -> scope.launch { browser.toggleFavorite(item) } }
+                                        } else null,
                                         bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                         modifier = Modifier.fillMaxSize(),
                                         artwork = { item, modifier ->
@@ -2640,6 +2660,13 @@ private fun BrowseContent(
                                     onRetry = { scope.launch { browser.refreshFavorites() } },
                                     onLoadMore = { scope.launch { browser.loadMoreFavorites() } },
                                     onItem = { item -> openDetail(item, "收藏") },
+                                    onPlay = startPlayback,
+                                    onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                        { item -> scope.launch { browser.toggleWatched(item) } }
+                                    } else null,
+                                    onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                        { item -> scope.launch { browser.toggleFavorite(item) } }
+                                    } else null,
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
@@ -2699,6 +2726,13 @@ private fun BrowseContent(
                                         }
                                     },
                                     onOpen = { item -> openDetail(item, null) },
+                                    onPlay = startPlayback,
+                                    onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                        { item -> scope.launch { browser.toggleWatched(item) } }
+                                    } else null,
+                                    onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                        { item -> scope.launch { browser.toggleFavorite(item) } }
+                                    } else null,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
                                         MediaArtwork(
@@ -2746,6 +2780,13 @@ private fun BrowseContent(
                                             state.collections.firstOrNull { it.id.value == route.collectionId }?.name,
                                         )
                                     },
+                                    onPlay = startPlayback,
+                                    onToggleWatched = if (browser.capabilities.watchedEdit) {
+                                        { item -> scope.launch { browser.toggleWatched(item) } }
+                                    } else null,
+                                    onToggleFavorite = if (browser.capabilities.favoritesEdit) {
+                                        { item -> scope.launch { browser.toggleFavorite(item) } }
+                                    } else null,
                                     onRetry = { scope.launch { browser.refresh() } },
                                     onLoadMore = { scope.launch { browser.loadMore() } },
                                     canDeleteMedia = state.deleteAvailable == true,

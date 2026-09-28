@@ -997,6 +997,11 @@ class MediaBrowser(
         mutateDetail(item, favorite = null, watched = !item.userData.isPlayed)
     }
 
+    suspend fun toggleFavorite(item: MediaItem) {
+        if (!capabilities.favoritesEdit) return
+        mutateDetail(item, favorite = !item.userData.isFavorite, watched = null)
+    }
+
     // ------------------------------------------------------------- watch history
 
     private enum class HistorySource { Resume, Completed }

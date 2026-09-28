@@ -56,6 +56,9 @@ fun HomeLatestByLibraryScreen(
     onBack: (() -> Unit)?,
     onRetry: () -> Unit,
     onItem: (MediaItem) -> Unit,
+    onPlay: ((MediaItem) -> Unit)? = null,
+    onToggleWatched: ((MediaItem) -> Unit)? = null,
+    onToggleFavorite: ((MediaItem) -> Unit)? = null,
     bottomOverlayInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
@@ -122,6 +125,9 @@ fun HomeLatestByLibraryScreen(
                                     LegacyVideoCard(
                                         item = item,
                                         onClick = { onItem(item) },
+                                        onPlay = onPlay?.let { play -> { play(item) } },
+                                        onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         poster = artwork?.let { draw -> { cardModifier -> draw(item, cardModifier) } },
                                     )
                                 }

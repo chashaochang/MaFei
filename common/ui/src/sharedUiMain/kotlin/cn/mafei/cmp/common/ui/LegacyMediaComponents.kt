@@ -4,6 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +28,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,9 +67,21 @@ fun LegacyVideoCard(
     textAlign: TextAlign = TextAlign.Start,
     poster: (@Composable (Modifier) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    onPlay: (() -> Unit)? = null,
+    onToggleWatched: (() -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
     Column(
-        modifier.mafeiInteractive(onClick, radiusDp = 6f, label = "查看$title", onLongClick = onLongClick)
+        modifier.mafeiInteractive(
+            onClick,
+            radiusDp = 6f,
+            label = "查看$title",
+            onLongClick = onLongClick,
+            interactionSource = interactionSource,
+        )
             .padding(bottom = 8.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -97,6 +114,14 @@ fun LegacyVideoCard(
                 tags = item.tags,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
             )
+            if (hovered || focused) {
+                MediaCardHoverOverlay(
+                    title = title,
+                    onPlay = onPlay ?: onClick,
+                    onToggleWatched = onToggleWatched,
+                    onToggleFavorite = onToggleFavorite,
+                )
+            }
         }
         Text(
             title,
@@ -104,7 +129,7 @@ fun LegacyVideoCard(
             // The card can be rendered directly in the adaptive shell scene,
             // outside a MaFeiSurface. Do not depend on a parent content-color
             // provider here; Material's fallback is black on the dark canvas.
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
@@ -139,9 +164,20 @@ fun LegacyBaseItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     poster: (@Composable (Modifier) -> Unit)? = null,
+    onPlay: (() -> Unit)? = null,
+    onToggleWatched: (() -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
     Column(
-        modifier.width(100.dp).mafeiInteractive(onClick, radiusDp = 10f, label = "查看${item.title}")
+        modifier.width(100.dp).mafeiInteractive(
+            onClick,
+            radiusDp = 10f,
+            label = "查看${item.title}",
+            interactionSource = interactionSource,
+        )
             .padding(bottom = 8.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -177,11 +213,19 @@ fun LegacyBaseItemCard(
                 deduplicate = false,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
             )
+            if (hovered || focused) {
+                MediaCardHoverOverlay(
+                    title = item.title,
+                    onPlay = onPlay ?: onClick,
+                    onToggleWatched = onToggleWatched,
+                    onToggleFavorite = onToggleFavorite,
+                )
+            }
         }
         Text(
             item.title,
             Modifier.fillMaxWidth().padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             fontSize = 14.sp,
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,

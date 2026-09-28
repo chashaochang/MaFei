@@ -89,6 +89,9 @@ fun SearchScreen(
     onRecordHistory: (String) -> Unit,
     onClearHistories: () -> Unit,
     onOpen: (MediaItem) -> Unit,
+    onPlay: ((MediaItem) -> Unit)? = null,
+    onToggleWatched: ((MediaItem) -> Unit)? = null,
+    onToggleFavorite: ((MediaItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
@@ -273,6 +276,9 @@ fun SearchScreen(
                                             onRecordHistory(normalized)
                                             onOpen(item)
                                         },
+                                        onPlay = onPlay?.let { play -> { play(item) } },
+                                        onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         poster = artwork?.let { draw ->
                                             { cardModifier -> draw(item, cardModifier) }
                                         },

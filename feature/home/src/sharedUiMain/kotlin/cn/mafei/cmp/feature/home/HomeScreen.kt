@@ -234,6 +234,8 @@ fun HomeScreen(
     onItem: (MediaItem) -> Unit,
     onHeroItem: (MediaItem) -> Unit = onItem,
     onPlay: ((MediaItem) -> Unit)? = null,
+    onToggleWatched: ((MediaItem) -> Unit)? = null,
+    onToggleFavorite: ((MediaItem) -> Unit)? = null,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onOpenLibrary: () -> Unit,
@@ -896,6 +898,9 @@ fun HomeScreen(
                                             }
                                         },
                                         progress = progress(item),
+                                        onPlay = onPlay?.let { play -> { play(item) } },
+                                        onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         modifier = Modifier.width(140.dp),
                                     )
                                 }
@@ -950,6 +955,9 @@ fun HomeScreen(
                             }
                         },
                         progress = progress(item),
+                        onPlay = onPlay?.let { play -> { play(item) } },
+                        onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                        onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                     )
                 }
             } else {
@@ -1008,6 +1016,9 @@ fun HomeScreen(
                         }
                     },
                     progress = progress(item),
+                    onPlay = onPlay?.let { play -> { play(item) } },
+                    onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                    onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                 )
             }
         }

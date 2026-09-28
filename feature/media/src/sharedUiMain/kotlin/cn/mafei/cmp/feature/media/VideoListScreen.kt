@@ -82,6 +82,9 @@ fun VideoListScreen(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onItem: (MediaItem) -> Unit,
+    onPlay: ((MediaItem) -> Unit)? = null,
+    onToggleWatched: ((MediaItem) -> Unit)? = null,
+    onToggleFavorite: ((MediaItem) -> Unit)? = null,
     bottomOverlayInset: Dp = 0.dp,
     bottomNavigationVisible: Boolean = layout.navigation == NavigationPlacement.Bottom,
     modifier: Modifier = Modifier,
@@ -205,6 +208,9 @@ fun VideoListScreen(
                                             else -> onItem(item)
                                         }
                                     },
+                                    onPlay = onPlay?.let { play -> { play(item) } },
+                                    onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                                    onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                     // 管理员长按进入多选（legacy enterSelection）。
                                     onLongClick = if (canDeleteMedia && !selectionMode) {
                                         { onEnterSelection(item) }

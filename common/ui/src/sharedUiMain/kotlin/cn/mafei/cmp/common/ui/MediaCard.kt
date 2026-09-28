@@ -2,11 +2,18 @@ package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,9 +42,21 @@ fun MediaCard(
     status: String? = null,
     poster: (@Composable (Modifier) -> Unit)? = null,
     progress: Float? = null,
+    onPlay: (() -> Unit)? = null,
+    onToggleWatched: (() -> Unit)? = null,
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val showHoverActions = hovered || focused
     Column(
-        modifier.mafeiInteractive(onClick, radiusDp = 10f, label = "查看$title"),
+        modifier.mafeiInteractive(
+            onClick,
+            radiusDp = 10f,
+            label = "查看$title",
+            interactionSource = interactionSource,
+        ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
@@ -76,13 +95,94 @@ fun MediaCard(
                     trackColor = Color.Black.copy(alpha = .5f),
                 )
             }
+            if (showHoverActions) {
+                MediaCardHoverOverlay(
+                    title = title,
+                    onPlay = onPlay ?: onClick,
+                    onToggleWatched = onToggleWatched,
+                    onToggleFavorite = onToggleFavorite,
+                )
+            }
         }
         Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
+            Text(title, color = if (hovered) MaterialTheme.colorScheme.primary else Color.White,
+                fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, fontSize = 12.sp, lineHeight = 17.sp, color = Color.White.copy(alpha = .72f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+/**
+ * Desktop pointer affordance shared by every poster card. It intentionally
+ * uses plain darkening and product glyphs rather than a glass surface: the
+ * poster remains the visual material and the actions stay legible above it.
+ */
+@Composable
+internal fun MediaCardHoverOverlay(
+    title: String,
+    onPlay: () -> Unit,
+    onToggleWatched: (() -> Unit)?,
+    onToggleFavorite: (() -> Unit)?,
+) {
+    Box(
+        Modifier.fillMaxSize()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black.copy(alpha = .54f)),
+    ) {
+        Box(
+            Modifier.align(Alignment.Center)
+                .size(58.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = .20f))
+                .border(2.dp, Color.White.copy(alpha = .92f), CircleShape)
+                .mafeiInteractive(
+                    onClick = onPlay,
+                    radiusDp = 29f,
+                    label = "播放$title",
+                    visualFeedback = false,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            MaFeiIcon(MaFeiGlyph.Play, Modifier.size(28.dp), Color.White)
+        }
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CardHoverAction(
+                glyph = MaFeiGlyph.Watched,
+                label = "设置已观看",
+                onClick = onToggleWatched,
+            )
+            CardHoverAction(
+                glyph = MaFeiGlyph.Favorite,
+                label = "收藏",
+                onClick = onToggleFavorite,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardHoverAction(
+    glyph: MaFeiGlyph,
+    label: String,
+    onClick: (() -> Unit)?,
+) {
+    Box(
+        Modifier.size(34.dp).mafeiInteractive(
+            onClick = { onClick?.invoke() },
+            enabled = onClick != null,
+            radiusDp = 17f,
+            label = label,
+            visualFeedback = false,
+        ),
+        contentAlignment = Alignment.Center,
+    ) {
+        MaFeiIcon(glyph, Modifier.size(27.dp), Color.White.copy(alpha = if (onClick != null) 1f else .72f))
     }
 }
 

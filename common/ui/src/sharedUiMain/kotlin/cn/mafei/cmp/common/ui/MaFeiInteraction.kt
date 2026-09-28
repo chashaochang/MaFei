@@ -37,8 +37,9 @@ fun Modifier.mafeiInteractive(
     role: Role = Role.Button,
     visualFeedback: Boolean = true,
     onLongClick: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
 ): Modifier = composed {
-    val source = remember { MutableInteractionSource() }
+    val source = interactionSource ?: remember { MutableInteractionSource() }
     val clickableModifier = if (onLongClick != null) {
         @OptIn(ExperimentalFoundationApi::class)
         Modifier.combinedClickable(
