@@ -314,8 +314,19 @@ fun HomeScreen(
         }
     }
     val selectedFeedCollection = collections.firstOrNull { it.id.value == selectedFeedKey }
-    val latestItems = remember(selectedFeedKey, selectedFeedCollection, recentItems, homeLatestByCollection) {
-        if (selectedFeedKey == RecentFeedKey) recentItems
+    // Sidebar/Rail layouts do not render the phone Floating Tabs. Their shelf
+    // is always the global home feed, even if a previous phone session left a
+    // library tab selected in rememberSaveable state.
+    val wideHomeShelf = layout.navigation == NavigationPlacement.Sidebar ||
+        layout.navigation == NavigationPlacement.Rail
+    val latestItems = remember(
+        selectedFeedKey,
+        selectedFeedCollection,
+        recentItems,
+        homeLatestByCollection,
+        wideHomeShelf,
+    ) {
+        if (selectedFeedKey == RecentFeedKey || wideHomeShelf) recentItems
         else selectedFeedCollection?.let { homeLatestByCollection[it.id] }.orEmpty().distinctByMediaId()
     }
     // Selecting an uncached library changes [selectedFeedKey] in the same
@@ -829,8 +840,12 @@ fun HomeScreen(
                                     )
                                     .mafeiInteractive(
                                         onClick = {
-                                            val target = selectedFeedCollection
-                                            if (target != null) onBrowseCollection(target) else onOpenLatest()
+                                            // This is the home "最近添加" shelf, so
+                                            // "更多" always opens its dedicated
+                                            // secondary list route. It must not
+                                            // inherit a stale phone tab selection
+                                            // and jump into that library instead.
+                                            onOpenLatest()
                                         },
                                         radiusDp = 18f,
                                         label = "更多",
