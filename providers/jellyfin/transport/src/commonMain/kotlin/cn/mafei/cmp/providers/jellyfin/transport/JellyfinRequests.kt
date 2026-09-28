@@ -257,6 +257,23 @@ data object JellyfinRequests {
             .build()
             .let { url -> request(HttpMethod.Get, url).build() }
 
+    /** Official endpoint: GET /Videos/{itemId}/Trickplay/{width}/{index}.jpg. */
+    fun trickplayTile(
+        base: HttpUrl,
+        itemId: String,
+        width: Int,
+        index: Int,
+        mediaSourceId: String? = null,
+    ): HttpRequest = base.newBuilder()
+        .addPathSegments("Videos")
+        .addPathSegment(itemId)
+        .addPathSegments("Trickplay")
+        .addPathSegment(width.toString())
+        .addPathSegment("$index.jpg")
+        .apply { mediaSourceId?.takeIf { it.isNotBlank() }?.let { addQueryParameter("MediaSourceId", it) } }
+        .build()
+        .let { url -> request(HttpMethod.Get, url).build() }
+
     /**
      * Jellyfin's person-specific lookup. Some 10.11 servers do not complete
      * GET /Items/{personId}, while this endpoint remains the authoritative

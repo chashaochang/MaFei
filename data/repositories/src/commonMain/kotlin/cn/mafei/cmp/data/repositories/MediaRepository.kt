@@ -6,6 +6,7 @@ import cn.mafei.cmp.core.storage_api.JsonSnapshotStorage
 import cn.mafei.cmp.data.adapter_contract.HomeFeed
 import cn.mafei.cmp.data.adapter_contract.HomeFeedRequest
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
+import cn.mafei.cmp.data.adapter_contract.PlaybackPreviewFrame
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -220,6 +221,18 @@ class MediaRepository(
                 if (it.id != id) throw ProtocolDecodingError("Detail returned a different media identity")
             }
         }
+    }
+
+    /** Account-scoped seek preview; providers without a real frame source return null. */
+    suspend fun previewFrame(
+        session: MediaSession,
+        item: MediaId,
+        positionMs: Long,
+        mediaSourceId: String? = null,
+    ): PlaybackPreviewFrame? {
+        currentCoroutineContext().ensureActive()
+        val adapter = mutex.withLock { requireActive(session).adapter }
+        return adapter.previewFrame(item, positionMs, mediaSourceId)
     }
 
     suspend fun person(

@@ -16,6 +16,21 @@ class PlayableResource(
     override fun toString() = "PlayableResource(id=$id, stream=<redacted>)"
 }
 
+/** Provider-free frame data used only while the seek bar is being dragged. */
+data class PlayerSeekPreviewFrame(
+    val encodedTile: ByteArray,
+    val frameWidthPx: Int,
+    val frameHeightPx: Int,
+    val tileColumn: Int,
+    val tileRow: Int,
+) {
+    init {
+        require(encodedTile.isNotEmpty())
+        require(frameWidthPx > 0 && frameHeightPx > 0)
+        require(tileColumn >= 0 && tileRow >= 0)
+    }
+}
+
 /** Reference identity, deliberately not a numeric or forgeable data-class generation. */
 class PlaybackGeneration
 

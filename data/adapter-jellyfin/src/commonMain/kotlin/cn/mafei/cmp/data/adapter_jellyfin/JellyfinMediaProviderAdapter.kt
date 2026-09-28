@@ -25,15 +25,22 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
+import cn.mafei.cmp.data.adapter_contract.PlaybackPreviewFrame
+import cn.mafei.cmp.data.adapter_contract.PlaybackPreviewInfo
+import cn.mafei.cmp.data.adapter_contract.PlaybackPreviewMath
 import cn.mafei.cmp.data.adapter_contract.PlaybackTrack
 import cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind
 import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.jellyfin.facade.JellyfinFacade
+import cn.mafei.cmp.providers.jellyfin.transport.JellyfinRequests
+import cn.mafei.cmp.providers.jellyfin.wire.TrickplayInfoDto
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.concurrent.Volatile
@@ -46,6 +53,7 @@ private const val HomeLatestConcurrency = 4
 
 /** 播放器侧相似条目的取数上限；旧版 `VideoDetailPage` 不展示相似推荐。 */
 private const val SimilarItemsLimit = 12
+private const val PreviewTargetWidthPx = 320
 
 /**
  * Jellyfin implementation of the provider-neutral [MediaProviderAdapter]
@@ -85,6 +93,18 @@ class JellyfinMediaProviderAdapter(
 
     /** Streams this instance prepared; reportPlayback accepts only these. */
     private val preparedStreams = mutableListOf<PlaybackPreparation.Ready>()
+
+    private data class PreviewManifestKey(val itemId: MediaId, val sourceId: String?)
+    private data class PreviewTileKey(val manifest: PreviewManifestKey, val width: Int, val sheetIndex: Int)
+    private data class TrickplayManifest(
+        val sourceId: String,
+        val routeWidth: Int,
+        val info: PlaybackPreviewInfo,
+    )
+
+    private val previewMutex = Mutex()
+    private val previewManifests = mutableMapOf<PreviewManifestKey, TrickplayManifest?>()
+    private val previewTiles = mutableMapOf<PreviewTileKey, ByteArray>()
 
     /**
      * Cached administrator verdict for [canDeleteMedia]; `null` until the
@@ -556,6 +576,39 @@ class JellyfinMediaProviderAdapter(
         return ready
     }
 
+    override suspend fun previewFrame(
+        item: MediaId,
+        positionMs: Long,
+        mediaSourceId: String?,
+    ): PlaybackPreviewFrame? {
+        val manifestKey = PreviewManifestKey(item, mediaSourceId)
+        val cachedManifest = previewMutex.withLock {
+            previewManifests.containsKey(manifestKey) to previewManifests[manifestKey]
+        }
+        val manifest: TrickplayManifest = if (cachedManifest.first) {
+            // A cached null is an intentional negative result: this item has
+            // no Trickplay manifest, so do not repeat the detail request for
+            // every drag bucket.
+            cachedManifest.second ?: return null
+        } else {
+            loadPreviewManifest(item, mediaSourceId, manifestKey) ?: return null
+        }
+        val location = PlaybackPreviewMath.locate(manifest.info, positionMs) ?: return null
+        val tileKey = PreviewTileKey(manifestKey, manifest.routeWidth, location.sheetIndex)
+        val encoded = previewMutex.withLock { previewTiles[tileKey] }
+            ?: fetchPreviewTile(item, manifest, location.sheetIndex)?.also { bytes ->
+                previewMutex.withLock { previewTiles[tileKey] = bytes }
+            }
+            ?: return null
+        return PlaybackPreviewFrame(
+            encodedTile = encoded,
+            frameWidthPx = manifest.info.widthPx,
+            frameHeightPx = manifest.info.heightPx,
+            tileColumn = location.tileColumn,
+            tileRow = location.tileRow,
+        )
+    }
+
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
         requireCapability(capabilities, AdapterCapability.PlaybackReporting)
         if (preparedStreams.none { it === stream }) {
@@ -589,6 +642,51 @@ class JellyfinMediaProviderAdapter(
                     positionMs = positionMs,
                 )
             }
+        }
+    }
+
+    private suspend fun loadPreviewManifest(
+        item: MediaId,
+        sourceId: String?,
+        key: PreviewManifestKey,
+    ): TrickplayManifest? {
+        val dto = translate { facade.catalog.item(jellyfinUserId, item.value) }
+        val sourceEntry = when {
+            sourceId != null -> dto.trickplay[sourceId]?.let { sourceId to it }
+            else -> dto.trickplay.entries.firstOrNull { it.value.isNotEmpty() }
+                ?.let { entry -> entry.key to entry.value }
+        }
+        val selected = sourceEntry?.second
+            ?.mapNotNull { (routeWidth, info) ->
+                val width = routeWidth.toIntOrNull() ?: return@mapNotNull null
+                info.toPlaybackPreviewInfo(width)?.let { width to it }
+            }
+            ?.minByOrNull { (width, _) -> kotlin.math.abs(width - PreviewTargetWidthPx) }
+        val manifest = selected?.let { (routeWidth, info) ->
+            TrickplayManifest(sourceEntry.first, routeWidth, info)
+        }
+        previewMutex.withLock { previewManifests[key] = manifest }
+        return manifest
+    }
+
+    private suspend fun fetchPreviewTile(
+        item: MediaId,
+        manifest: TrickplayManifest,
+        sheetIndex: Int,
+    ): ByteArray? {
+        val request = JellyfinRequests.trickplayTile(
+            base = facade.client.config.baseUrl,
+            itemId = item.value,
+            width = manifest.routeWidth,
+            index = sheetIndex,
+            mediaSourceId = manifest.sourceId,
+        )
+        return try {
+            facade.client.execute(request) { response -> response.bodyBytes.copyOf() }
+        } catch (_: cn.mafei.cmp.providers.jellyfin.core.JellyfinNotFoundError) {
+            null
+        } catch (error: cn.mafei.cmp.providers.jellyfin.core.JellyfinError) {
+            throw error.toDomainError()
         }
     }
 
@@ -806,4 +904,15 @@ private data class JellyfinReportingContext(
             runCatching { Json.Default.decodeFromString(serializer(), it) }.getOrNull()
         }
     }
+}
+
+private fun TrickplayInfoDto.toPlaybackPreviewInfo(routeWidth: Int): PlaybackPreviewInfo? {
+    val width = width ?: routeWidth
+    val height = height ?: return null
+    val interval = intervalMs ?: return null
+    val count = thumbnailCount ?: return null
+    val columns = tileWidth ?: return null
+    val rows = tileHeight ?: return null
+    if (width <= 0 || height <= 0 || interval <= 0L || count <= 0 || columns <= 0 || rows <= 0) return null
+    return PlaybackPreviewInfo(width, height, interval, count, columns, rows)
 }

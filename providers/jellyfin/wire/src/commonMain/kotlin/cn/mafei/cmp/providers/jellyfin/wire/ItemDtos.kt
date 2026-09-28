@@ -41,6 +41,17 @@ data class ExternalUrlDto(
     @SerialName("Url") val url: String? = null,
 )
 
+/** Jellyfin's per-media-source trickplay manifest (tile-sheet metadata). */
+@Serializable
+data class TrickplayInfoDto(
+    @SerialName("Width") val width: Int? = null,
+    @SerialName("Height") val height: Int? = null,
+    @SerialName("Interval") val intervalMs: Long? = null,
+    @SerialName("ThumbnailCount") val thumbnailCount: Int? = null,
+    @SerialName("TileWidth") val tileWidth: Int? = null,
+    @SerialName("TileHeight") val tileHeight: Int? = null,
+)
+
 /**
  * P0 subset of Jellyfin `BaseItemDto` (OpenAPI 10.10.7 names). Everything the
  * server adds beyond this subset is ignored on decode (frozen MafeiJson
@@ -87,6 +98,8 @@ data class BaseItemDto(
     @SerialName("MediaStreams") val mediaStreams: List<MediaStreamDto> = emptyList(),
     @SerialName("MediaSources") val mediaSources: List<MediaSourceInfoDto> = emptyList(),
     @SerialName("ExternalUrls") val externalUrls: List<ExternalUrlDto> = emptyList(),
+    /** source id -> generated width -> tile manifest */
+    @SerialName("Trickplay") val trickplay: Map<String, Map<String, TrickplayInfoDto>> = emptyMap(),
 )
 
 /** One category returned by GET /Movies/Recommendations. */

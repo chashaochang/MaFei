@@ -170,6 +170,17 @@ interface MediaProviderAdapter {
     suspend fun preparePlayback(item: MediaId, options: PlaybackOptions = PlaybackOptions()): PlaybackPreparation
 
     /**
+     * Returns a real video frame preview for the requested playback position,
+     * or null when this provider/server has no preview source. The returned
+     * bytes are a tile image, not a playable stream and must not be persisted.
+     */
+    suspend fun previewFrame(
+        item: MediaId,
+        positionMs: Long,
+        mediaSourceId: String? = null,
+    ): PlaybackPreviewFrame? = null
+
+    /**
      * Reports progress for a stream previously returned by [preparePlayback];
      * capability [AdapterCapability.PlaybackReporting]. Adapters must verify
      * the stream was prepared by THIS adapter instance and reject foreign or

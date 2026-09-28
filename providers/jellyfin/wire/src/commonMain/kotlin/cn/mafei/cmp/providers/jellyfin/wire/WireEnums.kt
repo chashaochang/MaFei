@@ -221,6 +221,7 @@ enum class ItemField(val wireName: String) {
     Runtime("Runtime"),
     ItemCounts("ItemCounts"),
     ChildCount("ChildCount"),
+    Trickplay("Trickplay"),
 }
 
 // ---------------------------------------------------------------------------

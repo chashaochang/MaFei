@@ -171,6 +171,7 @@ import cn.mafei.cmp.player.ui.NowPlayingScreen
 import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerTrack
+import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
@@ -243,6 +244,7 @@ private fun BoundNowPlayingScreen(
     onSelectContentMode: ((cn.mafei.cmp.player.api.PlayerContentMode) -> Unit)? = null,
     /** 全屏是显式状态（旧版 AppUIState.isFullScreen），不是从窗口横竖推出来的。 */
     fullscreen: Boolean = false,
+    loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
 ) {
     // Keep the 250-500 ms progress stream inside the player subtree. The
     // application shell only observes the low-frequency phase/resource pair.
@@ -305,6 +307,7 @@ private fun BoundNowPlayingScreen(
         playbackFacts = playbackFacts,
         onSelectContentMode = onSelectContentMode,
         deviceControls = deviceControls,
+        loadSeekPreview = loadSeekPreview,
         fullscreen = fullscreen,
         onFullscreenRequest = { requested -> onFullscreenChanged(requested) },
         videoSurface = { surfaceModifier ->
@@ -2190,6 +2193,22 @@ private fun BrowseContent(
                 onSelectQuality = { selectQuality(it) },
                 catalogItem = playerMedia,
                 prepared = preparedStream,
+                loadSeekPreview = { positionMs ->
+                    runtime.sessions.media.previewFrame(
+                        session = session.media,
+                        item = playerMedia.id,
+                        positionMs = positionMs,
+                        mediaSourceId = preparedStream?.mediaSourceId,
+                    )?.let { frame ->
+                        PlayerSeekPreviewFrame(
+                            encodedTile = frame.encodedTile,
+                            frameWidthPx = frame.frameWidthPx,
+                            frameHeightPx = frame.frameHeightPx,
+                            tileColumn = frame.tileColumn,
+                            tileRow = frame.tileRow,
+                        )
+                    }
+                },
                 // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
                 // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
                 fullscreen = playerFullscreen,

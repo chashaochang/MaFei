@@ -59,6 +59,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -90,6 +91,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
@@ -111,10 +113,15 @@ import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerDeviceControls
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerState
+import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.TrackKind
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.decodeToImageBitmap
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -224,6 +231,8 @@ fun NowPlayingScreen(
      */
     deviceControls: PlayerDeviceControls =
         PlayerDeviceControls.Unsupported,
+    /** Loads a real provider frame while the seek bar is being dragged. */
+    loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
 ) {
     val backdrop = rememberGlassBackdrop()
     val presentation = state.toNowPlayingPresentation(capabilities)
@@ -246,6 +255,7 @@ fun NowPlayingScreen(
     var sliderPositionMs by remember(media.id, state.generation) { mutableLongStateOf(state.positionMs) }
     var draggingSlider by remember(media.id, state.generation) { mutableStateOf(false) }
     var seekFeedbackMs by remember(media.id, state.generation) { mutableStateOf<Long?>(null) }
+    var seekPreview by remember(media.id, state.generation) { mutableStateOf<PlayerSeekPreviewFrame?>(null) }
     var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var longPressSpeedActive by remember(media.id, state.generation) { mutableStateOf(false) }
     var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
@@ -282,6 +292,24 @@ fun NowPlayingScreen(
 
     LaunchedEffect(state.positionMs, draggingSlider) {
         if (!draggingSlider) sliderPositionMs = state.positionMs.coerceAtLeast(0L)
+    }
+    val previewLoader by rememberUpdatedState(loadSeekPreview)
+    val previewBucket = sliderPositionMs / 250L
+    LaunchedEffect(media.id, draggingSlider, previewBucket) {
+        if (!draggingSlider || previewLoader == null) {
+            if (!draggingSlider) seekPreview = null
+            return@LaunchedEffect
+        }
+        delay(90)
+        seekPreview = try {
+            previewLoader?.invoke(sliderPositionMs)
+        } catch (cancelled: CancellationException) {
+            // A newer drag bucket superseded this request. Preserve structured
+            // cancellation so stale network work cannot publish a frame.
+            throw cancelled
+        } catch (_: Throwable) {
+            null
+        }
     }
     LaunchedEffect(controlsVisible, panel, locked, state.phase, autoHideGeneration) {
         if (controlsVisible && panel == PlayerChromePanel.None && !locked && state.phase == PlayerPhase.Playing) {
@@ -722,7 +750,12 @@ fun NowPlayingScreen(
         // 「拖条中」并进同一个来源。
         val seekFeedbackTarget = seekFeedbackMs ?: if (draggingSlider) sliderPositionMs else null
         if (seekFeedbackTarget != null) {
-            PlayerSeekFeedback(seekFeedbackTarget, durationMs ?: 1L, Modifier.align(Alignment.Center))
+            PlayerSeekFeedback(
+                target = seekFeedbackTarget,
+                duration = durationMs ?: 1L,
+                preview = seekPreview,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
 
         val feedbackTopInset = (if (fullscreen) 60.dp else 32.dp) + safeArea.top
@@ -1876,7 +1909,12 @@ private fun PlayerTextControl(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PlayerSeekFeedback(target: Long, duration: Long, modifier: Modifier = Modifier) {
+private fun PlayerSeekFeedback(
+    target: Long,
+    duration: Long,
+    preview: PlayerSeekPreviewFrame?,
+    modifier: Modifier = Modifier,
+) {
     val progress = (target.toDouble() / duration.coerceAtLeast(1L)).toFloat().coerceIn(0f, 1f)
     Column(
         modifier.clip(RoundedCornerShape(12.dp)).background(PlayerGestureSeekSurface)
@@ -1884,6 +1922,7 @@ private fun PlayerSeekFeedback(target: Long, duration: Long, modifier: Modifier 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        preview?.let { PlayerSeekPreviewImage(it) }
         // 旧版写的是「当前 / 总时长」，只报当前值看不出还剩多少。
         Text(
             "${formatPlayerDuration(target)} / ${formatPlayerDuration(duration)}",
@@ -1893,6 +1932,46 @@ private fun PlayerSeekFeedback(target: Long, duration: Long, modifier: Modifier 
         )
         Box(Modifier.width(146.dp).height(3.dp).clip(CircleShape).background(PlayerGestureTrack)) {
             Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(PlayerAccent))
+        }
+    }
+}
+
+@Composable
+private fun PlayerSeekPreviewImage(frame: PlayerSeekPreviewFrame) {
+    val encodedKey = frame.encodedTile.contentHashCode()
+    val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = encodedKey,
+        key2 = frame.frameWidthPx,
+        key3 = frame.frameHeightPx,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            try {
+                frame.encodedTile.decodeToImageBitmap()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+    Box(
+        Modifier.width(220.dp).aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = .36f)),
+    ) {
+        bitmap?.let { image ->
+            Canvas(Modifier.fillMaxSize()) {
+                drawImage(
+                    image = image,
+                    srcOffset = IntOffset(
+                        frame.tileColumn * frame.frameWidthPx,
+                        frame.tileRow * frame.frameHeightPx,
+                    ),
+                    srcSize = IntSize(frame.frameWidthPx, frame.frameHeightPx),
+                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                )
+            }
         }
     }
 }

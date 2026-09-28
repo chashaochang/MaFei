@@ -53,6 +53,22 @@ class JellyfinRequestsTest {
     }
 
     @Test
+    fun trickplayTileUsesOfficialRouteAndMediaSourceQuery() {
+        val request = JellyfinRequests.trickplayTile(
+            base = basePath,
+            itemId = "item/2",
+            width = 320,
+            index = 4,
+            mediaSourceId = "source/1",
+        )
+        assertEquals(
+            "https://jellyfin.test/stable/Videos/item%2F2/Trickplay/320/4.jpg?MediaSourceId=source%2F1",
+            request.url.toString(),
+        )
+        assertEquals(HttpMethod.Get, request.method)
+    }
+
+    @Test
     fun personLookupUsesThePersonNameRoute() {
         val request = JellyfinRequests.personByName(base, "Bob Actor / Guest")
         assertEquals("https://jellyfin.test/Persons/Bob%20Actor%20%2F%20Guest", urlOf(request).toString())
