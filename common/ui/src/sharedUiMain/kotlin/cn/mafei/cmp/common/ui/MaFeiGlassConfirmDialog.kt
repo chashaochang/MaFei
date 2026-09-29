@@ -1,8 +1,9 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +68,8 @@ fun MaFeiGlassConfirmDialog(
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)
         else Color(0xFF121212).copy(alpha = .56f)
     val focusRequester = remember { FocusRequester() }
+    val scrimInteraction = remember { MutableInteractionSource() }
+    val panelInteraction = remember { MutableInteractionSource() }
     val surfaceSpec = GlassSurfaceSpec(
         role = GlassRole.Dialog,
         level = GlassLevel.Opaque,
@@ -82,7 +84,11 @@ fun MaFeiGlassConfirmDialog(
     Box(
         modifier.fillMaxSize()
             .background(dimColor)
-            .pointerInput(onDismiss) { detectTapGestures { onDismiss() } }
+            .clickable(
+                interactionSource = scrimInteraction,
+                indication = null,
+                onClick = onDismiss,
+            )
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -104,7 +110,11 @@ fun MaFeiGlassConfirmDialog(
                 .widthIn(min = 280.dp, max = 360.dp)
                 .fillMaxWidth()
                 // The panel swallows its own taps so pressing inside never dismisses.
-                .pointerInput(Unit) { detectTapGestures { } }
+                .clickable(
+                    interactionSource = panelInteraction,
+                    indication = null,
+                    onClick = {},
+                )
                 .testTag("mafeiGlassConfirmCard"),
         ) {
             Column(
