@@ -14,15 +14,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.hoverable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -125,21 +130,19 @@ fun main() = application {
                     .clip(RoundedCornerShape(PcWindowCornerRadius)),
             ) {
                 DesktopNavigationOwner {
-                    var maximized by remember {
-                        mutableStateOf(window.extendedState and java.awt.Frame.MAXIMIZED_BOTH != 0)
-                    }
                     App(
                         runtime = runtime,
                         windowControls = {
+                            val fullscreen = windowState.placement == WindowPlacement.Fullscreen
                             MacWindowControls(
+                                fullscreen = fullscreen,
                                 onMinimize = { window.extendedState = window.extendedState or java.awt.Frame.ICONIFIED },
-                                onToggleMaximize = {
-                                    window.extendedState = if (maximized) {
-                                        java.awt.Frame.NORMAL
+                                onToggleFullscreen = {
+                                    windowState.placement = if (fullscreen) {
+                                        WindowPlacement.Floating
                                     } else {
-                                        java.awt.Frame.MAXIMIZED_BOTH
+                                        WindowPlacement.Fullscreen
                                     }
-                                    maximized = !maximized
                                 },
                                 onClose = { runtime.requestClose { exitApplication() } },
                             )
@@ -164,36 +167,62 @@ fun main() = application {
 /** Native-looking traffic-light controls for the undecorated Mac window. */
 @Composable
 private fun RowScope.MacWindowControls(
+    fullscreen: Boolean,
     onMinimize: () -> Unit,
-    onToggleMaximize: () -> Unit,
+    onToggleFullscreen: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val groupSource = remember { MutableInteractionSource() }
+    val groupHovered by groupSource.collectIsHoveredAsState()
+    val active = LocalWindowInfo.current.isWindowFocused
     val controls = listOf(
-        Color(0xFFFF5F57) to ("关闭" to onClose),
-        Color(0xFFFFBD2E) to ("最小化" to onMinimize),
-        Color(0xFF28C840) to ("最大化" to onToggleMaximize),
+        Triple(Color(0xFFFF5F57), "关闭", "×") to (true to onClose),
+        Triple(Color(0xFFFFBD2E), "最小化", "−") to (!fullscreen to onMinimize),
+        Triple(Color(0xFF28C840), if (fullscreen) "退出全屏" else "进入全屏", if (fullscreen) "⤡" else "⤢") to
+            (true to onToggleFullscreen),
     )
     androidx.compose.foundation.layout.Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.width(60.dp),
+        modifier = Modifier.width(60.dp).hoverable(groupSource),
     ) {
-        controls.forEach { (color, action) ->
+        controls.forEachIndexed { index, (control, action) ->
+            val (color, label, symbol) = control
+            val (enabled, onClick) = action
+            val source = remember(index) { MutableInteractionSource() }
+            val pressed by source.collectIsPressedAsState()
+            val displayColor = when {
+                !active || !enabled -> Color(0xFF9A9A9A)
+                else -> color
+            }
             Box(
                 Modifier
                     .size(16.dp)
                     .mafeiInteractive(
-                        onClick = action.second,
+                        onClick = onClick,
+                        enabled = enabled,
                         radiusDp = 8f,
-                        label = action.first,
-                        // Keep the traffic lights as real interactive controls:
-                        // hover/press wash is the only visual affordance in the
-                        // undecorated frame, and also confirms that the pointer
-                        // is not inside the neighbouring drag surface.
-                        visualFeedback = true,
+                        label = label,
+                        interactionSource = source,
+                        // macOS traffic lights reveal their glyphs as one group;
+                        // the standard Compose hover wash would make each dot
+                        // behave like an unrelated Material button.
+                        visualFeedback = false,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Spacer(Modifier.size(12.dp).background(color, CircleShape))
+                Spacer(
+                    Modifier.size(12.dp).background(
+                        displayColor.copy(alpha = if (pressed) .72f else 1f),
+                        CircleShape,
+                    ),
+                )
+                if (groupHovered && active && enabled) {
+                    Text(
+                        text = symbol,
+                        color = Color.Black.copy(alpha = .78f),
+                        fontSize = 10.sp,
+                    )
+                }
             }
         }
     }
