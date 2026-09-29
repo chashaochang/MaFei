@@ -100,6 +100,22 @@ interface MediaPlaybackPreferences {
     suspend fun setPreferredMediaSourceId(accountId: AccountId, mediaId: MediaId, sourceId: String)
 }
 
+/**
+ * The season document that was visible before an episode detail route took
+ * over the provider detail slot. Returning to that route should reveal this
+ * document immediately; a background refresh can update it later without
+ * replacing the whole season page with a loading state.
+ */
+private data class SeasonRestoreSnapshot(
+    val series: MediaItem,
+    val seasons: List<MediaItem>,
+    val seasonId: MediaId,
+    val season: MediaItem?,
+    val episodes: List<MediaItem>,
+    val seriesPlayTarget: MediaItem?,
+    val seasonPlayTarget: MediaItem?,
+)
+
 /** One screen and one account. Calls/state mutations run on the UI dispatcher.
  * Network suspends outside state updates; request tickets reject obsolete completions.
  * Repository still owns account isolation and cursor validation; no SDK leaks to UI.
@@ -116,6 +132,7 @@ class MediaBrowser(
     private var homeTicket = 0L
     private var detailTicket = 0L
     private var detailRefreshTicket = 0L
+    private var seasonRestoreSnapshot: SeasonRestoreSnapshot? = null
     private var personTicket = 0L
     private var searchTicket = 0L
     private var favoriteTicket = 0L
@@ -645,6 +662,24 @@ class MediaBrowser(
     )
 
     suspend fun openDetail(id: MediaId, initialItem: MediaItem? = null) {
+        val previous = state.value
+        val previousDetail = previous.detail
+        val previousSeasonId = previous.selectedSeasonId
+        if (
+            previousDetail?.mediaType == MediaType.Series &&
+            previous.detailEpisodes.any { it.id == id } &&
+            previousSeasonId != null
+        ) {
+            seasonRestoreSnapshot = SeasonRestoreSnapshot(
+                series = previousDetail,
+                seasons = previous.detailSeasons,
+                seasonId = previousSeasonId,
+                season = previous.selectedSeasonDetail,
+                episodes = previous.detailEpisodes,
+                seriesPlayTarget = previous.detailPlayTarget,
+                seasonPlayTarget = previous.selectedSeasonPlayTarget,
+            )
+        }
         val operation = ++detailTicket
         ++detailRefreshTicket
         mutableState.value = state.value.copy(
@@ -765,6 +800,54 @@ class MediaBrowser(
             // Background refresh failures leave the presented detail exactly as
             // it was. Explicit retry still uses [openDetail] and exposes errors.
         }
+    }
+
+    /**
+     * Restores the season that was visible immediately before an episode was
+     * opened. This is intentionally synchronous and local: the season route
+     * must not flash a full-page loading state just because its child route
+     * used the shared detail slot.
+     *
+     * @return true when a matching in-memory season snapshot was restored.
+     */
+    fun restoreSeasonContext(seriesId: MediaId, seasonId: MediaId): Boolean {
+        val snapshot = seasonRestoreSnapshot ?: return false
+        if (snapshot.series.id != seriesId || snapshot.seasonId != seasonId) return false
+
+        val currentEpisode = state.value.detail?.takeIf { item ->
+            snapshot.episodes.any { it.id == item.id }
+        }
+        val episodes = if (currentEpisode == null) {
+            snapshot.episodes
+        } else {
+            snapshot.episodes.map { episode ->
+                if (episode.id == currentEpisode.id) currentEpisode else episode
+            }
+        }
+        ++detailTicket
+        ++detailRefreshTicket
+        mutableState.value = state.value.copy(
+            detailId = snapshot.series.id,
+            detail = snapshot.series,
+            detailLoading = false,
+            detailError = null,
+            detailSeasons = snapshot.seasons,
+            selectedSeasonId = snapshot.seasonId,
+            selectedSeasonDetail = snapshot.season
+                ?: snapshot.seasons.firstOrNull { it.id == snapshot.seasonId },
+            detailEpisodes = episodes,
+            detailPlayTarget = snapshot.seriesPlayTarget,
+            selectedSeasonPlayTarget = snapshot.seasonPlayTarget,
+            detailSectionsLoading = false,
+            detailSectionsError = null,
+            detailActionBusy = false,
+            detailActionError = null,
+            selectedMediaSourceId = null,
+            selectedAudioStreamIndex = null,
+            selectedSubtitleStreamIndex = null,
+        )
+        seasonRestoreSnapshot = null
+        return true
     }
 
     /** 用户在详情页指定播放版本；与旧版一致，按当前账号和媒体条目持久化。 */

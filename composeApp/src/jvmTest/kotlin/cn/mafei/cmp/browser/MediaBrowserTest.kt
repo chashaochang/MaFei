@@ -643,6 +643,41 @@ class MediaBrowserTest {
         assertTrue(b.state.value.detailEpisodes.isEmpty())
     }
 
+    @Test fun episodeDetailRestoresVisibleSeasonWithoutClearingItsEpisodes() = runBlocking<Unit> {
+        val a = Adapter()
+        val series = a.media("series").copy(mediaType = MediaType.Series)
+        val season = a.media("season-1").copy(mediaType = MediaType.Season, seasonNumber = 1)
+        val episodeSummary = a.media("episode-1").copy(
+            mediaType = MediaType.Episode,
+            seasonNumber = 1,
+            episodeNumber = 1,
+            title = "Episode summary",
+        )
+        val episodeDetail = episodeSummary.copy(title = "Episode detail")
+        a.detail = { id ->
+            when (id) {
+                series.id -> series
+                episodeDetail.id -> episodeDetail
+                else -> a.media(id.value)
+            }
+        }
+        a.seasonFetch = { Page(listOf(season)) }
+        a.episodeFetch = { _, _, _ -> Page(listOf(episodeSummary)) }
+        val b = browser(a)
+
+        b.openDetail(series.id)
+        b.selectSeason(season.id)
+        b.openDetail(episodeDetail.id)
+
+        assertEquals(episodeDetail.id, b.state.value.detail?.id)
+        assertTrue(b.restoreSeasonContext(series.id, season.id))
+        assertEquals(series.id, b.state.value.detail?.id)
+        assertFalse(b.state.value.detailLoading)
+        assertEquals(listOf("Episode detail"), b.state.value.detailEpisodes.map { it.title })
+        assertEquals(season.id, b.state.value.selectedSeasonId)
+        assertFalse(b.state.value.detailSectionsLoading)
+    }
+
     @Test fun seasonEpisodesStopAtTheLegacyThousandItemWindow() = runBlocking<Unit> {
         val a = Adapter()
         val series = a.media("series").copy(mediaType = MediaType.Series)

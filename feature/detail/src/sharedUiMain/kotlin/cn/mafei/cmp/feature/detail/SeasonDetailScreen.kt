@@ -82,6 +82,7 @@ import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.components.LiquidFloatingTabs
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyMediaTagBadges
+import cn.mafei.cmp.common.ui.LegacyPosterPlaceholder
 import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
@@ -126,6 +127,7 @@ fun SeasonDetailScreen(
     posterArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     landscapeArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     episodeArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)? = null,
     onPersonSelected: (PersonRef) -> Unit = {},
     atmosphereArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = landscapeArtwork,
@@ -201,6 +203,7 @@ fun SeasonDetailScreen(
                             season = season,
                             libraryName = libraryName,
                             safeAreaTop = safeArea.top,
+                            sharedArtworkModifier = sharedArtworkModifier,
                             modifier = Modifier.align(Alignment.Start),
                         )
                     } else {
@@ -211,6 +214,7 @@ fun SeasonDetailScreen(
                             libraryName = libraryName,
                             posterArtwork = posterArtwork,
                             landscapeArtwork = landscapeArtwork,
+                            sharedArtworkModifier = sharedArtworkModifier,
                             extraHeight = heroStretch.extraHeight,
                         )
                     }
@@ -255,6 +259,7 @@ fun SeasonDetailScreen(
                             onEpisodeSelected = onEpisodeSelected,
                             onEpisodeOverview = { episodeOverview = it },
                             artwork = episodeArtwork,
+                            sharedArtworkModifier = sharedArtworkModifier,
                             backdrop = backdrop,
                         )
                         if (season.people.isNotEmpty()) {
@@ -313,11 +318,13 @@ private fun SeasonProjectHeader(
     season: MediaItem,
     libraryName: String?,
     safeAreaTop: androidx.compose.ui.unit.Dp,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     modifier: Modifier = Modifier,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
+    val headerBounds = modifier.fillMaxWidth()
     Box(
-        modifier
+        (sharedArtworkModifier?.invoke(season, headerBounds) ?: headerBounds)
             .fillMaxWidth()
             .padding(
                 start = horizontalPadding,
@@ -361,10 +368,14 @@ private fun SeasonHero(
     libraryName: String?,
     posterArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     landscapeArtwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     extraHeight: androidx.compose.ui.unit.Dp,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
-    Box(Modifier.fillMaxWidth().height(430.dp + extraHeight)) {
+    val heroBounds = Modifier.fillMaxWidth().height(430.dp + extraHeight)
+    Box(
+        sharedArtworkModifier?.invoke(season, heroBounds) ?: heroBounds,
+    ) {
         if (landscapeArtwork != null) {
             landscapeArtwork(season, Modifier.fillMaxSize().seasonFeatherBottom())
         } else {
@@ -619,6 +630,7 @@ private fun SeasonEpisodeSection(
     onEpisodeSelected: (MediaItem) -> Unit,
     onEpisodeOverview: (String) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     backdrop: GlassBackdrop,
 ) {
     var selectedGroup by remember(season.id.value) { mutableIntStateOf(0) }
@@ -714,6 +726,7 @@ private fun SeasonEpisodeSection(
                         SeasonEpisodeCard(
                             item = episode,
                             artwork = artwork,
+                            sharedArtworkModifier = sharedArtworkModifier,
                             onClick = { onEpisodeSelected(episode) },
                             onOverview = { overview -> onEpisodeOverview(overview) },
                         )
@@ -754,11 +767,13 @@ private fun SeasonEpisodeSkeletons() {
 private fun SeasonEpisodeCard(
     item: MediaItem,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     onClick: () -> Unit,
     onOverview: (String) -> Unit,
 ) {
+    val cardBounds = Modifier.width(180.dp).height(204.dp)
     Column(
-        Modifier.width(180.dp).height(204.dp)
+        (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds)
             .mafeiInteractive(onClick, radiusDp = 6f, label = item.title),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -768,8 +783,11 @@ private fun SeasonEpisodeCard(
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, imageShape)
                 .clip(imageShape),
         ) {
-            if (artwork != null) artwork(item, Modifier.fillMaxSize())
-            else TextPoster(item.title, Modifier.fillMaxSize())
+            if (artwork != null) {
+                val artworkModifier = Modifier.fillMaxSize()
+                artwork(item, artworkModifier)
+            }
+            else LegacyPosterPlaceholder(item.mediaType, Modifier.fillMaxSize())
             episodeProgress(item)?.let { progress ->
                 MaFeiProgressLine(
                     progress = progress,
@@ -779,7 +797,7 @@ private fun SeasonEpisodeCard(
                 )
             }
             LegacyMediaTagBadges(
-                tags = item.tags,
+                tags = episodeResolutionTags(item.tags),
                 maxTags = null,
                 filterOther = false,
                 deduplicate = false,
@@ -840,6 +858,18 @@ private fun SeasonEpisodeCard(
 }
 
 private const val EpisodeOverviewPreviewCharacters = 24
+
+private fun episodeResolutionTags(tags: List<String>): List<String> = tags
+    .map(String::trim)
+    .filter(String::isNotEmpty)
+    .filter { tag ->
+        when (tag.uppercase()) {
+            "8K", "4K", "2160P", "2160", "1440P", "1440",
+            "1080P", "1080", "720P", "720", "480P", "480" -> true
+            else -> false
+        }
+    }
+    .distinctBy(String::uppercase)
 
 private fun legacySeriesInfo(series: MediaItem, libraryName: String?): String = buildList {
     series.officialRating?.takeIf { it.isNotBlank() }?.let(::add)

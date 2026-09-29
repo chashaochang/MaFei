@@ -29,7 +29,16 @@ suspend fun PointerInputScope.inspectDragGestures(
         val upEvent =
             drag(
                 pointerId = drag.id,
-                onDrag = { onDrag(it, it.positionChange()) }
+                onDrag = {
+                    onDrag(it, it.positionChange())
+                    // This gesture drives an exclusive control (LiquidButton,
+                    // LiquidSlider, or the liquid tab indicator). Leaving the
+                    // movement unconsumed lets an ancestor vertical scroll
+                    // receive the same pointer delta while the control is held.
+                    // Consume after delivering the delta so the control keeps
+                    // its own press/drag feedback without scrolling the page.
+                    it.consume()
+                }
             )
         if (upEvent == null) {
             onDragCancel()

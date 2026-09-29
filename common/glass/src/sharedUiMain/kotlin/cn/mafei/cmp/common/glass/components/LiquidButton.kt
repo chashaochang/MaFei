@@ -49,6 +49,7 @@ fun LiquidButton(
     backdrop: GlassBackdrop,
     modifier: Modifier = Modifier,
     isInteractive: Boolean = true,
+    enablePressEffect: Boolean = true,
     tint: Color = Color.Unspecified,
     surfaceColor: Color = Color.Unspecified,
     chromaticAberration: Boolean = false,
@@ -62,6 +63,7 @@ fun LiquidButton(
     val hovered by interactionSource.collectIsHoveredAsState()
     val focused by interactionSource.collectIsFocusedAsState()
     val hoverActive = isInteractive && onClick != null && (hovered || focused)
+    val pressEffectActive = enablePressEffect && isInteractive && onClick != null
     val hoverScale by animateFloatAsState(
         targetValue = if (hoverActive) 1.025f else 1f,
         animationSpec = tween(140),
@@ -88,7 +90,7 @@ fun LiquidButton(
                         chromaticAberration = chromaticAberration,
                     )
                 },
-                layerBlock = if (isInteractive && onClick != null) {
+                layerBlock = if (pressEffectActive) {
                     {
                         val width = size.width
                         val height = size.height
@@ -150,7 +152,7 @@ fun LiquidButton(
                 scaleY = hoverScale
             }
             .then(
-                if (isInteractive && onClick != null) {
+                if (pressEffectActive) {
                     Modifier
                         .then(interactiveHighlight.modifier)
                         .then(interactiveHighlight.gestureModifier)

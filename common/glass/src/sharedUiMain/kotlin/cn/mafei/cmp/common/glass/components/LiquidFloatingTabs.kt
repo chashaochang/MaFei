@@ -79,6 +79,7 @@ fun LiquidFloatingTabs(
                 backdrop = backdrop,
                 surfaceColor = surfaceColor,
                 chromaticAberration = true,
+                enablePressEffect = false,
                 height = 36.dp,
                 horizontalPadding = 14.dp,
             ) {

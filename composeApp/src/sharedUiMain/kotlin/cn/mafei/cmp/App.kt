@@ -1261,6 +1261,14 @@ private fun BrowseContent(
     val browseBackStack = remember(session.selection.serverId.value, session.selection.accountId.value) {
         mutableStateListOf<BrowseRoute>(BrowseHomeRoute)
     }
+    // Keep the item that opened a detail route for the lifetime of this browse
+    // shell.  Episode rows already contain the artwork and basic metadata that
+    // the destination can render immediately; waiting for the detail request
+    // would replace the shared-element target with a skeleton and make the
+    // transition visibly jump.
+    val browseInitialItems = remember(session.selection.serverId.value, session.selection.accountId.value) {
+        mutableStateMapOf<String, MediaItem>()
+    }
     val currentRoute = browseBackStack.lastOrNull() ?: BrowseHomeRoute
     // Keep the chrome selection derived from the route that opened the page.
     // `state.selectedCollection` is provider/browser state and may still point
@@ -2103,6 +2111,17 @@ private fun BrowseContent(
             val route = browseBackStack.lastOrNull()
             val revealed = browseBackStack.getOrNull(browseBackStack.lastIndex - 1)
             val deferDetailClear = route is BrowseDetailRoute
+            // Restore the season document before removing the episode route so
+            // Navigation 3 never renders an intermediate full-page loading
+            // state during the pop transition.
+            val restoredSeasonContext = if (route is BrowseEpisodeRoute && revealed is BrowseSeasonRoute) {
+                browser.restoreSeasonContext(
+                    seriesId = MediaId(revealed.seriesId),
+                    seasonId = MediaId(revealed.seasonId),
+                )
+            } else {
+                false
+            }
             when (route) {
                 // Keep the detail document composed while NavDisplay runs the
                 // pop transition so the shared-element source remains alive.
@@ -2134,16 +2153,22 @@ private fun BrowseContent(
                         val id = MediaId(revealed.episodeId)
                         if (state.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
                     }
-                    is BrowseSeasonRoute -> scope.launch {
+                    is BrowseSeasonRoute -> if (!restoredSeasonContext) scope.launch {
                         val seriesId = MediaId(revealed.seriesId)
                         val seasonId = MediaId(revealed.seasonId)
-                        val requiresRestore = state.detail?.id != seriesId ||
-                            state.selectedSeasonId != seasonId
-                        if (state.detail?.id != seriesId) browser.openDetail(seriesId)
-                        if (browser.state.value.selectedSeasonId != seasonId) {
-                            browser.selectSeason(seasonId)
+                        // Episode details temporarily use the provider detail
+                        // slot. If no in-memory snapshot is available, use the
+                        // existing sequential restore as a cold fallback.
+                        if (!browser.restoreSeasonContext(seriesId, seasonId)) {
+                            val current = browser.state.value
+                            val requiresRestore = current.detail?.id != seriesId ||
+                                current.selectedSeasonId != seasonId
+                            if (current.detail?.id != seriesId) browser.openDetail(seriesId)
+                            if (browser.state.value.selectedSeasonId != seasonId) {
+                                browser.selectSeason(seasonId)
+                            }
+                            if (!requiresRestore) browser.refreshDetail(seriesId)
                         }
-                        if (!requiresRestore) browser.refreshDetail(seriesId)
                     }
                     else -> Unit
                 }
@@ -2434,11 +2459,13 @@ private fun BrowseContent(
                             BrowseHomeRoute -> NavEntry(route) {
                                 val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
                                     with(sharedTransitionScope) {
-                                        modifier.sharedElement(
+                                        modifier.sharedBounds(
                                             sharedContentState = rememberSharedContentState(
                                                 key = "media-artwork:${item.id.value}",
                                             ),
                                             animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            enter = fadeIn(tween(320)),
+                                            exit = fadeOut(tween(320)),
                                             boundsTransform = { _, _ -> tween(420) },
                                             zIndexInOverlay = 1f,
                                         )
@@ -2878,11 +2905,13 @@ private fun BrowseContent(
                             is BrowseDetailRoute -> NavEntry(route) {
                                 val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
                                     with(sharedTransitionScope) {
-                                        modifier.sharedElement(
+                                        modifier.sharedBounds(
                                             sharedContentState = rememberSharedContentState(
                                                 key = "media-artwork:${item.id.value}",
                                             ),
                                             animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            enter = fadeIn(tween(320)),
+                                            exit = fadeOut(tween(320)),
                                             boundsTransform = { _, _ -> tween(420) },
                                             zIndexInOverlay = 1f,
                                         )
@@ -3058,6 +3087,20 @@ private fun BrowseContent(
                                 )
                             }
                             is BrowseSeasonRoute -> NavEntry(route) {
+                                val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
+                                    with(sharedTransitionScope) {
+                                        modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState(
+                                                key = "media-artwork:${item.id.value}",
+                                            ),
+                                            animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            enter = fadeIn(tween(320)),
+                                            exit = fadeOut(tween(320)),
+                                            boundsTransform = { _, _ -> tween(420) },
+                                            zIndexInOverlay = 1f,
+                                        )
+                                    }
+                                }
                                 // The ArkUI season page owns its own ViewModel. Our
                                 // provider-neutral browser has one detail slot, so an
                                 // episode page temporarily replaces the series in that
@@ -3122,6 +3165,7 @@ private fun BrowseContent(
                                             }
                                         },
                                         onEpisodeSelected = { episode ->
+                                            browseInitialItems[episode.id.value] = episode
                                             browseBackStack += BrowseEpisodeRoute(
                                                 seriesId = route.seriesId,
                                                 seasonId = route.seasonId,
@@ -3165,6 +3209,7 @@ private fun BrowseContent(
                                                 revealDurationMillis = 360,
                                             )
                                         },
+                                        sharedArtworkModifier = sharedArtworkModifier,
                                         episodeArtwork = { item, modifier ->
                                             MediaArtwork(
                                                 item.legacyPrimaryThenBackdropArtworkCandidates(),
@@ -3199,20 +3244,42 @@ private fun BrowseContent(
                                 }
                             }
                             is BrowseEpisodeRoute -> NavEntry(route) {
-                                LaunchedEffect(route.episodeId) {
+                                val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
+                                    with(sharedTransitionScope) {
+                                        modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState(
+                                                key = "media-artwork:${item.id.value}",
+                                            ),
+                                            animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+                                            enter = fadeIn(tween(320)),
+                                            exit = fadeOut(tween(320)),
+                                            boundsTransform = { _, _ -> tween(420) },
+                                            zIndexInOverlay = 1f,
+                                        )
+                                    }
+                                }
+                                val initialEpisode = browseInitialItems[route.episodeId]
+                                LaunchedEffect(route.episodeId, initialEpisode) {
                                     if (state.detailId?.value != route.episodeId) {
-                                        browser.openDetail(MediaId(route.episodeId))
+                                        browser.openDetail(MediaId(route.episodeId), initialEpisode)
                                     }
                                 }
                                 val episode = state.detail?.takeIf { it.id.value == route.episodeId }
+                                    ?: initialEpisode
                                 DetailScreen(
                                     item = episode,
-                                    loading = state.detailLoading ||
-                                        (episode == null && state.detailError == null),
+                                    // Once the route has an initial row, keep it
+                                    // visible while the full detail refreshes.
+                                    // A loading state is only a blocking state
+                                    // when neither the row nor the detail is
+                                    // available.
+                                    loading = episode == null && state.detailLoading,
                                     error = state.detailError,
                                     onBack = popBrowseRoute,
                                     onRetry = {
-                                        scope.launch { browser.openDetail(MediaId(route.episodeId)) }
+                                        scope.launch {
+                                            browser.openDetail(MediaId(route.episodeId), initialEpisode)
+                                        }
                                     },
                                     onPlay = episode?.takeIf { playback != null }?.let { item ->
                                         { startPlayback(item) }
@@ -3258,6 +3325,7 @@ private fun BrowseContent(
                                             targetWidthPx = 480,
                                         )
                                     },
+                                    sharedArtworkModifier = sharedArtworkModifier,
                                     // The episode Hero must use the same primary
                                     // then backdrop chain as the season episode
                                     // cards.  Using the detail-backdrop chain

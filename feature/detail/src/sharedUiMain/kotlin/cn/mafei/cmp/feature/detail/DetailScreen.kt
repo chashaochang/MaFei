@@ -631,6 +631,7 @@ private fun BoxScope.DetailBody(
                     playbackSource = selectedPlaybackSource,
                     backdrop = backdrop,
                     safeAreaTop = safeArea.top,
+                    sharedArtworkModifier = sharedArtworkModifier,
                     modifier = Modifier.align(contentAlignment),
                 )
             } else {
@@ -721,6 +722,7 @@ private fun BoxScope.DetailBody(
                         loading = sectionsLoading,
                         error = sectionsError,
                         artwork = artwork,
+                        sharedArtworkModifier = sharedArtworkModifier,
                         onSeasonSelected = onSeasonSelected,
                     )
                 }
@@ -765,6 +767,7 @@ private fun DetailProjectHeader(
     playbackSource: DetailPlaybackSource?,
     backdrop: GlassBackdrop,
     safeAreaTop: Dp,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     modifier: Modifier = Modifier,
 ) {
     val horizontalPadding = detailPageHorizontalPadding()
@@ -777,8 +780,9 @@ private fun DetailProjectHeader(
     } else {
         null
     }
+    val headerBounds = modifier.fillMaxWidth()
     Box(
-        modifier
+        (sharedArtworkModifier?.invoke(item, headerBounds) ?: headerBounds)
             .fillMaxWidth()
             .padding(
                 start = horizontalPadding,
@@ -883,11 +887,10 @@ private fun DetailHero(
     // 宽屏/窄屏是两个页面。现在只有一种详情页。
     val roundedHero = false
 
+    val heroBounds = Modifier.fillMaxWidth().height(height)
     Box(
-        Modifier
-            .fillMaxWidth()
+        (sharedArtworkModifier?.invoke(item, heroBounds) ?: heroBounds)
             .padding(top = if (roundedHero) 12.dp else 0.dp)
-            .height(height)
             .clip(if (roundedHero) RoundedCornerShape(26.dp) else RoundedCornerShape(0.dp)),
     ) {
         // A rounded card keeps a crisp bottom edge so the card reads as a single
@@ -899,10 +902,7 @@ private fun DetailHero(
             Modifier.fillMaxSize().featherBottom(.64f)
         }
         if (artwork != null) {
-            artwork(
-                item,
-                sharedArtworkModifier?.invoke(item, artworkModifier) ?: artworkModifier,
-            )
+            artwork(item, artworkModifier)
         } else {
             TextPoster(item.title, artworkModifier)
         }
@@ -1039,8 +1039,8 @@ private fun DetailHeroMediaTags(
     centered: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier.fillMaxWidth(),
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (centered) {
             Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
         } else {
@@ -1048,7 +1048,10 @@ private fun DetailHeroMediaTags(
         },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        tags.forEach { tag ->
+        items(
+            items = tags,
+            key = { tag -> tag.name },
+        ) { tag ->
             DetailMediaBadge(tag.badgeSpec(), backdrop)
         }
     }
@@ -1268,7 +1271,18 @@ private fun RowScope.DetailPlayAction(
 ) {
     val progress = target?.playbackProgress() ?: item.playbackProgress()
     val label = legacyDetailPlayLabel(item, target)
-    Box(modifier.height(50.dp).clip(MaFeiShape.capsule)) {
+    Box(modifier.height(50.dp)) {
+        // Keep the progress fill behind the glass surface. The play action
+        // must use the same hit target and press/drag surface as the favorite
+        // and watched actions; drawing the fill/content as siblings above an
+        // empty LiquidButton made its drag feedback look different.
+        if (progress != null && progress > 0f && progress < 1f) {
+            Box(
+                Modifier.fillMaxWidth(progress).fillMaxHeight()
+                    .clip(MaFeiShape.capsule)
+                    .background(Color.White.copy(alpha = .26f)),
+            )
+        }
         if (onPlay != null) {
             LiquidButton(
                 onClick = { if (!busy) onPlay() },
@@ -1279,7 +1293,9 @@ private fun RowScope.DetailPlayAction(
                 modifier = Modifier.fillMaxSize().semantics {
                     contentDescription = label
                 },
-            ) {}
+            ) {
+                DetailPlayContents(label, busy)
+            }
         } else {
             GlassSurface(
                 backdrop = backdrop,
@@ -1289,25 +1305,18 @@ private fun RowScope.DetailPlayAction(
                     contentDescription = label
                     disabled()
                 },
-            ) {}
+                ) {}
         }
-        // LegacyDetailPlayAction paints progress above the material surface and
-        // below the button contents. Painting it before LiquidButton lets the
-        // refracted backdrop cover the fill completely.
-        if (progress != null && progress > 0f && progress < 1f) {
-            Box(
-                Modifier.fillMaxWidth(progress).fillMaxHeight()
-                    .background(Color.White.copy(alpha = .26f)),
-            )
-        }
-        Row(
-            Modifier.fillMaxSize()
-                .alpha(if (onPlay == null) .48f else 1f)
-                .padding(horizontal = 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DetailPlayContents(label, busy && onPlay != null)
+        if (onPlay == null) {
+            Row(
+                Modifier.fillMaxSize()
+                    .alpha(.48f)
+                    .padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DetailPlayContents(label, busy = false)
+            }
         }
     }
 }
@@ -1531,6 +1540,7 @@ private fun SeriesSections(
     loading: Boolean,
     error: String?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     onSeasonSelected: (MediaItem) -> Unit,
 ) {
     val largeTypography = usesLargeDetailTypography()
@@ -1575,6 +1585,7 @@ private fun SeriesSections(
                                     SeasonCard(
                                         season = season,
                                         artwork = artwork,
+                                        sharedArtworkModifier = sharedArtworkModifier,
                                         onClick = { onSeasonSelected(season) },
                                         modifier = Modifier.weight(1f),
                                     )
@@ -1614,6 +1625,7 @@ private fun SeriesSections(
 private fun RowScope.SeasonCard(
     season: MediaItem,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1626,8 +1638,10 @@ private fun RowScope.SeasonCard(
         }.joinToString(" · "),
         textAlign = TextAlign.Center,
         onClick = onClick,
-        modifier = modifier,
-        poster = artwork?.let { draw -> { cardModifier -> draw(season, cardModifier) } },
+        modifier = sharedArtworkModifier?.invoke(season, modifier) ?: modifier,
+        poster = artwork?.let { draw ->
+            { cardModifier -> draw(season, cardModifier) }
+        },
     )
 }
 

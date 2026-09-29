@@ -153,7 +153,7 @@ internal fun DetailSheetHeader(
     Box(Modifier.fillMaxWidth().height(if (largeWindow) 56.dp else 64.dp)) {
         if (!largeWindow) {
             Box(
-                Modifier.align(Alignment.TopCenter).padding(top = 4.dp).width(28.dp).height(3.dp)
+                Modifier.align(Alignment.TopCenter).width(28.dp).height(3.dp)
                     .clip(RoundedCornerShape(1.5.dp))
                     .background(Color.White.copy(alpha = .36f)),
             )

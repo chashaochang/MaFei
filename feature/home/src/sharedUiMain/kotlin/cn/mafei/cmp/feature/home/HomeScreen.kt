@@ -728,7 +728,6 @@ fun HomeScreen(
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
-                        sharedArtworkModifier = sharedArtworkModifier,
                         autoplay = heroAutoplay && heroVisibleForAutoplay,
                         scrolling = gridScrolling,
                         onActiveItemChanged = { item ->
@@ -905,10 +904,7 @@ fun HomeScreen(
                                         status = status(item),
                                         poster = artwork?.let { painter ->
                                             { posterModifier ->
-                                                painter(
-                                                    item,
-                                                    sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
-                                                )
+                                                painter(item, posterModifier)
                                             }
                                         },
                                         progress = progress(item),
@@ -917,7 +913,8 @@ fun HomeScreen(
                                         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         isWatched = item.userData.isPlayed,
                                         isFavorite = item.userData.isFavorite,
-                                        modifier = Modifier.width(140.dp),
+                                        modifier = sharedArtworkModifier?.invoke(item, Modifier.width(140.dp))
+                                            ?: Modifier.width(140.dp),
                                     )
                                 }
                             }
@@ -965,12 +962,10 @@ fun HomeScreen(
                         status = status(item),
                         poster = artwork?.let { painter ->
                             { posterModifier ->
-                                painter(
-                                    item,
-                                    sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
-                                )
+                                painter(item, posterModifier)
                             }
                         },
+                        modifier = sharedArtworkModifier?.invoke(item, Modifier) ?: Modifier,
                         progress = progress(item),
                         onPlay = onPlay?.let { play -> { play(item) } },
                         onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
@@ -1028,12 +1023,10 @@ fun HomeScreen(
                     status = status(item),
                     poster = artwork?.let { painter ->
                         { posterModifier ->
-                            painter(
-                                item,
-                                sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
-                            )
+                            painter(item, posterModifier)
                         }
                     },
+                    modifier = sharedArtworkModifier?.invoke(item, Modifier) ?: Modifier,
                     progress = progress(item),
                     onPlay = onPlay?.let { play -> { play(item) } },
                     onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
@@ -1962,7 +1955,6 @@ private fun RecommendationHero(
     layout: MaFeiLayout,
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
-    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     autoplay: Boolean,
     scrolling: Boolean,
     onActiveItemChanged: (MediaItem?) -> Unit,
@@ -2212,10 +2204,7 @@ private fun RecommendationHero(
                     ) {
                         if (artwork != null) {
                             val artworkModifier = Modifier.fillMaxSize()
-                            artwork(
-                                item,
-                                sharedArtworkModifier?.invoke(item, artworkModifier) ?: artworkModifier,
-                            )
+                            artwork(item, artworkModifier)
                         } else {
                             TextPoster(item.title, Modifier.fillMaxSize())
                         }
@@ -2428,8 +2417,9 @@ private fun HomeMediaShelf(
                 val interactionSource = remember(item.id) { MutableInteractionSource() }
                 val hovered by interactionSource.collectIsHoveredAsState()
                 val focused by interactionSource.collectIsFocusedAsState()
+                val cardBounds = Modifier.width(width)
                 Column(
-                    Modifier.width(width).mafeiInteractive(
+                    (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiInteractive(
                         onClick = { onItem(item) },
                         label = "查看${text.title}",
                         interactionSource = interactionSource,
@@ -2439,10 +2429,7 @@ private fun HomeMediaShelf(
                     Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
                         val posterModifier = Modifier.fillMaxSize()
                         if (artwork != null) {
-                            artwork(
-                                item,
-                                sharedArtworkModifier?.invoke(item, posterModifier) ?: posterModifier,
-                            )
+                            artwork(item, posterModifier)
                         } else {
                             TextPoster(text.title, posterModifier)
                         }
