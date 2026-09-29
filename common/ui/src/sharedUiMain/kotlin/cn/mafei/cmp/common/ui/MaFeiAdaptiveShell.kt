@@ -120,10 +120,11 @@ val LocalMaFeiNavigationChrome = staticCompositionLocalOf {
     MaFeiNavigationChrome(NavigationPlacement.Bottom, NavigationEdge.Leading, 0.dp, 0.dp)
 }
 
-/** shell 根部的玻璃记录层：窗口背景（含首页轮播背景）与全部内容的采样源。
- * 页面里的玻璃组件用它，而不是 scene 局部捕获层 —— 背景提升到窗口画布后，
- * 只有根层能同时采到背景与内容。shell 之外为 null。 */
+/** Window background + scene, for shell overlays only; scene descendants must not sample this layer. */
 val LocalShellBackdrop = staticCompositionLocalOf<cn.mafei.cmp.common.glass.GlassBackdrop?> { null }
+
+/** Background only, safe to combine with a page's scrolling-content layer without self-sampling. */
+val LocalShellBackgroundBackdrop = staticCompositionLocalOf<GlassBackdrop?> { null }
 
 internal data class MaFeiWindowModalEntry(
     val owner: Any,
@@ -221,6 +222,7 @@ fun MaFeiAdaptiveShell(
     modal: @Composable (GlassBackdrop) -> Unit = {},
 ) {
     val backdrop = rememberGlassBackdrop()
+    val backgroundBackdrop = rememberGlassBackdrop()
     val windowModalHost = remember { MaFeiWindowModalHostState() }
     val sideScroll = rememberScrollState()
     // Keep form-factor ownership explicit. A page route may hide the phone
@@ -342,6 +344,7 @@ fun MaFeiAdaptiveShell(
     )
     CompositionLocalProvider(
         LocalShellBackdrop provides backdrop,
+        LocalShellBackgroundBackdrop provides backgroundBackdrop,
         LocalMaFeiSafeArea provides safeArea,
         LocalMaFeiWindowModalHost provides windowModalHost,
     ) {
@@ -382,7 +385,9 @@ fun MaFeiAdaptiveShell(
         // Navigation remains a sibling consumer, so content moving beneath it is
         // sampled every frame without recursively recording the glass itself.
         Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
-            background()
+            Box(Modifier.fillMaxSize().captureGlassBackdrop(backgroundBackdrop)) {
+                background()
+            }
                 Box(
                     Modifier.fillMaxSize().padding(
                         start = when {

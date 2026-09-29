@@ -73,6 +73,7 @@ import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.components.LiquidFloatingTabs
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.*
 import kotlinx.coroutines.Job
@@ -408,7 +409,15 @@ fun HomeScreen(
     // 若在这里消费 LocalShellBackdrop，就会把“读取 shell layer”的节点重新录进同一个
     // shell layer，Skiko 绘制时形成 RenderNode -> SkDrawable 的无限递归并耗尽 native 栈。
     // 下方滚动内容负责记录，Floating Tabs / 搜索按钮 / ActionBar 是它的兄弟消费者。
-    val floatingTabsBackdrop = rememberGlassBackdrop()
+    val floatingTabsContentBackdrop = rememberGlassBackdrop()
+    val windowBackgroundBackdrop = LocalShellBackgroundBackdrop.current
+    // Refraction must sample an opaque scene, not isolated text on transparency:
+    // otherwise shifted/blurred glyphs let the original sharp text show through.
+    val floatingTabsBackdrop = if (windowBackgroundBackdrop != null) {
+        rememberCombinedGlassBackdrop(windowBackgroundBackdrop, floatingTabsContentBackdrop)
+    } else {
+        floatingTabsContentBackdrop
+    }
     val floatingTabLabels = remember(collections) {
         listOf("最近添加") + collections.map { it.name }
     }
@@ -683,7 +692,13 @@ fun HomeScreen(
       // 首页轮播背景已提升到 shell 的窗口画布（heroBackdropState 同步状态，
       // App.kt 的 background 里绘制）—— 它天然全窗、与侧栏让位无关，scene 里
       // 只保留内容、手势和文字浮层。
-      Box(Modifier.fillMaxSize().captureGlassBackdrop(floatingTabsBackdrop)) {
+      Box(
+          Modifier.fillMaxSize().captureGlassBackdrop(floatingTabsContentBackdrop)
+              .then(
+                  if (windowBackgroundBackdrop == null) Modifier.background(MaterialTheme.colorScheme.background)
+                  else Modifier,
+              ),
+      ) {
       HomeRefreshContainer(
         stretchHero = stretchHeroRefresh,
         refreshing = refreshing,
