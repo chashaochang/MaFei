@@ -1494,7 +1494,7 @@ internal fun BoxScope.OverviewSheetOverlay(
     GlassSurface(
         backdrop = LocalShellBackdrop.current ?: backdrop,
         spec = OverviewSheetSurfaceSpec,
-        tint = MaterialTheme.colorScheme.background,
+        tint = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.align(sheetAlignment)
             .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
             .widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
@@ -1793,7 +1793,7 @@ private fun BoxScope.DetailPickerSheetOverlay(
             GlassSurface(
                 backdrop = LocalShellBackdrop.current ?: backdrop,
                 spec = OverviewSheetSurfaceSpec,
-                tint = MaterialTheme.colorScheme.background,
+                tint = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
                     .then(if (largeWindow) Modifier else sheetDrag)
                     .pointerInput(Unit) { detectTapGestures { } },
@@ -2091,7 +2091,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     GlassSurface(
             backdrop = LocalShellBackdrop.current ?: backdrop,
             spec = OverviewSheetSurfaceSpec,
-            tint = MaterialTheme.colorScheme.background,
+            tint = MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.align(sheetAlignment)
                 .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
                 .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)

@@ -686,7 +686,7 @@ private fun SeasonEpisodeSection(
             }
         }
         Spacer(Modifier.height(16.dp))
-        Box(Modifier.fillMaxWidth().height(184.dp)) {
+        Box(Modifier.fillMaxWidth().height(220.dp)) {
             DetailAnimatedVisibility(
                 visible = showLoading,
                 modifier = Modifier.fillMaxSize(),
@@ -708,7 +708,7 @@ private fun SeasonEpisodeSection(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.fillMaxWidth().height(184.dp),
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
                 ) {
                     items(selectedEpisodes, key = { it.id.value }) { episode ->
                         SeasonEpisodeCard(
@@ -727,7 +727,7 @@ private fun SeasonEpisodeSection(
 @Composable
 private fun SeasonEpisodeSkeletons() {
     LazyRow(
-        Modifier.fillMaxWidth().height(184.dp),
+        Modifier.fillMaxWidth().height(220.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
     ) {
@@ -758,7 +758,7 @@ private fun SeasonEpisodeCard(
     onOverview: (String) -> Unit,
 ) {
     Column(
-        Modifier.width(180.dp).height(158.dp)
+        Modifier.width(180.dp).height(204.dp)
             .mafeiInteractive(onClick, radiusDp = 6f, label = item.title),
         horizontalAlignment = Alignment.Start,
     ) {
