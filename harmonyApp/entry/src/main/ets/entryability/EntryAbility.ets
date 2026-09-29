@@ -16,6 +16,8 @@ export default class EntryAbility extends UIAbility {
   private systemBarsHidden: boolean = false;
   private playerDecorHidden: boolean = false;
   private playerWindowMaximizedByUs: boolean = false;
+  private playerWindowRecoveryInFlight: boolean = false;
+  private lastPlayerFullscreenRequest: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -25,6 +27,16 @@ export default class EntryAbility extends UIAbility {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
       this.applyOrientationPolicy(this.mainWindow);
+    }
+  };
+  private windowStatusDidChangeCallback = (_status: window.WindowStatusType): void => {
+    if (this.mainWindow) {
+      this.publishSafeArea(this.mainWindow);
+    }
+  };
+  private windowTitleButtonRectChangeCallback = (_rect: window.TitleButtonRect): void => {
+    if (this.mainWindow) {
+      this.publishSafeArea(this.mainWindow);
     }
   };
 
@@ -96,8 +108,12 @@ export default class EntryAbility extends UIAbility {
    */
   private applySystemBarPolicy(windowClass: window.Window): void {
     const freeform = this.isFreeformWindow(windowClass);
+    const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
+    const playerFullscreenRequested = nativeApi.IsOhosPlayerFullscreenRequested();
+    const playerExitedFullscreen = this.lastPlayerFullscreenRequest && !playerFullscreenRequested;
+    this.lastPlayerFullscreenRequest = playerVisible ? playerFullscreenRequested : false;
     const fullscreen = this.isWindowedPlayerHost(windowClass) &&
-      nativeApi.IsOhosPlayerScreenVisible() && nativeApi.IsOhosPlayerFullscreenRequested();
+      playerVisible && playerFullscreenRequested;
     // A freeform tablet keeps its native titlebar in normal playback, but a
     // player fullscreen request should consume that chrome as well as the
     // status/navigation bars. The 2-in-1 host already hides its decor at
@@ -121,6 +137,8 @@ export default class EntryAbility extends UIAbility {
     if (deviceInfo.deviceType === '2in1') {
       try {
         const status = windowClass.getWindowStatus();
+        const nativeFullscreen = status === window.WindowStatusType.FULL_SCREEN ||
+          status === window.WindowStatusType.MAXIMIZE;
         if (fullscreen && !this.playerWindowMaximizedByUs &&
             status === window.WindowStatusType.FLOATING) {
           this.playerWindowMaximizedByUs = true;
@@ -136,6 +154,22 @@ export default class EntryAbility extends UIAbility {
             hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to recover player window: %{public}s',
               JSON.stringify(error));
           });
+        } else if (!fullscreen && playerVisible && playerExitedFullscreen && nativeFullscreen &&
+            !this.playerWindowRecoveryInFlight) {
+          // The user may have entered maximize/fullscreen with Harmony's
+          // native title button. The player button still means "exit" in that
+          // state, so restore the previous floating window instead of merely
+          // changing Compose's local state.
+          this.playerWindowRecoveryInFlight = true;
+          windowClass.recover().then(() => {
+            this.playerWindowRecoveryInFlight = false;
+          }).catch((error: Object) => {
+            this.playerWindowRecoveryInFlight = false;
+            hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to recover native fullscreen player window: %{public}s',
+              JSON.stringify(error));
+          });
+        } else if (!nativeFullscreen) {
+          this.playerWindowRecoveryInFlight = false;
         }
       } catch (error) {
         hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to query player window status: %{public}s',
@@ -195,15 +229,47 @@ export default class EntryAbility extends UIAbility {
       const navigation = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       const cutout = windowClass.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
       const width = properties.windowRect.width;
+      const widthVp = this.pxToVp(windowClass, width);
       // Freeform tablet windows also have a native title bar. Only the
       // HarmonyOS PC/2-in-1 device class uses the custom desktop shell.
       const desktopHost = deviceInfo.deviceType === '2in1';
       const windowedHost = this.isWindowedPlayerHost(windowClass);
       nativeApi.UpdateOhosWindowMetrics(
-        this.pxToVp(windowClass, width),
+        widthVp,
         this.pxToVp(windowClass, properties.windowRect.height),
         desktopHost,
         windowedHost
+      );
+
+      // The title buttons are native window chrome, not a physical safe area.
+      // Publish their actual horizontal and vertical footprint so the player
+      // top row can avoid the native title buttons without shifting the rest
+      // of the page.
+      let windowControlEndInsetVp = 0.0;
+      let windowControlTopInsetVp = 0.0;
+      let windowFullscreen = false;
+      if (windowedHost) {
+        try {
+          const titleButtons = windowClass.getTitleButtonRect();
+          const titleButtonsLeftVp = Math.max(0, titleButtons.right - titleButtons.width);
+          windowControlEndInsetVp = Math.max(0, widthVp - titleButtonsLeftVp);
+          windowControlTopInsetVp = Math.max(0, titleButtons.top + titleButtons.height);
+        } catch (_) {
+          // The button rectangle is unavailable while the window is changing
+          // state; the next size/status callback will publish it again.
+        }
+        try {
+          const status = windowClass.getWindowStatus();
+          windowFullscreen = status === window.WindowStatusType.FULL_SCREEN ||
+            status === window.WindowStatusType.MAXIMIZE;
+        } catch (_) {
+          // Older window managers may not expose status while starting.
+        }
+      }
+      nativeApi.UpdateOhosWindowChrome(
+        windowControlEndInsetVp,
+        windowControlTopInsetVp,
+        windowFullscreen
       );
       const leftPx = Math.max(
         0,
@@ -254,17 +320,26 @@ export default class EntryAbility extends UIAbility {
       try {
         const loadedWindow = mainWindow ?? windowStage.getMainWindowSync();
         try {
-          // In freeform HarmonyOS PC/tablet windows the system titlebar is
-          // only chrome around the CMP canvas. Hide that strip while keeping
-          // the system close/minimize/maximize buttons on the right; the
-          // shared Compose shell owns the left-side product navigation. This
-          // keeps Harmony aligned with the custom Mac chrome without
-          // reimplementing system window actions in ArkTS.
+          // Hide the native titlebar strip but keep the HarmonyOS-owned
+          // close/minimize/maximize area. The buttons remain system-owned;
+          // Compose must not paint a competing window-control surface.
           if (deviceInfo.deviceType === '2in1') {
-            loadedWindow.setWindowDecorVisible(false);
             loadedWindow.setWindowDecorHeight(52);
+            loadedWindow.setWindowDecorVisible(false);
             loadedWindow.setWindowTitleButtonVisible(true, true, true);
             loadedWindow.setWindowTitleMoveEnabled(true);
+            const decorButtonStyle: window.DecorButtonStyle = {
+              // MaFei uses a dark visual system. Keep the native controls
+              // light instead of letting the system theme turn them black
+              // over a dark hero image.
+              colorMode: ConfigurationConstant.ColorMode.COLOR_MODE_DARK,
+              buttonBackgroundSize: 28,
+              spacingBetweenButtons: 12,
+              closeButtonRightMargin: 20,
+              buttonIconSize: 20,
+              buttonBackgroundCornerRadius: 6
+            };
+            loadedWindow.setDecorButtonStyle(decorButtonStyle);
           }
         } catch (chromeError) {
           // Phones and older tablet window managers do not expose freeform
@@ -272,6 +347,17 @@ export default class EntryAbility extends UIAbility {
           hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to configure window chrome: %{public}s',
             JSON.stringify(chromeError));
         }
+        try {
+          // The title-button rectangle/status APIs are valid after content has
+          // been loaded. Keep the bridge current while a freeform window is
+          // resized, maximized, restored, or its native buttons are laid out.
+          loadedWindow.on('windowStatusDidChange', this.windowStatusDidChangeCallback);
+          loadedWindow.on('windowTitleButtonRectChange', this.windowTitleButtonRectChangeCallback);
+        } catch (chromeEventError) {
+          hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to observe window chrome: %{public}s',
+            JSON.stringify(chromeEventError));
+        }
+        this.publishSafeArea(loadedWindow);
         // Keep the full-screen Compose canvas stable while the IME animates.
         // The connection screen owns focused-field avoidance inside its
         // scrollable foreground; resizing the host also re-crops the full-screen
@@ -331,12 +417,16 @@ export default class EntryAbility extends UIAbility {
     }
     this.requestedOrientation = undefined;
     this.playerDecorHidden = false;
+    this.playerWindowRecoveryInFlight = false;
+    this.lastPlayerFullscreenRequest = false;
     const mainWindow = this.mainWindow;
     this.mainWindow = undefined;
     if (!mainWindow) return;
     try {
       mainWindow.off('avoidAreaChange', this.avoidAreaChangeCallback);
       mainWindow.off('windowSizeChange', this.windowSizeChangeCallback);
+      mainWindow.off('windowStatusDidChange', this.windowStatusDidChangeCallback);
+      mainWindow.off('windowTitleButtonRectChange', this.windowTitleButtonRectChangeCallback);
     } catch (_) {
       // The window is already being destroyed; listener cleanup is best effort.
     }

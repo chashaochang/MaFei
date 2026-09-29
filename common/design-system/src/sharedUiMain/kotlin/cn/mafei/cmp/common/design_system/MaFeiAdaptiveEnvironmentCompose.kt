@@ -20,6 +20,17 @@ data class MaFeiWindowFeatures(
     val desktopWindow: Boolean = false,
     /** A tablet/2-in-1 freeform window with native window chrome. */
     val windowedHost: Boolean = false,
+    /**
+     * The horizontal inset occupied by the native HarmonyOS title buttons.
+     * This is published by the host in dp and is intentionally separate from
+     * safe-area insets: the controls are window chrome, not a physical display
+     * cutout, and only the player top row needs to avoid them.
+     */
+    val windowControlEndInsetDp: Float = 0f,
+    /** The vertical footprint occupied by the native HarmonyOS title buttons. */
+    val windowControlTopInsetDp: Float = 0f,
+    /** Whether the host window is currently maximized/immersive fullscreen. */
+    val windowFullscreen: Boolean = false,
 )
 
 val LocalMaFeiWindowFeatures = staticCompositionLocalOf { MaFeiWindowFeatures() }

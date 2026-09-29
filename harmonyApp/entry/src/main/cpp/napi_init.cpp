@@ -114,6 +114,25 @@ static napi_value UpdateWindowMetrics(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value UpdateWindowChrome(napi_env env, napi_callback_info info) {
+    size_t count = 3;
+    napi_value arguments[3];
+    double endInset = 0.0;
+    double topInset = 0.0;
+    bool fullscreen = false;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 3 ||
+        napi_get_value_double(env, arguments[0], &endInset) != napi_ok ||
+        napi_get_value_double(env, arguments[1], &topInset) != napi_ok ||
+        napi_get_value_bool(env, arguments[2], &fullscreen) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "Window chrome inset and fullscreen state are required");
+        return nullptr;
+    }
+    UpdateOhosWindowChrome(endInset, topInset, fullscreen);
+    napi_value result = nullptr;
+    napi_get_undefined(env, &result);
+    return result;
+}
+
 static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) {
     size_t count = 1;
     napi_value arguments[1];
@@ -251,6 +270,16 @@ static napi_value Init(napi_env env, napi_value exports) {
             "UpdateOhosWindowMetrics",
             nullptr,
             UpdateWindowMetrics,
+            nullptr,
+            nullptr,
+            nullptr,
+            napi_default,
+            nullptr,
+        },
+        {
+            "UpdateOhosWindowChrome",
+            nullptr,
+            UpdateWindowChrome,
             nullptr,
             nullptr,
             nullptr,

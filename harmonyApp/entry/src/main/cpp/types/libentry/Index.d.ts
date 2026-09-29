@@ -21,6 +21,12 @@ export const UpdateOhosWindowMetrics: (
   windowedHost: boolean
 ) => void
 
+export const UpdateOhosWindowChrome: (
+  windowControlEndInsetDp: number,
+  windowControlTopInsetDp: number,
+  windowFullscreen: boolean
+) => void
+
 export const UpdateOhosPlayerState: (payload: string) => boolean
 
 export const IsOhosPlayerScreenVisible: () => boolean

@@ -393,6 +393,11 @@ fun NowPlayingScreen(
         // Normal tablets use this control to rotate the player; desktop hosts
         // keep a real window-fullscreen action.
         val windowFeatures = LocalMaFeiWindowFeatures.current
+        val windowControlTopInset = if (windowFeatures.windowedHost) {
+            windowFeatures.windowControlTopInsetDp.dp
+        } else {
+            0.dp
+        }
         val tabletWindow = !windowFeatures.desktopWindow && !windowFeatures.windowedHost &&
             minOf(maxWidth.value, maxHeight.value) >= 600f
         val landscapeWindow = maxWidth.value > maxHeight.value
@@ -636,7 +641,10 @@ fun NowPlayingScreen(
                 backdrop = backdrop,
                 onClick = handleBack,
                 modifier = Modifier.align(Alignment.TopStart)
-                    .padding(start = 12.dp + safeArea.start, top = 10.dp + safeArea.top),
+                    .padding(
+                        start = 12.dp + safeArea.start,
+                        top = 10.dp + safeArea.top + windowControlTopInset,
+                    ),
             ) {
                 MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
             }
@@ -884,13 +892,25 @@ private fun PlayerTopChrome(
     onBack: () -> Unit,
     onMenu: () -> Unit,
 ) {
+    val windowFeatures = LocalMaFeiWindowFeatures.current
+    val windowControlEndInset = if (windowFeatures.windowedHost && !fullscreen) {
+        windowFeatures.windowControlEndInsetDp.dp
+    } else {
+        0.dp
+    }
+    val windowControlTopInset = if (windowFeatures.windowedHost) {
+        windowFeatures.windowControlTopInsetDp.dp
+    } else {
+        0.dp
+    }
+    val topChromeInset = safeTop + windowControlTopInset
     Box(
         Modifier.fillMaxWidth()
             .height((when {
                 largeWindow -> 104.dp
                 fullscreen -> 96.dp
                 else -> 88.dp
-            }) + safeTop)
+            }) + topChromeInset)
             .background(
                 Brush.verticalGradient(
                     0f to (if (fullscreen) PlayerFullscreenControlMask else PlayerControlMask),
@@ -906,8 +926,13 @@ private fun PlayerTopChrome(
                     // 非全屏返回按钮独立绘制在 x=12、宽 44 的位置；标题从同一
                     // 行的 68dp 起步，保证返回按钮右缘到标题左缘的间距固定。
                     start = if (fullscreen) safeStart + 20.dp else safeStart + 68.dp,
-                    end = safeEnd + if (largeWindow) 24.dp else 12.dp,
-                    top = safeTop + if (fullscreen) 16.dp else 10.dp,
+                    // HarmonyOS owns the native maximize/minimize/close area.
+                    // Reserve its actual measured footprint instead of using a
+                    // device-specific constant; the player title/menu stays
+                    // readable in both floating and resized windows.
+                    end = safeEnd + (if (largeWindow) 24.dp else 12.dp) +
+                        windowControlEndInset,
+                    top = topChromeInset + if (fullscreen) 16.dp else 10.dp,
                 )
                 .height(44.dp),
             verticalAlignment = Alignment.CenterVertically,

@@ -113,6 +113,35 @@ fun UpdateOhosWindowMetrics(
     )
 }
 
+/**
+ * Publishes native HarmonyOS window chrome separately from safe areas. The
+ * title-button rectangle is not a display cutout; it only reserves the top
+ * end of the player chrome while the native buttons are visible.
+ */
+@OptIn(ExperimentalNativeApi::class)
+@CName("UpdateOhosWindowChrome")
+fun UpdateOhosWindowChrome(
+    windowControlEndInsetDp: Double,
+    windowControlTopInsetDp: Double,
+    windowFullscreen: Boolean,
+) {
+    val endInset = windowControlEndInsetDp
+        .takeIf { it.isFinite() }
+        ?.coerceAtLeast(0.0)
+        ?.toFloat()
+        ?: 0f
+    val topInset = windowControlTopInsetDp
+        .takeIf { it.isFinite() }
+        ?.coerceAtLeast(0.0)
+        ?.toFloat()
+        ?: 0f
+    ohosWindowFeatures.value = ohosWindowFeatures.value.copy(
+        windowControlEndInsetDp = endInset,
+        windowControlTopInsetDp = topInset,
+        windowFullscreen = windowFullscreen,
+    )
+}
+
 @OptIn(ExperimentalNativeApi::class, ExperimentalForeignApi::class)
 @CName("MainArkUIViewController")
 fun MainArkUIViewController(

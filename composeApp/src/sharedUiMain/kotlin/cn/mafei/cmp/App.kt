@@ -1152,6 +1152,7 @@ private fun BrowseContent(
     // 全屏是页面状态而不是几何推断：横屏平板宽 > 高，按窗口比例判「已是全屏」会让返回键
     // 永远停在「退出全屏」那一步（平板退出全屏也不会变竖屏），结果退不出播放页。
     var playerFullscreen by remember(session) { mutableStateOf(false) }
+    val hostWindowFeatures = LocalMaFeiWindowFeatures.current
     var playbackBusy by remember(session) { mutableStateOf(false) }
     var playbackError by remember(session) { mutableStateOf<String?>(null) }
     // 播放队列（旧版 QueueManager 的等价物）：由起播时的浏览上下文构造，播放页的
@@ -1193,6 +1194,24 @@ private fun BrowseContent(
         session.selection.serverId.value,
         session.selection.accountId.value,
     ) { mutableStateOf(false) }
+    // HarmonyOS PC/2-in-1 owns the native maximize/fullscreen state. When the
+    // user presses that system button while the player is open, reflect the
+    // host state in the player so its fullscreen button becomes "exit" rather
+    // than issuing another enter request. Do not key this effect by the local
+    // player state: an internal request is asynchronous and must not be reset
+    // before the window manager reports the resulting status.
+    LaunchedEffect(
+        playerExpanded,
+        hostWindowFeatures.windowedHost,
+        hostWindowFeatures.windowFullscreen,
+    ) {
+        if (playerExpanded && hostWindowFeatures.windowedHost &&
+            playerFullscreen != hostWindowFeatures.windowFullscreen
+        ) {
+            playerFullscreen = hostWindowFeatures.windowFullscreen
+            onPlayerFullscreenChanged(hostWindowFeatures.windowFullscreen)
+        }
+    }
     DisposableEffect(playerExpanded, onPlayerScreenChanged) {
         onPlayerScreenChanged(playerExpanded)
         onDispose {
