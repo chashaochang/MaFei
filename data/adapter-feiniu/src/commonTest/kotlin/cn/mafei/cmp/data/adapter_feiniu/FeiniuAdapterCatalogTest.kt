@@ -58,7 +58,7 @@ private val LIST_PAGE_ONE =
              "release_date":"2024-01-01","ancestor_guid":"lib-0001","epoch":"ts",
              "ts":1800,"overview":"Overview text","official_rating_unused":"x",
              "media_stream":{"resolutions":["4k","1080p"],"audio_type":["DTS","DolbyAtmos"],"color_range_type":["HDR","DolbyVision"],"progress":50.0,"current_time":3600.0}},
-            {"guid":"it-0002","title":"Fixture Show","type":"TV","poster":"/p/s.jpg","season_number":1},
+            {"guid":"it-0002","title":"Fixture Show","type":"TV","poster":"/p/s.jpg","season_number":1,"number_of_episodes":12,"number_of_seasons":2},
             {"guid":"it-0003","title":"Hologram","type":"LiveChannel"}
         ]}""",
     )
@@ -371,6 +371,7 @@ class FeiniuAdapterCatalogTest {
         val show = page.items[1]
         assertEquals(MediaType.Series, show.mediaType)
         assertEquals(1, show.seasonNumber)
+        assertEquals(12, show.childCount)
         assertFalse(show.canPlay)
         // Unknown type tolerated as Unknown, no play capability inferred.
         assertEquals(MediaType.Unknown, page.items[2].mediaType)

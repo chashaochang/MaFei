@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
@@ -65,7 +66,10 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
@@ -161,9 +165,12 @@ fun SeasonDetailScreen(
         }
     }
     var overviewSheetVisible by remember(season.id.value) { mutableStateOf(false) }
+    var episodeOverview by remember(season.id.value) { mutableStateOf<String?>(null) }
     DetailSheetBackHandler(
-        enabled = overviewSheetVisible,
-        onDismiss = { overviewSheetVisible = false },
+        enabled = overviewSheetVisible || episodeOverview != null,
+        onDismiss = {
+            if (episodeOverview != null) episodeOverview = null else overviewSheetVisible = false
+        },
     )
     val seriesName = legacySeasonSeriesName(series, season, libraryName)
 
@@ -246,6 +253,7 @@ fun SeasonDetailScreen(
                             loading = loading,
                             onSeasonSelected = onSeasonSelected,
                             onEpisodeSelected = onEpisodeSelected,
+                            onEpisodeOverview = { episodeOverview = it },
                             artwork = episodeArtwork,
                             backdrop = backdrop,
                         )
@@ -260,7 +268,13 @@ fun SeasonDetailScreen(
 
         MaFeiActionBar(
             title = "$seriesName ${season.title}".trim(),
-            onBack = { if (overviewSheetVisible) overviewSheetVisible = false else onBack() },
+            onBack = {
+                when {
+                    episodeOverview != null -> episodeOverview = null
+                    overviewSheetVisible -> overviewSheetVisible = false
+                    else -> onBack()
+                }
+            },
             backdrop = actionBarBackdrop,
             materialAlpha = collapseProgress,
             titleAlpha = titleOpacity,
@@ -275,11 +289,13 @@ fun SeasonDetailScreen(
             message = actionsError,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-        if (overviewSheetVisible) {
+        if (overviewSheetVisible || episodeOverview != null) {
             OverviewSheetOverlay(
-                overview = season.overview,
+                overview = episodeOverview ?: season.overview,
                 backdrop = actionBarBackdrop,
-                onDismiss = { overviewSheetVisible = false },
+                onDismiss = {
+                    if (episodeOverview != null) episodeOverview = null else overviewSheetVisible = false
+                },
             )
         }
     }
@@ -431,7 +447,6 @@ private fun SeasonActions(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val progress = target?.seasonPlaybackProgress()
-        val remaining = target?.seasonRemainingTime().orEmpty()
         val label = target?.episodeNumber?.let { "第 $it 集" } ?: "播放"
         Box(
             Modifier
@@ -442,7 +457,7 @@ private fun SeasonActions(
                 .height(50.dp)
                 .clip(RoundedCornerShape(25.dp)),
         ) {
-            if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
+            if (progress != null && progress > 0f && progress < 1f) {
                 Box(
                     Modifier.fillMaxWidth(progress).fillMaxHeight()
                         .background(Color.White.copy(alpha = .26f)),
@@ -455,10 +470,10 @@ private fun SeasonActions(
                     isInteractive = !playbackBusy,
                     height = 50.dp,
                     modifier = Modifier.fillMaxSize().semantics {
-                        contentDescription = if (remaining.isBlank()) label else "$label $remaining"
+                        contentDescription = label
                     },
                 ) {
-                    SeasonPlayActionContent(label, remaining, playbackBusy)
+                    SeasonPlayActionContent(label, playbackBusy)
                 }
             } else {
                 GlassSurface(
@@ -475,7 +490,7 @@ private fun SeasonActions(
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SeasonPlayActionContent(label, remaining, busy = false)
+                        SeasonPlayActionContent(label, busy = false)
                     }
                 }
             }
@@ -492,17 +507,16 @@ private fun SeasonActions(
 @Composable
 private fun RowScope.SeasonPlayActionContent(
     label: String,
-    remaining: String,
     busy: Boolean,
 ) {
     AnimatedContent(
-        targetState = Triple(label, remaining, busy),
+        targetState = Pair(label, busy),
         transitionSpec = {
             fadeIn(tween(DetailMotionFastMillis)) togetherWith
                 fadeOut(tween(DetailMotionExitMillis))
         },
         label = "season-play-state",
-    ) { (currentLabel, currentRemaining, isBusy) ->
+    ) { (currentLabel, isBusy) ->
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -531,15 +545,6 @@ private fun RowScope.SeasonPlayActionContent(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (currentRemaining.isNotBlank()) {
-                    Text(
-                        currentRemaining.replace("剩余 ", "剩余").replace(" 小时 ", "小时")
-                            .replace(" 分钟", "分"),
-                        color = Color.White.copy(alpha = .78f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                    )
-                }
             }
         }
     }
@@ -612,6 +617,7 @@ private fun SeasonEpisodeSection(
     loading: Boolean,
     onSeasonSelected: (MediaItem) -> Unit,
     onEpisodeSelected: (MediaItem) -> Unit,
+    onEpisodeOverview: (String) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     backdrop: GlassBackdrop,
 ) {
@@ -642,7 +648,7 @@ private fun SeasonEpisodeSection(
                 fontWeight = FontWeight.Medium,
             )
             Text(
-                "共${seasons.size.coerceAtLeast(1)}季",
+                "共${episodes.size.takeIf { it > 0 } ?: season.childCount ?: 0}集",
                 color = LocalContentColor.current.copy(alpha = .68f),
                 fontSize = 13.sp,
             )
@@ -709,6 +715,7 @@ private fun SeasonEpisodeSection(
                             item = episode,
                             artwork = artwork,
                             onClick = { onEpisodeSelected(episode) },
+                            onOverview = { overview -> onEpisodeOverview(overview) },
                         )
                     }
                 }
@@ -748,6 +755,7 @@ private fun SeasonEpisodeCard(
     item: MediaItem,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     onClick: () -> Unit,
+    onOverview: (String) -> Unit,
 ) {
     Column(
         Modifier.width(180.dp).height(158.dp)
@@ -787,15 +795,36 @@ private fun SeasonEpisodeCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(
-            item.overview.orEmpty(),
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            color = LocalContentColor.current.copy(alpha = .68f),
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        item.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+            val trimmedOverview = overview.trim()
+            val overviewPreview = if (trimmedOverview.length > EpisodeOverviewPreviewCharacters) {
+                trimmedOverview.take(EpisodeOverviewPreviewCharacters).trimEnd() + " … "
+            } else {
+                "$trimmedOverview "
+            }
+            val preview = buildAnnotatedString {
+                append(overviewPreview)
+                pushStringAnnotation("episode-overview", overview)
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("详情") }
+                pop()
+            }
+            ClickableText(
+                text = preview,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                style = androidx.compose.ui.text.TextStyle(
+                    color = LocalContentColor.current.copy(alpha = .68f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Clip,
+                onClick = { offset ->
+                    if (preview.getStringAnnotations("episode-overview", offset, offset).isNotEmpty()) {
+                        onOverview(overview)
+                    }
+                },
+            )
+        }
         item.runtimeMs?.takeIf { it > 0L }?.let { runtime ->
             Text(
                 legacyEpisodeDuration(runtime),
@@ -809,6 +838,8 @@ private fun SeasonEpisodeCard(
         Spacer(Modifier.height(8.dp))
     }
 }
+
+private const val EpisodeOverviewPreviewCharacters = 24
 
 private fun legacySeriesInfo(series: MediaItem, libraryName: String?): String = buildList {
     series.officialRating?.takeIf { it.isNotBlank() }?.let(::add)

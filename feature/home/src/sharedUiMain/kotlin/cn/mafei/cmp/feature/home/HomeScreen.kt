@@ -2519,6 +2519,16 @@ private fun homeLatestText(item: MediaItem): HomeCardText {
     if (item.displayStyle.cardStyle == CardTextStyle.EpisodeAware && item.mediaType == MediaType.Episode) {
         return HomeCardText(item.cardTitle, item.episodeCardLine ?: item.metaLine)
     }
+    // Feiniu's legacy latest cards show the TV episode total before the year.
+    // The provider maps this to childCount; keeping the rule here means the
+    // ordinary movie/folder cards retain their existing year-only subtitle.
+    if (item.provider == ProviderKind.Feiniu && item.mediaType == MediaType.Series) {
+        val subtitle = buildList {
+            item.childCount?.takeIf { it > 0 }?.let { add("共${it}集") }
+            item.year?.let { add(it.toString()) }
+        }.joinToString(" · ")
+        return HomeCardText(item.title, subtitle)
+    }
     return HomeCardText(item.title, item.year?.toString() ?: "")
 }
 
@@ -2555,6 +2565,5 @@ private fun progress(item: MediaItem): Float? = item.runtimeMs?.takeIf { it > 0 
 
 private fun progressLabel(item: MediaItem): String {
     val minutes = item.userData.playbackPositionMs / 60_000
-    val remaining = item.runtimeMs?.let { ((it - item.userData.playbackPositionMs).coerceAtLeast(0) / 60_000) }
-    return if (remaining != null) "看到 $minutes 分钟 · 剩余 $remaining 分钟" else "看到 $minutes 分钟"
+    return "看到 $minutes 分钟"
 }

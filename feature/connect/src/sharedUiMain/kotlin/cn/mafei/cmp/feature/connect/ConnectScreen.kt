@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -217,6 +219,15 @@ fun ConnectScreen(
                 ConnectAtmosphere()
             }
         }
+        // This route can be composed above the already-mounted home shell
+        // (notably Mine → 切换账号 → 新增账号).  Consume taps that land in the
+        // page background so dismissing the IME cannot pass the same pointer
+        // through to a Home card underneath and start playback accidentally.
+        Box(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                detectTapGestures { }
+            },
+        )
         Box(
             Modifier.fillMaxSize().padding(
                 start = safeArea.start,

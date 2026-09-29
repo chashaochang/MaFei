@@ -2888,7 +2888,12 @@ private fun BrowseContent(
                                         )
                                     }
                                 }
-                                val detailPlayTarget = state.detailPlayTarget?.takeIf { it.canPlay }
+                                // Feiniu's catalog rows do not always carry the
+                                // legacy can_play flag even when the detail/play
+                                // endpoint can resolve the item.  The resolved
+                                // target is the authoritative play affordance;
+                                // preparation will report a real failure.
+                                val detailPlayTarget = state.detailPlayTarget
                                 DetailScreen(
                                     item = state.detail,
                                     loading = state.detailLoading,
@@ -3209,7 +3214,7 @@ private fun BrowseContent(
                                     onRetry = {
                                         scope.launch { browser.openDetail(MediaId(route.episodeId)) }
                                     },
-                                    onPlay = episode?.takeIf { it.canPlay && playback != null }?.let { item ->
+                                    onPlay = episode?.takeIf { playback != null }?.let { item ->
                                         { startPlayback(item) }
                                     },
                                     playTarget = episode,
@@ -3253,9 +3258,13 @@ private fun BrowseContent(
                                             targetWidthPx = 480,
                                         )
                                     },
+                                    // The episode Hero must use the same primary
+                                    // then backdrop chain as the season episode
+                                    // cards.  Using the detail-backdrop chain
+                                    // here caused a visible image swap on entry.
                                     backdropArtwork = { item, modifier ->
                                         MediaArtwork(
-                                            item.legacyDetailBackdropArtworkCandidates(),
+                                            item.legacyPrimaryThenBackdropArtworkCandidates(),
                                             item.title,
                                             artworkCache,
                                             fetchArtwork,

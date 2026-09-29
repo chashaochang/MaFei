@@ -1267,7 +1267,6 @@ private fun RowScope.DetailPlayAction(
     modifier: Modifier = Modifier,
 ) {
     val progress = target?.playbackProgress() ?: item.playbackProgress()
-    val remaining = target?.remainingTime().orEmpty()
     val label = legacyDetailPlayLabel(item, target)
     Box(modifier.height(50.dp).clip(MaFeiShape.capsule)) {
         if (onPlay != null) {
@@ -1278,7 +1277,7 @@ private fun RowScope.DetailPlayAction(
                 height = 50.dp,
                 horizontalPadding = 0.dp,
                 modifier = Modifier.fillMaxSize().semantics {
-                    contentDescription = if (remaining.isBlank()) label else "$label $remaining"
+                    contentDescription = label
                 },
             ) {}
         } else {
@@ -1295,7 +1294,7 @@ private fun RowScope.DetailPlayAction(
         // LegacyDetailPlayAction paints progress above the material surface and
         // below the button contents. Painting it before LiquidButton lets the
         // refracted backdrop cover the fill completely.
-        if (progress != null && progress > 0f && progress < 1f && remaining.isNotBlank()) {
+        if (progress != null && progress > 0f && progress < 1f) {
             Box(
                 Modifier.fillMaxWidth(progress).fillMaxHeight()
                     .background(Color.White.copy(alpha = .26f)),
@@ -1308,21 +1307,21 @@ private fun RowScope.DetailPlayAction(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DetailPlayContents(label, remaining, busy && onPlay != null)
+            DetailPlayContents(label, busy && onPlay != null)
         }
     }
 }
 
 @Composable
-private fun DetailPlayContents(label: String, remaining: String, busy: Boolean) {
+private fun DetailPlayContents(label: String, busy: Boolean) {
     AnimatedContent(
-        targetState = Triple(label, remaining, busy),
+        targetState = Pair(label, busy),
         transitionSpec = {
             fadeIn(tween(DetailMotionFastMillis)) togetherWith
                 fadeOut(tween(DetailMotionExitMillis))
         },
         label = "detail-play-state",
-    ) { (currentLabel, currentRemaining, isBusy) ->
+    ) { (currentLabel, isBusy) ->
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1352,15 +1351,6 @@ private fun DetailPlayContents(label: String, remaining: String, busy: Boolean) 
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (currentRemaining.isNotBlank()) {
-                    Text(
-                        compactRemainingTime(currentRemaining),
-                        color = Color.White.copy(alpha = .78f),
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        maxLines = 1,
-                    )
-                }
             }
         }
     }
@@ -1443,7 +1433,7 @@ internal fun OverviewSection(
     val text = overview?.takeIf { it.isNotBlank() } ?: return
     val largeTypography = usesLargeDetailTypography()
     val textColor = LocalContentColor.current.copy(alpha = .86f)
-    val moreColor = Color.White.copy(alpha = .92f)
+    val moreColor = MaterialTheme.colorScheme.primary
     val textStyle = MaterialTheme.typography.bodyMedium.copy(
         color = textColor,
         fontSize = if (largeTypography) 15.sp else 13.sp,

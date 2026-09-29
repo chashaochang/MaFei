@@ -83,6 +83,30 @@ internal fun MediaType.toLibraryMediaTypes(): Set<MediaType> = when (this) {
     else -> setOf(this)
 }
 
+/**
+ * Maps the two Feiniu hierarchy counters using the same precedence as the
+ * legacy ArkUI catalog mapper.  Series and seasons are episode-bearing cards;
+ * only a generic folder may fall back to a season count.
+ */
+private fun feiniuChildCount(
+    mediaType: MediaType,
+    localNumberOfEpisodes: Int?,
+    numberOfEpisodes: Int?,
+    localNumberOfSeasons: Int?,
+    numberOfSeasons: Int?,
+): Int? = when (mediaType) {
+    MediaType.Series, MediaType.Season -> listOf(
+        localNumberOfEpisodes,
+        numberOfEpisodes,
+    ).firstOrNull { (it ?: 0) > 0 }
+    else -> listOf(
+        localNumberOfEpisodes,
+        numberOfEpisodes,
+        localNumberOfSeasons,
+        numberOfSeasons,
+    ).firstOrNull { (it ?: 0) > 0 }
+}
+
 /** Single-category request mapping; combos cannot express on this endpoint. */
 internal fun MediaType.toFeiniuCategory(): String = when (this) {
     MediaType.Movie -> "movie"
@@ -198,12 +222,16 @@ internal fun FeiniuMediaItem.toMediaItem(
         seasonId = seasonId?.let(::MediaId),
         seasonNumber = seasonNumber,
         episodeNumber = episodeNumber,
-        childCount = listOf(
-            localNumberOfEpisodes,
-            numberOfEpisodes,
-            localNumberOfSeasons,
-            numberOfSeasons,
-        ).firstOrNull { (it ?: 0) > 0 },
+        // The legacy Feiniu mapper exposes an episode count for TV/season
+        // cards.  Do not let a series fall through to number_of_seasons: the
+        // home card subtitle is expected to say “共 N 集”, not “共 N 季”.
+        childCount = feiniuChildCount(
+            mediaType = mediaType,
+            localNumberOfEpisodes = localNumberOfEpisodes,
+            numberOfEpisodes = numberOfEpisodes,
+            localNumberOfSeasons = localNumberOfSeasons,
+            numberOfSeasons = numberOfSeasons,
+        ),
         year = premiere?.second,
         premiereEpochMs = premiere?.first,
         runtimeMs = runtimeMs,
@@ -364,12 +392,13 @@ internal fun FeiniuItemDetail.toMediaItem(
         seasonTitle = context.seasonTitle?.trim()?.takeIf { it.isNotEmpty() },
         seasonNumber = seasonNumber,
         episodeNumber = episodeNumber,
-        childCount = listOf(
-            localNumberOfEpisodes,
-            numberOfEpisodes,
-            localNumberOfSeasons,
-            numberOfSeasons,
-        ).firstOrNull { (it ?: 0) > 0 },
+        childCount = feiniuChildCount(
+            mediaType = mediaType,
+            localNumberOfEpisodes = localNumberOfEpisodes,
+            numberOfEpisodes = numberOfEpisodes,
+            localNumberOfSeasons = localNumberOfSeasons,
+            numberOfSeasons = numberOfSeasons,
+        ),
         year = premiere?.second,
         premiereEpochMs = premiere?.first,
         runtimeMs = durationMs,
