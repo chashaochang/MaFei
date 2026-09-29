@@ -402,6 +402,23 @@ class ApplicationRuntime(
         settings.putBoolean(HOME_CAROUSEL_VISIBLE_KEY, value)
     }
 
+    /** Native player output path. Buffer is the safe default on OHOS phones/tablets. */
+    suspend fun loadPlayerRenderMode(): String {
+        check(!isClosed) { "Application is closed" }
+        return when (settings.getString(PLAYER_RENDER_MODE_KEY)) {
+            PLAYER_RENDER_MODE_DIRECT -> PLAYER_RENDER_MODE_DIRECT
+            else -> PLAYER_RENDER_MODE_BUFFER
+        }
+    }
+
+    suspend fun savePlayerRenderMode(value: String) {
+        check(!isClosed) { "Application is closed" }
+        settings.putString(
+            PLAYER_RENDER_MODE_KEY,
+            if (value == PLAYER_RENDER_MODE_DIRECT) PLAYER_RENDER_MODE_DIRECT else PLAYER_RENDER_MODE_BUFFER,
+        )
+    }
+
     /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
     suspend fun loadFeiniuRoutePreference(): FeiniuRoutePreference {
         check(!isClosed) { "Application is closed" }
@@ -809,6 +826,9 @@ class ApplicationRuntime(
         const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
         const val DEFAULT_GLASS_INTENSITY = .5f
         const val HOME_CAROUSEL_VISIBLE_KEY = "mafei.ui.home-carousel-visible.v1"
+        const val PLAYER_RENDER_MODE_KEY = "mafei.player.render-mode.v1"
+        const val PLAYER_RENDER_MODE_BUFFER = "buffer"
+        const val PLAYER_RENDER_MODE_DIRECT = "direct"
         const val FEINIU_ROUTE_PREFERENCE_KEY = "pref_feiniu_connection_preference"
         const val FEINIU_ROUTE_SPEED = "speed"
         const val FEINIU_ROUTE_PUBLIC = "public"

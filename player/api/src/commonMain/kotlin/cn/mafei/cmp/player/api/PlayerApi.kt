@@ -80,6 +80,15 @@ enum class PlayerContentMode {
     }
 }
 
+/** Native video output path preference. The OHOS runtime applies this at the next load. */
+enum class PlayerRenderMode {
+    /** Compose/Buffer surface path; the default on phones and tablets. */
+    Buffer,
+
+    /** Direct native surface output. */
+    Direct,
+}
+
 data class PlayerTrack(
     val id: String,
     val kind: TrackKind,
@@ -221,6 +230,13 @@ interface PlayerRuntime {
     fun execute(command: RuntimeCommand)
 
     /**
+     * Updates the native output path preference. Runtimes without two native
+     * output paths may ignore this; the preference is intentionally separate
+     * from media negotiation and takes effect on the next load.
+     */
+    fun setRenderMode(mode: PlayerRenderMode) = Unit
+
+    /**
      * Optional native frame extraction for direct streams. Providers that have
      * a server-side preview source should be preferred; this is the platform
      * fallback used by OHOS for authenticated HTTP video resources.
@@ -249,6 +265,7 @@ interface PlayerController {
     suspend fun speed(value: Float)
     suspend fun selectTrack(kind: TrackKind, id: String?)
     suspend fun setContentMode(mode: PlayerContentMode)
+    suspend fun setRenderMode(mode: PlayerRenderMode)
     suspend fun attachSurface(handle: PlayerSurfaceHandle)
     suspend fun detachSurface(handle: PlayerSurfaceHandle)
     suspend fun background()

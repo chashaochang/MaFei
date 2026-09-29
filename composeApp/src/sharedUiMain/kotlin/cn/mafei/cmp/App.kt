@@ -165,6 +165,7 @@ import cn.mafei.cmp.feature.settings.SettingsScreen
 import cn.mafei.cmp.feature.settings.UserAgreementScreen
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerState
+import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.player.ui.LiquidMiniPlayer
 import cn.mafei.cmp.player.ui.MiniPlayerMedia
 import cn.mafei.cmp.player.ui.NowPlayingMedia
@@ -367,6 +368,7 @@ fun App(
     onPlayerFullscreenChanged: (Boolean) -> Unit = {},
     windowControls: @Composable RowScope.() -> Unit = {},
     windowDragArea: @Composable (@Composable () -> Unit) -> Unit = { content -> content() },
+    playerRenderModeSupported: Boolean = false,
 ) {
     val sessionState by runtime.sessions.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -380,6 +382,8 @@ fun App(
     var glassIntensitySaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
     var homeCarouselVisible by remember(runtime) { mutableStateOf(true) }
     var homeCarouselSaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
+    var playerRenderMode by remember(runtime) { mutableStateOf(PlayerRenderMode.Buffer) }
+    var playerRenderModeSaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(runtime) {
         liquidGlassIntensity = runtime.loadGlassIntensity()
@@ -387,6 +391,10 @@ fun App(
 
     LaunchedEffect(runtime) {
         homeCarouselVisible = runtime.loadHomeCarouselVisible()
+    }
+
+    LaunchedEffect(runtime) {
+        playerRenderMode = runtime.loadPlayerRenderMode().toPlayerRenderMode()
     }
 
     LaunchedEffect(runtime) {
@@ -477,6 +485,15 @@ fun App(
                                                 homeCarouselSaveJob?.cancel()
                                                 homeCarouselSaveJob = scope.launch {
                                                     runtime.saveHomeCarouselVisible(visible)
+                                                }
+                                            },
+                                            playerRenderMode = playerRenderMode,
+                                            playerRenderModeSupported = playerRenderModeSupported,
+                                            onPlayerRenderModeChanged = { mode ->
+                                                playerRenderMode = mode
+                                                playerRenderModeSaveJob?.cancel()
+                                                playerRenderModeSaveJob = scope.launch {
+                                                    runtime.savePlayerRenderMode(mode.storageValue)
                                                 }
                                             },
                                             playerSurface = playerSurface,
@@ -1055,6 +1072,9 @@ private fun BrowseContent(
     onLiquidGlassIntensityChanged: (Float) -> Unit,
     homeCarouselVisible: Boolean,
     onHomeCarouselVisibleChanged: (Boolean) -> Unit,
+    playerRenderMode: PlayerRenderMode,
+    playerRenderModeSupported: Boolean,
+    onPlayerRenderModeChanged: (PlayerRenderMode) -> Unit,
     playerSurface: @Composable (
         PlayerController,
         onBack: () -> Unit,
@@ -1076,6 +1096,8 @@ private fun BrowseContent(
     // and re-entering the page.
     val currentLiquidGlassIntensity = rememberUpdatedState(liquidGlassIntensity)
     val currentLiquidGlassIntensityChanged = rememberUpdatedState(onLiquidGlassIntensityChanged)
+    val currentPlayerRenderMode = rememberUpdatedState(playerRenderMode)
+    val currentPlayerRenderModeChanged = rememberUpdatedState(onPlayerRenderModeChanged)
     val browser = remember(session) {
         MediaBrowser(
             repository = runtime.sessions.media,
@@ -1134,6 +1156,9 @@ private fun BrowseContent(
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
     }
     val playback = remember(session) { runtime.playback(session) }
+    LaunchedEffect(playback, playerRenderMode) {
+        playback?.controller?.setRenderMode(playerRenderMode)
+    }
     val playerShellState = if (playback == null) {
         PlayerShellState()
     } else {
@@ -1949,6 +1974,11 @@ private fun BrowseContent(
                                     },
                                     homeCarouselVisible = { homeCarouselVisible },
                                     onHomeCarouselVisibleChanged = onHomeCarouselVisibleChanged,
+                                    showPlayerRenderMode = playerRenderModeSupported,
+                                    playerRenderMode = { currentPlayerRenderMode.value.storageValue },
+                                    onPlayerRenderModeChanged = { value ->
+                                        currentPlayerRenderModeChanged.value(value.toPlayerRenderMode())
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -3808,6 +3838,12 @@ private const val ChasingDestination = "chasing"
 private const val FavoriteDestination = "favorite"
 private const val LibraryDestination = "library"
 private const val MineDestination = "mine"
+
+private fun String.toPlayerRenderMode(): PlayerRenderMode =
+    if (equals("direct", ignoreCase = true)) PlayerRenderMode.Direct else PlayerRenderMode.Buffer
+
+private val PlayerRenderMode.storageValue: String
+    get() = if (this == PlayerRenderMode.Direct) "direct" else "buffer"
 
 private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
     FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public

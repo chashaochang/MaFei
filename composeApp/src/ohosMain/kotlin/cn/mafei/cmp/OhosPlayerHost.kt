@@ -28,6 +28,7 @@ import cn.mafei.cmp.player.api.PlayerDeviceControls
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
+import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
@@ -76,6 +77,8 @@ private data class OhosPlayerCommandState(
     val trackId: Int = -1,
     /** mfplayer `PlayerContentMode` name; the ArkUI host maps it back to the enum. */
     val contentMode: String = "Fit",
+    /** Native output path; applied by mfplayer on the next load. */
+    val renderMode: String = PlayerRenderMode.Buffer.name,
     /** 亮度 0..1 / 音量步数，配合 action = setBrightness / setVolume。 */
     val level: Float = 0f,
     /** Non-zero only for a one-shot native frame preview request. */
@@ -294,6 +297,14 @@ private object OhosPlayerHostState {
         publish(handle = handle, action = "contentMode", contentMode = mode.name)
     }
 
+    fun renderMode(mode: PlayerRenderMode) {
+        if (activeHandle == 0L) {
+            publish(handle = 0L, action = "renderMode", renderMode = mode.name)
+        } else {
+            publish(handle = activeHandle, action = "renderMode", renderMode = mode.name)
+        }
+    }
+
     /** 让 ArkTS 重新读一次窗口亮度与媒体音量并推上来（异步）。 */
     fun requestDeviceState() {
         publish(handle = activeHandle, action = "deviceState")
@@ -493,6 +504,7 @@ private object OhosPlayerHostState {
         speed: Float = commandState.speed,
         trackId: Int = commandState.trackId,
         contentMode: String = commandState.contentMode,
+        renderMode: String = commandState.renderMode,
         level: Float = commandState.level,
         previewRequestId: Long = commandState.previewRequestId,
     ) {
@@ -511,6 +523,7 @@ private object OhosPlayerHostState {
             speed = speed,
             trackId = trackId,
             contentMode = contentMode,
+            renderMode = renderMode,
             level = level,
             previewRequestId = previewRequestId,
         )
@@ -580,6 +593,7 @@ private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
         OhosPlayerHostState.selectTrack(handle, kind, id)
     override fun setContentMode(handle: Long, mode: PlayerContentMode) =
         OhosPlayerHostState.contentMode(handle, mode)
+    override fun setRenderMode(mode: PlayerRenderMode) = OhosPlayerHostState.renderMode(mode)
     override fun releasePlayer(handle: Long) = OhosPlayerHostState.release(handle)
     override fun unbind(eventSink: (OhosNativePlayerEvent) -> Unit) =
         OhosPlayerHostState.unbind(eventSink)
@@ -668,6 +682,7 @@ private fun OhosPlayerCommandState.toJsParameter(): JsObject {
         "speed"(speed)
         "trackId"(trackId)
         "contentMode"(contentMode)
+        "renderMode"(renderMode)
         "level"(level)
         "previewRequestId"(previewRequestId.nApiValue())
     }

@@ -6,6 +6,7 @@ import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
+import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.RuntimeCommand
@@ -73,6 +74,7 @@ interface OhosNativePlayerBridge {
         multiConnectionAllowed: Boolean,
         startPositionMs: Long,
     )
+    fun setRenderMode(mode: PlayerRenderMode)
     fun play(handle: Long, pendingSeekPositionMs: Long?)
     fun pause(handle: Long)
     fun stop(handle: Long)
@@ -99,6 +101,14 @@ class OhosPlayerRuntime(
     override val capabilities: PlayerCapabilities,
     private val bridge: OhosNativePlayerBridge,
 ) : PlayerRuntime {
+
+    private var renderMode = PlayerRenderMode.Buffer
+
+    override fun setRenderMode(mode: PlayerRenderMode) {
+        renderMode = mode
+        val handle = state.value.handle
+        if (handle != 0L && !state.value.released) bridge.setRenderMode(mode)
+    }
 
     override suspend fun previewFrame(positionMs: Long): PlayerSeekPreviewFrame? {
         val snapshot = state.value
@@ -155,6 +165,7 @@ class OhosPlayerRuntime(
         if (previous.handle != 0L) bridge.stop(previous.handle)
         state.value = RuntimeSnapshot(handle = handle, generation = command.generation)
         try {
+            bridge.setRenderMode(renderMode)
             bridge.loadUrl(
                 handle = handle,
                 url = command.resource.url,

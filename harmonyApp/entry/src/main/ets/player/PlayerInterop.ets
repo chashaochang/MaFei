@@ -36,6 +36,7 @@ interface MaFeiPlayerSurfaceArgs {
   speed: number;
   trackId: number;
   contentMode: string;
+  renderMode: string;
   /** setBrightness 用 0..1；setVolume 用步数。 */
   level: number;
   previewRequestId: number;
@@ -213,6 +214,11 @@ struct MaFeiPlayerSurfaceHost {
       case 'preview':
         void this.emitPreview(command);
         break;
+      case 'renderMode':
+        // The native engine applies the selected path when the next source is
+        // loaded. Keeping the preference in the command state also makes it
+        // survive a surface recreation without rebuilding the current video.
+        break;
       default:
         break;
     }
@@ -383,10 +389,11 @@ struct MaFeiPlayerSurfaceHost {
       useHardwareDecode: true,
       // The HarmonyOS 2-in-1/PC host does not expose a usable Vulkan surface;
       // its buffer/gpu path crashes inside libmpv during pl_vulkan_create.
-      // Keep the compatibility surface path for that host only. Phones and
-      // tablets retain the buffer path used by the existing native player.
+      // Keep the compatibility surface path for that host. Phones/tablets
+      // follow the user's persisted Buffer/Direct preference.
       renderMode: deviceInfo.deviceType === '2in1' ?
-        PlayerRenderMode.SURFACE : PlayerRenderMode.BUFFER,
+        PlayerRenderMode.SURFACE :
+        (command.renderMode === 'Direct' ? PlayerRenderMode.SURFACE : PlayerRenderMode.BUFFER),
       // The shared PlayerStateMachine sends Play/Seek only after READY.
       autoPlay: false,
       startPositionMs: Math.max(0, command.positionMs),

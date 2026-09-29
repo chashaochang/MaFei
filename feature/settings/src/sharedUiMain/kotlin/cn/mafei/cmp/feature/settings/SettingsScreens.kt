@@ -93,6 +93,9 @@ fun SettingsScreen(
     onLiquidGlassIntensityChanged: (Float) -> Unit = {},
     homeCarouselVisible: () -> Boolean = { true },
     onHomeCarouselVisibleChanged: (Boolean) -> Unit = {},
+    showPlayerRenderMode: Boolean = false,
+    playerRenderMode: () -> String = { PlayerRenderModeBuffer },
+    onPlayerRenderModeChanged: (String) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -121,6 +124,12 @@ fun SettingsScreen(
                     value = liquidGlassIntensity(),
                     onValueChange = onLiquidGlassIntensityChanged,
                 )
+                if (showPlayerRenderMode) {
+                    PlayerRenderModeSetting(
+                        mode = playerRenderMode(),
+                        onModeChange = onPlayerRenderModeChanged,
+                    )
+                }
                 HomeCarouselSetting(
                     enabled = homeCarouselVisible(),
                     onEnabledChange = onHomeCarouselVisibleChanged,
@@ -135,6 +144,87 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+private const val PlayerRenderModeBuffer = "buffer"
+private const val PlayerRenderModeDirect = "direct"
+
+/** The only platform currently exposing this preference is the Harmony player host. */
+@Composable
+private fun PlayerRenderModeSetting(
+    mode: String,
+    onModeChange: (String) -> Unit,
+) {
+    val selected = if (mode == PlayerRenderModeDirect) PlayerRenderModeDirect else PlayerRenderModeBuffer
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "播放器渲染模式",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "下次播放时生效",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .08f))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            PlayerRenderModeOption(
+                label = "Buffer",
+                selected = selected == PlayerRenderModeBuffer,
+                onClick = { onModeChange(PlayerRenderModeBuffer) },
+            )
+            PlayerRenderModeOption(
+                label = "直出",
+                selected = selected == PlayerRenderModeDirect,
+                onClick = { onModeChange(PlayerRenderModeDirect) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerRenderModeOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.onSurface.copy(alpha = .16f)
+                else Color.Transparent,
+            )
+            .mafeiInteractive(onClick, radiusDp = 9f, label = "播放器渲染模式：$label")
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        )
     }
 }
 

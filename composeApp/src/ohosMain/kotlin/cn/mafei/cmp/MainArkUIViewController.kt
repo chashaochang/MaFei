@@ -267,6 +267,7 @@ fun MainArkUIViewController(
                     ohosPlayerFullscreenRequested = fullscreen
                     ohosPlayerOrientationRevision++
                 },
+                playerRenderModeSupported = true,
             )
         }
     }

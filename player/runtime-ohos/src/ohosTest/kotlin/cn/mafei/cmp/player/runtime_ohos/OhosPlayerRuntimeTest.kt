@@ -6,6 +6,7 @@ import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
+import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
 import cn.mafei.cmp.player.api.TrackKind
@@ -26,6 +27,7 @@ class OhosPlayerRuntimeTest {
         var allowInsecureTls = false
         var multiConnectionAllowed = true
         var startPositionMs = 0L
+        var renderMode = PlayerRenderMode.Buffer
         var selectedTrack: Pair<TrackKind, String?>? = null
         var contentMode: PlayerContentMode? = null
         var playedFromPositionMs: Long? = null
@@ -63,6 +65,9 @@ class OhosPlayerRuntimeTest {
 
         override fun play(handle: Long, pendingSeekPositionMs: Long?) {
             playedFromPositionMs = pendingSeekPositionMs
+        }
+        override fun setRenderMode(mode: PlayerRenderMode) {
+            renderMode = mode
         }
         override fun pause(handle: Long) = Unit
         override fun stop(handle: Long) = Unit
@@ -175,6 +180,17 @@ class OhosPlayerRuntimeTest {
         assertTrue(bridge.allowInsecureTls)
         assertEquals(false, bridge.multiConnectionAllowed)
         assertEquals(TrackKind.Subtitle to null, bridge.selectedTrack)
+    }
+
+    @Test
+    fun renderModeIsAppliedBeforeTheNextLoad() {
+        val bridge = FakeBridge()
+        val runtime = OhosPlayerRuntime(PlayerCapabilities(), bridge)
+        runtime.bind { }
+        runtime.setRenderMode(PlayerRenderMode.Direct)
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("media", "https://test/video")))
+
+        assertEquals(PlayerRenderMode.Direct, bridge.renderMode)
     }
 
     @Test
