@@ -15,6 +15,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -77,9 +78,11 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
@@ -131,6 +134,7 @@ import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaItem
@@ -1482,8 +1486,6 @@ internal fun BoxScope.OverviewSheetOverlay(
 ) {
     val text = overview?.takeIf { it.isNotBlank() } ?: return
     val safeArea = LocalMaFeiSafeArea.current
-    val dismissInteraction = remember { MutableInteractionSource() }
-    val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
     // The close button samples the dialog's own frosted material. Sampling the
     // page backdrop here makes the button visually leak through the dialog.
@@ -1496,11 +1498,8 @@ internal fun BoxScope.OverviewSheetOverlay(
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black.copy(alpha = .28f))
-            .clickable(
-                interactionSource = dismissInteraction,
-                indication = null,
-                onClick = onDismiss,
-            ),
+            .mafeiDismissOnOutsidePointer(onDismiss)
+            .testTag("detailSheetScrim"),
     )
     GlassSurface(
         backdrop = LocalShellBackdrop.current ?: backdrop,
@@ -1510,11 +1509,7 @@ internal fun BoxScope.OverviewSheetOverlay(
             .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
             .widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
             .then(if (largeWindow) Modifier else sheetDrag)
-            .clickable(
-                interactionSource = sheetInteraction,
-                indication = null,
-                onClick = {},
-            ),
+            .pointerInput(Unit) { detectTapGestures { } },
         exportedBackdrop = sheetMaterialBackdrop,
     ) {
         CompositionLocalProvider(LocalContentColor provides Color.White) {
@@ -1787,8 +1782,6 @@ private fun BoxScope.DetailPickerSheetOverlay(
 ) {
     val source = selectedSource ?: return
     val safeArea = LocalMaFeiSafeArea.current
-    val dismissInteraction = remember { MutableInteractionSource() }
-    val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
     val closeButtonBackdrop = sheetMaterialBackdrop
     val contentScrollState = rememberScrollState()
@@ -1797,11 +1790,8 @@ private fun BoxScope.DetailPickerSheetOverlay(
         ?.let { it.navigation != NavigationPlacement.Bottom } == true
     val sheetAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
-            interactionSource = dismissInteraction,
-            indication = null,
-            onClick = onDismiss,
-        ),
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f))
+            .mafeiDismissOnOutsidePointer(onDismiss),
     )
     BoxWithConstraints(
         Modifier.align(sheetAlignment)
@@ -1815,11 +1805,8 @@ private fun BoxScope.DetailPickerSheetOverlay(
                 spec = OverviewSheetSurfaceSpec,
                 tint = MaterialTheme.colorScheme.background,
                 modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
-                    .then(if (largeWindow) Modifier else sheetDrag).clickable(
-                    interactionSource = sheetInteraction,
-                    indication = null,
-                    onClick = {},
-                ),
+                    .then(if (largeWindow) Modifier else sheetDrag)
+                    .pointerInput(Unit) { detectTapGestures { } },
                 exportedBackdrop = sheetMaterialBackdrop,
             ) {
                 CompositionLocalProvider(LocalContentColor provides Color.White) {
@@ -2100,8 +2087,6 @@ internal fun BoxScope.MediaInfoSheetOverlay(
 ) {
     if (sections.isEmpty()) return
     val safeArea = LocalMaFeiSafeArea.current
-    val dismissInteraction = remember { MutableInteractionSource() }
-    val sheetInteraction = remember { MutableInteractionSource() }
     val sheetMaterialBackdrop = rememberGlassBackdrop()
     val closeButtonBackdrop = sheetMaterialBackdrop
     val contentScrollState = rememberScrollState()
@@ -2110,11 +2095,8 @@ internal fun BoxScope.MediaInfoSheetOverlay(
         ?.let { it.navigation != NavigationPlacement.Bottom } == true
     val sheetAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)).clickable(
-            interactionSource = dismissInteraction,
-            indication = null,
-            onClick = onDismiss,
-        ),
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f))
+            .mafeiDismissOnOutsidePointer(onDismiss),
     )
     GlassSurface(
             backdrop = LocalShellBackdrop.current ?: backdrop,
@@ -2124,11 +2106,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
                 .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
                 .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
                 .then(if (largeWindow) Modifier else sheetDrag)
-                .clickable(
-                    interactionSource = sheetInteraction,
-                    indication = null,
-                    onClick = {},
-                ),
+                .pointerInput(Unit) { detectTapGestures { } },
             exportedBackdrop = sheetMaterialBackdrop,
         ) {
             CompositionLocalProvider(LocalContentColor provides Color.White) {

@@ -13,9 +13,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -83,6 +85,15 @@ class DetailSheetInteractionTest {
         composeRule.onNodeWithContentDescription("关闭简介").performClick()
 
         composeRule.onAllNodesWithContentDescription("关闭简介").assertCountEquals(0)
+    }
+
+    @Test
+    fun tappingOutsideOverviewSheetDismissesIt() {
+        showOverview()
+
+        composeRule.onNodeWithTag("detailSheetScrim")
+            .performTouchInput { click(Offset(8f, 8f)) }
+        composeRule.waitUntil(timeoutMillis = 2_000) { !visible }
     }
 
     @Test

@@ -1,9 +1,10 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,8 +71,6 @@ fun MaFeiGlassConfirmDialog(
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)
         else Color(0xFF121212).copy(alpha = .56f)
     val focusRequester = remember { FocusRequester() }
-    val scrimInteraction = remember { MutableInteractionSource() }
-    val panelInteraction = remember { MutableInteractionSource() }
     val surfaceSpec = GlassSurfaceSpec(
         role = GlassRole.Dialog,
         level = GlassLevel.Opaque,
@@ -83,12 +84,6 @@ fun MaFeiGlassConfirmDialog(
     }
     Box(
         modifier.fillMaxSize()
-            .background(dimColor)
-            .clickable(
-                interactionSource = scrimInteraction,
-                indication = null,
-                onClick = onDismiss,
-            )
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -98,23 +93,24 @@ fun MaFeiGlassConfirmDialog(
                 } else {
                     false
                 }
-            }
-            .testTag("mafeiGlassConfirmScrim"),
-        contentAlignment = Alignment.Center,
+            },
     ) {
+        Box(
+            Modifier.fillMaxSize()
+                .background(dimColor)
+                .mafeiDismissOnOutsidePointer(onDismiss)
+                .testTag("mafeiGlassConfirmScrim"),
+        )
         GlassSurface(
             backdrop = backdrop,
             spec = surfaceSpec,
             tint = containerColor,
             modifier = Modifier
+                .align(Alignment.Center)
                 .widthIn(min = 280.dp, max = 360.dp)
                 .fillMaxWidth()
                 // The panel swallows its own taps so pressing inside never dismisses.
-                .clickable(
-                    interactionSource = panelInteraction,
-                    indication = null,
-                    onClick = {},
-                )
+                .pointerInput(Unit) { detectTapGestures { } }
                 .testTag("mafeiGlassConfirmCard"),
         ) {
             Column(
@@ -170,3 +166,27 @@ fun MaFeiGlassConfirmDialog(
         }
     }
 }
+
+/**
+ * Dismiss a same-layer modal from the scrim without relying on the final
+ * pointer-up event. CPF/OHOS can let a child consume the up event before a
+ * regular clickable or tap detector receives it; observing the Initial pass
+ * keeps the scrim reliable while the panel remains a separate hit target.
+ */
+fun Modifier.mafeiDismissOnOutsidePointer(onDismiss: () -> Unit): Modifier =
+    pointerInput(onDismiss) {
+        awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Initial,
+            )
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
+                    onDismiss()
+                    break
+                }
+            }
+        }
+    }

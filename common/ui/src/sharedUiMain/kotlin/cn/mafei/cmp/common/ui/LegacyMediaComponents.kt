@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -385,14 +386,25 @@ fun <T> LegacySortSheet(
     }
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = true,
+            dismissOnBackPress = true,
+        ),
     ) {
         BoxWithConstraints(
             Modifier.fillMaxSize(),
-            contentAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter,
         ) {
+            // CPF's Dialog window may not forward its outside-dismiss callback
+            // consistently. Keep the behavior owned by this Compose layer too.
+            Box(
+                Modifier.fillMaxSize()
+                    .mafeiDismissOnOutsidePointer(onDismiss)
+                    .testTag("legacySortScrim"),
+            )
             Column(
-                Modifier.widthIn(max = if (largeWindow) 560.dp else Dp.Infinity)
+                Modifier.align(if (largeWindow) Alignment.Center else Alignment.BottomCenter)
+                    .widthIn(max = if (largeWindow) 560.dp else Dp.Infinity)
                     .fillMaxWidth()
                     .heightIn(max = maxHeight * if (largeWindow) .62f else .4f)
                     .clip(panelShape)

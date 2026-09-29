@@ -109,6 +109,7 @@ import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerDeviceControls
@@ -1391,7 +1392,11 @@ private fun PlayerSidePanel(
         Box(
             Modifier.fillMaxSize()
                 .background(if (largeWindow) Color(0x42000000) else Color.Transparent)
-                .clickable(onClick = onDismiss),
+                // The player menu is a same-layer overlay. Raw tap detection
+                // keeps the outside hit region working on OHOS/CPF as well as
+                // desktop, where a regular clickable can lose its up event to
+                // the video surface below.
+                .mafeiDismissOnOutsidePointer(onDismiss),
         )
         // Phone keeps the legacy edge sheet. A wide player uses the same
         // content and actions in a centred-height, right-aligned panel so the

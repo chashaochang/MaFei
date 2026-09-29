@@ -3,7 +3,7 @@ package cn.mafei.cmp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -36,7 +36,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -44,6 +43,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -107,6 +107,7 @@ import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiNavItem
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
@@ -3395,20 +3396,12 @@ private fun MineAccountSheet(
         val closeButtonTopInset = (topBarHeight - 44.dp) / 2f
         val closeButtonEndInset = if (largeWindow) 16.dp else 8.dp
         val focusRequester = remember { FocusRequester() }
-        val scrimInteraction = remember { MutableInteractionSource() }
-        val panelInteraction = remember { MutableInteractionSource() }
         LaunchedEffect(Unit) {
             runCatching { focusRequester.requestFocus() }
         }
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = .46f))
-                .clickable(
-                    interactionSource = scrimInteraction,
-                    indication = null,
-                    onClick = onDismiss,
-                )
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -3419,18 +3412,19 @@ private fun MineAccountSheet(
                         false
                     }
                 },
-            contentAlignment = if (largeWindow) Alignment.Center else Alignment.BottomCenter,
         ) {
             Box(
+                Modifier.fillMaxSize()
+                    .background(Color.Black.copy(alpha = .46f))
+                    .mafeiDismissOnOutsidePointer(onDismiss),
+            )
+            Box(
                 Modifier
+                    .align(if (largeWindow) Alignment.Center else Alignment.BottomCenter)
                     .width(sheetWidth)
                     .height(sheetHeight)
                     .clip(RoundedCornerShape(MineSheetCornerDp))
-                    .clickable(
-                        interactionSource = panelInteraction,
-                        indication = null,
-                        onClick = {},
-                    )
+                    .pointerInput(Unit) { detectTapGestures { } }
                     .semantics { contentDescription = "我的" },
             ) {
                 val sheetBackdrop = rememberGlassBackdrop()
