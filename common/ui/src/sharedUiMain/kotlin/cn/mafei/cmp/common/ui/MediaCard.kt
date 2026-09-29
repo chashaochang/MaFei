@@ -140,6 +140,7 @@ fun MediaCardHoverOverlay(
     ) {
         Box(
             Modifier.align(Alignment.Center)
+                .offset(y = (-18).dp)
                 .size(58.dp)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = .20f))
@@ -182,6 +183,11 @@ private fun CardHoverAction(
     onClick: (() -> Unit)?,
     selected: Boolean,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val highlighted = hovered || focused
+
     Box(
         Modifier.size(34.dp).mafeiInteractive(
             onClick = { onClick?.invoke() },
@@ -189,20 +195,35 @@ private fun CardHoverAction(
             radiusDp = 17f,
             label = label,
             visualFeedback = false,
+            interactionSource = interactionSource,
         ),
         contentAlignment = Alignment.Center,
     ) {
-        MaFeiIcon(
-            glyph,
-            Modifier.size(27.dp),
-            when {
-                selected -> MaterialTheme.colorScheme.primary
-                onClick != null -> Color.White
-                else -> Color.White.copy(alpha = .72f)
-            },
-        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(
+                    if (highlighted) Color.White.copy(alpha = .22f) else Color.Transparent,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            MaFeiIcon(
+                glyph,
+                Modifier.size(27.dp),
+                when {
+                    glyph == MaFeiGlyph.Favorite && selected -> CardFavoriteColor
+                    selected -> MaterialTheme.colorScheme.primary
+                    onClick != null -> Color.White
+                    else -> Color.White.copy(alpha = .72f)
+                },
+                filled = glyph == MaFeiGlyph.Favorite && selected,
+            )
+        }
     }
 }
+
+private val CardFavoriteColor = Color(0xFFE9210B)
 
 @Composable
 fun TextPoster(title: String, modifier: Modifier = Modifier) {

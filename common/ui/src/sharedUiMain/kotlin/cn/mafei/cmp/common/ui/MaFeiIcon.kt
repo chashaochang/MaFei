@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ fun MaFeiIcon(
     glyph: MaFeiGlyph,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.onSurface,
+    filled: Boolean = false,
 ) {
     Canvas(modifier.size(24.dp)) {
         scale(size.width / 24f, size.height / 24f, Offset.Zero) {
@@ -88,7 +90,11 @@ fun MaFeiIcon(
                         cubicTo(17.7f, 3.5f, 20f, 5.7f, 20f, 8.8f)
                         cubicTo(20f, 14.1f, 14f, 18f, 12f, 20f)
                     }
-                    drawPath(heart, color, style = Stroke(1.7f, cap = StrokeCap.Round))
+                    drawPath(
+                        heart,
+                        color,
+                        style = if (filled) Fill else Stroke(1.7f, cap = StrokeCap.Round),
+                    )
                 }
                 MaFeiGlyph.Watched -> {
                     line(5f, 12.5f, 9.5f, 17f)
