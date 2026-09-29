@@ -17,6 +17,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -2278,12 +2280,17 @@ internal fun LegacyPeopleSection(
                 people,
                 key = { it.id?.value ?: "${it.name}:${it.role.orEmpty()}:${it.personType}" },
             ) { person ->
+                val interactionSource = remember(person) { MutableInteractionSource() }
+                val hovered by interactionSource.collectIsHoveredAsState()
+                val focused by interactionSource.collectIsFocusedAsState()
+                val personInteractive = person.id != null
                 Column(
                     Modifier.width(avatarSize).mafeiInteractive(
                         onClick = { onPersonSelected(person) },
-                        enabled = person.id != null,
+                        enabled = personInteractive,
                         radiusDp = avatarSize.value / 2f,
                         label = "查看${person.name}",
+                        interactionSource = interactionSource,
                     ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(textSpacing),
@@ -2302,11 +2309,22 @@ internal fun LegacyPeopleSection(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
+                        if ((hovered || focused) && personInteractive) {
+                            Box(
+                                Modifier.fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = .54f)),
+                            )
+                        }
                     }
                     Text(
                         person.name,
                         Modifier.width(avatarSize),
-                        color = LocalContentColor.current,
+                        color = if ((hovered || focused) && personInteractive) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            LocalContentColor.current
+                        },
                         fontSize = nameSize,
                         lineHeight = if (largeLayout) 18.sp else 15.sp,
                         fontWeight = FontWeight.Medium,

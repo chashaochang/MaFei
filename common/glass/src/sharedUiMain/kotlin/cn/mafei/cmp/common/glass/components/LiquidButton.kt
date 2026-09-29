@@ -3,6 +3,7 @@ package cn.mafei.cmp.common.glass.components
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -56,6 +60,13 @@ fun LiquidButton(
     val animationScope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val hoverActive = isInteractive && onClick != null && (hovered || focused)
+    val hoverScale by animateFloatAsState(
+        targetValue = if (hoverActive) 1.025f else 1f,
+        animationSpec = tween(140),
+        label = "liquid-button-hover-scale",
+    )
 
     val interactiveHighlight = remember(animationScope) {
         InteractiveHighlight(
@@ -127,10 +138,17 @@ fun LiquidButton(
                 if (isInteractive && onClick != null) {
                     Modifier.drawWithContent {
                         drawContent()
-                        if (hovered) drawRect(Color.White.copy(alpha = .045f))
+                        if (hovered) drawRect(Color.White.copy(alpha = .085f))
                     }
                 } else Modifier
             )
+            .graphicsLayer {
+                // Keep the layout and hit target stable while making a pointer
+                // hover readable on a busy backdrop. Press/drag distortion is
+                // still owned by InteractiveHighlight inside drawBackdrop.
+                scaleX = hoverScale
+                scaleY = hoverScale
+            }
             .then(
                 if (isInteractive && onClick != null) {
                     Modifier
