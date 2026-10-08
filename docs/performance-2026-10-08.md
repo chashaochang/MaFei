@@ -72,3 +72,25 @@ Native Release（`linkReleaseSharedOhosArm64`，LLVM -O3）+ 原签名 Debug HAP
 最终 Release 影片详情往返滚动通过：绘制回调均值 7.02ms、P95 13.29ms，重组均值 0.33ms；trace 为 `/private/tmp/mafei-perf-final-detail.ftrace`。提交间隔最大约 792ms 含触底/触顶后没有内容变化的停帧，不能作为单帧执行耗时；对应绘制回调最大为 20.31ms。已通过页面返回按钮回到首页，交付时停留在首页。
 
 手机/宽屏、浅色/深色的完整视觉矩阵、Android/iOS/Mac 真机性能不因本轮单台鸿蒙设备通过而自动视为完成。
+
+## 第二轮：材质导出复用
+
+上一轮优化已单独提交为 `8f34f19`，其他播放器、ISO 及设置改动未纳入。
+
+`DrawBackdropNode` 的可见材质与 `exportedBackdrop` 原先分别录制同一背景。现在每次绘制只录制一次，两条路径复用当帧的 display list；导出仍只包含背景、表面与前景装饰，不包含子控件。未修改模糊、折射、透明度、动画或组件布局，也未缓存动态玻璃为静态位图。
+
+新增三个回归：
+
+- 导出路径背景录制次数先红（2 次，期望 1 次），修改后通过。
+- 导出不包含子控件，保持背景实时更新及 behind/surface/front 遮挡顺序。
+- 非零模糊、窗口尺寸及模糊半径变更后，导出与可见材质逐像素一致。
+
+五个模块桌面测试合计 230 项通过，`verifyArchitecture` 通过。Android assembleDebug、OHOS Native Release（8m47s）和 HAP（7s）均构建通过；`verify-harmony-artifacts.mjs ... release` 检查同次产物通过。已使用 `hdc install -r` 覆盖安装，保留原包名、签名和账号数据。
+
+构建期间手机曾锁屏，`aa start` 返回 10106102；未绕过锁屏。安装后再次启动成功，PID 22419，读取首页布局树确认列表 bounds 后完成两轮相同滑动路径采样，没有截图。
+
+预热采样绘制回调均值 8.37ms、P95 12.46ms；提交间隔均值 12.44ms、P95 18.38ms、最大 37.47ms；461 个间隔中 6 个超过 25ms，0 个超过 50ms。首轮仍观测到约 17.48ms 的 shader 加载/编译，绘制回调最大 47.03ms。相比上一轮预热均值 8.52ms、提交 P95 22.54ms，本次数据有改善，但短场景、轮播内容及系统调度有波动，不能把全部变化归因于此项改动，更不能把录制次数减半解读为帧率提升一倍。
+
+本地 trace：`/private/tmp/mafei-perf-export-first.ftrace`、`mafei-perf-export-warm.ftrace`。首次 GPU shader 编译慢帧尚未解决；已有的 shader 实例缓存不等同于 GPU 管线已经预热。
+
+详情页已操作上下滚动并通过页面返回按钮回首页：绘制均值 6.85ms、P95 13.91ms、最大 20.53ms。trace 为 `/private/tmp/mafei-perf-export-detail.ftrace`；约 720ms 的最大提交间隔包含触顶/触底后的静止段，不作为单帧执行耗时。不同影片不做严格 A/B 比较。此次未截图，不声明完整视觉矩阵验收。

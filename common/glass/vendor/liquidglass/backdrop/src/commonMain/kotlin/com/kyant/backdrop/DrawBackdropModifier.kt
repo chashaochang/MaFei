@@ -282,7 +282,7 @@ private class DrawBackdropNode(
         }
     }
 
-    private val drawBackdropLayer: DrawScope.() -> Unit = {
+    private fun DrawScope.recordBackdropLayer() {
         val layer = if (isRenderEffectSupported()) graphicsLayer else null
         if (layer != null) {
             val padding = padding
@@ -299,8 +299,11 @@ private class DrawBackdropNode(
             layer.topLeft =
                 if (padding != 0f) IntOffset(-padding.toInt(), -padding.toInt())
                 else IntOffset.Zero
-            drawLayer(layer)
         }
+    }
+
+    private val drawBackdropLayer: DrawScope.() -> Unit = {
+        if (isRenderEffectSupported()) graphicsLayer?.let { drawLayer(it) }
     }
 
     override fun MeasureScope.measure(
@@ -323,6 +326,9 @@ private class DrawBackdropNode(
         }
 
         onDrawBehind?.invoke(this)
+        // The visible surface and its export sample the same frame. Record once;
+        // the export still omits child content and retains its own overlay order.
+        recordBackdropLayer()
         drawBackdropLayer()
         onDrawSurface?.invoke(this)
         drawContent()
