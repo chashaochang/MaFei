@@ -71,6 +71,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.NavigationEdge
@@ -130,7 +131,7 @@ fun SeasonDetailScreen(
     sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)? = null,
     onPersonSelected: (PersonRef) -> Unit = {},
-    atmosphereArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = landscapeArtwork,
+    atmosphereArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     val backdrop = rememberGlassBackdrop()
@@ -156,12 +157,12 @@ fun SeasonDetailScreen(
     val collapseEnd = remember(density) { with(density) { 272.dp.toPx() } }
     val titleStart = remember(density) { with(density) { 200.dp.toPx() } }
     val titleEnd = remember(density) { with(density) { 272.dp.toPx() } }
-    val collapseProgress by remember(scrollState, collapseStart, collapseEnd) {
+    val collapseProgress = remember(scrollState, collapseStart, collapseEnd) {
         derivedStateOf {
             ((scrollState.value - collapseStart) / (collapseEnd - collapseStart)).coerceIn(0f, 1f)
         }
     }
-    val titleOpacity by remember(scrollState, titleStart, titleEnd) {
+    val titleOpacity = remember(scrollState, titleStart, titleEnd) {
         derivedStateOf {
             ((scrollState.value - titleStart) / (titleEnd - titleStart)).coerceIn(0f, .6f) / .6f
         }
@@ -181,7 +182,8 @@ fun SeasonDetailScreen(
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
                 DetailAtmosphere(
                     item = season,
-                    artwork = atmosphereArtwork,
+                    artwork = landscapeArtwork,
+                    cachedArtwork = atmosphereArtwork,
                     leadingBleed = atmosphereLeadingBleed,
                     trailingBleed = atmosphereTrailingBleed,
                     unblurred = largeDetailLayout,
@@ -271,7 +273,7 @@ fun SeasonDetailScreen(
             }
         }
 
-        MaFeiActionBar(
+        DetailScrollActionBar(
             title = "$seriesName ${season.title}".trim(),
             onBack = {
                 when {
@@ -283,11 +285,8 @@ fun SeasonDetailScreen(
             backdrop = actionBarBackdrop,
             materialAlpha = collapseProgress,
             titleAlpha = titleOpacity,
-            contentColor = lerp(
-                Color.White,
-                MaterialTheme.colorScheme.onSurface,
-                collapseProgress,
-            ),
+            expandedContentColor = Color.White,
+            collapsedContentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.align(Alignment.TopCenter),
         )
         LegacyTransientToast(

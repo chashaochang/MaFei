@@ -525,7 +525,7 @@ fun HomeScreen(
     // surface is only a sibling renderer outside the captured scene; it no
     // longer tries to reconstruct sticky state from a separately maintained
     // item index.
-    val floatingTabsPlacement by remember(
+    val floatingTabsPlacement = remember(
         gridState,
         floatingTabsInsetPx,
         floatingTabsStickyTopPx,
@@ -540,6 +540,12 @@ fun HomeScreen(
                 stickyTopPx = floatingTabsStickyTopPx,
             )
         }
+    }
+    val floatingTabsVisible by remember(floatingTabsPlacement) {
+        derivedStateOf { floatingTabsPlacement.value.visible }
+    }
+    val floatingTabsPinned by remember(floatingTabsPlacement) {
+        derivedStateOf { floatingTabsPlacement.value.pinned }
     }
     val gridScrolling by remember(gridState) { derivedStateOf { gridState.isScrollInProgress } }
     val heroAutoplayMinimumVisiblePx = with(density) { HomeHeroForegroundHiddenTail.roundToPx() }
@@ -1080,18 +1086,18 @@ fun HomeScreen(
               precomposeNeighbours = heroVisibleForAutoplay,
           )
       }
-      if (overview && overviewHasContent && floatingTabsPlacement.visible && showFloatingTabs) {
+      if (overview && overviewHasContent && floatingTabsVisible && showFloatingTabs) {
           Row(
               modifier = Modifier.align(Alignment.TopCenter)
                   .widthIn(max = layout.contentMaxWidthDp.dp)
                   .fillMaxWidth()
-                  .offset { IntOffset(0, floatingTabsPlacement.topPx) }
+                  .offset { IntOffset(0, floatingTabsPlacement.value.topPx) }
                   .padding(
                       start = layout.pagePaddingDp.dp +
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
                       end = layout.pagePaddingDp.dp + safeArea.end +
                           homeFloatingTabsEndInset(
-                              pinned = floatingTabsPlacement.pinned,
+                              pinned = floatingTabsPinned,
                               hasSearch = onSearch != null,
                               showRefresh = showRefreshAction,
                           ),
@@ -1113,7 +1119,7 @@ fun HomeScreen(
                               }
                           }
                       }
-                      val anchorIndex = floatingTabsPlacement.anchorIndex
+                      val anchorIndex = floatingTabsPlacement.value.anchorIndex
                           ?: return@LiquidFloatingTabs
                       // Pin the real sticky item once, then replace the feed.
                       // Its stable key keeps the grid anchored while poster
@@ -1148,7 +1154,7 @@ fun HomeScreen(
       }
       if (
           overview && onSearch != null && showFloatingTabs &&
-          (layout.navigation == NavigationPlacement.Bottom || floatingTabsPlacement.pinned)
+          (layout.navigation == NavigationPlacement.Bottom || floatingTabsPinned)
       ) {
           Box(
               Modifier.align(Alignment.TopCenter)
@@ -1548,6 +1554,7 @@ fun HomeHeroWindowBackdrop(
     state: HomeHeroBackdropState,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     modifier: Modifier = Modifier,
+    ambientArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
     val darkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val brightnessFilter = remember(darkMode) {
@@ -1579,7 +1586,7 @@ fun HomeHeroWindowBackdrop(
                     scaleY = 1.18f
                     colorFilter = brightnessFilter
                 }
-                .blur(state.blurRadius),
+                .then(if (ambientArtwork == null) Modifier.blur(state.blurRadius) else Modifier),
         ) {
             Crossfade(
                 targetState = state.activeItem,
@@ -1587,8 +1594,12 @@ fun HomeHeroWindowBackdrop(
                 animationSpec = tween(durationMillis = HeroAmbientFadeMillis),
                 label = "mafei-hero-ambient",
             ) { target ->
-                if (target != null && artwork != null) {
-                    artwork(target, Modifier.fillMaxSize())
+                if (target != null) {
+                    if (ambientArtwork != null) {
+                        ambientArtwork(target, state.blurRadius, Modifier.fillMaxSize())
+                    } else if (artwork != null) {
+                        artwork(target, Modifier.fillMaxSize())
+                    }
                 }
             }
         }

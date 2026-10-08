@@ -51,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -221,7 +222,7 @@ fun DetailScreen(
     logoArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
     personArtwork: (@Composable (PersonRef, Modifier) -> Unit)? = null,
     onPersonSelected: (PersonRef) -> Unit = {},
-    atmosphereArtwork: (@Composable (MediaItem, Modifier) -> Unit)? = backdropArtwork,
+    atmosphereArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
@@ -232,14 +233,13 @@ fun DetailScreen(
     val density = LocalDensity.current
     val startPx = remember(density) { with(density) { 72.dp.toPx() } }
     val endPx = remember(density) { with(density) { 290.dp.toPx() } }
-    val collapseProgress by remember(scrollState, startPx, endPx) {
+    val collapseProgress = remember(scrollState, startPx, endPx) {
         derivedStateOf {
             ((scrollState.value - startPx) / (endPx - startPx)).coerceIn(0f, 1f)
         }
     }
-    val collapsedTitleOpacity = when {
-        collapseProgress <= .72f -> 0f
-        else -> ((collapseProgress - .72f) / .22f).coerceIn(0f, 1f)
+    val collapsedTitleOpacity = remember(collapseProgress) {
+        derivedStateOf { ((collapseProgress.value - .72f) / .22f).coerceIn(0f, 1f) }
     }
     var overviewSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
     var mediaInfoSheetVisible by remember(item?.id?.value) { mutableStateOf(false) }
@@ -287,7 +287,8 @@ fun DetailScreen(
             Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop)) {
                 DetailAtmosphere(
                     item = item,
-                    artwork = atmosphereArtwork,
+                    artwork = backdropArtwork,
+                    cachedArtwork = atmosphereArtwork,
                     leadingBleed = atmosphereLeadingBleed,
                     trailingBleed = atmosphereTrailingBleed,
                     unblurred = largeDetailLayout,
@@ -358,13 +359,14 @@ fun DetailScreen(
             }
         }
 
-        MaFeiActionBar(
+        DetailScrollActionBar(
             title = item?.title.orEmpty(),
             onBack = { if (sheetVisible) dismissTopSheet() else onBack() },
             backdrop = actionBarBackdrop,
-            materialAlpha = if (item == null) 1f else collapseProgress,
-            titleAlpha = if (item == null) 0f else collapsedTitleOpacity,
-            contentColor = if (item == null) MaterialTheme.colorScheme.onSurface else Color.White,
+            materialAlpha = collapseProgress,
+            titleAlpha = collapsedTitleOpacity,
+            loading = item == null,
+            collapsedContentColor = if (item == null) MaterialTheme.colorScheme.onSurface else Color.White,
             modifier = Modifier.align(Alignment.TopCenter),
         )
         LegacyTransientToast(
@@ -470,6 +472,7 @@ internal fun DetailAtmosphere(
     leadingBleed: Dp = 0.dp,
     trailingBleed: Dp = 0.dp,
     unblurred: Boolean = false,
+    cachedArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
     val atmosphereModifier = if (leadingBleed > 0.dp || trailingBleed > 0.dp) {
         Modifier
@@ -480,11 +483,9 @@ internal fun DetailAtmosphere(
         Modifier.fillMaxSize().clipToBounds()
     }
     Box(atmosphereModifier.background(MaterialTheme.colorScheme.background)) {
-        if (item != null && artwork != null) {
+        if (item != null && (artwork != null || cachedArtwork != null)) {
             val darkMode = isSystemInDarkTheme()
-            artwork(
-                item,
-                Modifier
+            val imageModifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
                         scaleX = 1.18f
@@ -504,9 +505,13 @@ internal fun DetailAtmosphere(
                         )
                     }
                     .let { modifier ->
-                        if (unblurred) modifier else modifier.blur(DetailAtmosphereBlurRadius)
-                    },
-            )
+                        if (unblurred || cachedArtwork != null) modifier else modifier.blur(DetailAtmosphereBlurRadius)
+                    }
+            if (cachedArtwork != null) {
+                cachedArtwork(item, if (unblurred) 0.dp else DetailAtmosphereBlurRadius, imageModifier)
+            } else {
+                artwork?.invoke(item, imageModifier)
+            }
         }
         Box(
             Modifier.fillMaxSize().background(
@@ -554,7 +559,7 @@ private fun Modifier.detailAtmosphereBleed(
 private fun BoxScope.DetailBody(
     item: MediaItem,
     scrollState: androidx.compose.foundation.ScrollState,
-    collapseProgress: Float,
+    collapseProgress: State<Float>,
     loading: Boolean,
     error: String?,
     stale: Boolean,
@@ -853,7 +858,7 @@ private fun DetailProjectHeader(
 private fun DetailHero(
     item: MediaItem,
     height: Dp,
-    collapseProgress: Float,
+    collapseProgress: State<Float>,
     libraryName: String?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
@@ -864,11 +869,6 @@ private fun DetailHero(
     val horizontalPadding = detailPageHorizontalPadding()
     val heroTags = detailHeroTags(item, playbackSource)
     val largeTypography = usesLargeDetailTypography()
-    val titleOpacity = when {
-        collapseProgress <= .72f -> 1f
-        else -> (1f - (collapseProgress - .72f) / .22f).coerceIn(0f, 1f)
-    }
-    val titlePhase = smoothStep(((collapseProgress - .42f) / .58f).coerceIn(0f, 1f))
     val hasLogo = item.images.any { it.kind == ImageKind.Logo }
     val usesCalligraphy = item.title.any { it in '\u3400'..'\u9fff' }
     val calligraphyFont = if (usesCalligraphy) {
@@ -881,7 +881,6 @@ private fun DetailHero(
         usesCalligraphy -> .23f
         else -> .46f
     }
-    val titleScale = 1f - (1f - collapsedScale) * titlePhase
     // 与手机同一套规格：hero 是 edge-to-edge 的 band，底部羽化融入氛围背景。
     // 之前宽屏把 hero 做成圆角卡片（"桌面化第二套布局"），既失去沉浸感，也让
     // 宽屏/窄屏是两个页面。现在只有一种详情页。
@@ -932,9 +931,12 @@ private fun DetailHero(
                         .width(196.dp)
                         .height(76.dp)
                         .graphicsLayer {
+                            val progress = collapseProgress.value
+                            val titlePhase = smoothStep(((progress - .42f) / .58f).coerceIn(0f, 1f))
+                            val titleScale = 1f - (1f - collapsedScale) * titlePhase
                             scaleX = titleScale
                             scaleY = titleScale
-                            alpha = titleOpacity
+                            alpha = (1f - (progress - .72f) / .22f).coerceIn(0f, 1f)
                             translationY = -8.dp.toPx() - 8.dp.toPx() * titlePhase
                         },
                 ) {
@@ -945,9 +947,12 @@ private fun DetailHero(
                     Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
+                            val progress = collapseProgress.value
+                            val titlePhase = smoothStep(((progress - .42f) / .58f).coerceIn(0f, 1f))
+                            val titleScale = 1f - (1f - collapsedScale) * titlePhase
                             scaleX = titleScale
                             scaleY = titleScale
-                            alpha = titleOpacity
+                            alpha = (1f - (progress - .72f) / .22f).coerceIn(0f, 1f)
                             translationY = -16.dp.toPx() * titlePhase
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,

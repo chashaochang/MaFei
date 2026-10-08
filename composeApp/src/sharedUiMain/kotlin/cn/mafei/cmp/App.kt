@@ -93,6 +93,7 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
 import cn.mafei.cmp.common.design_system.MaFeiPopupReferenceColors
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
+import cn.mafei.cmp.common.media.CachedBlurredArtwork
 import cn.mafei.cmp.common.media.MediaArtwork
 import cn.mafei.cmp.common.media.landscapeArtworkCandidates
 import cn.mafei.cmp.common.media.legacyDetailBackdropArtworkCandidates
@@ -2355,6 +2356,15 @@ private fun BrowseContent(
                 if (currentRoute == BrowseHomeRoute && !showingDetail && homeCarouselVisible) {
                     HomeHeroWindowBackdrop(
                         state = heroBackdrop,
+                        ambientArtwork = { item, radius, modifier ->
+                            MediaArtwork(
+                                item.landscapeArtworkCandidates(), item.title, artworkCache, fetchArtwork, modifier,
+                                targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
+                                bitmapContent = { bitmap, imageModifier ->
+                                    CachedBlurredArtwork(bitmap, radius, imageModifier)
+                                },
+                            )
+                        },
                         artwork = { item, modifier ->
                             MediaArtwork(
                                 item.landscapeArtworkCandidates(),
@@ -3024,7 +3034,7 @@ private fun BrowseContent(
                                         )
                                     },
                                     onPersonSelected = openPerson,
-                                    atmosphereArtwork = { item, modifier ->
+                                    atmosphereArtwork = { item, radius, modifier ->
                                         MediaArtwork(
                                             images = item.legacyDetailBackdropArtworkCandidates(),
                                             title = item.title,
@@ -3032,6 +3042,9 @@ private fun BrowseContent(
                                             fetch = fetchArtwork,
                                             modifier = modifier,
                                             targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
+                                            bitmapContent = { bitmap, imageModifier ->
+                                                CachedBlurredArtwork(bitmap, radius, imageModifier)
+                                            },
                                         )
                                     },
                                 )
@@ -3230,7 +3243,7 @@ private fun BrowseContent(
                                             )
                                         },
                                         onPersonSelected = openPerson,
-                                        atmosphereArtwork = { item, modifier ->
+                                        atmosphereArtwork = { item, radius, modifier ->
                                             MediaArtwork(
                                                 images = item.legacyDetailBackdropArtworkCandidates(),
                                                 title = item.title,
@@ -3238,6 +3251,9 @@ private fun BrowseContent(
                                                 fetch = fetchArtwork,
                                                 modifier = modifier,
                                                 targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
+                                                bitmapContent = { bitmap, imageModifier ->
+                                                    CachedBlurredArtwork(bitmap, radius, imageModifier)
+                                                },
                                             )
                                         },
                                     )
@@ -3364,7 +3380,7 @@ private fun BrowseContent(
                                         )
                                     },
                                     onPersonSelected = openPerson,
-                                    atmosphereArtwork = { item, modifier ->
+                                    atmosphereArtwork = { item, radius, modifier ->
                                         MediaArtwork(
                                             images = item.legacyDetailBackdropArtworkCandidates(),
                                             title = item.title,
@@ -3372,6 +3388,9 @@ private fun BrowseContent(
                                             fetch = fetchArtwork,
                                             modifier = modifier,
                                             targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
+                                            bitmapContent = { bitmap, imageModifier ->
+                                                CachedBlurredArtwork(bitmap, radius, imageModifier)
+                                            },
                                         )
                                     },
                                 )

@@ -214,6 +214,7 @@ fun MediaArtwork(
     targetWidthPx: Int? = null,
     warmStartImages: List<MediaImage> = emptyList(),
     revealDurationMillis: Int = DefaultArtworkRevealMillis,
+    bitmapContent: (@Composable (ImageBitmap, Modifier) -> Unit)? = null,
 ) = MediaArtwork(
     images = listOfNotNull(image),
     title = title,
@@ -225,6 +226,7 @@ fun MediaArtwork(
     targetWidthPx = targetWidthPx,
     warmStartImages = warmStartImages,
     revealDurationMillis = revealDurationMillis,
+    bitmapContent = bitmapContent,
 )
 
 /**
@@ -247,6 +249,7 @@ fun MediaArtwork(
     targetWidthPx: Int? = null,
     warmStartImages: List<MediaImage> = emptyList(),
     revealDurationMillis: Int = DefaultArtworkRevealMillis,
+    bitmapContent: (@Composable (ImageBitmap, Modifier) -> Unit)? = null,
 ) {
     val candidates = remember(images) {
         images.filter { it.url.isNotBlank() }.distinctBy { it.url }
@@ -266,6 +269,7 @@ fun MediaArtwork(
             fallback = fallback,
             requestedWidthPx = remember(targetWidthPx) { artworkWidthBucket(targetWidthPx) },
             revealDurationMillis = revealDurationMillis,
+            bitmapContent = bitmapContent,
         )
     } else {
         BoxWithConstraints(modifier) {
@@ -289,6 +293,7 @@ fun MediaArtwork(
                 fallback = fallback,
                 requestedWidthPx = requestedWidthPx,
                 revealDurationMillis = revealDurationMillis,
+                bitmapContent = bitmapContent,
             )
         }
     }
@@ -306,6 +311,7 @@ private fun MediaArtworkContent(
     fallback: (@Composable (Modifier) -> Unit)?,
     requestedWidthPx: Int,
     revealDurationMillis: Int,
+    bitmapContent: (@Composable (ImageBitmap, Modifier) -> Unit)?,
 ) {
     val cachedBitmap = remember(candidates, cache, requestedWidthPx) {
         cache.peek(candidates, requestedWidthPx)
@@ -364,7 +370,7 @@ private fun MediaArtworkContent(
     // otherwise schedule Crossfade work in the same frame as the lazy layout.
     // Keep the reveal only for a real placeholder -> decoded-image transition.
     if (cachedBitmap != null) {
-        ArtworkContent(loaded, title, fallback, modifier, contentScale)
+        ArtworkContent(loaded, title, fallback, modifier, contentScale, bitmapContent)
     } else {
         Crossfade(
             targetState = loaded,
@@ -372,7 +378,7 @@ private fun MediaArtworkContent(
             animationSpec = tween(revealDurationMillis),
             label = "artwork-reveal",
         ) { artwork ->
-            ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale)
+            ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale, bitmapContent)
         }
     }
 }
@@ -384,11 +390,14 @@ private fun ArtworkContent(
     fallback: (@Composable (Modifier) -> Unit)?,
     modifier: Modifier,
     contentScale: ContentScale,
+    bitmapContent: (@Composable (ImageBitmap, Modifier) -> Unit)?,
 ) {
     Box(modifier) {
         if (artwork == null) {
             if (fallback == null) TextPoster(title, Modifier.fillMaxSize())
             else fallback(Modifier.fillMaxSize())
+        } else if (bitmapContent != null) {
+            bitmapContent(artwork, Modifier.fillMaxSize())
         } else {
             Image(
                 artwork,

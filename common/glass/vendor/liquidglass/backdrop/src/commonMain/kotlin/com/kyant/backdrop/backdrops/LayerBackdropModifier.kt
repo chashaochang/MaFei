@@ -2,6 +2,7 @@ package com.kyant.backdrop.backdrops
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
@@ -53,8 +54,16 @@ private class LayerBackdropNode(
 ) : DrawModifierNode, GlobalPositionAwareModifierNode, Modifier.Node() {
 
     override fun ContentDrawScope.draw() {
-        drawContent()
-        recordLayer(backdrop.graphicsLayer) { backdrop.onDraw(this@draw) }
+        if (backdrop.recordsContentOnly) {
+            // Reuse the live display list for both the page and its consumers.
+            // Drawing content separately doubles traversal at every nested recorder.
+            recordLayer(backdrop.graphicsLayer) { this@draw.drawContent() }
+            drawLayer(backdrop.graphicsLayer)
+        } else {
+            // A custom recorder may intentionally differ from the visible content.
+            drawContent()
+            recordLayer(backdrop.graphicsLayer) { backdrop.onDraw(this@draw) }
+        }
     }
 
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {

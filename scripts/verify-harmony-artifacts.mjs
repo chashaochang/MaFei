@@ -4,16 +4,19 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-// Run after publishDebugBinariesToHarmonyApp and assembleHap. No extraction,
+// Run after publish{Debug,Release}BinariesToHarmonyApp and assembleHap. No extraction,
 // signing or deployment; generated header and library must match their source.
 const root = resolve(process.argv[2] ?? resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const hap = resolve(process.argv[3] ?? resolve(root, 'harmonyApp/entry/build/default/outputs/default/entry-default-unsigned.hap'));
 function check(ok, message) { if (!ok) throw new Error(message); }
+const buildType = process.argv[4] ?? 'debug';
+check(['debug', 'release'].includes(buildType), 'Build type must be debug or release');
+const binaryDir = resolve(root, `composeApp/build/bin/ohosArm64/${buildType}Shared`);
 for (const [name, staged] of [
   ['libkn.so', 'harmonyApp/entry/libs/arm64-v8a/libkn.so'],
   ['libkn_api.h', 'harmonyApp/entry/src/main/cpp/include/arm64-v8a/libkn_api.h'],
 ]) {
-  execFileSync('cmp', ['-s', resolve(root, `composeApp/build/bin/ohosArm64/debugShared/${name}`), resolve(root, staged)]);
+  execFileSync('cmp', ['-s', resolve(binaryDir, name), resolve(root, staged)]);
 }
 const entries = execFileSync('unzip', ['-Z1', hap], { encoding: 'utf8' }).trim().split('\n');
 for (const entry of entries.filter(it => /^libs\/.+\.so$/.test(it))) {
@@ -27,7 +30,7 @@ for (const name of ['libkn.so', 'libentry.so', 'libskikobridge.so', 'libc++_shar
 execFileSync('cmp', ['-s', resolve(root, 'harmonyApp/entry/libs/arm64-v8a/libkn.so'),
   resolve(root, 'harmonyApp/entry/build/default/intermediates/libs/default/arm64-v8a/libkn.so')]);
 const strippedKn = readFileSync(resolve(root, 'harmonyApp/entry/build/default/intermediates/stripped_native_libs/default/arm64-v8a/libkn.so'));
-const linkedKn = readFileSync(resolve(root, 'composeApp/build/bin/ohosArm64/debugShared/libkn.so'));
+const linkedKn = readFileSync(resolve(binaryDir, 'libkn.so'));
 function buildId(elf) {
   check(elf.subarray(0, 6).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1])) && elf.readUInt16LE(18) === 183,
     'Expected little-endian ARM64 ELF');
