@@ -13,6 +13,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import org.jetbrains.compose.resources.painterResource
+import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -161,7 +165,7 @@ private val PlayerAccent = Color(0xFF2173DF)
 
 private enum class PlayerChromePanel { None, More, AspectRatio, Speed, Audio, Subtitle, Episodes, Quality }
 
-private enum class PlayerChromeGlyph {
+enum class PlayerChromeGlyph {
     More,
     Play,
     Pause,
@@ -227,6 +231,9 @@ fun NowPlayingScreen(
     /** 「播放信息」卡片的来源事实；null = 该条目没有可展示的技术信息，入口不出现。 */
     playbackFacts: PlayerPlaybackFacts? = null,
     onSelectContentMode: ((PlayerContentMode) -> Unit)? = null,
+    onPictureInPicture: (() -> Unit)? = null,
+    onCasting: (() -> Unit)? = null,
+    danmaku: List<cn.mafei.cmp.player.api.DanmakuEntry> = emptyList(),
     /**
      * 平台亮度/音量（旧版左侧调亮度、右侧调音量）。默认不支持：两条竖向手势都不介入，
      * 也不会画出「改了但没生效」的反馈条。
@@ -237,7 +244,9 @@ fun NowPlayingScreen(
     loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
 ) {
     val backdrop = rememberGlassBackdrop()
-    val presentation = state.toNowPlayingPresentation(capabilities)
+    val localCapabilities = if (state.casting) capabilities.copy(trackSelection = false, contentMode = false) else capabilities
+    val availableQualities = if (state.casting) emptyList() else qualityOptions
+    val presentation = state.toNowPlayingPresentation(if (media.live) capabilities.copy(seek = false) else capabilities)
     val safeArea = currentMaFeiSafeArea()
     val latestTogglePlay by rememberUpdatedState(onTogglePlay)
     val latestSeek by rememberUpdatedState(onSeek)
@@ -248,6 +257,7 @@ fun NowPlayingScreen(
 
     var controlsVisible by remember(media.id, state.generation) { mutableStateOf(true) }
     var locked by remember(media.id, state.generation) { mutableStateOf(false) }
+    var danmakuEnabled by remember(media.id) { mutableStateOf(false) }
     var panel by remember(media.id, state.generation) { mutableStateOf(PlayerChromePanel.None) }
     var panelContainerVisible by remember(media.id, state.generation) { mutableStateOf(false) }
     var panelClosing by remember(media.id, state.generation) { mutableStateOf(false) }
@@ -339,6 +349,8 @@ fun NowPlayingScreen(
 
     fun openPanel(next: PlayerChromePanel) {
         if (next == PlayerChromePanel.None) return
+        if (state.casting && next in listOf(PlayerChromePanel.Audio, PlayerChromePanel.Subtitle,
+                PlayerChromePanel.Quality, PlayerChromePanel.AspectRatio)) return
         panelAnimationToken++
         panel = next
         panelClosing = false
@@ -459,7 +471,24 @@ fun NowPlayingScreen(
             Modifier.fillMaxSize().clipToBounds().captureGlassBackdrop(backdrop),
             contentAlignment = Alignment.Center,
         ) {
-            Box(areaModifier) { videoSurface(Modifier.fillMaxSize()) }
+            Box(areaModifier) {
+                videoSurface(Modifier.fillMaxSize())
+                if (state.subtitleText.isNotBlank()) {
+                    Text(
+                        state.subtitleText,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = if (controlsVisible) 76.dp else 18.dp),
+                        color = Color.White,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontSize = if (fullscreen) 22.sp else 17.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            shadow = androidx.compose.ui.graphics.Shadow(Color.Black, blurRadius = 5f),
+                        ),
+                    )
+                }
+                if (danmakuEnabled && danmaku.isNotEmpty() && state.engineType == cn.mafei.cmp.player.api.PlayerEngineType.System) {
+                    DanmakuOverlay(danmaku, state, fullscreen, Modifier.fillMaxSize().clipToBounds())
+                }
+            }
         }
 
         Box(
@@ -669,9 +698,11 @@ fun NowPlayingScreen(
                 clockText = clockText,
                 // Legacy 「更多」 holds exactly 画面比例 and 播放信息; it appears
                 // only when at least one of the two exists on this platform.
-                showMenu = capabilities.contentMode || playbackFacts != null,
+                showMenu = localCapabilities.contentMode || playbackFacts != null,
                 onBack = handleBack,
                 onMenu = { openPanel(PlayerChromePanel.More) },
+                onPictureInPicture = onPictureInPicture,
+                onCasting = onCasting,
             )
         }
 
@@ -684,6 +715,7 @@ fun NowPlayingScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             PlayerBottomChrome(
+                live = media.live,
                 state = state,
                 presentation = presentation,
                 fullscreen = fullscreen,
@@ -709,10 +741,14 @@ fun NowPlayingScreen(
                 onNext = onNext,
                 onPrevious = onPrevious,
                 episodes = episodes,
-                qualityOptions = qualityOptions,
+                qualityOptions = availableQualities,
                 onPanel = ::openPanel,
-                capabilities = capabilities,
+                capabilities = localCapabilities,
                 tracks = tracks,
+                danmakuEnabled = danmakuEnabled,
+                onDanmakuToggle = if (danmaku.isNotEmpty() && state.engineType == cn.mafei.cmp.player.api.PlayerEngineType.System) {
+                    { danmakuEnabled = !danmakuEnabled }
+                } else null,
             )
         }
 
@@ -823,10 +859,10 @@ fun NowPlayingScreen(
                     tracks = tracks,
                     episodes = episodes,
                     episodeIndex = episodeIndex,
-                    qualityOptions = qualityOptions,
+                    qualityOptions = availableQualities,
                     fullscreen = fullscreen,
                     largeWindow = largeWindow,
-                    showAspectRatio = capabilities.contentMode,
+                    showAspectRatio = localCapabilities.contentMode,
                     showPlaybackInfo = playbackFacts != null,
                     backdrop = backdrop,
                     safeEnd = safeArea.end,
@@ -891,6 +927,8 @@ private fun PlayerTopChrome(
     showMenu: Boolean,
     onBack: () -> Unit,
     onMenu: () -> Unit,
+    onPictureInPicture: (() -> Unit)?,
+    onCasting: (() -> Unit)?,
 ) {
     val windowFeatures = LocalMaFeiWindowFeatures.current
     val windowControlEndInset = if (windowFeatures.windowedHost && !fullscreen) {
@@ -960,6 +998,20 @@ private fun PlayerTopChrome(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (onPictureInPicture != null) {
+                PlayerChromeButton(glyph = null, label = "画中画", diameter = 44, iconSize = 22,
+                    backdrop = backdrop, onClick = onPictureInPicture) {
+                    Image(painterResource(MaFeiLegacyDrawables.pictureInPicture), null,
+                        Modifier.size(22.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White))
+                }
+            }
+            if (onCasting != null) {
+                PlayerChromeButton(glyph = null, label = "投屏", diameter = 44, iconSize = 22,
+                    backdrop = backdrop, onClick = onCasting) {
+                    Image(painterResource(MaFeiLegacyDrawables.wirelessProjection), null,
+                        Modifier.size(22.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White))
+                }
+            }
             if (showMenu) {
                 PlayerChromeButton(
                     glyph = PlayerChromeGlyph.More,
@@ -986,6 +1038,7 @@ private fun PlayerTopChrome(
 
 @Composable
 private fun PlayerBottomChrome(
+    live: Boolean,
     state: PlayerState,
     tracks: List<PlayerTrack>,
     presentation: NowPlayingPresentation,
@@ -1011,6 +1064,8 @@ private fun PlayerBottomChrome(
     qualityOptions: List<PlayerQualityOption>,
     onPanel: (PlayerChromePanel) -> Unit,
     capabilities: PlayerCapabilities,
+    danmakuEnabled: Boolean = false,
+    onDanmakuToggle: (() -> Unit)? = null,
 ) {
     val audioTracks = tracks.filter { it.kind == TrackKind.Audio }
     val subtitleTracks = tracks.filter { it.kind == TrackKind.Subtitle }
@@ -1047,7 +1102,7 @@ private fun PlayerBottomChrome(
             verticalArrangement = Arrangement.spacedBy(if (fullscreen) 2.dp else 0.dp),
         ) {
                 if (extendedControls) {
-                    PlayerTimelineRow(
+                    if (!live) PlayerTimelineRow(
                         state = state,
                         positionMs = sliderPositionMs,
                         durationMs = duration,
@@ -1095,6 +1150,14 @@ private fun PlayerBottomChrome(
                         )
                     }
                     Spacer(Modifier.weight(1f))
+                    if (onDanmakuToggle != null) {
+                        PlayerChromeButton(glyph = null, label = if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
+                            diameter = if (largeWindow) 42 else 30, iconSize = 20,
+                            backdrop = backdrop, transparent = true, onClick = onDanmakuToggle) {
+                            Image(painterResource(if (danmakuEnabled) MaFeiLegacyDrawables.danmakuOpen else MaFeiLegacyDrawables.danmakuClose),
+                                null, Modifier.size(20.dp))
+                        }
+                    }
                     if (capabilities.trackSelection && audioTracks.size > 1) {
                         PlayerTextControl("音轨") { onPanel(PlayerChromePanel.Audio) }
                     }
@@ -1102,7 +1165,7 @@ private fun PlayerBottomChrome(
                         PlayerTextControl("字幕") { onPanel(PlayerChromePanel.Subtitle) }
                     }
                     // Legacy order: 音轨 → 字幕 → 选集 → 清晰度 → 倍速.
-                    if (episodes.size > 1) {
+                    if (!live && episodes.size > 1) {
                         PlayerTextControl("选集") { onPanel(PlayerChromePanel.Episodes) }
                     }
                     if (qualityOptions.isNotEmpty()) {
@@ -1169,6 +1232,7 @@ private fun PlayerBottomChrome(
                             onClick = onNext,
                         )
                     }
+                    if (!live) {
                     Text(
                         formatPlayerDuration(if (draggingSlider) sliderPositionMs else state.positionMs),
                         color = Color.White,
@@ -1190,6 +1254,7 @@ private fun PlayerBottomChrome(
                         color = Color.White,
                         style = MaterialTheme.typography.labelMedium,
                     )
+                    } else Spacer(Modifier.weight(1f))
                     if (onFullscreenRequest != null) {
                         PlayerChromeButton(
                             glyph = if (tabletWindow) PlayerChromeGlyph.Orientation
@@ -2137,7 +2202,7 @@ private fun PlayerChromeButton(
 }
 
 @Composable
-private fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: Color = Color.White) {
+fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: Color = Color.White) {
     Canvas(modifier) {
         val stroke = size.minDimension * .09f
         fun line(x1: Float, y1: Float, x2: Float, y2: Float, width: Float = stroke) {

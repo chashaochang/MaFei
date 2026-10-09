@@ -9,6 +9,7 @@ data class NowPlayingMedia(
     val title: String,
     val subtitle: String,
     val description: String? = null,
+    val live: Boolean = false,
 ) {
     init {
         require(id.isNotBlank())

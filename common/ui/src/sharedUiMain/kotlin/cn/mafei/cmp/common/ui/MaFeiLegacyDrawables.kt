@@ -21,6 +21,10 @@ import cn.mafei.cmp.common.ui.generated.resources.ic_close
 import cn.mafei.cmp.common.ui.generated.resources.ic_like
 import cn.mafei.cmp.common.ui.generated.resources.ic_play_round
 import cn.mafei.cmp.common.ui.generated.resources.ic_photo
+import cn.mafei.cmp.common.ui.generated.resources.ic_pip
+import cn.mafei.cmp.common.ui.generated.resources.ic_wireless_projection
+import cn.mafei.cmp.common.ui.generated.resources.danmu_open
+import cn.mafei.cmp.common.ui.generated.resources.danmu_close
 import cn.mafei.cmp.common.ui.generated.resources.ic_setting
 import cn.mafei.cmp.common.ui.generated.resources.ic_search
 import cn.mafei.cmp.common.ui.generated.resources.ic_unlike
@@ -40,6 +44,7 @@ import cn.mafei.cmp.common.ui.generated.resources.qrcode
 import cn.mafei.cmp.common.ui.generated.resources.shengxu
 import cn.mafei.cmp.common.ui.generated.resources.tv
 import org.jetbrains.compose.resources.DrawableResource
+import cn.mafei.cmp.common.ui.generated.resources.web
 
 /**
  * Original HarmonyOS artwork exposed through a stable public API.
@@ -48,6 +53,7 @@ import org.jetbrains.compose.resources.DrawableResource
  * these exact legacy assets through this object instead of redrawing icons.
  */
 object MaFeiLegacyDrawables {
+    val web: DrawableResource get() = Res.drawable.web
     val appIcon: DrawableResource get() = Res.drawable.app_icon
     val ponyLoadingFrames: List<DrawableResource>
         get() = listOf(
@@ -69,6 +75,11 @@ object MaFeiLegacyDrawables {
     val librarySeries: DrawableResource get() = Res.drawable.tv
     val libraryMusic: DrawableResource get() = Res.drawable.ic_audio
     val libraryPhoto: DrawableResource get() = Res.drawable.ic_photo
+    val pictureInPicture: DrawableResource get() = Res.drawable.ic_pip
+    /** Same HMSymbolVF U+F02EB glyph as legacy sys.symbol.wireless_projection, rasterized for CMP. */
+    val wirelessProjection: DrawableResource get() = Res.drawable.ic_wireless_projection
+    val danmakuOpen: DrawableResource get() = Res.drawable.danmu_open
+    val danmakuClose: DrawableResource get() = Res.drawable.danmu_close
     // 注意：旧版还有一张 `bg_mine`（浅灰底 + 播放按钮水印）作「我的」页背景，但它属于**飞牛主题**：
     // 旧版判据是 `AppThemeTokens.showMineBackground(style) = (style === ThemeStyle.Feiniu)`，那个主题
     // 当前不做，所以不在这里暴露入口（资源文件仍留在 composeResources，将来做飞牛主题时再挂上）。
