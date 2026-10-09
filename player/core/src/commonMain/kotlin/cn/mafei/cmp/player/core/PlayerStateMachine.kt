@@ -23,12 +23,14 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
     private var lastReportAt: Long? = null
     private var resumePosition = 0L
     private var surface: PlayerSurfaceHandle? = null
+    private var backgroundAudio = false
 
     fun load(resources: List<PlayableResource>, index: Int, resumeMs: Long, autoplay: Boolean): List<PlayerEffect> {
         active(); require(resources.isNotEmpty()); require(index in resources.indices); require(resumeMs >= 0)
         if (resumeMs > 0 && !capabilities.seek) throw UnsupportedPlayerCapability("seek")
         val effects = terminalReport()
         queue = resources.toList()
+        backgroundAudio = false
         wantsPlay = autoplay
         resumeOnForeground = autoplay && backgrounded && !capabilities.backgroundPlayback
         resumePosition = resumeMs
@@ -61,12 +63,12 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
                 state = state.copy(phase = PlayerPhase.Ready, durationMs = event.durationMs, positionMs = position)
                 return buildList {
                     if (position > 0) add(engine(RuntimeCommand.Seek(generation, position)))
-                    if (wantsPlay && (!backgrounded || capabilities.backgroundPlayback)) add(engine(RuntimeCommand.Play(generation)))
+                    if (wantsPlay && (!backgrounded || backgroundPlaybackAllowed())) add(engine(RuntimeCommand.Play(generation)))
                 }
             }
             is RuntimeEvent.Playing -> {
                 if (!prepared) return emptyList()
-                if (!wantsPlay || (backgrounded && !capabilities.backgroundPlayback)) return listOf(engine(RuntimeCommand.Pause(generation)))
+                if (!wantsPlay || (backgrounded && !backgroundPlaybackAllowed())) return listOf(engine(RuntimeCommand.Pause(generation)))
                 nativePaused = false
                 state = state.copy(phase = PlayerPhase.Playing)
                 if (!reportedStart) { reportedStart = true; lastReportAt = nowMs; return listOf(report(PlayerReportKind.Start)) }
@@ -79,7 +81,7 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
                 if (reportedStart && !lastReportedPaused) { lastReportAt = nowMs; return listOf(report(PlayerReportKind.Progress)) }
             }
             is RuntimeEvent.Buffering -> {
-                if (prepared && wantsPlay && (!backgrounded || capabilities.backgroundPlayback)) state = state.copy(phase = PlayerPhase.Buffering)
+                if (prepared && wantsPlay && (!backgrounded || backgroundPlaybackAllowed())) state = state.copy(phase = PlayerPhase.Buffering)
             }
             is RuntimeEvent.Progress -> {
                 if (!prepared || event.positionMs < 0 || event.bufferedPositionMs < 0) return emptyList()
@@ -96,7 +98,31 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
                 }
             }
             is RuntimeEvent.Tracks -> state = state.copy(tracks = event.tracks.toList())
+            is RuntimeEvent.Subtitle -> state = state.copy(subtitleText = event.text)
             is RuntimeEvent.Diagnostics -> state = state.copy(runtimeInfo = event.info)
+            is RuntimeEvent.EngineChanged -> state = state.copy(engineType = event.engine)
+            is RuntimeEvent.Casting -> {
+                state = state.copy(casting = event.active)
+                if (!backgrounded || !prepared || !wantsPlay || event.active) return emptyList()
+                resumeOnForeground = !backgroundPlaybackAllowed()
+                return if (resumeOnForeground) listOf(engine(RuntimeCommand.Pause(generation))) else emptyList()
+            }
+            is RuntimeEvent.BackgroundAudio -> {
+                if (!queue[state.queueIndex].audioOnly || backgroundAudio == event.active) return emptyList()
+                backgroundAudio = event.active
+                if (!backgrounded || !prepared || !wantsPlay) return emptyList()
+                resumeOnForeground = !backgroundPlaybackAllowed()
+                return listOf(engine(if (backgroundPlaybackAllowed()) RuntimeCommand.Play(generation)
+                    else RuntimeCommand.Pause(generation)))
+            }
+            is RuntimeEvent.PictureInPicture -> {
+                if (state.pictureInPicture == event.active) return emptyList()
+                state = state.copy(pictureInPicture = event.active)
+                if (!backgrounded || !prepared || !wantsPlay) return emptyList()
+                resumeOnForeground = !backgroundPlaybackAllowed()
+                return listOf(engine(if (backgroundPlaybackAllowed()) RuntimeCommand.Play(generation)
+                    else RuntimeCommand.Pause(generation)))
+            }
             is RuntimeEvent.Failed -> return fail(event.failure)
             is RuntimeEvent.Ended -> {
                 if (!prepared) return emptyList()
@@ -112,8 +138,8 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
 
     fun play(): List<PlayerEffect> {
         usable(); wantsPlay = true
-        resumeOnForeground = backgrounded && !capabilities.backgroundPlayback
-        return if (prepared && (!backgrounded || capabilities.backgroundPlayback)) listOf(engine(RuntimeCommand.Play(generation()))) else emptyList()
+        resumeOnForeground = backgrounded && !backgroundPlaybackAllowed()
+        return if (prepared && (!backgrounded || backgroundPlaybackAllowed())) listOf(engine(RuntimeCommand.Play(generation()))) else emptyList()
     }
     fun pause(): List<PlayerEffect> { usable(); wantsPlay = false; resumeOnForeground = false; return if (prepared) listOf(engine(RuntimeCommand.Pause(generation()))) else emptyList() }
     fun seek(positionMs: Long): List<PlayerEffect> {
@@ -151,7 +177,7 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
     }
     fun background(): List<PlayerEffect> {
         active(); backgrounded = true
-        if (capabilities.backgroundPlayback || state.generation == null || state.phase in terminalPhases) return emptyList()
+        if (backgroundPlaybackAllowed() || state.generation == null || state.phase in terminalPhases) return emptyList()
         resumeOnForeground = wantsPlay
         return if (prepared && wantsPlay) listOf(engine(RuntimeCommand.Pause(generation()))) else emptyList()
     }
@@ -201,6 +227,7 @@ class PlayerStateMachine(private val capabilities: PlayerCapabilities, private v
     private fun generation() = checkNotNull(state.generation)
     private fun active() = check(state.phase != PlayerPhase.Released) { "Player released" }
     private fun usable() { active(); check(state.generation != null && state.phase !in terminalPhases) { "No active resource" } }
+    private fun backgroundPlaybackAllowed() = capabilities.backgroundPlayback || state.pictureInPicture || backgroundAudio || state.casting
     private fun clamp(position: Long, durationMs: Long? = state.durationMs) =
         durationMs?.let { position.coerceAtMost(it) } ?: position
     private val terminalPhases = setOf(PlayerPhase.Idle, PlayerPhase.Ended, PlayerPhase.Error, PlayerPhase.Released)

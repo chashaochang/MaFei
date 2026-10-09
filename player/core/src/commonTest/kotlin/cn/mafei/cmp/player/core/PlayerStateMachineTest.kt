@@ -4,6 +4,58 @@ import cn.mafei.cmp.player.api.*
 import kotlin.test.*
 
 class PlayerStateMachineTest {
+    @Test fun audioBackgroundRequiresActualGrantAndDoesNotGrantVideos() {
+        val m = machine()
+        m.load(listOf(PlayableResource("song", "https://media.invalid/song", audioOnly = true)), 0, 0, true)
+        val generation = m.state.generation!!
+        m.accept(RuntimeEvent.Ready(generation, 10000), 0)
+        assertIs<RuntimeCommand.Pause>((m.background().single() as PlayerEffect.Engine).command)
+        assertIs<RuntimeCommand.Play>((m.accept(RuntimeEvent.BackgroundAudio(generation, true), 1).single() as PlayerEffect.Engine).command)
+        assertTrue(m.foreground().isEmpty())
+        assertTrue(m.background().isEmpty())
+        assertIs<RuntimeCommand.Pause>((m.accept(RuntimeEvent.BackgroundAudio(generation, false), 2).single() as PlayerEffect.Engine).command)
+        m.load(listOf(resource()), 0, 0, true)
+        val video = m.state.generation!!
+        assertTrue(m.accept(RuntimeEvent.BackgroundAudio(generation, true), 3).isEmpty())
+        assertTrue(m.accept(RuntimeEvent.BackgroundAudio(video, true), 4).isEmpty())
+        assertTrue(m.accept(RuntimeEvent.Ready(video, 10000), 5).isEmpty())
+    }
+
+    @Test fun audioGrantNeverOverridesUserPause() {
+        val m = machine()
+        m.load(listOf(PlayableResource("song", "https://media.invalid/song", audioOnly = true)), 0, 0, true)
+        val generation = m.state.generation!!
+        m.accept(RuntimeEvent.Ready(generation, 10000), 0)
+        m.pause(); m.background()
+        assertTrue(m.accept(RuntimeEvent.BackgroundAudio(generation, true), 1).isEmpty())
+        assertTrue(m.foreground().isEmpty())
+    }
+    @Test fun pictureInPictureAllowsBackgroundButDoesNotOverrideUserPause() {
+        val m = machine(); val generation = ready(m)
+        m.accept(RuntimeEvent.PictureInPicture(generation, true), 0)
+        assertTrue(m.background().isEmpty())
+        m.pause()
+        assertIs<RuntimeCommand.Pause>((m.accept(RuntimeEvent.Playing(generation), 1).single() as PlayerEffect.Engine).command)
+        assertTrue(m.accept(RuntimeEvent.PictureInPicture(generation, false), 2).isEmpty())
+        assertTrue(m.foreground().isEmpty())
+    }
+
+    @Test fun closingPipInBackgroundPausesAndRestoresOnlyOnForeground() {
+        val m = machine(); val generation = ready(m)
+        m.accept(RuntimeEvent.PictureInPicture(generation, true), 0); m.background()
+        assertIs<RuntimeCommand.Pause>((m.accept(RuntimeEvent.PictureInPicture(generation, false), 1).single() as PlayerEffect.Engine).command)
+        assertIs<RuntimeCommand.Play>((m.foreground().single() as PlayerEffect.Engine).command)
+    }
+
+    @Test fun pipStartedAfterBackgroundPauseResumesAndOldPipCannotGrantBackgroundPlayback() {
+        val m = machine(); val old = ready(m); m.background()
+        assertIs<RuntimeCommand.Play>((m.accept(RuntimeEvent.PictureInPicture(old, true), 1).single() as PlayerEffect.Engine).command)
+        m.load(listOf(resource()), 0, 0, true)
+        assertTrue(m.accept(RuntimeEvent.PictureInPicture(old, true), 2).isEmpty())
+        assertFalse(m.state.pictureInPicture)
+        assertTrue(m.accept(RuntimeEvent.Ready(m.state.generation!!, 1000), 3).isEmpty())
+    }
+
     @Test
     fun loadCarriesResumePositionToRuntime() {
         val machine = PlayerStateMachine(PlayerCapabilities())

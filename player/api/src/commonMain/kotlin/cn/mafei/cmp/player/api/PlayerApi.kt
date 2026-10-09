@@ -10,6 +10,9 @@ class PlayableResource(
     val subtitleUrl: String? = null,
     val allowInsecureTls: Boolean = false,
     val multiConnectionAllowed: Boolean = true,
+    val engineFacts: PlayerEngineSourceFacts? = null,
+    /** Provider-confirmed audio, never inferred from URL or the absence of video dimensions. */
+    val audioOnly: Boolean = false,
 ) {
     val headers: Map<String, String> = headers.toMap()
     init { require(id.isNotBlank()); require(url.isNotBlank()) }
@@ -108,6 +111,11 @@ data class PlayerCapabilities(
      * offering the command.
      */
     val contentMode: Boolean = false,
+    /** The native engine can read an ISO disc image, rather than only a video stream. */
+    val isoDirectPlay: Boolean = false,
+    /** Explicit hardware/software decode and cache limit, applied on the next Load. */
+    val playbackPreferences: Boolean = false,
+    val engineSelection: Boolean = false,
 )
 class UnsupportedPlayerCapability(val capability: String) : IllegalStateException("Unsupported player capability: $capability")
 enum class PlayerFailure { Network, Decode, UnsupportedMedia, Engine, RuntimeClosed }
@@ -163,6 +171,11 @@ data class PlayerState(
     val contentMode: PlayerContentMode = PlayerContentMode.Fit,
     /** Latest engine-owned diagnostic snapshot; null on runtimes that do not expose one. */
     val runtimeInfo: PlayerRuntimeInfo? = null,
+    val pictureInPicture: Boolean = false,
+    val casting: Boolean = false,
+    val engineType: PlayerEngineType? = null,
+    /** Decoded external text only; no URL, headers or provider object reaches the UI. */
+    val subtitleText: String = "",
 )
 
 /** Runtime callbacks must retain the generation of the originating native player/load. */
@@ -180,11 +193,17 @@ sealed interface RuntimeEvent {
         val durationMs: Long? = null,
     ) : RuntimeEvent
     data class Tracks(override val generation: PlaybackGeneration, val tracks: List<PlayerTrack>) : RuntimeEvent
+    data class Subtitle(override val generation: PlaybackGeneration, val text: String) : RuntimeEvent
     data class Diagnostics(
         override val generation: PlaybackGeneration,
         val info: PlayerRuntimeInfo,
     ) : RuntimeEvent
     data class Ended(override val generation: PlaybackGeneration) : RuntimeEvent
+    data class PictureInPicture(override val generation: PlaybackGeneration, val active: Boolean) : RuntimeEvent
+    /** Granted only after the platform's audio background task actually starts. */
+    data class BackgroundAudio(override val generation: PlaybackGeneration, val active: Boolean) : RuntimeEvent
+    data class Casting(override val generation: PlaybackGeneration, val active: Boolean) : RuntimeEvent
+    data class EngineChanged(override val generation: PlaybackGeneration, val engine: PlayerEngineType) : RuntimeEvent
     data class Failed(override val generation: PlaybackGeneration, val failure: PlayerFailure) : RuntimeEvent
 }
 
@@ -235,6 +254,9 @@ interface PlayerRuntime {
      * from media negotiation and takes effect on the next load.
      */
     fun setRenderMode(mode: PlayerRenderMode) = Unit
+
+    fun setPlaybackPreferences(preferences: PlayerPlaybackPreferences): Unit =
+        throw UnsupportedPlayerCapability("playbackPreferences")
 
     /**
      * Optional native frame extraction for direct streams. Providers that have
