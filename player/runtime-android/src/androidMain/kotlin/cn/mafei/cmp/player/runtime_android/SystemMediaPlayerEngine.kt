@@ -104,6 +104,7 @@ class SystemMediaPlayerEngine(private val context: Context) : AndroidPlayerEngin
             // release()d by reset(), so there is never a reused instance.
             check(player == null) { "setDataSource requires a reset engine" }
             val created = MediaPlayer()
+            created.setWakeMode(context, android.os.PowerManager.PARTIAL_WAKE_LOCK)
             val sessionAtCreation = sessionValue
             created.setAudioAttributes(
                 AudioAttributes.Builder()

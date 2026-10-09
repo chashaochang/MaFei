@@ -8,6 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.mafei.cmp.player.api.PlayerController
@@ -20,6 +23,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * Process-owned Android player host.
@@ -33,7 +38,7 @@ internal class AndroidPlayerHost private constructor(context: Context) {
     private val surfaces = AndroidSurfaceRegistry()
     private val surfaceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    fun createRuntime(): PlayerRuntime = createAndroidPlayerRuntime(applicationContext, surfaces)
+    fun createRuntime(): PlayerRuntime = AndroidMusicPlayback.wrap(applicationContext, createAndroidPlayerRuntime(applicationContext, surfaces))
 
     @Composable
     fun Surface(
@@ -41,6 +46,10 @@ internal class AndroidPlayerHost private constructor(context: Context) {
         modifier: Modifier = Modifier,
     ) {
         val latestController = rememberUpdatedState(controller)
+        val latestActions by rememberUpdatedState(LocalPlatformPlaybackActions.current)
+        val generation by remember(controller) { controller.state.map { it.generation }.distinctUntilChanged() }
+            .collectAsState(controller.state.value.generation)
+        LaunchedEffect(controller, generation) { AndroidMusicPlayback.bind(controller, generation) { latestActions } }
         val binding = remember {
             AndroidSurfaceBinding(
                 registry = surfaces,
