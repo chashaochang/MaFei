@@ -116,13 +116,17 @@ internal object AndroidMusicPlayback {
             "previous" -> currentActions()?.onPrevious?.invoke()
             else -> scope.launch {
                 if (token != lease.token || target.state.value.generation !== generation) return@launch
-                when (action) {
-                    "play" -> target.play()
-                    "pause" -> target.pause()
-                    "toggle" -> if (target.state.value.phase == PlayerPhase.Playing) target.pause() else target.play()
-                    "stop" -> target.stop()
-                    "seek" -> target.seek(value.coerceAtLeast(0))
-                }
+                if (target.state.value.phase in setOf(PlayerPhase.Idle, PlayerPhase.Ended, PlayerPhase.Error, PlayerPhase.Released)) return@launch
+                try {
+                    when (action) {
+                        "play" -> target.play()
+                        "pause" -> target.pause()
+                        "toggle" -> if (target.state.value.phase == PlayerPhase.Playing) target.pause() else target.play()
+                        "stop" -> target.stop()
+                        "seek" -> target.seek(value.coerceAtLeast(0))
+                    }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: IllegalStateException) { /* Session may retire while the controller mutex is suspended. */ }
             }
         }
     }

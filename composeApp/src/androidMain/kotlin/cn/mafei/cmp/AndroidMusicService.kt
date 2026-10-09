@@ -28,14 +28,6 @@ class AndroidMusicService : Service() {
         super.onCreate()
         audio = getSystemService(AudioManager::class.java)
         session = MediaSession(this, "MaFeiMusic")
-        session.setCallback(object : MediaSession.Callback() {
-            override fun onPlay() { AndroidMusicPlayback.command("play", token = token) }
-            override fun onPause() { AndroidMusicPlayback.command("pause", token = token) }
-            override fun onStop() { AndroidMusicPlayback.command("stop", token = token) }
-            override fun onSeekTo(pos: Long) { AndroidMusicPlayback.command("seek", pos, token) }
-            override fun onSkipToNext() { AndroidMusicPlayback.command("next", token = token) }
-            override fun onSkipToPrevious() { AndroidMusicPlayback.command("previous", token = token) }
-        }, Handler(Looper.getMainLooper()))
         session.setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(Channel, "音乐播放", NotificationManager.IMPORTANCE_LOW))
@@ -56,6 +48,7 @@ class AndroidMusicService : Service() {
         }
         abandonFocus()
         token = requested
+        bindCommands(token)
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NotificationId, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             else startForeground(NotificationId, notification())
@@ -81,6 +74,17 @@ class AndroidMusicService : Service() {
         } catch (_: SecurityException) { AndroidMusicPlayback.focus(token, false); stopSelf(startId) }
         catch (_: IllegalStateException) { AndroidMusicPlayback.focus(token, false); stopSelf(startId) }
         return START_NOT_STICKY
+    }
+
+    private fun bindCommands(bindingToken: Long) {
+        session.setCallback(object : MediaSession.Callback() {
+            override fun onPlay() { AndroidMusicPlayback.command("play", token = bindingToken) }
+            override fun onPause() { AndroidMusicPlayback.command("pause", token = bindingToken) }
+            override fun onStop() { AndroidMusicPlayback.command("stop", token = bindingToken) }
+            override fun onSeekTo(pos: Long) { AndroidMusicPlayback.command("seek", pos, bindingToken) }
+            override fun onSkipToNext() { AndroidMusicPlayback.command("next", token = bindingToken) }
+            override fun onSkipToPrevious() { AndroidMusicPlayback.command("previous", token = bindingToken) }
+        }, Handler(Looper.getMainLooper()))
     }
 
     private fun requestPlaybackFocus() {
