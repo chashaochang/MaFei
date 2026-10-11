@@ -586,7 +586,6 @@ private fun BoxScope.DetailBody(
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     val outerHorizontalInset = detailOuterHorizontalInset()
-    val showRefreshProgress = rememberDelayedDetailLoading(loading)
     val selectedPlaybackSource = playbackSources.firstOrNull { it.id == selectedMediaSourceId }
         ?: playbackSources.firstOrNull()
     // The full-page atmosphere is always media-first and darkened. Downstream
@@ -669,19 +668,6 @@ private fun BoxScope.DetailBody(
                     backdrop = backdrop,
                     largeLayout = simplifiedLargeLayout,
                 )
-                DetailAnimatedVisibility(
-                    visible = showRefreshProgress,
-                    modifier = Modifier.fillMaxWidth(),
-                    enter = fadeIn(tween(DetailMotionFastMillis)),
-                    exit = fadeOut(tween(DetailMotionExitMillis)),
-                ) {
-                    Box(
-                        Modifier.fillMaxWidth().height(20.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
-                    }
-                }
                 if (item.mediaType != MediaType.Series && playbackSources.isNotEmpty()) {
                     Spacer(Modifier.height(DetailActionSelectorSpacing))
                     PlaybackSelectionSection(
