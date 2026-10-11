@@ -70,6 +70,7 @@ fun LegacyVideoCard(
     onPlay: (() -> Unit)? = null,
     onToggleWatched: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
+    posterAspectRatio: Float = 2f / 3f,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -87,7 +88,7 @@ fun LegacyVideoCard(
     ) {
         val posterShape = RoundedCornerShape(6.dp)
         Box(
-            Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+            Modifier.fillMaxWidth().aspectRatio(posterAspectRatio)
                 .clip(posterShape)
                 .background(Color(0xFFCBD2D3))
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, posterShape),
@@ -379,68 +380,24 @@ fun <T> LegacySortSheet(
 ) {
     val largeWindow = LocalMaFeiNavigationChrome.current.effectiveLayout
         ?.let { it.navigation != cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom } == true
-    val panelShape = if (largeWindow) {
-        RoundedCornerShape(24.dp)
-    } else {
-        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-    }
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnClickOutside = true,
-            dismissOnBackPress = true,
-        ),
-    ) {
-        BoxWithConstraints(
-            Modifier.fillMaxSize(),
-        ) {
-            // CPF's Dialog window may not forward its outside-dismiss callback
-            // consistently. Keep the behavior owned by this Compose layer too.
-            Box(
-                Modifier.fillMaxSize()
-                    .mafeiDismissOnOutsidePointer(onDismiss)
-                    .testTag("legacySortScrim"),
-            )
-            Column(
-                Modifier.align(if (largeWindow) Alignment.Center else Alignment.BottomCenter)
-                    .widthIn(max = if (largeWindow) 560.dp else Dp.Infinity)
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight * if (largeWindow) .62f else .4f)
-                    .clip(panelShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(bottom = 20.dp),
-            ) {
+    LegacyModalSheet("排序", onDismiss, heightFraction = if (largeWindow) .62f else .4f,
+        scrimModifier = Modifier.testTag("legacySortScrim")) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+            itemsIndexed(choices) { _, choice ->
                 Text(
-                    "排序",
-                    Modifier.fillMaxWidth().padding(top = 16.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
+                    choice.label,
+                    Modifier.fillMaxWidth().mafeiInteractive(
+                        onClick = { onSelected(choice.value); onDismiss() },
+                        radiusDp = 8f,
+                        label = choice.label,
+                    ).padding(horizontal = 16.dp, vertical = 10.dp),
+                    color = if (choice.value == selected) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                    itemsIndexed(choices) { _, choice ->
-                        Text(
-                            choice.label,
-                            Modifier.fillMaxWidth().mafeiInteractive(
-                                onClick = {
-                                    onSelected(choice.value)
-                                    onDismiss()
-                                },
-                                radiusDp = 8f,
-                                label = choice.label,
-                            ).padding(horizontal = 16.dp, vertical = 10.dp),
-                            color = if (choice.value == selected) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
             }
         }
     }

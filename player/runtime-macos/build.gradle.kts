@@ -7,6 +7,7 @@ plugins {
 dependencies {
     add("commonMainApi", project(":player:api"))
     add("commonMainImplementation", project(":player:core"))
+    add("desktopMainImplementation", libs.kotlinx.serialization.json)
 }
 
 // JNI dylib for the AVPlayer bridge, following the proven

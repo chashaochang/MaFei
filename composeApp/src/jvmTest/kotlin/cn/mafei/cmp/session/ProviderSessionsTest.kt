@@ -42,6 +42,8 @@ class ProviderSessionsTest {
         val first = factory.restore(connection, secrets(connection))
         first.adapter.collections(PageRequest())
         val header = assertNotNull(transport.requests.single().headers.first("Authorization"))
+        assertTrue(header.contains("Client=\"MaFei\""))
+        assertTrue(header.contains("Device=\"MaFei\""))
         assertTrue(header.contains("Token=\"fixture-token\""))
         assertTrue(header.contains("DeviceId=\"${connection.credentialKey}\""))
         assertTrue(transport.requests.single().url.toEncodedString().contains("remote-a"))

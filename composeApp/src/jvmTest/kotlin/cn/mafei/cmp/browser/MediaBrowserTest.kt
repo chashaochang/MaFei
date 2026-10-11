@@ -108,6 +108,45 @@ class MediaBrowserTest {
         assertFalse(b.state.value.loading)
     }
 
+    @Test fun newBrowserHasNotConfirmedAnEmptyLibraryBeforeStartup() = runBlocking<Unit> {
+        val b = browser(Adapter())
+        assertTrue(b.state.value.loading)
+        assertTrue(b.state.value.homeLoading)
+    }
+
+    @Test fun firstLibraryPageDoesNotFinishAPendingHomeFeed() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val a = Adapter()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            a.homeFetch = { entered.complete(Unit); release.await(); HomeFeed(latest = listOf(a.media("home"))) }
+            val b = browser(a)
+            val pending = launch { b.start() }
+            entered.await()
+            while (b.state.value.loading || b.state.value.items.isEmpty()) yield()
+            assertTrue(b.state.value.homeLoading)
+            assertEquals(HomeFeed(), b.state.value.homeFeed)
+            release.complete(Unit)
+            pending.join()
+            assertFalse(b.state.value.homeLoading)
+            assertEquals("home", b.state.value.homeFeed.latest.single().title)
+        }
+    }
+
+    @Test fun homeFailureAndCancellationClearOnlyTheHomeLoadingState() = runBlocking<Unit> {
+        val failed = Adapter().apply { homeFetch = { throw NetworkUnreachableError() } }
+        val failedBrowser = browser(failed)
+        failedBrowser.start()
+        assertFalse(failedBrowser.state.value.homeLoading)
+        assertNotNull(failedBrowser.state.value.homeError)
+        assertTrue(failedBrowser.state.value.items.isNotEmpty())
+
+        val cancelled = browser(Adapter().apply { homeFetch = { throw CancellationException("cancel home") } })
+        assertFailsWith<CancellationException> { cancelled.start() }
+        assertFalse(cancelled.state.value.homeLoading)
+        assertNull(cancelled.state.value.homeError)
+    }
+
     @Test fun startupPublishesProviderAuthoritativeHomeFeed() = runBlocking<Unit> {
         val a = Adapter()
         a.feed = HomeFeed(

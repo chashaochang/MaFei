@@ -34,8 +34,13 @@ import cn.mafei.cmp.data.adapter_contract.PlaybackTransport
 import cn.mafei.cmp.data.adapter_contract.RefusalReason
 import cn.mafei.cmp.data.adapter_contract.requireCapability
 import cn.mafei.cmp.providers.jellyfin.facade.JellyfinFacade
+import cn.mafei.cmp.providers.jellyfin.core.JellyfinTicks
 import cn.mafei.cmp.providers.jellyfin.transport.JellyfinRequests
+import cn.mafei.cmp.providers.jellyfin.wire.MediaProtocol
+import cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto
+import cn.mafei.cmp.providers.jellyfin.wire.PlaybackInfoResponseDto
 import cn.mafei.cmp.providers.jellyfin.wire.TrickplayInfoDto
+import cn.mafei.cmp.providers.jellyfin.wire.WirePlayMethod
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -75,9 +80,19 @@ class JellyfinMediaProviderAdapter(
     override val accountId: AccountId,
     /** Jellyfin user id the bound account maps to (from the restored session). */
     private val jellyfinUserId: String,
+    private val danmakuFallback: cn.mafei.cmp.providers.jellyfin.playback.DandanPlayFallback? = null,
 ) : MediaProviderAdapter {
 
     override val provider: ProviderKind = ProviderKind.Jellyfin
+    override val management: cn.mafei.cmp.data.adapter_contract.ServerManagement by lazy { JellyfinServerManagement(facade) }
+    override suspend fun danmakuXml(itemId: MediaId): String? {
+        try { facade.playback.danmakuXml(itemId.value)?.let { return it } }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { /* A missing server plugin falls back exactly as in the legacy client. */ }
+        val fallback = danmakuFallback ?: return null
+        val item = facade.catalog.item(jellyfinUserId, itemId.value)
+        return fallback.xml(item.seriesName.orEmpty(), item.indexNumber ?: return null)
+    }
 
     override val capabilities = AdapterCapabilities(
         search = true,
@@ -89,10 +104,14 @@ class JellyfinMediaProviderAdapter(
         playbackReporting = true,
         mediaDelete = true, // DELETE /Items?ids=... — the SERVER rejects non-admins
         chasing = true,
+        music = true,
+        liveTv = true,
+        photos = true,
     )
 
     /** Streams this instance prepared; reportPlayback accepts only these. */
     private val preparedStreams = mutableListOf<PlaybackPreparation.Ready>()
+    private val preparedStreamsMutex = Mutex()
 
     private data class PreviewManifestKey(val itemId: MediaId, val sourceId: String?)
     private data class PreviewTileKey(val manifest: PreviewManifestKey, val width: Int, val sheetIndex: Int)
@@ -133,6 +152,46 @@ class JellyfinMediaProviderAdapter(
         val views = translate { facade.catalog.views(jellyfinUserId) }
         val collections = views.items.mapNotNull { it.toMediaCollection(serverId, ::imageUrl) }
         return Page.of(collections, nextCursor = null, totalEstimate = collections.size)
+    }
+
+    override suspend fun liveChannels(request: PageRequest): Page<MediaItem> {
+        if (request.filter != cn.mafei.cmp.core.domain.MediaFilter() || request.sort != null)
+            throw ClientConfigError("Legacy live channel listing does not send filters or sort options")
+        val offset = decodeOffset(request.cursor)
+        val result = translate { facade.livetv.channels(jellyfinUserId, offset, request.pageSize) }
+        return toPage(result, request, offset, collectionId = null)
+    }
+
+    override suspend fun photos(query: cn.mafei.cmp.data.adapter_contract.PhotoCatalogQuery, request: PageRequest): Page<MediaItem> {
+        if (request.filter != cn.mafei.cmp.core.domain.MediaFilter() || request.sort != null)
+            throw ClientConfigError("Photo ordering and type constraints belong to the selected legacy section")
+        val offset = decodeOffset(request.cursor)
+        val result = translate { facade.photos.items(jellyfinUserId, query.parentId.value, query.albums, offset, request.pageSize) }
+        val page = toPage(result, request, offset, collectionId = null)
+        val expected = if (query.albums) setOf(cn.mafei.cmp.providers.jellyfin.wire.ItemKind.PhotoAlbum, cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Folder)
+            else setOf(cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo)
+        return Page.of(result.items.filter { it.type in expected }.mapNotNull(::photoItem), page.nextCursor, page.totalEstimate)
+    }
+
+    private fun photoItem(dto: cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto): MediaItem? {
+        val item = dto.toMediaItem(serverId, ::imageUrl) ?: return null
+        val image = facade.images.itemImageUrl(item.id.value, maxWidth = 720, maxHeight = 720, quality = 82,
+            tag = dto.imageTags["Primary"]).toEncodedString()
+        if (dto.type != cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo) return item.copy(
+            parentId = dto.parentId?.takeIf(String::isNotBlank)?.let(::MediaId),
+            childCount = (dto.recursiveItemCount ?: dto.childCount)?.coerceAtLeast(0),
+            images = listOf(cn.mafei.cmp.core.domain.MediaImage(url = image)))
+        return item.copy(parentId = dto.parentId?.takeIf(String::isNotBlank)?.let(::MediaId),
+            images = listOf(cn.mafei.cmp.core.domain.MediaImage(url = image)),
+            photo = dto.toPhotoInfo(facade.images.itemImageUrl(item.id.value, maxWidth = 4096, maxHeight = 4096,
+                quality = 92, tag = dto.imageTags["Primary"]).toEncodedString()))
+    }
+
+    override suspend fun photoOriginal(id: MediaId): cn.mafei.cmp.core.domain.MediaDownload {
+        val dto = translate { facade.catalog.item(jellyfinUserId, id.value) }
+        if (dto.id != id.value || dto.type != cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo || dto.canDownload != true)
+            throw ClientConfigError("Original photo download is not permitted")
+        return cn.mafei.cmp.core.domain.MediaDownload(facade.photos.originalUrl(id.value).toEncodedString(), dto.toPhotoInfo("").fileName)
     }
 
     override suspend fun home(request: HomeFeedRequest): HomeFeed {
@@ -265,6 +324,18 @@ class JellyfinMediaProviderAdapter(
         return translate { facade.catalog.items(query) }.let { toPage(it, request, offset, collectionId) }
     }
 
+    override suspend fun music(
+        query: cn.mafei.cmp.data.adapter_contract.MusicCatalogQuery,
+        request: PageRequest,
+    ): Page<MediaItem> {
+        if (!request.filter.isEmpty || request.sort != null) {
+            throw ClientConfigError("Music queries own their legacy filter and sort")
+        }
+        val offset = decodeOffset(request.cursor)
+        return translate { facade.catalog.items(query.toJellyfinQuery(jellyfinUserId, offset, request.pageSize)) }
+            .let { toPage(it, request, offset, query.libraryIdOrNull()) }
+    }
+
     override suspend fun search(term: String, request: PageRequest): Page<MediaItem> {
         requireCapability(capabilities, AdapterCapability.Search)
         // Search shares the /Items pipeline, so every expressible filter and
@@ -294,9 +365,11 @@ class JellyfinMediaProviderAdapter(
         return translate { facade.catalog.items(query) }.let { toPage(it, request, offset, collectionId = null) }
     }
 
-    override suspend fun item(id: MediaId): MediaItem =
-        translate { facade.catalog.item(jellyfinUserId, id.value) }.toMediaItem(serverId, ::imageUrl)
+    override suspend fun item(id: MediaId): MediaItem {
+        val dto = translate { facade.catalog.item(jellyfinUserId, id.value) }
+        return (if (dto.type == cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo) photoItem(dto) else dto.toMediaItem(serverId, ::imageUrl))
             ?: throw ResourceNotFoundError(resource = "jellyfin item $id")
+    }
 
     override suspend fun person(id: MediaId): MediaPerson =
         throw ClientConfigError("Jellyfin person detail requires the credited name")
@@ -468,20 +541,36 @@ class JellyfinMediaProviderAdapter(
         // 用户指定的版本/轨道随协商一起提交：服务端按选中的源/轨协商转码决策。
         val pinnedSourceId = options.mediaSourceId?.takeIf { it.isNotBlank() }
         val bitrateCeiling = options.maxStreamingBitrate?.takeIf { it > 0 }
-        val info = translate {
-            facade.playback.playbackInfo(
-                userId = jellyfinUserId,
-                itemId = item.value,
-                mediaSourceId = pinnedSourceId,
-                audioStreamIndex = options.audioStreamIndex,
-                subtitleStreamIndex = options.subtitleStreamIndex,
-                maxStreamingBitrate = bitrateCeiling,
-                // 旧版清晰度就是「请求这个码率的胶片」：指定档位时不再直连原文件，
-                // 让服务端按码率重编（auto/未指定时保持原来的直连优先协商）。
-                enableDirectPlay = bitrateCeiling?.let { false },
-                enableDirectStream = bitrateCeiling?.let { false },
-                enableTranscoding = bitrateCeiling?.let { true },
-            )
+        val info = try {
+            translate {
+                facade.playback.playbackInfo(
+                    userId = jellyfinUserId,
+                    itemId = item.value,
+                    autoOpenLiveStream = options.live,
+                    mediaSourceId = pinnedSourceId,
+                    audioStreamIndex = options.audioStreamIndex,
+                    subtitleStreamIndex = options.subtitleStreamIndex,
+                    maxStreamingBitrate = bitrateCeiling,
+                    startTimeTicks = options.startPositionMs?.coerceAtLeast(0)?.let(JellyfinTicks::fromMilliseconds),
+                    deviceProfile = LegacyMpvDeviceProfile.takeIf { options.isoDirectPlay },
+                    // 旧版清晰度就是「请求这个码率的胶片」：指定档位时不再直连原文件，
+                    // 让服务端按码率重编（auto/未指定时保持原来的直连优先协商）。
+                    enableDirectPlay = bitrateCeiling?.let { false },
+                    enableDirectStream = bitrateCeiling?.let { false },
+                    enableTranscoding = bitrateCeiling?.let { true },
+                )
+            }
+        } catch (timeout: cn.mafei.cmp.core.domain.TimeoutError) {
+            if (!options.isoDirectPlay || bitrateCeiling != null) throw timeout
+            // Only actual File/iso metadata can recover a failed negotiation.
+            // Keep the selected version and its tracks; an ordinary video
+            // timeout must never be manufactured into an ISO stream.
+            val detail = translate { facade.catalog.item(jellyfinUserId, item.value) }
+            val isoSources = detail.mediaSources.filter {
+                it.isLocalIso() && (pinnedSourceId == null || it.id == pinnedSourceId)
+            }
+            if (isoSources.isEmpty()) throw timeout
+            PlaybackInfoResponseDto(mediaSources = isoSources)
         }
         // Any non-null error code refuses — including the SDK's Unknown
         // fallback: an unrecognized server refusal must never be read as
@@ -498,18 +587,19 @@ class JellyfinMediaProviderAdapter(
         // source; an id the server did not negotiate falls back to the
         // natural order over every negotiated source.
         val candidates: List<cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto> =
-            options.mediaSourceId?.takeIf { it.isNotBlank() }
+            options.mediaSourceId?.takeIf { it.isNotBlank() && !options.live }
                 ?.let { pinnedId -> info.mediaSources.filter { it.id == pinnedId } }
                 ?.takeIf { it.isNotEmpty() }
-                ?: info.mediaSources
+                ?: if (options.live) info.mediaSources.take(1) else info.mediaSources
         val directPlay = candidates.firstOrNull { it.supportsDirectPlay == true }
         val directStream = candidates.firstOrNull { it.supportsDirectStream == true }
+        val iso = candidates.firstOrNull { options.isoDirectPlay && it.isLocalIso() }
         val transcode = candidates.firstOrNull { !it.transcodingUrl.isNullOrBlank() }
         // 指定清晰度档位时服务端重编才是用户要的那条流：转码优先。
         val source = if (bitrateCeiling != null) {
-            transcode ?: directStream ?: directPlay
+            transcode ?: directStream ?: directPlay ?: iso
         } else {
-            directPlay ?: directStream ?: transcode
+            directPlay ?: directStream ?: iso ?: transcode
         }
             ?: return PlaybackPreparation.Refused(
                 RefusalReason.NoPlayableSource,
@@ -517,24 +607,27 @@ class JellyfinMediaProviderAdapter(
             )
         // 实际是哪条路：转码 URL 只在真正用它时才叫 Transcode。这个事实要如实上报，
         // 界面不能按「用户点了 1080p」去猜 —— 服务端可能仍直连（也就会显示「自动」）。
-        val usesTranscodingUrl = (bitrateCeiling != null && !source.transcodingUrl.isNullOrBlank()) ||
-            (directPlay == null && directStream == null)
+        // Legacy isIsoStaticPlaybackFallback: File + iso stays client-side
+        // even if Jellyfin negotiates it as Transcode. System-only engines do
+        // not take this branch.
+        val isoStaticPlayback = options.isoDirectPlay && source.isLocalIso()
+        val usesTranscodingUrl = !isoStaticPlayback &&
+            ((bitrateCeiling != null && !source.transcodingUrl.isNullOrBlank()) ||
+                (directPlay == null && directStream == null))
         val streamUrl = when {
-            bitrateCeiling != null && !source.transcodingUrl.isNullOrBlank() -> try {
+            isoStaticPlayback -> buildStreamUrl(
+                item.value, source, info.playSessionId, options, container = "iso",
+            ) + "#bdiso"
+            usesTranscodingUrl -> try {
                 facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
             } catch (e: IllegalArgumentException) {
                 return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
             }
-            directPlay != null || directStream != null ->
+            else ->
                 buildStreamUrl(item.value, source, playSessionId = info.playSessionId, options = options)
-            else -> try {
-                facade.playback.transcodingUrl(source.transcodingUrl!!).toEncodedString()
-            } catch (e: IllegalArgumentException) {
-                // Unparseable or cross-origin link: rejected instead of trusted.
-                return PlaybackPreparation.Refused(RefusalReason.LinkRejected, detail = e.message)
-            }
         }
         val transport = when {
+            isoStaticPlayback -> PlaybackTransport.DirectPlay
             usesTranscodingUrl -> PlaybackTransport.Transcode
             source === directPlay -> PlaybackTransport.DirectPlay
             else -> PlaybackTransport.DirectStream
@@ -555,6 +648,9 @@ class JellyfinMediaProviderAdapter(
                 }
             }
         val ready = PlaybackPreparation.Ready(
+            audioOnly = source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
+                source.mediaStreams.any { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio },
+            engineSource = source.toMediaSourceInfo().takeUnless { usesTranscodingUrl },
             streamUrl = streamUrl,
             subtitleUrl = subtitleUrl,
             mediaSourceId = source.id,
@@ -566,13 +662,16 @@ class JellyfinMediaProviderAdapter(
             tracks = playbackTracks(
                 source = source,
                 options = options,
-                directRoute = bitrateCeiling == null && (directPlay != null || directStream != null),
+                directRoute = !usesTranscodingUrl,
             ),
             headers = emptyMap(), // Jellyfin streams carry access in the URL itself
+            // mfplayer's Range proxy changes the URL to /source/{id}, losing
+            // the disc-reader marker. ISO uses the authenticated source itself.
+            multiConnectionAllowed = !isoStaticPlayback,
             playSessionId = info.playSessionId?.let(::PlaybackSessionId),
-            reportingContext = JellyfinReportingContext(item.value, source.id).encode(),
+            reportingContext = JellyfinReportingContext(item.value, source.id, source.liveStreamId).encode(),
         )
-        preparedStreams.add(ready)
+        preparedStreamsMutex.withLock { preparedStreams.add(ready) }
         return ready
     }
 
@@ -611,7 +710,7 @@ class JellyfinMediaProviderAdapter(
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
         requireCapability(capabilities, AdapterCapability.PlaybackReporting)
-        if (preparedStreams.none { it === stream }) {
+        if (!preparedStreamsMutex.withLock { preparedStreams.any { it === stream } }) {
             throw ClientConfigError("reportPlayback rejected a stream not prepared by this adapter instance")
         }
         val context = JellyfinReportingContext.decode(stream.reportingContext)
@@ -620,6 +719,12 @@ class JellyfinMediaProviderAdapter(
         // Position 0 is legal and load-bearing: it is how a user seek back to
         // the start clears a stale resume point on the server.
         val positionMs = event.positionMs
+        val playMethod = when (stream.transport) {
+            PlaybackTransport.DirectPlay -> WirePlayMethod.DirectPlay
+            PlaybackTransport.DirectStream -> WirePlayMethod.DirectStream
+            PlaybackTransport.Transcode -> WirePlayMethod.Transcode
+            null -> null
+        }
         translate {
             when (event.kind) {
                 PlaybackEventKind.Start -> facade.playstate.reportStartMs(
@@ -627,6 +732,7 @@ class JellyfinMediaProviderAdapter(
                     playSessionId = playSessionId,
                     mediaSourceId = context.mediaSourceId,
                     positionMs = positionMs,
+                    playMethod = playMethod,
                 )
                 PlaybackEventKind.Progress -> facade.playstate.reportProgressMs(
                     itemId = context.itemId,
@@ -634,15 +740,28 @@ class JellyfinMediaProviderAdapter(
                     mediaSourceId = context.mediaSourceId,
                     positionMs = positionMs,
                     isPaused = event.isPaused,
+                    playMethod = playMethod,
                 )
-                PlaybackEventKind.Stop -> facade.playstate.reportStoppedMs(
-                    itemId = context.itemId,
-                    playSessionId = playSessionId,
-                    mediaSourceId = context.mediaSourceId,
-                    positionMs = positionMs,
+                PlaybackEventKind.Stop -> facade.playstate.reportStopped(
+                    cn.mafei.cmp.providers.jellyfin.wire.PlaybackStopInfoDto(
+                        itemId = context.itemId, playSessionId = playSessionId,
+                        mediaSourceId = context.mediaSourceId,
+                        positionTicks = cn.mafei.cmp.providers.jellyfin.core.JellyfinTicks.fromMilliseconds(positionMs),
+                        liveStreamId = context.liveStreamId,
+                    ),
                 )
             }
         }
+    }
+
+    override suspend fun releasePlayback(stream: PlaybackPreparation.Ready) {
+        val close = preparedStreamsMutex.withLock {
+            if (preparedStreams.none { it === stream }) return
+            preparedStreams.removeAll { it === stream }
+            // A server may retain its playSessionId across renegotiation. Do not close the replacement.
+            preparedStreams.none { it.playSessionId == stream.playSessionId }
+        }
+        if (close) stream.playSessionId?.value?.let { session -> translate { facade.playback.stopEncodingProcess(session) } }
     }
 
     private suspend fun loadPreviewManifest(
@@ -705,17 +824,21 @@ class JellyfinMediaProviderAdapter(
         source: cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto,
         playSessionId: String?,
         options: PlaybackOptions,
+        container: String? = source.container,
     ): String {
-        val audio = source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
+        val audio = container?.trim()?.lowercase() != "iso" &&
+            source.mediaStreams.none { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Video } &&
             source.mediaStreams.any { it.type == cn.mafei.cmp.providers.jellyfin.wire.MediaStreamType.Audio }
         val token = facade.client.sessionState.current.value?.accessToken
         val url = facade.client.config.baseUrl.newBuilder()
             .addPathSegment(if (audio) "Audio" else "Videos")
             .addPathSegment(itemId)
-            .addPathSegments(source.container?.takeIf { it.isNotBlank() }?.let { "stream.$it" } ?: "stream")
+            .addPathSegments(container?.takeIf { it.isNotBlank() }?.let { "stream.$it" } ?: "stream")
             .apply {
                 addQueryParameter("static", "true")
+                addQueryParameter("deviceId", facade.client.config.deviceId)
                 source.id?.let { addQueryParameter("mediaSourceId", it) }
+                source.liveStreamId?.let { addQueryParameter("liveStreamId", it) }
                 playSessionId?.let { addQueryParameter("playSessionId", it) }
                 options.audioStreamIndex?.let { addQueryParameter("audioStreamIndex", it.toString()) }
                 options.subtitleStreamIndex?.let { addQueryParameter("subtitleStreamIndex", it.toString()) }
@@ -723,6 +846,9 @@ class JellyfinMediaProviderAdapter(
             }
         return url.build().toEncodedString()
     }
+
+    private fun MediaSourceInfoDto.isLocalIso(): Boolean =
+        protocol == MediaProtocol.File && container?.trim()?.lowercase() == "iso"
 
     /**
      * Mirrors the legacy player's DisplayTitle/Title metadata and selection
@@ -896,6 +1022,7 @@ class JellyfinMediaProviderAdapter(
 private data class JellyfinReportingContext(
     val itemId: String,
     val mediaSourceId: String? = null,
+    val liveStreamId: String? = null,
 ) {
     fun encode(): String = Json.Default.encodeToString(serializer(), this)
 

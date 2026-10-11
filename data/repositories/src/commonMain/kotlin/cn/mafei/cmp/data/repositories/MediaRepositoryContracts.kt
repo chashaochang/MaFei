@@ -4,6 +4,9 @@ import cn.mafei.cmp.core.domain.*
 
 /** Query meaning is part of the cache key; Provider cursors stay opaque. */
 sealed interface MediaQuery {
+    data class Music(val query: cn.mafei.cmp.data.adapter_contract.MusicCatalogQuery) : MediaQuery
+    data object LiveChannels : MediaQuery
+    data class Photos(val query: cn.mafei.cmp.data.adapter_contract.PhotoCatalogQuery) : MediaQuery
     data class Items(val collectionId: CollectionId? = null) : MediaQuery
     data class Search(val term: String) : MediaQuery
     data class Seasons(val seriesId: MediaId) : MediaQuery

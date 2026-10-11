@@ -59,8 +59,13 @@ class ApplicationRuntime(
         cn.mafei.cmp.player.api.PlayerDeviceControls.Unsupported,
     private val failureReporter: (stage: String, failure: Throwable) -> Unit = { _, _ -> },
     private val persistenceStageReporter: (stage: String) -> Unit = {},
+    val photoSaver: cn.mafei.cmp.feature.photo.PhotoSaver = cn.mafei.cmp.feature.photo.UnsupportedPhotoSaver,
+    val playerWindowControls: cn.mafei.cmp.player.api.PlayerWindowControls = cn.mafei.cmp.player.api.PlayerWindowControls.Unsupported,
+    private val externalSubtitleOverlay: Boolean = false,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val appearance = AppearanceStore(settings)
+    val glassStyle = GlassStyleStore(settings)
     private val closeMutex = Mutex()
     var isClosed: Boolean = false
         private set
@@ -68,6 +73,7 @@ class ApplicationRuntime(
     /** Copy-on-write session playback map; guarded by [playbackMutex] + CAS. */
     private val playbackMutex = Mutex()
     private val playbacks = MutableStateFlow(emptyMap<ApplicationSession, SessionPlaybackRuntime>())
+    private var hostForeground = true
     private var playbackObserver: Job? = null
     private var deferredFeiniuRouteRefresh: Job? = null
     val sessions = ApplicationSessions(
@@ -84,6 +90,7 @@ class ApplicationRuntime(
         beforeExplicitLogout = { suppressLegacyAccountRecovery() },
     )
     private val connectionCatalog = ConnectionCatalog(settings)
+    val playerPreferences = PlayerPreferencesStore(settings)
     private val persistedChasingSeries = SettingsChasingSeriesStore(settings)
     val chasingSeriesStore: cn.mafei.cmp.feature.chasing.ChasingSeriesStore
         get() = persistedChasingSeries
@@ -165,6 +172,12 @@ class ApplicationRuntime(
     ): ByteArray? {
         if (isClosed || sessions.state.value.session !== session) return null
         return artwork.load(session.connection, session.binding, image, targetWidthPx)
+            .takeIf { sessions.state.value.session === session }
+    }
+
+    suspend fun loadPhotoArtwork(session: ApplicationSession, image: cn.mafei.cmp.core.domain.MediaImage): ByteArray? {
+        if (isClosed || sessions.state.value.session !== session) return null
+        return artwork.load(session.connection, session.binding, image, photoDimensions = true)
             .takeIf { sessions.state.value.session === session }
     }
 
@@ -342,21 +355,17 @@ class ApplicationRuntime(
         )
     }
 
-    /**
-     * Reserved appearance storage. The product is dark-only for now and its UI no
-     * longer offers a choice (`SettingsScreen` hides the entry), so nothing reads
-     * or writes this yet; keeping the key and its vocabulary makes re-enabling an
-     * appearance setting a UI-only change.
-     */
+    /** Uses the existing ordinary-settings key, independent of account storage. */
     suspend fun loadAppearanceMode(): String? {
         check(!isClosed) { "Application is closed" }
-        return settings.getString(APPEARANCE_MODE_KEY)?.takeIf { it in APPEARANCE_MODES }
+        return appearance.storedMode()
     }
 
     suspend fun saveAppearanceMode(value: String) {
         check(!isClosed) { "Application is closed" }
-        require(value in APPEARANCE_MODES) { "Unsupported appearance mode" }
-        settings.putString(APPEARANCE_MODE_KEY, value)
+        val mode = cn.mafei.cmp.common.design_system.AppearanceMode.entries.firstOrNull { it.storageValue == value }
+            ?: throw IllegalArgumentException("Unsupported appearance mode")
+        appearance.save(mode)
     }
 
     /** Product-wide Liquid Glass strength, persisted as a 0..100 percentage. */
@@ -554,6 +563,13 @@ class ApplicationRuntime(
         false
     }
 
+    /** Non-secret password status shared by login history and account switching. */
+    suspend fun savedPasswordKeys(connections: List<SavedConnection>): Set<String> = buildSet {
+        for (connection in connections) {
+            if (hasSavedPassword(connection)) add(connection.credentialKey)
+        }
+    }
+
     /**
      * Older ArkUI builds stored remembered Jellyfin passwords under an AssetStore alias that is
      * unrelated to the CMP session namespace. The Harmony host includes those values in its
@@ -607,6 +623,14 @@ class ApplicationRuntime(
      */
     suspend fun start(): ApplicationSession? {
         check(!isClosed) { "Application is closed" }
+        try {
+            playerPreferences.load()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            // A player preference read error must not invalidate a saved account.
+            failureReporter("player-preferences-read", failure)
+        }
         val restored = sessions.start()
         if (restored != null) {
             importLegacyRememberedPasswordsSafely(
@@ -660,12 +684,21 @@ class ApplicationRuntime(
             val created = SessionPlaybackRuntime.create(
                 provider = session.selection.provider,
                 adapter = session.binding.adapter,
-                runtime = factory(session.selection.provider),
+                runtime = PreferenceApplyingPlayerRuntime(factory(session.selection.provider).let { engine ->
+                    if (externalSubtitleOverlay) ExternalSubtitlePlayerRuntime(engine, transport, scope) else engine
+                }) {
+                    playerPreferences.state.value
+                },
                 scope = scope,
                 nowMs = { cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs() },
             )
             if (playbacks.compareAndSet(current, current + (session to created))) {
                 ensurePlaybackObserver()
+                if (!hostForeground) scope.launch {
+                    playbackMutex.withLock {
+                        if (!hostForeground && playbacks.value[session] === created) created.controller.background()
+                    }
+                }
                 return created
             }
             // CAS lost to a concurrent lifecycle change: release the loser
@@ -674,6 +707,21 @@ class ApplicationRuntime(
                 try { created.release() }
                 catch (e: CancellationException) { throw e }
                 catch (_: Exception) { } // best-effort cleanup of a discarded instance
+            }
+        }
+    }
+
+    /** Host visibility only; never changes account state or destroys a music queue. */
+    fun setHostForeground(foreground: Boolean) {
+        if (isClosed || hostForeground == foreground) return
+        hostForeground = foreground
+        scope.launch {
+            playbackMutex.withLock {
+                // A newer lifecycle event can supersede one still queued on the main thread.
+                if (isClosed || hostForeground != foreground) return@withLock
+                for (playback in playbacks.value.values) {
+                    if (foreground) playback.controller.foreground() else playback.controller.background()
+                }
             }
         }
     }
@@ -821,8 +869,6 @@ class ApplicationRuntime(
     }
 
     private companion object {
-        const val APPEARANCE_MODE_KEY = "mafei.ui.appearance-mode.v1"
-        val APPEARANCE_MODES = setOf("auto", "light", "dark")
         const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
         const val DEFAULT_GLASS_INTENSITY = .5f
         const val HOME_CAROUSEL_VISIBLE_KEY = "mafei.ui.home-carousel-visible.v1"
@@ -910,4 +956,5 @@ internal object ProcessApplication {
         if (existing != null && !existing.isClosed) return existing
         return create().also { current = it }
     }
+    fun setForeground(foreground: Boolean) { current?.setHostForeground(foreground) }
 }

@@ -66,10 +66,15 @@ private class StubTransport : HttpTransport {
 
 private class FakeEngine : PlayerRuntime {
     val released = mutableListOf<Int>()
+    val commands = mutableListOf<RuntimeCommand>()
     private var sink: ((RuntimeEvent) -> Unit)? = null
     override val capabilities = PlayerCapabilities()
     override fun bind(eventSink: (RuntimeEvent) -> Unit) { sink = eventSink }
     override fun execute(command: RuntimeCommand) {
+        commands += command
+        if (command is RuntimeCommand.Load) sink?.invoke(RuntimeEvent.Ready(command.generation, 60_000))
+        if (command is RuntimeCommand.Play) sink?.invoke(RuntimeEvent.Playing(command.generation))
+        if (command is RuntimeCommand.Pause) sink?.invoke(RuntimeEvent.Paused(command.generation))
         if (command is RuntimeCommand.Release) markReleased() // the engine really relinquished
     }
     fun markReleased() { released += 1 }
@@ -112,6 +117,40 @@ class ApplicationRuntimePlaybackTest {
     @AfterTest
     fun tearDown() {
         runBlocking { app.close() }
+    }
+
+    @Test
+    fun hostLifecyclePausesAndRestoresVideoWithoutDroppingTheAccount() = runBlocking<Unit> {
+        activateSession()
+        val session = checkNotNull(app.sessions.state.value.session)
+        val playback = checkNotNull(app.playback(session))
+        playback.controller.load(listOf(cn.mafei.cmp.player.api.PlayableResource("v", "https://media.test/v")))
+        delay(50)
+        app.setHostForeground(false)
+        delay(50)
+        assertTrue(engine.commands.any { it is RuntimeCommand.Pause })
+        assertTrue(app.sessions.state.value.session === session)
+        val previousPlayCount = engine.commands.count { it is RuntimeCommand.Play }
+        app.setHostForeground(true)
+        delay(50)
+        assertEquals(previousPlayCount + 1, engine.commands.count { it is RuntimeCommand.Play })
+        app.setHostForeground(true)
+        delay(50)
+        assertEquals(previousPlayCount + 1, engine.commands.count { it is RuntimeCommand.Play })
+    }
+
+    @Test
+    fun anExplicitPauseIsNotUndoneOnForeground() = runBlocking<Unit> {
+        activateSession()
+        val playback = checkNotNull(app.playback(checkNotNull(app.sessions.state.value.session)))
+        playback.controller.load(listOf(cn.mafei.cmp.player.api.PlayableResource("v", "https://media.test/v")))
+        delay(50)
+        playback.controller.pause()
+        val plays = engine.commands.count { it is RuntimeCommand.Play }
+        app.setHostForeground(false)
+        app.setHostForeground(true)
+        delay(50)
+        assertEquals(plays, engine.commands.count { it is RuntimeCommand.Play })
     }
 
     @Test

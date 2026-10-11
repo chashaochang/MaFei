@@ -1,7 +1,6 @@
 package cn.mafei.cmp.feature.settings
 
 import androidx.compose.foundation.Image
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -58,7 +57,9 @@ import cn.mafei.cmp.common.glass.DefaultGlassIntensity
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurface
+import cn.mafei.cmp.common.glass.GlassStyle
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
+import cn.mafei.cmp.common.glass.components.LiquidToggle
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyListGroup
 import cn.mafei.cmp.common.ui.LegacyListGroupItem
@@ -86,16 +87,18 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenGlassStyleSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
     feiniuRoutePreferenceTitle: String? = null,
     onOpenFeiniuPreference: (() -> Unit)? = null,
-    liquidGlassIntensity: () -> Float = { DefaultGlassIntensity },
-    onLiquidGlassIntensityChanged: (Float) -> Unit = {},
+    glassStyleTitle: String = GlassStyle.Liquid.title,
     homeCarouselVisible: () -> Boolean = { true },
     onHomeCarouselVisibleChanged: (Boolean) -> Unit = {},
     showPlayerRenderMode: Boolean = false,
     playerRenderMode: () -> String = { PlayerRenderModeBuffer },
     onPlayerRenderModeChanged: (String) -> Unit = {},
+    onOpenPlayerSettings: (() -> Unit)? = null,
+    appearanceTitle: String = DarkAppearanceTitle,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -112,22 +115,25 @@ fun SettingsScreen(
                     .padding(top = 12.dp, bottom = safeArea.bottom.coerceAtLeast(24.dp)),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // 外观与显示：入口先隐藏。浅色模式未真正实现——各页面按深色优先构建
-                // （浅色文字 + 深色氛围图），选「浅色」只会把表面染浅、页面本体依旧深色，
-                // 看起来是坏的。等浅色做完再放开这一行；页面与路由仍在
-                // （AppearanceScreen / BrowseAppearanceRoute），恢复时取消注释即可。
-                // LegacyListGroup(
-                //     items = listOf(LegacyListGroupItem("外观与显示", trailing = DarkAppearanceTitle)),
-                //     onItemClick = { onOpenAppearance() },
-                // )
-                LiquidGlassIntensitySetting(
-                    value = liquidGlassIntensity(),
-                    onValueChange = onLiquidGlassIntensityChanged,
+                LegacyListGroup(
+                    items = listOf(
+                        LegacyListGroupItem("外观与显示", trailing = appearanceTitle),
+                        LegacyListGroupItem("风格设置", trailing = glassStyleTitle),
+                    ),
+                    onItemClick = { index ->
+                        if (index == 0) onOpenAppearance() else onOpenGlassStyleSettings()
+                    },
                 )
                 if (showPlayerRenderMode) {
                     PlayerRenderModeSetting(
                         mode = playerRenderMode(),
                         onModeChange = onPlayerRenderModeChanged,
+                    )
+                }
+                if (onOpenPlayerSettings != null) {
+                    LegacyListGroup(
+                        items = listOf(LegacyListGroupItem("播放器设置")),
+                        onItemClick = { onOpenPlayerSettings() },
                     )
                 }
                 HomeCarouselSetting(
@@ -234,10 +240,7 @@ private fun HomeCarouselSetting(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
 ) {
-    val thumbOffset by animateDpAsState(
-        targetValue = if (enabled) 24.dp else 4.dp,
-        label = "home-carousel-toggle",
-    )
+    val toggleBackdrop = rememberGlassBackdrop()
     Row(
         Modifier
             .fillMaxWidth()
@@ -273,28 +276,12 @@ private fun HomeCarouselSetting(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(
-            Modifier
-                .width(52.dp)
-                .height(32.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (enabled) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = .18f),
-                ),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Box(
-                Modifier
-                    .offset(x = thumbOffset)
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (enabled) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-            )
-        }
+        LiquidToggle(
+            selected = { enabled },
+            onSelect = onEnabledChange,
+            backdrop = toggleBackdrop,
+            modifier = Modifier.width(64.dp).height(40.dp),
+        )
     }
 }
 
@@ -319,7 +306,7 @@ private fun LiquidGlassIntensitySetting(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Liquid Glass",
+                "液态玻璃",
                 Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 16.sp,
@@ -413,16 +400,59 @@ private fun LiquidGlassIntensitySetting(
 
 internal const val DarkAppearanceTitle = "深色"
 
-/**
- * Appearance settings. The product is dark-only — every page is built dark-first
- * (light text on dark atmospheres) and the login/history backgrounds are dark
- * images — so a light option could only tint the surfaces while the pages behind
- * it stayed dark. Rather than offer that, this page states the current appearance.
- */
+@Composable
+fun GlassStyleScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    style: GlassStyle = GlassStyle.Liquid,
+    liquidGlassIntensity: Float = DefaultGlassIntensity,
+    saving: Boolean = false,
+    error: String? = null,
+    onSelectStyle: (GlassStyle) -> Unit = {},
+    onLiquidGlassIntensityChanged: (Float) -> Unit = {},
+) {
+    val safeArea = LocalMaFeiSafeArea.current
+    MaFeiActionBarScaffold(
+        title = "风格设置",
+        onBack = onBack,
+        modifier = modifier,
+    ) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 16.dp)
+                    .padding(top = 12.dp, bottom = safeArea.bottom.coerceAtLeast(24.dp)),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                LegacyListGroup(
+                    items = GlassStyle.entries.map {
+                        LegacyListGroupItem(it.title, isSelected = it == style)
+                    },
+                    enabled = !saving,
+                    onItemClick = { onSelectStyle(GlassStyle.entries[it]) },
+                )
+                if (style == GlassStyle.Liquid) {
+                    LiquidGlassIntensitySetting(
+                        value = liquidGlassIntensity,
+                        onValueChange = onLiquidGlassIntensityChanged,
+                    )
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
 @Composable
 fun AppearanceScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    mode: cn.mafei.cmp.common.design_system.AppearanceMode = cn.mafei.cmp.common.design_system.AppearanceMode.Dark,
+    saving: Boolean = false,
+    error: String? = null,
+    onSelect: (cn.mafei.cmp.common.design_system.AppearanceMode) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -447,32 +477,13 @@ fun AppearanceScreen(
                     lineHeight = 19.sp,
                     fontWeight = FontWeight.Medium,
                 )
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(5.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(11.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                            .semantics { selected = true },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            DarkAppearanceTitle,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-                Text(
-                    "当前版本仅提供深色外观。",
-                    Modifier.fillMaxWidth().padding(start = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .76f),
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
+                val modes = cn.mafei.cmp.common.design_system.AppearanceMode.entries
+                LegacyListGroup(
+                    items = modes.map { LegacyListGroupItem(it.title, isSelected = it == mode) },
+                    enabled = !saving,
+                    onItemClick = { onSelect(modes[it]) },
                 )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         }
     }

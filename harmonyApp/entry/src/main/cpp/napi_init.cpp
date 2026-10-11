@@ -133,7 +133,7 @@ static napi_value UpdateWindowChrome(napi_env env, napi_callback_info info) {
     return result;
 }
 
-static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) {
+static napi_value UpdateStateJson(napi_env env, napi_callback_info info, bool web) {
     size_t count = 1;
     napi_value arguments[1];
     size_t payloadLength = 0;
@@ -155,7 +155,7 @@ static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) {
         napi_throw_type_error(env, nullptr, "Invalid player state JSON string");
         return nullptr;
     }
-    const bool accepted = UpdateOhosPlayerState(payload.data());
+    const bool accepted = web ? UpdateOhosWebState(payload.data()) : UpdateOhosPlayerState(payload.data());
     if (!accepted) {
         OH_LOG_Print(
             LOG_APP,
@@ -181,6 +181,24 @@ static napi_value GetPlayerScreenVisible(napi_env env, napi_callback_info info) 
     return result;
 }
 
+static napi_value UpdatePlayerState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, false); }
+static napi_value UpdateWebState(napi_env env, napi_callback_info info) { return UpdateStateJson(env, info, true); }
+
+static napi_value SetApplicationForeground(napi_env env, napi_callback_info info) {
+    size_t count = 1;
+    napi_value arguments[1];
+    bool foreground = false;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 1 ||
+        napi_get_value_bool(env, arguments[0], &foreground) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "One application visibility value is required");
+        return nullptr;
+    }
+    SetOhosApplicationForeground(foreground);
+    napi_value result = nullptr;
+    napi_get_undefined(env, &result);
+    return result;
+}
+
 static napi_value GetPlayerFullscreenRequested(napi_env env, napi_callback_info info) {
     size_t count = 0;
     if (napi_get_cb_info(env, info, &count, nullptr, nullptr, nullptr) != napi_ok || count != 0) {
@@ -189,6 +207,33 @@ static napi_value GetPlayerFullscreenRequested(napi_env env, napi_callback_info 
     }
     napi_value result = nullptr;
     napi_get_boolean(env, IsOhosPlayerFullscreenRequested(), &result);
+    return result;
+}
+
+static napi_value UpdatePlayerBackdrop(napi_env env, napi_callback_info info) {
+    size_t count = 6;
+    napi_value arguments[6];
+    int64_t handle = 0, revision = 0;
+    int32_t width = 0, height = 0, alpha = 0;
+    void* pixels = nullptr;
+    size_t bytes = 0;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 6 ||
+        napi_get_value_int64(env, arguments[0], &handle) != napi_ok ||
+        napi_get_value_int64(env, arguments[1], &revision) != napi_ok ||
+        napi_get_value_int32(env, arguments[2], &width) != napi_ok ||
+        napi_get_value_int32(env, arguments[3], &height) != napi_ok ||
+        napi_get_value_int32(env, arguments[4], &alpha) != napi_ok ||
+        napi_get_arraybuffer_info(env, arguments[5], &pixels, &bytes) != napi_ok ||
+        width < 1 || width > 256 || height < 1 || height > 256 ||
+        bytes != static_cast<size_t>(width) * height * 4 || pixels == nullptr) {
+        napi_throw_type_error(env, nullptr, "Invalid bounded video backdrop frame");
+        return nullptr;
+    }
+    // Kotlin owns a copy before the JS ArrayBuffer can be collected or reused.
+    const bool accepted = UpdateOhosPlayerBackdrop(handle, revision, width, height, alpha,
+        reinterpret_cast<char*>(pixels), static_cast<int32_t>(bytes));
+    napi_value result = nullptr;
+    napi_get_boolean(env, accepted, &result);
     return result;
 }
 
@@ -242,10 +287,51 @@ static napi_value HandlePlayerKey(napi_env env, napi_callback_info info) {
 }
 
 EXTERN_C_START
+static napi_value RegisterPhotoSave(napi_env env, napi_callback_info info) {
+    size_t count = 1;
+    napi_value arguments[1];
+    napi_valuetype type;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 1 ||
+        napi_typeof(env, arguments[0], &type) != napi_ok || type != napi_function) {
+        napi_throw_type_error(env, nullptr, "A photo-save handler is required");
+        return nullptr;
+    }
+    napi_value result;
+    napi_get_boolean(env, RegisterOhosPhotoSave(env, arguments[0]), &result);
+    return result;
+}
+
+static napi_value CompletePhotoSave(napi_env env, napi_callback_info info) {
+    size_t count = 2;
+    napi_value arguments[2];
+    int64_t id;
+    int32_t status;
+    if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 2 ||
+        napi_get_value_int64(env, arguments[0], &id) != napi_ok || napi_get_value_int32(env, arguments[1], &status) != napi_ok) {
+        napi_throw_type_error(env, nullptr, "A photo-save identity and result are required");
+        return nullptr;
+    }
+    CompleteOhosPhotoSave(id, status);
+    napi_value result;
+    napi_get_undefined(env, &result);
+    return result;
+}
+
+static napi_value ReleasePhotoSave(napi_env env, napi_callback_info info) {
+    ReleaseOhosPhotoSave();
+    napi_value result;
+    napi_get_undefined(env, &result);
+    return result;
+}
+
 static napi_value Init(napi_env env, napi_value exports) {
     androidx_compose_ui_arkui_init(env, exports);
 
     napi_property_descriptor descriptors[] = {
+        {"UpdateOhosWebState", nullptr, UpdateWebState, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"RegisterOhosPhotoSave", nullptr, RegisterPhotoSave, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"CompleteOhosPhotoSave", nullptr, CompletePhotoSave, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"ReleaseOhosPhotoSave", nullptr, ReleasePhotoSave, nullptr, nullptr, nullptr, napi_default, nullptr},
         {
             "MainArkUIViewController",
             nullptr,
@@ -296,6 +382,8 @@ static napi_value Init(napi_env env, napi_value exports) {
             napi_default,
             nullptr,
         },
+        { "UpdateOhosPlayerBackdrop", nullptr, UpdatePlayerBackdrop, nullptr, nullptr, nullptr, napi_default, nullptr },
+        { "SetOhosApplicationForeground", nullptr, SetApplicationForeground, nullptr, nullptr, nullptr, napi_default, nullptr },
         {
             "IsOhosPlayerScreenVisible",
             nullptr,

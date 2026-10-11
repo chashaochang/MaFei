@@ -15,7 +15,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 // One Compose controller per scene. Swift owns only the platform window;
 // all page layout and safe-area consumption remain in shared Compose.
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    private static var activeScenes = Set<String>()
     var window: UIWindow?
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        Self.activeScenes.insert(scene.session.persistentIdentifier)
+        MainViewControllerKt.SetApplicationForeground(foreground: true)
+    }
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        Self.activeScenes.remove(scene.session.persistentIdentifier)
+        MainViewControllerKt.SetApplicationForeground(foreground: !Self.activeScenes.isEmpty)
+    }
+
+    func sceneDidDisconnect(_ scene: UIScene) {
+        Self.activeScenes.remove(scene.session.persistentIdentifier)
+        MainViewControllerKt.SetApplicationForeground(foreground: !Self.activeScenes.isEmpty)
+    }
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
                options connectionOptions: UIScene.ConnectionOptions) {
@@ -28,7 +44,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             },
             onPlayerFullscreenChanged: { [weak orientationController] fullscreen in
                 orientationController?.setPlayerFullscreenRequested(fullscreen.boolValue)
-            }
+            },
+            playerBridge: ApplePlayerBridge()
         )
         orientationController.install(composeController)
         window.rootViewController = orientationController

@@ -39,17 +39,20 @@ internal val LocalGlassRenderHealth = staticCompositionLocalOf<GlassRenderHealth
  * (lens, highlight, shadow and tint) remains enabled at every value.
  */
 internal val LocalGlassIntensity = staticCompositionLocalOf { DefaultGlassIntensity }
+internal val LocalGlassStyle = staticCompositionLocalOf { GlassStyle.Liquid }
 
 /** No process-global latch: independent windows have independent rendering health. */
 @Composable
 fun GlassRenderingEnvironment(
     health: GlassRenderHealth,
     intensity: Float = DefaultGlassIntensity,
+    style: GlassStyle = GlassStyle.Liquid,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
         LocalGlassRenderHealth provides health,
         LocalGlassIntensity provides intensity.coerceIn(0f, 1f),
+        LocalGlassStyle provides style,
         content = content,
     )
 }

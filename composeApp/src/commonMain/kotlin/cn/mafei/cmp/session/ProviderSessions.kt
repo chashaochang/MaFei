@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlin.coroutines.cancellation.CancellationException
 
 interface ProviderSessionBinding {
+    suspend fun webPage(): WebPageRequest? = null
     val adapter: MediaProviderAdapter
     val source: AuthoritativeCredentialSource
     val aliases: Set<CredentialAlias>
@@ -66,7 +67,7 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
         val installed = JellyfinSession(userId = connection.remoteUserId, accessToken = token.token)
         val state = SingleIdentityJellyfinState(installed)
         val facade = DefaultJellyfinFacade(
-            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei CMP", connection.deviceId, "2.0.0"),
+            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei", connection.deviceId, "2.0.0"),
             BorrowedSessionTransport(transport) { state.current.value != null },
             state,
         )
@@ -78,8 +79,34 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
                 mapOf(connection.tokenAlias to SecureSecret.AuthToken("MediaBrowser", session.accessToken)))
             else SessionCredentialSnapshot(1, 1, emptyMap())
         }
-        val adapter = JellyfinMediaProviderAdapter(facade, connection.server.id, connection.account.id, connection.remoteUserId)
-        return binding(adapter, source, connection.aliases) { state.clear() }
+        val fallback = if (DanmakuBuildConfiguration.appId.isNotBlank() && DanmakuBuildConfiguration.appSecret.isNotBlank()) {
+            cn.mafei.cmp.providers.jellyfin.playback.DandanPlayFallback(
+                BorrowedSessionTransport(transport) { state.current.value != null },
+                cn.mafei.cmp.providers.jellyfin.playback.DandanPlayConfiguration(
+                    cn.mafei.cmp.core.http_contract.HttpUrl.parse(DanmakuBuildConfiguration.baseUrl),
+                    DanmakuBuildConfiguration.appId, DanmakuBuildConfiguration.appSecret,
+                ),
+            )
+        } else null
+        val adapter = JellyfinMediaProviderAdapter(facade, connection.server.id, connection.account.id, connection.remoteUserId, fallback)
+        return object : ProviderSessionBinding {
+            override val adapter = adapter
+            override val source = source
+            override val aliases = connection.aliases
+            override fun clear() { state.clear() }
+            override suspend fun webPage(): WebPageRequest {
+                val user = facade.auth.currentUserDocument()
+                val active = state.current.value ?: throw CancellationException("Web account retired")
+                val userId = (user["Id"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val serverId = (user["ServerId"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    ?.takeIf(String::isNotBlank) ?: facade.auth.systemInfo().id
+                    ?: throw ClientConfigError("Web server identity missing")
+                if (userId != active.userId) throw ClientConfigError("Web user identity mismatch")
+                return WebPageRequest.jellyfin(connection.server.baseUrl, serverId, connection.server.name,
+                    active.userId, active.accessToken, user, connection.deviceId,
+                    cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs())
+            }
+        }
     }
 
     private fun feiniu(connection: SavedConnection, token: SecureSecret.AuthToken, cookie: SecureSecret.CookieText?): ProviderSessionBinding {

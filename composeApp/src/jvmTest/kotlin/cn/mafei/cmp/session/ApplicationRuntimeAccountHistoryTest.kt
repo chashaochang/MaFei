@@ -93,6 +93,21 @@ class ApplicationRuntimeAccountHistoryTest {
         assertEquals("Living Room", history.single().server.name)
     }
 
+    @Test fun bothAccountListsReceiveOnlyKeysOfRememberedPasswordsIncludingEmptyPasswords() = runBlocking<Unit> {
+        val withPassword = legacyRecord("s1", "a1", "a".repeat(32), null)
+        val emptyPassword = legacyRecord("s2", "a2", "b".repeat(32), null)
+        val noPassword = legacyRecord("s3", "a3", "c".repeat(32), null)
+        val wrongSecret = legacyRecord("s4", "a4", "d".repeat(32), null)
+        secrets.save(withPassword.passwordAlias, SecureSecret.Password("private"))
+        secrets.save(emptyPassword.passwordAlias, SecureSecret.Password(""))
+        secrets.save(wrongSecret.passwordAlias, SecureSecret.AuthToken("fixture", "token"))
+
+        assertEquals(
+            setOf(withPassword.credentialKey, emptyPassword.credentialKey),
+            app.savedPasswordKeys(listOf(withPassword, emptyPassword, noPassword, wrongSecret)),
+        )
+    }
+
     @Test fun anotherAddressOfTheSameJellyfinServerReusesTheSavedAccount() = runBlocking<Unit> {
         val first = app.connect(ProviderKind.Jellyfin, "https://media.test", "Demo", "pw")
         val second = app.connect(ProviderKind.Jellyfin, "https://lan.media.test:8920", "Demo", "pw")

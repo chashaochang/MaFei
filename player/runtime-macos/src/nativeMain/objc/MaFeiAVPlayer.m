@@ -1,6 +1,54 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CMTime.h>
 #import <jni.h>
+#import <jawt_md.h>
+#import <dlfcn.h>
+
+static NSMutableDictionary<NSNumber *, AVPlayerLayer *> *videoLayers;
+static jlong nextVideoLayer = 0;
+static AVPlayerLayer *layerFor(jlong handle) {
+    @synchronized ([AVPlayerLayer class]) { return videoLayers[@(handle)]; }
+}
+
+JNIEXPORT jlong JNICALL
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_createVideoLayer(JNIEnv *env, jclass clazz, jobject canvas) {
+    (void)clazz;
+    typedef jboolean (JNICALL *GetAWTFunction)(JNIEnv *, JAWT *);
+    GetAWTFunction getAWT = (GetAWTFunction)dlsym(RTLD_DEFAULT, "JAWT_GetAWT");
+    if (getAWT == NULL) return 0;
+    JAWT awt = { .version = JAWT_VERSION_1_7 };
+    if (!getAWT(env, &awt)) return 0;
+    JAWT_DrawingSurface *surface = awt.GetDrawingSurface(env, canvas);
+    if (surface == NULL) return 0;
+    jlong handle = 0;
+    if ((surface->Lock(surface) & JAWT_LOCK_ERROR) == 0) {
+        JAWT_DrawingSurfaceInfo *info = surface->GetDrawingSurfaceInfo(surface);
+        if (info != NULL && info->platformInfo != NULL) {
+            id<JAWT_SurfaceLayers> native = (__bridge id<JAWT_SurfaceLayers>)info->platformInfo;
+            AVPlayerLayer *layer = [AVPlayerLayer layer];
+            layer.videoGravity = AVLayerVideoGravityResizeAspect;
+            layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+            native.layer = layer;
+            @synchronized ([AVPlayerLayer class]) {
+                if (videoLayers == nil) videoLayers = [NSMutableDictionary dictionary];
+                handle = ++nextVideoLayer; videoLayers[@(handle)] = layer;
+            }
+        }
+        if (info != NULL) surface->FreeDrawingSurfaceInfo(info);
+        surface->Unlock(surface);
+    }
+    awt.FreeDrawingSurface(surface);
+    return handle;
+}
+
+JNIEXPORT void JNICALL
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_destroyVideoLayer(JNIEnv *env, jclass clazz, jlong handle) {
+    (void)env; (void)clazz;
+    @synchronized ([AVPlayerLayer class]) {
+        AVPlayerLayer *layer = videoLayers[@(handle)];
+        layer.player = nil; [layer removeFromSuperlayer]; [videoLayers removeObjectForKey:@(handle)];
+    }
+}
 
 // JNI bridge for one AVPlayer per handle (GLM-05 macOS runtime). Everything
 // is synchronous query/command — the Kotlin runtime drives readiness and
@@ -74,17 +122,13 @@ Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_setSpeed(JNIEnv *env, jcl
     playerFor(handle).rate = speed;
 }
 
-// The layer pointer is an AVPlayerLayer* handed over by the UI layer (video
-// compositing is a UI concern); 0 detaches. Audio playback needs no layer.
+// An opaque layer id from the JAWT registry; 0 means there is no surface.
 JNIEXPORT void JNICALL
 Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_attachLayer(JNIEnv *env, jclass clazz, jlong handle, jlong layerPointer) {
     (void)env; (void)clazz;
     if (layerPointer == 0) return;
-    CALayer *layer = (__bridge CALayer *)(void *)(intptr_t)layerPointer;
-    if (![layer isKindOfClass:[AVPlayerLayer class]]) {
-        return;
-    }
-    ((AVPlayerLayer *)layer).player = playerFor(handle);
+    AVPlayerLayer *layer = layerFor(layerPointer);
+    layer.player = playerFor(handle);
 }
 
 // Unbinds the layer: a destroyed surface must not keep rendering the last
@@ -93,10 +137,7 @@ JNIEXPORT void JNICALL
 Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_detachLayer(JNIEnv *env, jclass clazz, jlong handle, jlong layerPointer) {
     (void)env; (void)clazz; (void)handle;
     if (layerPointer == 0) return;
-    CALayer *layer = (__bridge CALayer *)(void *)(intptr_t)layerPointer;
-    if ([layer isKindOfClass:[AVPlayerLayer class]]) {
-        ((AVPlayerLayer *)layer).player = nil;
-    }
+    layerFor(layerPointer).player = nil;
 }
 
 JNIEXPORT jlong JNICALL
@@ -159,4 +200,42 @@ Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_releasePlayer(JNIEnv *env
     [player pause];
     [player replaceCurrentItemWithPlayerItem:nil];
     // ARC releases the player here, balancing CFBridgingRetain.
+}
+
+JNIEXPORT jstring JNICALL
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_tracks(JNIEnv *env, jclass clazz, jlong handle) {
+    (void)clazz;
+    AVPlayerItem *item = playerFor(handle).currentItem;
+    NSMutableArray *tracks = [NSMutableArray array];
+    NSArray *kinds = @[AVMediaCharacteristicAudible, AVMediaCharacteristicLegible];
+    for (NSUInteger kind = 0; kind < kinds.count; kind++) {
+        AVMediaSelectionGroup *group = [item.asset mediaSelectionGroupForMediaCharacteristic:kinds[kind]];
+        AVMediaSelectionOption *selected = group ? [item.currentMediaSelection selectedMediaOptionInMediaSelectionGroup:group] : nil;
+        for (NSUInteger index = 0; index < group.options.count; index++) {
+            AVMediaSelectionOption *option = group.options[index];
+            [tracks addObject:@{ @"id": [NSString stringWithFormat:@"%lu", (unsigned long)index],
+                @"kind": kind == 0 ? @"Audio" : @"Subtitle", @"label": option.displayName ?: @"",
+                @"language": option.extendedLanguageTag ?: @"", @"selected": @(selected == option) }];
+        }
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:tracks options:0 error:NULL];
+    NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    return (*env)->NewStringUTF(env, json.UTF8String ?: "[]");
+}
+
+JNIEXPORT void JNICALL
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_selectTrack(JNIEnv *env, jclass clazz, jlong handle, jint kind, jint index) {
+    (void)env; (void)clazz;
+    AVPlayerItem *item = playerFor(handle).currentItem;
+    AVMediaSelectionGroup *group = [item.asset mediaSelectionGroupForMediaCharacteristic:
+        kind == 0 ? AVMediaCharacteristicAudible : AVMediaCharacteristicLegible];
+    if (group == nil) return;
+    AVMediaSelectionOption *option = index >= 0 && (NSUInteger)index < group.options.count ? group.options[index] : nil;
+    [item selectMediaOption:option inMediaSelectionGroup:group];
+}
+
+JNIEXPORT void JNICALL
+Java_cn_mafei_cmp_player_runtime_1macos_NativeAvPlayer_setContentMode(JNIEnv *env, jclass clazz, jlong handle, jboolean fills) {
+    (void)env; (void)clazz;
+    layerFor(handle).videoGravity = fills ? AVLayerVideoGravityResizeAspectFill : AVLayerVideoGravityResizeAspect;
 }

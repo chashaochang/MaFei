@@ -15,6 +15,7 @@ internal class SessionArtwork(private val transport: HttpTransport) {
         binding: ProviderSessionBinding,
         image: MediaImage,
         targetWidthPx: Int = 480,
+        photoDimensions: Boolean = false,
     ): ByteArray? {
         val url = HttpUrl.parseOrNull(image.url) ?: return null
         val base = validateSavedBaseUrl(connection.server.baseUrl)
@@ -29,7 +30,7 @@ internal class SessionArtwork(private val transport: HttpTransport) {
             return null
         }
         val target = when (connection.server.provider) {
-            ProviderKind.Jellyfin -> url.newBuilder()
+            ProviderKind.Jellyfin -> if (photoDimensions) url else url.newBuilder()
                 .setQueryParameter("maxWidth", targetWidthPx.coerceIn(96, 960).toString())
                 .setQueryParameter("quality", "85").build()
             ProviderKind.Feiniu -> url.newBuilder()
@@ -38,7 +39,7 @@ internal class SessionArtwork(private val transport: HttpTransport) {
         }
         val request = HttpRequest.builder(HttpMethod.Get, target)
             .redirectPolicy(RedirectPolicy.FollowSameOrigin)
-            .readPolicy(BodyReadPolicy.BufferedAtMost(4L * 1024 * 1024))
+            .readPolicy(BodyReadPolicy.BufferedAtMost((if (photoDimensions) 16L else 4L) * 1024 * 1024))
             .timeoutMillis(12_000)
         when (connection.server.provider) {
             ProviderKind.Jellyfin -> request.header("X-Emby-Token", token.token)

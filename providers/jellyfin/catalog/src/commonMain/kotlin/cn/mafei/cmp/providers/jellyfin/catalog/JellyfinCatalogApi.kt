@@ -171,7 +171,7 @@ class DefaultJellyfinCatalogApi(
     override suspend fun item(userId: String, itemId: String): BaseItemDto =
         client.executeDecoding(
             JellyfinRequests.itemById(client.config.baseUrl, userId, itemId),
-            BaseItemDto.serializer(),
+            cn.mafei.cmp.providers.jellyfin.wire.ItemWithOriginalDatesSerializer,
         )
 
     override suspend fun person(name: String): BaseItemDto =

@@ -41,10 +41,15 @@ class ProviderLoginTest {
         assertEquals("Demo", result.connection.account.displayName)
         assertEquals("Living Room", result.connection.server.name)
         assertEquals("10.10.7", result.connection.server.serverVersion)
+        val loginHeader = login.headers.first("Authorization")!!
+        assertTrue(loginHeader.contains("Client=\"MaFei\""))
+        assertTrue(loginHeader.contains("Device=\"MaFei\""))
         assertFalse(login.headers.first("Authorization")!!.contains("Token="))
         assertEquals(SecureSecret.AuthToken("MediaBrowser", "fixture-token"), result.binding.source.current().secrets[result.connection.tokenAlias])
         result.binding.adapter.collections(PageRequest())
         val authenticatedHeader = transport.requests.last().headers.first("Authorization")!!
+        assertTrue(authenticatedHeader.contains("Client=\"MaFei\""))
+        assertTrue(authenticatedHeader.contains("Device=\"MaFei\""))
         assertTrue(authenticatedHeader.contains("Token=\"fixture-token\""))
         assertTrue(authenticatedHeader.contains("DeviceId=\"${result.connection.credentialKey}\""))
         assertTrue(login.headers.first("Authorization")!!.contains("DeviceId=\"${result.connection.credentialKey}\""))

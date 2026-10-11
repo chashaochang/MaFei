@@ -38,6 +38,10 @@ import cn.mafei.cmp.core.domain.ServerId
  *   from the first page, and return `nextCursor = null` on the last page.
  */
 interface MediaProviderAdapter {
+    val management: ServerManagement? get() = null
+    /** Retires provider-owned server streams, even if playback never reached Start. */
+    suspend fun releasePlayback(stream: PlaybackPreparation.Ready) {}
+    suspend fun danmakuXml(itemId: MediaId): String? = null
 
     val provider: ProviderKind
     val serverId: ServerId
@@ -68,6 +72,19 @@ interface MediaProviderAdapter {
      * of being silently dropped.
      */
     suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem>
+
+    /** Exact legacy music surfaces; unsupported providers reject rather than return empty success. */
+    suspend fun music(query: MusicCatalogQuery, request: PageRequest): Page<MediaItem> =
+        throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose a music catalog")
+
+    suspend fun liveChannels(request: PageRequest): Page<MediaItem> =
+        throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose live channels")
+
+    suspend fun photos(query: PhotoCatalogQuery, request: PageRequest): Page<MediaItem> =
+        throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose photo catalogs")
+
+    suspend fun photoOriginal(id: MediaId): cn.mafei.cmp.core.domain.MediaDownload =
+        throw cn.mafei.cmp.core.domain.ClientConfigError("$provider does not expose original photo downloads")
 
     /** Free-text search; capability [AdapterCapability.Search]. */
     suspend fun search(term: String, request: PageRequest): Page<MediaItem>

@@ -25,6 +25,8 @@ data class JellyfinLoginResult(
  * credential store, GLM-04/06).
  */
 interface JellyfinAuthApi {
+    /** Exact current-user document for the legacy web client's local-storage bootstrap. */
+    suspend fun currentUserDocument(): kotlinx.serialization.json.JsonObject
 
     suspend fun publicUsers(): List<PublicUserDto>
 
@@ -55,6 +57,14 @@ class DefaultJellyfinAuthApi(
     private val client: JellyfinClient,
     private val sessionState: JellyfinSessionState = client.sessionState,
 ) : JellyfinAuthApi {
+    override suspend fun currentUserDocument(): kotlinx.serialization.json.JsonObject {
+        val request = cn.mafei.cmp.core.http_contract.HttpRequest.builder(cn.mafei.cmp.core.http_contract.HttpMethod.Get,
+            client.config.baseUrl.newBuilder().addPathSegments("Users/Me").build()).build()
+        return client.execute(request) {
+            cn.mafei.cmp.core.serialization.MafeiJson.Default.parseToJsonElement(it.bodyText()) as? kotlinx.serialization.json.JsonObject
+                ?: throw cn.mafei.cmp.providers.jellyfin.core.JellyfinDecodeError("Current user is not an object")
+        }
+    }
 
     override suspend fun publicUsers(): List<PublicUserDto> =
         client.executeDecoding(JellyfinRequests.publicUsers(client.config.baseUrl), ListSerializer(PublicUserDto.serializer()))

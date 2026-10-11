@@ -74,12 +74,15 @@ private fun desktopWorkArea(): DesktopWorkArea? = runCatching {
  * 的问题，也容易让人误以为"这一版看过了"。视觉验收改为**在真机 / 真账号上跑再截图**。
  */
 fun main() = application {
+    val player = remember { MacPlayerHost() }
     val runtime = ProcessApplication.getOrCreate {
         ApplicationRuntime(
             createDesktopSettings(),
             createDesktopCredentialStore(),
             createMacOsHttpTransport(),
-            playerRuntimeFactory = { createMacOsPlayerRuntime() },
+            playerRuntimeFactory = { player.runtime() },
+            photoSaver = DesktopPhotoSaver,
+            externalSubtitleOverlay = true,
         )
     }
     val workArea = remember { desktopWorkArea() }
@@ -132,6 +135,7 @@ fun main() = application {
                 DesktopNavigationOwner {
                     App(
                         runtime = runtime,
+                        playerSurface = { controller, _, _, _, modifier -> player.Surface(controller, modifier) },
                         windowControls = {
                             val fullscreen = windowState.placement == WindowPlacement.Fullscreen
                             MacWindowControls(

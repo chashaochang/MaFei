@@ -5,14 +5,18 @@
     objectVersion = 56;
     objects = {
         A00000000000000000000001 = { isa = PBXProject; attributes = { LastUpgradeCheck = 1600; }; buildConfigurationList = A00000000000000000000010; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = A00000000000000000000002; productRefGroup = A00000000000000000000003; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000004, A00000000000000000000020); };
-        A00000000000000000000002 = { isa = PBXGroup; children = (A00000000000000000000005, A00000000000000000000006, A00000000000000000000016, A00000000000000000000021, A00000000000000000000003); sourceTree = "<group>"; };
+        A00000000000000000000002 = { isa = PBXGroup; children = (A00000000000000000000005, A00000000000000000000030, A00000000000000000000032, A00000000000000000000006, A00000000000000000000016, A00000000000000000000021, A00000000000000000000003); sourceTree = "<group>"; };
         A00000000000000000000003 = { isa = PBXGroup; children = (A00000000000000000000007, A00000000000000000000022); name = Products; sourceTree = "<group>"; };
         A00000000000000000000004 = { isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000011; buildPhases = (A00000000000000000000008, A00000000000000000000009, A0000000000000000000000A, A00000000000000000000018); buildRules = (); dependencies = (); name = MaFei; productName = MaFei; productReference = A00000000000000000000007; productType = "com.apple.product-type.application"; };
         A00000000000000000000005 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaFei/AppDelegate.swift; sourceTree = "<group>"; };
         A00000000000000000000006 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = MaFei/Info.plist; sourceTree = "<group>"; };
         A00000000000000000000007 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MaFei.app; sourceTree = BUILT_PRODUCTS_DIR; };
         A00000000000000000000008 = { isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); outputPaths = (); name = "Build shared Compose framework and resources"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "set -eu\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n"; };
-        A00000000000000000000009 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0000000000000000000000B); runOnlyForDeploymentPostprocessing = 0; };
+        A00000000000000000000009 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0000000000000000000000B, A00000000000000000000031, A00000000000000000000033); runOnlyForDeploymentPostprocessing = 0; };
+        A00000000000000000000030 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaFei/IosPlayback.swift; sourceTree = "<group>"; };
+        A00000000000000000000031 = { isa = PBXBuildFile; fileRef = A00000000000000000000030; };
+        A00000000000000000000032 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaFei/AuthorizedMediaProxy.swift; sourceTree = "<group>"; };
+        A00000000000000000000033 = { isa = PBXBuildFile; fileRef = A00000000000000000000032; };
         A0000000000000000000000A = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
         A0000000000000000000000B = { isa = PBXBuildFile; fileRef = A00000000000000000000005; };
         A00000000000000000000016 = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = MaFei/Assets.xcassets; sourceTree = "<group>"; };

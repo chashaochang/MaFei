@@ -4,8 +4,10 @@ package cn.mafei.cmp
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -29,6 +31,7 @@ import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.PlayerRenderMode
+import cn.mafei.cmp.player.api.PlayerPlaybackPreferences
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
@@ -39,6 +42,13 @@ import cn.mafei.cmp.player.runtime_ohos.OhosPlayerRuntime
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.toKString
+import kotlinx.cinterop.readBytes
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import cn.mafei.cmp.player.ui.PlayerVideoBackdropSource
+import org.jetbrains.skia.ColorAlphaType
+import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -46,6 +56,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.experimental.ExperimentalNativeApi
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import platform.PerformanceAnalysisKit.HiLog.LOG_APP
 import platform.PerformanceAnalysisKit.HiLog.LOG_INFO
 import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
@@ -72,6 +84,7 @@ private data class OhosPlayerCommandState(
     val subtitleUrl: String? = null,
     val allowInsecureTls: Boolean = false,
     val multiConnectionAllowed: Boolean = true,
+    val audioOnly: Boolean = false,
     val positionMs: Long = 0L,
     val speed: Float = 1f,
     val trackId: Int = -1,
@@ -79,6 +92,9 @@ private data class OhosPlayerCommandState(
     val contentMode: String = "Fit",
     /** Native output path; applied by mfplayer on the next load. */
     val renderMode: String = PlayerRenderMode.Buffer.name,
+    val useHardwareDecode: Boolean = true,
+    val cacheSizeMb: Int = 1024,
+    val engine: String = "Mpv",
     /** 亮度 0..1 / 音量步数，配合 action = setBrightness / setVolume。 */
     val level: Float = 0f,
     /** Non-zero only for a one-shot native frame preview request. */
@@ -103,6 +119,12 @@ private data class OhosPlayerEventPayload(
     val durationMs: Long = 0L,
     val bufferedMs: Long = 0L,
     val failure: String? = null,
+    val systemAction: String? = null,
+    val systemValue: Double = 0.0,
+    val pipActive: Boolean = false,
+    val backgroundAudioActive: Boolean = false,
+    val castingActive: Boolean = false,
+    val engine: String? = null,
     val tracks: List<OhosPlayerTrackPayload> = emptyList(),
     /**
      * `event = "device"` 专用：ArkUI 侧的窗口亮度与媒体音量。这些值不挂在任何一次播放上，
@@ -142,6 +164,9 @@ private data class OhosPlayerEventPayload(
     val activeConnections: Int? = null,
 )
 
+internal val ohosVideoBackdropSource = PlayerVideoBackdropSource()
+private var ohosVideoBackdropRevision by mutableLongStateOf(0L)
+
 private object OhosPlayerHostState {
     private val json = Json { ignoreUnknownKeys = true }
     // This state is consumed only by the Compose surface and every command is
@@ -154,6 +179,7 @@ private object OhosPlayerHostState {
     private var activeHandle = 0L
     private var eventSink: ((OhosNativePlayerEvent) -> Unit)? = null
     private var systemBackHandler: (() -> Unit)? = null
+    private var systemActionHandler: ((String, Double) -> Unit)? = null
     private var playing = false
     private var positionMs = 0L
     private var durationMs = 0L
@@ -161,6 +187,11 @@ private object OhosPlayerHostState {
 
     val command: OhosPlayerCommandState
         get() = commandState
+
+    fun bindSystemActions(handler: (String, Double) -> Unit) { systemActionHandler = handler }
+    fun unbindSystemActions(handler: (String, Double) -> Unit) {
+        if (systemActionHandler === handler) systemActionHandler = null
+    }
 
     fun bind(sink: (OhosNativePlayerEvent) -> Unit) {
         eventSink = sink
@@ -195,6 +226,8 @@ private object OhosPlayerHostState {
     fun create(): Long {
         val handle = nextHandle++
         activeHandle = handle
+        ohosVideoBackdropRevision++
+        ohosVideoBackdropSource.frame = null
         playing = false
         positionMs = 0L
         durationMs = 0L
@@ -209,12 +242,16 @@ private object OhosPlayerHostState {
         subtitleUrl: String?,
         allowInsecureTls: Boolean,
         multiConnectionAllowed: Boolean,
+        audioOnly: Boolean,
         startPositionMs: Long,
+        preferences: PlayerPlaybackPreferences,
     ) {
         if (handle != activeHandle) {
             logOhosPlayer("host load rejected handle=$handle active=$activeHandle")
             return
         }
+        ohosVideoBackdropRevision++
+        ohosVideoBackdropSource.frame = null
         logOhosPlayer(
             "host load handle=$handle endpoint=${url.safeEndpoint()} " +
                 "headers=${headers.keys.sorted().joinToString(",")} subtitle=${subtitleUrl != null}",
@@ -227,7 +264,11 @@ private object OhosPlayerHostState {
             subtitleUrl = subtitleUrl,
             allowInsecureTls = allowInsecureTls,
             multiConnectionAllowed = multiConnectionAllowed,
+            audioOnly = audioOnly,
             positionMs = startPositionMs.coerceAtLeast(0L),
+            useHardwareDecode = preferences.useHardwareDecode,
+            cacheSizeMb = preferences.cacheSizeMb,
+            engine = preferences.engine.name,
         )
     }
 
@@ -240,6 +281,8 @@ private object OhosPlayerHostState {
         )
     }
     fun pause(handle: Long) = publishAction(handle, "pause")
+    fun pictureInPicture() { if (activeHandle != 0L) publishAction(activeHandle, "pip") }
+    fun casting() { if (activeHandle != 0L) publishAction(activeHandle, "cast") }
     fun stop(handle: Long) = publishAction(handle, "stop")
 
     fun seek(handle: Long, positionMs: Long) {
@@ -331,9 +374,14 @@ private object OhosPlayerHostState {
         if (handle != activeHandle) return
         publishAction(handle, "release")
         activeHandle = 0L
+        ohosVideoBackdropRevision++
+        ohosVideoBackdropSource.frame = null
         pendingPreviewRequests.values.forEach { request -> request.complete(null) }
         pendingPreviewRequests.clear()
     }
+
+    fun acceptsBackdrop(handle: Long, revision: Long): Boolean =
+        handle != 0L && handle == activeHandle && revision == ohosVideoBackdropRevision && ohosVideoBackdropSource.sampling
 
     fun handleSystemBack(): Boolean {
         systemBackHandler?.invoke()
@@ -410,6 +458,12 @@ private object OhosPlayerHostState {
             return true
         }
         if (payload.handle != activeHandle) return false
+        if (payload.event == "systemAction") {
+            val action = payload.systemAction ?: return false
+            if (!payload.systemValue.isFinite()) return false
+            systemActionHandler?.invoke(action, payload.systemValue) ?: return false
+            return true
+        }
         when (payload.event) {
             "playing" -> playing = true
             "paused", "ended", "error" -> playing = false
@@ -428,6 +482,11 @@ private object OhosPlayerHostState {
         "playing" -> OhosNativePlayerEvent.Playing(handle)
         "paused" -> OhosNativePlayerEvent.Paused(handle)
         "buffering" -> OhosNativePlayerEvent.Buffering(handle)
+        "pip" -> OhosNativePlayerEvent.PictureInPicture(handle, pipActive)
+        "backgroundAudio" -> OhosNativePlayerEvent.BackgroundAudio(handle, backgroundAudioActive)
+        "casting" -> OhosNativePlayerEvent.Casting(handle, castingActive)
+        "engine" -> engine?.let { value -> cn.mafei.cmp.player.api.PlayerEngineType.entries.firstOrNull { it.name == value } }
+            ?.let { OhosNativePlayerEvent.EngineChanged(handle, it) }
         "progress" -> OhosNativePlayerEvent.Progress(
             handle = handle,
             positionMs = positionMs,
@@ -500,11 +559,15 @@ private object OhosPlayerHostState {
         subtitleUrl: String? = commandState.subtitleUrl,
         allowInsecureTls: Boolean = commandState.allowInsecureTls,
         multiConnectionAllowed: Boolean = commandState.multiConnectionAllowed,
+        audioOnly: Boolean = commandState.audioOnly,
         positionMs: Long = commandState.positionMs,
         speed: Float = commandState.speed,
         trackId: Int = commandState.trackId,
         contentMode: String = commandState.contentMode,
         renderMode: String = commandState.renderMode,
+        useHardwareDecode: Boolean = commandState.useHardwareDecode,
+        cacheSizeMb: Int = commandState.cacheSizeMb,
+        engine: String = commandState.engine,
         level: Float = commandState.level,
         previewRequestId: Long = commandState.previewRequestId,
     ) {
@@ -519,11 +582,15 @@ private object OhosPlayerHostState {
             subtitleUrl = subtitleUrl,
             allowInsecureTls = allowInsecureTls,
             multiConnectionAllowed = multiConnectionAllowed,
+            audioOnly = audioOnly,
             positionMs = positionMs,
             speed = speed,
             trackId = trackId,
             contentMode = contentMode,
             renderMode = renderMode,
+            useHardwareDecode = useHardwareDecode,
+            cacheSizeMb = cacheSizeMb,
+            engine = engine,
             level = level,
             previewRequestId = previewRequestId,
         )
@@ -547,6 +614,27 @@ fun UpdateOhosPlayerState(payload: CPointer<ByteVar>?): Boolean {
     return OhosPlayerHostState.report(raw)
 }
 
+/** Copies a bounded frame before returning; no N-API buffer or native pointer is retained. */
+@OptIn(ExperimentalNativeApi::class, kotlinx.cinterop.ExperimentalForeignApi::class)
+@CName("UpdateOhosPlayerBackdrop")
+fun UpdateOhosPlayerBackdrop(handle: Long, revision: Long, width: Int, height: Int,
+    alphaType: Int, pixels: CPointer<ByteVar>?, byteCount: Int): Boolean {
+    if (!OhosPlayerHostState.acceptsBackdrop(handle, revision) || pixels == null ||
+        width !in 1..256 || height !in 1..256 || byteCount != width * height * 4) return false
+    return try {
+        val alpha = when (alphaType) {
+            1 -> ColorAlphaType.OPAQUE
+            2 -> ColorAlphaType.PREMUL
+            3 -> ColorAlphaType.UNPREMUL
+            else -> return false
+        }
+        val info = ImageInfo(width, height, ColorType.BGRA_8888, alpha)
+        val image = Image.makeRaster(info, pixels.readBytes(byteCount), width * 4)
+        try { ohosVideoBackdropSource.frame = image.toComposeImageBitmap() } finally { image.close() }
+        true
+    } catch (_: Exception) { false }
+}
+
 /** HarmonyOS host fallback so a system back gesture can never finish the app while the player is open. */
 @OptIn(ExperimentalNativeApi::class)
 @CName("HandleOhosPlayerBack")
@@ -568,7 +656,9 @@ private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
         subtitleUrl: String?,
         allowInsecureTls: Boolean,
         multiConnectionAllowed: Boolean,
+        audioOnly: Boolean,
         startPositionMs: Long,
+        preferences: PlayerPlaybackPreferences,
     ) {
         logOhosPlayer("bridge loadUrl handle=$handle endpoint=${url.safeEndpoint()}")
         OhosPlayerHostState.load(
@@ -578,7 +668,9 @@ private class ComposeOhosPlayerBridge : OhosNativePlayerBridge {
             subtitleUrl,
             allowInsecureTls,
             multiConnectionAllowed,
+            audioOnly,
             startPositionMs,
+            preferences,
         )
     }
     override fun play(handle: Long, pendingSeekPositionMs: Long?) =
@@ -607,6 +699,9 @@ fun createOhosPlayerRuntime(): PlayerRuntime = OhosPlayerRuntime(
         backgroundPlayback = false,
         // mfplayer's PlayerSurface takes PlayerContentMode directly.
         contentMode = true,
+        isoDirectPlay = true,
+        playbackPreferences = true,
+        engineSelection = true,
     ),
     bridge = ComposeOhosPlayerBridge(),
 )
@@ -616,6 +711,7 @@ fun createOhosPlayerRuntime(): PlayerRuntime = OhosPlayerRuntime(
  * chrome, gestures and menus remain in the shared CMP player above this node.
  */
 @Composable
+@OptIn(ExperimentalEncodingApi::class)
 fun OhosPlayerSurface(
     controller: PlayerController,
     onBack: () -> Unit,
@@ -631,6 +727,39 @@ fun OhosPlayerSurface(
     val surfaceHandle = remember { PlayerSurfaceHandle() }
     val latestOnBack by rememberUpdatedState(onBack)
     val latestOnExitFullscreen by rememberUpdatedState(onExitFullscreen)
+    val latestSystemActions by rememberUpdatedState(LocalPlatformPlaybackActions.current)
+    val artworkGeneration = latestSystemActions?.generation
+    val artworkMediaId = latestSystemActions?.mediaId
+    val artworkLoader = latestSystemActions?.loadArtwork
+    var artworkData by remember(artworkGeneration, artworkMediaId, artworkLoader) { mutableStateOf("") }
+    LaunchedEffect(artworkGeneration, artworkMediaId, artworkLoader) {
+        if (artworkGeneration == null || artworkLoader == null) return@LaunchedEffect
+        try {
+            val bytes = artworkLoader() ?: return@LaunchedEffect
+            if (controller.state.value.generation === artworkGeneration && latestSystemActions?.mediaId == artworkMediaId) {
+                artworkData = Base64.encode(bytes)
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { logOhosPlayer("system artwork unavailable") }
+    }
+
+    DisposableEffect(controller) {
+        val handler: (String, Double) -> Unit = handler@ { action, value ->
+            val actions = latestSystemActions ?: return@handler
+            if (actions.generation == null || actions.generation !== controller.state.value.generation) return@handler
+            when (action) {
+                "play" -> actions.onPlay()
+                "pause" -> actions.onPause()
+                "stop" -> actions.onStop()
+                "seek" -> if (value >= 0) actions.onSeek(value.toLong())
+                "speed" -> if (value > 0 && value <= 4) actions.onSpeed(value.toFloat())
+                "next" -> actions.onNext?.invoke()
+                "previous" -> actions.onPrevious?.invoke()
+            }
+        }
+        OhosPlayerHostState.bindSystemActions(handler)
+        onDispose { OhosPlayerHostState.unbindSystemActions(handler) }
+    }
 
     DisposableEffect(controller, surfaceHandle) {
         scope.launch { runCatching { controller.attachSurface(surfaceHandle) } }
@@ -659,30 +788,41 @@ fun OhosPlayerSurface(
         ArkUIView2(
             name = "MaFeiPlayerSurface",
             modifier = Modifier.fillMaxSize(),
-            parameter = command.toJsParameter(),
+            parameter = command.toJsParameter(latestSystemActions, artworkData),
             background = Color.Black,
             interactive = false,
         )
     }
 }
 
-private fun OhosPlayerCommandState.toJsParameter(): JsObject {
+private fun OhosPlayerCommandState.toJsParameter(actions: PlatformPlaybackActions?, artworkData: String): JsObject {
     val headerValues = JsArray(JsEnv.createArray(headers.size))
     headers.forEachIndexed { index, value -> headerValues[index] = value.nApiValue() }
     return js {
         "commandId"(commandId.nApiValue())
+        "backdropRevision"(ohosVideoBackdropRevision.nApiValue())
+        "backdropSampling"(ohosVideoBackdropSource.sampling)
         "handle"(handle.nApiValue())
         "action"(action)
+        "mediaId"(actions?.mediaId.orEmpty())
+        "title"(actions?.title.orEmpty())
+        "artworkData"(artworkData)
+        "canNext"(actions?.onNext != null)
+        "canPrevious"(actions?.onPrevious != null)
         "url"(url ?: "")
         "headers"(headerValues.jsValue)
         "subtitleUrl"(subtitleUrl ?: "")
         "allowInsecureTls"(allowInsecureTls)
         "multiConnectionAllowed"(multiConnectionAllowed)
+        "audioOnly"(audioOnly)
         "positionMs"(positionMs.nApiValue())
         "speed"(speed)
         "trackId"(trackId)
         "contentMode"(contentMode)
         "renderMode"(renderMode)
+        "useHardwareDecode"(useHardwareDecode)
+        "cacheSizeMb"(cacheSizeMb)
+        "engine"(engine)
         "level"(level)
         "previewRequestId"(previewRequestId.nApiValue())
     }
@@ -715,6 +855,13 @@ private fun decodeBase64(value: String): ByteArray? {
  * 播放页竖向手势的亮度/音量实现：值由 ArkTS 推送，写入回给 ArkUI 宿主执行。
  * 读不到（ArkTS 没上报）时返回 null / 0，手势那一侧就不介入。
  */
+internal object OhosPlayerWindowControls : cn.mafei.cmp.player.api.PlayerWindowControls {
+    override val pictureInPictureSupported = true
+    override fun pictureInPicture() = OhosPlayerHostState.pictureInPicture()
+    override val castingSupported = true
+    override fun casting() = OhosPlayerHostState.casting()
+}
+
 internal object OhosDeviceControls : PlayerDeviceControls {
     override fun brightness(): Float? = OhosPlayerHostState.brightnessValue
     override fun setBrightness(value: Float) = OhosPlayerHostState.setDeviceBrightness(value)

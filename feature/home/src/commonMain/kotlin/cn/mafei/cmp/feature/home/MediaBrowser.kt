@@ -19,6 +19,7 @@ data class MediaBrowserState(
     val selectedCollection: CollectionId? = null,
     val items: List<MediaItem> = emptyList(),
     val homeFeed: HomeFeed = HomeFeed(),
+    val homeLoading: Boolean = false,
     val homeLatestByCollection: Map<CollectionId, List<MediaItem>> = emptyMap(),
     val homeLatestLoading: Set<CollectionId> = emptySet(),
     val homeLatestErrors: Map<CollectionId, String> = emptyMap(),
@@ -126,7 +127,7 @@ class MediaBrowser(
     val capabilities: AdapterCapabilities = AdapterCapabilities(),
     private val playbackPreferences: MediaPlaybackPreferences? = null,
 ) {
-    private val mutableState = MutableStateFlow(MediaBrowserState())
+    private val mutableState = MutableStateFlow(MediaBrowserState(loading = true, homeLoading = true))
     val state: StateFlow<MediaBrowserState> = mutableState.asStateFlow()
     private var ticket = 0L
     private var homeTicket = 0L
@@ -167,6 +168,7 @@ class MediaBrowser(
             loadingMore = false,
             error = null,
             homeError = null,
+            homeLoading = true,
         )
         try {
         // The home feed, the library list and the first library page are
@@ -201,6 +203,10 @@ class MediaBrowser(
                 } catch (failure: Exception) {
                     if (homeOperation != homeTicket) return@launch
                     mutableState.value = state.value.copy(homeError = browseError(failure), homeStale = false)
+                } finally {
+                    if (homeOperation == homeTicket) {
+                        mutableState.value = state.value.copy(homeLoading = false)
+                    }
                 }
             }
             launch {
@@ -309,6 +315,10 @@ class MediaBrowser(
                     homeStale = false,
                 )
             }
+        } finally {
+            if (operation == homeTicket) {
+                mutableState.value = state.value.copy(homeLoading = false)
+            }
         }
     }
 
@@ -322,12 +332,15 @@ class MediaBrowser(
     }
 
     suspend fun select(id: CollectionId) {
-        if (state.value.collections.none { it.id == id }) return
+        val collection = state.value.collections.firstOrNull { it.id == id } ?: return
         val operation = ++ticket
         pages = MediaPageAccumulator()
+        val dedicatedCatalog = (capabilities.music && collection.mediaTypes.any { it in setOf(MediaType.Audio, MediaType.MusicAlbum, MediaType.MusicArtist) }) ||
+            (capabilities.photos && MediaType.Photo in collection.mediaTypes) || (capabilities.liveTv && MediaType.LiveChannel in collection.mediaTypes)
         mutableState.value = state.value.copy(selectedCollection = id, items = emptyList(), nextCursor = null,
             totalEstimate = null,
-            loading = true, error = null, stale = false)
+            loading = !dedicatedCatalog, error = null, stale = false)
+        if (dedicatedCatalog) return
         try { loadFirst(id, operation, false) }
         catch (cancelled: CancellationException) {
             if (operation == ticket) mutableState.value = state.value.copy(loading = false)
@@ -355,11 +368,7 @@ class MediaBrowser(
             homeLatestLoading = state.value.homeLatestLoading + id,
             homeLatestErrors = state.value.homeLatestErrors - id,
         )
-        val request = PageRequest(
-            pageSize = HomeLatestPageSize,
-            sort = MediaSort(MediaSortField.DateAdded, SortDirection.Descending),
-            filter = MediaFilter(mediaTypes = collection.mediaTypes),
-        )
+        val request = collection.homeLatestRequest(PageRequest(pageSize = HomeLatestPageSize))
         try {
             val loaded = repository.browse(
                 session = session,

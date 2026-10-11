@@ -31,6 +31,7 @@ class AndroidMediaPlayerRuntime(
     private var session = 0
     private var generation: PlaybackGeneration? = null
     private var preparedEmitted = false
+    private var buffering = false
     private var ended = false
     private var released = false
     private var lastPhase: PlayerPhase? = null
@@ -81,18 +82,20 @@ class AndroidMediaPlayerRuntime(
     /** One engine poll: derives phase/progress events from live engine queries only. */
     fun poll() {
         if (released || generation == null || ended || sink == null) return
-        val duration = engine.durationMs
-        if (!preparedEmitted && duration > 0) {
-            // Fallback for engines whose onPrepared raced a poll; still engine-derived.
-            emitPrepared(duration)
-        }
+        // MediaPlayer queries in Preparing can move the native player into
+        // Error without throwing. Only its prepared callback grants readiness;
+        // a poll must not try to infer it by querying duration.
         if (!preparedEmitted) return
-        val phase = if (engine.isPlaying) PlayerPhase.Playing else PlayerPhase.Paused
+        val playing = engine.isPlaying
+        val phase = if (!playing) PlayerPhase.Paused else if (buffering) PlayerPhase.Buffering else PlayerPhase.Playing
         if (phase != lastPhase) {
             lastPhase = phase
             emit(
-                if (phase == PlayerPhase.Playing) RuntimeEvent.Playing(generation!!)
-                else RuntimeEvent.Paused(generation!!),
+                when (phase) {
+                    PlayerPhase.Playing -> RuntimeEvent.Playing(generation!!)
+                    PlayerPhase.Buffering -> RuntimeEvent.Buffering(generation!!)
+                    else -> RuntimeEvent.Paused(generation!!)
+                },
             )
         }
         sink?.invoke(
@@ -108,6 +111,7 @@ class AndroidMediaPlayerRuntime(
         session = engine.session
         generation = command.generation
         preparedEmitted = false
+        buffering = false
         ended = false
         lastPhase = null
         engine.setDataSource(command.resource.url, command.resource.headers)
@@ -123,6 +127,7 @@ class AndroidMediaPlayerRuntime(
         engine.reset()
         this.generation = null
         preparedEmitted = false
+        buffering = false
         ended = false
         lastPhase = null
     }
@@ -149,14 +154,16 @@ class AndroidMediaPlayerRuntime(
         sink?.invoke(event)
     }
 
-    /** MediaPlayer `what` codes mapped onto the frozen failure taxonomy. */
-    private fun failureFor(what: Int): PlayerFailure = when (what) {
-        100 -> PlayerFailure.Engine // MEDIA_ERROR_SERVER_DIED
-        -1004 -> PlayerFailure.Network // MEDIA_ERROR_IO
-        -110 -> PlayerFailure.Network // MEDIA_ERROR_TIMED_OUT
-        -1007 -> PlayerFailure.Decode // MEDIA_ERROR_MALFORMED
-        -1010 -> PlayerFailure.UnsupportedMedia // MEDIA_ERROR_UNSUPPORTED
-        else -> PlayerFailure.Engine
+    /** Android reports IO/format details in `extra`, usually with `what=MEDIA_ERROR_UNKNOWN`. */
+    private fun failureFor(what: Int, extra: Int): PlayerFailure {
+        if (what == 100) return PlayerFailure.Engine // MEDIA_ERROR_SERVER_DIED
+        return when (if (extra != 0) extra else what) {
+            -1004 -> PlayerFailure.Network // MEDIA_ERROR_IO
+            -110 -> PlayerFailure.Network // MEDIA_ERROR_TIMED_OUT
+            -1007 -> PlayerFailure.Decode // MEDIA_ERROR_MALFORMED
+            -1010 -> PlayerFailure.UnsupportedMedia // MEDIA_ERROR_UNSUPPORTED
+            else -> PlayerFailure.Engine
+        }
     }
 
     private inner class EngineListener : AndroidPlayerEngineListener {
@@ -174,12 +181,16 @@ class AndroidMediaPlayerRuntime(
         override fun onError(session: Int, what: Int, extra: Int) {
             if (released || session != this@AndroidMediaPlayerRuntime.session) return
             ended = true
-            emit(RuntimeEvent.Failed(checkNotNull(generation), failureFor(what)))
+            emit(RuntimeEvent.Failed(checkNotNull(generation), failureFor(what, extra)))
         }
 
         override fun onBuffering(session: Int, buffering: Boolean) {
             if (released || session != this@AndroidMediaPlayerRuntime.session || !preparedEmitted) return
-            if (buffering) emit(RuntimeEvent.Buffering(checkNotNull(generation)))
+            this@AndroidMediaPlayerRuntime.buffering = buffering
+            if (buffering) {
+                lastPhase = PlayerPhase.Buffering
+                emit(RuntimeEvent.Buffering(checkNotNull(generation)))
+            }
             // Buffering end re-classifies via the next poll (isPlaying query).
         }
     }

@@ -56,6 +56,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,19 +93,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassMaterial
-import cn.mafei.cmp.common.glass.GlassRole
-import cn.mafei.cmp.common.glass.GlassSurface
-import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
@@ -143,7 +142,6 @@ private const val PlayerEpisodeRowStaggerMs = 50
 /** Legacy `PLAYER_CLOCK_INTERVAL_MS`. */
 private const val PlayerClockIntervalMs = 30_000L
 
-private val PlayerGlassControlTint = Color(0x18000000)
 private val PlayerControlMask = Color(0x99000000)
 private val PlayerFullscreenControlMask = Color(0xB0000000)
 private val PlayerGestureSeekSurface = Color(0x85000000)
@@ -157,10 +155,11 @@ private val PlayerInfoCardSurface = Color(0x7A101010)
 private val PlayerInfoCardBorder = Color(0x1AFFFFFF)
 private val PlayerInfoSectionTitle = Color(0xA3FFFFFF)
 private val PlayerInfoEntryLabel = Color(0xADFFFFFF)
-// The menu is a readable information surface, not a liquid-glass control. It
-// samples and blurs the playing picture, then adds only a dark tint; there is
-// no lens/refraction, highlight border, or pressed water-drop effect here.
-private val PlayerMenuTint = Color(0xFF111318)
+private val PlayerMenuGradient = Brush.horizontalGradient(
+    0f to Color.Transparent,
+    .42f to Color(0x8A000000),
+    1f to Color(0xDC000000),
+)
 private val PlayerAccent = Color(0xFF2173DF)
 
 private enum class PlayerChromePanel { None, More, AspectRatio, Speed, Audio, Subtitle, Episodes, Quality }
@@ -243,7 +242,46 @@ fun NowPlayingScreen(
     /** Loads a real provider frame while the seek bar is being dragged. */
     loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
 ) {
-    val backdrop = rememberGlassBackdrop()
+    val nativeBackdrop = LocalPlayerVideoBackdropSource.current
+    val currentVideoMode by rememberUpdatedState(state.contentMode)
+    val currentVideoArea by rememberUpdatedState(playerVideoArea(
+        state.contentMode, playbackFacts?.video?.widthPx, playbackFacts?.video?.heightPx,
+    ))
+    val nativeRecorder: (ContentDrawScope.() -> Unit)? = remember(nativeBackdrop) {
+        nativeBackdrop?.let { source ->
+            {
+                val frame = source.frame
+                if (frame == null) {
+                    drawContent()
+                } else {
+                    drawRect(Color.Black)
+                    val area = currentVideoArea
+                    val target = when {
+                        area.oneToOnePixels != null -> Size(
+                            area.oneToOnePixels.width.toFloat().coerceAtMost(size.width),
+                            area.oneToOnePixels.height.toFloat().coerceAtMost(size.height),
+                        )
+                        area.aspectRatio != null -> {
+                            val ratio = area.aspectRatio
+                            if (size.width / size.height > ratio) Size(size.height * ratio, size.height)
+                            else Size(size.width, size.width / ratio)
+                        }
+                        else -> size
+                    }
+                    val scale = if (currentVideoMode.fills) maxOf(target.width / frame.width, target.height / frame.height)
+                        else minOf(target.width / frame.width, target.height / frame.height)
+                    val width = (frame.width * scale).toInt().coerceAtLeast(1)
+                    val height = (frame.height * scale).toInt().coerceAtLeast(1)
+                    clipRect((size.width - target.width) / 2, (size.height - target.height) / 2,
+                        (size.width + target.width) / 2, (size.height + target.height) / 2) {
+                        drawImage(frame, dstOffset = IntOffset(((size.width - width) / 2).toInt(), ((size.height - height) / 2).toInt()),
+                            dstSize = IntSize(width, height))
+                    }
+                }
+            }
+        }
+    }
+    val backdrop = rememberGlassBackdrop(nativeRecorder)
     val localCapabilities = if (state.casting) capabilities.copy(trackSelection = false, contentMode = false) else capabilities
     val availableQualities = if (state.casting) emptyList() else qualityOptions
     val presentation = state.toNowPlayingPresentation(if (media.live) capabilities.copy(seek = false) else capabilities)
@@ -390,6 +428,28 @@ fun NowPlayingScreen(
         }
     }
 
+    val materialVisible = panel == PlayerChromePanel.None &&
+        !state.pictureInPicture && (locked || controlsVisible || !fullscreen)
+    DisposableEffect(nativeBackdrop, materialVisible, media.id, state.generation) {
+        nativeBackdrop?.sampling = materialVisible
+        onDispose { nativeBackdrop?.sampling = false }
+    }
+
+    LaunchedEffect(state.pictureInPicture) {
+        if (state.pictureInPicture) {
+            panelAnimationToken++
+            panel = PlayerChromePanel.None
+            panelContainerVisible = false
+            panelClosing = false
+            openPlaybackInfoAfterPanelClose = false
+            playbackInfoVisible = false
+            locked = false
+            controlsVisible = false
+        } else {
+            showControlsTemporarily()
+        }
+    }
+
     BoxWithConstraints(
         modifier.background(Color.Black).onSizeChanged { sceneSize = it },
     ) {
@@ -442,8 +502,6 @@ fun NowPlayingScreen(
             }
         }
 
-        PlayerNavigationBackHandler(handleBack)
-
         // The video AREA: the surface fills whatever shape the current ratio
         // asks for, and the page (black) shows through around it. 原始比例 uses
         // the source's 1:1 pixel size; the ratio modes the largest fitting
@@ -490,6 +548,10 @@ fun NowPlayingScreen(
                 }
             }
         }
+
+        // The native PiP window owns its controls; only the video remains here.
+        if (state.pictureInPicture) return@BoxWithConstraints
+        PlayerNavigationBackHandler(handleBack)
 
         Box(
             Modifier.fillMaxSize()
@@ -866,6 +928,8 @@ fun NowPlayingScreen(
                     showPlaybackInfo = playbackFacts != null,
                     backdrop = backdrop,
                     safeEnd = safeArea.end,
+                    safeTop = safeArea.top + windowControlTopInset,
+                    safeBottom = safeArea.bottom,
                     onDismiss = { closePanel() },
                     onOpenPanel = ::openPanel,
                     onSpeed = { value ->
@@ -904,11 +968,16 @@ fun NowPlayingScreen(
             PlayerPlaybackInfoCard(
                 sections = buildPlayerInfoSections(playbackFacts, state, tracks),
                 largeWindow = largeWindow,
+                modifier = Modifier.padding(
+                    start = safeArea.start,
+                    top = safeArea.top + windowControlTopInset,
+                    end = safeArea.end,
+                    bottom = safeArea.bottom,
+                ),
                 onDismiss = {
                     playbackInfoVisible = false
                     showControlsTemporarily()
                 },
-                modifier = Modifier,
             )
         }
     }
@@ -1426,6 +1495,8 @@ private fun PlayerSidePanel(
     showPlaybackInfo: Boolean,
     backdrop: GlassBackdrop,
     safeEnd: androidx.compose.ui.unit.Dp,
+    safeTop: androidx.compose.ui.unit.Dp,
+    safeBottom: androidx.compose.ui.unit.Dp,
     onDismiss: () -> Unit,
     onOpenPanel: (PlayerChromePanel) -> Unit,
     onSpeed: (Float) -> Unit,
@@ -1481,53 +1552,26 @@ private fun PlayerSidePanel(
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize()
-                .background(if (largeWindow) Color(0x42000000) else Color.Transparent)
                 // The player menu is a same-layer overlay. Raw tap detection
                 // keeps the outside hit region working on OHOS/CPF as well as
                 // desktop, where a regular clickable can lose its up event to
                 // the video surface below.
                 .mafeiDismissOnOutsidePointer(onDismiss),
         )
-        // Phone keeps the legacy edge sheet. A wide player uses the same
-        // content and actions in a centred-height, right-aligned panel so the
-        // controls do not become a full-height phone drawer on a tablet/Mac.
-        val panelModifier = if (largeWindow) {
+        Box(
             Modifier.align(Alignment.CenterEnd)
-                .width((width + safeEnd).coerceAtMost(420.dp))
-                .fillMaxHeight(.84f)
-                .shadow(
-                    elevation = 24.dp,
-                    shape = RoundedCornerShape(24.dp),
-                    ambientColor = Color.Black.copy(alpha = .34f),
-                    spotColor = Color.Black.copy(alpha = .42f),
-                )
-        } else {
-            Modifier.align(Alignment.CenterEnd)
-                .then(if (fullscreen) Modifier.width(width + safeEnd) else Modifier.fillMaxWidth(.84f))
+                .then(if (fullscreen || largeWindow) Modifier.width(width + safeEnd)
+                    else Modifier.fillMaxWidth(.84f))
                 .fillMaxHeight()
-        }
-        GlassSurface(
-            backdrop = backdrop,
-            spec = GlassSurfaceSpec(
-                role = GlassRole.PlayerOverlay,
-                level = GlassLevel.Full,
-                tintAlpha = if (largeWindow) .62f else .68f,
-                // The setting remains global: this surface follows the same
-                // blur intensity as every other app glass surface.
-                intensity = 1f,
-                cornerRadiusDp = if (largeWindow) 24f else 0f,
-                material = GlassMaterial.Frosted,
-            ),
-            tint = PlayerMenuTint,
-            modifier = panelModifier,
+                .background(PlayerMenuGradient)
+                .testTag("playerMenuPanel"),
         ) {
             Column(
                 Modifier.fillMaxSize().padding(
-                    start = if (largeWindow) 24.dp else 16.dp,
-                    end = if (largeWindow) safeEnd + 24.dp
-                    else if (fullscreen) safeEnd + 16.dp else 16.dp,
-                    top = if (largeWindow) 24.dp else if (fullscreen) 18.dp else 8.dp,
-                    bottom = if (largeWindow) 24.dp else if (fullscreen) 18.dp else 8.dp,
+                    start = 16.dp,
+                    end = safeEnd + 16.dp,
+                    top = safeTop + if (fullscreen || largeWindow) 18.dp else 8.dp,
+                    bottom = safeBottom + if (fullscreen || largeWindow) 18.dp else 8.dp,
                 ),
             ) {
                 when {
@@ -1887,7 +1931,6 @@ private fun PlayerPanelOptionRow(
     val surface = when {
         pressed -> PlayerMenuSelectedSurface.copy(alpha = .46f)
         hovered -> Color.White.copy(alpha = .10f)
-        option.selected -> PlayerMenuSelectedSurface
         else -> Color.Transparent
     }
     Box(
@@ -1899,7 +1942,7 @@ private fun PlayerPanelOptionRow(
                 durationMs = PlayerMenuOptionDurationMs,
                 staggerMs = PlayerMenuOptionStaggerMs,
             )
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(surface)
             .hoverable(interactionSource)
             .clickable(
@@ -1912,7 +1955,7 @@ private fun PlayerPanelOptionRow(
     ) {
         Text(
             option.label,
-            color = if (option.selected || hovered || pressed) Color.White else PlayerMenuText,
+            color = if (option.selected) PlayerAccent else PlayerMenuText,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (option.selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -2165,15 +2208,7 @@ private fun PlayerChromeButton(
         LiquidButton(
             onClick = onClick,
             backdrop = backdrop,
-            modifier = buttonModifier.hoverable(interactionSource),
-            // A light readability tint preserves the sampled video, lens and
-            // press highlight. The previous 0x52 black fill hid all three and
-            // made the control look like a bordered transparent circle.
-            surfaceColor = if (hovered) {
-                Color.White.copy(alpha = .16f)
-            } else {
-                PlayerGlassControlTint
-            },
+            modifier = buttonModifier,
             height = diameter.dp,
             horizontalPadding = ((diameter - iconSize) / 2f).dp,
         ) { buttonContent() }

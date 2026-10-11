@@ -12,6 +12,9 @@ import cn.mafei.cmp.providers.jellyfin.wire.PlaybackInfoResponseDto
  * transcoding. Actual playback belongs to the player runtimes (GLM-05).
  */
 interface JellyfinPlaybackApi {
+    suspend fun stopEncodingProcess(playSessionId: String)
+    /** Legacy Jellyfin danmu plugin; null means the plugin did not publish a document. */
+    suspend fun danmakuXml(itemId: String): String? = null
 
     /**
      * Opens a playback session for [itemId] and returns the server's media
@@ -65,6 +68,33 @@ interface JellyfinPlaybackApi {
 class DefaultJellyfinPlaybackApi(
     private val client: JellyfinClient,
 ) : JellyfinPlaybackApi {
+    override suspend fun stopEncodingProcess(playSessionId: String) {
+        require(playSessionId.isNotBlank())
+        val url = client.config.baseUrl.newBuilder().addPathSegments("Videos/ActiveEncodings")
+            .addQueryParameter("deviceId", client.config.deviceId)
+            .addQueryParameter("playSessionId", playSessionId).build()
+        val request = cn.mafei.cmp.core.http_contract.HttpRequest.builder(
+            cn.mafei.cmp.core.http_contract.HttpMethod.Delete, url).timeoutMillis(5_000).build()
+        client.execute(request) { /* legacy stopEncodingProcess, 204 */ }
+    }
+    override suspend fun danmakuXml(itemId: String): String? {
+        val plugin = client.config.baseUrl.newBuilder().addPathSegments("api/danmu").addPathSegment(itemId).build()
+        val request = cn.mafei.cmp.core.http_contract.HttpRequest.builder(cn.mafei.cmp.core.http_contract.HttpMethod.Get, plugin)
+            .readPolicy(cn.mafei.cmp.core.http_contract.BodyReadPolicy.BufferedAtMost(64 * 1024L))
+            .redirectPolicy(cn.mafei.cmp.core.http_contract.RedirectPolicy.FollowSameOrigin).timeoutMillis(12_000).build()
+        val url = client.execute(request) { response ->
+            val body = cn.mafei.cmp.core.serialization.MafeiJson.Default.parseToJsonElement(response.bodyText())
+            val value = (body as? kotlinx.serialization.json.JsonObject)?.get("url") as? kotlinx.serialization.json.JsonPrimitive
+            value?.content?.let(HttpUrl::parseOrNull)
+        } ?: return null
+        // The old plugin's second request is anonymous, including same-server URLs.
+        val document = cn.mafei.cmp.core.http_contract.HttpRequest.builder(cn.mafei.cmp.core.http_contract.HttpMethod.Get, url)
+            .attribute(cn.mafei.cmp.providers.jellyfin.core.JellyfinRequestMode.ATTRIBUTE,
+                cn.mafei.cmp.providers.jellyfin.core.JellyfinRequestMode.ANONYMOUS)
+            .readPolicy(cn.mafei.cmp.core.http_contract.BodyReadPolicy.BufferedAtMost(2 * 1024 * 1024L))
+            .redirectPolicy(cn.mafei.cmp.core.http_contract.RedirectPolicy.FollowSameOrigin).timeoutMillis(12_000).build()
+        return client.execute(document) { it.bodyText().takeIf(String::isNotBlank) }
+    }
 
     override suspend fun playbackInfo(
         userId: String,

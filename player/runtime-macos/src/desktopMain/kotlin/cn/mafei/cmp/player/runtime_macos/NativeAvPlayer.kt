@@ -24,6 +24,11 @@ internal object NativeAvPlayer {
     external fun itemStatus(handle: Long): Int
     external fun errorKind(handle: Long): Int
     external fun releasePlayer(handle: Long)
+    external fun createVideoLayer(component: java.awt.Component): Long
+    external fun destroyVideoLayer(layer: Long)
+    external fun tracks(handle: Long): String
+    external fun selectTrack(handle: Long, kind: Int, index: Int)
+    external fun setContentMode(layer: Long, fills: Boolean)
 
     private val loaded: Unit by lazy {
         if (!System.getProperty("os.name").startsWith("Mac") || System.getProperty("os.arch") !in setOf("aarch64", "arm64")) {
@@ -37,6 +42,7 @@ internal object NativeAvPlayer {
             val library = root.resolve("libmafei_avplayer.dylib")
             library.toFile().deleteOnExit()
             Files.copy(it, library)
+            System.loadLibrary("jawt")
             System.load(library.toAbsolutePath().toString())
         }
     }
@@ -44,4 +50,10 @@ internal object NativeAvPlayer {
     fun ensureLoaded() {
         loaded
     }
+}
+
+/** Layer ids are opaque registry entries, never raw pointers owned by the UI. */
+object MacVideoSurface {
+    fun create(component: java.awt.Component): Long { NativeAvPlayer.ensureLoaded(); return NativeAvPlayer.createVideoLayer(component) }
+    fun destroy(layer: Long) { if (layer != 0L) NativeAvPlayer.destroyVideoLayer(layer) }
 }

@@ -86,6 +86,7 @@ internal fun ItemKind.toMediaType(): MediaType = when (this) {
     ItemKind.BoxSet -> MediaType.BoxSet
     ItemKind.Folder -> MediaType.Folder
     ItemKind.Video -> MediaType.Video
+    ItemKind.LiveTvChannel, ItemKind.TvChannel -> MediaType.LiveChannel
     // Views, persons, genres, live-TV and anything else is not a
     // browsable media object; Unknown beats failing the whole page.
     ItemKind.AggregateFolder,
@@ -97,7 +98,6 @@ internal fun ItemKind.toMediaType(): MediaType = when (this) {
     ItemKind.CollectionFolder,
     ItemKind.Genre,
     ItemKind.ManualPlaylistsFolder,
-    ItemKind.LiveTvChannel,
     ItemKind.LiveTvProgram,
     ItemKind.UserView,
     ItemKind.MusicGenre,
@@ -109,7 +109,6 @@ internal fun ItemKind.toMediaType(): MediaType = when (this) {
     ItemKind.Recording,
     ItemKind.Studio,
     ItemKind.Trailer,
-    ItemKind.TvChannel,
     ItemKind.TvProgram,
     ItemKind.UserRootFolder,
     ItemKind.Year,
@@ -118,7 +117,7 @@ internal fun ItemKind.toMediaType(): MediaType = when (this) {
 }
 
 /** Playable leaf types; folders and containers are browsable only. */
-private val PLAYABLE_TYPES = setOf(MediaType.Movie, MediaType.Episode, MediaType.Audio, MediaType.Video)
+private val PLAYABLE_TYPES = setOf(MediaType.Movie, MediaType.Episode, MediaType.Audio, MediaType.Video, MediaType.LiveChannel)
 
 internal fun MediaType.toPlayable(): Boolean = this in PLAYABLE_TYPES
 
@@ -129,6 +128,7 @@ internal fun String?.toCollectionMediaTypes(): Set<MediaType> = when (this?.trim
     "photos" -> setOf(MediaType.PhotoAlbum, MediaType.Photo)
     "boxsets" -> setOf(MediaType.BoxSet)
     "musicvideos" -> setOf(MediaType.Video)
+    "livetv" -> setOf(MediaType.LiveChannel)
     // homevideos/books/playlists and unknown future types: unconstrained.
     else -> emptySet()
 }
@@ -146,6 +146,7 @@ internal fun MediaType.toIncludeItemTypes(): String = when (this) {
     MediaType.BoxSet -> "BoxSet"
     MediaType.Folder -> "Folder"
     MediaType.Video -> "Video"
+    MediaType.LiveChannel -> "LiveTvChannel"
     // The wire query cannot express "items of unknown type"; a filter
     // containing Unknown would silently widen the query.
     MediaType.Unknown -> throw ClientConfigError("Unknown media type cannot be mapped to a Jellyfin includeItemTypes filter")
@@ -265,8 +266,21 @@ internal fun BaseItemDto.toMediaItem(
         serverId = serverId,
         provider = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
         title = name ?: "",
+        channelNumber = channelNumber,
+        currentProgram = currentProgram?.let { cn.mafei.cmp.core.domain.LiveProgram(it.name.orEmpty(), it.overview, it.startDate, it.endDate) },
         mediaType = mediaType,
         originalTitle = originalTitle,
+        albumId = albumId?.let(::MediaId),
+        albumTitle = album?.takeIf { it.isNotBlank() },
+        albumArtist = albumArtist?.takeIf { it.isNotBlank() }
+            ?: if (mediaType == MediaType.MusicAlbum) albumArtists.firstOrNull()?.name
+                ?.takeIf { it.isNotBlank() } ?: artists.firstOrNull() else null,
+        artistNames = artists.filter { it.isNotBlank() },
+        artistIds = (if (mediaType == MediaType.MusicAlbum) {
+            albumArtists.ifEmpty { artistItems }
+        } else artistItems.ifEmpty { albumArtists })
+            .mapNotNull { it.id?.takeIf(String::isNotBlank)?.let(::MediaId) },
+        recursiveItemCount = recursiveItemCount,
         overview = overview,
         collectionId = collectionId,
         seriesId = seriesId?.let(::MediaId),
@@ -279,13 +293,15 @@ internal fun BaseItemDto.toMediaItem(
             else -> null
         },
         episodeNumber = if (mediaType == MediaType.Episode) indexNumber else null,
-        childCount = (childCount ?: episodeCount)?.coerceAtLeast(0),
+        childCount = (if (mediaType == MediaType.MusicAlbum) childCount?.takeIf { it > 0 }
+            ?: recursiveItemCount else childCount ?: episodeCount)?.coerceAtLeast(0),
         indexNumber = if (mediaType == MediaType.Episode || mediaType == MediaType.Season) null else indexNumber,
         parentIndexNumber = if (mediaType == MediaType.Episode || mediaType == MediaType.Season) null else parentIndexNumber,
         year = productionYear,
         premiereEpochMs = premiereDate,
         dateAddedEpochMs = dateCreated,
-        runtimeMs = runTimeTicks?.let(JellyfinTicks::toMilliseconds),
+        runtimeMs = (if (mediaType == MediaType.MusicAlbum) cumulativeRunTimeTicks?.takeIf { it > 0 }
+            ?: runTimeTicks else runTimeTicks)?.let(JellyfinTicks::toMilliseconds),
         communityRating = communityRating,
         officialRating = officialRating,
         genres = genres,
@@ -472,12 +488,19 @@ private fun BaseItemDto.buildImages(
             // /Items/Latest omits ImageTags. The tag is a cache revision, not
             // proof that the image exists. Runtime fallback handles a real
             // 404 by trying the remaining inherited/thumbnail candidates.
-            addImage(
-                ImageKind.Primary,
-                itemId,
-                ImageType.Primary,
-                imageTags[ImageType.Primary.name],
-            )
+            // Audio tracks deliberately use the album artwork, matching the
+            // legacy MusicMapper rather than inventing a track-specific image.
+            if (type == ItemKind.Audio && !albumId.isNullOrBlank()) {
+                addImage(ImageKind.Primary, albumId, ImageType.Primary,
+                    albumPrimaryImageTag?.takeIf { it.isNotBlank() } ?: imageTags[ImageType.Primary.name])
+            } else {
+                addImage(
+                    ImageKind.Primary,
+                    itemId,
+                    ImageType.Primary,
+                    imageTags[ImageType.Primary.name],
+                )
+            }
             if (!parentPrimaryImageItemId.isNullOrBlank()) {
                 addImage(
                     ImageKind.Primary,

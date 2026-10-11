@@ -3,6 +3,7 @@ package cn.mafei.cmp.common.glass
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
@@ -14,16 +15,21 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.BackdropEffectScope
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.drawBackdrop as vendorDrawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 import com.kyant.backdrop.isRenderEffectSupported
 import com.kyant.backdrop.isRuntimeShaderSupported
 import com.kyant.shapes.Capsule
@@ -42,10 +48,90 @@ class GlassBackdrop internal constructor(
  */
 private val LiquidHighlight: () -> Highlight? = { Highlight.Default }
 private val NoHighlight: () -> Highlight? = { null }
+private val DefaultGlassHighlight: () -> Highlight? = { Highlight.Default }
+private val DefaultGlassShadow: () -> Shadow? = { Shadow.Default }
+
+/** Applies the selected product material while preserving the vendor backdrop's layout and callbacks. */
+fun Modifier.drawStyledBackdrop(
+    backdrop: Backdrop,
+    shape: () -> androidx.compose.ui.graphics.Shape,
+    effects: BackdropEffectScope.() -> Unit,
+    highlight: (() -> Highlight?)? = DefaultGlassHighlight,
+    shadow: (() -> Shadow?)? = DefaultGlassShadow,
+    innerShadow: (() -> InnerShadow?)? = null,
+    layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
+    exportedBackdrop: LayerBackdrop? = null,
+    onDrawBehind: (DrawScope.() -> Unit)? = null,
+    onDrawBackdrop: DrawScope.(drawBackdrop: DrawScope.() -> Unit) -> Unit = { drawBackdrop -> drawBackdrop() },
+    onDrawSurface: (DrawScope.() -> Unit)? = null,
+    onDrawFront: (DrawScope.() -> Unit)? = null,
+): Modifier = composed {
+    val style = LocalGlassStyle.current
+    val health = LocalGlassRenderHealth.current
+    val translucentSurface = MaterialTheme.colorScheme.surface.copy(alpha = .28f)
+    when (style) {
+        GlassStyle.Liquid -> vendorDrawBackdrop(
+            backdrop = backdrop,
+            shape = shape,
+            effects = effects,
+            highlight = highlight,
+            shadow = shadow,
+            innerShadow = innerShadow,
+            layerBlock = layerBlock,
+            exportedBackdrop = exportedBackdrop,
+            onDrawBehind = onDrawBehind,
+            onDrawBackdrop = onDrawBackdrop,
+            onDrawSurface = onDrawSurface,
+            onDrawFront = onDrawFront,
+        )
+
+        GlassStyle.GaussianBlur -> vendorDrawBackdrop(
+            backdrop = backdrop,
+            shape = shape,
+            effects = {
+                val applied = if (health == null) {
+                    blur(16.dp.toPx())
+                    true
+                } else {
+                    health.guard.run { blur(16.dp.toPx()) }
+                }
+                if (!applied) {
+                    renderEffect = null
+                    padding = 0f
+                }
+            },
+            highlight = null,
+            shadow = null,
+            innerShadow = null,
+            layerBlock = layerBlock,
+            exportedBackdrop = exportedBackdrop,
+            onDrawBehind = onDrawBehind,
+            onDrawBackdrop = onDrawBackdrop,
+            onDrawSurface = onDrawSurface ?: { drawRect(translucentSurface) },
+            onDrawFront = onDrawFront,
+        )
+
+        GlassStyle.Translucent -> vendorDrawBackdrop(
+            backdrop = backdrop,
+            shape = shape,
+            effects = {},
+            highlight = null,
+            shadow = null,
+            innerShadow = null,
+            layerBlock = layerBlock,
+            exportedBackdrop = exportedBackdrop,
+            onDrawBehind = onDrawBehind,
+            // Do not paint a sampled copy of the page in this mode.
+            onDrawBackdrop = { _ -> },
+            onDrawSurface = onDrawSurface ?: { drawRect(translucentSurface) },
+            onDrawFront = onDrawFront,
+        )
+    }
+}
 
 @Composable
-fun rememberGlassBackdrop(): GlassBackdrop {
-    val layer = rememberLayerBackdrop()
+fun rememberGlassBackdrop(onDraw: (ContentDrawScope.() -> Unit)? = null): GlassBackdrop {
+    val layer = if (onDraw == null) rememberLayerBackdrop() else rememberLayerBackdrop(onDraw = onDraw)
     return remember(layer) { GlassBackdrop(layer, layer) }
 }
 
@@ -70,7 +156,7 @@ fun Modifier.liquidTrackSurface(
         // real pressed transform; an outer clip would cut off the enlarged capsule
         // and its highlight, leaving only the sampled content visibly expanded.
         // drawBackdrop already owns the capsule mask, matching LiquidBottomTabs.
-        drawBackdrop(
+        drawStyledBackdrop(
             backdrop = backdrop.layer,
             shape = { Capsule() },
             effects = {
@@ -127,7 +213,9 @@ fun GlassSurface(
 ) {
     // Standalone components also fail closed when no shell environment is installed.
     val health = LocalGlassRenderHealth.current ?: rememberGlassRenderHealth()
-    val level = if (health.effectFailed) GlassLevel.Opaque
+    val style = LocalGlassStyle.current
+    val failedLiquidEffects = health.effectFailed && style != GlassStyle.Translucent
+    val level = if (failedLiquidEffects) GlassLevel.Opaque
         else resolveGlassLevel(spec.level, currentGlassCapability(), backdrop != null)
     val glassIntensity = LocalGlassIntensity.current
     val blurIntensity = (spec.intensity * glassIntensity).coerceIn(0f, 1f)
@@ -137,14 +225,16 @@ fun GlassSurface(
         requireNotNull(it.captureLayer) { "A combined glass backdrop cannot be used as a recorder" }
     }
     val liquid = spec.material == GlassMaterial.Liquid
-    val material = if (level == GlassLevel.Opaque || backdrop == null) {
+    val material = if (style == GlassStyle.Translucent) {
+        Modifier.background(tint.copy(alpha = spec.tintAlpha.coerceIn(0f, .34f)), shape)
+    } else if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
     } else {
         Modifier
             // 投影只属于"浮在页面上的液态玻璃"。贴边通栏的面板加投影只会让朝内容的那条边
             // 多一道晕，而那一侧本来就由调用方画分界线。
             .then(
-                if (liquid) {
+                if (liquid && style == GlassStyle.Liquid) {
                     Modifier.shadow(
                         elevation = if (spec.role == GlassRole.Navigation || spec.role == GlassRole.Overlay) 14.dp else 8.dp,
                         shape = shape,
@@ -155,7 +245,7 @@ fun GlassSurface(
                     Modifier
                 },
             )
-            .drawBackdrop(
+            .drawStyledBackdrop(
             backdrop = backdrop.layer,
             shape = { shape },
             effects = {
@@ -185,7 +275,7 @@ fun GlassSurface(
                         else spec.tintAlpha.coerceIn(0f, 1f),
                     ),
                 )
-                if (!health.effectFailed && level != GlassLevel.Opaque && liquid) {
+                    if (!failedLiquidEffects && level != GlassLevel.Opaque && liquid && style == GlassStyle.Liquid) {
                     val radius = spec.cornerRadiusDp.coerceAtLeast(0f).dp.toPx()
                     drawRoundRect(
                         color = Color.White.copy(

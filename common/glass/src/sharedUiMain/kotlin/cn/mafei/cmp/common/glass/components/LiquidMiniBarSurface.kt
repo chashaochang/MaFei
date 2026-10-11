@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
-import com.kyant.backdrop.drawBackdrop
+import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy

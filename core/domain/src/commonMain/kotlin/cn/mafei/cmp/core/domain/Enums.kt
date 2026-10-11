@@ -33,6 +33,7 @@ enum class MediaType {
     BoxSet,
     Folder,
     Video,
+    LiveChannel,
     Unknown,
 }
 

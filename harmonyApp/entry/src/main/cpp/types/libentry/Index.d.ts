@@ -29,6 +29,11 @@ export const UpdateOhosWindowChrome: (
 
 export const UpdateOhosPlayerState: (payload: string) => boolean
 
+export const SetOhosApplicationForeground: (foreground: boolean) => void
+
+export const UpdateOhosPlayerBackdrop: (handle: number, revision: number, width: number,
+  height: number, alphaType: number, pixels: ArrayBuffer) => boolean
+
 export const IsOhosPlayerScreenVisible: () => boolean
 
 export const IsOhosPlayerFullscreenRequested: () => boolean
@@ -40,3 +45,8 @@ export const HandleOhosComposeBack: () => boolean
 export const HandleOhosPlayerBack: () => boolean
 
 export const HandleOhosPlayerKey: (keyCode: number, action: number) => boolean
+
+export const RegisterOhosPhotoSave: (handler: (payload: string) => void) => boolean
+export const CompleteOhosPhotoSave: (id: number, result: number) => void
+export const ReleaseOhosPhotoSave: () => void
+export const UpdateOhosWebState: (payload: string) => boolean;

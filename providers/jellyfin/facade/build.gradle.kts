@@ -14,6 +14,9 @@ dependencies {
     add("commonMainApi", project(":providers:jellyfin:playback"))
     add("commonMainApi", project(":providers:jellyfin:userdata"))
     add("commonMainApi", project(":providers:jellyfin:images"))
+    add("commonMainApi", project(":providers:jellyfin:livetv"))
+    add("commonMainApi", project(":providers:jellyfin:photos"))
+    add("commonMainApi", project(":providers:jellyfin:management"))
 }
 
 dependencies {

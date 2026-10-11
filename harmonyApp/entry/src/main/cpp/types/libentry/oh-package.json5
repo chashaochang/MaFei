@@ -2,5 +2,5 @@
   "name": "libentry.so",
   "types": "./Index.d.ts",
   "version": "2.0.0",
-  "description": "MaFei CMP N-API bridge"
+  "description": "MaFei N-API bridge"
 }

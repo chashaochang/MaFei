@@ -24,6 +24,9 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,11 +71,11 @@ data class PlaybackReportFailure(
  *   with the SAME adapter instance, bounded by [maxRenegotiationsPerGeneration]
  *   so an expiring token cannot loop forever.
  * - A stale renegotiation result (after Stop, Release or a newer play) is
- *   discarded and never loaded into the new session; reports queued for a
- *   superseded binding are dropped the same way.
+ *   released and never loaded into the new session. Superseded Start/Progress
+ *   reports are dropped; the last Stop and resource cleanup are drained.
  * - Report failures are published on [reportFailures] and never crash the
  *   player state machine; CancellationException always propagates.
- * - After [release] no report is forwarded anymore.
+ * - [release] drains already queued Stop/cleanup before stopping the worker.
  */
 class ProviderPlaybackCoordinator(
     private val adapterFor: (ProviderKind) -> MediaProviderAdapter,
@@ -91,7 +94,13 @@ class ProviderPlaybackCoordinator(
     private val bindingState = MutableStateFlow(Binding())
     private var binding: Binding
         get() = bindingState.value
-        set(value) { bindingState.value = value }
+        set(value) {
+            val previous = bindingState.value
+            bindingState.value = value
+            if (previous.ready != null && previous.ready !== value.ready) {
+                reportTasks.trySend(ReportTask(previous, null, previous.itemId!!.value))
+            }
+        }
     private var requestSeq = 0L
     private var released = false
 
@@ -145,8 +154,18 @@ class ProviderPlaybackCoordinator(
 
     private data class ReportTask(
         val binding: Binding,
-        val event: PlaybackEvent,
+        val event: PlaybackEvent?,
         val resourceId: String,
+    )
+
+    private data class LoadRequest(
+        val sequence: Long,
+        val controller: PlayerController,
+        val adapter: MediaProviderAdapter,
+        val itemId: MediaId,
+        val options: PlaybackOptions,
+        val autoplay: Boolean,
+        val renegotiations: Int,
     )
 
     /** Attaches the controller this coordinator's [reportSink] was wired into and starts the report worker. */
@@ -155,11 +174,19 @@ class ProviderPlaybackCoordinator(
         if (worker == null) {
             worker = scope.launch {
                 for (task in reportTasks) {
+                    val event = task.event
+                    if (event == null) {
+                        try {
+                            task.binding.adapter?.releasePlayback(checkNotNull(task.binding.ready))
+                        } catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { /* A server cleanup failure cannot stop the new resource. */ }
+                        continue
+                    }
                     // Tasks queued for a superseded binding are dropped: a
                     // renegotiated load is never chased by stale reports.
-                    if (task.binding !== bindingState.value) continue
+                    if (task.binding !== bindingState.value && event.kind != PlaybackEventKind.Stop) continue
                     try {
-                        task.binding.adapter?.reportPlayback(checkNotNull(task.binding.ready), task.event)
+                        task.binding.adapter?.reportPlayback(checkNotNull(task.binding.ready), event)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (failure: DomainError) {
@@ -185,58 +212,78 @@ class ProviderPlaybackCoordinator(
         resumePositionMs: Long = 0,
         autoplay: Boolean = true,
         options: PlaybackOptions = PlaybackOptions(),
-    ): PlaybackGeneration? = mutex.withLock {
+    ): PlaybackGeneration? {
+        val request = mutex.withLock {
         println("[MaFeiPlayback] coordinator prepare start provider=$provider item=${itemId.value}")
         val target = checkNotNull(controller) { "attachController before play" }
         check(!released) { "Playback coordinator released" }
         val seq = ++requestSeq
         cancelPendingNativeTracks()
-        binding = Binding()
-        tracksFlow.value = emptyList()
-        preparedFlow.value = null
         val adapter = adapterFor(provider)
         // CancellationException propagates untouched (adapter contract).
-        val prepareOptions = options.copy(startPositionMs = resumePositionMs.coerceAtLeast(0L))
-        val outcome = adapter.preparePlayback(itemId, prepareOptions)
+        val prepareOptions = options.copy(
+            startPositionMs = resumePositionMs.coerceAtLeast(0L),
+            isoDirectPlay = target.capabilities.isoDirectPlay,
+        )
+            LoadRequest(seq, target, adapter, itemId, prepareOptions, autoplay, 0)
+        }
+        return prepareAndLoad(request)
+    }
+
+    private suspend fun prepareAndLoad(request: LoadRequest): PlaybackGeneration? {
+        // Server negotiation must not hold the command mutex: Back/Stop must
+        // finish immediately even when a server hasn't answered yet.
+        val outcome = request.adapter.preparePlayback(request.itemId, request.options)
         println("[MaFeiPlayback] coordinator prepare completed outcome=${outcome::class.simpleName}")
-        if (seq != requestSeq || released) return@withLock null // superseded while preparing
         val ready = outcome as? PlaybackPreparation.Ready
         if (ready == null) {
             val refused = outcome as? PlaybackPreparation.Refused
             emitFailure(
                 PlaybackReportFailure(
                     generation = PlaybackGeneration(),
-                    resourceId = itemId.value,
+                    resourceId = request.itemId.value,
                     kind = PlayerReportKind.Start,
                     renegotiated = false,
                     error = null,
                     message = "prepare refused: ${refused?.reason}" + (refused?.detail?.let { " ($it)" } ?: ""),
                 ),
             )
-            return@withLock null
+            return null
         }
-        val resource = PlayableResource(
-            id = itemId.value,
-            url = ready.streamUrl,
-            headers = ready.headers,
-            subtitleUrl = ready.subtitleUrl,
-            allowInsecureTls = ready.allowInsecureTls,
-            multiConnectionAllowed = ready.multiConnectionAllowed,
-        )
-        val generation = target.load(listOf(resource), index = 0, resumePositionMs = resumePositionMs, autoplay = autoplay)
-        println("[MaFeiPlayback] coordinator target.load invoked item=${itemId.value}")
+        var installed = false
+        try {
+            return mutex.withLock {
+                if (request.sequence != requestSeq || released) return@withLock null
+                val generation = request.controller.load(listOf(ready.toPlayableResource(request.itemId)), index = 0,
+                    resumePositionMs = request.options.startPositionMs ?: 0, autoplay = request.autoplay)
         binding = Binding(
             generation = generation,
-            adapter = adapter,
+            adapter = request.adapter,
             ready = ready,
-            itemId = itemId,
-            options = prepareOptions.withNegotiatedDefaults(ready),
-            renegotiations = 0,
+            itemId = request.itemId,
+            options = request.options.withNegotiatedDefaults(ready),
+            renegotiations = request.renegotiations,
         )
+                installed = true
         tracksFlow.value = ready.tracks
         preparedFlow.value = ready.toPreparedFacts()
-        schedulePendingNativeTracks(generation, ready, prepareOptions)
+        schedulePendingNativeTracks(generation, ready, request.options)
         generation
+            }
+        } finally {
+            if (!installed) releaseCandidate(request.adapter, ready)
+        }
+    }
+
+    private suspend fun releaseCandidate(adapter: MediaProviderAdapter, ready: PlaybackPreparation.Ready) {
+        // Candidates never published to binding have no queued cleanup owner.
+        withContext(NonCancellable) {
+            withTimeoutOrNull(5_000) {
+                try { adapter.releasePlayback(ready) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { /* Cleanup cannot replace a prepare/load failure. */ }
+            }
+        }
     }
 
     /**
@@ -244,7 +291,8 @@ class ProviderPlaybackCoordinator(
      * reloads at the current position. Provider indexes are never passed to a
      * native runtime as though they were native track ids.
      */
-    suspend fun selectTrack(kind: PlaybackTrackKind, id: String?): PlaybackGeneration? = mutex.withLock {
+    suspend fun selectTrack(kind: PlaybackTrackKind, id: String?): PlaybackGeneration? {
+        val request = mutex.withLock {
         val snapshot = binding
         val adapter = snapshot.adapter ?: return@withLock null
         val itemId = snapshot.itemId ?: return@withLock null
@@ -264,28 +312,10 @@ class ProviderPlaybackCoordinator(
                 startPositionMs = state.positionMs,
             )
         }
-        val outcome = adapter.preparePlayback(itemId, options)
-        val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
         val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
-        val resource = ready.toPlayableResource(itemId)
-        val generation = target.load(
-            listOf(resource),
-            index = 0,
-            resumePositionMs = state.positionMs,
-            autoplay = autoplay,
-        )
-        binding = Binding(
-            generation = generation,
-            adapter = adapter,
-            ready = ready,
-            itemId = itemId,
-            options = options.withNegotiatedDefaults(ready),
-            renegotiations = snapshot.renegotiations,
-        )
-        tracksFlow.value = ready.tracks
-        preparedFlow.value = ready.toPreparedFacts()
-        schedulePendingNativeTracks(generation, ready, options)
-        generation
+            LoadRequest(++requestSeq, target, adapter, itemId, options, autoplay, snapshot.renegotiations)
+        } ?: return null
+        return prepareAndLoad(request)
     }
 
     /**
@@ -293,7 +323,8 @@ class ProviderPlaybackCoordinator(
      * ([PlaybackOptions.maxStreamingBitrate], null = auto/direct) and reloads
      * at the current position. Mirrors [selectTrack]'s stale-result guards.
      */
-    suspend fun selectQuality(maxStreamingBitrate: Int?): PlaybackGeneration? = mutex.withLock {
+    suspend fun selectQuality(maxStreamingBitrate: Int?): PlaybackGeneration? {
+        val request = mutex.withLock {
         val snapshot = binding
         val adapter = snapshot.adapter ?: return@withLock null
         val itemId = snapshot.itemId ?: return@withLock null
@@ -303,27 +334,10 @@ class ProviderPlaybackCoordinator(
             maxStreamingBitrate = maxStreamingBitrate,
             startPositionMs = state.positionMs,
         )
-        val outcome = adapter.preparePlayback(itemId, options)
-        val ready = outcome as? PlaybackPreparation.Ready ?: return@withLock null
         val autoplay = state.phase != cn.mafei.cmp.player.api.PlayerPhase.Paused
-        val generation = target.load(
-            listOf(ready.toPlayableResource(itemId)),
-            index = 0,
-            resumePositionMs = state.positionMs,
-            autoplay = autoplay,
-        )
-        binding = Binding(
-            generation = generation,
-            adapter = adapter,
-            ready = ready,
-            itemId = itemId,
-            options = options.withNegotiatedDefaults(ready),
-            renegotiations = snapshot.renegotiations,
-        )
-        tracksFlow.value = ready.tracks
-        preparedFlow.value = ready.toPreparedFacts()
-        schedulePendingNativeTracks(generation, ready, options)
-        generation
+            LoadRequest(++requestSeq, target, adapter, itemId, options, autoplay, snapshot.renegotiations)
+        } ?: return null
+        return prepareAndLoad(request)
     }
 
     /**
@@ -461,28 +475,30 @@ class ProviderPlaybackCoordinator(
         )
     }
 
-    /** Stops playback and discards the current binding; queued reports for the old binding are dropped. */
+    /** Stops immediately; queued final Stop and cleanup retain the old binding. */
     suspend fun stop() = mutex.withLock {
         ++requestSeq
         cancelPendingNativeTracks()
+        controller?.stop()
         binding = Binding()
         tracksFlow.value = emptyList()
         preparedFlow.value = null
-        controller?.stop()
     }
 
-    /** Releases the controller and this coordinator; no report is forwarded afterwards. */
+    /** Drains final Stop/cleanup, then releases the report worker. */
     suspend fun release() = mutex.withLock {
         ++requestSeq
         cancelPendingNativeTracks()
+        released = true
+        controller?.release()
         binding = Binding()
         tracksFlow.value = emptyList()
         preparedFlow.value = null
-        released = true
         reportTasks.close()
+        // Drain final stop/cleanup, but never hang app/account shutdown on a server.
+        withTimeoutOrNull(5_000) { worker?.join() }
         worker?.cancelAndJoin()
         worker = null
-        controller?.release()
         controller = null
     }
 
@@ -507,17 +523,19 @@ class ProviderPlaybackCoordinator(
     }
 
     private suspend fun onFailure(task: ReportTask, error: DomainError?, message: String?) {
+        val event = task.event ?: return
         val snapshot = task.binding
         val expiryFailure = error is AuthenticationError || error is AuthorizationError
-        if (expiryFailure && snapshot.renegotiations < maxRenegotiationsPerGeneration && !released) {
-            renegotiate(snapshot, task.resourceId, task.event, resumePositionMs = task.event.positionMs)
+        if (expiryFailure && event.kind != PlaybackEventKind.Stop && task.binding === binding &&
+            snapshot.renegotiations < maxRenegotiationsPerGeneration && !released) {
+            renegotiate(snapshot, task.resourceId, event, resumePositionMs = event.positionMs)
             return
         }
         emitFailure(
             PlaybackReportFailure(
                 generation = checkNotNull(snapshot.generation),
                 resourceId = task.resourceId,
-                kind = task.event.kind.toReportKind(),
+                kind = event.kind.toReportKind(),
                 renegotiated = false,
                 error = error,
                 message = message,
@@ -559,6 +577,7 @@ class ProviderPlaybackCoordinator(
         // The stale result never loads into a newer session.
         val stillCurrent = binding === snapshot && binding.generation === snapshot.generation
         if (!stillCurrent || outcome !is PlaybackPreparation.Ready) {
+            if (outcome is PlaybackPreparation.Ready) releaseCandidate(adapter, outcome)
             emitFailure(
                 PlaybackReportFailure(
                     generation = checkNotNull(snapshot.generation),
@@ -572,14 +591,7 @@ class ProviderPlaybackCoordinator(
             return
         }
         val target = controller ?: return
-        val resource = PlayableResource(
-            id = itemId.value,
-            url = outcome.streamUrl,
-            headers = outcome.headers,
-            subtitleUrl = outcome.subtitleUrl,
-            allowInsecureTls = outcome.allowInsecureTls,
-            multiConnectionAllowed = outcome.multiConnectionAllowed,
-        )
+        val resource = outcome.toPlayableResource(itemId)
         val newGeneration = target.load(
             listOf(resource),
             index = 0,
@@ -613,11 +625,21 @@ class ProviderPlaybackCoordinator(
 
     private fun PlaybackPreparation.Ready.toPlayableResource(itemId: MediaId) = PlayableResource(
         id = itemId.value,
+        audioOnly = audioOnly,
         url = streamUrl,
         headers = headers,
         subtitleUrl = subtitleUrl,
         allowInsecureTls = allowInsecureTls,
         multiConnectionAllowed = multiConnectionAllowed,
+        engineFacts = engineSource?.let { source ->
+            cn.mafei.cmp.player.api.PlayerEngineSourceFacts(
+                container = source.container, videoCodec = source.videoStream?.codec,
+                pixelFormat = source.videoStream?.pixelFormat, videoRangeType = source.videoStream?.videoRangeType,
+                dolbyVisionProfile = source.videoStream?.dolbyVisionProfile,
+                audioCodecs = source.audioStreams.map { it.codec.orEmpty() },
+                externalSubtitleCodecs = tracks.filter { it.isExternal }.map { it.codec.orEmpty() },
+            )
+        },
     )
 
     /**

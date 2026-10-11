@@ -146,6 +146,7 @@ val MediaItem.typeLabel: String?
         MediaType.BoxSet -> "合集"
         MediaType.Folder -> "文件夹"
         MediaType.Video -> "视频"
+        MediaType.LiveChannel -> "直播"
         MediaType.Unknown -> null
     }
 

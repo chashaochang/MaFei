@@ -27,7 +27,15 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /** One account/screen lifetime. Small memory-only cache; no token-bearing disk cache. */
-class ArtworkMemoryCache {
+class ArtworkMemoryCache(
+    private val maxWidthPx: Int = MaxArtworkWidthPx,
+    private val maxEncodedBytes: Int = MaxEncodedArtworkBytes,
+    private val maxSingleBytes: Long = MaxSingleArtworkBytes,
+    private val maxCacheBytes: Long = MaxArtworkCacheBytes,
+) {
+    init { require(maxWidthPx >= MinArtworkWidthPx && maxEncodedBytes > 0 && maxSingleBytes > 0 && maxCacheBytes >= maxSingleBytes) }
+    internal val blurCache = ArtworkBlurCache()
+
     private class UrlLoadGate {
         val lock = Mutex()
         var users: Int = 0
@@ -49,7 +57,7 @@ class ArtworkMemoryCache {
         targetWidthPx: Int,
         fetch: suspend (MediaImage, Int) -> ByteArray?,
     ): ImageBitmap? {
-        val width = targetWidthPx.coerceIn(MinArtworkWidthPx, MaxArtworkWidthPx)
+        val width = targetWidthPx.coerceIn(MinArtworkWidthPx, maxWidthPx)
         val key = artworkCacheKey(image.url, width)
         cached(key)?.let { return it }
         // Multiple visible consumers (hero + ambient continuation) share one
@@ -67,7 +75,7 @@ class ArtworkMemoryCache {
                         recordFailure(image.url)
                         return@withLock null
                     }
-                if (encoded.size > MaxEncodedArtworkBytes) {
+                if (encoded.size > maxEncodedBytes) {
                     recordFailure(image.url)
                     return@withLock null
                 }
@@ -82,7 +90,7 @@ class ArtworkMemoryCache {
                     return@withLock null
                 }
                 val size = decoded.width.toLong() * decoded.height * 4
-                if (size > MaxSingleArtworkBytes) {
+                if (size > maxSingleBytes) {
                     recordFailure(image.url)
                     return@withLock null
                 }
@@ -127,7 +135,7 @@ class ArtworkMemoryCache {
     ): ImageBitmap? {
         if (!mutex.tryLock()) return null
         return try {
-            val width = targetWidthPx.coerceIn(MinArtworkWidthPx, MaxArtworkWidthPx)
+            val width = targetWidthPx.coerceIn(MinArtworkWidthPx, maxWidthPx)
             for (candidate in candidates) {
                 val key = artworkCacheKey(candidate.url, width)
                 val hit = images.remove(key) ?: continue
@@ -166,7 +174,7 @@ class ArtworkMemoryCache {
     private suspend fun store(key: String, decoded: ImageBitmap, size: Long) {
         mutex.withLock {
             images.remove(key)?.let { bytes -= it.width.toLong() * it.height * 4 }
-            while (images.isNotEmpty() && bytes + size > MaxArtworkCacheBytes) {
+            while (images.isNotEmpty() && bytes + size > maxCacheBytes) {
                 val oldest = images.remove(images.keys.first())!!
                 bytes -= oldest.width.toLong() * oldest.height * 4
             }

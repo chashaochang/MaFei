@@ -221,6 +221,14 @@ enum class ItemField(val wireName: String) {
     Runtime("Runtime"),
     ItemCounts("ItemCounts"),
     ChildCount("ChildCount"),
+    RecursiveItemCount("RecursiveItemCount"),
+    CumulativeRunTimeTicks("CumulativeRunTimeTicks"),
+    ParentId("ParentId"),
+    CanDownload("CanDownload"),
+    Height("Height"),
+    Width("Width"),
+    Path("Path"),
+    SortName("SortName"),
     Trickplay("Trickplay"),
 }
 

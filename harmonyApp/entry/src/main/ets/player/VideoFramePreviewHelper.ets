@@ -184,6 +184,9 @@ export class VideoFramePreviewHelper {
     if (!(normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://'))) {
       return false
     }
-    return !normalizedUrl.includes('.m3u8') && !normalizedUrl.includes('.mpd')
+    // Disc images are read by mfplayer's libbluray bridge, not by the
+    // system video-frame extractor. Do not probe the same ISO in parallel.
+    return !normalizedUrl.includes('.m3u8') && !normalizedUrl.includes('.mpd') &&
+      !normalizedUrl.endsWith('#bdiso') && !normalizedUrl.split(/[?#]/)[0].endsWith('.iso')
   }
 }

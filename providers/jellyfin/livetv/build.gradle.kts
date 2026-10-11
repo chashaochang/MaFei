@@ -8,5 +8,5 @@ plugins {
 dependencies {
     add("commonMainApi", project(":providers:jellyfin:core"))
     add("commonMainImplementation", project(":providers:jellyfin:transport"))
-    add("commonMainImplementation", project(":providers:jellyfin:wire"))
+    add("commonMainApi", project(":providers:jellyfin:wire"))
 }

@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -39,7 +40,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
+import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
@@ -55,7 +56,8 @@ fun LiquidSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     visibilityThreshold: Float,
     backdrop: GlassBackdrop,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onValueChangeFinished: ((Float) -> Unit)? = null,
 ) {
     val glassIntensity = LocalGlassIntensity.current
     // 判定必须跟随**应用**主题，不是系统外观：应用已经只有深色一套（浅色主题已砍），
@@ -78,9 +80,12 @@ fun LiquidSlider(
         val trackWidth = constraints.maxWidth
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val change by rememberUpdatedState(onValueChange)
+        val finished by rememberUpdatedState(onValueChangeFinished)
+        val currentValue by rememberUpdatedState(value)
         val animationScope = rememberCoroutineScope()
         var didDrag by remember { mutableStateOf(false) }
-        val dampedDragAnimation = remember(animationScope) {
+        val dampedDragAnimation = remember(animationScope, valueRange, trackWidth, isLtr) {
             DampedDragAnimation(
                 animationScope = animationScope,
                 initialValue = value(),
@@ -88,10 +93,12 @@ fun LiquidSlider(
                 visibilityThreshold = visibilityThreshold,
                 initialScale = 1f,
                 pressedScale = 1.5f,
-                onDragStarted = {},
+                onDragStarted = { didDrag = false },
                 onDragStopped = {
                     if (didDrag) {
-                        onValueChange(targetValue)
+                        val position = currentValue().coerceIn(valueRange)
+                        change(position)
+                        finished?.invoke(position)
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -99,7 +106,7 @@ fun LiquidSlider(
                         didDrag = dragAmount.x != 0f
                     }
                     val delta = (valueRange.endInclusive - valueRange.start) * (dragAmount.x / trackWidth)
-                    onValueChange(
+                    change(
                         if (isLtr) (targetValue + delta).coerceIn(valueRange)
                         else (targetValue - delta).coerceIn(valueRange)
                     )
@@ -107,7 +114,7 @@ fun LiquidSlider(
             )
         }
         LaunchedEffect(dampedDragAnimation) {
-            snapshotFlow { value() }
+            snapshotFlow { currentValue() }
                 .collectLatest { value ->
                     if (dampedDragAnimation.targetValue != value) {
                         dampedDragAnimation.updateValue(value)
@@ -120,7 +127,7 @@ fun LiquidSlider(
                 Modifier
                     .clip(Capsule())
                     .background(trackColor)
-                    .pointerInput(animationScope) {
+                    .pointerInput(dampedDragAnimation) {
                         detectTapGestures { position ->
                             val delta = (valueRange.endInclusive - valueRange.start) * (position.x / trackWidth)
                             val targetValue =
@@ -128,7 +135,8 @@ fun LiquidSlider(
                                 else valueRange.endInclusive - delta)
                                     .coerceIn(valueRange)
                             dampedDragAnimation.animateToValue(targetValue)
-                            onValueChange(targetValue)
+                            change(targetValue)
+                            finished?.invoke(targetValue)
                         }
                     }
                     .height(6f.dp)

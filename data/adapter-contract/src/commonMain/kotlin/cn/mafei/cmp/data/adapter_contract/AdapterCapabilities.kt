@@ -56,6 +56,9 @@ data class AdapterCapabilities(
     val playbackReporting: Boolean = false,
     val mediaDelete: Boolean = false,
     val chasing: Boolean = false,
+    val music: Boolean = false,
+    val liveTv: Boolean = false,
+    val photos: Boolean = false,
 ) {
     fun supports(capability: AdapterCapability): Boolean = when (capability) {
         AdapterCapability.Search -> search

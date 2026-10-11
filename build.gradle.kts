@@ -328,6 +328,13 @@ tasks.register<Exec>("verifyNoNativeMaterialUi") {
         rootProject.projectDir.absolutePath)
 }
 
+val verifyDependencyBoundaries by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Checks production source dependencies independently of CPF/ABI configuration."
+    commandLine("node", rootProject.file("scripts/verify-dependency-boundaries.mjs").absolutePath)
+}
+
 tasks.named("check") {
+    dependsOn(verifyDependencyBoundaries)
     dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")
 }

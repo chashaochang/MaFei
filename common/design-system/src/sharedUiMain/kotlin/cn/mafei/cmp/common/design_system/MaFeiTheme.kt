@@ -19,20 +19,10 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassSurface
 
-/**
- * 全应用只有**深色**一套配色。
- *
- * 这里原来还带一个 `darkTheme: Boolean` 与整套浅色 `lightColorScheme`，那套值逐条对应旧版鸿蒙
- * 的**浅色主题调色板**（`native_navigation_accent #0A59F7` → primary、`native_canvas_background
- * #F1F2F4` → background、`text_primary #121212` → onBackground、`bg_1 #FFFFFF` → surface…）。
- * 那个主题（旧版的"飞牛/原生浅色"）已定下暂时不做，深色是唯一形态，所以整套浅色方案连同它的
- * 服务对象（各处 `if (luminance >= .5f)` 的浅色分支）一起移除 —— 留着只会让旧调色板以
- * "反正用不到"的名义继续被引用。
- */
 @Composable
-fun MaFeiTheme(content: @Composable () -> Unit) {
+fun MaFeiTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = darkColorScheme(
+        colorScheme = if (darkTheme) darkColorScheme(
             primary = Color(0xFF5291FF),
             onPrimary = Color.White,
             primaryContainer = Color(0xFF173C60),
@@ -48,6 +38,15 @@ fun MaFeiTheme(content: @Composable () -> Unit) {
             onSurfaceVariant = Color(0x99FFFFFF),
             outline = Color(0x33FFFFFF),
             outlineVariant = Color(0x1FFFFFFF),
+        ) else lightColorScheme(
+            primary = Color(0xFF0A59F7), onPrimary = Color.White,
+            primaryContainer = Color(0xFFDCE8FF), onPrimaryContainer = Color(0xFF0A285E),
+            secondary = Color(0xFF526171), secondaryContainer = Color(0xFFE5EBF2),
+            onSecondaryContainer = Color(0xFF253340),
+            background = Color(0xFFF1F2F4), onBackground = Color(0xFF121212),
+            surface = Color.White, surfaceVariant = Color(0xFFE7E8EB),
+            onSurface = Color(0xFF121212), onSurfaceVariant = Color(0xFF606166),
+            outline = Color(0xFFB8BAC0), outlineVariant = Color(0xFFD8D9DE),
         ),
         typography = MaFeiTypography,
         content = content,

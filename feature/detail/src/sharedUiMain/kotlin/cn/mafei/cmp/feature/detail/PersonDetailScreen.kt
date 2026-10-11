@@ -30,8 +30,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -100,10 +103,6 @@ fun PersonDetailScreen(
         derivedStateOf { if (scrollState.value > 0) 1f else 0f }
     }
     var overviewSheetVisible by remember(person?.id?.value) { mutableStateOf(false) }
-    DetailSheetBackHandler(
-        enabled = overviewSheetVisible,
-        onDismiss = { overviewSheetVisible = false },
-    )
     Box(modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize().captureGlassBackdrop(actionBarBackdrop),
@@ -209,11 +208,17 @@ fun PersonDetailScreen(
             titleAlpha = if (person == null) 0f else actionBarProgress,
             modifier = Modifier.align(Alignment.TopCenter),
         )
-        if (overviewSheetVisible) {
+        cn.mafei.cmp.common.ui.MaFeiAnimatedModalOverlay(
+            value = person?.overview?.takeIf { overviewSheetVisible },
+            backdrop = actionBarBackdrop,
+            useWindowHost = true,
+            onDismiss = { overviewSheetVisible = false },
+        ) { overview, modalBackdrop, motion ->
             OverviewSheetOverlay(
-                overview = person?.overview,
-                backdrop = actionBarBackdrop,
+                overview = overview,
+                backdrop = modalBackdrop,
                 onDismiss = { overviewSheetVisible = false },
+                surfaceMotion = motion,
             )
         }
     }
@@ -288,11 +293,14 @@ private fun PersonHeader(
                 )
             }
             person.overview?.takeIf { it.isNotBlank() }?.let { overview ->
-                OverviewSection(
-                    overview = overview,
-                    modifier = Modifier.padding(top = 10.dp),
-                    onOpen = onOpenOverview,
-                )
+                // Match the video detail page: the shared biography reads LocalContentColor.
+                CompositionLocalProvider(LocalContentColor provides Color.White) {
+                    OverviewSection(
+                        overview = overview,
+                        modifier = Modifier.padding(top = 10.dp),
+                        onOpen = onOpenOverview,
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             // 旧版 CastDetailPage 始终显示人物收藏按钮；无能力时点击不执行写操作。

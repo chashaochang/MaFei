@@ -31,6 +31,10 @@ data class PlaybackOptions(
      * the requested timestamp instead of exposing a full-file rendition.
      */
     val startPositionMs: Long? = null,
+    /** Set by the active player runtime, not by a user quality preference. */
+    val isoDirectPlay: Boolean = false,
+    /** Live channels open the server stream and never reuse a VOD resume position. */
+    val live: Boolean = false,
 )
 
 /** Provider track metadata kept separate from platform-player track ids. */
@@ -135,6 +139,10 @@ sealed interface PlaybackPreparation {
          * derived by re-parsing stream URLs.
          */
         val reportingContext: String? = null,
+        /** Actual original/remux source facts; unknown on server-transcoded renditions. */
+        val engineSource: cn.mafei.cmp.core.domain.MediaSourceInfo? = null,
+        /** Authoritative source stream layout; false when unknown. */
+        val audioOnly: Boolean = false,
     ) : PlaybackPreparation {
         init {
             require(streamUrl.isNotBlank()) { "PlaybackPreparation.Ready.streamUrl must not be blank" }

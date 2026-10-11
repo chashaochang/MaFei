@@ -9,6 +9,25 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Keep the old locally configured DandanPlay credentials out of tracked source files.
+val generateDanmakuConfiguration by tasks.registering {
+    val configuration = rootProject.layout.projectDirectory.file("legacy/harmony-arkts-reference/entry/src/main/ets/config/api-config.ets")
+    val output = layout.buildDirectory.dir("generated/danmaku/kotlin")
+    if (configuration.asFile.exists()) inputs.file(configuration)
+    outputs.dir(output)
+    doLast {
+        val text = if (configuration.asFile.exists()) configuration.asFile.readText() else ""
+        fun value(name: String) = Regex(name + ":\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1).orEmpty()
+            .takeUnless { it.startsWith("YOUR_") }.orEmpty()
+        fun literal(value: String) = groovy.json.JsonOutput.toJson(value).replace("$", "\\$")
+        val target = output.get().file("cn/mafei/cmp/session/DanmakuBuildConfiguration.kt").asFile
+        target.parentFile.mkdirs()
+        target.writeText("package cn.mafei.cmp.session\ninternal object DanmakuBuildConfiguration {\n" +
+            " val appId = ${literal(value("appId"))}\n val appSecret = ${literal(value("appSecret"))}\n" +
+            " val baseUrl = ${literal(value("baseUrl").ifBlank { "https://api.dandanplay.net/api/v2" })}\n}\n")
+    }
+}
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -24,6 +43,8 @@ kotlin {
         target.binaries.framework {
             baseName = "MaFeiShared"
             isStatic = true
+            export(project(":player:runtime-ios"))
+            export(project(":player:api"))
         }
     }
 
@@ -55,6 +76,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
+            kotlin.srcDir(generateDanmakuConfiguration)
             dependencies {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.koin.core)
@@ -110,9 +132,11 @@ kotlin {
         }
 
         val androidMain by getting {
+            kotlin.srcDir("src/sharedJvmMain/kotlin")
             dependsOn(cpfUiMain)
             dependencies {
                 implementation(libs.androidx.activity.compose)
+                implementation("androidx.webkit:webkit:1.14.0")
                 implementation(project(":player:runtime-android"))
                 implementation(project(":platform:http-android"))
                 implementation(project(":platform:secure-storage-android"))
@@ -124,6 +148,7 @@ kotlin {
         }
 
         val desktopMain by getting {
+            kotlin.srcDir("src/sharedJvmMain/kotlin")
             dependsOn(commonMain)
             kotlin.srcDir("src/sharedUiMain/kotlin")
             dependencies {
@@ -159,7 +184,8 @@ kotlin {
         val iosMain by creating {
             dependsOn(cpfUiMain)
             dependencies {
-                implementation(project(":player:runtime-ios"))
+                api(project(":player:runtime-ios"))
+                api(project(":player:api"))
                 implementation(project(":platform:http-ios"))
                 implementation(project(":platform:secure-storage-ios"))
             }
@@ -206,9 +232,15 @@ kotlin {
     }
 }
 
+val stageNativeWebAssets by tasks.registering(Sync::class) {
+    from(layout.projectDirectory.dir("src/commonMain/resources/native"))
+    into(layout.buildDirectory.dir("generated/nativeWebAssets/native"))
+}
+
 android {
     namespace = "cn.mafei.cmp.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/nativeWebAssets"))
 
     defaultConfig {
         applicationId = "cn.xiaobai.mafei"
@@ -237,6 +269,8 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 }
+
+tasks.named("preBuild") { dependsOn(stageNativeWebAssets) }
 
 dependencies {
     debugImplementation(libs.compose.ui)
@@ -277,6 +311,7 @@ compose.desktop {
         }
 
         nativeDistributions {
+            modules("jdk.httpserver", "java.net.http")
             targetFormats(TargetFormat.Dmg)
             packageName = "MaFei"
             packageVersion = "2.0.0"
@@ -318,6 +353,9 @@ arrayOf("debug", "release").forEach { buildType ->
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
         doNotTrackState("HarmonyApp is an external Hvigor staging directory.")
         into(harmonyEntryDir)
+        from(layout.projectDirectory.dir("src/commonMain/resources/native")) {
+            into("src/main/resources/rawfile/native")
+        }
 
         from(binaryOutputDir.map { it.file("libkn_api.h") }) {
             into("src/main/cpp/include/arm64-v8a")

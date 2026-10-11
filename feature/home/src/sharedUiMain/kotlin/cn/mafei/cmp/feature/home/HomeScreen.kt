@@ -227,6 +227,7 @@ fun HomeScreen(
     homeLatestErrors: Map<CollectionId, String> = emptyMap(),
     selectedCollection: CollectionId?,
     loading: Boolean,
+    homeLoading: Boolean = loading,
     refreshing: Boolean = false,
     loadingMore: Boolean = false,
     error: String?,
@@ -247,7 +248,7 @@ fun HomeScreen(
     showHomeHero: Boolean = true,
     onSearch: (() -> Unit)? = null,
     onHeroItemChanged: (MediaItem?) -> Unit = {},
-    onBrowseCollection: (MediaCollection) -> Unit = onCollection,
+    onOpenCollectionLatest: (MediaCollection) -> Unit = onCollection,
     onBack: (() -> Unit)? = null,
     heroAutoplay: Boolean = true,
     bottomOverlayInset: Dp = 0.dp,
@@ -353,7 +354,7 @@ fun HomeScreen(
             sortBrowseItems(items.distinctByMediaId(), browseSort, browseDescending)
         }
     }
-    val showFeedPlaceholders = (loading || latestFeedLoading) && displayed.isEmpty()
+    val showFeedPlaceholders = ((if (overview) homeLoading else loading) || latestFeedLoading) && displayed.isEmpty()
     // Grid density follows the usable content width. Collapsing/expanding the
     // sidebar only changes the available width; each window size therefore
     // gets an appropriate number of posters instead of a fixed five-column
@@ -364,12 +365,12 @@ fun HomeScreen(
     val showHero = overview && showHomeHero && heroItems.isNotEmpty()
     // Keep the first lazy item stable while the provider loads. Otherwise the
     // tabs become the initial anchor and stay pinned when the real hero arrives.
-    val showHeroSlot = overview && showHomeHero && (showHero || loading)
+    val showHeroSlot = overview && showHomeHero && (showHero || homeLoading)
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
     val showRefreshAction = refreshing && overviewHasContent
-    val showStatus = stale || error != null || collections.isEmpty() ||
-        if (overview) !overviewHasContent else items.isEmpty()
+    val showStatus = stale || error != null ||
+        if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty()
     val latestGap = if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp
     // Home library tabs have their own cached request stream. The ordinary
     // media-library cursor belongs to a different screen and must never be
@@ -770,7 +771,12 @@ fun HomeScreen(
         if (showStatus) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(Modifier.padding(start = sceneControlLeading)) {
-                    StatusContent(collections, items, selectedCollection, loading, error, stale, overview, onRetry)
+                    StatusContent(
+                        collections, items, selectedCollection,
+                        loading = loading || (overview && homeLoading),
+                        error = error, stale = stale, overview = overview,
+                        overviewHasContent = overviewHasContent, onRetry = onRetry,
+                    )
                 }
             }
         }
@@ -882,7 +888,7 @@ fun HomeScreen(
                                     )
                                     .mafeiInteractive(
                                         onClick = {
-                                            onBrowseCollection(collection)
+                                            onOpenCollectionLatest(collection)
                                         },
                                         radiusDp = 18f,
                                         label = "更多",
@@ -1942,7 +1948,8 @@ private fun HomeHeroPlaceholder(layout: MaFeiLayout) {
 @Composable
 private fun StatusContent(
     collections: List<MediaCollection>, items: List<MediaItem>, selectedCollection: CollectionId?,
-    loading: Boolean, error: String?, stale: Boolean, overview: Boolean, onRetry: () -> Unit,
+    loading: Boolean, error: String?, stale: Boolean, overview: Boolean,
+    overviewHasContent: Boolean, onRetry: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (stale) Box(
@@ -1960,9 +1967,9 @@ private fun StatusContent(
                 MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
             }
         }
-        if (!loading && error == null && collections.isEmpty()) {
+        if (!loading && error == null && !(overview && overviewHasContent) && collections.isEmpty()) {
             LibraryEmptyState("这里还没有媒体库", "这个账号暂时没有可访问的媒体库。请检查服务器中的媒体库和账号权限。")
-        } else if (!loading && error == null && items.isEmpty()) {
+        } else if (!loading && error == null && !(overview && overviewHasContent) && items.isEmpty()) {
             LibraryEmptyState(
                 if (selectedCollection == null) "选择一个媒体库" else "还没有发现内容",
                 if (selectedCollection == null && !overview) "从导航中选择媒体库，开始浏览。" else "这个媒体库暂无内容，完成服务器扫描后可再刷新。",

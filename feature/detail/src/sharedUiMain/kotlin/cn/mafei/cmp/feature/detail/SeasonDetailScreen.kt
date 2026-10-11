@@ -32,7 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
@@ -67,9 +66,11 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -169,12 +170,6 @@ fun SeasonDetailScreen(
     }
     var overviewSheetVisible by remember(season.id.value) { mutableStateOf(false) }
     var episodeOverview by remember(season.id.value) { mutableStateOf<String?>(null) }
-    DetailSheetBackHandler(
-        enabled = overviewSheetVisible || episodeOverview != null,
-        onDismiss = {
-            if (episodeOverview != null) episodeOverview = null else overviewSheetVisible = false
-        },
-    )
     val seriesName = legacySeasonSeriesName(series, season, libraryName)
 
     Box(modifier.fillMaxSize()) {
@@ -293,13 +288,21 @@ fun SeasonDetailScreen(
             message = actionsError,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-        if (overviewSheetVisible || episodeOverview != null) {
+        cn.mafei.cmp.common.ui.MaFeiAnimatedModalOverlay(
+            value = (episodeOverview ?: season.overview).takeIf { overviewSheetVisible || episodeOverview != null },
+            backdrop = actionBarBackdrop,
+            useWindowHost = true,
+            onDismiss = {
+                if (episodeOverview != null) episodeOverview = null else overviewSheetVisible = false
+            },
+        ) { overview, modalBackdrop, motion ->
             OverviewSheetOverlay(
-                overview = episodeOverview ?: season.overview,
-                backdrop = actionBarBackdrop,
+                overview = overview,
+                backdrop = modalBackdrop,
                 onDismiss = {
                     if (episodeOverview != null) episodeOverview = null else overviewSheetVisible = false
                 },
+                surfaceMotion = motion,
             )
         }
     }
@@ -821,11 +824,11 @@ private fun SeasonEpisodeCard(
             }
             val preview = buildAnnotatedString {
                 append(overviewPreview)
-                pushStringAnnotation("episode-overview", overview)
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("详情") }
-                pop()
+                withLink(LinkAnnotation.Clickable("episode-overview", linkInteractionListener = { onOverview(overview) })) {
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("详情") }
+                }
             }
-            ClickableText(
+            Text(
                 text = preview,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 style = androidx.compose.ui.text.TextStyle(
@@ -835,11 +838,6 @@ private fun SeasonEpisodeCard(
                 ),
                 maxLines = 2,
                 overflow = TextOverflow.Clip,
-                onClick = { offset ->
-                    if (preview.getStringAnnotations("episode-overview", offset, offset).isNotEmpty()) {
-                        onOverview(overview)
-                    }
-                },
             )
         }
         item.runtimeMs?.takeIf { it > 0L }?.let { runtime ->

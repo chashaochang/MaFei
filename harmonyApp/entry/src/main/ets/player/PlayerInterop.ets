@@ -22,21 +22,38 @@ import {
   PlayerVideoInfo
 } from 'mfplayer';
 import { VideoFramePreviewHelper } from './VideoFramePreviewHelper';
+import { PlayerSystemSession, SystemPlaybackMetadata, SystemPlaybackSnapshot } from './PlayerSystemSession';
+import { SystemAvPlayerEngine, SystemEngineSnapshot, SystemEngineSource, SystemEngineTrack } from './SystemAvPlayerEngine';
+import { PlayerPictureInPicture, PlayerPiPSnapshot } from './PlayerPictureInPicture';
+import { PlayerBackgroundAudio } from './PlayerBackgroundAudio';
+import { CastEvent } from './PlayerCasting';
+import { PlayerVideoBackdropCapture } from './PlayerVideoBackdropCapture';
 
-interface MaFeiPlayerSurfaceArgs {
+interface MaFeiPlayerSurfaceArgs extends SystemEngineSource {
   commandId: number;
+  backdropRevision: number;
+  backdropSampling: boolean;
   handle: number;
   action: string;
+  mediaId: string;
+  title: string;
+  artworkData: string;
+  canNext: boolean;
+  canPrevious: boolean;
   url: string;
   headers: string[];
   subtitleUrl: string;
   allowInsecureTls: boolean;
   multiConnectionAllowed: boolean;
+  audioOnly: boolean;
   positionMs: number;
   speed: number;
   trackId: number;
   contentMode: string;
   renderMode: string;
+  useHardwareDecode: boolean;
+  cacheSizeMb: number;
+  engine: string;
   /** setBrightness 用 0..1；setVolume 用步数。 */
   level: number;
   previewRequestId: number;
@@ -60,6 +77,12 @@ interface MaFeiPlayerEventState {
   durationMs: number;
   bufferedMs: number;
   failure?: string;
+  systemAction?: string;
+  systemValue?: number;
+  pipActive?: boolean;
+  backgroundAudioActive?: boolean;
+  castingActive?: boolean;
+  engine?: string;
   tracks: MaFeiPlayerTrackState[];
   /** event = 'device' 专用：窗口亮度与媒体音量，不属于任何一次播放。 */
   brightness?: number;
@@ -118,6 +141,32 @@ struct MaFeiPlayerSurfaceHost {
   private playerWindow: window.Window | undefined = undefined;
   private readonly controller: PlayerController = new PlayerController();
   private readonly previewHelper: VideoFramePreviewHelper = new VideoFramePreviewHelper();
+  private readonly systemSession: PlayerSystemSession = new PlayerSystemSession(
+    (event: CastEvent): void => this.castEvent(event));
+  private readonly pictureInPicture: PlayerPictureInPicture = new PlayerPictureInPicture();
+  private readonly backgroundAudio: PlayerBackgroundAudio = new PlayerBackgroundAudio();
+  private readonly glassBackdrop: PlayerVideoBackdropCapture = new PlayerVideoBackdropCapture(
+    (handle: number, revision: number, width: number, height: number, alpha: number, pixels: ArrayBuffer): boolean =>
+      nativeApi.UpdateOhosPlayerBackdrop(handle, revision, width, height, alpha, pixels));
+  private hostForeground: boolean = true;
+  private mpvSurface: XComponentController | undefined = undefined;
+  @State private usingSystem: boolean = false;
+  private readonly systemSurface: XComponentController = new XComponentController();
+  private readonly systemEngine: SystemAvPlayerEngine = new SystemAvPlayerEngine(
+    (snapshot: SystemEngineSnapshot): void => this.systemEvent(snapshot),
+    (positionMs: number, speed: number, playing: boolean): void => this.fallbackToMpv(positionMs, speed, playing));
+  private lastLoad: MaFeiPlayerSurfaceArgs | undefined = undefined;
+  private systemReady: boolean = false;
+  private fallbackReady: boolean = false;
+  private fallbackPosition: number = 0;
+  private fallbackSpeed: number = 1;
+  private fallbackPlaying: boolean = false;
+  private selectedAudio: number = -1;
+  private selectedSubtitle: number = -1;
+  private lastSystemTracks: SystemEngineTrack[] = [];
+  private fallbackTracks: boolean = false;
+  private sessionMetadata: SystemPlaybackMetadata = { id: '', title: '', canNext: false, canPrevious: false };
+  private sessionPhase: string = 'ready';
   private appliedCommandId: number = -1;
   private lastPlayerState: PlayerState = PlayerState.IDLE;
   private lastDiagnosticsAt: number = 0;
@@ -125,10 +174,15 @@ struct MaFeiPlayerSurfaceHost {
     onPlayerEvent: (event: PlayerEvent): void => this.handlePlayerEvent(event)
   };
   private readonly onHostBackground = (): void => {
-    this.controller.onHostBackground();
+    this.hostForeground = false;
+    this.glassBackdrop.stop();
   };
   private readonly onHostForeground = (): void => {
-    this.controller.onHostForeground();
+    this.hostForeground = true;
+    // The shared reducer owns pause/resume intent. Returning through the app
+    // icon must also return the original surface, not leave a black PiP page.
+    this.pictureInPicture.restoreToPlayer();
+    this.syncGlassBackdrop();
   };
 
   aboutToAppear(): void {
@@ -145,17 +199,45 @@ struct MaFeiPlayerSurfaceHost {
   }
 
   aboutToDisappear(): void {
+    this.glassBackdrop.stop();
     const context = getContext(this) as common.UIAbilityContext;
     this.emitProgress(true);
     context.eventHub.off('onBackground', this.onHostBackground);
     context.eventHub.off('onForeground', this.onHostForeground);
     this.controller.removeListener(this.listener);
+    this.systemEngine.release();
+    this.pictureInPicture.close();
+    this.backgroundAudio.close();
+    this.systemSession.close();
     this.controller.release();
     void this.previewHelper.release();
   }
 
   onArgsChanged(): void {
     this.applyCommand();
+    this.syncSystemArtwork();
+    this.syncGlassBackdrop();
+  }
+
+  private syncSystemArtwork(): void {
+    if (!this.lastLoad || this.lastLoad.handle !== this.args.handle || this.sessionMetadata.id !== this.args.mediaId) return;
+    const encoded = this.args.artworkData || '';
+    if (encoded === (this.sessionMetadata.artworkData ?? '')) return;
+    this.sessionMetadata = { id: this.sessionMetadata.id, title: this.sessionMetadata.title,
+      canNext: this.sessionMetadata.canNext, canPrevious: this.sessionMetadata.canPrevious,
+      audioOnly: this.sessionMetadata.audioOnly, castUrl: this.sessionMetadata.castUrl, artworkData: encoded };
+    this.systemSession.updateMetadata(this.sessionMetadata);
+  }
+
+  private syncGlassBackdrop(): void {
+    const surface = this.usingSystem ? this.systemSurface : this.mpvSurface;
+    const ready = this.usingSystem ? this.systemReady :
+      [PlayerState.READY, PlayerState.PLAYING, PlayerState.PAUSED, PlayerState.BUFFERING, PlayerState.ENDED]
+        .indexOf(this.controller.getState()) >= 0;
+    const path = this.controller.getRenderPathInfo();
+    const supported = this.usingSystem || (path.actualMode !== 'surface-hw' && path.actualMode !== 'unknown');
+    this.glassBackdrop.bind(surface ? surface.getXComponentSurfaceId() : '', this.args.handle,
+      this.args.backdropRevision, this.hostForeground && this.args.backdropSampling && ready && supported && !this.args.audioOnly);
   }
 
   private applyCommand(): void {
@@ -169,6 +251,47 @@ struct MaFeiPlayerSurfaceHost {
     // Every command carries the current mode, so a surface that appears after
     // the viewer already picked a ratio still renders correctly.
     this.contentMode = command.contentMode === 'Fill' ? PlayerContentMode.Fill : PlayerContentMode.Fit;
+    if (this.usingSystem) this.systemEngine.fit(command.contentMode === 'Fill');
+    if (command.action === 'cast') {
+      void this.systemSession.casting.choose(getContext(this) as common.UIAbilityContext); return;
+    }
+    if (this.systemSession.casting.active &&
+      (command.action === 'play' || command.action === 'pause' || command.action === 'seek' || command.action === 'speed')) {
+      void this.systemSession.casting.command(command.action, command.action === 'speed' ? command.speed : command.positionMs);
+      return;
+    }
+    if (command.action === 'pip') {
+      const surface = this.usingSystem ? this.systemSurface : this.mpvSurface;
+      if (!surface) return;
+      const handle = command.handle;
+      this.pictureInPicture.start(getContext(this) as common.UIAbilityContext, surface,
+        (active: boolean): void => {
+          const payload: MaFeiPlayerEventState = { handle: handle, event: 'pip', pipActive: active,
+            positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+          nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+        }, (action: string): void => {
+          const payload: MaFeiPlayerEventState = { handle: handle, event: 'systemAction', systemAction: action,
+            positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+          nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+        }, this.pictureInPictureSnapshot());
+      return;
+    }
+    if (command.action === 'stop' || command.action === 'release') {
+      this.pictureInPicture.close();
+      this.backgroundAudio.close();
+    }
+    if (this.usingSystem && command.action !== 'load') {
+      switch (command.action) {
+        case 'play': this.systemEngine.play(command.positionMs); return;
+        case 'pause': this.systemEngine.pause(); return;
+        case 'seek': this.systemEngine.seek(command.positionMs); return;
+        case 'speed': this.systemEngine.speed(command.speed); return;
+        case 'selectAudio': this.selectedAudio = command.trackId; this.systemEngine.select('audio', command.trackId); return;
+        case 'selectSubtitle': this.selectedSubtitle = command.trackId; this.systemEngine.select('subtitle', command.trackId); return;
+        case 'stop':
+        case 'release': this.systemEngine.release(); this.systemSession.close(); return;
+      }
+    }
     switch (command.action) {
       case 'load':
         this.load(command);
@@ -184,6 +307,7 @@ struct MaFeiPlayerSurfaceHost {
         break;
       case 'stop':
         this.emitProgress(true);
+        this.systemSession.close();
         this.controller.stop();
         break;
       case 'seek':
@@ -193,12 +317,15 @@ struct MaFeiPlayerSurfaceHost {
         if (command.speed > 0) this.controller.setPlaybackSpeed(command.speed);
         break;
       case 'selectAudio':
+        this.selectedAudio = command.trackId;
         if (command.trackId >= 0) this.controller.selectAudioTrack(command.trackId);
         break;
       case 'selectSubtitle':
+        this.selectedSubtitle = command.trackId;
         this.controller.selectSubtitleTrack(command.trackId);
         break;
       case 'release':
+        this.systemSession.close();
         this.controller.release();
         break;
       // 亮度/音量（旧版左侧调亮度、右侧调音量）：只作用于播放页窗口与媒体音量流。
@@ -374,6 +501,112 @@ struct MaFeiPlayerSurfaceHost {
   }
 
   private load(command: MaFeiPlayerSurfaceArgs): void {
+    this.pictureInPicture.close();
+    this.lastLoad = command;
+    this.systemReady = false; this.fallbackReady = false;
+    this.lastSystemTracks = []; this.fallbackTracks = false;
+    this.selectedAudio = -1; this.selectedSubtitle = -1;
+    this.systemEngine.release();
+    this.usingSystem = command.engine === 'System';
+    if (this.usingSystem) {
+      this.controller.stop();
+      this.startSystemSession(command);
+      this.systemEngine.load(command);
+      this.systemEngine.fit(command.contentMode === 'Fill');
+    } else this.loadMpv(command, command.positionMs, command.speed);
+  }
+
+  private systemEvent(snapshot: SystemEngineSnapshot): void {
+    if (!this.usingSystem || snapshot.handle !== this.args.handle) return;
+    if (this.systemSession.casting.active) return;
+    if (snapshot.event === 'ready') this.systemReady = true;
+    this.syncGlassBackdrop();
+    if (snapshot.event === 'tracks') this.lastSystemTracks = snapshot.tracks.slice();
+    if (snapshot.event !== 'progress' && snapshot.event !== 'tracks') this.sessionPhase = snapshot.event;
+    const state: SystemPlaybackSnapshot = { state: this.sessionPhase, positionMs: snapshot.positionMs,
+      durationMs: snapshot.durationMs, bufferedMs: snapshot.bufferedMs, speed: this.args.speed };
+    this.systemSession.update(this.sessionMetadata, state);
+    this.backgroundAudio.update(this.args.audioOnly, this.sessionPhase);
+    this.pictureInPicture.update(this.pictureInPictureSnapshot());
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(snapshot));
+  }
+
+  private pictureInPictureSnapshot(): PlayerPiPSnapshot {
+    return { widthPx: this.usingSystem ? this.systemEngine.videoWidthPx : this.controller.getVideoWidth(),
+      heightPx: this.usingSystem ? this.systemEngine.videoHeightPx : this.controller.getVideoHeight(),
+      playing: this.sessionPhase === 'playing' || this.sessionPhase === 'buffering' };
+  }
+
+  private fallbackToMpv(positionMs: number, speed: number, playing: boolean): void {
+    const source = this.lastLoad;
+    if (!this.usingSystem || !source || source.handle !== this.args.handle) return;
+    this.pictureInPicture.close();
+    const pipState: MaFeiPlayerEventState = { handle: source.handle, event: 'pip', pipActive: false,
+      positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(pipState));
+    this.fallbackReady = this.systemReady;
+    this.fallbackTracks = this.systemReady;
+    this.fallbackPosition = positionMs; this.fallbackSpeed = speed; this.fallbackPlaying = playing;
+    this.usingSystem = false;
+    const engineState: MaFeiPlayerEventState = { handle: source.handle, event: 'engine', engine: 'Mpv',
+      positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(engineState));
+    // The same validated resource and generation survive runtime fallback.
+    // No new provider request or duplicate progress-start report is needed.
+    this.loadMpv(source, positionMs, speed);
+  }
+
+  private startSystemSession(command: MaFeiPlayerSurfaceArgs): void {
+    this.sessionMetadata = { id: command.mediaId || `playback-${command.handle}`,
+      title: command.title || '马飞', canNext: command.canNext, canPrevious: command.canPrevious,
+      audioOnly: command.audioOnly, castUrl: command.headers.length === 0 ? command.url : undefined,
+      artworkData: command.artworkData || '' };
+    this.sessionPhase = 'ready';
+    const handle = command.handle;
+    this.backgroundAudio.bind(getContext(this) as common.UIAbilityContext, (active: boolean): void => {
+      const payload: MaFeiPlayerEventState = { handle: handle, event: 'backgroundAudio',
+        backgroundAudioActive: active, positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+      nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+    });
+    this.systemSession.start(getContext(this) as common.UIAbilityContext, this.sessionMetadata,
+      (action: string, value: number): void => {
+        const payload: MaFeiPlayerEventState = { handle: handle, event: 'systemAction', systemAction: action,
+          systemValue: value, positionMs: 0, durationMs: 0, bufferedMs: 0, tracks: [] };
+        nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+      });
+  }
+
+  private castEvent(event: CastEvent): void {
+    if (event.event === 'casting') {
+      if (event.active) {
+        this.pictureInPicture.close();
+        if (this.usingSystem) this.systemEngine.pause(); else this.controller.pause();
+      }
+      const payload: MaFeiPlayerEventState = { handle: this.args.handle, event: 'casting', castingActive: event.active,
+        positionMs: event.positionMs, durationMs: event.durationMs, bufferedMs: 0, tracks: [] };
+      nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
+      if (!event.active) {
+        if (this.usingSystem) {
+          this.systemEngine.seek(event.positionMs);
+          if (this.sessionPhase === 'playing' || this.sessionPhase === 'buffering') this.systemEngine.play(event.positionMs);
+        } else {
+          this.controller.seekTo(event.positionMs, false);
+          if (this.sessionPhase === 'playing' || this.sessionPhase === 'buffering') this.controller.play();
+        }
+        this.backgroundAudio.update(this.args.audioOnly, this.sessionPhase);
+      }
+      return;
+    }
+    this.sessionPhase = event.event;
+    const progress: MaFeiPlayerEventState = { handle: this.args.handle, event: 'progress', positionMs: event.positionMs,
+      durationMs: event.durationMs, bufferedMs: 0, tracks: [] };
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(progress));
+    progress.event = event.event;
+    nativeApi.UpdateOhosPlayerState(JSON.stringify(progress));
+    this.backgroundAudio.update(true, event.event);
+  }
+
+  private loadMpv(command: MaFeiPlayerSurfaceArgs, positionMs: number, speed: number): void {
     const url = command.url.trim();
     if (url.length === 0) return;
     const source: PlayerSource = {
@@ -386,7 +619,8 @@ struct MaFeiPlayerSurfaceHost {
       }] : []
     };
     const options: PlayerOptions = {
-      useHardwareDecode: true,
+      useHardwareDecode: command.useHardwareDecode,
+      cacheSizeMb: command.cacheSizeMb,
       // The HarmonyOS 2-in-1/PC host does not expose a usable Vulkan surface;
       // its buffer/gpu path crashes inside libmpv during pl_vulkan_create.
       // Keep the compatibility surface path for that host. Phones/tablets
@@ -396,31 +630,49 @@ struct MaFeiPlayerSurfaceHost {
         (command.renderMode === 'Direct' ? PlayerRenderMode.SURFACE : PlayerRenderMode.BUFFER),
       // The shared PlayerStateMachine sends Play/Seek only after READY.
       autoPlay: false,
-      startPositionMs: Math.max(0, command.positionMs),
-      playbackSpeed: command.speed > 0 ? command.speed : 1,
+      startPositionMs: Math.max(0, positionMs),
+      playbackSpeed: speed > 0 ? speed : 1,
       // The native view consumes smooth progress locally. KMP receives only
       // throttled progress reports for provider bookkeeping.
       progressIntervalMs: 250,
       exactSeek: false,
-      multiConnectionEnabled: command.multiConnectionAllowed
+      multiConnectionEnabled: command.multiConnectionAllowed,
+      // The proxy publishes complete blocks, not partial downloads. Its
+      // 12 x 2 MB default repeatedly exhausts the 30 s request timeout on
+      // slower links before startup/seek reads get their required blocks.
+      multiConnectionOptions: { connections: 4, blockSizeMb: 1 }
     };
     this.lastPlayerState = PlayerState.IDLE;
     this.lastDiagnosticsAt = 0;
     const accepted = this.controller.load(source, options);
     if (accepted) {
+      this.startSystemSession(command);
       // Warm the extractor while mfplayer prepares the same authenticated
       // source, so the first drag does not also pay metadata discovery cost.
       void this.previewHelper.prepare(url, command.headers);
     }
     hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG,
       'load submitted accepted=%{public}s headers=%{public}d insecureTls=%{public}s multi=%{public}s',
-      `${accepted}`, command.headers.length, `${command.allowInsecureTls}`, `${command.multiConnectionAllowed}`);
+      `${accepted}`, command.headers.length, `${command.allowInsecureTls}`, `${options.multiConnectionEnabled}`);
     if (!accepted) {
       this.emitEvent('error', undefined, 'engine');
     }
   }
 
   private handlePlayerEvent(event: PlayerEvent): void {
+    if (this.usingSystem) return;
+    this.syncGlassBackdrop();
+    if (event.state === PlayerState.READY && this.fallbackReady) {
+      this.fallbackReady = false;
+      this.controller.seekTo(this.fallbackPosition, false);
+      this.controller.setPlaybackSpeed(this.fallbackSpeed);
+      if (this.fallbackPlaying) this.controller.play();
+      this.lastPlayerState = PlayerState.READY;
+      this.restoreFallbackTracks(event);
+      this.emitEvent('tracks', event);
+      this.emitProgress(true, event);
+      return;
+    }
     if (event.state !== this.lastPlayerState) {
       this.lastPlayerState = event.state;
       switch (event.state) {
@@ -452,6 +704,7 @@ struct MaFeiPlayerSurfaceHost {
       }
     }
     if (event.type === PlayerEventType.TRACKS_CHANGED) {
+      this.restoreFallbackTracks(event);
       this.emitEvent('tracks', event);
     }
     if (event.type === PlayerEventType.PROGRESS_CHANGED) {
@@ -461,6 +714,22 @@ struct MaFeiPlayerSurfaceHost {
     if (event.type === PlayerEventType.VIDEO_INFO_CHANGED || event.type === PlayerEventType.DECODER_CHANGED) {
       this.emitDiagnostics(true);
     }
+  }
+
+  private restoreFallbackTracks(event: PlayerEvent): void {
+    if (!this.fallbackTracks) return;
+    const audio = this.lastSystemTracks.filter((track: SystemEngineTrack): boolean => track.kind === 'audio');
+    const subtitle = this.lastSystemTracks.filter((track: SystemEngineTrack): boolean => track.kind === 'subtitle');
+    const selectedAudio = audio.findIndex((track: SystemEngineTrack): boolean => track.selected);
+    const selectedSubtitle = subtitle.findIndex((track: SystemEngineTrack): boolean => track.selected);
+    const audioTracks = event.audioTracks.length > 0 ? event.audioTracks : this.controller.getAudioTracks();
+    const subtitleTracks = event.subtitleTracks.length > 0 ? event.subtitleTracks : this.controller.getSubtitleTracks();
+    // Empty early TRACKS_CHANGED is not the final track inventory.
+    if (selectedAudio >= audioTracks.length || selectedSubtitle >= subtitleTracks.length) return;
+    this.fallbackTracks = false;
+    if (selectedAudio >= 0) this.controller.selectAudioTrack(audioTracks[selectedAudio].id);
+    if (selectedSubtitle >= 0) this.controller.selectSubtitleTrack(subtitleTracks[selectedSubtitle].id);
+    else this.controller.selectSubtitleTrack(-1);
   }
 
   /** mfplayer runtime snapshot, matching the legacy player information card. */
@@ -546,6 +815,7 @@ struct MaFeiPlayerSurfaceHost {
   }
 
   private emitEvent(type: string, event?: PlayerEvent, failure?: string): void {
+    if (this.systemSession.casting.active) return;
     const includeTracks = type === 'tracks';
     const eventAudioTracks = event?.audioTracks ?? [];
     const eventSubtitleTracks = event?.subtitleTracks ?? [];
@@ -581,15 +851,33 @@ struct MaFeiPlayerSurfaceHost {
       failure: failure,
       tracks: audioTracks.concat(subtitleTracks)
     };
+    if (type !== 'tracks') {
+      if (type !== 'progress') this.sessionPhase = type;
+      const snapshot: SystemPlaybackSnapshot = {
+        state: this.sessionPhase, positionMs: payload.positionMs, durationMs: payload.durationMs,
+        bufferedMs: payload.bufferedMs, speed: this.args.speed
+      };
+      this.systemSession.update(this.sessionMetadata, snapshot);
+      this.backgroundAudio.update(this.args.audioOnly, this.sessionPhase);
+      this.pictureInPicture.update(this.pictureInPictureSnapshot());
+    }
     nativeApi.UpdateOhosPlayerState(JSON.stringify(payload));
   }
 
   build() {
     Stack() {
-      PlayerSurface({
+      if (this.usingSystem) {
+        XComponent({ id: 'mafei-system-player', type: XComponentType.SURFACE, controller: this.systemSurface })
+          .width('100%').height('100%')
+          .onLoad((): void => this.systemEngine.surface(this.systemSurface.getXComponentSurfaceId()))
+          .onDestroy((): void => this.systemEngine.surface(''))
+      } else {
+        PlayerSurface({
         controller: this.controller,
         contentMode: this.contentMode,
         onVideoSurfaceControllerReady: (_controller: XComponentController): void => {
+          this.mpvSurface = _controller;
+          this.syncGlassBackdrop();
           // PlayerController keeps load() as a pending source until the video
           // surface is ready. Without this signal the native player is never
           // created and CMP remains in its loading state indefinitely.
@@ -599,6 +887,7 @@ struct MaFeiPlayerSurfaceHost {
       })
         .width('100%')
         .height('100%')
+      }
     }
     .width('100%')
     .height('100%')

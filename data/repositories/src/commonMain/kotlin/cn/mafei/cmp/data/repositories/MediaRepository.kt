@@ -98,7 +98,7 @@ class MediaRepository(
         }
         val key = BrowseKey(session, normalized, frozen)
         return load(session, key, pages, refresh, store = { page ->
-            if (normalized is MediaQuery.Items || normalized is MediaQuery.Search || normalized is MediaQuery.PersonItems) {
+            if (normalized is MediaQuery.Items || normalized is MediaQuery.Search || normalized is MediaQuery.PersonItems || normalized is MediaQuery.Music) {
                 for (item in page.items) {
                     val itemKey = ItemKey(session, item.id)
                     listUserState.put(itemKey, item.userData, clock.nowEpochMs())
@@ -109,6 +109,9 @@ class MediaRepository(
             page
         }) { adapter ->
             val page = when (normalized) {
+                is MediaQuery.Music -> adapter.music(normalized.query, frozen)
+                is MediaQuery.LiveChannels -> adapter.liveChannels(frozen)
+                is MediaQuery.Photos -> adapter.photos(normalized.query, frozen)
                 is MediaQuery.Items -> adapter.items(normalized.collectionId, frozen)
                 is MediaQuery.Search -> adapter.search(normalized.term, frozen)
                 is MediaQuery.Seasons -> adapter.seasons(normalized.seriesId)
@@ -223,6 +226,20 @@ class MediaRepository(
         }
     }
 
+    suspend fun photoOriginal(session: MediaSession, id: MediaId): MediaDownload {
+        val adapter = requireActive(session).adapter
+        val result = adapter.photoOriginal(id)
+        requireActive(session)
+        return result
+    }
+
+    suspend fun danmakuXml(session: MediaSession, id: MediaId): String? {
+        val adapter = mutex.withLock { requireActive(session).adapter }
+        val result = adapter.danmakuXml(id)
+        mutex.withLock { requireActive(session) }
+        return result
+    }
+
     /** Account-scoped seek preview; providers without a real frame source return null. */
     suspend fun previewFrame(
         session: MediaSession,
@@ -273,6 +290,38 @@ class MediaRepository(
     /** Provider-authoritative role used by the legacy Mine profile header. */
     suspend fun isAdministrator(session: MediaSession): Boolean =
         mutex.withLock { requireActive(session).adapter }.isAdministrator()
+
+    suspend fun management(session: MediaSession): cn.mafei.cmp.data.adapter_contract.ServerManagement {
+        val delegate = mutex.withLock { requireActive(session).adapter.management }
+            ?: throw ClientConfigError("Provider does not expose server management")
+        return object : cn.mafei.cmp.data.adapter_contract.ServerManagement {
+            override val currentDeviceId get() = delegate.currentDeviceId
+            private suspend fun <T> checked(block: suspend () -> T): T {
+                currentCoroutineContext().ensureActive()
+                mutex.withLock { requireActive(session) }
+                val result = withContext(fetchDispatcher) { block() }
+                currentCoroutineContext().ensureActive()
+                mutex.withLock { requireActive(session) }
+                return result
+            }
+            override suspend fun isAdministrator() = checked { delegate.isAdministrator() }
+            override suspend fun server() = checked { delegate.server() }
+            override suspend fun counts() = checked { delegate.counts() }
+            override suspend fun users() = checked { delegate.users() }
+            override suspend fun tasks() = checked { delegate.tasks() }
+            override suspend fun sessions(nowEpochMs: Long) = checked { delegate.sessions(nowEpochMs) }
+            override suspend fun activity(offset: Int, limit: Int, minDate: String?, hasUserId: Boolean?) =
+                checked { delegate.activity(offset, limit, minDate, hasUserId) }
+            override suspend fun sessionCommand(id: String, command: ManagedSessionCommand) = checked { delegate.sessionCommand(id, command) }
+            override suspend fun sessionMessage(id: String, text: String) = checked { delegate.sessionMessage(id, text) }
+            override suspend fun startLibraryScan() = checked { delegate.startLibraryScan() }
+            override suspend fun startTask(id: String) = checked { delegate.startTask(id) }
+            override suspend fun cancelTask(id: String) = checked { delegate.cancelTask(id) }
+            override suspend fun devices() = checked { delegate.devices() }
+            override suspend fun renameDevice(id: String, customName: String) = checked { delegate.renameDevice(id, customName) }
+            override suspend fun revokeDevice(id: String) = checked { delegate.revokeDevice(id) }
+        }
+    }
 
     private suspend fun mutate(
         session: MediaSession,

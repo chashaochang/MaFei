@@ -64,13 +64,17 @@ class IosPlayerRuntime(
                 val snapshot = state.value
                 if (snapshot.handles(command.generation)) bridge.setSpeed(snapshot.player, command.value)
             }
-            is RuntimeCommand.SelectTrack ->
-                // No AVFoundation track negotiation in P0; refuse honestly.
-                throw UnsupportedPlayerCapability("trackSelection")
-            is RuntimeCommand.ContentMode ->
-                // AVPlayerLayer gravity needs a bridge method the P0 injectable
-                // bridge does not declare; refuse instead of a silent no-op.
-                throw UnsupportedPlayerCapability("contentMode")
+            is RuntimeCommand.SelectTrack -> {
+                val snapshot = state.value
+                if (!capabilities.trackSelection) throw UnsupportedPlayerCapability("trackSelection")
+                if (snapshot.handles(command.generation)) bridge.selectTrack(snapshot.player, command.kind, command.id)
+            }
+            is RuntimeCommand.ContentMode -> {
+                if (!capabilities.contentMode) throw UnsupportedPlayerCapability("contentMode")
+                val snapshot = state.value
+                state.value = snapshot.copy(contentMode = command.mode)
+                if (snapshot.player != 0L) bridge.contentMode(snapshot.player, command.mode)
+            }
             is RuntimeCommand.AttachSurface -> {
                 val snapshot = state.value
                 val layer = surfaces.layerOf(command.handle)
@@ -111,6 +115,12 @@ class IosPlayerRuntime(
                     eventSink(RuntimeEvent.Ready(checkNotNull(updated.generation), bridge.durationMs(updated.player).takeIf { it > 0 }))
                 }
                 if (!updated.readyEmitted) return
+                val tracks = bridge.tracks(updated.player)
+                if (tracks != updated.tracks) {
+                    val next = updated.copy(tracks = tracks.toList())
+                    state.compareAndSet(updated, next); updated = next
+                    eventSink(RuntimeEvent.Tracks(checkNotNull(updated.generation), tracks))
+                }
                 val phase = when (bridge.timeControl(updated.player)) {
                     TIME_PLAYING -> PlayerPhase.Playing
                     TIME_BUFFERING -> PlayerPhase.Buffering
@@ -140,6 +150,7 @@ class IosPlayerRuntime(
                         checkNotNull(updated.generation),
                         bridge.positionMs(updated.player).coerceAtLeast(0),
                         bridge.bufferedMs(updated.player).coerceAtLeast(0),
+                        bridge.durationMs(updated.player).takeIf { it > 0 },
                     ),
                 )
             }
@@ -157,10 +168,16 @@ class IosPlayerRuntime(
                 player = player,
                 generation = command.generation,
                 attachedLayer = snapshot.attachedLayer,
+                contentMode = snapshot.contentMode,
             ),
         )
         try {
             bridge.loadUrl(player, command.resource.url, command.resource.headers)
+            snapshot.attachedLayer?.let { bridge.attachLayer(player, it) }
+            if (capabilities.contentMode) bridge.contentMode(player, snapshot.contentMode)
+            sink.value?.invoke(RuntimeEvent.EngineChanged(command.generation, cn.mafei.cmp.player.api.PlayerEngineType.System))
+            val backgroundAudio = bridge.configureAudioOnly(player, command.resource.audioOnly)
+            sink.value?.invoke(RuntimeEvent.BackgroundAudio(command.generation, command.resource.audioOnly && backgroundAudio))
         } catch (failure: UnsupportedOperationException) {
             markEnded()
             sink.value?.invoke(RuntimeEvent.Failed(command.generation, PlayerFailure.UnsupportedMedia))
@@ -200,6 +217,8 @@ class IosPlayerRuntime(
         val released: Boolean = false,
         val lastPhase: PlayerPhase? = null,
         val attachedLayer: Any? = null,
+        val contentMode: cn.mafei.cmp.player.api.PlayerContentMode = cn.mafei.cmp.player.api.PlayerContentMode.Fit,
+        val tracks: List<cn.mafei.cmp.player.api.PlayerTrack> = emptyList(),
     ) {
         fun handles(candidate: PlaybackGeneration?): Boolean = candidate != null && candidate === generation
     }

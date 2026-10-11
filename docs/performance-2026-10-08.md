@@ -94,3 +94,33 @@ Native Release（`linkReleaseSharedOhosArm64`，LLVM -O3）+ 原签名 Debug HAP
 本地 trace：`/private/tmp/mafei-perf-export-first.ftrace`、`mafei-perf-export-warm.ftrace`。首次 GPU shader 编译慢帧尚未解决；已有的 shader 实例缓存不等同于 GPU 管线已经预热。
 
 详情页已操作上下滚动并通过页面返回按钮回首页：绘制均值 6.85ms、P95 13.91ms、最大 20.53ms。trace 为 `/private/tmp/mafei-perf-export-detail.ftrace`；约 720ms 的最大提交间隔包含触顶/触底后的静止段，不作为单帧执行耗时。不同影片不做严格 A/B 比较。此次未截图，不声明完整视觉矩阵验收。
+
+## 第三轮（2026-10-09）：重复切图和页面返回的氛围图复用
+
+发现 `CachedBlurredArtwork` 只在当前组件存活时持有模糊结果。Crossfade 移除旧图或离开页面后，重新进入会再次裁剪、模糊、栅格化，并短暂使用全窗实时模糊作为回退。
+
+新增 `ArtworkBlurCache`，由现有的账号级 `ArtworkMemoryCache` 持有，首页与详情共用。以不可变源位图的身份和完整栅格几何（裁剪、尺寸、半径）匹配；命中直接绘制缓存，不创建录制层或启动模糊协程。上限 8 项、按 RGBA 估算 16MiB，计入保留的源图与结果；LRU 淘汰，不写磁盘，不跨账号共享。组件以 source/geometry/cache 为 key，避免新源第一帧仍显示上一源的 produceState 值。取消和失败的生成不进入缓存。
+
+新增 6 个测试：源与几何匹配、账号隔离、内存/数量上限及 LRU、替换计数、超大图拒存、页面离开后复用同一位图、直接缓存命中绕过生成。其中 4 个缓存规则测试先红后绿。五模块合计 236 项桌面测试通过，`verifyArchitecture` 和 `git diff --check` 通过。没有改玻璃采样、光学参数、布局或图片请求优先级。
+
+修改前已在 PID 22419 执行两轮各 6 次连续轮播滑动；每次滑动前重新 dumpLayout 确认 Hero List bounds `[0,137][1280,1505]`。第二轮绘制均值 6.65ms、P95 8.91ms、最大 22.96ms，提交间隔 P95 16.25ms。此场景与纵向列表滚动不同，不能交叉当作 A/B。本地 trace：`/private/tmp/mafei-carousel-before-1.ftrace`、`mafei-carousel-before-2.ftrace`；自动操作脚本 `/private/tmp/mafei-carousel-perf.mjs`，后续以 `mafei-carousel-after` 参数复测。
+
+Android assembleDebug、OHOS Native Release（8m41s）、HAP（约7s）及同次产物检查通过，已使用 `hdc install -r` 覆盖安装。安装后手机处于锁屏状态，唤醒屏幕后 `aa start` 仍返回 10106102；没有绕过锁屏、清数据或退出账号。**本轮优化后的真机启动/性能对比 Pending**，不能宣称上述时间已经改善。首次 GPU shader 编译仍未解决，本轮仅消除静态背景的重复生成。
+
+### 解锁后补测（2026-10-09 00:30–00:35）
+
+用户解锁后启动成功，PID 60260。以上 Pending 的启动与本机短场景性能检查已补齐。未重新安装、退出账号、清数据或截图；每次点击/滑动前读取布局树核对目标 bounds。两轮各 6 次切图、首页上下滚动、进入详情上下滚动及返回首页均正常完成，结束停留首页。
+
+| 场景 | 绘制均值 | 绘制 P95 | 绘制最大 | 提交间隔 P95 |
+| --- | ---: | ---: | ---: | ---: |
+| 连续切图第 1 轮 | 6.25ms | 8.03ms | 15.53ms | 14.21ms |
+| 连续切图第 2 轮 | 6.68ms | 9.01ms | 22.62ms | 16.90ms |
+| 首页首次纵向滚动 | 9.27ms | 13.44ms | 49.69ms | 19.69ms |
+| 首页预热后纵向滚动 | 8.07ms | 12.84ms | 22.17ms | 18.51ms |
+| 详情上下滚动 | 6.82ms | 13.62ms | 21.78ms | 18.97ms |
+
+切图第 2 轮与修改前均值 6.65ms、P95 8.91ms 基本持平，不能只挑第 1 轮的较好数字宣称提升。首页预热后与上一轮均值 8.37ms、P95 12.46ms 也没有一致且显著的改善。结论：缓存复用的正确性有自动测试证明，真机链路正常，但目前没有证据证明这次增量使整体帧率明显提高。
+
+首次纵向滚动仍出现约 17.92ms 的 shader 加载/编译和一次 52.04ms 的提交间隔；预热后未出现 shader 编译记录，最大提交间隔约 38.00ms。首次 GPU 编译仍是明确缺口，不能认定已解决。详情的 612ms 最大提交间隔包含到达边界后静止停帧，不等于单帧执行时间；本次详情影片不同，不作为严格 A/B。
+
+本地 trace：`/private/tmp/mafei-carousel-after-{1,2}.ftrace`、`mafei-blur-final-scroll.ftrace`、`mafei-blur-final-warm-scroll.ftrace`、`mafei-blur-final-detail.ftrace`。指标仍为应用绘制回调耗时/提交间隔，不是显示 FPS。完整视觉矩阵及其他设备性能未因本次通过而自动完成；代码保持未提交。

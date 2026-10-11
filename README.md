@@ -1,6 +1,6 @@
-# MaFei 2.0 CMP
+# 马飞 2.0
 
-MaFei 2.0 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台媒体客户端。仓库根目录现在就是活动 Gradle/CMP 工程，不再使用额外的 `cmp/` 外层目录。
+马飞 2.0 是基于 Kotlin Multiplatform 与 Compose Multiplatform 的跨平台媒体客户端。仓库根目录现在就是活动 Gradle/CMP 工程，不再使用额外的 `cmp/` 外层目录。
 
 ## 首发平台
 

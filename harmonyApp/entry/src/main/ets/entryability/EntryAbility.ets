@@ -410,6 +410,16 @@ export default class EntryAbility extends UIAbility {
     this.loadCmpContent(windowStage, mainWindow);
   }
 
+  onForeground(): void {
+    nativeApi.SetOhosApplicationForeground(true);
+    this.context.eventHub.emit('onForeground');
+  }
+
+  onBackground(): void {
+    nativeApi.SetOhosApplicationForeground(false);
+    this.context.eventHub.emit('onBackground');
+  }
+
   onWindowStageDestroy(): void {
     if (this.orientationPoller !== undefined) {
       clearInterval(this.orientationPoller);

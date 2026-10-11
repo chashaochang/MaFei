@@ -96,6 +96,8 @@ fun MineScreen(
     onPrivacy: () -> Unit,
     onAddGroup: () -> Unit,
     onLogout: () -> Unit,
+    onWebITong: (() -> Unit)? = null,
+    onManagement: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     versionName: String = "",
     avatar: (@Composable (Modifier) -> Unit)? = null,
@@ -136,6 +138,11 @@ fun MineScreen(
                 ) {
                     MineProfileHeader(profile, avatar)
 
+                    if (onManagement != null) LegacyListGroup(
+                        listOf(LegacyListGroupItem("服务器控制台", MaFeiLegacyDrawables.settings)),
+                        { onManagement() },
+                    )
+
                     when {
                         historyLoading -> MineHistoryLoadingSection(columns)
                         historyError != null -> MineHistoryErrorSection(onRetry = onHistoryRetry)
@@ -151,8 +158,8 @@ fun MineScreen(
                     LegacyListGroup(
                         items = listOf(
                             LegacyListGroupItem("切换账号", MaFeiLegacyDrawables.accountSwitch),
-                        ),
-                        onItemClick = { onSwitchAccount() },
+                        ) + if (onWebITong != null) listOf(LegacyListGroupItem("网(Web)易通", MaFeiLegacyDrawables.web)) else emptyList(),
+                        onItemClick = { index -> if (index == 0) onSwitchAccount() else onWebITong?.invoke() },
                     )
                     LegacyListGroup(
                         items = listOf(

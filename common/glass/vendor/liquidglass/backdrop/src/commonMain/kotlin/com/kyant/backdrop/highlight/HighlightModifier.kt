@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.util.fastCoerceAtMost
 import com.kyant.backdrop.RuntimeShaderCacheImpl
 import com.kyant.backdrop.internal.ShapeProvider
+import com.kyant.backdrop.internal.EffectLayerRecording
+import com.kyant.backdrop.internal.isInvisibleEffect
 import com.kyant.backdrop.internal.blur
 import com.kyant.backdrop.internal.clipOutline
 import com.kyant.backdrop.internal.setRuntimeShader
@@ -75,6 +77,7 @@ internal class HighlightNode(
     override val shouldAutoInvalidate: Boolean = false
 
     private var highlightLayer: GraphicsLayer? = null
+    private val recording = EffectLayerRecording()
 
     private val paint =
         Paint().apply {
@@ -90,7 +93,9 @@ internal class HighlightNode(
         if (!isRenderEffectSupported()) return drawContent()
 
         val highlight = highlight()
-        if (highlight == null || highlight.width.value <= 0f) {
+        if (highlight == null || highlight.width.value <= 0f ||
+            isInvisibleEffect(highlight.alpha, highlight.style.blendMode)
+        ) {
             return drawContent()
         }
 
@@ -135,17 +140,22 @@ internal class HighlightNode(
                     null
                 }
 
-            configurePaint(highlight)
-
             highlightLayer.alpha = highlight.alpha
             highlightLayer.blendMode = highlight.style.blendMode
-            highlightLayer.record(safeSize) {
-                translate(1f, 1f) {
-                    val canvas = drawContext.canvas
-                    canvas.save()
-                    canvas.clipOutline(outline, clipPath)
-                    canvas.drawOutline(outline, paint)
-                    canvas.restore()
+            val style = highlight.style
+            // Custom styles may read animated state inside createShader.
+            val canReuse = style is HighlightStyle.Plain ||
+                style is HighlightStyle.Default || style is HighlightStyle.Ambient
+            recording.recordIfChanged(size, density, layoutDirection, outline, highlight, canReuse) {
+                configurePaint(highlight)
+                highlightLayer.record(safeSize) {
+                    translate(1f, 1f) {
+                        val canvas = drawContext.canvas
+                        canvas.save()
+                        canvas.clipOutline(outline, clipPath)
+                        canvas.drawOutline(outline, paint)
+                        canvas.restore()
+                    }
                 }
             }
 
@@ -163,6 +173,7 @@ internal class HighlightNode(
     }
 
     override fun onDetach() {
+        recording.clear()
         val graphicsContext = if (highlightLayer != null) requireGraphicsContext() else null
         highlightLayer?.let { layer ->
             graphicsContext?.releaseGraphicsLayer(layer)

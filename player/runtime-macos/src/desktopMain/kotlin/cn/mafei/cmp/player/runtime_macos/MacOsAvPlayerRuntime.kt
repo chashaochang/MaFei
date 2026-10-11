@@ -47,22 +47,32 @@ interface AvPlayerBridge {
     /** 0 none, 1 network, 2 decode. */
     fun errorKind(handle: Long): Int
     fun releasePlayer(handle: Long)
+    fun tracks(handle: Long): List<cn.mafei.cmp.player.api.PlayerTrack> = emptyList()
+    fun selectTrack(handle: Long, kind: cn.mafei.cmp.player.api.TrackKind, id: String?) {
+        throw UnsupportedOperationException("Track selection unavailable")
+    }
+    fun contentMode(layer: Long, mode: cn.mafei.cmp.player.api.PlayerContentMode) {
+        throw UnsupportedOperationException("Content mode unavailable")
+    }
 }
 
 /** JNI wiring of [AvPlayerBridge]. Loads the bundled dylib on first use. */
 class JniAvPlayerBridge : AvPlayerBridge {
-    override fun create(): Long = NativeAvPlayer.let { it.ensureLoaded(); it.create() }
+    private val handles = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val proxyIds = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    private var proxy: AuthorizedMediaProxy? = null
+    override fun create(): Long = NativeAvPlayer.let { it.ensureLoaded(); it.create().also(handles::add) }
     override fun loadUrl(handle: Long, url: String, headers: Map<String, String>) {
-        // AVURLAsset has no public custom-header API (needs a resource-loader
-        // delegate, Pending). Refusing loudly beats a doomed 401 playback.
-        if (headers.isNotEmpty()) {
-            throw UnsupportedOperationException("macOS AVPlayer bridge cannot apply custom HTTP headers")
+        retireSource(handle)
+        val target = if (headers.isEmpty()) url else {
+            val service = proxy ?: AuthorizedMediaProxy().also { proxy = it }
+            val (id, local) = service.register(url, headers); proxyIds[handle] = id; local
         }
-        NativeAvPlayer.loadUrl(handle, url)
+        NativeAvPlayer.loadUrl(handle, target)
     }
     override fun play(handle: Long) = NativeAvPlayer.play(handle)
     override fun pause(handle: Long) = NativeAvPlayer.pause(handle)
-    override fun stop(handle: Long) = NativeAvPlayer.stop(handle)
+    override fun stop(handle: Long) { NativeAvPlayer.stop(handle); retireSource(handle) }
     override fun seek(handle: Long, positionMs: Long) = NativeAvPlayer.seek(handle, positionMs)
     override fun setSpeed(handle: Long, speed: Float) = NativeAvPlayer.setSpeed(handle, speed)
     override fun attachLayer(handle: Long, layerPointer: Long) = NativeAvPlayer.attachLayer(handle, layerPointer)
@@ -73,7 +83,16 @@ class JniAvPlayerBridge : AvPlayerBridge {
     override fun timeControl(handle: Long): Int = NativeAvPlayer.timeControl(handle)
     override fun itemStatus(handle: Long): Int = NativeAvPlayer.itemStatus(handle)
     override fun errorKind(handle: Long): Int = NativeAvPlayer.errorKind(handle)
-    override fun releasePlayer(handle: Long) = NativeAvPlayer.releasePlayer(handle)
+    override fun releasePlayer(handle: Long) {
+        if (!handles.remove(handle)) return
+        retireSource(handle); NativeAvPlayer.releasePlayer(handle)
+        if (handles.isEmpty()) { proxy?.close(); proxy = null }
+    }
+    private fun retireSource(handle: Long) { proxyIds.remove(handle)?.let { proxy?.retire(it) } }
+    override fun tracks(handle: Long) = decodeNativeTracks(NativeAvPlayer.tracks(handle))
+    override fun selectTrack(handle: Long, kind: cn.mafei.cmp.player.api.TrackKind, id: String?) =
+        NativeAvPlayer.selectTrack(handle, if (kind == cn.mafei.cmp.player.api.TrackKind.Audio) 0 else 1, id?.toIntOrNull() ?: -1)
+    override fun contentMode(layer: Long, mode: cn.mafei.cmp.player.api.PlayerContentMode) = NativeAvPlayer.setContentMode(layer, mode.fills)
 }
 
 /**
@@ -145,6 +164,8 @@ class MacOsAvPlayerRuntime(
     private val released = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastPhase: PlayerPhase? = null
     private var attachedLayer: Long = 0
+    private var tracks = emptyList<cn.mafei.cmp.player.api.PlayerTrack>()
+    private var contentMode = cn.mafei.cmp.player.api.PlayerContentMode.Fit
     private var pollTicket: AutoCloseable? = null
 
     override fun bind(eventSink: (RuntimeEvent) -> Unit) {
@@ -166,13 +187,13 @@ class MacOsAvPlayerRuntime(
         // Keep capability failures synchronous and consistent with the other
         // runtimes. The remaining commands are dispatched asynchronously and
         // therefore cannot surface an exception to the caller.
-        if (command is RuntimeCommand.SelectTrack) {
+        if (command is RuntimeCommand.SelectTrack && !capabilities.trackSelection) {
             throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("trackSelection")
         }
         // AVPlayerLayer gravity is not exposed through the bundled ObjC bridge,
         // and the desktop host attaches no video surface at all, so the picture
         // fitting stays unavailable instead of silently doing nothing.
-        if (command is RuntimeCommand.ContentMode) {
+        if (command is RuntimeCommand.ContentMode && !capabilities.contentMode) {
             throw cn.mafei.cmp.player.api.UnsupportedPlayerCapability("contentMode")
         }
         try {
@@ -194,12 +215,16 @@ class MacOsAvPlayerRuntime(
             is RuntimeCommand.Seek -> if (owns(command.generation)) bridge.seek(player, command.positionMs)
             is RuntimeCommand.Stop -> stop(command.generation)
             is RuntimeCommand.Speed -> if (owns(command.generation)) bridge.setSpeed(player, command.value)
-            is RuntimeCommand.SelectTrack -> Unit // rejected synchronously in execute()
-            is RuntimeCommand.ContentMode -> Unit // rejected synchronously in execute()
+            is RuntimeCommand.SelectTrack -> if (owns(command.generation)) bridge.selectTrack(player, command.kind, command.id)
+            is RuntimeCommand.ContentMode -> {
+                contentMode = command.mode
+                if (attachedLayer != 0L) bridge.contentMode(attachedLayer, command.mode)
+            }
             is RuntimeCommand.AttachSurface -> {
                 val layer = surfaces.layerOf(command.handle)
                 if (player != 0L && layer != 0L) bridge.attachLayer(player, layer)
                 attachedLayer = layer
+                if (layer != 0L && capabilities.contentMode) bridge.contentMode(layer, contentMode)
             }
             is RuntimeCommand.DetachSurface -> {
                 if (player != 0L) bridge.detachLayer(player, attachedLayer)
@@ -257,11 +282,14 @@ class MacOsAvPlayerRuntime(
                         else -> emit(RuntimeEvent.Paused(checkNotNull(generation)))
                     }
                 }
+                val latestTracks = bridge.tracks(player)
+                if (latestTracks != tracks) { tracks = latestTracks.toList(); emit(RuntimeEvent.Tracks(checkNotNull(generation), tracks)) }
                 emit(
                     RuntimeEvent.Progress(
                         checkNotNull(generation),
                         bridge.positionMs(player).coerceAtLeast(0),
                         bridge.bufferedMs(player).coerceAtLeast(0),
+                        bridge.durationMs(player).takeIf { it > 0 },
                     ),
                 )
             }
@@ -283,6 +311,9 @@ class MacOsAvPlayerRuntime(
             return
         }
         if (attachedLayer != 0L) bridge.attachLayer(player, attachedLayer)
+        if (attachedLayer != 0L && capabilities.contentMode) bridge.contentMode(attachedLayer, contentMode)
+        tracks = emptyList()
+        emit(RuntimeEvent.EngineChanged(command.generation, cn.mafei.cmp.player.api.PlayerEngineType.System))
     }
 
     private fun stop(generation: PlaybackGeneration?) {
@@ -327,13 +358,14 @@ class MacOsAvPlayerRuntime(
  * AVPlayerLayer composed by the UI layer (register via MacSurfaceRegistry);
  * audio works without a layer. JNI link verification: JniAvPlayerBridgeTest.
  */
-fun createMacOsPlayerRuntime(): PlayerRuntime = MacOsAvPlayerRuntime(
+fun createMacOsPlayerRuntime(surfaces: MacSurfaceRegistry = MacSurfaceRegistry()): PlayerRuntime = MacOsAvPlayerRuntime(
     capabilities = cn.mafei.cmp.player.api.PlayerCapabilities(
         seek = true,
         speed = true,
-        trackSelection = false, // no AVMediaSelectionGroup negotiation in P0
+        trackSelection = true,
+        contentMode = true,
         backgroundPlayback = false,
     ),
     bridge = JniAvPlayerBridge(),
-    surfaces = MacSurfaceRegistry(),
+    surfaces = surfaces,
 )

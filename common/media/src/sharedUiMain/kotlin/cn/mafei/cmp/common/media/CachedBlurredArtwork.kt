@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,6 +23,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -31,6 +34,7 @@ fun CachedBlurredArtwork(
     source: ImageBitmap,
     radius: Dp,
     modifier: Modifier = Modifier,
+    cache: ArtworkMemoryCache? = null,
 ) {
     if (radius <= 0.dp) {
         Image(source, null, modifier, contentScale = ContentScale.Crop)
@@ -47,30 +51,54 @@ fun CachedBlurredArtwork(
                 )
             }
         }
-        val layer = rememberGraphicsLayer()
-        val blurred by produceState<ImageBitmap?>(null, source, geometry, layer) {
-            // A source/size change must never publish the previous cover as the new one.
+        // A completed carousel cycle or returning route can reuse the raster without
+        // briefly installing a full-window live blur while the coroutine starts.
+        key(source, geometry, cache) {
+            val hit = remember { cache?.blurCache?.get(source, geometry) }
+            if (hit != null) {
+                Image(hit, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            } else {
+                BlurredArtworkMiss(source, geometry, radius, cache)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlurredArtworkMiss(
+    source: ImageBitmap,
+    geometry: ArtworkBlurGeometry,
+    radius: Dp,
+    cache: ArtworkMemoryCache?,
+) {
+    val layer = rememberGraphicsLayer()
+    val blurred by produceState<ImageBitmap?>(null, layer) {
+        cache?.blurCache?.get(source, geometry)?.let {
+            value = it
+            return@produceState
+        }
+        layer.renderEffect = BlurEffect(geometry.radiusPx, geometry.radiusPx, TileMode.Clamp)
+        layer.record(Density(1f), LayoutDirection.Ltr, geometry.rasterSize) {
+            drawImage(source, dstOffset = geometry.imageOffset, dstSize = geometry.imageSize)
+        }
+        try {
+            val result = layer.toImageBitmap()
+            currentCoroutineContext().ensureActive()
+            cache?.blurCache?.put(source, geometry, result)
+            value = result
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Failed snapshots are not cached, so a later visit can retry.
             value = null
-            layer.renderEffect = BlurEffect(geometry.radiusPx, geometry.radiusPx, TileMode.Clamp)
-            layer.record(Density(1f), LayoutDirection.Ltr, geometry.rasterSize) {
-                drawImage(source, dstOffset = geometry.imageOffset, dstSize = geometry.imageSize)
-            }
-            try {
-                value = layer.toImageBitmap()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Keep artwork usable on renderers without snapshot support.
-                value = null
-            }
         }
-        val cached = blurred
-        if (cached != null) {
-            Image(cached, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
-        } else {
-            // Fallback is still the original blur, not an unblurred flash.
-            Image(source, null, Modifier.fillMaxSize().blur(radius), contentScale = ContentScale.Crop)
-        }
+    }
+    val cached = blurred
+    if (cached != null) {
+        Image(cached, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+    } else {
+        // Fallback is still the original blur, not an unblurred flash.
+        Image(source, null, Modifier.fillMaxSize().blur(radius), contentScale = ContentScale.Crop)
     }
 }
 

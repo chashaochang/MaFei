@@ -129,7 +129,7 @@ class ProviderLogin(
         for (candidate in candidates) {
             currentCoroutineContext().ensureActive()
             val facade = DefaultJellyfinFacade(
-                JellyfinServerConfig(candidate, "MaFei", "MaFei CMP", deviceId, "2.0.0"),
+                JellyfinServerConfig(candidate, "MaFei", "MaFei", deviceId, "2.0.0"),
                 LoginBorrowedTransport(transport),
             )
             try {
@@ -168,7 +168,7 @@ class ProviderLogin(
         val presented = PresentedDevice(known?.deviceId ?: newCredentialKey(), borrowed = known != null)
         val state = InMemoryJellyfinSessionState()
         val facade = DefaultJellyfinFacade(
-            JellyfinServerConfig(url, "MaFei", "MaFei CMP", presented.id, "2.0.0"),
+            JellyfinServerConfig(url, "MaFei", "MaFei", presented.id, "2.0.0"),
             LoginBorrowedTransport(transport), state,
         )
         try {

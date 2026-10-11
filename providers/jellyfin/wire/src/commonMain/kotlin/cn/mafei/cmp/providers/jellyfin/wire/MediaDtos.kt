@@ -109,6 +109,7 @@ data class SubtitleProfileDto(
 @Serializable
 data class CodecProfileDto(
     @SerialName("Type") val type: CodecType? = null,
+    @SerialName("Codec") val codec: String? = null,
     @SerialName("Conditions") val conditions: List<ProfileConditionDto> = emptyList(),
 )
 
@@ -191,6 +192,7 @@ data class PlaybackProgressInfoDto(
 /** POST /Sessions/Playing/Stopped body. */
 @Serializable
 data class PlaybackStopInfoDto(
+    @SerialName("LiveStreamId") val liveStreamId: String? = null,
     @SerialName("ItemId") val itemId: String,
     @SerialName("SessionId") val sessionId: String? = null,
     @SerialName("PlaySessionId") val playSessionId: String? = null,

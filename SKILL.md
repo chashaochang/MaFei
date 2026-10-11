@@ -1,6 +1,6 @@
 ---
 name: mafei-liquid-glass-ui
-description: MaFei CMP 界面设计与液态玻璃组件接入规范。修改可见 UI、导航、播放器、浮层、按钮、卡片或 Glass 底层前必须阅读。
+description: MaFei 界面设计与液态玻璃组件接入规范。修改可见 UI、导航、播放器、浮层、按钮、卡片或 Glass 底层前必须阅读。
 ---
 
 # MaFei 液态玻璃 UI 开发规范
@@ -110,6 +110,12 @@ MaFei 的空列表状态使用自己的插画语法，不采用 Material 3 的�
 
 ## MaFei 现有 API
 
+### OHOS Skia 完整效果
+
+OHOS 保持 `rendererBackend=skia`。vendor 的 `Platform.kt` 中 RenderEffect、RuntimeShader 和 GraphicsLayerEffects 三项能力均启用；最后一项控制内阴影的 clear 遮罩、外阴影的 alpha/offset/blendMode 与高光的混合模式，不能沿用早期 Fusion Renderer 的兼容关闭状态。
+
+这些路径已在 Glass Demo 的 Mate 80 上做过针对性交互验证，不代表 MaFei 所有页面已完成验收。接入仍须保持 sibling 采样，检查浅色/深色与按压/拖动状态；独立窗口缺少有效 backdrop 时的实体降级继续保留。更换 renderer 或 CMP/Skiko 版本后必须重新验证，不得直接将 Skia 的结论套用于 Fusion Renderer。
+
 ### `rememberGlassBackdrop` / `captureGlassBackdrop`
 
 用于路由级实时背景采样。采样节点只包含希望被玻璃看到的背景与内容。
@@ -198,6 +204,8 @@ MaFei 的空列表状态使用自己的插画语法，不采用 Material 3 的�
 - backdrop、shader 和动画控制器必须 `remember`。
 - 首次按压卡顿时只预热昂贵 shader，不得改变 idle 外观。
 - 滚动时观察背景是否每帧更新，不能用静态截图伪装玻璃。
+- 完整阴影/高光仅在尺寸、轮廓或材质参数变化时重新录制装饰图层；该复用不适用于实时 backdrop。自定义高光 Shader 可能在绘制时读取动画状态，必须保留逐帧更新。透明度为零的 SrcOver/Plus 装饰跳过绘制，不得对 Clear/DstIn 等破坏性混合模式套用此规则。
+- 玻璃效果恢复必须在业务首页做滚动回归；Demo 无崩溃与模块编译通过不代表整页性能通过。前后对比应使用一致的 Kotlin/Native 构建模式，不能用 Native Debug 与之前 Native Release 的结果直接比较。
 
 ## 验收门禁
 

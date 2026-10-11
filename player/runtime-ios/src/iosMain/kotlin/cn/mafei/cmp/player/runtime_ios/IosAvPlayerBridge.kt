@@ -46,6 +46,20 @@ interface IosAvPlayerBridge {
     /** 0 none, 1 network, 2 decode. */
     fun errorKind(handle: Long): Int
     fun releasePlayer(handle: Long)
+    /** True only when the platform audio session really grants background music playback. */
+    fun configureAudioOnly(handle: Long, audioOnly: Boolean): Boolean = false
+    /** Returns a binding token so a retired scene cannot detach a newer scene's controls. */
+    fun bindSystemControls(title: String, canNext: Boolean, canPrevious: Boolean,
+        handler: (String, Double) -> Unit): Long = 0
+    fun unbindSystemControls(binding: Long) {}
+    fun createVideoView(): Any = throw UnsupportedOperationException("Video view unavailable")
+    fun tracks(handle: Long): List<cn.mafei.cmp.player.api.PlayerTrack> = emptyList()
+    fun selectTrack(handle: Long, kind: cn.mafei.cmp.player.api.TrackKind, id: String?) {
+        throw UnsupportedOperationException("Track selection unavailable")
+    }
+    fun contentMode(handle: Long, mode: cn.mafei.cmp.player.api.PlayerContentMode) {
+        throw UnsupportedOperationException("Content mode unavailable")
+    }
 }
 
 /**

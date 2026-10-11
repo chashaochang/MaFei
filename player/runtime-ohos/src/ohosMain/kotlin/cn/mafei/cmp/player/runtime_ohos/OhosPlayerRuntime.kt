@@ -7,6 +7,8 @@ import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntime
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.PlayerRenderMode
+import cn.mafei.cmp.player.api.PlayerPlaybackPreferences
+import cn.mafei.cmp.player.api.PlayerEngineResolver
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.RuntimeCommand
@@ -29,6 +31,10 @@ sealed interface OhosNativePlayerEvent {
     data class Playing(override val handle: Long) : OhosNativePlayerEvent
     data class Paused(override val handle: Long) : OhosNativePlayerEvent
     data class Buffering(override val handle: Long) : OhosNativePlayerEvent
+    data class PictureInPicture(override val handle: Long, val active: Boolean) : OhosNativePlayerEvent
+    data class BackgroundAudio(override val handle: Long, val active: Boolean) : OhosNativePlayerEvent
+    data class Casting(override val handle: Long, val active: Boolean) : OhosNativePlayerEvent
+    data class EngineChanged(override val handle: Long, val engine: cn.mafei.cmp.player.api.PlayerEngineType) : OhosNativePlayerEvent
 
     data class Progress(
         override val handle: Long,
@@ -72,7 +78,9 @@ interface OhosNativePlayerBridge {
         subtitleUrl: String?,
         allowInsecureTls: Boolean,
         multiConnectionAllowed: Boolean,
+        audioOnly: Boolean,
         startPositionMs: Long,
+        preferences: PlayerPlaybackPreferences,
     )
     fun setRenderMode(mode: PlayerRenderMode)
     fun play(handle: Long, pendingSeekPositionMs: Long?)
@@ -103,6 +111,11 @@ class OhosPlayerRuntime(
 ) : PlayerRuntime {
 
     private var renderMode = PlayerRenderMode.Buffer
+    private var playbackPreferences = PlayerPlaybackPreferences()
+
+    override fun setPlaybackPreferences(preferences: PlayerPlaybackPreferences) {
+        playbackPreferences = preferences
+    }
 
     override fun setRenderMode(mode: PlayerRenderMode) {
         renderMode = mode
@@ -165,6 +178,13 @@ class OhosPlayerRuntime(
         if (previous.handle != 0L) bridge.stop(previous.handle)
         state.value = RuntimeSnapshot(handle = handle, generation = command.generation)
         try {
+            val decision = PlayerEngineResolver.resolve(playbackPreferences.engine, command.resource.engineFacts, capabilities.engineSelection)
+            // Self-signed streams stay on the engine that actually supports
+            // their trust policy. AVPlayer has no per-stream insecure-TLS flag.
+            val engine = if (command.resource.allowInsecureTls) cn.mafei.cmp.player.api.PlayerEngineType.Mpv else decision.engine
+            val preferences = playbackPreferences.copy(engine = engine,
+                useHardwareDecode = playbackPreferences.useHardwareDecode && !decision.forceMpvSoftwareDecode)
+            sink.value?.invoke(RuntimeEvent.EngineChanged(command.generation, engine))
             bridge.setRenderMode(renderMode)
             bridge.loadUrl(
                 handle = handle,
@@ -173,7 +193,9 @@ class OhosPlayerRuntime(
                 subtitleUrl = command.resource.subtitleUrl,
                 allowInsecureTls = command.resource.allowInsecureTls,
                 multiConnectionAllowed = command.resource.multiConnectionAllowed,
+                audioOnly = command.resource.audioOnly,
                 startPositionMs = command.startPositionMs,
+                preferences = preferences,
             )
         } catch (_: UnsupportedOperationException) {
             sink.value?.invoke(RuntimeEvent.Failed(command.generation, PlayerFailure.UnsupportedMedia))
@@ -211,6 +233,10 @@ class OhosPlayerRuntime(
             is OhosNativePlayerEvent.Playing -> RuntimeEvent.Playing(generation)
             is OhosNativePlayerEvent.Paused -> RuntimeEvent.Paused(generation)
             is OhosNativePlayerEvent.Buffering -> RuntimeEvent.Buffering(generation)
+            is OhosNativePlayerEvent.PictureInPicture -> RuntimeEvent.PictureInPicture(generation, event.active)
+            is OhosNativePlayerEvent.BackgroundAudio -> RuntimeEvent.BackgroundAudio(generation, event.active)
+            is OhosNativePlayerEvent.Casting -> RuntimeEvent.Casting(generation, event.active)
+            is OhosNativePlayerEvent.EngineChanged -> RuntimeEvent.EngineChanged(generation, event.engine)
             is OhosNativePlayerEvent.Progress -> RuntimeEvent.Progress(
                 generation,
                 event.positionMs.coerceAtLeast(0L),

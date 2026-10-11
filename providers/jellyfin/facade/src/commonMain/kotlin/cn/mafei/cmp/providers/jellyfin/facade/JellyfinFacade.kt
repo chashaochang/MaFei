@@ -33,6 +33,12 @@ interface JellyfinFacade {
     val playstate: JellyfinPlayStateApi
     val userdata: JellyfinUserDataApi
     val images: JellyfinImagesApi
+    val management: cn.mafei.cmp.providers.jellyfin.management.JellyfinManagementApi
+        get() = cn.mafei.cmp.providers.jellyfin.management.JellyfinManagementApi(client)
+    val livetv: cn.mafei.cmp.providers.jellyfin.livetv.JellyfinLiveTvApi
+        get() = cn.mafei.cmp.providers.jellyfin.livetv.DefaultJellyfinLiveTvApi(client)
+    val photos: cn.mafei.cmp.providers.jellyfin.photos.JellyfinPhotosApi
+        get() = cn.mafei.cmp.providers.jellyfin.photos.DefaultJellyfinPhotosApi(client)
 }
 
 class DefaultJellyfinFacade(
@@ -53,4 +59,7 @@ class DefaultJellyfinFacade(
     override val playstate: JellyfinPlayStateApi by lazy { cn.mafei.cmp.providers.jellyfin.playstate.DefaultJellyfinPlayStateApi(client) }
     override val userdata: JellyfinUserDataApi by lazy { cn.mafei.cmp.providers.jellyfin.userdata.DefaultJellyfinUserDataApi(client) }
     override val images: JellyfinImagesApi by lazy { cn.mafei.cmp.providers.jellyfin.images.DefaultJellyfinImagesApi(client) }
+    override val management by lazy { cn.mafei.cmp.providers.jellyfin.management.JellyfinManagementApi(client) }
+    override val livetv by lazy { cn.mafei.cmp.providers.jellyfin.livetv.DefaultJellyfinLiveTvApi(client) }
+    override val photos by lazy { cn.mafei.cmp.providers.jellyfin.photos.DefaultJellyfinPhotosApi(client) }
 }

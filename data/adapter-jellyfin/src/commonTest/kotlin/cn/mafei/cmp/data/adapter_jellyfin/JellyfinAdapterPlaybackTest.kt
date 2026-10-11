@@ -4,6 +4,8 @@ import cn.mafei.cmp.core.domain.AccountId
 import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.ServerError
 import cn.mafei.cmp.core.domain.ServerId
+import cn.mafei.cmp.core.domain.TimeoutError
+import cn.mafei.cmp.core.http_contract.HttpTimeoutException
 import cn.mafei.cmp.core.http_contract.HttpUrl
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
 import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
@@ -59,6 +61,12 @@ private const val PLAYBACK_INFO_SUBTITLES_OFF =
 /** Server mandates an embedded (no DeliveryUrl) track: no external fallback. */
 private const val PLAYBACK_INFO_MANDATED_EMBEDDED =
     """{"MediaSources":[{"Id":"msEmbedded","Protocol":"File","Container":"mkv","SupportsDirectPlay":true,"DefaultSubtitleStreamIndex":1,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264"},{"Index":1,"Type":"Subtitle","Codec":"subrip","IsExternal":false},{"Index":2,"Type":"Subtitle","Codec":"srt","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/m6/Subtitles/2/0/Stream.srt"}]}],"PlaySessionId":"session-0006"}"""
+
+private const val ISO_SOURCE =
+    """{"Id":"disc-source","Protocol":"File","Container":"iso","Path":"/media/disc.iso","SupportsDirectPlay":false,"SupportsDirectStream":false,"SupportsTranscoding":true,"TranscodingUrl":"/videos/disc/master.m3u8","DefaultAudioStreamIndex":1,"DefaultSubtitleStreamIndex":3,"MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc"},{"Index":1,"Type":"Audio","DisplayTitle":"English TrueHD"},{"Index":2,"Type":"Subtitle","Codec":"pgssub","IsExternal":false},{"Index":3,"Type":"Subtitle","Codec":"srt","IsExternal":true,"DeliveryMethod":"External","DeliveryUrl":"/Videos/disc/disc-source/Subtitles/3/0/Stream.srt"}]}"""
+
+private const val PLAYBACK_INFO_ISO =
+    """{"MediaSources":[$ISO_SOURCE],"PlaySessionId":"iso-session"}"""
 
 class JellyfinAdapterPlaybackTest {
 
@@ -121,6 +129,180 @@ class JellyfinAdapterPlaybackTest {
     }
 
     // ------------------------------------------------------------- prepare
+
+    @Test
+    fun nativeIsoFallbackKeepsSourceTracksResumeAndReporting() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO)
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"),
+            PlaybackOptions(isoDirectPlay = true, startPositionMs = 90_000),
+        ))
+        val url = HttpUrl.parse(ready.streamUrl)
+        assertEquals("/Videos/disc/stream.iso", url.encodedPath)
+        assertEquals("true", url.queryParameters.first("static"))
+        assertEquals("disc-source", url.queryParameters.first("mediaSourceId"))
+        assertEquals("iso-session", url.queryParameters.first("playSessionId"))
+        assertEquals("device-1", url.queryParameters.first("deviceId"))
+        assertEquals("fixture-token", url.queryParameters.first("api_key"))
+        assertTrue(ready.streamUrl.endsWith("#bdiso"))
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+        assertEquals("disc-source", ready.mediaSourceId)
+        assertEquals(null, ready.appliedBitrate)
+        // The SDK's local Range proxy drops the ISO suffix/marker.
+        assertEquals(false, ready.multiConnectionAllowed)
+        assertEquals(listOf(1, 2, 3), ready.tracks.map { it.index })
+        assertEquals(false, ready.tracks.first { it.index == 1 }.renegotiate)
+        assertEquals(false, ready.tracks.first { it.index == 2 }.renegotiate)
+        assertEquals(true, ready.tracks.first { it.index == 3 }.renegotiate)
+        assertEquals("https://jellyfin.test/Videos/disc/disc-source/Subtitles/3/0/Stream.srt?api_key=fixture-token", ready.subtitleUrl)
+        val request = (fixture.transport.requests.single().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(request.contains("\"StartTimeTicks\":900000000"), request)
+        assertTrue(request.contains("\"Container\":\"iso\",\"Type\":\"Video\""), request)
+
+        fixture.transport.enqueue(FakeJellyfinTransport.noContent(url))
+        fixture.adapter.reportPlayback(ready, PlaybackEvent(PlaybackEventKind.Start, 90_000))
+        val report = (fixture.transport.requests.last().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(report.contains("\"MediaSourceId\":\"disc-source\""), report)
+        assertTrue(report.contains("\"PlaySessionId\":\"iso-session\""), report)
+        assertTrue(report.contains("\"PlayMethod\":\"DirectPlay\""), report)
+        fixture.transport.enqueue(FakeJellyfinTransport.noContent(url))
+        fixture.adapter.reportPlayback(ready, PlaybackEvent(PlaybackEventKind.Progress, 95_000))
+        val progress = (fixture.transport.requests.last().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(progress.contains("\"PlayMethod\":\"DirectPlay\""), progress)
+    }
+
+    @Test
+    fun directPlayIsoAlsoReachesTheDiscReader() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO.replace("\"SupportsDirectPlay\":false", "\"SupportsDirectPlay\":true"))
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true),
+        ))
+        assertTrue(ready.streamUrl.endsWith("#bdiso"), ready.streamUrl)
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+    }
+
+    @Test
+    fun localIsoDoesNotRequireATranscodingUrl() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO
+            .replace("\"TranscodingUrl\":\"/videos/disc/master.m3u8\",", "")
+            .replace("\"Container\":\"iso\"", "\"Container\":\" ISO \""))
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true),
+        ))
+        assertEquals("/Videos/disc/stream.iso", HttpUrl.parse(ready.streamUrl).encodedPath)
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+    }
+
+    @Test
+    fun incompleteIsoProbeStillUsesTheVideoDiscRoute() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO.replace("{\"Index\":0,\"Type\":\"Video\",\"Codec\":\"hevc\"},", ""))
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true),
+        ))
+        assertEquals("/Videos/disc/stream.iso", HttpUrl.parse(ready.streamUrl).encodedPath)
+    }
+
+    @Test
+    fun isoOnAnEngineWithoutDiscSupportKeepsTheServerStream() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO)
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("disc")))
+        assertEquals(PlaybackTransport.Transcode, ready.transport)
+        assertTrue(ready.streamUrl.contains("master.m3u8"), ready.streamUrl)
+        assertTrue(!ready.streamUrl.contains("#bdiso"))
+    }
+
+    @Test
+    fun remoteIsoIsNotMistakenForTheLegacyLocalFileFallback() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO.replace("\"Protocol\":\"File\"", "\"Protocol\":\"Http\""))
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true),
+        ))
+        assertEquals(PlaybackTransport.Transcode, ready.transport)
+        assertTrue(!ready.streamUrl.contains("#bdiso"))
+    }
+
+    @Test
+    fun nativeProfileKeepsNormalVideoAndHdrCapabilities() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, JellyfinFixtures.PLAYBACK_INFO)
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("m0102030405060708"), PlaybackOptions(isoDirectPlay = true),
+        ))
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+        assertTrue(!ready.streamUrl.contains("#bdiso"))
+        assertEquals(true, ready.multiConnectionAllowed)
+        val request = (fixture.transport.requests.single().body as cn.mafei.cmp.core.http_contract.HttpBody.Text).text
+        assertTrue(request.contains("mp4,m4v,mov,mkv,webm,ts,mpegts,flv,avi,3gp"), request)
+        assertTrue(request.contains("\"Codec\":\"hevc\""), request)
+        assertTrue(request.contains("DOVIWithHDR10"), request)
+    }
+
+    @Test
+    fun isoStaticFallbackDoesNotClaimAQualityCeilingWasApplied() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, PLAYBACK_INFO_ISO)
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true, maxStreamingBitrate = 8_000_000),
+        ))
+        assertEquals(PlaybackTransport.DirectPlay, ready.transport)
+        assertEquals(null, ready.appliedBitrate)
+    }
+
+    @Test
+    fun negotiationTimeoutOnlyFallsBackWithConfirmedIsoMetadata() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            if (request.url.encodedPath.endsWith("/PlaybackInfo")) throw HttpTimeoutException(request.url, 30_000)
+            FakeJellyfinTransport.jsonResponse(200, """{"Id":"disc","MediaSources":[$ISO_SOURCE]}""", request.url)
+        }
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            cn.mafei.cmp.core.domain.MediaId("disc"), PlaybackOptions(isoDirectPlay = true, mediaSourceId = "disc-source"),
+        ))
+        assertEquals("disc-source", ready.mediaSourceId)
+        assertEquals(null, ready.playSessionId)
+        assertTrue(ready.streamUrl.endsWith("#bdiso"))
+        assertEquals(3, ready.tracks.size)
+        fixture.adapter.reportPlayback(ready, PlaybackEvent(PlaybackEventKind.Start, 0))
+    }
+
+    @Test
+    fun ordinaryTimeoutIsNeverConvertedToAnIsoStream() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            if (request.url.encodedPath.endsWith("/PlaybackInfo")) throw HttpTimeoutException(request.url, 30_000)
+            FakeJellyfinTransport.jsonResponse(200, """{"Id":"m1","MediaSources":[{"Id":"movie","Protocol":"File","Container":"mkv"}]}""", request.url)
+        }
+        assertFailsWith<TimeoutError> {
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m1"), PlaybackOptions(isoDirectPlay = true))
+        }
+    }
+
+    @Test
+    fun timeoutFallbackMustNotChangeAnExplicitlySelectedVersion() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request ->
+            if (request.url.encodedPath.endsWith("/PlaybackInfo")) throw HttpTimeoutException(request.url, 30_000)
+            FakeJellyfinTransport.jsonResponse(200, """{"Id":"disc","MediaSources":[$ISO_SOURCE]}""", request.url)
+        }
+        assertFailsWith<TimeoutError> {
+            fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("disc"),
+                PlaybackOptions(isoDirectPlay = true, mediaSourceId = "another-version"))
+        }
+    }
+
+    @Test
+    fun standardTimeoutStillFailsWithoutDiscCapableRuntime() = runTest {
+        val fixture = Fixture()
+        fixture.transport.handler = { request -> throw HttpTimeoutException(request.url, 30_000) }
+        assertFailsWith<TimeoutError> { fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("m1")) }
+        assertEquals(1, fixture.transport.requests.size)
+    }
 
     @Test
     fun directPlaySourceYieldsValidatedStreamUrl() = runTest {
@@ -228,6 +410,7 @@ class JellyfinAdapterPlaybackTest {
             fixture.adapter.preparePlayback(cn.mafei.cmp.core.domain.MediaId("song")),
         )
         val stream = ready.streamUrl
+        assertTrue(ready.audioOnly)
         assertTrue(stream.startsWith("https://jellyfin.test/Audio/song/stream.flac"), stream)
         assertTrue(stream.contains("static=true"), stream) // direct play of the audio file
         assertTrue(stream.contains("mediaSourceId=msAudio0102030405060708"), stream)

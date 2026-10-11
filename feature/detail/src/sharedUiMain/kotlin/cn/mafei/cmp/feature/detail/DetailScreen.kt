@@ -44,7 +44,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -89,6 +89,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -100,6 +101,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
@@ -130,7 +132,7 @@ import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.LocalShellBackdrop
 import cn.mafei.cmp.common.ui.LocalMaFeiWindowModalHost
-import cn.mafei.cmp.common.ui.MaFeiWindowModalPortal
+import cn.mafei.cmp.common.ui.MaFeiAnimatedModalOverlay
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
@@ -193,6 +195,9 @@ fun DetailScreen(
     playbackError: String? = null,
     onToggleFavorite: (() -> Unit)? = null,
     onTogglePlayed: (() -> Unit)? = null,
+    onToggleChasing: (() -> Unit)? = null,
+    isChasing: Boolean = false,
+    chasingBusy: Boolean = false,
     actionsBusy: Boolean = false,
     actionsError: String? = null,
     seasons: List<MediaItem> = emptyList(),
@@ -253,7 +258,6 @@ fun DetailScreen(
             overviewSheetVisible -> overviewSheetVisible = false
         }
     }
-    DetailSheetBackHandler(enabled = sheetVisible, onDismiss = dismissTopSheet)
     val playbackSources = remember(item?.provider, item?.mediaSources) {
         item?.let {
             presentDetailPlaybackSources(it.provider, selectLegacyDetailSources(it.mediaSources))
@@ -321,6 +325,9 @@ fun DetailScreen(
                                 playbackBusy = playbackBusy,
                                 onToggleFavorite = onToggleFavorite,
                                 onTogglePlayed = onTogglePlayed,
+                                onToggleChasing = onToggleChasing,
+                                isChasing = isChasing,
+                                chasingBusy = chasingBusy,
                                 actionsBusy = actionsBusy,
                                 seasons = seasons,
                                 sectionsLoading = sectionsLoading,
@@ -373,59 +380,33 @@ fun DetailScreen(
             message = actionsError ?: playbackError,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-        if (!useWindowModalHost) {
-            if (overviewSheetVisible) {
-                OverviewSheetOverlay(
-                    overview = item?.overview,
-                    backdrop = actionBarBackdrop,
-                    onDismiss = { overviewSheetVisible = false },
-                )
-            }
-            if (mediaInfoSheetVisible && selectedPlaybackSource != null) {
-                MediaInfoSheetOverlay(
-                    sections = selectedPlaybackSource.infoSections,
-                    backdrop = actionBarBackdrop,
-                    onDismiss = { mediaInfoSheetVisible = false },
-                )
-            }
-            pickerKind?.let { kind ->
-                DetailPickerSheetOverlay(
-                    kind = kind,
-                    sources = playbackSources,
-                    selectedSource = selectedPlaybackSource,
-                    selectedAudioStreamIndex = selectedAudioStreamIndex,
-                    selectedSubtitleStreamIndex = selectedSubtitleStreamIndex,
-                    backdrop = actionBarBackdrop,
-                    onDismiss = { pickerKind = null },
-                    onSelectSource = { sourceId ->
-                        pickerKind = null
-                        onSelectMediaSource?.invoke(sourceId)
-                    },
-                    onSelectAudio = { streamIndex ->
-                        pickerKind = null
-                        onSelectAudioTrack?.invoke(streamIndex)
-                    },
-                    onSelectSubtitle = { streamIndex ->
-                        pickerKind = null
-                        onSelectSubtitleTrack?.invoke(streamIndex)
-                    },
-                )
-            }
+        val activeModal = when {
+            pickerKind != null -> DetailModal.Picker(pickerKind!!)
+            mediaInfoSheetVisible && selectedPlaybackSource != null -> DetailModal.MediaInfo
+            overviewSheetVisible -> DetailModal.Overview
+            else -> null
         }
-        MaFeiWindowModalPortal(visible = useWindowModalHost && sheetVisible) { modalBackdrop ->
-            when {
-                overviewSheetVisible -> OverviewSheetOverlay(
+        MaFeiAnimatedModalOverlay(
+            value = activeModal,
+            backdrop = actionBarBackdrop,
+            useWindowHost = useWindowModalHost,
+            onDismiss = dismissTopSheet,
+        ) { modal, modalBackdrop, motion ->
+            when (modal) {
+                DetailModal.Overview -> OverviewSheetOverlay(
                     overview = item?.overview,
                     backdrop = modalBackdrop,
                     onDismiss = { overviewSheetVisible = false },
+                    surfaceMotion = motion,
                 )
-                mediaInfoSheetVisible && selectedPlaybackSource != null -> MediaInfoSheetOverlay(
-                    sections = selectedPlaybackSource.infoSections,
+                DetailModal.MediaInfo -> MediaInfoSheetOverlay(
+                    sections = selectedPlaybackSource?.infoSections.orEmpty(),
                     backdrop = modalBackdrop,
                     onDismiss = { mediaInfoSheetVisible = false },
+                    surfaceMotion = motion,
                 )
-                pickerKind != null -> DetailPickerSheetOverlay(
-                    kind = pickerKind!!,
+                is DetailModal.Picker -> DetailPickerSheetOverlay(
+                    kind = modal.kind,
                     sources = playbackSources,
                     selectedSource = selectedPlaybackSource,
                     selectedAudioStreamIndex = selectedAudioStreamIndex,
@@ -444,6 +425,7 @@ fun DetailScreen(
                         pickerKind = null
                         onSelectSubtitleTrack?.invoke(streamIndex)
                     },
+                    surfaceMotion = motion,
                 )
             }
         }
@@ -569,6 +551,9 @@ private fun BoxScope.DetailBody(
     playbackBusy: Boolean,
     onToggleFavorite: (() -> Unit)?,
     onTogglePlayed: (() -> Unit)?,
+    onToggleChasing: (() -> Unit)?,
+    isChasing: Boolean,
+    chasingBusy: Boolean,
     actionsBusy: Boolean,
     seasons: List<MediaItem>,
     sectionsLoading: Boolean,
@@ -677,6 +662,9 @@ private fun BoxScope.DetailBody(
                     playbackBusy = playbackBusy,
                     onToggleFavorite = onToggleFavorite,
                     onTogglePlayed = onTogglePlayed,
+                    onToggleChasing = onToggleChasing,
+                    isChasing = isChasing,
+                    chasingBusy = chasingBusy,
                     actionsBusy = actionsBusy,
                     backdrop = backdrop,
                     largeLayout = simplifiedLargeLayout,
@@ -1215,6 +1203,9 @@ private fun DetailActions(
     playbackBusy: Boolean,
     onToggleFavorite: (() -> Unit)?,
     onTogglePlayed: (() -> Unit)?,
+    onToggleChasing: (() -> Unit)?,
+    isChasing: Boolean,
+    chasingBusy: Boolean,
     actionsBusy: Boolean,
     backdrop: GlassBackdrop,
     largeLayout: Boolean,
@@ -1262,6 +1253,17 @@ private fun DetailActions(
             busy = actionsBusy,
             backdrop = backdrop,
         )
+        if (onToggleChasing != null) {
+            DetailIconAction(
+                icon = MaFeiLegacyDrawables.history,
+                selected = isChasing,
+                selectedColor = MaterialTheme.colorScheme.primary,
+                accessibilityLabel = if (isChasing) "取消追剧" else "追剧",
+                onAction = onToggleChasing,
+                busy = chasingBusy,
+                backdrop = backdrop,
+            )
+        }
     }
 }
 
@@ -1454,6 +1456,7 @@ internal fun OverviewSection(
         lineHeight = if (largeTypography) 22.sp else 18.sp,
     )
     val textMeasurer = rememberTextMeasurer()
+    val latestOnOpen by rememberUpdatedState(onOpen)
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val maxWidthPx = with(density) { maxWidth.roundToPx() }
@@ -1464,19 +1467,15 @@ internal fun OverviewSection(
                 textMeasurer = textMeasurer,
                 style = textStyle,
                 moreColor = moreColor,
+                onMore = { latestOnOpen() },
             )
         }
-        ClickableText(
+        Text(
             text = preview,
             modifier = Modifier.fillMaxWidth(),
             style = textStyle,
             maxLines = LegacyOverviewMaxLines,
             overflow = TextOverflow.Ellipsis,
-            onClick = { offset ->
-                if (preview.getStringAnnotations(LegacyOverviewMoreTag, offset, offset).isNotEmpty()) {
-                    onOpen()
-                }
-            },
         )
     }
 }
@@ -1487,6 +1486,7 @@ internal fun BoxScope.OverviewSheetOverlay(
     overview: String?,
     backdrop: GlassBackdrop,
     onDismiss: () -> Unit,
+    surfaceMotion: Modifier = Modifier,
 ) {
     val text = overview?.takeIf { it.isNotBlank() } ?: return
     val safeArea = LocalMaFeiSafeArea.current
@@ -1512,6 +1512,7 @@ internal fun BoxScope.OverviewSheetOverlay(
         modifier = Modifier.align(sheetAlignment)
             .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
             .widthIn(max = 720.dp).fillMaxWidth().height(420.dp)
+            .then(surfaceMotion)
             .then(if (largeWindow) Modifier else sheetDrag)
             .pointerInput(Unit) { detectTapGestures { } },
         exportedBackdrop = sheetMaterialBackdrop,
@@ -1772,6 +1773,12 @@ private enum class DetailPickerKind {
     Audio,
 }
 
+private sealed interface DetailModal {
+    data object Overview : DetailModal
+    data object MediaInfo : DetailModal
+    data class Picker(val kind: DetailPickerKind) : DetailModal
+}
+
 /**
  * Same-layer translation of the legacy ArkUI bindSheet selectors. The source
  * list keeps the 68vp checkmark row; audio and subtitle keep the 66vp radio row.
@@ -1788,6 +1795,7 @@ private fun BoxScope.DetailPickerSheetOverlay(
     onSelectSource: (String) -> Unit,
     onSelectAudio: (Int) -> Unit,
     onSelectSubtitle: (Int) -> Unit,
+    surfaceMotion: Modifier = Modifier,
 ) {
     val source = selectedSource ?: return
     val safeArea = LocalMaFeiSafeArea.current
@@ -1814,6 +1822,7 @@ private fun BoxScope.DetailPickerSheetOverlay(
                 spec = OverviewSheetSurfaceSpec,
                 tint = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)
+                    .then(surfaceMotion)
                     .then(if (largeWindow) Modifier else sheetDrag)
                     .pointerInput(Unit) { detectTapGestures { } },
                 exportedBackdrop = sheetMaterialBackdrop,
@@ -2093,6 +2102,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
     sections: List<DetailInfoSection>,
     backdrop: GlassBackdrop,
     onDismiss: () -> Unit,
+    surfaceMotion: Modifier = Modifier,
 ) {
     if (sections.isEmpty()) return
     val safeArea = LocalMaFeiSafeArea.current
@@ -2114,6 +2124,7 @@ internal fun BoxScope.MediaInfoSheetOverlay(
             modifier = Modifier.align(sheetAlignment)
                 .padding(horizontal = if (largeWindow) 24.dp else 0.dp)
                 .widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(.70f)
+                .then(surfaceMotion)
                 .then(if (largeWindow) Modifier else sheetDrag)
                 .pointerInput(Unit) { detectTapGestures { } },
             exportedBackdrop = sheetMaterialBackdrop,
@@ -2367,6 +2378,7 @@ private fun legacyOverviewPreview(
     textMeasurer: TextMeasurer,
     style: TextStyle,
     moreColor: Color,
+    onMore: () -> Unit,
 ): AnnotatedString {
     if (maxWidthPx <= 0) return AnnotatedString(text)
 
@@ -2396,9 +2408,9 @@ private fun legacyOverviewPreview(
     return buildAnnotatedString {
         append(text.substring(0, prefixEnd))
         append("... ")
-        pushStringAnnotation(LegacyOverviewMoreTag, "more")
-        withStyle(SpanStyle(color = moreColor)) { append("更多") }
-        pop()
+        withLink(LinkAnnotation.Clickable(LegacyOverviewMoreTag, linkInteractionListener = { onMore() })) {
+            withStyle(SpanStyle(color = moreColor)) { append("更多") }
+        }
     }
 }
 

@@ -40,6 +40,7 @@ fun LibraryIndexScreen(
     onCollection: (MediaCollection) -> Unit,
     onFavorite: () -> Unit,
     onRetry: () -> Unit,
+    onChasing: (() -> Unit)? = null,
     refreshing: Boolean = false,
     bottomOverlayInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
@@ -92,6 +93,15 @@ fun LibraryIndexScreen(
                             )
                         }
                         item { Spacer(Modifier.height(12.dp)) }
+                        if (onChasing != null) {
+                            item {
+                                LegacyListGroup(
+                                    items = listOf(LegacyListGroupItem("追剧", icon = MaFeiLegacyDrawables.history)),
+                                    onItemClick = { onChasing() },
+                                )
+                            }
+                            item { Spacer(Modifier.height(12.dp)) }
+                        }
                         item {
                             LegacyListGroup(
                                 items = collections.map { collection ->

@@ -7,6 +7,9 @@ import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerFailure
 import cn.mafei.cmp.player.api.PlayerRuntimeInfo
 import cn.mafei.cmp.player.api.PlayerRenderMode
+import cn.mafei.cmp.player.api.PlayerPlaybackPreferences
+import cn.mafei.cmp.player.api.PlayerEngineType
+import cn.mafei.cmp.player.api.PlayerEngineSourceFacts
 import cn.mafei.cmp.player.api.RuntimeCommand
 import cn.mafei.cmp.player.api.RuntimeEvent
 import cn.mafei.cmp.player.api.TrackKind
@@ -28,6 +31,7 @@ class OhosPlayerRuntimeTest {
         var multiConnectionAllowed = true
         var startPositionMs = 0L
         var renderMode = PlayerRenderMode.Buffer
+        var preferences: PlayerPlaybackPreferences? = null
         var selectedTrack: Pair<TrackKind, String?>? = null
         var contentMode: PlayerContentMode? = null
         var playedFromPositionMs: Long? = null
@@ -52,7 +56,9 @@ class OhosPlayerRuntimeTest {
             subtitleUrl: String?,
             allowInsecureTls: Boolean,
             multiConnectionAllowed: Boolean,
+            audioOnly: Boolean,
             startPositionMs: Long,
+            preferences: PlayerPlaybackPreferences,
         ) {
             if (rejectHeaders && headers.isNotEmpty()) throw UnsupportedOperationException("headers unsupported")
             this.url = url
@@ -61,6 +67,7 @@ class OhosPlayerRuntimeTest {
             this.allowInsecureTls = allowInsecureTls
             this.multiConnectionAllowed = multiConnectionAllowed
             this.startPositionMs = startPositionMs
+            this.preferences = preferences
         }
 
         override fun play(handle: Long, pendingSeekPositionMs: Long?) {
@@ -180,6 +187,38 @@ class OhosPlayerRuntimeTest {
         assertTrue(bridge.allowInsecureTls)
         assertEquals(false, bridge.multiConnectionAllowed)
         assertEquals(TrackKind.Subtitle to null, bridge.selectedTrack)
+    }
+
+    @Test
+    fun playbackPreferencesTravelWithLoadAndDoNotRestartTheCurrentSource() {
+        val bridge = FakeBridge()
+        val runtime = OhosPlayerRuntime(PlayerCapabilities(playbackPreferences = true), bridge)
+        runtime.bind { }
+        val first = RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("media", "https://test/video"), 12345)
+        runtime.execute(first)
+        assertEquals(PlayerPlaybackPreferences(engine = PlayerEngineType.Mpv), bridge.preferences)
+        runtime.setPlaybackPreferences(PlayerPlaybackPreferences(false, 512))
+        assertEquals(PlayerPlaybackPreferences(engine = PlayerEngineType.Mpv), bridge.preferences)
+        assertEquals(12345L, bridge.startPositionMs)
+        runtime.execute(first.copy(generation = PlaybackGeneration(), startPositionMs = 67890))
+        assertEquals(PlayerPlaybackPreferences(false, 512, PlayerEngineType.Mpv), bridge.preferences)
+        assertEquals(67890L, bridge.startPositionMs)
+        assertEquals(1, bridge.created)
+    }
+
+    @Test fun systemSelectionUsesActualSourceAndTlsPolicy() {
+        val bridge = FakeBridge()
+        val runtime = OhosPlayerRuntime(PlayerCapabilities(playbackPreferences = true, engineSelection = true), bridge)
+        runtime.bind { }
+        val facts = PlayerEngineSourceFacts(container = "mp4", videoCodec = "h264", audioCodecs = listOf("aac"))
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("video", "https://test/video", engineFacts = facts), 12345))
+        assertEquals(PlayerEngineType.System, bridge.preferences!!.engine)
+        assertEquals(12345L, bridge.startPositionMs)
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("video", "https://test/video", allowInsecureTls = true, engineFacts = facts)))
+        assertEquals(PlayerEngineType.Mpv, bridge.preferences!!.engine)
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("video", "https://test/video", engineFacts = facts.copy(pixelFormat = "yuv444p"))))
+        assertEquals(PlayerEngineType.Mpv, bridge.preferences!!.engine)
+        assertEquals(false, bridge.preferences!!.useHardwareDecode)
     }
 
     @Test

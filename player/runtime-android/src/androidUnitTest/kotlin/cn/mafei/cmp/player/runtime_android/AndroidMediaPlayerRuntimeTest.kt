@@ -34,7 +34,7 @@ private class FakeAndroidEngine : AndroidPlayerEngine {
 
     fun emitPrepared(duration: Long, session: Int = this.session) = listenerRef?.onPrepared(session, duration)
     fun emitEnded(session: Int = this.session) = listenerRef?.onCompletion(session)
-    fun emitError(what: Int = 1, session: Int = this.session) = listenerRef?.onError(session, what, 0)
+    fun emitError(what: Int = 1, session: Int = this.session, extra: Int = 0) = listenerRef?.onError(session, what, extra)
     fun emitBuffering(buffering: Boolean, session: Int = this.session) = listenerRef?.onBuffering(session, buffering)
 }
 
@@ -49,6 +49,51 @@ private class ManualPollScheduler : AndroidPollScheduler {
 }
 
 class AndroidMediaPlayerRuntimeTest {
+
+    @Test
+    fun preparationDoesNotPollStateBasedMediaPlayerQueries() {
+        val backing = FakeAndroidEngine()
+        var queriesAllowed = false
+        val guarded = object : AndroidPlayerEngine by backing {
+            override val durationMs: Long get() { check(queriesAllowed); return backing.durationMs }
+            override val isPlaying: Boolean get() { check(queriesAllowed); return backing.isPlaying }
+            override val currentPositionMs: Long get() { check(queriesAllowed); return backing.currentPositionMs }
+            override val bufferedPositionMs: Long get() { check(queriesAllowed); return backing.bufferedPositionMs }
+        }
+        val scheduler = ManualPollScheduler()
+        val received = mutableListOf<RuntimeEvent>()
+        val runtime = AndroidMediaPlayerRuntime(PlayerCapabilities(), guarded, scheduler)
+        runtime.bind { received += it }
+        val first = PlaybackGeneration()
+        runtime.execute(RuntimeCommand.Load(first, PlayableResource("first", "https://stream.test/first.mp4")))
+        repeat(3) { scheduler.tickAll() }
+        assertTrue(received.isEmpty())
+
+        queriesAllowed = true
+        backing.emitPrepared(60_000)
+        scheduler.tickAll()
+        assertTrue(received.any { it is RuntimeEvent.Progress && it.generation === first })
+
+        runtime.execute(RuntimeCommand.Stop(first))
+        queriesAllowed = false
+        scheduler.tickAll()
+        runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("second", "https://stream.test/second.mp4")))
+        backing.emitPrepared(60_000, session = backing.session - 1)
+        scheduler.tickAll()
+        backing.emitError(-1004)
+        scheduler.tickAll()
+        runtime.execute(RuntimeCommand.Release)
+        scheduler.tickAll()
+    }
+
+    @Test
+    fun preparedLiveStreamCanPollWithoutAKnownDuration() {
+        val generation = loadAndPrepare()
+        // A ready callback, not a positive duration, makes live media queryable.
+        engine.durationMs = 0
+        scheduler.tickAll()
+        assertTrue(events.any { it is RuntimeEvent.Progress && it.generation === generation })
+    }
 
     private val engine = FakeAndroidEngine()
     private val scheduler = ManualPollScheduler()
@@ -102,6 +147,32 @@ class AndroidMediaPlayerRuntimeTest {
     }
 
     @Test
+    fun aPausedNativeEngineDoesNotWaitForBufferingEndToPublishPause() {
+        val generation = loadAndPrepare()
+        engine.isPlaying = true
+        scheduler.tickAll()
+        engine.emitBuffering(true)
+        runtime.execute(RuntimeCommand.Pause(generation))
+        engine.isPlaying = false
+        scheduler.tickAll()
+        assertEquals("Paused", eventKinds().last { it != "Progress" })
+    }
+
+    @Test
+    fun bufferingMustNotBeOverwrittenByPollingAndMustReturnToPlayingWhenItEnds() {
+        loadAndPrepare()
+        engine.isPlaying = true
+        scheduler.tickAll()
+        engine.emitBuffering(true)
+        repeat(3) { scheduler.tickAll() }
+        assertEquals("Buffering", eventKinds().last { it != "Progress" })
+        engine.emitBuffering(false)
+        scheduler.tickAll()
+        assertEquals("Playing", eventKinds().last { it != "Progress" })
+        assertEquals(2, events.filterIsInstance<RuntimeEvent.Playing>().size)
+    }
+
+    @Test
     fun pollDerivesPlayingPausedAndProgressFromEngineQueriesOnly() {
         val generation = loadAndPrepare()
         engine.emitBuffering(true)
@@ -120,6 +191,24 @@ class AndroidMediaPlayerRuntimeTest {
         assertTrue(progress.generation === generation)
         assertEquals(1_500L, progress.positionMs)
         assertEquals(30_000L, progress.bufferedPositionMs)
+    }
+
+    @Test
+    fun androidErrorDetailsUseExtraWhileServerDeathKeepsItsPrimaryClassification() {
+        runtime.bind { events += it }
+        for ((what, extra, expected) in listOf(
+            Triple(1, -1004, PlayerFailure.Network),
+            Triple(1, -110, PlayerFailure.Network),
+            Triple(1, -1007, PlayerFailure.Decode),
+            Triple(1, -1010, PlayerFailure.UnsupportedMedia),
+            Triple(100, -1004, PlayerFailure.Engine),
+        )) {
+            events.clear()
+            runtime.execute(RuntimeCommand.Load(PlaybackGeneration(), PlayableResource("video", "https://stream.test/video.mp4")))
+            engine.emitPrepared(60_000)
+            engine.emitError(what = what, extra = extra)
+            assertEquals(expected, events.filterIsInstance<RuntimeEvent.Failed>().single().failure)
+        }
     }
 
     @Test

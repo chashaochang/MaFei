@@ -47,6 +47,31 @@ class PlayerStateMachineTest {
         assertIs<RuntimeCommand.Play>((m.foreground().single() as PlayerEffect.Engine).command)
     }
 
+    @Test fun explicitPipCloseNeverRestartsPlaybackWhenTheAppReopens() {
+        val m = machine(); val generation = ready(m)
+        m.accept(RuntimeEvent.Progress(generation, 42_000, 100_000, 60_000), 0)
+        m.accept(RuntimeEvent.PictureInPicture(generation, true), 1)
+        m.background()
+        // Closing the system window is an explicit pause, not merely losing
+        // background permission. It must survive opening the app directly.
+        m.pause()
+        assertTrue(m.accept(RuntimeEvent.PictureInPicture(generation, false), 2).isEmpty())
+        assertTrue(m.foreground().isEmpty())
+        assertSame(generation, m.state.generation)
+        assertEquals(42_000, m.state.positionMs)
+    }
+
+    @Test fun restoringPipKeepsTheSameGenerationAndPositionWithoutReloading() {
+        val m = machine(); val generation = ready(m)
+        m.accept(RuntimeEvent.Progress(generation, 42_000, 100_000, 60_000), 0)
+        m.accept(RuntimeEvent.PictureInPicture(generation, true), 1)
+        m.background()
+        assertTrue(m.foreground().isEmpty())
+        assertTrue(m.accept(RuntimeEvent.PictureInPicture(generation, false), 2).isEmpty())
+        assertSame(generation, m.state.generation)
+        assertEquals(42_000, m.state.positionMs)
+    }
+
     @Test fun pipStartedAfterBackgroundPauseResumesAndOldPipCannotGrantBackgroundPlayback() {
         val m = machine(); val old = ready(m); m.background()
         assertIs<RuntimeCommand.Play>((m.accept(RuntimeEvent.PictureInPicture(old, true), 1).single() as PlayerEffect.Engine).command)

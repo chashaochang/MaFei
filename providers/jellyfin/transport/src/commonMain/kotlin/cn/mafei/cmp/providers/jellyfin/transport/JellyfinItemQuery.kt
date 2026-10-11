@@ -68,4 +68,18 @@ data class JellyfinItemQuery(
     val years: List<Int> = emptyList(),
     val filters: List<JellyfinItemFilter> = emptyList(),
     val imageTypeLimit: Int = 1,
-)
+    val albumIds: List<String> = emptyList(),
+    val albumArtistIds: List<String> = emptyList(),
+    val artistIds: List<String> = emptyList(),
+    /** One direction per sort key; empty keeps the existing single-direction contract. */
+    val sortOrders: List<JellyfinSortOrder> = emptyList(),
+    val enableImageTypes: List<String> = listOf("Primary", "Backdrop", "Thumb"),
+    val enableUserData: Boolean? = null,
+    val enableTotalRecordCount: Boolean? = null,
+) {
+    init {
+        require(sortOrders.isEmpty() || sortOrders.size == sortBy.size) {
+            "Per-key sort orders must match the sort keys"
+        }
+    }
+}

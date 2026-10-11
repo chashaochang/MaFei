@@ -50,6 +50,14 @@ data object JellyfinRequests {
 
     // -------------------------------------------------------------- catalog
 
+    fun liveChannels(base: HttpUrl, userId: String, startIndex: Int, limit: Int): HttpRequest =
+        get(base, "LiveTv/Channels") {
+            addQueryParameter("userId", userId)
+            addQueryParameter("startIndex", startIndex.toString())
+            addQueryParameter("limit", limit.toString())
+            addQueryParameter("fields", "PrimaryImageAspectRatio")
+        }
+
     /** Official endpoint: GET /UserViews?userId=... */
     fun views(base: HttpUrl, userId: String): HttpRequest =
         get(base, "UserViews") {
@@ -62,19 +70,25 @@ data object JellyfinRequests {
             addQueryParameter("userId", query.userId)
             query.parentId?.let { addQueryParameter("parentId", it) }
             addQueryParameterIfNotBlank("personIds", query.personIds.joinToString(",") { it.trim() })
+            addQueryParameterIfNotBlank("albumIds", query.albumIds.joinToString(","))
+            addQueryParameterIfNotBlank("albumArtistIds", query.albumArtistIds.joinToString(","))
+            addQueryParameterIfNotBlank("artistIds", query.artistIds.joinToString(","))
             addQueryParameter("startIndex", query.startIndex.toString())
             addQueryParameter("limit", query.limit.toString())
             addQueryParameterIfNotBlank("includeItemTypes", query.includeItemTypes.joinToString(",") { it.trim() })
             if (query.fields.isNotEmpty()) addQueryParameter("fields", query.fields.joinToString(",") { it.wireName })
             if (query.sortBy.isNotEmpty()) addQueryParameter("sortBy", query.sortBy.joinToString(",") { it.wireName })
-            addQueryParameter("sortOrder", query.sortOrder.wireName)
+            addQueryParameter("sortOrder", query.sortOrders.takeIf { it.isNotEmpty() }
+                ?.joinToString(",") { it.wireName } ?: query.sortOrder.wireName)
             query.recursive?.let { addQueryParameter("recursive", it.toString()) }
             addQueryParameterIfNotBlank("searchTerm", query.searchTerm)
             if (query.genres.isNotEmpty()) addQueryParameter("genres", query.genres.joinToString("|"))
             if (query.years.isNotEmpty()) addQueryParameter("years", query.years.joinToString(","))
             if (query.filters.isNotEmpty()) addQueryParameter("filters", query.filters.joinToString(",") { it.wireName })
             addQueryParameter("enableImages", "true")
-            addQueryParameter("enableImageTypes", "Primary,Backdrop,Thumb")
+            addQueryParameter("enableImageTypes", query.enableImageTypes.joinToString(","))
+            query.enableUserData?.let { addQueryParameter("enableUserData", it.toString()) }
+            query.enableTotalRecordCount?.let { addQueryParameter("enableTotalRecordCount", it.toString()) }
             addQueryParameter("imageTypeLimit", query.imageTypeLimit.toString())
         }
 

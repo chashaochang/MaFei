@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
-import com.kyant.backdrop.drawBackdrop
+import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens

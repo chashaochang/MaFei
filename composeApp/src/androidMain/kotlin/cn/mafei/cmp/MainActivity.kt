@@ -17,6 +17,8 @@ import cn.mafei.cmp.platform.http_android.createAndroidHttpTransport
 class MainActivity : ComponentActivity() {
     private var playerScreenVisible = false
     private var playerFullscreenRequested = false
+    private var boundDeviceControls: AndroidDeviceControls? = null
+    private var boundRuntime: ApplicationRuntime? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         playerScreenVisible = savedInstanceState?.getBoolean(PlayerScreenVisibleKey) == true
@@ -34,9 +36,13 @@ class MainActivity : ComponentActivity() {
                 playerRuntimeFactory = { playerHost.createRuntime() },
                 // 播放页左侧调亮度、右侧调音量；窗口亮度与 STREAM_MUSIC 都归属本 Activity。
                 deviceControls = AndroidDeviceControls(this),
+                photoSaver = AndroidPhotoSaver(applicationContext),
             )
         }
+        boundDeviceControls = (runtime.deviceControls as? AndroidDeviceControls)?.also { it.attach(this) }
+        boundRuntime = runtime
         setContent {
+            androidx.compose.runtime.CompositionLocalProvider(LocalEmbeddedWebHost provides AndroidEmbeddedWebHost) {
             App(runtime, onThemeChanged = { dark ->
                 // Probe theme can differ from the system theme. Let Activity's
                 // edge-to-edge API select readable system icons for that theme.
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
                 applyOrientationPolicy()
                 applySystemBarPolicy()
             })
+            }
         }
     }
 
@@ -75,6 +82,22 @@ class MainActivity : ComponentActivity() {
         outState.putBoolean(PlayerScreenVisibleKey, playerScreenVisible)
         outState.putBoolean(PlayerFullscreenKey, playerFullscreenRequested)
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        boundRuntime?.setHostForeground(true)
+    }
+
+    override fun onStop() {
+        // Rotation replaces the window, not the process playback session.
+        if (!isChangingConfigurations) boundRuntime?.setHostForeground(false)
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        boundDeviceControls?.detach(this)
+        super.onDestroy()
     }
 
     /**

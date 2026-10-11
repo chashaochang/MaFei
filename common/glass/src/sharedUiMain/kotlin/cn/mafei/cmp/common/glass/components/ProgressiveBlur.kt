@@ -9,7 +9,9 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassStyle
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
+import cn.mafei.cmp.common.glass.LocalGlassStyle
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
@@ -101,12 +103,37 @@ fun Modifier.mafeiProgressiveBlur(
     opacity: Float = 1f,
 ): Modifier = composed {
     val glassIntensity = LocalGlassIntensity.current
-    progressiveBlur(
-        backdrop = backdrop.layer,
-        tint = tint,
-        blurRadius = blurRadius * glassIntensity,
-        tintIntensity = tintIntensity,
-        gradientStartFraction = gradientStartFraction,
-        opacity = opacity,
-    )
+    when (LocalGlassStyle.current) {
+        GlassStyle.Liquid -> progressiveBlur(
+            backdrop = backdrop.layer,
+            tint = tint,
+            blurRadius = blurRadius * glassIntensity,
+            tintIntensity = tintIntensity,
+            gradientStartFraction = gradientStartFraction,
+            opacity = opacity,
+        )
+
+        GlassStyle.GaussianBlur -> progressiveBlur(
+            backdrop = backdrop.layer,
+            tint = tint,
+            blurRadius = 16.dp,
+            tintIntensity = tintIntensity,
+            gradientStartFraction = gradientStartFraction,
+            opacity = opacity,
+        )
+
+        GlassStyle.Translucent -> drawWithCache {
+            val resolvedOpacity = opacity.coerceIn(0f, 1f)
+            val resolvedTint = tint.copy(alpha = tint.alpha * tintIntensity.coerceIn(0f, 1f) * resolvedOpacity)
+            val start = gradientStartFraction.coerceIn(0f, .999f)
+            val material = Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to resolvedTint,
+                    start to resolvedTint,
+                    1f to Color.Transparent,
+                ),
+            )
+            onDrawBehind { drawRect(material) }
+        }
+    }
 }

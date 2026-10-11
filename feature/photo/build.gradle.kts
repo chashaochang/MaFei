@@ -9,7 +9,11 @@ plugins {
 
 dependencies {
     add("commonMainApi", project(":core:domain"))
+    add("commonMainImplementation", project(":common:core"))
     add("commonMainApi", project(":common:ui"))
     add("commonMainApi", project(":common:media"))
     add("commonMainImplementation", project(":data:repositories"))
+    add("commonMainApi", project(":player:ui"))
+    add("desktopTestImplementation", "org.jetbrains.compose.ui:ui-test-junit4:1.9.2")
+    add("desktopTestImplementation", libs.compose.desktop)
 }

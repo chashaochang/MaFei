@@ -64,6 +64,10 @@ private class OhosSystemBackInput : NavigationEventInput() {
 fun IsOhosPlayerScreenVisible(): Boolean = ohosPlayerScreenVisible
 
 @OptIn(ExperimentalNativeApi::class)
+@CName("SetOhosApplicationForeground")
+fun SetOhosApplicationForeground(foreground: Boolean) = ProcessApplication.setForeground(foreground)
+
+@OptIn(ExperimentalNativeApi::class)
 @CName("IsOhosPlayerFullscreenRequested")
 fun IsOhosPlayerFullscreenRequested(): Boolean = ohosPlayerFullscreenRequested
 
@@ -179,6 +183,8 @@ fun MainArkUIViewController(
             // 播放页左侧调亮度、右侧调音量：亮度/音量只能经 ArkUI 拿到，所以值由
             // MaFeiPlayerSurface 的 ArkTS 宿主推送，写入也回给它执行。
             deviceControls = OhosDeviceControls,
+            playerWindowControls = OhosPlayerWindowControls,
+            photoSaver = OhosPhotoSaver,
             legacySnapshotReader = LegacySnapshotPayloadReader.create(legacyPayload),
             failureReporter = { stage, failure ->
                 val diagnostic = if (failure is IllegalStateException) {
@@ -247,6 +253,8 @@ fun MainArkUIViewController(
         CompositionLocalProvider(
             LocalNavigationEventDispatcherOwner provides navigationOwner,
             LocalMaFeiWindowFeatures provides windowFeatures,
+            LocalEmbeddedWebHost provides OhosEmbeddedWebHost,
+            cn.mafei.cmp.player.ui.LocalPlayerVideoBackdropSource provides ohosVideoBackdropSource,
         ) {
             App(
                 runtime = runtime,

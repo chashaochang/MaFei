@@ -149,8 +149,40 @@ data class MediaItem(
      * 的格式规则统一在 `MediaPresentation.kt` 定义，UI 不得自行格式化。
      */
     val displayStyleOverride: MediaDisplayStyle? = null,
+    /** Jellyfin music metadata; null/empty for non-audio items. */
+    val albumId: MediaId? = null,
+    val albumTitle: String? = null,
+    val albumArtist: String? = null,
+    val artistNames: List<String> = emptyList(),
+    val artistIds: List<MediaId> = emptyList(),
+    val recursiveItemCount: Int? = null,
+    val channelNumber: String? = null,
+    val currentProgram: LiveProgram? = null,
+    val photo: PhotoInfo? = null,
 ) {
     val primaryImage: MediaImage? get() = images.firstOrNull { it.kind == ImageKind.Primary } ?: images.firstOrNull()
+}
+
+@Serializable
+data class LiveProgram(val title: String, val overview: String? = null,
+    val startEpochMs: Long? = null, val endEpochMs: Long? = null)
+
+@Serializable
+data class PhotoInfo(
+    val fileName: String, val path: String = "", val format: String = "", val dateKey: String = "unknown",
+    val width: Int = 0, val height: Int = 0, val fullImage: MediaImage,
+    val canDownload: Boolean = false, val cameraMake: String? = null, val cameraModel: String? = null,
+    val software: String? = null, val exposureTime: Double? = null, val focalLength: Double? = null,
+    val orientation: String? = null, val aperture: Double? = null, val shutterSpeed: Double? = null,
+    val latitude: Double? = null, val longitude: Double? = null, val altitude: Double? = null,
+    val isoSpeedRating: Double? = null,
+    val dateTaken: String? = null,
+    val dateTakenEpochMs: Long? = null,
+)
+
+/** Short-lived authenticated original download; never logged or persisted. */
+class MediaDownload(val url: String, val fileName: String, val headers: Map<String, String> = emptyMap()) {
+    override fun toString(): String = "MediaDownload(redacted)"
 }
 
 /**

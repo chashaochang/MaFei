@@ -45,6 +45,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CoroutineStart
 
 private val ITEM = MediaId("item-0001")
 
@@ -54,6 +57,7 @@ private val ITEM = MediaId("item-0001")
  */
 private class PlaybackOnlyAdapter : MediaProviderAdapter {
     val preparedUrls = mutableListOf<String>()
+    val releasedReadies = mutableListOf<PlaybackPreparation.Ready>()
     val reports = mutableListOf<Pair<PlaybackPreparation.Ready, PlaybackEvent>>()
     val preparedReadies = mutableListOf<PlaybackPreparation.Ready>()
     val preparedOptions = mutableListOf<PlaybackOptions>()
@@ -134,6 +138,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
         reportFailure?.invoke(stream, event)
         reports += stream to event
     }
+    override suspend fun releasePlayback(stream: PlaybackPreparation.Ready) { releasedReadies += stream }
 
     override val provider = ProviderKind.Jellyfin
     override val serverId = ServerId("srv-test")
@@ -149,9 +154,9 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     override suspend fun setWatched(id: MediaId, watched: Boolean) = throw ClientConfigError("unused")
 }
 
-private class Harness(trackSelection: Boolean = false) {
+private class Harness(trackSelection: Boolean = false, isoDirectPlay: Boolean = false) {
     val adapter = PlaybackOnlyAdapter()
-    val runtime = FakePlayerRuntime(PlayerCapabilities(trackSelection = trackSelection))
+    val runtime = FakePlayerRuntime(PlayerCapabilities(trackSelection = trackSelection, isoDirectPlay = isoDirectPlay))
     val scope = CoroutineScope(Dispatchers.Unconfined + Job())
     val failures = mutableListOf<PlaybackReportFailure>()
     val coordinator = ProviderPlaybackCoordinator(
@@ -180,14 +185,50 @@ private class Harness(trackSelection: Boolean = false) {
 }
 
 class ProviderPlaybackCoordinatorTest {
+    @Test fun stoppingDuringSlowPrepareDoesNotWaitForTheServerAndReleasesTheLateCandidate() = harness { h ->
+        h.adapter.gateCall(1)
+        coroutineScope {
+            val preparing = async(start = CoroutineStart.UNDISPATCHED) { h.coordinator.play(ProviderKind.Jellyfin, ITEM) }
+            try {
+                kotlinx.coroutines.withTimeout(300) { h.coordinator.stop() }
+            } finally { h.adapter.openGates() }
+            assertNull(preparing.await())
+        }
+        assertTrue(loadedResources(h).isEmpty())
+        assertTrue(h.adapter.releasedReadies.single() === h.adapter.preparedReadies.single())
+    }
+
+    @Test fun stopReportsFinalPositionAndClosesTheExactStreamOnce() = harness { h ->
+        h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+        emitReadyAndPlaying(h)
+        h.runtime.emit(RuntimeEvent.Progress(currentGeneration(h), 14000, 15000))
+        val prepared = h.adapter.preparedReadies.single()
+        h.coordinator.stop()
+        assertTrue(h.adapter.reports.last().first === prepared)
+        assertEquals(PlaybackEventKind.Stop, h.adapter.reports.last().second.kind)
+        assertEquals(14000, h.adapter.reports.last().second.positionMs)
+        assertTrue(h.adapter.releasedReadies.single() === prepared)
+        h.coordinator.stop(); assertEquals(1, h.adapter.releasedReadies.size)
+    }
+
+    @Test fun replacingAnUnstartedStreamStillReleasesItAndDoesNotCloseTheNewStream() = harness { h ->
+        h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+        val first = h.adapter.preparedReadies.single()
+        h.coordinator.play(ProviderKind.Jellyfin, MediaId("next"))
+        assertTrue(h.adapter.releasedReadies.single() === first)
+        assertTrue(h.adapter.releasedReadies.none { it === h.adapter.preparedReadies.last() })
+        h.coordinator.release()
+        assertEquals(2, h.adapter.releasedReadies.size)
+    }
 
     private fun harness(
         trackSelection: Boolean = false,
+        isoDirectPlay: Boolean = false,
         block: suspend (Harness) -> Unit,
     ) = runBlocking {
         // A hung coordinator must fail the test with a stack, never park CI.
         kotlinx.coroutines.withTimeout(10_000) {
-            val harness = Harness(trackSelection)
+            val harness = Harness(trackSelection, isoDirectPlay)
             try {
                 block(harness)
             } finally {
@@ -226,6 +267,22 @@ class ProviderPlaybackCoordinatorTest {
         PlayerReport(currentGeneration(harness), "item-0001", PlayerReportKind.Progress, positionMs, 60_000, false)
 
     // ------------------------------------------------------- normal path
+
+    @Test
+    fun isoSupportComesFromTheRuntimeAndSurvivesRenegotiation() = harness(isoDirectPlay = true) { harness ->
+        harness.coordinator.play(ProviderKind.Jellyfin, ITEM, resumePositionMs = 90_000)
+        assertEquals(true, harness.adapter.preparedOptions.single().isoDirectPlay)
+        assertEquals(90_000, harness.adapter.preparedOptions.single().startPositionMs)
+        emitReadyAndPlaying(harness)
+        harness.coordinator.selectQuality(8_000_000)
+        assertEquals(true, harness.adapter.preparedOptions.last().isoDirectPlay)
+    }
+
+    @Test
+    fun callerCannotEnableIsoOnAnEngineThatDoesNotSupportIt() = harness { harness ->
+        harness.coordinator.play(ProviderKind.Jellyfin, ITEM, options = PlaybackOptions(isoDirectPlay = true))
+        assertEquals(false, harness.adapter.preparedOptions.single().isoDirectPlay)
+    }
 
     @Test
     fun normalPrepareLoadsResourceAndReportsStartWithTheOriginalReady() = harness { harness ->
@@ -576,6 +633,7 @@ class ProviderPlaybackCoordinatorTest {
         harness.coordinator.stop()
         harness.adapter.openGates()
         assertEquals(1, loadedResources(harness).size) // no reload of the stale result
+        assertTrue(harness.adapter.releasedReadies.any { it === harness.adapter.preparedReadies.last() })
     }
 
     @Test
@@ -639,6 +697,25 @@ class ProviderPlaybackCoordinatorTest {
         assertNull(generation)
         assertEquals(emptyList(), loadedResources(harness))
         assertEquals("prepare refused: NoPlayableSource", harness.failures.single().message)
+    }
+
+    @Test
+    fun refusedNextTrackKeepsCurrentNegotiationAndReporting() = harness { harness ->
+        harness.adapter.queueReady("https://stream.test/current", mediaSourceId = "source-current",
+            tracks = listOf(PlaybackTrack(1, PlaybackTrackKind.Audio, title = "Original audio")))
+        harness.coordinator.play(ProviderKind.Jellyfin, ITEM)
+        emitReadyAndPlaying(harness)
+        val originalTracks = harness.coordinator.tracks.value
+        val originalFacts = harness.coordinator.prepared.value
+        harness.adapter.stubs.addLast(PlaybackOnlyAdapter.StubOutcome.Refused)
+        assertNull(harness.coordinator.play(ProviderKind.Jellyfin, MediaId("next-track")))
+        assertEquals(originalTracks, harness.coordinator.tracks.value)
+        assertEquals(originalFacts, harness.coordinator.prepared.value)
+        val reports = harness.adapter.reports.size
+        harness.coordinator.reportSink(progressReport(harness))
+        assertEquals(reports + 1, harness.adapter.reports.size)
+        assertEquals("source-current", harness.adapter.reports.last().first.mediaSourceId)
+        assertEquals(1, loadedResources(harness).size)
     }
 
     @Test

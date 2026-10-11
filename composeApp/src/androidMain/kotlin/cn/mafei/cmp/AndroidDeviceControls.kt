@@ -16,18 +16,21 @@ import cn.mafei.cmp.player.api.PlayerDeviceControls
  *
  * 音量走 `STREAM_MUSIC`，与系统音量键同一条流；读不到时返回 null，手势那一侧就不介入。
  */
-internal class AndroidDeviceControls(private val activity: Activity) : PlayerDeviceControls {
+internal class AndroidDeviceControls(activity: Activity) : PlayerDeviceControls {
+    private var currentActivity = java.lang.ref.WeakReference(activity)
+    fun attach(activity: Activity) { currentActivity = java.lang.ref.WeakReference(activity) }
+    fun detach(activity: Activity) { if (currentActivity.get() === activity) currentActivity.clear() }
 
     private val audioManager: AudioManager? =
-        activity.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        activity.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     override fun brightness(): Float? {
-        val override = activity.window?.attributes?.screenBrightness ?: return null
+        val override = currentActivity.get()?.window?.attributes?.screenBrightness ?: return null
         return if (override >= 0f) override else PlayerDeviceControls.DEFAULT_BRIGHTNESS
     }
 
     override fun setBrightness(value: Float) {
-        val window = activity.window ?: return
+        val window = currentActivity.get()?.window ?: return
         val attributes: WindowManager.LayoutParams = window.attributes
         attributes.screenBrightness = value.coerceIn(0f, 1f)
         window.attributes = attributes
