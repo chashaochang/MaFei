@@ -94,6 +94,7 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
 import cn.mafei.cmp.common.design_system.MaFeiPopupReferenceColors
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
+import cn.mafei.cmp.common.media.rememberArtworkMemoryCache
 import cn.mafei.cmp.common.media.CachedBlurredArtwork
 import cn.mafei.cmp.common.media.MediaArtwork
 import cn.mafei.cmp.common.media.landscapeArtworkCandidates
@@ -1232,7 +1233,7 @@ private fun BrowseContent(
     }
     var feiniuConnectionPreferenceError by remember(session) { mutableStateOf<String?>(null) }
     var feiniuConnectionPreferenceSaving by remember(session) { mutableStateOf(false) }
-    val artworkCache = remember(session) { ArtworkMemoryCache() }
+    val artworkCache = rememberArtworkMemoryCache(session, session.connection.credentialKey)
     val fetchArtwork: suspend (MediaImage, Int) -> ByteArray? = remember(session) {
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
     }
@@ -3297,7 +3298,8 @@ private fun BrowseContent(
                                     onSave = if (runtime.photoSaver.supported) {{ item ->
                                         runtime.photoSaver.save(runtime.sessions.media.photoOriginal(session.media, item.id))
                                     }} else null,
-                                    fetch = { image, _ -> runtime.loadPhotoArtwork(session, image) })
+                                    fetch = { image, _ -> runtime.loadPhotoArtwork(session, image) },
+                                    artworkNamespace = "${session.connection.credentialKey}/photos")
                             }
                             is BrowseDetailRoute -> NavEntry(route) {
                                 val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->

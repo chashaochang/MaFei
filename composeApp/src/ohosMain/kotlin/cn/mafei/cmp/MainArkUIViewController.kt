@@ -157,6 +157,7 @@ fun MainArkUIViewController(
 ): napi_value? = try {
     initMainHandler(env)
     val directory = requireNotNull(filesDirectory).toKString()
+    cn.mafei.cmp.common.media.configureOhosArtworkCache(directory)
     val applicationBundle = requireNotNull(bundleName).toKString()
     val legacyPayload = requireNotNull(legacySnapshot).toKString()
     val legacyCmpPayload = requireNotNull(legacyCmpSettingsPayload).toKString()

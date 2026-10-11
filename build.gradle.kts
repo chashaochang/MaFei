@@ -1,5 +1,6 @@
 import com.android.build.api.dsl.LibraryExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 plugins {
@@ -227,6 +228,19 @@ val verifyNoSvgResources = tasks.register("verifyNoSvgResources") {
 }
 
 subprojects {
+    configurations.configureEach {
+        val platformConfiguration = this
+        resolutionStrategy.eachDependency {
+            // CPF Coil's Android variant targets JVM 18. Resolve upstream Coil
+            // on Android without changing CPF Native metadata or the JVM target.
+            if (requested.group == "io.coil-kt.coil3" &&
+                platformConfiguration.attributes.getAttribute(KotlinPlatformType.attribute) == KotlinPlatformType.androidJvm
+            ) {
+                useVersion(libs.versions.coil.upstream.get())
+                because("Android uses upstream Coil; CPF adaptation is required only on Native targets")
+            }
+        }
+    }
     val groupSegments = path
         .split(":")
         .filter { it.isNotBlank() }

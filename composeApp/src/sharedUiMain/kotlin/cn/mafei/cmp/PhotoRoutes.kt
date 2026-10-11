@@ -5,7 +5,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import cn.mafei.cmp.common.media.ArtworkMemoryCache
+import cn.mafei.cmp.common.media.rememberArtworkMemoryCache
 import cn.mafei.cmp.common.media.MediaArtwork
 import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.*
@@ -35,7 +35,7 @@ internal fun PhotoCatalogRouteContent(store: PagedMediaStore<PhotoCatalogQuery>,
 internal fun PhotoViewerRouteContent(store: PagedMediaStore<PhotoCatalogQuery>, parentId: String?, photoId: String,
     initialItem: MediaItem?, onBack: () -> Unit, loadItem: suspend (MediaId) -> MediaItem,
     onFavorite: suspend (MediaItem) -> Unit, onSave: (suspend (MediaItem) -> PhotoSaveResult)?,
-    fetch: suspend (MediaImage, Int) -> ByteArray?) {
+    fetch: suspend (MediaImage, Int) -> ByteArray?, artworkNamespace: String) {
     val query = remember(parentId) { parentId?.let { PhotoCatalogQuery(MediaId(it)) } }
     val pages by store.pages.collectAsState()
     var single by remember(photoId) { mutableStateOf(initialItem) }
@@ -66,8 +66,8 @@ internal fun PhotoViewerRouteContent(store: PagedMediaStore<PhotoCatalogQuery>, 
         return
     }
     val scope = rememberCoroutineScope()
-    val cache = remember { ArtworkMemoryCache(maxWidthPx = 4096, maxEncodedBytes = 16 * 1024 * 1024,
-        maxSingleBytes = 64L * 1024 * 1024, maxCacheBytes = 96L * 1024 * 1024) }
+    val cache = rememberArtworkMemoryCache(photoId, artworkNamespace, maxWidthPx = 4096, maxEncodedBytes = 16 * 1024 * 1024,
+        maxSingleBytes = 64L * 1024 * 1024, maxCacheBytes = 96L * 1024 * 1024)
     var busy by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<MediaItem?>(null) }

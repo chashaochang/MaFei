@@ -7,6 +7,8 @@ android-targetSdk = "37"
 kotlin = "2.2.21-1.1.0"
 compose = "1.9.2-1.1.0"
 compose-desktop = "1.9.2"
+coil = "3.3.0-1.0.0"
+coil-upstream = "3.3.0"
 coroutines = "1.10.2-1.0.0"
 serialization = "1.9.1-1.0.0"
 activity = "1.13.0"
@@ -23,6 +25,8 @@ compose-material3 = { module = "org.jetbrains.compose.material3:material3", vers
 compose-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
 compose-export = { module = "org.jetbrains.compose.export:export", version.ref = "compose" }
 compose-desktop = { module = "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64", version.ref = "compose-desktop" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-compose-upstream = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil-upstream" }
 
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 

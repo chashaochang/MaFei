@@ -15,200 +15,10 @@ import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.core.domain.MediaItem
+import coil3.Image as CoilImage
+import coil3.compose.LocalPlatformContext
+import coil3.compose.asPainter
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
-import org.jetbrains.compose.resources.decodeToImageBitmap
-import kotlin.math.abs
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
-
-/** One account/screen lifetime. Small memory-only cache; no token-bearing disk cache. */
-class ArtworkMemoryCache(
-    private val maxWidthPx: Int = MaxArtworkWidthPx,
-    private val maxEncodedBytes: Int = MaxEncodedArtworkBytes,
-    private val maxSingleBytes: Long = MaxSingleArtworkBytes,
-    private val maxCacheBytes: Long = MaxArtworkCacheBytes,
-) {
-    init { require(maxWidthPx >= MinArtworkWidthPx && maxEncodedBytes > 0 && maxSingleBytes > 0 && maxCacheBytes >= maxSingleBytes) }
-    internal val blurCache = ArtworkBlurCache()
-
-    private class UrlLoadGate {
-        val lock = Mutex()
-        var users: Int = 0
-    }
-
-    private val mutex = Mutex()
-    // Network latency must not occupy the scarce image-decoder slots. Keeping
-    // these budgets separate lets a home viewport fetch several thumbnails at
-    // once while still protecting Compose from a burst of bitmap decoding.
-    private val networkPermits = Semaphore(MaxConcurrentArtworkFetches)
-    private val decodePermits = Semaphore(MaxConcurrentArtworkDecodes)
-    private val images = linkedMapOf<String, ImageBitmap>()
-    private val urlLoadGates = mutableMapOf<String, UrlLoadGate>()
-    private val failedUrls = linkedMapOf<String, TimeMark>()
-    private var bytes = 0L
-
-    suspend fun load(
-        image: MediaImage,
-        targetWidthPx: Int,
-        fetch: suspend (MediaImage, Int) -> ByteArray?,
-    ): ImageBitmap? {
-        val width = targetWidthPx.coerceIn(MinArtworkWidthPx, maxWidthPx)
-        val key = artworkCacheKey(image.url, width)
-        cached(key)?.let { return it }
-        // Multiple visible consumers (hero + ambient continuation) share one
-        // request/decode. Lock by URL rather than width so a missing image does
-        // not fan out into simultaneous 160/240/960px 404s.
-        val gate = mutex.withLock {
-            urlLoadGates.getOrPut(image.url) { UrlLoadGate() }.also { it.users += 1 }
-        }
-        return try {
-            gate.lock.withLock {
-                cached(key)?.let { return@withLock it }
-                if (hasRecentFailure(image.url)) return@withLock null
-                val encoded = networkPermits.withPermit { fetch(image, width) }
-                    ?: run {
-                        recordFailure(image.url)
-                        return@withLock null
-                    }
-                if (encoded.size > maxEncodedBytes) {
-                    recordFailure(image.url)
-                    return@withLock null
-                }
-                val decoded = try {
-                    decodePermits.withPermit {
-                        withContext(Dispatchers.Default) { encoded.decodeToImageBitmap() }
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    recordFailure(image.url)
-                    return@withLock null
-                }
-                val size = decoded.width.toLong() * decoded.height * 4
-                if (size > maxSingleBytes) {
-                    recordFailure(image.url)
-                    return@withLock null
-                }
-                clearFailure(image.url)
-                store(key, decoded, size)
-                decoded
-            }
-        } finally {
-            mutex.withLock {
-                gate.users -= 1
-                if (gate.users == 0 && urlLoadGates[image.url] === gate) {
-                    urlLoadGates.remove(image.url)
-                }
-            }
-        }
-    }
-
-    /**
-     * Fast UI-thread cache probe used only to avoid a one-frame placeholder
-     * flash when a recycled card already has its bitmap in memory. A contended
-     * cache simply falls back to the normal suspending load path.
-     */
-    internal fun peek(candidates: List<MediaImage>, targetWidthPx: Int): ImageBitmap? {
-        return peekInternal(candidates, targetWidthPx, allowOtherWidth = false)
-    }
-
-    /**
-     * Warm-start probe for a destination that requests a different size than
-     * the source card. A home poster may already have the exact same URL at
-     * 360/480px while a detail hero asks for 720px. Reusing that bitmap for the
-     * first frame avoids replacing the shared-transition image with TextPoster;
-     * the normal load still runs afterwards to fill the requested-size entry.
-     */
-    internal fun peekAnyWidth(candidates: List<MediaImage>, targetWidthPx: Int): ImageBitmap? {
-        return peekInternal(candidates, targetWidthPx, allowOtherWidth = true)
-    }
-
-    private fun peekInternal(
-        candidates: List<MediaImage>,
-        targetWidthPx: Int,
-        allowOtherWidth: Boolean,
-    ): ImageBitmap? {
-        if (!mutex.tryLock()) return null
-        return try {
-            val width = targetWidthPx.coerceIn(MinArtworkWidthPx, maxWidthPx)
-            for (candidate in candidates) {
-                val key = artworkCacheKey(candidate.url, width)
-                val hit = images.remove(key) ?: continue
-                images[key] = hit
-                return hit
-            }
-            if (allowOtherWidth) {
-                for (candidate in candidates) {
-                    val prefix = "${candidate.url}#w="
-                    val key = images.keys
-                        .asSequence()
-                        .filter { it.startsWith(prefix) }
-                        .minByOrNull { cachedWidth(it, width) }
-                        ?: continue
-                    val hit = images.remove(key) ?: continue
-                    images[key] = hit
-                    return hit
-                }
-            }
-            null
-        } finally {
-            mutex.unlock()
-        }
-    }
-
-    private fun cachedWidth(key: String, requestedWidth: Int): Int {
-        val width = key.substringAfter("#w=", "").toIntOrNull() ?: return Int.MAX_VALUE
-        return abs(width - requestedWidth)
-    }
-
-    private suspend fun cached(key: String): ImageBitmap? = mutex.withLock {
-        // Reinsertion promotes a hit to the MRU end of the linked map.
-        images.remove(key)?.also { images[key] = it }
-    }
-
-    private suspend fun store(key: String, decoded: ImageBitmap, size: Long) {
-        mutex.withLock {
-            images.remove(key)?.let { bytes -= it.width.toLong() * it.height * 4 }
-            while (images.isNotEmpty() && bytes + size > maxCacheBytes) {
-                val oldest = images.remove(images.keys.first())!!
-                bytes -= oldest.width.toLong() * oldest.height * 4
-            }
-            images[key] = decoded
-            bytes += size
-        }
-    }
-
-    private suspend fun hasRecentFailure(url: String): Boolean = mutex.withLock {
-        val failedAt = failedUrls[url] ?: return@withLock false
-        if (failedAt.elapsedNow() < ArtworkFailureTtl) {
-            true
-        } else {
-            failedUrls.remove(url)
-            false
-        }
-    }
-
-    private suspend fun recordFailure(url: String) {
-        mutex.withLock {
-            // Refresh insertion order and keep malformed/missing catalog URLs
-            // from accumulating for the complete account session.
-            failedUrls.remove(url)
-            failedUrls[url] = TimeSource.Monotonic.markNow()
-            while (failedUrls.size > MaxFailedArtworkUrls) {
-                failedUrls.remove(failedUrls.keys.first())
-            }
-        }
-    }
-
-    private suspend fun clearFailure(url: String) {
-        mutex.withLock { failedUrls.remove(url) }
-    }
-}
 
 @Composable
 fun MediaArtwork(
@@ -275,20 +85,20 @@ fun MediaArtwork(
             modifier = modifier,
             contentScale = contentScale,
             fallback = fallback,
-            requestedWidthPx = remember(targetWidthPx) { artworkWidthBucket(targetWidthPx) },
+            requestedWidthPx = remember(targetWidthPx, cache) { cache.requestedWidth(targetWidthPx) },
             revealDurationMillis = revealDurationMillis,
             bitmapContent = bitmapContent,
         )
     } else {
         BoxWithConstraints(modifier) {
             val density = LocalDensity.current
-            val requestedWidthPx = remember(maxWidth, density) {
+            val requestedWidthPx = remember(maxWidth, density, cache) {
                 val measured = if (maxWidth.value.isFinite() && maxWidth.value > 0f) {
                     with(density) { maxWidth.roundToPx() }
                 } else {
                     DefaultArtworkWidthPx
                 }
-                artworkWidthBucket(measured)
+                cache.requestedWidth(measured)
             }
             MediaArtworkContent(
                 candidates = candidates,
@@ -333,7 +143,7 @@ private fun MediaArtworkContent(
         }
     }
     val initialBitmap = cachedBitmap ?: warmBitmap
-    val bitmap by produceState<ImageBitmap?>(
+    val bitmap by produceState<CoilImage?>(
         initialBitmap,
         candidates,
         cache,
@@ -378,7 +188,7 @@ private fun MediaArtworkContent(
     // otherwise schedule Crossfade work in the same frame as the lazy layout.
     // Keep the reveal only for a real placeholder -> decoded-image transition.
     if (cachedBitmap != null) {
-        ArtworkContent(loaded, title, fallback, modifier, contentScale, bitmapContent)
+        ArtworkContent(loaded, title, fallback, modifier, contentScale, bitmapContent, cache)
     } else {
         Crossfade(
             targetState = loaded,
@@ -386,29 +196,34 @@ private fun MediaArtworkContent(
             animationSpec = tween(revealDurationMillis),
             label = "artwork-reveal",
         ) { artwork ->
-            ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale, bitmapContent)
+            ArtworkContent(artwork, title, fallback, Modifier.fillMaxSize(), contentScale, bitmapContent, cache)
         }
     }
 }
 
 @Composable
 private fun ArtworkContent(
-    artwork: ImageBitmap?,
+    artwork: CoilImage?,
     title: String,
     fallback: (@Composable (Modifier) -> Unit)?,
     modifier: Modifier,
     contentScale: ContentScale,
     bitmapContent: (@Composable (ImageBitmap, Modifier) -> Unit)?,
+    cache: ArtworkMemoryCache,
 ) {
     Box(modifier) {
         if (artwork == null) {
             if (fallback == null) TextPoster(title, Modifier.fillMaxSize())
             else fallback(Modifier.fillMaxSize())
         } else if (bitmapContent != null) {
-            bitmapContent(artwork, Modifier.fillMaxSize())
+            // Ordinary posters draw Coil's native image directly. Only the
+            // existing blurred-background consumer needs a software bitmap.
+            val bitmap = remember(artwork, cache) { cache.bitmap(artwork) }
+            bitmapContent(bitmap, Modifier.fillMaxSize())
         } else {
+            val context = LocalPlatformContext.current
             Image(
-                artwork,
+                painter = remember(artwork, context) { artwork.asPainter(context) },
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = contentScale,
@@ -471,7 +286,7 @@ suspend fun prefetchArtwork(
     fetch: suspend (MediaImage, Int) -> ByteArray?,
     targetWidthPx: Int = 960,
 ) {
-    val requested = artworkWidthBucket(targetWidthPx)
+    val requested = cache.requestedWidth(targetWidthPx)
     val candidates = images
         .filter { it.url.isNotBlank() }
         .distinctBy { it.url }
@@ -496,7 +311,7 @@ private fun MediaItem.exactArtworkCandidates(vararg kinds: ImageKind): List<Medi
     kinds.forEach { kind -> addAll(images.filter { it.kind == kind }) }
 }.filter { it.url.isNotBlank() }.distinctBy { it.url }
 
-private fun artworkWidthBucket(widthPx: Int): Int = when {
+internal fun artworkWidthBucket(widthPx: Int): Int = when {
     widthPx <= 160 -> 160
     widthPx <= 240 -> 240
     widthPx <= 360 -> 360
@@ -505,22 +320,7 @@ private fun artworkWidthBucket(widthPx: Int): Int = when {
     else -> 960
 }
 
-private fun artworkCacheKey(url: String, widthPx: Int): String = "$url#w=$widthPx"
-
-private const val MinArtworkWidthPx = 96
-private const val MaxArtworkWidthPx = 960
 private const val DefaultArtworkWidthPx = 480
 private const val DefaultArtworkRevealMillis = 180
 private const val ArtworkRetryCount = 2
 private const val ArtworkRetryDelayMs = 300L
-private val ArtworkFailureTtl = 30.seconds
-private const val MaxEncodedArtworkBytes = 4 * 1024 * 1024
-private const val MaxSingleArtworkBytes = 16L * 1024 * 1024
-private const val MaxArtworkCacheBytes = 64L * 1024 * 1024
-private const val MaxFailedArtworkUrls = 128
-private const val MaxConcurrentArtworkFetches = 6
-// Image decoding is CPU- and allocation-heavy on CPF/OHOS. Two simultaneous
-// 720/960px decodes regularly completed during the same scroll frame on tablet,
-// producing a visible cold-start hitch even though the work ran on Default.
-// Keep network I/O concurrent, but serialize decode/publication pressure.
-private const val MaxConcurrentArtworkDecodes = 1

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import coil3.PlatformContext
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -32,7 +33,7 @@ class CachedBlurredArtworkTest {
         val second = splitImage(Color.Green, Color.Green)
         val source = mutableStateOf(first)
         val visible = mutableStateOf(true)
-        val accountCache = mutableStateOf(ArtworkMemoryCache())
+        val accountCache = mutableStateOf(ArtworkMemoryCache(PlatformContext.INSTANCE))
         lateinit var geometry: ArtworkBlurGeometry
         compose.setContent {
             with(LocalDensity.current) {
@@ -57,7 +58,7 @@ class CachedBlurredArtworkTest {
         compose.runOnIdle { visible.value = true }
         compose.waitForIdle()
         compose.runOnIdle { assertSame(original, accountCache.value.blurCache.get(first, geometry)) }
-        compose.runOnIdle { accountCache.value = ArtworkMemoryCache() }
+        compose.runOnIdle { accountCache.value = ArtworkMemoryCache(PlatformContext.INSTANCE) }
         compose.waitForIdle()
         compose.runOnIdle {
             assertNotSame(original, assertNotNull(accountCache.value.blurCache.get(first, geometry)))
@@ -67,7 +68,7 @@ class CachedBlurredArtworkTest {
     @Test
     fun cachedResultIsDisplayedDirectlyWithoutRegeneratingIt() {
         val source = splitImage(Color.Red, Color.Red)
-        val cache = ArtworkMemoryCache()
+        val cache = ArtworkMemoryCache(PlatformContext.INSTANCE)
         compose.setContent {
             with(LocalDensity.current) {
                 val geometry = artworkBlurGeometry(

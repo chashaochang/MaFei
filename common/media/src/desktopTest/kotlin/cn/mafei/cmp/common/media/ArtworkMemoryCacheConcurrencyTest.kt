@@ -2,6 +2,7 @@ package cn.mafei.cmp.common.media
 
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaImage
+import coil3.PlatformContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -16,7 +17,7 @@ class ArtworkMemoryCacheConcurrencyTest {
 
     @Test
     fun networkFetchesDoNotConsumeTheDecoderPermit() = runBlocking {
-        val cache = ArtworkMemoryCache()
+        val cache = ArtworkMemoryCache(PlatformContext.INSTANCE)
         val entered = Channel<Unit>(Channel.UNLIMITED)
         val release = CompletableDeferred<Unit>()
         val requests = (0 until 3).map { index ->
@@ -42,7 +43,7 @@ class ArtworkMemoryCacheConcurrencyTest {
 
     @Test
     fun missingUrlIsNegativeCachedAcrossRequestedWidths() = runBlocking {
-        val cache = ArtworkMemoryCache()
+        val cache = ArtworkMemoryCache(PlatformContext.INSTANCE)
         val image = MediaImage(ImageKind.Primary, "https://images.test/missing")
         var fetchCount = 0
 
