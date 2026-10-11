@@ -14,7 +14,7 @@ dependencies {
     add("commonMainImplementation", project(":common:glass"))
     add("commonMainImplementation", project(":common:design-system"))
     add("commonMainImplementation", project(":data:repositories"))
-    add("cpfUiMainImplementation", "org.jetbrains.androidx.navigationevent:navigationevent-compose:1.9.2-1.0.0")
+    add("cpfUiMainImplementation", "org.jetbrains.androidx.navigationevent:navigationevent-compose:1.9.2-1.1.0")
     add("desktopMainImplementation", "androidx.navigationevent:navigationevent-compose:1.0.0-alpha06")
     add("desktopTestImplementation", "org.jetbrains.compose.ui:ui-test-junit4:1.9.2")
     add("desktopTestImplementation", libs.compose.desktop)

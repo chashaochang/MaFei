@@ -6,7 +6,7 @@ import kotlin.concurrent.AtomicReference
 /**
  * iOS engine bridge over AVPlayer. The direct Kotlin/Native AVFoundation
  * binding is NOT compilable with the current toolchain: the bundled
- * `platform.AVFoundation` klib of Kotlin `2.2.21-1.0.0` exports the AVPlayer
+ * `platform.AVFoundation` klib of Kotlin `2.2.21-1.1.0` exports the AVPlayer
  * type shell but none of its members (play/pause/currentItem/timeControlStatus/
  * rate/seekToTime/replaceCurrentItemWithPlayerItem) and neither AVMediaPlayback
  * nor AVPlayerItems resolve — verified by probe compilations (GLM-05 report).

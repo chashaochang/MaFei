@@ -10,7 +10,7 @@ The original module directories are preserved for future diffs. MaFei compiles
 both within `common:glass`, its sole rendering adapter. Demo code, generated
 binaries, and upstream build scripts are not imported.
 
-MaFei owns the build wiring: CPF Kotlin 2.2.21-1.0.0 / Compose 1.9.2-1.0.0,
+MaFei owns the build wiring: CPF Kotlin 2.2.21-1.1.0 / Compose 1.9.2-1.1.0,
 official Compose 1.9.2 for Desktop, Skia OHOS backend. Android uses androidMain;
 iOS and Desktop use skikoMain; OHOS uses the fork's ohosMain implementation.
 Do not expose vendor types through MaFei-facing APIs.

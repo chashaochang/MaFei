@@ -1,11 +1,15 @@
 # HarmonyOS thin host
 
-This directory follows the CPF-KMP-CMP 1.0.0 host shape. Generated libkn.so
+This directory follows the CPF-KMP-CMP 1.1.0 host shape. Generated libkn.so
 and libkn_api.h are published by:
 
 ```bash
 ./gradlew :composeApp:publishDebugBinariesToHarmonyApp
 ```
+
+The pinned toolchain is Kotlin `2.2.21-1.1.0`, Compose and the OHPM host
+`1.9.2-1.1.0`, with Skiko `0.9.22.2-1.1.0` and the Skia renderer. Versions
+follow the [official CPF 1.1.0 release notes](https://atomgit.com/CPF-KMP-CMP/docs/blob/KMP-v2.2.21-1.1.0/zh-cn/release-notes/KMP-v2.2.21-1.1.0%26CMP-v1.9.2-1.1.0.md).
 
 Then run ohpm install and Hvigor assembleHap inside this directory. Only
 arm64-v8a is part of the MaFei release matrix.

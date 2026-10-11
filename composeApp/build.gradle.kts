@@ -163,7 +163,7 @@ kotlin {
                 implementation(
                     "org.jetbrains.androidx.navigation3:navigation3-ui-desktop:1.0.0+dev2861",
                 )
-                // CPF publishes the OHOS Compose artifacts with a -1.0.0 suffix,
+                // CPF publishes the OHOS Compose artifacts with a -1.1.0 suffix,
                 // but no matching Desktop bundle exists. MaFei only targets ARM Macs,
                 // so use JetBrains' official macOS ARM64 Desktop artifact explicitly.
                 implementation(libs.compose.desktop)

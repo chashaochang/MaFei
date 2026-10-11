@@ -21,7 +21,7 @@ allprojects {
 
 fun KotlinMultiplatformExtension.configureCommonTests() {
     sourceSets.commonTest.dependencies {
-        implementation("org.jetbrains.kotlin:kotlin-test:2.2.21-1.0.0")
+        implementation("org.jetbrains.kotlin:kotlin-test:2.2.21-1.1.0")
     }
 }
 
@@ -87,12 +87,12 @@ fun KotlinMultiplatformExtension.configureCmpTargets() {
             dependsOn(commonMain)
             kotlin.srcDir("src/sharedUiMain/kotlin")
             dependencies {
-                implementation("org.jetbrains.compose.runtime:runtime:1.9.2-1.0.0")
-                implementation("org.jetbrains.compose.foundation:foundation:1.9.2-1.0.0")
-                implementation("org.jetbrains.compose.ui:ui:1.9.2-1.0.0")
-                implementation("org.jetbrains.compose.material3:material3:1.9.2-1.0.0")
+                implementation("org.jetbrains.compose.runtime:runtime:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.foundation:foundation:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.ui:ui:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.material3:material3:1.9.2-1.1.0")
                 implementation(
-                    "org.jetbrains.compose.components:components-resources:1.9.2-1.0.0",
+                    "org.jetbrains.compose.components:components-resources:1.9.2-1.1.0",
                 )
             }
         }

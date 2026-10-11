@@ -10,7 +10,7 @@ const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function fixture(run) {
   const root = mkdtempSync(resolve(tmpdir(), 'mafei-foundation-test-'));
   const files = ['settings.gradle.kts', 'build.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml',
-    'harmonyApp/entry/build-profile.json5', 'harmonyApp/entry/oh-package.json5', 'iosApp/MaFei.xcodeproj/project.pbxproj',
+    'harmonyApp/entry/build-profile.json5', 'harmonyApp/oh-package.json5', 'harmonyApp/entry/oh-package.json5', 'iosApp/MaFei.xcodeproj/project.pbxproj',
     'iosApp/MaFei/Info.plist', 'composeApp/src/androidMain/AndroidManifest.xml'];
   const settings = readFileSync(resolve(source, 'settings.gradle.kts'), 'utf8');
   for (const match of settings.matchAll(/"(:[a-zA-Z0-9-]+(?::[a-zA-Z0-9-]+)*)"/g)) {
@@ -36,8 +36,20 @@ test('missing module fails', () => fixture(root => {
   assert.throws(() => verifyFoundation(root), /missing module/);
 }));
 test('Compose drift fails', () => fixture(root => {
-  replace(root, 'gradle/libs.versions.toml', 'compose = "1.9.2-1.0.0"', 'compose = "1.9.2"');
+  replace(root, 'gradle/libs.versions.toml', 'compose = "1.9.2-1.1.0"', 'compose = "1.9.2"');
   assert.throws(() => verifyFoundation(root), /compose: expected/);
+}));
+test('root Harmony Compose package must match the frozen release', () => fixture(root => {
+  replace(root, 'harmonyApp/oh-package.json5', '"@cpf-kmp-cmp/compose": "1.9.2-1.1.0"', '"@cpf-kmp-cmp/compose": "1.9.2-1.0.0"');
+  assert.throws(() => verifyFoundation(root), /root compose HAR/);
+}));
+test('hardcoded Kotlin dependency cannot retain a different CPF release', () => fixture(root => {
+  replace(root, 'build.gradle.kts', 'kotlin-test:2.2.21-1.1.0', 'kotlin-test:2.2.21-1.0.0');
+  assert.throws(() => verifyFoundation(root), /hardcoded CPF dependency/);
+}));
+test('hardcoded navigation dependency cannot retain a different CPF release', () => fixture(root => {
+  replace(root, 'common/ui/build.gradle.kts', 'navigationevent-compose:1.9.2-1.1.0', 'navigationevent-compose:1.9.2-1.0.0');
+  assert.throws(() => verifyFoundation(root), /hardcoded CPF dependency/);
 }));
 test('x64 target fails', () => fixture(root => {
   replace(root, 'composeApp/build.gradle.kts', 'iosArm64()', 'iosX64()');
