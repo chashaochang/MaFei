@@ -39,7 +39,6 @@ fun MediaCard(
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    status: String? = null,
     poster: (@Composable (Modifier) -> Unit)? = null,
     progress: Float? = null,
     onPlay: (() -> Unit)? = null,
@@ -73,23 +72,6 @@ fun MediaCard(
                     ),
                 ),
             )
-            status?.let {
-                Box(
-                    Modifier.align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xDD151921)),
-                ) {
-                    Text(
-                        it,
-                        Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
             progress?.takeIf { it > 0f }?.let {
                 MaFeiProgressLine(
                     progress = it,

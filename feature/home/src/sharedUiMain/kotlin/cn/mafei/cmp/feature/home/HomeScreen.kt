@@ -308,6 +308,10 @@ fun HomeScreen(
         }.take(8)).distinctByMediaId()
     }
     var selectedFeedKey by rememberSaveable { mutableStateOf(RecentFeedKey) }
+    // LazyGrid retains key callbacks alongside an index map. Freeze the feed
+    // identity with this composition's items so switching tabs cannot change
+    // the keys of an old interval before that interval is replaced.
+    val renderedFeedKey = selectedFeedKey
     var browseSortIndex by rememberSaveable { mutableStateOf(0) }
     var browseDescending by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(collections) {
@@ -928,7 +932,6 @@ fun HomeScreen(
                                         text.title,
                                         text.subtitle,
                                         onClick = { onItem(item) },
-                                        status = status(item),
                                         poster = artwork?.let { painter ->
                                             { posterModifier ->
                                                 painter(item, posterModifier)
@@ -977,16 +980,15 @@ fun HomeScreen(
             if (showFeedPlaceholders) {
                 items(
                     count = HomeLoadingPlaceholderCount,
-                    key = { index -> "$selectedFeedKey:loading:$index" },
+                    key = { index -> "$renderedFeedKey:loading:$index" },
                 ) { MediaPlaceholder() }
             } else if (displayed.isNotEmpty()) {
-                items(displayed, key = { item -> "$selectedFeedKey:${item.id.value}" }) { item ->
+                items(displayed, key = { item -> "$renderedFeedKey:${item.id.value}" }) { item ->
                     val text = homeLatestText(item)
                     MediaCard(
                         text.title,
                         text.subtitle,
                         onClick = { onItem(item) },
-                        status = status(item),
                         poster = artwork?.let { painter ->
                             { posterModifier ->
                                 painter(item, posterModifier)
@@ -1047,7 +1049,6 @@ fun HomeScreen(
                 val text = HomeCardText(item.title, item.metaLine)
                 MediaCard(
                     text.title, text.subtitle, onClick = { onItem(item) },
-                    status = status(item),
                     poster = artwork?.let { painter ->
                         { posterModifier ->
                             painter(item, posterModifier)
@@ -2571,12 +2572,6 @@ private fun MediaPlaceholder(modifier: Modifier = Modifier) {
         Box(Modifier.fillMaxWidth(.45f).height(10.dp).clip(RoundedCornerShape(4.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .6f)))
     }
-}
-
-private fun status(item: MediaItem): String? = when {
-    item.userData.isPlayed -> "已看"
-    item.userData.isFavorite -> "已收藏"
-    else -> null
 }
 
 private fun progress(item: MediaItem): Float? = item.runtimeMs?.takeIf { it > 0 && item.userData.hasProgress }?.let {

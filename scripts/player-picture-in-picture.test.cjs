@@ -4,12 +4,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('/Applications/DevEco-Studio.app/Contents/tools/ohpm/node_modules/typescript');
 
-function harness(createOverride, { failBackground = false, desktop = false } = {}) {
+function harness(createOverride) {
   const controllers = [], states = [], actions = [], failures = [], configurations = [], transitions = [];
-  const context = { async moveAbilityToBackground() {
-    transitions.push('background');
-    if (failBackground) throw Error('background rejected');
-  } };
+  const context = {};
   function make() {
     const c = { listeners: {}, starts: 0, stops: 0, sizes: [], controlStates: [],
       on(name, callback) { this.listeners[name] = callback; }, off(name) { delete this.listeners[name]; },
@@ -29,9 +26,7 @@ function harness(createOverride, { failBackground = false, desktop = false } = {
       isPiPEnabled: () => true,
       PiPControlType: { VIDEO_PLAY_PAUSE: 0 }, PiPControlStatus: { PLAY: 1, PAUSE: 0 },
       PiPTemplateType: { VIDEO_PLAY: 1 }, PiPState: { STARTED: 2, STOPPED: 4, ABOUT_TO_RESTORE: 5, ERROR: 6 } },
-      window: { getLastWindow: async () => ({ async minimize() { transitions.push('minimize'); } }) },
       promptAction: { showToast: options => failures.push(options) } };
-    if (name === '@kit.BasicServicesKit') return { deviceInfo: { deviceType: desktop ? '2in1' : 'phone' } };
     if (name === '@kit.PerformanceAnalysisKit') return { hilog: { warn() {}, info() {} } };
     throw Error(name);
   } });
@@ -44,6 +39,27 @@ function harness(createOverride, { failBackground = false, desktop = false } = {
   };
 }
 
+function surfaceLifecycle(pictureInPicture) {
+  const source = fs.readFileSync('harmonyApp/entry/src/main/ets/player/PlayerInterop.ets', 'utf8');
+  const callbacks = ['onHostBackground', 'onHostForeground'].map(name => {
+    const field = source.match(new RegExp(`  private readonly ${name} = \\(\\): void => \\{[\\s\\S]*?\\n  \\};`));
+    assert.ok(field, `Missing actual native host callback: ${name}`);
+    return field[0];
+  });
+  const module = { exports: {} };
+  const lifecycle = `export class SurfaceLifecycle {
+    hostForeground = true;
+    glassBackdrop = { stops: 0, syncs: 0, stop() { this.stops++; } };
+    constructor(public pictureInPicture: Object) {}
+    syncGlassBackdrop() { this.glassBackdrop.syncs++; }
+    ${callbacks.join('\n')}
+  }`;
+  vm.runInNewContext(ts.transpileModule(lifecycle, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+  } }).outputText, { module, exports: module.exports });
+  return new module.exports.SurfaceLifecycle(pictureInPicture);
+}
+
 test('native window delegates play/pause to shared controller and reuses active window', async () => {
   const h = harness(); h.start(); await h.drain(); h.start(); await h.drain();
   assert.equal(h.controllers.length, 1); assert.equal(h.controllers[0].starts, 1); assert.equal(h.host.active, true);
@@ -52,23 +68,23 @@ test('native window delegates play/pause to shared controller and reuses active 
   assert.deepEqual(h.actions, ['pause', 'play']); assert.deepEqual(h.states, [true]);
 });
 
-test('entering PiP backgrounds the original ability only after playback has its PiP grant', async () => {
+test('entering PiP keeps the source ability foregrounded and retains its mounted surface', async () => {
   const h = harness(); h.start(); await h.drain();
-  assert.deepEqual(h.transitions, ['pip:true', 'background']);
+  assert.deepEqual(h.transitions, ['pip:true']);
   assert.equal(h.configurations[0].navigationId, undefined, 'CMP keeps its one ArkUI host page mounted');
   assert.equal(h.controllers[0].stops, 0);
 });
 
-test('desktop PiP minimizes its main window instead of calling the phone-only background API', async () => {
-  const h = harness(undefined, { desktop: true }); h.start(); await h.drain();
-  assert.deepEqual(h.transitions, ['pip:true', 'minimize']);
+test('PiP does not minimize the source window', async () => {
+  const h = harness(); h.start(); await h.drain();
+  assert.deepEqual(h.transitions, ['pip:true']);
 });
 
-test('failed main-window handoff returns the surface without stopping playback or leaving a black page', async () => {
-  const h = harness(undefined, { failBackground: true }); h.start(); await h.drain();
-  assert.equal(h.host.active, false); assert.equal(h.controllers[0].stops, 1);
-  assert.deepEqual(h.states, [true, false]); assert.deepEqual(h.actions, []);
-  assert.equal(h.failures.length, 1);
+test('PiP activation does not request an ability-background handoff', async () => {
+  const h = harness(); h.start(); await h.drain();
+  assert.equal(h.host.active, true); assert.equal(h.controllers[0].stops, 0);
+  assert.deepEqual(h.states, [true]); assert.deepEqual(h.actions, []);
+  assert.equal(h.failures.length, 0);
 });
 
 test('closing the small window pauses the shared player before dropping the PiP grant', async () => {
@@ -81,18 +97,36 @@ test('closing the small window pauses the shared player before dropping the PiP 
 test('restoring the small window does not play, pause, reload or close the player page', async () => {
   const h = harness(); h.start(); await h.drain();
   h.controllers[0].listeners.stateChange(5);
-  h.host.restoreToPlayer(); await h.drain();
+  surfaceLifecycle(h.host).onHostForeground(); await h.drain();
   assert.equal(h.controllers[0].stops, 0, 'The system is already restoring its original surface');
   h.controllers[0].listeners.stateChange(4);
   assert.deepEqual(h.states, [true, false]); assert.deepEqual(h.actions, []);
 });
 
-test('opening the app while PiP is active returns the same surface once and preserves user pause', async () => {
-  const h = harness(); h.start({ widthPx: 1920, heightPx: 1080, playing: false }); await h.drain();
-  h.host.restoreToPlayer(); h.host.restoreToPlayer(); await h.drain();
-  assert.equal(h.controllers.length, 1); assert.equal(h.controllers[0].stops, 1);
-  assert.equal(h.controllers[0].starts, 1); assert.deepEqual(h.actions, []);
-  assert.deepEqual(h.states, [true, false]);
+for (const playing of [true, false]) {
+  test(`reopening the app preserves active PiP and user ${playing ? 'play' : 'pause'} intent`, async () => {
+    const h = harness(); h.start({ widthPx: 1920, heightPx: 1080, playing }); await h.drain();
+    const lifecycle = surfaceLifecycle(h.host);
+    for (let i = 0; i < 2; i++) {
+      lifecycle.onHostBackground(); lifecycle.onHostForeground(); await h.drain();
+    }
+    assert.equal(lifecycle.hostForeground, true);
+    assert.equal(lifecycle.glassBackdrop.stops, 2);
+    assert.equal(lifecycle.glassBackdrop.syncs, 2);
+    assert.equal(h.host.active, true);
+    assert.equal(h.controllers.length, 1); assert.equal(h.controllers[0].stops, 0);
+    assert.equal(h.controllers[0].starts, 1); assert.deepEqual(h.actions, []);
+    assert.deepEqual(h.states, [true]);
+    assert.deepEqual(h.controllers[0].controlStates.at(-1), [0, playing ? 1 : 0]);
+  });
+}
+
+test('closing PiP after reopening the app still pauses instead of restoring playback', async () => {
+  const h = harness(); h.start(); await h.drain();
+  surfaceLifecycle(h.host).onHostForeground(); await h.drain();
+  h.controllers[0].listeners.stateChange(4);
+  assert.equal(h.controllers[0].stops, 0);
+  assert.deepEqual(h.transitions, ['pip:true', 'pause', 'pip:false']);
 });
 test('close invalidates late controls synchronously and closes system window', async () => {
   const h = harness(); h.start(); await h.drain();

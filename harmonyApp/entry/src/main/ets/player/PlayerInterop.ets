@@ -179,9 +179,6 @@ struct MaFeiPlayerSurfaceHost {
   };
   private readonly onHostForeground = (): void => {
     this.hostForeground = true;
-    // The shared reducer owns pause/resume intent. Returning through the app
-    // icon must also return the original surface, not leave a black PiP page.
-    this.pictureInPicture.restoreToPlayer();
     this.syncGlassBackdrop();
   };
 

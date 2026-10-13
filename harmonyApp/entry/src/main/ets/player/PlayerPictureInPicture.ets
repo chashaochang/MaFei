@@ -1,6 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { PiPWindow, window } from '@kit.ArkUI';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { PiPWindow } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { promptAction } from '@kit.ArkUI';
 
@@ -58,9 +57,6 @@ export class PlayerPictureInPicture {
             hilog.info(0x4D46, 'MaFeiPlayer', 'picture-in-picture state=%{public}d', state);
             if (state === PiPWindow.PiPState.STARTED && !this.active) {
               this.active = true; this.restoring = false; this.sync(); onState(true);
-              // startPiP transfers the XComponent, not the main window. Keep
-              // the CMP route mounted, but leave it in the background.
-              void this.backgroundMainWindow(context, controller, epoch);
             }
             if (state === PiPWindow.PiPState.ABOUT_TO_RESTORE) this.restoring = true;
             if (state === PiPWindow.PiPState.STOPPED || state === PiPWindow.PiPState.ERROR) {
@@ -84,48 +80,6 @@ export class PlayerPictureInPicture {
         this.active = false; onState(false);
         hilog.warn(0x4D46, 'MaFeiPlayer', 'picture-in-picture unavailable');
         promptAction.showToast({ message: '暂时无法进入画中画' });
-      }
-    });
-  }
-
-  private async backgroundMainWindow(context: common.UIAbilityContext,
-    controller: PiPWindow.PiPController, epoch: number): Promise<void> {
-    try {
-      if (deviceInfo.deviceType === '2in1') {
-        // moveAbilityToBackground is not supported on PC/2-in-1.
-        const mainWindow = await window.getLastWindow(context);
-        if (epoch !== this.epoch || controller !== this.controller || !this.active || this.restoring) return;
-        await mainWindow.minimize();
-      } else {
-        await context.moveAbilityToBackground();
-      }
-      hilog.info(0x4D46, 'MaFeiPlayer', 'picture-in-picture source window backgrounded');
-    } catch (_error) {
-      if (epoch !== this.epoch || controller !== this.controller || !this.active || this.restoring) return;
-      hilog.warn(0x4D46, 'MaFeiPlayer', 'Unable to background the picture-in-picture source window');
-      // A failed handoff must return the video surface instead of leaving a
-      // black player behind the small window. This is a restore, not a close.
-      this.restoreToPlayer();
-      promptAction.showToast({ message: '暂时无法进入画中画' });
-    }
-  }
-
-  /** Also used when the user opens the app directly rather than the PiP restore button. */
-  restoreToPlayer(): void {
-    const controller = this.controller;
-    if (!controller || !this.active || this.restoring) return;
-    this.restoring = true;
-    hilog.info(0x4D46, 'MaFeiPlayer', 'picture-in-picture returning to source window');
-    const epoch = this.epoch;
-    this.operations = this.operations.then(async (): Promise<void> => {
-      if (epoch !== this.epoch || controller !== this.controller || !this.active) return;
-      try {
-        await controller.stopPiP();
-      } catch (_error) {
-        if (epoch !== this.epoch || controller !== this.controller || !this.active) return;
-        this.restoring = false;
-        hilog.warn(0x4D46, 'MaFeiPlayer', 'Unable to restore the picture-in-picture surface');
-        promptAction.showToast({ message: '恢复播放窗口失败，请重试' });
       }
     });
   }
