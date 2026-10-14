@@ -24,14 +24,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 
 /** One interaction group for artwork, captions and the artwork's quick actions. */
 @Stable
@@ -91,46 +90,55 @@ fun Modifier.mafeiMediaCardInteraction(
     )
 
 /**
- * Image-only lift and rim. Captions never move, gain a background or enter the
- * focus outline. This reacts to input, not a desktop/device classification.
+ * Fixed artwork contour with a slight inner zoom and clockwise hover rim. Captions never move,
+ * gain a background or enter the focus outline. This reacts to input, not device classification.
  * Animation values are read in layer/draw phases; no backdrop or blur per card.
- * Also owns the artwork clip so callers do not add a second clipping layer.
+ * The outer clip stays inside the layout bounds even at a list edge. Only the inner content layer
+ * scales, preserving child action hit transforms without moving the contour into adjacent items.
  */
 fun Modifier.mafeiArtworkFeedback(
     interaction: MediaCardInteraction,
     shape: Shape,
     enabled: Boolean = true,
 ): Modifier = composed {
-    val hovered = enabled && interaction.hovered
-    val focused = enabled && interaction.focused && !hovered
-    val pressed = enabled && interaction.pressed
-    val lift = animateFloatAsState(if (hovered || focused) 1f else 0f, tween(160), label = "artwork lift")
+    val active = enabled && LocalWindowInfo.current.isWindowFocused
+    val hovered = active && interaction.hovered
+    val focused = active && interaction.focused && !hovered
+    val pressed = active && interaction.pressed
     val scale = animateFloatAsState(
-        if (pressed) .985f else if (hovered) 1.018f else 1f,
+        if (pressed) 1.008f else if (hovered) 1.018f else 1f,
         tween(if (pressed) 80 else 160), label = "artwork scale",
     )
     val focus = animateFloatAsState(if (focused) 1f else 0f, tween(120), label = "artwork focus")
+    val hover = animateFloatAsState(if (hovered) 1f else 0f, tween(160), label = "artwork hover rim")
+    val phase = rememberArtworkHoverPhase(hovered)
     val density = LocalDensity.current.density
     val focusColor = MaterialTheme.colorScheme.primary
     this.graphicsLayer {
-        scaleX = scale.value
-        scaleY = scale.value
-        translationY = -2f * density * lift.value
-        shadowElevation = 4f * density * lift.value
         this.shape = shape
         clip = true
-        ambientShadowColor = Color.Black.copy(alpha = .18f)
-        spotShadowColor = Color.Black.copy(alpha = .28f)
     }.drawWithCache {
-        val outline = shape.createOutline(size, layoutDirection, this)
-        val rim = Brush.linearGradient(
-            listOf(Color.White.copy(alpha = .85f), Color.White.copy(alpha = .30f), Color.White.copy(alpha = .12f)),
-            start = Offset.Zero, end = Offset(size.width, size.height),
+        // Include the full 4dp glow in the fixed contour, including the first/last list items.
+        val inset = 2f * density
+        val rim = ArtworkHoverRim(
+            outline = shape.createOutline(
+                Size((size.width - inset * 2).coerceAtLeast(0f), (size.height - inset * 2).coerceAtLeast(0f)),
+                layoutDirection, this,
+            ),
+            inset = inset, density = density, accent = focusColor,
         )
+        val hoverStroke = Stroke(density)
+        val focusStroke = Stroke(2f * density)
         onDrawWithContent {
             drawContent()
-            if (lift.value > 0f) drawOutline(outline, rim, alpha = lift.value, style = Stroke(1.5f * density))
-            if (focus.value > 0f) drawOutline(outline, focusColor, alpha = focus.value, style = Stroke(4f * density))
+            if (hover.value > 0f) {
+                drawPath(rim.contour, Color.White, alpha = .16f * hover.value, style = hoverStroke)
+                rim.draw(this, phase.value, hover.value)
+            }
+            if (focus.value > 0f) drawPath(rim.contour, focusColor, alpha = focus.value, style = focusStroke)
         }
+    }.graphicsLayer {
+        scaleX = scale.value
+        scaleY = scale.value
     }
 }

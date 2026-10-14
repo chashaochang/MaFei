@@ -260,15 +260,17 @@ class MediaCardPointerTest {
             val label = "${if (isWide) "wide" else "phone"} / ${if (isDark) "dark" else "light"}"
             fun capture(state: String) { images += "$label / $state" to buffered(rule.onNodeWithTag("scene")) }
             capture("idle")
-            rule.onNodeWithTag("poster").performMouseInput { moveTo(center) }
-            capture("hover")
             rule.mainClock.autoAdvance = false
+            rule.onNodeWithTag("poster").performMouseInput { moveTo(center) }
+            rule.mainClock.advanceTimeBy(560)
+            capture("hover")
             rule.onNodeWithTag("poster").performMouseInput { moveTo(Offset(12f, 12f)); press() }
             rule.mainClock.advanceTimeBy(120)
             capture("press")
             rule.onNodeWithTag("poster").performMouseInput { release() }
-            rule.mainClock.autoAdvance = true
             rule.onNodeWithTag("poster").performMouseInput { moveTo(Offset(-1f, -1f)) }
+            rule.mainClock.advanceTimeBy(200)
+            rule.mainClock.autoAdvance = true
         }
         System.getenv("MAFEI_CAPTURE_DIR")?.let { directory ->
             val sheet = BufferedImage(3000, 4 * 370, BufferedImage.TYPE_INT_RGB)
