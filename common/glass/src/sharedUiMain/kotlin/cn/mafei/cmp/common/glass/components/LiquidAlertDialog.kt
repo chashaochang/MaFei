@@ -30,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
+import cn.mafei.cmp.common.glass.currentGlassCapability
+import cn.mafei.cmp.common.glass.currentGlassStyle
+import cn.mafei.cmp.common.glass.surfaceAlpha
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -50,11 +53,12 @@ import com.kyant.shapes.RoundedRectangle
  * belongs to the page, so it stays with the caller.
  *
  * Colors are parameters (like [LiquidButton]): this module owns material, not
- * theme.
+ * theme. A separate platform window passes a null backdrop and uses the same
+ * layout with an opaque fallback; it must not sample another window's layer.
  */
 @Composable
 fun LiquidAlertDialog(
-    backdrop: GlassBackdrop,
+    backdrop: GlassBackdrop?,
     title: String,
     message: String,
     confirmText: String,
@@ -69,24 +73,31 @@ fun LiquidAlertDialog(
     confirmContentColor: Color = Color.White,
 ) {
     val glassIntensity = LocalGlassIntensity.current
+    val style = currentGlassStyle()
+    val canSample = backdrop != null && currentGlassCapability().blur
+    val material = if (!canSample) {
+        Modifier.clip(RoundedRectangle(48f.dp)).background(containerColor.copy(alpha = 1f))
+    } else {
+        Modifier.drawBackdrop(
+            backdrop = requireNotNull(backdrop).layer,
+            shape = { RoundedRectangle(48f.dp) },
+            effects = {
+                colorControls(
+                    brightness = if (isLightTheme) .2f else 0f,
+                    saturation = 1.5f,
+                )
+                blur((if (isLightTheme) 16f.dp.toPx() else 8f.dp.toPx()) * glassIntensity)
+                lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
+            },
+            highlight = { Highlight.Plain },
+            onDrawSurface = { drawRect(containerColor.copy(alpha = style.surfaceAlpha(containerColor.alpha))) },
+        )
+    }
     Column(
         modifier
             .widthIn(min = 280.dp, max = 360.dp)
             .fillMaxWidth()
-            .drawBackdrop(
-                backdrop = backdrop.layer,
-                shape = { RoundedRectangle(48f.dp) },
-                effects = {
-                    colorControls(
-                        brightness = if (isLightTheme) .2f else 0f,
-                        saturation = 1.5f,
-                    )
-                    blur((if (isLightTheme) 16f.dp.toPx() else 8f.dp.toPx()) * glassIntensity)
-                    lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
-                },
-                highlight = { Highlight.Plain },
-                onDrawSurface = { drawRect(containerColor) },
-            ),
+            .then(material),
     ) {
         BasicText(
             title,

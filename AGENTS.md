@@ -19,6 +19,7 @@
 4. 禁止用 `AppGlassCard`、`MaFeiSurface` 或 Material3 `Surface` 批量包裹页面来代替产品设计。先确定信息层级、媒体主视觉、滚动节奏和交互，再选择材质。
 5. 新增或重做交互玻璃组件时，优先复用已验证的 Liquid Button、Toggle、Slider、Bottom Tabs 和 Mini Player 模式；不得自行用静态透明背景仿制。
 6. UI 完成声明必须包含手机和宽屏截图、浅色和深色、静止和按压/拖动状态。仅编译通过不算视觉验收。
+7. 确认/提示弹窗必须使用现成的标准液态玻璃提示框：页面调用 `common/ui/.../MaFeiGlassConfirmDialog.kt`，该宿主只负责遮罩、焦点、关闭和事件，展示必须委托 `common/glass/.../components/LiquidAlertDialog.kt`（源自 Liquid Glass Demo 的 `DialogContent.kt`）。禁止另写 Material 弹窗、手排按钮行，或以“苹果风格”为由再创造一套提示框。独立窗口的 `LegacyConfirmDialog` 也复用同一个面板，仅在没有同窗口 backdrop 时降级材质；不能复制布局。参考布局和光学参数不得擅自修改。
 
 ## Git Agent 独立署名
 
