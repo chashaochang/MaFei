@@ -102,6 +102,13 @@ fun main() = application {
         height = (System.getProperty("mafei.desktop.windowHeight")?.toIntOrNull()
             ?.coerceIn(PcMinimumWindowHeight.value.toInt(), 1600) ?: initialHeight).dp,
     )
+    val playerWindowMode = remember { DesktopPlayerWindowMode() }
+    val requestPlayerFullscreen: (Boolean) -> Unit = remember(windowState) {
+        { requested -> windowState.placement = playerWindowMode.request(windowState.placement, requested) }
+    }
+    val playerScreenChanged: (Boolean) -> Unit = remember(windowState) {
+        { visible -> if (!visible) windowState.placement = playerWindowMode.playerClosed(windowState.placement) }
+    }
     Window(
         icon = painterResource(Res.drawable.app_launcher_icon),
         state = windowState,
@@ -125,12 +132,16 @@ fun main() = application {
             onDispose { }
         }
         CompositionLocalProvider(
-            LocalMaFeiWindowFeatures provides MaFeiWindowFeatures(desktopWindow = true),
+            LocalMaFeiWindowFeatures provides MaFeiWindowFeatures(
+                desktopWindow = true,
+                windowedHost = true,
+                windowFullscreen = windowState.placement == WindowPlacement.Fullscreen,
+            ),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(PcWindowCornerRadius)),
+                    .clip(RoundedCornerShape(if (windowState.placement == WindowPlacement.Fullscreen) 0.dp else PcWindowCornerRadius)),
             ) {
                 DesktopNavigationOwner {
                     App(
@@ -142,11 +153,8 @@ fun main() = application {
                                 fullscreen = fullscreen,
                                 onMinimize = { window.extendedState = window.extendedState or java.awt.Frame.ICONIFIED },
                                 onToggleFullscreen = {
-                                    windowState.placement = if (fullscreen) {
-                                        WindowPlacement.Floating
-                                    } else {
-                                        WindowPlacement.Fullscreen
-                                    }
+                                    if (fullscreen) requestPlayerFullscreen(false)
+                                    else windowState.placement = WindowPlacement.Fullscreen
                                 },
                                 onClose = { runtime.requestClose { exitApplication() } },
                             )
@@ -154,13 +162,8 @@ fun main() = application {
                         windowDragArea = { content ->
                             WindowDraggableArea(content = content)
                         },
-                        onPlayerFullscreenChanged = { fullscreen ->
-                            windowState.placement = if (fullscreen) {
-                                WindowPlacement.Fullscreen
-                            } else {
-                                WindowPlacement.Floating
-                            }
-                        },
+                        onPlayerScreenChanged = playerScreenChanged,
+                        onPlayerFullscreenChanged = requestPlayerFullscreen,
                     )
                 }
             }

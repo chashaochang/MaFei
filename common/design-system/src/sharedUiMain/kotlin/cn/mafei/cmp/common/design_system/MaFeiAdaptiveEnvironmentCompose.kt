@@ -18,7 +18,7 @@ data class MaFeiWindowFeatures(
      * layout still reflows from the current window bounds.
      */
     val desktopWindow: Boolean = false,
-    /** A tablet/2-in-1 freeform window with native window chrome. */
+    /** A resizable host supporting system fullscreen, including tablet freeform windows. */
     val windowedHost: Boolean = false,
     /**
      * The horizontal inset occupied by the native HarmonyOS title buttons.
@@ -29,7 +29,7 @@ data class MaFeiWindowFeatures(
     val windowControlEndInsetDp: Float = 0f,
     /** The vertical footprint occupied by the native HarmonyOS title buttons. */
     val windowControlTopInsetDp: Float = 0f,
-    /** Whether the host window is currently maximized/immersive fullscreen. */
+    /** Actual immersive system fullscreen; an ordinary maximized window is NOT fullscreen. */
     val windowFullscreen: Boolean = false,
 )
 

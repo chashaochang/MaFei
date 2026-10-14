@@ -15,9 +15,10 @@ export default class EntryAbility extends UIAbility {
   private lastPlayerScreenVisible: boolean = false;
   private systemBarsHidden: boolean = false;
   private playerDecorHidden: boolean = false;
-  private playerWindowMaximizedByUs: boolean = false;
-  private playerWindowRecoveryInFlight: boolean = false;
-  private lastPlayerFullscreenRequest: boolean = false;
+  private playerWindowRestoreStatus?: window.WindowStatusType;
+  private playerWindowTransitionInFlight: boolean = false;
+  private lastWindowModeRevision: number = -1;
+  private windowModePlayerVisible: boolean = false;
   private avoidAreaChangeCallback = (_options: window.AvoidAreaOptions): void => {
     if (this.mainWindow) {
       this.publishSafeArea(this.mainWindow);
@@ -67,6 +68,49 @@ export default class EntryAbility extends UIAbility {
     return this.isFreeformWindow(windowClass);
   }
 
+  /** Execute explicit requests once. Native title-button changes are observations, not new requests. */
+  private applyPlayerWindowMode(windowClass: window.Window, playerVisible: boolean): void {
+    if (!this.isWindowedPlayerHost(windowClass) || this.playerWindowTransitionInFlight) return;
+    const revision = nativeApi.GetOhosPlayerOrientationRevision();
+    const opened = !this.windowModePlayerVisible && playerVisible;
+    const closed = this.windowModePlayerVisible && !playerVisible;
+    const requested = playerVisible && revision !== this.lastWindowModeRevision;
+    this.windowModePlayerVisible = playerVisible;
+    if (!closed && !requested) return;
+    this.lastWindowModeRevision = revision;
+    const enter = playerVisible && nativeApi.IsOhosPlayerFullscreenRequested();
+    if (opened && !enter) return;
+    try {
+      const status = windowClass.getWindowStatus();
+      if (enter && status === window.WindowStatusType.FULL_SCREEN) return;
+      if (!enter && status !== window.WindowStatusType.FULL_SCREEN) {
+        this.playerWindowRestoreStatus = undefined;
+        return;
+      }
+      if (!enter && this.playerWindowRestoreStatus === undefined &&
+          (closed || status !== window.WindowStatusType.FULL_SCREEN)) return;
+      if (enter) this.playerWindowRestoreStatus = status;
+      const restoreStatus = this.playerWindowRestoreStatus;
+      this.playerWindowTransitionInFlight = true;
+      const transition = enter ?
+        windowClass.maximize(window.MaximizePresentation.ENTER_IMMERSIVE) :
+        restoreStatus === window.WindowStatusType.MAXIMIZE ?
+          windowClass.maximize(window.MaximizePresentation.EXIT_IMMERSIVE) : windowClass.recover();
+      transition.then(() => {
+        if (!enter) this.playerWindowRestoreStatus = undefined;
+        this.playerWindowTransitionInFlight = false;
+        this.publishSafeArea(windowClass);
+      }).catch((error: Object) => {
+        if (enter) this.playerWindowRestoreStatus = undefined;
+        this.playerWindowTransitionInFlight = false;
+        this.publishSafeArea(windowClass);
+        hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to change player window mode: %{public}s', JSON.stringify(error));
+      });
+    } catch (error) {
+      hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to query player window mode: %{public}s', JSON.stringify(error));
+    }
+  }
+
   private applyOrientationPolicy(windowClass: window.Window): void {
     const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
     const playerFullscreen = playerVisible && nativeApi.IsOhosPlayerFullscreenRequested();
@@ -109,11 +153,13 @@ export default class EntryAbility extends UIAbility {
   private applySystemBarPolicy(windowClass: window.Window): void {
     const freeform = this.isFreeformWindow(windowClass);
     const playerVisible = nativeApi.IsOhosPlayerScreenVisible();
-    const playerFullscreenRequested = nativeApi.IsOhosPlayerFullscreenRequested();
-    const playerExitedFullscreen = this.lastPlayerFullscreenRequest && !playerFullscreenRequested;
-    this.lastPlayerFullscreenRequest = playerVisible ? playerFullscreenRequested : false;
-    const fullscreen = this.isWindowedPlayerHost(windowClass) &&
-      playerVisible && playerFullscreenRequested;
+    this.applyPlayerWindowMode(windowClass, playerVisible);
+    let fullscreen = false;
+    if (this.isWindowedPlayerHost(windowClass)) {
+      try {
+        fullscreen = windowClass.getWindowStatus() === window.WindowStatusType.FULL_SCREEN;
+      } catch (_) { /* Next status callback retries the observation. */ }
+    }
     // A freeform tablet keeps its native titlebar in normal playback, but a
     // player fullscreen request should consume that chrome as well as the
     // status/navigation bars. The 2-in-1 host already hides its decor at
@@ -129,53 +175,6 @@ export default class EntryAbility extends UIAbility {
       }
     }
 
-    // A real HarmonyOS PC/2-in-1 player fullscreen must expand the host
-    // window, not only hide system bars. Remember whether this transition was
-    // initiated by the player so leaving fullscreen restores the user's
-    // previous floating window instead of unexpectedly unmaximizing a window
-    // they had already maximized themselves.
-    if (deviceInfo.deviceType === '2in1') {
-      try {
-        const status = windowClass.getWindowStatus();
-        const nativeFullscreen = status === window.WindowStatusType.FULL_SCREEN ||
-          status === window.WindowStatusType.MAXIMIZE;
-        if (fullscreen && !this.playerWindowMaximizedByUs &&
-            status === window.WindowStatusType.FLOATING) {
-          this.playerWindowMaximizedByUs = true;
-          windowClass.maximize(window.MaximizePresentation.ENTER_IMMERSIVE_DISABLE_TITLE_AND_DOCK_HOVER)
-            .catch((error: Object) => {
-              this.playerWindowMaximizedByUs = false;
-              hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to maximize player window: %{public}s',
-                JSON.stringify(error));
-            });
-        } else if (!fullscreen && this.playerWindowMaximizedByUs) {
-          this.playerWindowMaximizedByUs = false;
-          windowClass.recover().catch((error: Object) => {
-            hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to recover player window: %{public}s',
-              JSON.stringify(error));
-          });
-        } else if (!fullscreen && playerVisible && playerExitedFullscreen && nativeFullscreen &&
-            !this.playerWindowRecoveryInFlight) {
-          // The user may have entered maximize/fullscreen with Harmony's
-          // native title button. The player button still means "exit" in that
-          // state, so restore the previous floating window instead of merely
-          // changing Compose's local state.
-          this.playerWindowRecoveryInFlight = true;
-          windowClass.recover().then(() => {
-            this.playerWindowRecoveryInFlight = false;
-          }).catch((error: Object) => {
-            this.playerWindowRecoveryInFlight = false;
-            hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to recover native fullscreen player window: %{public}s',
-              JSON.stringify(error));
-          });
-        } else if (!nativeFullscreen) {
-          this.playerWindowRecoveryInFlight = false;
-        }
-      } catch (error) {
-        hilog.warn(DOMAIN, 'MaFeiCMP', 'Unable to query player window status: %{public}s',
-          JSON.stringify(error));
-      }
-    }
     if (fullscreen === this.systemBarsHidden) {
       return;
     }
@@ -260,8 +259,7 @@ export default class EntryAbility extends UIAbility {
         }
         try {
           const status = windowClass.getWindowStatus();
-          windowFullscreen = status === window.WindowStatusType.FULL_SCREEN ||
-            status === window.WindowStatusType.MAXIMIZE;
+          windowFullscreen = status === window.WindowStatusType.FULL_SCREEN;
         } catch (_) {
           // Older window managers may not expose status while starting.
         }
@@ -427,8 +425,10 @@ export default class EntryAbility extends UIAbility {
     }
     this.requestedOrientation = undefined;
     this.playerDecorHidden = false;
-    this.playerWindowRecoveryInFlight = false;
-    this.lastPlayerFullscreenRequest = false;
+    this.playerWindowRestoreStatus = undefined;
+    this.playerWindowTransitionInFlight = false;
+    this.lastWindowModeRevision = -1;
+    this.windowModePlayerVisible = false;
     const mainWindow = this.mainWindow;
     this.mainWindow = undefined;
     if (!mainWindow) return;

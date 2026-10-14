@@ -1342,7 +1342,6 @@ private fun BrowseContent(
             playerFullscreen != hostWindowFeatures.windowFullscreen
         ) {
             playerFullscreen = hostWindowFeatures.windowFullscreen
-            onPlayerFullscreenChanged(hostWindowFeatures.windowFullscreen)
         }
     }
     val videoPlayerPresented = playerExpanded && playingMedia?.mediaType != MediaType.Audio
@@ -1352,13 +1351,14 @@ private fun BrowseContent(
             if (videoPlayerPresented) onPlayerScreenChanged(false)
         }
     }
-    DisposableEffect(playerExpanded, onPlayerFullscreenChanged) {
+    val currentFullscreenChanged by rememberUpdatedState(onPlayerFullscreenChanged)
+    DisposableEffect(playerExpanded) {
         if (!playerExpanded) {
             playerFullscreen = false
             // 清晰度是**本次播放会话**的选择，不是全局偏好：看完退出就回到自动。
             requestedBitrate = null
         }
-        onDispose { onPlayerFullscreenChanged(false) }
+        onDispose { if (playerFullscreen) currentFullscreenChanged(false) }
     }
     var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
     // Apple presents the account surface above the current document instead of
@@ -2568,7 +2568,7 @@ private fun BrowseContent(
                 },
                 // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
                 // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
-                fullscreen = playerFullscreen,
+                fullscreen = if (hostWindowFeatures.windowedHost) hostWindowFeatures.windowFullscreen else playerFullscreen,
                 onFullscreenChanged = { requested ->
                     playerFullscreen = requested
                     onPlayerFullscreenChanged(requested)
