@@ -61,6 +61,9 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkHoverSideInset
+import cn.mafei.cmp.common.ui.mafeiArtworkShelfBleed
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
@@ -257,16 +260,19 @@ fun SearchScreen(
                             LegacyEmptyView(modifier = Modifier.weight(1f))
                         } else {
                             val gap = if (layout.gridWidthDp < 320f) 12.dp else 16.dp
+                            val hoverInset = mediaArtworkGridHoverInset(layout.gridWidthDp.dp, columns, gap)
+                            val sideInset = mediaArtworkHoverSideInset((layout.gridWidthDp.dp - gap * (columns - 1)) / columns)
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(columns),
                                 state = gridState,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).mafeiArtworkShelfBleed(sideInset),
                                 contentPadding = PaddingValues(
+                                    start = sideInset, end = sideInset, top = hoverInset,
                                     bottom = safeArea.bottom + 30.dp,
                                 ),
                                 horizontalArrangement = Arrangement.spacedBy(gap),
                                 verticalArrangement = Arrangement.spacedBy(
-                                    if (layout.gridWidthDp < 320f) 18.dp else 20.dp,
+                                    maxOf(20.dp, hoverInset),
                                 ),
                             ) {
                                 items(results, key = { it.id.value }) { item ->

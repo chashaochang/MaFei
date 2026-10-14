@@ -20,6 +20,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
+import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
+import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
+import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
 import org.jetbrains.compose.resources.painterResource
@@ -58,9 +61,11 @@ fun MusicTrackRow(
 fun MusicArtworkCard(item: MediaItem, onClick: () -> Unit,
     artwork: @Composable (MediaItem, Modifier) -> Unit, modifier: Modifier = Modifier) {
     val artist = item.mediaType == MediaType.MusicArtist
-    Column(modifier.fillMaxWidth().clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(if (artist) 8.dp else 7.dp)) {
+    val interaction = rememberMediaCardInteraction()
+    Column(modifier.fillMaxWidth().mafeiMediaCardInteraction(interaction, onClick, label = item.title),
+        verticalArrangement = Arrangement.spacedBy(if (artist) 8.dp else 7.dp)) {
         artwork(item, Modifier.fillMaxWidth().aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
+            .mafeiArtworkFeedback(interaction, RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant))
         Text(item.title, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, lineHeight = 17.sp,
             fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)

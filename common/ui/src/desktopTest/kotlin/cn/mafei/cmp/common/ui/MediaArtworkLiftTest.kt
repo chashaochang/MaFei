@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
@@ -92,14 +94,14 @@ class MediaArtworkLiftTest {
         rule.setContent {
             TestTheme {
                 Box(Modifier.size(420.dp, 450.dp).padding(36.dp)) {
-                    val interaction = rememberMediaCardInteraction(liftArtwork = true)
+                    val interaction = rememberMediaCardInteraction()
                     Column(Modifier.width(if (wide.value) 240.dp else 140.dp).testTag("card")
                         .mafeiMediaCardInteraction(interaction, { opens++ }, "details")) {
                         Box(Modifier.fillMaxWidth().aspectRatio(if (landscape.value) 16f / 9f else 2f / 3f)
                             .mafeiArtworkFeedback(interaction, RoundedCornerShape(10.dp))) {
                             Box(Modifier.fillMaxSize().testTag("art").background(Color(0xFF75939D)))
                             MediaCardHoverOverlay("影片", { plays++ }, { watched++ }, { favorites++ },
-                                visible = interaction.showActions, liftArtwork = true)
+                                visible = interaction.showActions)
                         }
                     }
                 }
@@ -136,7 +138,7 @@ class MediaArtworkLiftTest {
         rule.setContent {
             TestTheme {
                 Box(Modifier.size(140.dp, 210.dp).background(background.value)) {
-                    MediaCardHoverOverlay("影片", {}, null, null, liftArtwork = true)
+                    MediaCardHoverOverlay("影片", {}, null, null)
                 }
             }
         }
@@ -198,13 +200,34 @@ class MediaArtworkLiftTest {
         rule.onNodeWithTag("card-0").performTouchInput { up() }
     }
 
+    @Test fun keyboardActionsHideWhenWindowLosesFocusAndReturnWhenFocused() {
+        val windowFocused = mutableStateOf(true)
+        val info = object : WindowInfo { override val isWindowFocused get() = windowFocused.value }
+        val focus = FocusRequester()
+        rule.setContent {
+            CompositionLocalProvider(LocalWindowInfo provides info) {
+                TestTheme {
+                    MediaCard("影片", "2026", {}, Modifier.width(140.dp).focusRequester(focus))
+                }
+            }
+        }
+        rule.runOnIdle { focus.requestFocus() }
+        action("播放影片").assertIsDisplayed()
+        rule.runOnIdle { windowFocused.value = false }
+        rule.mainClock.advanceTimeBy(400)
+        action("播放影片").assertDoesNotExist()
+        rule.runOnIdle { windowFocused.value = true }
+        rule.mainClock.advanceTimeBy(400)
+        action("播放影片").assertIsDisplayed()
+    }
+
     @Test fun enlargedOuterStripStillOpensDetails() {
         var opens = 0
         rule.setContent {
             TestTheme {
                 Box(Modifier.padding(40.dp)) {
                     MediaCard("影片", "2026", { opens++ }, Modifier.width(140.dp).testTag("card"),
-                        poster = { Box(it.testTag("art").background(Color.Cyan)) }, liftArtwork = true)
+                        poster = { Box(it.testTag("art").background(Color.Cyan)) })
                 }
             }
         }
@@ -237,7 +260,7 @@ class MediaArtworkLiftTest {
                             MediaCard("封面样板 ${index + 1}", "2026 · 电影", {},
                                 Modifier.width(140.dp).testTag("sample-$index"),
                                 poster = { Image(covers[index % covers.size], null, it, contentScale = ContentScale.Crop) },
-                                onToggleFavorite = {}, onToggleWatched = {}, liftArtwork = true)
+                                onToggleFavorite = {}, onToggleWatched = {})
                         }
                     }
                 }
@@ -297,7 +320,7 @@ class MediaArtworkLiftTest {
 
     @Composable private fun Card(index: Int) {
         MediaCard("影片 $index", "2026 · 电影", {}, Modifier.width(140.dp).testTag("card-$index"),
-            poster = { Box(it.testTag("art-$index").background(Color(0xFF75939D))) }, liftArtwork = true)
+            poster = { Box(it.testTag("art-$index").background(Color(0xFF75939D))) })
     }
 
     @Composable private fun TestTheme(dark: Boolean = true, content: @Composable () -> Unit) {

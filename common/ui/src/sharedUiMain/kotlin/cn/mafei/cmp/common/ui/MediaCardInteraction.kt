@@ -26,7 +26,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
@@ -48,32 +47,33 @@ class MediaCardInteraction internal constructor(
     internal val source: MutableInteractionSource,
     private val hover: State<Boolean>,
     private val press: State<Boolean>,
-    internal val liftArtwork: Boolean,
     private val revealActions: State<Boolean>,
+    private val windowFocused: State<Boolean>,
 ) {
     internal var focusWithin by mutableStateOf(false)
     internal var pointerActivation by mutableStateOf(false)
     val hovered: Boolean get() = hover.value
     val focused: Boolean get() = focusWithin && !pointerActivation
     internal val pressed: Boolean get() = press.value
-    val showActions: Boolean get() = if (liftArtwork) revealActions.value || focused else hovered || focused
+    val showActions: Boolean get() = windowFocused.value && (revealActions.value || focused)
 }
 
 @Composable
-fun rememberMediaCardInteraction(liftArtwork: Boolean = false): MediaCardInteraction {
+fun rememberMediaCardInteraction(): MediaCardInteraction {
     val source = remember { MutableInteractionSource() }
     val hover = source.collectIsHoveredAsState()
     val press = source.collectIsPressedAsState()
     var reveal by remember(source) { mutableStateOf(false) }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(hover.value, windowFocused, liftArtwork) {
-        if (liftArtwork && hover.value && windowFocused) {
+    LaunchedEffect(hover.value, windowFocused) {
+        if (hover.value && windowFocused) {
             delay(80)
             reveal = true
         } else reveal = false
     }
     val revealState = rememberUpdatedState(reveal)
-    return remember(source, liftArtwork) { MediaCardInteraction(source, hover, press, liftArtwork, revealState) }
+    val windowFocusState = rememberUpdatedState(windowFocused)
+    return remember(source) { MediaCardInteraction(source, hover, press, revealState, windowFocusState) }
 }
 
 /** The whole card remains a target; only [mafeiArtworkFeedback] paints feedback. */
@@ -84,7 +84,7 @@ fun Modifier.mafeiMediaCardInteraction(
     enabled: Boolean = true,
     onLongClick: (() -> Unit)? = null,
 ): Modifier = this.composed {
-    val raised = interaction.liftArtwork && enabled && LocalWindowInfo.current.isWindowFocused &&
+    val raised = enabled && LocalWindowInfo.current.isWindowFocused &&
         (interaction.hovered || interaction.focused)
     var settling by remember { mutableStateOf(false) }
     LaunchedEffect(raised) {
@@ -119,65 +119,14 @@ fun Modifier.mafeiMediaCardInteraction(
 }
 
 /**
- * Fixed artwork contour with a slight inner zoom and clockwise hover rim. Captions never move,
- * gain a background or enter the focus outline. This reacts to input, not device classification.
- * Animation values are read in layer/draw phases; no backdrop or blur per card.
- * The outer clip stays inside the layout bounds even at a list edge. Only the inner content layer
- * scales, preserving child action hit transforms without moving the contour into adjacent items.
+ * The complete cover rises while captions and the layout slot stay still. Shelf/grid owners
+ * reserve clearance with [mediaArtworkHoverTopInset] and [mediaArtworkHoverSideInset].
+ * Animation values are read in layer/draw phases; settled hover has no continuous frame work.
  */
 fun Modifier.mafeiArtworkFeedback(
     interaction: MediaCardInteraction,
     shape: Shape,
     enabled: Boolean = true,
-): Modifier = composed {
-    if (interaction.liftArtwork) return@composed this.liftedArtworkFeedback(interaction, shape, enabled)
-    val active = enabled && LocalWindowInfo.current.isWindowFocused
-    val hovered = active && interaction.hovered
-    val focused = active && interaction.focused && !hovered
-    val pressed = active && interaction.pressed
-    val scale = animateFloatAsState(
-        if (pressed) 1.008f else if (hovered) 1.018f else 1f,
-        tween(if (pressed) 80 else 160), label = "artwork scale",
-    )
-    val focus = animateFloatAsState(if (focused) 1f else 0f, tween(120), label = "artwork focus")
-    val hover = animateFloatAsState(if (hovered) 1f else 0f, tween(160), label = "artwork hover rim")
-    val phase = rememberArtworkHoverPhase(hovered)
-    val density = LocalDensity.current.density
-    val focusColor = MaterialTheme.colorScheme.primary
-    this.graphicsLayer {
-        this.shape = shape
-        clip = true
-    }.drawWithCache {
-        // Include the full 4dp glow in the fixed contour, including the first/last list items.
-        val inset = 2f * density
-        val rim = ArtworkHoverRim(
-            outline = shape.createOutline(
-                Size((size.width - inset * 2).coerceAtLeast(0f), (size.height - inset * 2).coerceAtLeast(0f)),
-                layoutDirection, this,
-            ),
-            inset = inset, density = density, accent = focusColor,
-        )
-        val hoverStroke = Stroke(density)
-        val focusStroke = Stroke(2f * density)
-        onDrawWithContent {
-            drawContent()
-            if (hover.value > 0f) {
-                drawPath(rim.contour, Color.White, alpha = .16f * hover.value, style = hoverStroke)
-                rim.draw(this, phase.value, hover.value)
-            }
-            if (focus.value > 0f) drawPath(rim.contour, focusColor, alpha = focus.value, style = focusStroke)
-        }
-    }.graphicsLayer {
-        scaleX = scale.value
-        scaleY = scale.value
-    }
-}
-
-/** Home sample: the complete cover rises; its captions and layout slot stay still. */
-private fun Modifier.liftedArtworkFeedback(
-    interaction: MediaCardInteraction,
-    shape: Shape,
-    enabled: Boolean,
 ): Modifier = composed {
     val active = enabled && LocalWindowInfo.current.isWindowFocused
     val hovered = active && interaction.hovered
@@ -220,6 +169,12 @@ internal const val ArtworkLiftScale = 1.09f
 
 fun mediaArtworkHoverTopInset(artworkHeight: Dp): Dp = artworkHeight * (ArtworkLiftScale - 1f) + 12.dp
 fun mediaArtworkHoverSideInset(artworkWidth: Dp): Dp = artworkWidth * ((ArtworkLiftScale - 1f) / 2f) + 12.dp
+
+fun mediaArtworkGridHoverInset(contentWidth: Dp, columns: Int, gap: Dp, aspectRatio: Float = 2f / 3f): Dp {
+    val count = columns.coerceAtLeast(1)
+    val width = ((contentWidth - gap * (count - 1)) / count).coerceAtLeast(1.dp)
+    return mediaArtworkHoverTopInset(width / aspectRatio)
+}
 
 /** Pair with equal LazyRow content padding so resting posters keep the heading's alignment. */
 fun Modifier.mafeiArtworkShelfBleed(inset: Dp): Modifier = layout { measurable, constraints ->

@@ -82,6 +82,7 @@ fun MusicDetailScreen(
                     }
                 } else {
                     val columns = musicColumns(maxWidth.value)
+                    val albumHoverInset = mediaArtworkGridHoverInset(maxWidth - pagePadding * 2, columns, 12.dp, 1f)
                     LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(), state = gridState,
                         contentPadding = PaddingValues(start = pagePadding, end = pagePadding, top = 20.dp,
                             bottom = safe.bottom + bottomInset + 20.dp),
@@ -104,10 +105,10 @@ fun MusicDetailScreen(
                         if (artist && (albums.items.isNotEmpty() || albums.loading || albums.error != null)) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Text("专辑", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 26.dp, bottom = 18.dp))
+                                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 26.dp, bottom = albumHoverInset))
                             }
                             items(albums.items, key = { "album:${it.id.value}" }) { album ->
-                                MusicArtworkCard(album, { onAlbum(album) }, artwork, Modifier.padding(bottom = 18.dp))
+                                MusicArtworkCard(album, { onAlbum(album) }, artwork, Modifier.padding(bottom = maxOf(18.dp, albumHoverInset)))
                             }
                             item(span = { GridItemSpan(maxLineSpan) }) { MusicSectionFeedback(albums, onMoreAlbums, onRetry) }
                         }

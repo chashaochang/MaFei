@@ -42,6 +42,7 @@ import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.core.domain.MediaItem
@@ -80,6 +81,7 @@ fun FavoriteScreen(
     val contentWidth = layout.gridWidthDp
     val columns = legacyMediaColumns(contentWidth)
     val gap = legacyMediaGridGap(contentWidth)
+    val hoverInset = mediaArtworkGridHoverInset(contentWidth.dp, columns, gap)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
@@ -118,7 +120,7 @@ fun FavoriteScreen(
                     columns = columns,
                     startPadding = safeArea.start + horizontalPadding,
                     endPadding = safeArea.end + horizontalPadding,
-                    topPadding = 12.dp,
+                    topPadding = hoverInset,
                     bottomPadding = bottomPadding,
                     modifier = Modifier.weight(1f),
                 )
@@ -135,11 +137,12 @@ fun FavoriteScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = safeArea.start + horizontalPadding,
+                            top = hoverInset,
                             end = safeArea.end + horizontalPadding,
                             bottom = bottomPadding,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
                     ) {
                         items(items, key = { it.id.value }) { item ->
                             LegacyVideoCard(

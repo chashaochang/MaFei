@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
@@ -101,8 +102,8 @@ class MediaCardPointerTest {
             action("播放影片标题").assertIsDisplayed()
             assertEquals(titleBounds, title.fetchSemanticsNode().boundsInRoot)
             assertEquals(subtitleBounds, subtitle.fetchSemanticsNode().boundsInRoot)
-            assertTrue(titlePixels.contentEquals(pixels(title)), "Title must stay unchanged: $cardKind/$isDark")
-            assertTrue(subtitlePixels.contentEquals(pixels(subtitle)), "Subtitle must stay unchanged: $cardKind/$isDark")
+            assertCaptionInkUnchanged(titlePixels, pixels(title), isDark)
+            assertCaptionInkUnchanged(subtitlePixels, pixels(subtitle), isDark)
             card.performMouseInput { moveTo(Offset(-1f, -1f)) }
             rule.waitForIdle()
             action("播放影片标题").assertDoesNotExist()
@@ -304,7 +305,22 @@ class MediaCardPointerTest {
 
     private fun pixels(node: SemanticsNodeInteraction): IntArray {
         val image = node.captureToImage().toPixelMap()
-        return IntArray(image.width * image.height) { i -> image[i % image.width, i / image.width].hashCode() }
+        return IntArray(image.width * image.height) { i -> image[i % image.width, i / image.width].toArgb() }
+    }
+
+    private fun assertCaptionInkUnchanged(before: IntArray, after: IntArray, dark: Boolean) {
+        assertEquals(before.size, after.size)
+        // The approved cover shadow may shade the caption's background, but not move/repaint its text.
+        val ink = before.indices.filter { index ->
+            val rgb = listOf(16, 8, 0).map { (before[index] ushr it) and 255 }
+            if (dark) rgb.min() > 128 else rgb.max() < 180
+        }
+        assertTrue(ink.isNotEmpty())
+        ink.forEach { index ->
+            for (shift in listOf(16, 8, 0)) assertTrue(kotlin.math.abs(
+                ((before[index] ushr shift) and 255) - ((after[index] ushr shift) and 255),
+            ) <= 12, "Caption ink changed at pixel $index")
+        }
     }
 
     private fun action(label: String) = rule.onNode(SemanticsMatcher("click action: $label") {

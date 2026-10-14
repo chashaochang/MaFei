@@ -83,9 +83,14 @@ fun MusicLibraryScreen(
                                     .collect { last -> if (last != null && last >= state.items.size - 5 &&
                                         state.cursor != null && !state.loadingMore && state.error == null) onMore() }
                             }
-                            LazyVerticalGrid(GridCells.Fixed(musicColumns(maxWidth.value)), Modifier.fillMaxSize(),
-                                state = grid, contentPadding = padding, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            val columns = musicColumns(maxWidth.value)
+                            val hoverInset = mediaArtworkGridHoverInset(maxWidth - layout.pagePaddingDp.dp * 2, columns, 12.dp, 1f)
+                            LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(),
+                                state = grid, contentPadding = PaddingValues(
+                                    start = layout.pagePaddingDp.dp, end = layout.pagePaddingDp.dp,
+                                    top = hoverInset, bottom = safe.bottom + bottomInset + 20.dp,
+                                ), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(maxOf(18.dp, hoverInset))) {
                                 items(state.items, key = { it.id.value }) { item -> MusicArtworkCard(item, { onOpen(item) }, artwork) }
                                 item(span = { GridItemSpan(maxLineSpan) }) { MusicPageFooter(state, onMore) }
                             }

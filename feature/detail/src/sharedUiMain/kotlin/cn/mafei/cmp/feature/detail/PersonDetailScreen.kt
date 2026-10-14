@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -56,6 +57,7 @@ import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.LegacyBaseItemCard
+import cn.mafei.cmp.common.ui.mediaArtworkHoverTopInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
@@ -389,16 +391,16 @@ private fun PersonWorkSection(
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.height(12.dp))
+        val hoverInset = mediaArtworkHoverTopInset(150.dp)
         LazyRow(
             // ArkUI's 194vp list did not clip BaseItemCard's trailing text,
             // while Compose measures the explicit 19sp/17sp line heights and
             // the card's 8dp bottom breathing room into the row. Allocate the
             // card's real 206dp height so the subtitle remains fully visible.
-            Modifier.fillMaxWidth().height(206.dp),
+            Modifier.fillMaxWidth().height(206.dp + hoverInset),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = hoverInset),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item { Spacer(Modifier.width(8.dp)) }
             items(items, key = { it.id.value }) { item ->
                 LegacyBaseItemCard(
                     item = item,
@@ -406,7 +408,6 @@ private fun PersonWorkSection(
                     poster = artwork?.let { draw -> { imageModifier -> draw(item, imageModifier) } },
                 )
             }
-            item { Spacer(Modifier.width(8.dp)) }
         }
     }
 }

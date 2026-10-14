@@ -49,6 +49,7 @@ import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.common.ui.LegacySortRow
 import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
@@ -108,6 +109,7 @@ fun VideoListScreen(
     val contentWidth = layout.gridWidthDp
     val columns = legacyMediaColumns(contentWidth)
     val gap = legacyMediaGridGap(contentWidth)
+    val hoverInset = mediaArtworkGridHoverInset(contentWidth.dp, columns, gap)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (bottomNavigationVisible) 112.dp else 30.dp
@@ -175,6 +177,7 @@ fun VideoListScreen(
                     columns = columns,
                     startPadding = safeArea.start + horizontalPadding,
                     endPadding = safeArea.end + horizontalPadding,
+                    topPadding = hoverInset,
                     bottomPadding = bottomPadding,
                     modifier = Modifier.weight(1f),
                 )
@@ -191,12 +194,12 @@ fun VideoListScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = safeArea.start + horizontalPadding,
-                            top = 0.dp,
+                            top = hoverInset,
                             end = safeArea.end + horizontalPadding,
                             bottom = 0.dp,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
                     ) {
                         items(items, key = { it.id.value }) { item ->
                             val selected = item.id.value in selectedIds

@@ -98,6 +98,7 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
 import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
+import cn.mafei.cmp.common.ui.mediaArtworkHoverTopInset
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PersonRef
 import org.jetbrains.compose.resources.painterResource
@@ -702,8 +703,8 @@ private fun SeasonEpisodeSection(
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Box(Modifier.fillMaxWidth().height(220.dp)) {
+        val hoverInset = mediaArtworkHoverTopInset(180.dp * 9f / 16f)
+        Box(Modifier.fillMaxWidth().height(220.dp + hoverInset)) {
             DetailAnimatedVisibility(
                 visible = showLoading,
                 modifier = Modifier.fillMaxSize(),
@@ -724,8 +725,8 @@ private fun SeasonEpisodeSection(
                 LazyRow(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = hoverInset),
+                    modifier = Modifier.fillMaxWidth().height(220.dp + hoverInset),
                 ) {
                     items(selectedEpisodes, key = { it.id.value }) { episode ->
                         SeasonEpisodeCard(
@@ -744,10 +745,11 @@ private fun SeasonEpisodeSection(
 
 @Composable
 private fun SeasonEpisodeSkeletons() {
+    val hoverInset = mediaArtworkHoverTopInset(180.dp * 9f / 16f)
     LazyRow(
-        Modifier.fillMaxWidth().height(220.dp),
+        Modifier.fillMaxWidth().height(220.dp + hoverInset),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = hoverInset),
     ) {
         items(3) {
             Column(Modifier.width(180.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

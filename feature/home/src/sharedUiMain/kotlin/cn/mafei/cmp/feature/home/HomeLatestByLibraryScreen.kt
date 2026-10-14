@@ -28,6 +28,7 @@ import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
@@ -67,6 +68,7 @@ fun HomeLatestByLibraryScreen(
     val backdrop = rememberGlassBackdrop()
     val columns = legacyMediaColumns(layout.gridWidthDp)
     val gap = legacyMediaGridGap(layout.gridWidthDp)
+    val hoverInset = mediaArtworkGridHoverInset(layout.gridWidthDp.dp, columns, gap)
     val horizontalPadding = gap * 2
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
@@ -100,7 +102,7 @@ fun HomeLatestByLibraryScreen(
                             bottom = bottomPadding,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(gap),
-                        verticalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
                     ) {
                         collections.forEach { collection ->
                             val itemsForLibrary = latestByCollection[collection.id].orEmpty()

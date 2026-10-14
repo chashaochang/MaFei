@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -65,6 +66,7 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
 import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PlaybackHistoryItem
 import cn.mafei.cmp.core.domain.movieRatingText
@@ -351,7 +353,10 @@ private fun MineHistoryRows(
     onItem: (MediaItem) -> Unit,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val hoverInset = mediaArtworkGridHoverInset(maxWidth, columns, 10.dp)
+      Column(Modifier.padding(top = (hoverInset - 12.dp).coerceAtLeast(0.dp)),
+          verticalArrangement = Arrangement.spacedBy(maxOf(14.dp, hoverInset))) {
         items.chunked(columns).forEach { rowItems ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 rowItems.forEach { item ->
@@ -365,6 +370,7 @@ private fun MineHistoryRows(
                 repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+      }
     }
 }
 
@@ -530,6 +536,7 @@ fun MineHistoryScreen(
         else -> 3
     }
     val horizontalPadding = if (layout.gridWidthDp < 600f) 16.dp else 24.dp
+    val hoverInset = mediaArtworkGridHoverInset(minOf(layout.gridWidthDp.dp, 960.dp) - horizontalPadding * 2, columns, 10.dp)
     MaFeiActionBarScaffold(
         title = "播放历史",
         onBack = onBack,
@@ -591,12 +598,12 @@ fun MineHistoryScreen(
                     modifier = Modifier.widthIn(max = 960.dp).fillMaxWidth().fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = horizontalPadding,
-                        top = 12.dp,
+                        top = hoverInset,
                         end = horizontalPadding,
                         bottom = safeArea.bottom + 20.dp,
                     ),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(maxOf(14.dp, hoverInset)),
                 ) {
                     items(items, key = { item -> historyItemKey(item) }) { item ->
                         MineHistoryPoster(

@@ -54,9 +54,8 @@ fun MediaCard(
     onToggleFavorite: (() -> Unit)? = null,
     isWatched: Boolean = false,
     isFavorite: Boolean = false,
-    liftArtwork: Boolean = false,
 ) {
-    val interaction = rememberMediaCardInteraction(liftArtwork)
+    val interaction = rememberMediaCardInteraction()
     Column(
         modifier.mafeiMediaCardInteraction(
             interaction,
@@ -86,7 +85,6 @@ fun MediaCard(
                 )
             }
             MediaCardHoverOverlay(
-                liftArtwork = liftArtwork,
                 visible = interaction.showActions,
                 title = title,
                 onPlay = onPlay ?: onClick,
@@ -107,9 +105,8 @@ fun MediaCard(
 }
 
 /**
- * Pointer/keyboard affordance shared by every poster card. It intentionally
- * uses plain darkening and product glyphs rather than a glass surface: the
- * poster remains the visual material and the actions stay legible above it.
+ * Shared pointer/keyboard actions. Only the control circles are tinted;
+ * artwork retains its brightness and captions remain outside the lifted surface.
  */
 @Composable
 fun MediaCardHoverOverlay(
@@ -121,7 +118,6 @@ fun MediaCardHoverOverlay(
     isFavorite: Boolean = false,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
-    liftArtwork: Boolean = false,
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -130,16 +126,14 @@ fun MediaCardHoverOverlay(
         exit = fadeOut(tween(100)),
     ) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().then(if (liftArtwork) Modifier else Modifier.background(Brush.verticalGradient(
-                listOf(Color.Black.copy(alpha = .12f), Color.Black.copy(alpha = .34f), Color.Black.copy(alpha = .65f)),
-            ))),
+            Modifier.fillMaxSize(),
         ) {
             val landscape = maxWidth > maxHeight
             val compact = maxWidth < 140.dp || maxHeight < 120.dp
             val playSize = if (compact) 40.dp else 52.dp
-            val actionSize = if (compact || liftArtwork) 32.dp else 40.dp
+            val actionSize = 32.dp
             val hasActions = onToggleWatched != null || onToggleFavorite != null
-            val playAtStart = landscape && hasActions && (!liftArtwork || maxWidth < 200.dp)
+            val playAtStart = landscape && hasActions && maxWidth < 200.dp
             val playSource = remember { MutableInteractionSource() }
             val playHovered by playSource.collectIsHoveredAsState()
             val playFocused by playSource.collectIsFocusedAsState()
@@ -158,8 +152,7 @@ fun MediaCardHoverOverlay(
                     .graphicsLayer { scaleX = playScale.value; scaleY = playScale.value }
                     .clip(CircleShape)
                     .drawWithContent {
-                        drawCircle(if (liftArtwork) Color.Black.copy(alpha = playBackgroundAlpha.value)
-                            else Color.White.copy(alpha = .96f))
+                        drawCircle(Color.Black.copy(alpha = playBackgroundAlpha.value))
                         drawContent()
                     }
                     .mafeiInteractive(
@@ -173,13 +166,13 @@ fun MediaCardHoverOverlay(
             ) {
                 MaFeiIcon(
                     MaFeiGlyph.Play,
-                    Modifier.size(if (liftArtwork) { if (compact) 26.dp else 32.dp } else if (compact) 20.dp else 26.dp),
-                    if (liftArtwork) Color.White else Color(0xFF1A1A1A),
+                    Modifier.size(if (compact) 26.dp else 32.dp),
+                    Color.White,
                 )
             }
             if (hasActions) {
                 Row(
-                    Modifier.align(if (liftArtwork) Alignment.BottomEnd else if (landscape) Alignment.CenterEnd else Alignment.BottomCenter)
+                    Modifier.align(Alignment.BottomEnd)
                         .padding(horizontal = if (compact) 6.dp else 10.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -191,7 +184,6 @@ fun MediaCardHoverOverlay(
                         selected = isWatched,
                         size = actionSize,
                         enabled = visible,
-                        localScrim = liftArtwork,
                     )
                     if (onToggleFavorite != null) CardHoverAction(
                         glyph = MaFeiGlyph.Favorite,
@@ -200,7 +192,6 @@ fun MediaCardHoverOverlay(
                         selected = isFavorite,
                         size = actionSize,
                         enabled = visible,
-                        localScrim = liftArtwork,
                     )
                 }
             }
@@ -216,7 +207,6 @@ private fun CardHoverAction(
     selected: Boolean,
     size: Dp,
     enabled: Boolean,
-    localScrim: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -243,7 +233,7 @@ private fun CardHoverAction(
                 .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
                 .clip(CircleShape)
                 .drawWithContent {
-                    if (localScrim) drawCircle(Color.Black.copy(alpha = .44f))
+                    drawCircle(Color.Black.copy(alpha = .44f))
                     drawCircle(Color.White.copy(alpha = highlight.value))
                     drawContent()
                 },

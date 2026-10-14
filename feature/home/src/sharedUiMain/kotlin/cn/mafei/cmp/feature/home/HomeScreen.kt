@@ -676,9 +676,9 @@ fun HomeScreen(
       val gridEndPadding = layout.pagePaddingDp.dp + safeArea.end
       val gridBottomPadding = (if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp) +
           safeArea.bottom + bottomOverlayInset
-      val posterWidth = (layout.gridWidthDp.dp - latestGap * (latestColumns - 1)) / latestColumns
-      val gridVerticalGap = if (overview) maxOf(20.dp, mediaArtworkHoverTopInset(posterWidth * 1.5f))
-          else if (layout.family == MaFeiLayoutFamily.Phone) 20.dp else 16.dp
+      val gridVerticalGap = maxOf(20.dp, mediaArtworkGridHoverInset(
+          layout.gridWidthDp.dp, if (overview) latestColumns else legacyMediaColumns(layout.gridWidthDp), latestGap,
+      ))
       // Match the legacy HomeLatestFeedContent.constraintSize(minHeight): a
       // short/loading/empty feed must still be tall enough for its sticky
       // header to remain at the top. Without this tail the lazy grid clamps to
@@ -741,7 +741,7 @@ fun HomeScreen(
                     overview && layout.navigation != NavigationPlacement.Bottom ->
                         safeArea.top + 12.dp
                     overview -> 0.dp
-                    else -> safeArea.top + HomeActionBarHeight + 12.dp
+                    else -> safeArea.top + HomeActionBarHeight + gridVerticalGap
                 },
                 bottom = gridBottomPadding,
             ),
@@ -951,7 +951,6 @@ fun HomeScreen(
                                     MediaCard(
                                         text.title,
                                         text.subtitle,
-                                        liftArtwork = true,
                                         onClick = { openArtwork(item, artworkSource) },
                                         poster = artwork?.let { painter ->
                                             { posterModifier ->
@@ -1009,7 +1008,6 @@ fun HomeScreen(
                     MediaCard(
                         text.title,
                         text.subtitle,
-                        liftArtwork = overview,
                         onClick = { openArtwork(item, artworkSource) },
                         poster = artwork?.let { painter ->
                             { posterModifier ->
@@ -1072,7 +1070,6 @@ fun HomeScreen(
                 val artworkSource = "browse:${item.id.value}"
                 MediaCard(
                     text.title, text.subtitle, onClick = { openArtwork(item, artworkSource) },
-                    liftArtwork = overview,
                     poster = artwork?.let { painter ->
                         { posterModifier ->
                             painter(item, posterModifier)
@@ -2484,7 +2481,7 @@ private fun HomeMediaShelf(
         ) {
             items(items, key = { it.id.value }) { item ->
                 val text = homeShelfText(item, kind)
-                val interaction = rememberMediaCardInteraction(liftArtwork = true)
+                val interaction = rememberMediaCardInteraction()
                 val cardBounds = Modifier.width(width)
                 Column(
                     (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiMediaCardInteraction(
@@ -2511,7 +2508,6 @@ private fun HomeMediaShelf(
                             )
                         }
                         MediaCardHoverOverlay(
-                            liftArtwork = true,
                             visible = interaction.showActions,
                             title = text.title,
                             onPlay = { (onPlay ?: onItem)(item) },

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -137,6 +138,8 @@ import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
 import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
 import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
+import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
+import cn.mafei.cmp.common.ui.mediaArtworkHoverTopInset
 import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.ImageKind
@@ -1553,7 +1556,6 @@ private fun SeriesSections(
                         lineHeight = if (largeTypography) 24.sp else 21.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    Spacer(Modifier.height(DetailSectionContentSpacing))
                 }
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val horizontalPadding = 16.dp
@@ -1564,9 +1566,10 @@ private fun SeriesSections(
                     // guessing from a device category.
                     val columns = legacyMediaColumns(availableWidth.value)
                     val gap = legacyMediaGridGap(availableWidth.value)
+                    val hoverInset = mediaArtworkGridHoverInset(availableWidth, columns, gap)
                     Column(
-                        Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
-                        verticalArrangement = Arrangement.spacedBy(gap),
+                        Modifier.fillMaxWidth().padding(start = horizontalPadding, end = horizontalPadding, top = hoverInset),
+                        verticalArrangement = Arrangement.spacedBy(maxOf(gap, hoverInset)),
                     ) {
                         seasons.chunked(columns).forEach { rowSeasons ->
                             Row(
@@ -2255,9 +2258,8 @@ internal fun LegacyPeopleSection(
         )
         LazyRow(
             Modifier.fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .height(rowHeight)
-                .padding(vertical = if (largeLayout) 15.dp else 10.dp),
+                .height(rowHeight + mediaArtworkHoverTopInset(avatarSize)),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = mediaArtworkHoverTopInset(avatarSize)),
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),
         ) {
             items(
