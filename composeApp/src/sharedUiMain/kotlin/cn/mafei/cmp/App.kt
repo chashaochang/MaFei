@@ -52,7 +52,6 @@ import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiSafeArea
-import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
@@ -110,7 +109,6 @@ import cn.mafei.cmp.feature.chasing.ChasingSelection
 import cn.mafei.cmp.feature.detail.DetailScreen
 import cn.mafei.cmp.feature.detail.PersonDetailScreen
 import cn.mafei.cmp.feature.detail.SeasonDetailScreen
-import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.feature.favorite.FavoriteScreen
 import cn.mafei.cmp.feature.home.HomeHeroBackdropState
 import cn.mafei.cmp.feature.home.HomeHeroWindowBackdrop
@@ -119,8 +117,6 @@ import cn.mafei.cmp.feature.home.homeLatestRequest
 import cn.mafei.cmp.feature.home.HomeScreen
 import cn.mafei.cmp.feature.home.LibraryIndexScreen
 import cn.mafei.cmp.feature.music.MusicCatalogStore
-import cn.mafei.cmp.feature.music.MusicRepeatMode
-import cn.mafei.cmp.feature.music.toMusicTrackOrNull
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.feature.home.authenticationRecoveryMessage
 import cn.mafei.cmp.feature.home.PlaybackQueue
@@ -141,16 +137,9 @@ import cn.mafei.cmp.feature.settings.MineScreen as LegacyMineScreen
 import cn.mafei.cmp.feature.settings.SettingsScreen
 import cn.mafei.cmp.feature.settings.UserAgreementScreen
 import cn.mafei.cmp.player.api.PlayerPhase
-import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.api.PlayerRenderMode
-import cn.mafei.cmp.player.ui.LiquidMiniPlayer
 import cn.mafei.cmp.player.ui.MiniPlayerMedia
-import cn.mafei.cmp.player.ui.NowPlayingMedia
-import cn.mafei.cmp.player.ui.NowPlayingScreen
-import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.player.api.PlayerController
-import cn.mafei.cmp.player.api.PlayerTrack
-import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
@@ -160,208 +149,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 val LocalApplicationRuntime = staticCompositionLocalOf<ApplicationRuntime> {
     error("Application runtime is not installed")
-}
-
-/**
- * Only state that changes application-level routing/chrome.
- *
- * Player progress arrives every 250-500 ms. Collecting the complete
- * [PlayerState] in [BrowseApplication] used to recompose the whole browse
- * tree for every progress tick even though only the player surfaces consume
- * position/buffer data.
- */
-private data class PlayerShellState(
-    val phase: PlayerPhase = PlayerPhase.Idle,
-    val resourceId: String? = null,
-)
-
-@Composable
-private fun BoundNowPlayingScreen(
-    media: NowPlayingMedia,
-    controller: PlayerController,
-    providerTracks: kotlinx.coroutines.flow.StateFlow<List<cn.mafei.cmp.data.adapter_contract.PlaybackTrack>>,
-    onBack: () -> Unit,
-    onTogglePlay: () -> Unit,
-    onRetry: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onSpeed: (Float) -> Unit,
-    onSelectTrack: (cn.mafei.cmp.player.api.TrackKind, String?) -> Unit,
-    onFullscreenChanged: (Boolean) -> Unit,
-    playerSurface: @Composable (
-        PlayerController,
-        onBack: () -> Unit,
-        onExitFullscreen: () -> Unit,
-        fullscreen: Boolean,
-        Modifier,
-    ) -> Unit,
-    preparing: Boolean,
-    playbackError: String?,
-    modifier: Modifier = Modifier,
-    queue: PlaybackQueue? = null,
-    onNext: (() -> Unit)? = null,
-    onPrevious: (() -> Unit)? = null,
-    onSelectEpisode: ((Int) -> Unit)? = null,
-    qualityOptions: List<cn.mafei.cmp.player.ui.PlayerQualityOption> = emptyList(),
-    onSelectQuality: ((Int) -> Unit)? = null,
-    /** 目录条目：播放信息卡片要它的媒体源/流明细，播放控制本身只需要 NowPlayingMedia。 */
-    catalogItem: cn.mafei.cmp.core.domain.MediaItem? = null,
-    /**
-     * 本次协商的**实际结果**（媒体源 / 播放方式 / 档位表 / 生效档位）。
-     * 「播放信息」里的一切都从它来 —— 不用界面自己最后点的那一下去猜。
-     */
-    prepared: cn.mafei.cmp.data.repositories.playback.PreparedStreamFacts? = null,
-    onSelectContentMode: ((cn.mafei.cmp.player.api.PlayerContentMode) -> Unit)? = null,
-    /** 全屏是显式状态（旧版 AppUIState.isFullScreen），不是从窗口横竖推出来的。 */
-    fullscreen: Boolean = false,
-    loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
-    hostWindowControls: @Composable RowScope.() -> Unit = {},
-    hostWindowDragArea: @Composable (@Composable () -> Unit) -> Unit = { it() },
-) {
-    // Keep the 250-500 ms progress stream inside the player subtree. The
-    // application shell only observes the low-frequency phase/resource pair.
-    val state by controller.state.collectAsState()
-    val application = LocalApplicationRuntime.current
-    val activeSession = application.sessions.state.collectAsState().value.session
-    var danmaku by remember(media.id, activeSession) { mutableStateOf(emptyList<cn.mafei.cmp.player.api.DanmakuEntry>()) }
-    LaunchedEffect(media.id, activeSession, state.engineType) {
-        if (activeSession == null || state.engineType != cn.mafei.cmp.player.api.PlayerEngineType.System || catalogItem == null) return@LaunchedEffect
-        try {
-            val xml = application.sessions.media.danmakuXml(activeSession.media, catalogItem.id)
-            danmaku = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                xml?.let(cn.mafei.cmp.player.api.DanmakuParser::parseXml).orEmpty()
-            }
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { danmaku = emptyList() }
-    }
-    val negotiatedTracks by providerTracks.collectAsState()
-    val systemScope = rememberCoroutineScope()
-    val visibleTracks = negotiatedTracks.map { track ->
-        PlayerTrack(
-            id = track.index.toString(),
-            kind = when (track.kind) {
-                cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Audio ->
-                    cn.mafei.cmp.player.api.TrackKind.Audio
-                cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Subtitle ->
-                    cn.mafei.cmp.player.api.TrackKind.Subtitle
-            },
-            label = track.displayTitle?.takeIf(String::isNotBlank)
-                ?: track.title?.takeIf(String::isNotBlank)
-                ?: if (track.kind == cn.mafei.cmp.data.adapter_contract.PlaybackTrackKind.Audio) {
-                    "音轨 ${track.index}"
-                } else {
-                    "字幕 ${track.index}"
-                },
-            language = track.language,
-            selected = track.selected,
-        )
-    }.ifEmpty { state.tracks }
-    // 平台亮度/音量来自 ApplicationRuntime（宿主注入）；缺省实现让两条竖向手势都不介入。
-    val deviceControls = LocalApplicationRuntime.current.deviceControls
-    val windowControls = LocalApplicationRuntime.current.playerWindowControls
-    val loadSystemArtwork = rememberPlatformArtworkLoader(catalogItem)
-    val playbackFacts = catalogItem?.let { item ->
-        playerPlaybackFacts(
-            item = item,
-            playingMediaSourceId = prepared?.mediaSourceId,
-            transport = prepared?.transport,
-            providerTracks = negotiatedTracks,
-            protocol = prepared?.protocol,
-            multiConnectionAllowed = prepared?.multiConnectionAllowed,
-        )
-    }
-    NowPlayingScreen(
-        media = media,
-        state = state,
-        tracks = visibleTracks,
-        capabilities = controller.capabilities.copy(
-            trackSelection = controller.capabilities.trackSelection || negotiatedTracks.isNotEmpty(),
-        ),
-        onBack = onBack,
-        onTogglePlay = onTogglePlay,
-        onRetry = onRetry,
-        onSeek = onSeek,
-        onSpeed = onSpeed,
-        onSelectTrack = onSelectTrack,
-        preparing = preparing,
-        externalError = playbackError,
-        episodes = queue?.items.orEmpty(),
-        episodeIndex = queue?.index?.coerceAtLeast(0) ?: 0,
-        onNext = onNext,
-        onPrevious = onPrevious,
-        onSelectEpisode = onSelectEpisode,
-        qualityOptions = qualityOptions,
-        onSelectQuality = onSelectQuality,
-        playbackFacts = playbackFacts,
-        onSelectContentMode = onSelectContentMode,
-        deviceControls = deviceControls,
-        danmaku = danmaku,
-        onCasting = if (windowControls.castingSupported) { { windowControls.casting() } } else null,
-        onPictureInPicture = if (windowControls.pictureInPictureSupported && !state.casting) {
-            { windowControls.pictureInPicture() }
-        } else null,
-        loadSeekPreview = loadSeekPreview,
-        hostWindowControls = hostWindowControls,
-        hostWindowDragArea = hostWindowDragArea,
-        fullscreen = fullscreen,
-        onFullscreenRequest = { requested -> onFullscreenChanged(requested) },
-        videoSurface = { surfaceModifier ->
-            CompositionLocalProvider(LocalPlatformPlaybackActions provides PlatformPlaybackActions(
-                generation = state.generation,
-                mediaId = catalogItem?.id?.value ?: state.resourceId.orEmpty(),
-                title = catalogItem?.title.orEmpty(),
-                onPlay = { systemScope.launch { controller.play() } },
-                onPause = { systemScope.launch { controller.pause() } },
-                onStop = onBack,
-                onSeek = onSeek,
-                onSpeed = onSpeed,
-                onNext = onNext,
-                onPrevious = onPrevious,
-                loadArtwork = loadSystemArtwork,
-            )) {
-            playerSurface(
-                controller,
-                onBack,
-                { onFullscreenChanged(false) },
-                fullscreen,
-                surfaceModifier,
-            )
-            }
-        },
-        modifier = modifier,
-    )
-}
-
-@Composable
-private fun BoundLiquidMiniPlayer(
-    media: MiniPlayerMedia,
-    controller: PlayerController,
-    backdrop: GlassBackdrop,
-    onOpen: () -> Unit,
-    onTogglePlay: () -> Unit,
-    compactProgress: () -> Float,
-    artwork: @Composable (Modifier) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Mini-player progress is another high-frequency consumer and must not
-    // invalidate Home/Library/Detail while playback advances.
-    val state by controller.state.collectAsState()
-    LiquidMiniPlayer(
-        media = media,
-        presentation = state.toMiniPlayerPresentation(),
-        backdrop = backdrop,
-        onOpen = onOpen,
-        onTogglePlay = onTogglePlay,
-        compactProgress = compactProgress,
-        artwork = artwork,
-        modifier = modifier,
-    )
 }
 
 @Composable
@@ -591,34 +384,15 @@ private fun BrowseContent(
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
     }
     val playback = remember(session) { runtime.playback(session) }
-    LaunchedEffect(playback, playerRenderMode) {
-        playback?.controller?.setRenderMode(playerRenderMode)
-    }
-    val playerShellState = if (playback == null) {
-        PlayerShellState()
-    } else {
-        val shellState = remember(playback) {
-            playback.controller.state
-                .map { PlayerShellState(phase = it.phase, resourceId = it.resourceId) }
-                .distinctUntilChanged()
-        }
-        shellState.collectAsState(
-            initial = playback.controller.state.value.let {
-                PlayerShellState(phase = it.phase, resourceId = it.resourceId)
-            },
-        ).value
-    }
-    var playingMedia by remember(session) { mutableStateOf<MediaItem?>(null) }
+    val player = remember(session) { BrowsePlayerState(playback, browser, scope) }
+    val playerShellState = rememberPlayerShellState(playback)
+    BindBrowsePlayerLifecycle(player, playerShellState, playerRenderMode, state.detailId,
+        onPlayerScreenChanged, onPlayerFullscreenChanged)
     // 全屏是页面状态而不是几何推断：横屏平板宽 > 高，按窗口比例判「已是全屏」会让返回键
     // 永远停在「退出全屏」那一步（平板退出全屏也不会变竖屏），结果退不出播放页。
-    var playerFullscreen by remember(session) { mutableStateOf(false) }
     val hostWindowFeatures = LocalMaFeiWindowFeatures.current
-    var playbackBusy by remember(session) { mutableStateOf(false) }
-    var playbackError by remember(session) { mutableStateOf<String?>(null) }
     // 播放队列（旧版 QueueManager 的等价物）：由起播时的浏览上下文构造，播放页的
     // 「选集」「下一集」和播完自动衔接都读它。
-    var playQueue by remember(session) { mutableStateOf<PlaybackQueue?>(null) }
-    var musicRepeatMode by remember(session) { mutableStateOf(MusicRepeatMode.Off) }
     val musicStore = remember(session, runtime) {
         MusicCatalogStore(
             loadPage = { query, request, refresh -> runtime.sessions.media.browse(
@@ -644,80 +418,11 @@ private fun BrowseContent(
         }
     }
     // 清晰度有「请求」和「实际」两个值，故意分开：
-    //  - requestedBitrate 是我们**要求**的上限（本次播放会话的用户意图，会带给下一集）；
+    //  - player.requestedBitrate 是我们**要求**的上限（本次播放会话的用户意图，会带给下一集）；
     //  - 实际生效的档位只信协商结果（prepared.appliedBitrate）。
     // 界面只呈现后者，所以协商没兑现时不会出现「标签换了、其实没换」。
-    var requestedBitrate by remember(session) { mutableStateOf<Int?>(null) }
     val preparedStream = playback?.prepared?.collectAsState()?.value
-    val qualityOptions = remember(playingMedia, preparedStream) {
-        val facts = preparedStream ?: return@remember emptyList()
-        val applied = facts.appliedBitrate
-        val providerLadder = facts.qualities
-        when {
-            // provider 自己给了档位表（fnOS 的上游直链）：原样呈现，不造表。
-            !providerLadder.isNullOrEmpty() -> cn.mafei.cmp.player.ui.PlayerQualityOptions.fromProvider(
-                renditions = providerLadder.map { quality -> quality.label to quality.bitrate },
-                appliedBitrate = applied,
-            )
-            // 空表 = 这条流没有别的档位（飞牛 range 原画直连）：**不给菜单**，
-            // 否则就是旧版那个 bug —— 点了档位却还是同一个文件。
-            providerLadder != null -> emptyList()
-            // null = provider 按需重编，可以自己造档位表（Jellyfin）。
-            else -> {
-                val videoStream = playingMedia?.mediaSources
-                    ?.firstOrNull { source -> source.videoStream != null }
-                    ?.videoStream
-                cn.mafei.cmp.player.ui.PlayerQualityOptions.applicable(
-                    videoWidthPx = videoStream?.widthPx,
-                    videoHeightPx = videoStream?.heightPx,
-                    appliedBitrate = applied,
-                )
-            }
-        }
-    }
-    var playerExpanded by remember(
-        session.selection.serverId.value,
-        session.selection.accountId.value,
-    ) { mutableStateOf(false) }
-    // HarmonyOS PC/2-in-1 owns the native maximize/fullscreen state. When the
-    // user presses that system button while the player is open, reflect the
-    // host state in the player so its fullscreen button becomes "exit" rather
-    // than issuing another enter request. Do not key this effect by the local
-    // player state: an internal request is asynchronous and must not be reset
-    // before the window manager reports the resulting status.
-    LaunchedEffect(
-        playerExpanded,
-        hostWindowFeatures.windowedHost,
-        hostWindowFeatures.windowFullscreen,
-    ) {
-        if (playerExpanded && hostWindowFeatures.windowedHost &&
-            playerFullscreen != hostWindowFeatures.windowFullscreen
-        ) {
-            playerFullscreen = hostWindowFeatures.windowFullscreen
-        }
-    }
-    val videoPlayerPresented = playerExpanded && playingMedia?.mediaType != MediaType.Audio
-    val currentPlayerScreenChanged by rememberUpdatedState(onPlayerScreenChanged)
-    DisposableEffect(videoPlayerPresented) {
-        currentPlayerScreenChanged(videoPlayerPresented)
-        onDispose {
-            if (videoPlayerPresented) currentPlayerScreenChanged(false)
-        }
-    }
-    val currentFullscreenChanged by rememberUpdatedState(onPlayerFullscreenChanged)
-    DisposableEffect(playerExpanded) {
-        if (!playerExpanded) {
-            playerFullscreen = false
-            // 清晰度是**本次播放会话**的选择，不是全局偏好：看完退出就回到自动。
-            requestedBitrate = null
-        }
-        onDispose {
-            // Window hosts restore only transitions owned by the player via
-            // onPlayerScreenChanged(false), not an app-wide native fullscreen.
-            if (playerFullscreen && !hostWindowFeatures.windowedHost) currentFullscreenChanged(false)
-        }
-    }
-    var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
+    val qualityOptions = rememberPlayerQualityOptions(player.playingMedia, preparedStream)
     // Apple presents the account surface above the current document instead of
     // navigating away from it. "我的" therefore opens a modal sheet; the browse
     // route, its scroll position and its loaded data all stay untouched behind it.
@@ -838,28 +543,6 @@ private fun BrowseContent(
     LaunchedEffect(browser) {
         browser.refreshDeleteAvailability()
         browser.refreshAdministratorStatus()
-    }
-    LaunchedEffect(state.detailId) { playbackError = null }
-    LaunchedEffect(playerShellState.phase) {
-        if (playerShellState.phase == PlayerPhase.Error) playbackError = "播放失败，请重试"
-        if (!playbackBusy &&
-            (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released)
-        ) {
-            playerExpanded = false
-        }
-    }
-    LaunchedEffect(pendingSeekPosition, playback) {
-        val target = pendingSeekPosition ?: return@LaunchedEffect
-        delay(90)
-        try {
-            playback?.controller?.seek(target)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            playbackError = "跳转播放位置失败，请重试"
-        } finally {
-            if (pendingSeekPosition == target) pendingSeekPosition = null
-        }
     }
     val loadAccounts: () -> Unit = {
         if (!accountsLoading) {
@@ -988,128 +671,6 @@ private fun BrowseContent(
                 }
             }
         }
-        fun startPlaybackItem(item: MediaItem, queueOverride: PlaybackQueue? = null,
-            resumePositionMs: Long = if (item.mediaType == MediaType.LiveChannel) 0L else legacyPlaybackResumePositionMs(item),
-            optionsOverride: cn.mafei.cmp.data.adapter_contract.PlaybackOptions? = null) {
-            if (playback != null && !playbackBusy) {
-                val previousMedia = playingMedia
-                val previousQueue = playQueue
-                val previouslyExpanded = playerExpanded
-                playbackBusy = true
-                playbackError = null
-                playingMedia = item
-                playerExpanded = if (item.mediaType == MediaType.Audio) previouslyExpanded && previousMedia?.mediaType == MediaType.Audio else true
-                val existing = playQueue?.takeIf { queue -> queue.items.any { it.id == item.id } }
-                val positionedQueue = queueOverride ?: existing?.movedTo(item.id)
-                // 播放器先拿到一个立即可用的队列；首页缺少季列表时，出画后再异步扩充。
-                playQueue = positionedQueue ?: PlaybackQueue.forItem(item, emptyList())
-                scope.launch {
-                    var started = false
-                    try {
-                        // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
-                        val generation = playback.play(
-                            itemId = item.id,
-                            resumePositionMs = resumePositionMs,
-                            options = (optionsOverride ?: browser.playbackOptionsFor(item))
-                                .copy(maxStreamingBitrate = requestedBitrate, live = item.mediaType == MediaType.LiveChannel),
-                        )
-                        if (generation == null) {
-                            playbackError = "当前媒体暂时无法播放"
-                        } else {
-                            started = true
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        println("[MaFeiPlayback] prepare failed: $failure")
-                        playbackError = "播放准备失败，请重试"
-                    } finally {
-                        playbackBusy = false
-                        if (!started && item.mediaType == MediaType.Audio && previousMedia?.mediaType == MediaType.Audio &&
-                            playback.controller.state.value.resourceId == previousMedia.id.value) {
-                            playingMedia = previousMedia
-                            playQueue = previousQueue?.movedTo(previousMedia.id)
-                            playerExpanded = previouslyExpanded
-                        }
-                    }
-                    // 旧版也是在播放器完成 load 后扩充剧集队列。网络慢或失败都不阻塞出画；
-                    // 已有队列（上一集/下一集/选集）则直接复用，绝不重复拉整季。
-                    if (started && positionedQueue == null && item.mediaType == MediaType.Episode) {
-                        val expanded = browser.playbackQueueFor(item)
-                        if (playingMedia?.id == item.id && playerExpanded) {
-                            playQueue = expanded
-                        }
-                    }
-                }
-            }
-        }
-        val startPlayback: (MediaItem) -> Unit = { startPlaybackItem(it) }
-        val playNextEpisode: () -> Unit = {
-            playQueue?.next()?.let { next ->
-                playQueue = next
-                startPlayback(next.current)
-            }
-        }
-        val playPreviousEpisode: () -> Unit = {
-            playQueue?.previous()?.let { previous ->
-                playQueue = previous
-                startPlayback(previous.current)
-            }
-        }
-        val playEpisodeAt: (Int) -> Unit = { index ->
-            playQueue?.select(index)?.let { selected ->
-                playQueue = selected
-                startPlayback(selected.current)
-            }
-        }
-        val playMusicQueue: (List<MediaItem>, Int) -> Unit = { tracks, index ->
-            val target = tracks.getOrNull(index)
-            if (target?.mediaType == MediaType.Audio && !playbackBusy) {
-                if (playerShellState.resourceId == target.id.value && playingMedia?.id == target.id) {
-                    playerExpanded = true
-                } else {
-                    startPlaybackItem(target, PlaybackQueue(tracks, index))
-                }
-            }
-        }
-        // 清晰度：0 = 自动（恢复直连），其余请求该码率的上限。
-        // 只有协商真的产出了新流才提交请求值 —— 失败时标签继续跟随实际结果（自动/原档），
-        // 下一集也不会把这个没兑现的上限带过去。
-        val selectQuality: (Int) -> Unit = { bitrate ->
-            val ceiling = bitrate.takeIf { it > 0 }
-            // 已经是这个档：不重复协商、不重复起播（旧版同样直接返回）。
-            if (ceiling != requestedBitrate) scope.launch {
-                try {
-                    if (playback?.selectQuality(ceiling) == null) {
-                        // 协商没产出新流（被拒 / 被后续请求取代）：请求值不提交，
-                        // 界面继续显示实际在播的那一档。
-                        playbackError = "当前清晰度暂时无法切换，已保持原清晰度"
-                    } else {
-                        requestedBitrate = ceiling
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (failure: Exception) {
-                    println("[MaFeiPlayback] quality switch failed: $failure")
-                    playbackError = "切换清晰度失败，请重试"
-                }
-            }
-        }
-        // 播完自动衔接下一集（旧版队列的连续播放）。phase 由「播放中」变为
-        // 「已结束」时 effect 重启一次，因此只会自动前进一集。
-        LaunchedEffect(playerShellState.phase) {
-            if (playerShellState.phase == PlayerPhase.Ended) {
-                val queue = playQueue
-                if (playingMedia?.mediaType == MediaType.Audio && queue != null) {
-                    val next = queue.next() ?: when (musicRepeatMode) {
-                        MusicRepeatMode.Off -> null
-                        MusicRepeatMode.All -> queue.copy(index = 0)
-                        MusicRepeatMode.One -> queue
-                    }
-                    if (next != null) startPlaybackItem(next.current, next, resumePositionMs = 0L)
-                } else playNextEpisode()
-            }
-        }
         val openSearch: () -> Unit = {
             if (browseBackStack.lastOrNull() != BrowseSearchRoute) {
                 browser.clearSearch()
@@ -1148,7 +709,7 @@ private fun BrowseContent(
                 historyError = state.historyError,
                 layout = layout,
                 busy = busy,
-                onHistoryItem = mineRootMediaAction(startPlayback),
+                onHistoryItem = mineRootMediaAction(player.startPlayback),
                 onHistoryRetry = mineRootAction { scope.launch { browser.loadHistoryPreview() } },
                 // 「我的」里的二级页推到**容器自己的**回退栈上，容器不关闭 —— 模态 / 全屏
                 // 两种呈现共用同一条栈。
@@ -1253,7 +814,7 @@ private fun BrowseContent(
                                     layout = layout,
                                     onBack = popMineRoute,
                                     onRetry = { scope.launch { browser.loadHistory() } },
-                                    onItem = startPlayback,
+                                    onItem = player.startPlayback,
                                     canLoadMore = state.historyCanLoadMore,
                                     loadingMore = state.historyLoadingMore,
                                     loadMoreFailed = state.historyLoadMoreFailed,
@@ -1603,7 +1164,7 @@ private fun BrowseContent(
                                                         if (runtime.sessions.state.value.session === session) {
                                                             returnToEmbeddedWeb = true
                                                             minePresented = false
-                                                            startPlaybackItem(items[options.startIndex], PlaybackQueue(items, options.startIndex),
+                                                            player.startPlaybackItem(items[options.startIndex], PlaybackQueue(items, options.startIndex),
                                                                 options.startMs, options.options())
                                                         }
                                                     }
@@ -1620,13 +1181,13 @@ private fun BrowseContent(
                                                     "openClientSettings" -> mineBackStack += BrowseSettingsRoute
                                                     "openServerSelection" -> { loadAccounts(); mineBackStack += BrowseAccountSwitchRoute }
                                                     "enableFullscreen", "disableFullscreen" -> {
-                                                        playerFullscreen = action == "enableFullscreen"
-                                                        onPlayerFullscreenChanged(playerFullscreen)
+                                                        player.playerFullscreen = action == "enableFullscreen"
+                                                        onPlayerFullscreenChanged(player.playerFullscreen)
                                                     }
                                                     "exitApp" -> popMineRoute()
                                                 }
                                             } catch (cancelled: CancellationException) { throw cancelled }
-                                            catch (_: Exception) { playbackError = "网页操作失败，请重试" }
+                                            catch (_: Exception) { player.playbackError = "网页操作失败，请重试" }
                                         }
                                     }
                                 }
@@ -1643,24 +1204,8 @@ private fun BrowseContent(
                 modifier = mineHostModifier,
             )
         }
-        val togglePlayback: () -> Unit = {
-            scope.launch {
-                try {
-                    when (playback?.controller?.state?.value?.phase ?: PlayerPhase.Idle) {
-                        PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
-                        PlayerPhase.Ended, PlayerPhase.Error -> playingMedia?.let(startPlayback)
-                        PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
-                        PlayerPhase.Idle, PlayerPhase.Loading, PlayerPhase.Released -> Unit
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    playbackError = "播放器操作失败，请重试"
-                }
-            }
-        }
-        val activeMedia = playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
-        val playerMedia = if (playerExpanded) playingMedia else activeMedia
+        val activeMedia = player.playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
+        val playerMedia = if (player.playerExpanded) player.playingMedia else activeMedia
         // The floating mini player is the legacy MusicMiniPlayer. Video keeps
         // using the full player surface, but must not reserve music chrome or
         // appear above the app navigation after playback starts.
@@ -1795,159 +1340,29 @@ private fun BrowseContent(
                 if (pendingDeleteMedia != null) Modifier.captureGlassBackdrop(deleteConfirmBackdrop) else Modifier,
             ),
         ) {
-        if (playingMedia?.mediaType == MediaType.Audio && playback != null) {
-            BoundMusicNativeSurface(
-                controller = playback.controller, item = playingMedia!!, playerSurface = playerSurface,
-                onBack = { playerExpanded = false }, onStop = { scope.launch { playback.stop() } },
-                onSeek = { pendingSeekPosition = it }, onNext = playQueue?.takeIf { it.hasNext }?.let { playNextEpisode },
-                onPrevious = playQueue?.takeIf { it.hasPrevious }?.let { playPreviousEpisode },
-            )
-        }
-        if (playerExpanded && playerMedia?.mediaType == MediaType.Audio && playback != null) {
-            CompositionLocalProvider(LocalMaFeiSafeArea provides currentMaFeiSafeArea()) {
-            BoundMusicPlayer(
-                item = playerMedia, controller = playback.controller, preparing = playbackBusy, error = playbackError,
-                queue = playQueue?.items.orEmpty(), queueIndex = playQueue?.index ?: 0, repeatMode = musicRepeatMode,
-                onBack = { playerExpanded = false }, onTogglePlay = togglePlayback, onRetry = { startPlayback(playerMedia); playerExpanded = true },
-                onSeek = { pendingSeekPosition = it },
-                onPrevious = playQueue?.takeIf { it.hasPrevious }?.let { playPreviousEpisode },
-                onNext = playQueue?.takeIf { it.hasNext }?.let { playNextEpisode },
-                onSelect = { playEpisodeAt(it); playerExpanded = true },
-                onRepeat = { musicRepeatMode = when(musicRepeatMode) {
-                    MusicRepeatMode.Off -> MusicRepeatMode.All
-                    MusicRepeatMode.All -> MusicRepeatMode.One
-                    MusicRepeatMode.One -> MusicRepeatMode.Off
-                } },
-                onFavorite = if (browser.capabilities.favoritesEdit) {{
-                    val favorite = !playerMedia.userData.isFavorite
-                    runtime.sessions.media.setFavorite(session.media, playerMedia.id, favorite)
-                    musicStore.favoriteChanged(playerMedia.id, favorite)
-                    val updated = playerMedia.copy(userData = playerMedia.userData.copy(isFavorite = favorite))
-                    playingMedia = updated
-                    playQueue = playQueue?.let { it.copy(items = it.items.map { track -> if (track.id == updated.id) updated else track }) }
-                }} else null,
-                onRemove = { index ->
-                    playQueue?.let { queue -> if (index in queue.items.indices && index != queue.index && !playbackBusy) {
-                        playQueue = queue.copy(items = queue.items.filterIndexed { itemIndex, _ -> itemIndex != index },
-                            index = if (index < queue.index) queue.index - 1 else queue.index)
-                    } }
-                },
-                onClear = { scope.launch {
-                    try {
-                        playback.stop(); playQueue = null; playingMedia = null; playerExpanded = false
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { playbackError = "停止播放失败，请重试" }
-                } },
-                artwork = { item, modifier -> MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, modifier) },
-                ambientArtwork = { item, modifier -> MediaArtwork(item.preferredPoster(), item.title, artworkCache,
-                    fetchArtwork, modifier, targetWidthPx = 480,
-                    bitmapContent = { bitmap, imageModifier -> CachedBlurredArtwork(bitmap, 64.dp, imageModifier, cache = artworkCache) }) },
-            )
-            }
-        } else if (playerExpanded && playerMedia != null && playback != null) {
-            BoundNowPlayingScreen(
-                media = NowPlayingMedia(
-                    id = playerMedia.id.value,
-                    title = playerMedia.title,
-                    subtitle = playerMedia.miniPlayerSubtitle(),
-                    description = playerMedia.overview,
-                    live = playerMedia.mediaType == MediaType.LiveChannel,
-                ),
-                controller = playback.controller,
-                providerTracks = playback.tracks,
-                onBack = {
-                    playerExpanded = false
-                    if (returnToEmbeddedWeb) {
-                        returnToEmbeddedWeb = false
-                        minePresented = true
-                    }
-                    playerFullscreen = false
-                    if (!hostWindowFeatures.windowedHost) onPlayerFullscreenChanged(false)
-                    scope.launch {
-                        try {
-                            playback.stop()
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            playbackError = "停止播放失败，请重试"
-                        }
-                    }
-                },
-                onTogglePlay = togglePlayback,
-                onRetry = { startPlayback(playerMedia) },
-                onSeek = { pendingSeekPosition = it },
-                onSpeed = { speed ->
-                    scope.launch {
-                        try {
-                            playback.controller.speed(speed)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            playbackError = "播放器操作失败，请重试"
-                        }
-                    }
-                },
-                onSelectTrack = { kind, id ->
-                    scope.launch {
-                        try {
-                            playback.selectTrack(kind, id)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            playbackError = "播放器操作失败，请重试"
-                        }
-                    }
-                },
-                playerSurface = playerSurface,
-                preparing = playbackBusy,
-                hostWindowControls = windowControls,
-                hostWindowDragArea = windowDragArea,
-                playbackError = playbackError,
-                modifier = Modifier.fillMaxSize(),
-                queue = playQueue,
-                onNext = playQueue?.takeIf { it.hasNext }?.let { { playNextEpisode() } },
-                onPrevious = playQueue?.takeIf { it.hasPrevious }?.let { { playPreviousEpisode() } },
-                onSelectEpisode = playQueue?.takeIf { it.size > 1 }?.let { { playEpisodeAt(it) } },
-                qualityOptions = qualityOptions,
-                onSelectQuality = { selectQuality(it) },
-                catalogItem = playerMedia,
-                prepared = preparedStream,
-                loadSeekPreview = { positionMs ->
-                    runtime.sessions.media.previewFrame(
-                        session = session.media,
-                        item = playerMedia.id,
-                        positionMs = positionMs,
-                        mediaSourceId = preparedStream?.mediaSourceId,
-                    )?.let { frame ->
-                        PlayerSeekPreviewFrame(
-                            encodedTile = frame.encodedTile,
-                            frameWidthPx = frame.frameWidthPx,
-                            frameHeightPx = frame.frameHeightPx,
-                            tileColumn = frame.tileColumn,
-                            tileRow = frame.tileRow,
-                        )
-                    } ?: playback.previewFrame(positionMs)
-                },
-                // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
-                // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
-                fullscreen = if (hostWindowFeatures.windowedHost) hostWindowFeatures.windowFullscreen else playerFullscreen,
-                onFullscreenChanged = { requested ->
-                    playerFullscreen = requested
-                    onPlayerFullscreenChanged(requested)
-                },
-                onSelectContentMode = { mode ->
-                    scope.launch {
-                        try {
-                            playback.controller.setContentMode(mode)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            playbackError = "切换画面比例失败，请重试"
-                        }
-                    }
-                },
-            )
-        } else browseContentStateHolder.SaveableStateProvider("browse-content") {
+        BrowsePlayerHost(
+            player = player,
+            playerMedia = playerMedia,
+            preparedStream = preparedStream,
+            qualityOptions = qualityOptions,
+            repository = runtime.sessions.media,
+            mediaSession = session.media,
+            canEditFavorites = browser.capabilities.favoritesEdit,
+            musicStore = musicStore,
+            artworkCache = artworkCache,
+            fetchArtwork = fetchArtwork,
+            playerSurface = playerSurface,
+            windowControls = windowControls,
+            windowDragArea = windowDragArea,
+            onPlayerFullscreenChanged = onPlayerFullscreenChanged,
+            onReturnToBrowse = {
+                if (returnToEmbeddedWeb) {
+                    returnToEmbeddedWeb = false
+                    minePresented = true
+                }
+            },
+        )
+        if (!player.playerExpanded || playerMedia == null || playback == null) browseContentStateHolder.SaveableStateProvider("browse-content") {
         MaFeiAdaptiveShell(
             layout = layout,
             bottomNavigationType = bottomNavigationType,
@@ -2173,7 +1588,7 @@ private fun BrowseContent(
                                             item.takeIf { it.id == target.mediaId },
                                         )
                                     },
-                                    onPlay = startPlayback,
+                                    onPlay = player.startPlayback,
                                     onToggleWatched = if (browser.capabilities.watchedEdit) {
                                         { item -> scope.launch { browser.toggleWatched(item) } }
                                     } else null,
@@ -2289,7 +1704,7 @@ private fun BrowseContent(
                                         } },
                                         onLoadMore = { collection?.let { scope.launch { latestStore.load(it, more = true) } } },
                                         onItem = { item -> openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
-                                        onPlay = startPlayback,
+                                        onPlay = player.startPlayback,
                                         onToggleWatched = if (browser.capabilities.watchedEdit) {
                                             { item -> scope.launch {
                                                 browser.toggleWatched(item)
@@ -2339,7 +1754,7 @@ private fun BrowseContent(
                                         onItem = { item ->
                                             openDetail(item, item.legacyHomeLatestMediaName(state.collections))
                                         },
-                                        onPlay = startPlayback,
+                                        onPlay = player.startPlayback,
                                         onToggleWatched = if (browser.capabilities.watchedEdit) {
                                             { item -> scope.launch { browser.toggleWatched(item) } }
                                         } else null,
@@ -2391,7 +1806,7 @@ private fun BrowseContent(
                                     layout = layout,
                                     listState = chasingListState,
                                     onRetry = { scope.launch { chasingBrowser.refresh() } },
-                                    onPlay = startPlayback,
+                                    onPlay = player.startPlayback,
                                     onOpenSeries = { id -> openDetailId(id, "电视节目") },
                                     bottomOverlayInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
                                     modifier = Modifier.fillMaxSize(),
@@ -2434,7 +1849,7 @@ private fun BrowseContent(
                                     onRetry = { scope.launch { browser.refreshFavorites() } },
                                     onLoadMore = { scope.launch { browser.loadMoreFavorites() } },
                                     onItem = { item -> openDetail(item, "收藏") },
-                                    onPlay = startPlayback,
+                                    onPlay = player.startPlayback,
                                     onToggleWatched = if (browser.capabilities.watchedEdit) {
                                         { item -> scope.launch { browser.toggleWatched(item) } }
                                     } else null,
@@ -2500,7 +1915,7 @@ private fun BrowseContent(
                                         }
                                     },
                                     onOpen = { item -> openDetail(item, null) },
-                                    onPlay = startPlayback,
+                                    onPlay = player.startPlayback,
                                     onToggleWatched = if (browser.capabilities.watchedEdit) {
                                         { item -> scope.launch { browser.toggleWatched(item) } }
                                     } else null,
@@ -2533,7 +1948,7 @@ private fun BrowseContent(
                                         onRetry = { scope.launch { liveStore.load(Unit, refresh = true) } },
                                         onMore = { scope.launch { liveStore.load(Unit, more = true) } },
                                         onChannel = { channels, index ->
-                                            channels.getOrNull(index)?.let { startPlaybackItem(it, PlaybackQueue(channels, index), 0L) }
+                                            channels.getOrNull(index)?.let { player.startPlaybackItem(it, PlaybackQueue(channels, index), 0L) }
                                         }, artwork = { item, modifier -> MediaArtwork(item.primaryImage, item.title, artworkCache, fetchArtwork,
                                             modifier, fallback = { LegacyPosterPlaceholder(item.mediaType, it) }) })
                                 } else if (browser.capabilities.photos && collection?.mediaTypes?.contains(MediaType.Photo) == true) {
@@ -2549,10 +1964,10 @@ private fun BrowseContent(
                                     MusicLibraryRouteContent(musicStore, route.collectionId, collection.name, layout,
                                         onBack = popBrowseRoute.takeIf { layout.isPhoneNavigation },
                                         onOpen = { item -> openDetail(item, collection.name, libraryId = collection.id.value) },
-                                        onPlay = playMusicQueue,
+                                        onPlay = player.playMusicQueue,
                                         artwork = { item, modifier -> MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork,
                                             modifier, fallback = { LegacyPosterPlaceholder(item.mediaType, it) }) },
-                                        currentId = playingMedia?.id?.value, preparing = playbackBusy,
+                                        currentId = player.playingMedia?.id?.value, preparing = player.playbackBusy,
                                         playing = playerShellState.phase == PlayerPhase.Playing,
                                         bottomInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp)
                                 } else {
@@ -2587,7 +2002,7 @@ private fun BrowseContent(
                                             state.collections.firstOrNull { it.id.value == route.collectionId }?.name,
                                         )
                                     },
-                                    onPlay = startPlayback,
+                                    onPlay = player.startPlayback,
                                     onToggleWatched = if (browser.capabilities.watchedEdit) {
                                         { item -> scope.launch { browser.toggleWatched(item) } }
                                     } else null,
@@ -2637,7 +2052,7 @@ private fun BrowseContent(
                                 MusicDetailRouteContent(musicStore, route.mediaId, route.title, route.artist,
                                     onBack = popBrowseRoute,
                                     onAlbum = { item -> browseBackStack += BrowseMusicDetailRoute(item.id.value, item.title, false, route.libraryId, route.origin) },
-                                    onPlay = playMusicQueue,
+                                    onPlay = player.playMusicQueue,
                                     onFavorite = if (browser.capabilities.favoritesEdit) {{ item ->
                                         val favorite = !item.userData.isFavorite
                                         runtime.sessions.media.setFavorite(session.media, item.id, favorite)
@@ -2645,7 +2060,7 @@ private fun BrowseContent(
                                     }} else null,
                                     artwork = { item, modifier -> MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork,
                                         modifier, fallback = { LegacyPosterPlaceholder(item.mediaType, it) }) },
-                                    currentId = playingMedia?.id?.value, preparing = playbackBusy,
+                                    currentId = player.playingMedia?.id?.value, preparing = player.playbackBusy,
                                     playing = playerShellState.phase == PlayerPhase.Playing,
                                     bottomInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp)
                             }
@@ -2698,14 +2113,14 @@ private fun BrowseContent(
                                         state.detailId?.let { id -> scope.launch { browser.openDetail(id) } }
                                     },
                                     onPlay = detailPlayTarget?.takeIf { playback != null }?.let { item ->
-                                        { startPlayback(item) }
+                                        { player.startPlayback(item) }
                                     },
                                     playTarget = detailPlayTarget,
                                     onOpenExternalUrl = { url ->
                                         try {
                                             uriHandler.openUri(url)
                                         } catch (_: Exception) {
-                                            playbackError = "无法打开外部链接"
+                                            player.playbackError = "无法打开外部链接"
                                         }
                                     },
                                     onDelete = if (state.deleteAvailable == true) {
@@ -2748,8 +2163,8 @@ private fun BrowseContent(
                                             )
                                         }
                                     },
-                                    playbackBusy = playbackBusy,
-                                    playbackError = playbackError,
+                                    playbackBusy = player.playbackBusy,
+                                    playbackError = player.playbackError,
                                     libraryName = route.mediaName,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
@@ -2952,13 +2367,13 @@ private fun BrowseContent(
                                             )
                                         },
                                         onPlayFirst = playTarget?.takeIf { playback != null }?.let { item ->
-                                            { startPlayback(item) }
+                                            { player.startPlayback(item) }
                                         },
                                         playTarget = playTarget,
                                         onTogglePlayed = if (browser.capabilities.watchedEdit) {
                                             { scope.launch { browser.toggleWatched(season) } }
                                         } else null,
-                                        playbackBusy = playbackBusy,
+                                        playbackBusy = player.playbackBusy,
                                         actionsBusy = state.detailActionBusy,
                                         actionsError = state.detailActionError,
                                         libraryName = route.mediaName,
@@ -3061,14 +2476,14 @@ private fun BrowseContent(
                                         }
                                     },
                                     onPlay = episode?.takeIf { playback != null }?.let { item ->
-                                        { startPlayback(item) }
+                                        { player.startPlayback(item) }
                                     },
                                     playTarget = episode,
                                     onOpenExternalUrl = { url ->
                                         try {
                                             uriHandler.openUri(url)
                                         } catch (_: Exception) {
-                                            playbackError = "无法打开外部链接"
+                                            player.playbackError = "无法打开外部链接"
                                         }
                                     },
                                     onDelete = if (state.deleteAvailable == true) {
@@ -3090,8 +2505,8 @@ private fun BrowseContent(
                                     } else null,
                                     actionsBusy = state.detailActionBusy,
                                     actionsError = state.detailActionError,
-                                    playbackBusy = playbackBusy,
-                                    playbackError = playbackError,
+                                    playbackBusy = player.playbackBusy,
+                                    playbackError = player.playbackError,
                                     libraryName = route.mediaName,
                                     modifier = Modifier.fillMaxSize(),
                                     artwork = { item, modifier ->
@@ -3180,7 +2595,7 @@ private fun BrowseContent(
                 val safeArea = cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea.current
                 val media = musicMiniPlayerMedia
                 val playerController = playback?.controller
-                cn.mafei.cmp.common.ui.LegacyTransientToast(playbackError, Modifier.align(Alignment.BottomCenter))
+                cn.mafei.cmp.common.ui.LegacyTransientToast(player.playbackError, Modifier.align(Alignment.BottomCenter))
                 if (media != null && playerController != null) {
                     BoundLiquidMiniPlayer(
                         media = MiniPlayerMedia(
@@ -3190,8 +2605,8 @@ private fun BrowseContent(
                         ),
                         controller = playerController,
                         backdrop = backdrop,
-                        onOpen = { playerExpanded = true },
-                        onTogglePlay = togglePlayback,
+                        onOpen = { player.playerExpanded = true },
+                        onTogglePlay = player.togglePlayback,
                         compactProgress = { chromeCompactProgress.value },
                         artwork = { modifier ->
                             MediaArtwork(media.preferredPoster(), media.title, artworkCache, fetchArtwork, modifier)
@@ -3223,7 +2638,7 @@ private fun BrowseContent(
                     )
                 }
                 if (authenticationMessage != null && !authenticationNoticeDismissed &&
-                    mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !playerExpanded
+                    mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !player.playerExpanded
                 ) {
                     cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) {
                         authenticationNoticeDismissed = true
@@ -3514,25 +2929,13 @@ private fun LegacyPersonArtwork(
     )
 }
 
-private fun MediaItem.preferredPoster(): List<MediaImage> = posterArtworkCandidates()
+internal fun MediaItem.preferredPoster(): List<MediaImage> = posterArtworkCandidates()
 
 private fun MediaItem.preferredLandscape(): List<MediaImage> = landscapeArtworkCandidates()
 
 private fun MediaItem.preferredLogo(): MediaImage? =
     images.firstOrNull { it.kind == ImageKind.Logo }
 
-private fun MediaItem.miniPlayerSubtitle(): String = if (mediaType == MediaType.Audio) {
-    toMusicTrackOrNull()?.let { listOf(it.artist, it.album).filter(String::isNotBlank).joinToString(" · ") }.orEmpty()
-} else listOfNotNull(
-    year?.toString(),
-    when (mediaType) {
-        cn.mafei.cmp.core.domain.MediaType.Movie -> "电影"
-        cn.mafei.cmp.core.domain.MediaType.Series -> "剧集"
-        cn.mafei.cmp.core.domain.MediaType.Episode -> "单集"
-        cn.mafei.cmp.core.domain.MediaType.Audio -> "音乐"
-        else -> null
-    },
-).joinToString(" · ")
 
 private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
     FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
