@@ -5,9 +5,9 @@ import androidx.compose.runtime.*
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
-import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.feature.home.PlaybackQueue
+import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
@@ -29,9 +29,12 @@ internal class BrowsePlayerState(
     var playerExpanded by mutableStateOf(false)
     var pendingSeekPosition by mutableStateOf<Long?>(null)
 
-    fun startPlaybackItem(item: MediaItem, queueOverride: PlaybackQueue? = null,
+    fun startPlaybackItem(
+        item: MediaItem,
+        queueOverride: PlaybackQueue? = null,
         resumePositionMs: Long = if (item.mediaType == MediaType.LiveChannel) 0L else legacyPlaybackResumePositionMs(item),
-        optionsOverride: cn.mafei.cmp.data.adapter_contract.PlaybackOptions? = null) {
+        optionsOverride: cn.mafei.cmp.data.adapter_contract.PlaybackOptions? = null,
+    ) {
         if (playback != null && !playbackBusy) {
             val previousMedia = playingMedia
             val previousQueue = playQueue
@@ -48,12 +51,16 @@ internal class BrowsePlayerState(
                 var started = false
                 try {
                     // 详情页上选过的版本/音轨/字幕只对当前详情条目生效。
-                    val generation = playback.play(
-                        itemId = item.id,
-                        resumePositionMs = resumePositionMs,
-                        options = (optionsOverride ?: browser.playbackOptionsFor(item))
-                            .copy(maxStreamingBitrate = requestedBitrate, live = item.mediaType == MediaType.LiveChannel),
-                    )
+                    val generation =
+                        playback.play(
+                            itemId = item.id,
+                            resumePositionMs = resumePositionMs,
+                            options =
+                                (optionsOverride ?: browser.playbackOptionsFor(item)).copy(
+                                    maxStreamingBitrate = requestedBitrate,
+                                    live = item.mediaType == MediaType.LiveChannel,
+                                ),
+                        )
                     if (generation == null) {
                         playbackError = "当前媒体暂时无法播放"
                     } else {
@@ -66,8 +73,12 @@ internal class BrowsePlayerState(
                     playbackError = "播放准备失败，请重试"
                 } finally {
                     playbackBusy = false
-                    if (!started && item.mediaType == MediaType.Audio && previousMedia?.mediaType == MediaType.Audio &&
-                        playback.controller.state.value.resourceId == previousMedia.id.value) {
+                    if (
+                        !started &&
+                            item.mediaType == MediaType.Audio &&
+                            previousMedia?.mediaType == MediaType.Audio &&
+                            playback.controller.state.value.resourceId == previousMedia.id.value
+                    ) {
                         playingMedia = previousMedia
                         playQueue = previousQueue?.movedTo(previousMedia.id)
                         playerExpanded = previouslyExpanded
@@ -84,6 +95,7 @@ internal class BrowsePlayerState(
             }
         }
     }
+
     val startPlayback: (MediaItem) -> Unit = { startPlaybackItem(it) }
     val playNextEpisode: () -> Unit = {
         playQueue?.next()?.let { next ->
@@ -119,32 +131,38 @@ internal class BrowsePlayerState(
     val selectQuality: (Int) -> Unit = { bitrate ->
         val ceiling = bitrate.takeIf { it > 0 }
         // 已经是这个档：不重复协商、不重复起播（旧版同样直接返回）。
-        if (ceiling != requestedBitrate) scope.launch {
-            try {
-                if (playback?.selectQuality(ceiling) == null) {
-                    // 协商没产出新流（被拒 / 被后续请求取代）：请求值不提交，
-                    // 界面继续显示实际在播的那一档。
-                    playbackError = "当前清晰度暂时无法切换，已保持原清晰度"
-                } else {
-                    requestedBitrate = ceiling
+        if (ceiling != requestedBitrate)
+            scope.launch {
+                try {
+                    if (playback?.selectQuality(ceiling) == null) {
+                        // 协商没产出新流（被拒 / 被后续请求取代）：请求值不提交，
+                        // 界面继续显示实际在播的那一档。
+                        playbackError = "当前清晰度暂时无法切换，已保持原清晰度"
+                    } else {
+                        requestedBitrate = ceiling
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    println("[MaFeiPlayback] quality switch failed: $failure")
+                    playbackError = "切换清晰度失败，请重试"
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                println("[MaFeiPlayback] quality switch failed: $failure")
-                playbackError = "切换清晰度失败，请重试"
             }
-        }
     }
 
     val togglePlayback: () -> Unit = {
         scope.launch {
             try {
                 when (playback?.controller?.state?.value?.phase ?: PlayerPhase.Idle) {
-                    PlayerPhase.Playing, PlayerPhase.Buffering -> playback?.controller?.pause()
-                    PlayerPhase.Ended, PlayerPhase.Error -> playingMedia?.let(startPlayback)
-                    PlayerPhase.Ready, PlayerPhase.Paused -> playback?.controller?.play()
-                    PlayerPhase.Idle, PlayerPhase.Loading, PlayerPhase.Released -> Unit
+                    PlayerPhase.Playing,
+                    PlayerPhase.Buffering -> playback?.controller?.pause()
+                    PlayerPhase.Ended,
+                    PlayerPhase.Error -> playingMedia?.let(startPlayback)
+                    PlayerPhase.Ready,
+                    PlayerPhase.Paused -> playback?.controller?.play()
+                    PlayerPhase.Idle,
+                    PlayerPhase.Loading,
+                    PlayerPhase.Released -> Unit
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

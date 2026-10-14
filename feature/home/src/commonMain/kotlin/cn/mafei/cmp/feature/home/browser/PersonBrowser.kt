@@ -12,28 +12,31 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
     /** Legacy CastDetailViewModel: detail first, then three independent ten-item work lists in parallel. */
     suspend fun openPerson(id: MediaId, name: String) {
         val operation = ++personTicket
-        mutableState.value = state.value.copy(
-            personId = id,
-            person = null,
-            personLoading = true,
-            personError = null,
-            personMovies = emptyList(),
-            personSeries = emptyList(),
-            personEpisodes = emptyList(),
-            personSectionsLoading = false,
-            personFavoriteBusy = false,
-        )
+        mutableState.value =
+            state.value.copy(
+                personId = id,
+                person = null,
+                personLoading = true,
+                personError = null,
+                personMovies = emptyList(),
+                personSeries = emptyList(),
+                personEpisodes = emptyList(),
+                personSectionsLoading = false,
+                personFavoriteBusy = false,
+            )
         try {
             val loaded = repository.person(session, id, name, refresh = true)
             if (operation != personTicket) return
-            mutableState.value = state.value.copy(
-                person = loaded.value,
-                personLoading = false,
-                personError = if (loaded.origin == MediaLoadOrigin.StaleCache) {
-                    "连接暂不可用，显示缓存人物详情"
-                } else null,
-                personSectionsLoading = true,
-            )
+            mutableState.value =
+                state.value.copy(
+                    person = loaded.value,
+                    personLoading = false,
+                    personError =
+                        if (loaded.origin == MediaLoadOrigin.StaleCache) {
+                            "连接暂不可用，显示缓存人物详情"
+                        } else null,
+                    personSectionsLoading = true,
+                )
             val works = coroutineScope {
                 val movies = async { loadPersonWorks(id, MediaType.Movie) }
                 val episodes = async { loadPersonWorks(id, MediaType.Episode) }
@@ -41,12 +44,8 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
                 Triple(movies.await(), series.await(), episodes.await())
             }
             if (operation != personTicket) return
-            mutableState.value = state.value.copy(
-                personMovies = works.first,
-                personSeries = works.second,
-                personEpisodes = works.third,
-                personSectionsLoading = false,
-            )
+            mutableState.value =
+                state.value.copy(personMovies = works.first, personSeries = works.second, personEpisodes = works.third, personSectionsLoading = false)
         } catch (cancelled: CancellationException) {
             if (operation == personTicket) {
                 mutableState.value = state.value.copy(personLoading = false, personSectionsLoading = false)
@@ -54,28 +53,20 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
             throw cancelled
         } catch (failure: Exception) {
             if (operation == personTicket) {
-                mutableState.value = state.value.copy(
-                    personLoading = false,
-                    personSectionsLoading = false,
-                    personError = browseError(failure),
-                )
+                mutableState.value = state.value.copy(personLoading = false, personSectionsLoading = false, personError = browseError(failure))
             }
         }
     }
 
     private suspend fun loadPersonWorks(personId: MediaId, type: MediaType): List<MediaItem> {
-        val request = PageRequest(
-            pageSize = PersonWorkPageSize,
-            sort = MediaSort(MediaSortField.Title, SortDirection.Ascending),
-            filter = MediaFilter(mediaTypes = setOf(type)),
-        )
-        return try {
-            val loaded = repository.browse(
-                session = session,
-                query = MediaQuery.PersonItems(personId),
-                request = request,
-                refresh = true,
+        val request =
+            PageRequest(
+                pageSize = PersonWorkPageSize,
+                sort = MediaSort(MediaSortField.Title, SortDirection.Ascending),
+                filter = MediaFilter(mediaTypes = setOf(type)),
             )
+        return try {
+            val loaded = repository.browse(session = session, query = MediaQuery.PersonItems(personId), request = request, refresh = true)
             loaded.value.items
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -94,10 +85,7 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
         try {
             repository.setFavorite(session, person.id, !person.isFavorite)
             if (state.value.person?.id == person.id) {
-                mutableState.value = state.value.copy(
-                    person = person.copy(isFavorite = !person.isFavorite),
-                    personFavoriteBusy = false,
-                )
+                mutableState.value = state.value.copy(person = person.copy(isFavorite = !person.isFavorite), personFavoriteBusy = false)
             } else {
                 mutableState.value = state.value.copy(personFavoriteBusy = false)
             }
@@ -111,16 +99,17 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
 
     fun clearPerson() {
         ++personTicket
-        mutableState.value = state.value.copy(
-            personId = null,
-            person = null,
-            personLoading = false,
-            personError = null,
-            personMovies = emptyList(),
-            personSeries = emptyList(),
-            personEpisodes = emptyList(),
-            personSectionsLoading = false,
-            personFavoriteBusy = false,
-        )
+        mutableState.value =
+            state.value.copy(
+                personId = null,
+                person = null,
+                personLoading = false,
+                personError = null,
+                personMovies = emptyList(),
+                personSeries = emptyList(),
+                personEpisodes = emptyList(),
+                personSectionsLoading = false,
+                personFavoriteBusy = false,
+            )
     }
 }

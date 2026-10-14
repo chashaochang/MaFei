@@ -12,44 +12,37 @@ internal class FavoriteBrowser(context: BrowserContext) : BrowserController(cont
         val operation = ++favoriteTicket
         if (!capabilities.favoritesRead) {
             favoritePages = MediaPageAccumulator()
-            mutableState.value = state.value.copy(
-                favoriteItems = emptyList(),
-                favoriteLoading = false,
-                favoriteRefreshing = false,
-                favoriteLoadingMore = false,
-                favoriteError = null,
-                favoriteNextCursor = null,
-                favoriteTotalEstimate = 0,
-            )
+            mutableState.value =
+                state.value.copy(
+                    favoriteItems = emptyList(),
+                    favoriteLoading = false,
+                    favoriteRefreshing = false,
+                    favoriteLoadingMore = false,
+                    favoriteError = null,
+                    favoriteNextCursor = null,
+                    favoriteTotalEstimate = 0,
+                )
             return
         }
         val alreadyLoaded = state.value.favoriteItems.isNotEmpty() || state.value.favoriteTotalEstimate != null
-        mutableState.value = state.value.copy(
-            favoriteLoading = !alreadyLoaded,
-            favoriteRefreshing = alreadyLoaded,
-            favoriteLoadingMore = false,
-            favoriteError = null,
-        )
+        mutableState.value =
+            state.value.copy(favoriteLoading = !alreadyLoaded, favoriteRefreshing = alreadyLoaded, favoriteLoadingMore = false, favoriteError = null)
         try {
-            val loaded = repository.browse(
-                session = session,
-                query = MediaQuery.Items(null),
-                request = favoriteRequest(),
-                refresh = true,
-            )
+            val loaded = repository.browse(session = session, query = MediaQuery.Items(null), request = favoriteRequest(), refresh = true)
             if (operation != favoriteTicket) return
             val freshPages = MediaPageAccumulator()
             val page = freshPages.append(null, loaded.value)
             favoritePages = freshPages
-            mutableState.value = state.value.copy(
-                favoriteItems = page.items,
-                favoriteLoading = false,
-                favoriteRefreshing = false,
-                favoriteLoadingMore = false,
-                favoriteError = null,
-                favoriteNextCursor = page.nextCursor,
-                favoriteTotalEstimate = page.totalEstimate,
-            )
+            mutableState.value =
+                state.value.copy(
+                    favoriteItems = page.items,
+                    favoriteLoading = false,
+                    favoriteRefreshing = false,
+                    favoriteLoadingMore = false,
+                    favoriteError = null,
+                    favoriteNextCursor = page.nextCursor,
+                    favoriteTotalEstimate = page.totalEstimate,
+                )
         } catch (cancelled: CancellationException) {
             if (operation == favoriteTicket) {
                 mutableState.value = state.value.copy(favoriteLoading = false, favoriteRefreshing = false)
@@ -57,11 +50,7 @@ internal class FavoriteBrowser(context: BrowserContext) : BrowserController(cont
             throw cancelled
         } catch (failure: Exception) {
             if (operation == favoriteTicket) {
-                mutableState.value = state.value.copy(
-                    favoriteLoading = false,
-                    favoriteRefreshing = false,
-                    favoriteError = browseError(failure),
-                )
+                mutableState.value = state.value.copy(favoriteLoading = false, favoriteRefreshing = false, favoriteError = browseError(failure))
             }
         }
     }
@@ -73,19 +62,16 @@ internal class FavoriteBrowser(context: BrowserContext) : BrowserController(cont
         val operation = ++favoriteTicket
         mutableState.value = before.copy(favoriteLoadingMore = true, favoriteError = null)
         try {
-            val loaded = repository.browse(
-                session = session,
-                query = MediaQuery.Items(null),
-                request = favoriteRequest(cursor),
-            )
+            val loaded = repository.browse(session = session, query = MediaQuery.Items(null), request = favoriteRequest(cursor))
             if (operation != favoriteTicket) return
             val page = favoritePages.append(cursor, loaded.value)
-            mutableState.value = state.value.copy(
-                favoriteItems = page.items,
-                favoriteLoadingMore = false,
-                favoriteNextCursor = page.nextCursor,
-                favoriteTotalEstimate = page.totalEstimate,
-            )
+            mutableState.value =
+                state.value.copy(
+                    favoriteItems = page.items,
+                    favoriteLoadingMore = false,
+                    favoriteNextCursor = page.nextCursor,
+                    favoriteTotalEstimate = page.totalEstimate,
+                )
         } catch (cancelled: CancellationException) {
             if (operation == favoriteTicket) mutableState.value = state.value.copy(favoriteLoadingMore = false)
             throw cancelled
@@ -102,16 +88,18 @@ internal class FavoriteBrowser(context: BrowserContext) : BrowserController(cont
         refreshFavorites()
     }
 
-    private fun favoriteRequest(cursor: PageCursor? = null): PageRequest = PageRequest(
-        cursor = cursor,
-        pageSize = CatalogPageSize,
-        sort = state.value.favoriteSort,
-        filter = MediaFilter(
-            // Fixed page semantics from FavoriteListViewModel.queryTypes. This
-            // is not an arbitrary user-composed filter, so Feiniu can forward
-            // it even though it still advertises favoritesFilter=false.
-            mediaTypes = FavoriteMediaTypes,
-            favoritesOnly = true,
-        ),
-    )
+    private fun favoriteRequest(cursor: PageCursor? = null): PageRequest =
+        PageRequest(
+            cursor = cursor,
+            pageSize = CatalogPageSize,
+            sort = state.value.favoriteSort,
+            filter =
+                MediaFilter(
+                    // Fixed page semantics from FavoriteListViewModel.queryTypes. This
+                    // is not an arbitrary user-composed filter, so Feiniu can forward
+                    // it even though it still advertises favoritesFilter=false.
+                    mediaTypes = FavoriteMediaTypes,
+                    favoritesOnly = true,
+                ),
+        )
 }

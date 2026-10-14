@@ -4,39 +4,36 @@ import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.adapter_contract.HomeFeed
 import cn.mafei.cmp.data.repositories.*
 
-internal fun MediaItem.toPlaybackTarget(): MediaPlaybackTarget = MediaPlaybackTarget(
-    id = id,
-    seasonNumber = seasonNumber,
-    episodeNumber = episodeNumber,
-    playbackPositionMs = userData.playbackPositionMs,
-    playedPercentage = userData.playedPercentage,
-    durationMs = runtimeMs,
-)
+internal fun MediaItem.toPlaybackTarget(): MediaPlaybackTarget =
+    MediaPlaybackTarget(
+        id = id,
+        seasonNumber = seasonNumber,
+        episodeNumber = episodeNumber,
+        playbackPositionMs = userData.playbackPositionMs,
+        playedPercentage = userData.playedPercentage,
+        durationMs = runtimeMs,
+    )
 
 /**
- * Resolves the old ArkUI playback-target rules against real episode rows.
- * Series detail uses target -> first unwatched -> first; season detail inserts
- * "episode with partial progress" before the first-unwatched fallback.
+ * Resolves the old ArkUI playback-target rules against real episode rows. Series detail uses target -> first unwatched -> first; season detail inserts "episode
+ * with partial progress" before the first-unwatched fallback.
  */
-internal fun resolveEpisodePlaybackTarget(
-    episodes: List<MediaItem>,
-    target: MediaPlaybackTarget?,
-    preferProgressFallback: Boolean,
-): MediaItem? {
+internal fun resolveEpisodePlaybackTarget(episodes: List<MediaItem>, target: MediaPlaybackTarget?, preferProgressFallback: Boolean): MediaItem? {
     if (episodes.isEmpty()) return null
     var targetIndex = target?.id?.let { id -> episodes.indexOfFirst { it.id == id } } ?: -1
     if (targetIndex < 0 && target?.episodeNumber != null) {
-        targetIndex = episodes.indexOfFirst { episode ->
-            episode.episodeNumber == target.episodeNumber &&
-                (target.seasonNumber == null || episode.seasonNumber == target.seasonNumber)
-        }
+        targetIndex =
+            episodes.indexOfFirst { episode ->
+                episode.episodeNumber == target.episodeNumber && (target.seasonNumber == null || episode.seasonNumber == target.seasonNumber)
+            }
     }
     val matchedTarget = targetIndex >= 0
     if (targetIndex < 0 && preferProgressFallback) {
-        targetIndex = episodes.indexOfFirst { episode ->
-            val percentage = episodePlaybackPercentage(episode)
-            percentage > 0.0 && percentage < 100.0
-        }
+        targetIndex =
+            episodes.indexOfFirst { episode ->
+                val percentage = episodePlaybackPercentage(episode)
+                percentage > 0.0 && percentage < 100.0
+            }
     }
     if (targetIndex < 0) targetIndex = episodes.indexOfFirst { !it.userData.isPlayed }
     if (targetIndex < 0) targetIndex = 0
@@ -46,10 +43,7 @@ internal fun resolveEpisodePlaybackTarget(
     if (target.playbackPositionMs <= 0L && targetPercentage <= 0.0) return selected
     return selected.copy(
         runtimeMs = target.durationMs?.takeIf { it > 0L } ?: selected.runtimeMs,
-        userData = selected.userData.copy(
-            playbackPositionMs = target.playbackPositionMs.coerceAtLeast(0L),
-            playedPercentage = target.playedPercentage,
-        ),
+        userData = selected.userData.copy(playbackPositionMs = target.playbackPositionMs.coerceAtLeast(0L), playedPercentage = target.playedPercentage),
     )
 }
 
@@ -70,20 +64,10 @@ internal fun HomeFeed.mergeUnchangedSections(fresh: HomeFeed): HomeFeed {
     val resume = resume.takeIf { it == fresh.resume } ?: fresh.resume
     val nextUp = nextUp.takeIf { it == fresh.nextUp } ?: fresh.nextUp
     val latest = latest.takeIf { it == fresh.latest } ?: fresh.latest
-    return if (
-        recommendations === this.recommendations &&
-        resume === this.resume &&
-        nextUp === this.nextUp &&
-        latest === this.latest
-    ) {
+    return if (recommendations === this.recommendations && resume === this.resume && nextUp === this.nextUp && latest === this.latest) {
         this
     } else {
-        HomeFeed(
-            recommendations = recommendations,
-            resume = resume,
-            nextUp = nextUp,
-            latest = latest,
-        )
+        HomeFeed(recommendations = recommendations, resume = resume, nextUp = nextUp, latest = latest)
     }
 }
 
@@ -91,13 +75,8 @@ internal fun MediaBrowserState.replaceUserData(id: MediaId, userData: MediaUserD
     return replaceUserData(id) { userData }
 }
 
-internal fun MediaBrowserState.replaceUserData(
-    id: MediaId,
-    transform: (MediaUserData) -> MediaUserData,
-): MediaBrowserState {
-    fun List<MediaItem>.replace() = map { item ->
-        if (item.id == id) item.copy(userData = transform(item.userData)) else item
-    }
+internal fun MediaBrowserState.replaceUserData(id: MediaId, transform: (MediaUserData) -> MediaUserData): MediaBrowserState {
+    fun List<MediaItem>.replace() = map { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item }
     fun List<PlaybackHistoryItem>.replaceHistory() = map { item ->
         if (item.media.id == id) item.copy(media = item.media.copy(userData = transform(item.media.userData))) else item
     }
@@ -106,23 +85,18 @@ internal fun MediaBrowserState.replaceUserData(
         favoriteItems = favoriteItems.replace(),
         searchItems = searchItems.replace(),
         detail = detail?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
-        selectedSeasonDetail = selectedSeasonDetail?.let { item ->
-            if (item.id == id) item.copy(userData = transform(item.userData)) else item
-        },
-        detailPlayTarget = detailPlayTarget?.let { item ->
-            if (item.id == id) item.copy(userData = transform(item.userData)) else item
-        },
-        selectedSeasonPlayTarget = selectedSeasonPlayTarget?.let { item ->
-            if (item.id == id) item.copy(userData = transform(item.userData)) else item
-        },
+        selectedSeasonDetail = selectedSeasonDetail?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
+        detailPlayTarget = detailPlayTarget?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
+        selectedSeasonPlayTarget = selectedSeasonPlayTarget?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
         detailSeasons = detailSeasons.replace(),
         detailEpisodes = detailEpisodes.replace(),
-        homeFeed = homeFeed.copy(
-            recommendations = homeFeed.recommendations.replace(),
-            resume = homeFeed.resume.replace(),
-            nextUp = homeFeed.nextUp.replace(),
-            latest = homeFeed.latest.replace(),
-        ),
+        homeFeed =
+            homeFeed.copy(
+                recommendations = homeFeed.recommendations.replace(),
+                resume = homeFeed.resume.replace(),
+                nextUp = homeFeed.nextUp.replace(),
+                latest = homeFeed.latest.replace(),
+            ),
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.replace() },
         historyItems = historyItems.replaceHistory(),
     )
@@ -148,8 +122,7 @@ internal fun MediaBrowserState.userDataFor(id: MediaId): MediaUserData? {
 }
 
 internal fun MediaBrowserState.containsMedia(id: MediaId): Boolean =
-    detail?.id == id || selectedSeasonDetail?.id == id || detailSeasons.any { it.id == id } ||
-        detailEpisodes.any { it.id == id }
+    detail?.id == id || selectedSeasonDetail?.id == id || detailSeasons.any { it.id == id } || detailEpisodes.any { it.id == id }
 
 /** 删除成功后的状态修剪：所有列表里被删条目一并移除，总数收紧。 */
 internal fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState {
@@ -169,15 +142,14 @@ internal fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState
         personEpisodes = personEpisodes.prune(),
         historyItems = historyItems.pruneHistory(),
         totalEstimate = totalEstimate?.let { total -> (total - items.count { it.id in ids }).coerceAtLeast(0) },
-        favoriteTotalEstimate = favoriteTotalEstimate?.let { total ->
-            (total - favoriteItems.count { it.id in ids }).coerceAtLeast(0)
-        },
-        homeFeed = homeFeed.copy(
-            recommendations = homeFeed.recommendations.prune(),
-            resume = homeFeed.resume.prune(),
-            nextUp = homeFeed.nextUp.prune(),
-            latest = homeFeed.latest.prune(),
-        ),
+        favoriteTotalEstimate = favoriteTotalEstimate?.let { total -> (total - favoriteItems.count { it.id in ids }).coerceAtLeast(0) },
+        homeFeed =
+            homeFeed.copy(
+                recommendations = homeFeed.recommendations.prune(),
+                resume = homeFeed.resume.prune(),
+                nextUp = homeFeed.nextUp.prune(),
+                latest = homeFeed.latest.prune(),
+            ),
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.prune() },
     )
 }
@@ -187,9 +159,11 @@ internal fun MediaSourceInfo.legacyDefaultAudioStreamIndex(): Int? =
         ?: audioStreams.firstOrNull { it.isDefault }?.index
         ?: audioStreams.firstOrNull()?.index
 
-internal fun MediaSourceInfo.legacyDefaultSubtitleStreamIndex(): Int = when (defaultSubtitleIndex) {
-    -1 -> -1
-    else -> defaultSubtitleIndex?.let { preferred ->
-        subtitleStreams.firstOrNull { it.index == preferred }?.index
-    } ?: subtitleStreams.firstOrNull { it.isDefault }?.index ?: -1
-}
+internal fun MediaSourceInfo.legacyDefaultSubtitleStreamIndex(): Int =
+    when (defaultSubtitleIndex) {
+        -1 -> -1
+        else ->
+            defaultSubtitleIndex?.let { preferred -> subtitleStreams.firstOrNull { it.index == preferred }?.index }
+                ?: subtitleStreams.firstOrNull { it.isDefault }?.index
+                ?: -1
+    }

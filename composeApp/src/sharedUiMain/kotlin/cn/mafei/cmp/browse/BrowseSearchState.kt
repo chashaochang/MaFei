@@ -20,33 +20,36 @@ internal class BrowseSearchState(
         private set
 
     suspend fun load() {
-        searchHistories = try {
-            loadHistory()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
-        }
+        searchHistories =
+            try {
+                loadHistory()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
     }
 
-    fun cancel() { searchJob?.cancel(); searchJob = null }
+    fun cancel() {
+        searchJob?.cancel()
+        searchJob = null
+    }
 
     fun query(term: String, submitted: Boolean, onResults: suspend () -> Unit) {
         searchJob?.cancel()
-        searchJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            if (runSearch(term)) {
-                onResults()
-                if (submitted) record(term)
+        searchJob =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                if (runSearch(term)) {
+                    onResults()
+                    if (submitted) record(term)
+                }
             }
-        }
     }
 
     fun record(raw: String) {
         val term = raw.trim()
         if (term.isNotEmpty()) {
-            val updated = (listOf(term) + searchHistories.filterNot {
-                it.equals(term, ignoreCase = true)
-            }).take(10)
+            val updated = (listOf(term) + searchHistories.filterNot { it.equals(term, ignoreCase = true) }).take(10)
             searchHistories = updated
             scope.launch {
                 try {

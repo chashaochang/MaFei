@@ -2,14 +2,13 @@ package cn.mafei.cmp
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.input.key.key
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.player.api.PlayerPhase
-import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.player.api.PlayerRenderMode
+import cn.mafei.cmp.player.api.PlayerState
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -27,9 +26,7 @@ internal fun BindBrowsePlayerLifecycle(
 ) {
     val playback = player.playback
     val hostWindowFeatures = LocalMaFeiWindowFeatures.current
-    LaunchedEffect(playback, playerRenderMode) {
-        playback?.controller?.setRenderMode(playerRenderMode)
-    }
+    LaunchedEffect(playback, playerRenderMode) { playback?.controller?.setRenderMode(playerRenderMode) }
 
     // HarmonyOS PC/2-in-1 owns the native maximize/fullscreen state. When the
     // user presses that system button while the player is open, reflect the
@@ -37,14 +34,8 @@ internal fun BindBrowsePlayerLifecycle(
     // than issuing another enter request. Do not key this effect by the local
     // player state: an internal request is asynchronous and must not be reset
     // before the window manager reports the resulting status.
-    LaunchedEffect(
-        player.playerExpanded,
-        hostWindowFeatures.windowedHost,
-        hostWindowFeatures.windowFullscreen,
-    ) {
-        if (player.playerExpanded && hostWindowFeatures.windowedHost &&
-            player.playerFullscreen != hostWindowFeatures.windowFullscreen
-        ) {
+    LaunchedEffect(player.playerExpanded, hostWindowFeatures.windowedHost, hostWindowFeatures.windowFullscreen) {
+        if (player.playerExpanded && hostWindowFeatures.windowedHost && player.playerFullscreen != hostWindowFeatures.windowFullscreen) {
             player.playerFullscreen = hostWindowFeatures.windowFullscreen
         }
     }
@@ -52,9 +43,7 @@ internal fun BindBrowsePlayerLifecycle(
     val currentPlayerScreenChanged by rememberUpdatedState(onPlayerScreenChanged)
     DisposableEffect(videoPlayerPresented) {
         currentPlayerScreenChanged(videoPlayerPresented)
-        onDispose {
-            if (videoPlayerPresented) currentPlayerScreenChanged(false)
-        }
+        onDispose { if (videoPlayerPresented) currentPlayerScreenChanged(false) }
     }
     val currentFullscreenChanged by rememberUpdatedState(onPlayerFullscreenChanged)
     DisposableEffect(player.playerExpanded) {
@@ -73,9 +62,7 @@ internal fun BindBrowsePlayerLifecycle(
     LaunchedEffect(detailId) { player.playbackError = null }
     LaunchedEffect(playerShellState.phase) {
         if (playerShellState.phase == PlayerPhase.Error) player.playbackError = "播放失败，请重试"
-        if (!player.playbackBusy &&
-            (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released)
-        ) {
+        if (!player.playbackBusy && (playerShellState.phase == PlayerPhase.Idle || playerShellState.phase == PlayerPhase.Released)) {
             player.playerExpanded = false
         }
     }
@@ -99,31 +86,29 @@ internal fun BindBrowsePlayerLifecycle(
         if (playerShellState.phase == PlayerPhase.Ended) {
             val queue = player.playQueue
             if (player.playingMedia?.mediaType == MediaType.Audio && queue != null) {
-                val next = queue.next() ?: when (player.musicRepeatMode) {
-                    MusicRepeatMode.Off -> null
-                    MusicRepeatMode.All -> queue.copy(index = 0)
-                    MusicRepeatMode.One -> queue
-                }
+                val next =
+                    queue.next()
+                        ?: when (player.musicRepeatMode) {
+                            MusicRepeatMode.Off -> null
+                            MusicRepeatMode.All -> queue.copy(index = 0)
+                            MusicRepeatMode.One -> queue
+                        }
                 if (next != null) player.startPlaybackItem(next.current, next, resumePositionMs = 0L)
             } else player.playNextEpisode()
         }
     }
-
 }
 
 @Composable
 internal fun rememberPlayerShellState(playback: SessionPlaybackRuntime?): PlayerShellState {
-    return if (playback == null) PlayerShellState() else {
+    return if (playback == null) PlayerShellState()
+    else {
         val shellState = remember(playback) { playback.controller.state.shellStates() }
         shellState.collectAsState(initial = playback.controller.state.value.toPlayerShellState()).value
     }
 }
 
-
 internal fun kotlinx.coroutines.flow.Flow<PlayerState>.shellStates(): kotlinx.coroutines.flow.Flow<PlayerShellState> =
     map { it.toPlayerShellState() }.distinctUntilChanged()
 
-internal fun PlayerState.toPlayerShellState() = PlayerShellState(
-    phase = phase,
-    resourceId = resourceId,
-)
+internal fun PlayerState.toPlayerShellState() = PlayerShellState(phase = phase, resourceId = resourceId)

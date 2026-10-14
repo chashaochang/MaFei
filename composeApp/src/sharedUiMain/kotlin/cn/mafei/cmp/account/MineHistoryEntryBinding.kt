@@ -45,9 +45,7 @@ internal fun MineHistoryEntryBinding(
                 artworkCache,
                 fetchArtwork,
                 modifier,
-                fallback = { fallbackModifier ->
-                    LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
-                },
+                fallback = { fallbackModifier -> LegacyPosterPlaceholder(item.mediaType, fallbackModifier) },
             )
         },
     )

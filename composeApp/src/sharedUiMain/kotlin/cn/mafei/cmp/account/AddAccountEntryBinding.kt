@@ -7,10 +7,7 @@ import cn.mafei.cmp.feature.settings.AddAccountScreen
 import cn.mafei.cmp.session.*
 
 @Composable
-internal fun AddAccountEntryBinding(
-    account: AccountFlowState,
-    popMineRoute: () -> Unit,
-) {
+internal fun AddAccountEntryBinding(account: AccountFlowState, popMineRoute: () -> Unit) {
     AddAccountScreen(
         onBack = popMineRoute,
         onProvider = { provider ->

@@ -9,12 +9,19 @@ import cn.mafei.cmp.session.*
 internal fun ManagementEntryBinding(
     route: BrowseManagementRoute,
     account: AccountFlowState,
-    session: ApplicationSession,
+    mediaSession: cn.mafei.cmp.data.repositories.MediaSession,
     popMineRoute: () -> Unit,
-    runtime: ApplicationRuntime,
+    repository: cn.mafei.cmp.data.repositories.MediaRepository,
 ) {
-    ManagementRoute(runtime.sessions.media, session.media, route.taskId, popMineRoute,
-        onTask = { id -> account.mineBackStack += BrowseManagementRoute(taskId = id) }, Modifier.fillMaxSize(),
-        sessionId = route.sessionId, onSession = { id -> account.mineBackStack += BrowseManagementRoute(sessionId = id) },
-        onDevices = { account.mineBackStack += BrowseManagementDevicesRoute() })
+    ManagementRoute(
+        repository,
+        mediaSession,
+        route.taskId,
+        popMineRoute,
+        onTask = { id -> account.mineBackStack += BrowseManagementRoute(taskId = id) },
+        Modifier.fillMaxSize(),
+        sessionId = route.sessionId,
+        onSession = { id -> account.mineBackStack += BrowseManagementRoute(sessionId = id) },
+        onDevices = { account.mineBackStack += BrowseManagementDevicesRoute() },
+    )
 }

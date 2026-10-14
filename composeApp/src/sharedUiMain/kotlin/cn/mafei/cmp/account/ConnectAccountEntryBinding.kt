@@ -30,10 +30,10 @@ internal fun ConnectAccountEntryBinding(
             formState.password = ""
             formState.rememberPassword = true
             try {
-                val connection = route.credentialKey?.let { key ->
-                    session.connection.takeIf { it.credentialKey == key }
-                        ?: account.access.savedConnections().firstOrNull { it.credentialKey == key }
-                }
+                val connection =
+                    route.credentialKey?.let { key ->
+                        session.connection.takeIf { it.credentialKey == key } ?: account.access.savedConnections().firstOrNull { it.credentialKey == key }
+                    }
                 if (connection != null) {
                     val password = account.access.savedPassword(connection)
                     formState.password = password.orEmpty()
@@ -61,19 +61,21 @@ internal fun ConnectAccountEntryBinding(
         busy = account.accountConnectBusy || prefilling,
         error = account.accountConnectError,
         onSubmit = { provider, address, name, password, rememberPassword ->
-            if (!prefilling) account.connect(provider, address, name, password, rememberPassword) {
-                account.minePresented = false
-                account.mineBackStack.clear()
-                account.mineBackStack += BrowseMineRoute
-            }
+            if (!prefilling)
+                account.connect(provider, address, name, password, rememberPassword) {
+                    account.minePresented = false
+                    account.mineBackStack.clear()
+                    account.mineBackStack += BrowseMineRoute
+                }
         },
         modifier = Modifier.fillMaxSize(),
         formState = formState,
-        routeTitle = if (route.provider == ProviderKind.Jellyfin) {
-            "连接 Jellyfin"
-        } else {
-            "连接飞牛影视"
-        },
+        routeTitle =
+            if (route.provider == ProviderKind.Jellyfin) {
+                "连接 Jellyfin"
+            } else {
+                "连接飞牛影视"
+            },
         onBack = popMineRoute,
         showProviderSwitcher = false,
         showHistory = false,

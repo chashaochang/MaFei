@@ -7,10 +7,7 @@ import cn.mafei.cmp.feature.settings.FeiniuConnectionPreferenceScreen
 import cn.mafei.cmp.session.*
 
 @Composable
-internal fun FeiniuConnectionPreferenceEntryBinding(
-    feiniu: FeiniuPreferenceState,
-    popMineRoute: () -> Unit,
-) {
+internal fun FeiniuConnectionPreferenceEntryBinding(feiniu: FeiniuPreferenceState, popMineRoute: () -> Unit) {
     FeiniuConnectionPreferenceScreen(
         selectedPreference = feiniu.feiniuConnectionPreference,
         onSelect = feiniu::select,

@@ -9,5 +9,6 @@ import cn.mafei.cmp.session.*
 internal class BrowseNavigationState {
     val browseBackStack = mutableStateListOf<BrowseRoute>(BrowseHomeRoute)
     val browseInitialItems = mutableStateMapOf<String, MediaItem>()
-    val currentRoute get() = browseBackStack.lastOrNull() ?: BrowseHomeRoute
+    val currentRoute
+        get() = browseBackStack.lastOrNull() ?: BrowseHomeRoute
 }

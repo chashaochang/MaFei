@@ -5,8 +5,9 @@ import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.repositories.*
 import kotlinx.coroutines.flow.StateFlow
 
-/** Account-scoped compatibility facade. New work belongs to the focused browser controllers.
- * The facade preserves existing caller APIs and exposes one coherent read model.
+/**
+ * Account-scoped compatibility facade. New work belongs to the focused browser controllers. The facade preserves existing caller APIs and exposes one coherent
+ * read model.
  */
 class MediaBrowser(
     repository: MediaRepository,

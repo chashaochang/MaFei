@@ -16,11 +16,13 @@ internal class FeiniuPreferenceState(
     var feiniuConnectionPreference by mutableStateOf(FeiniuConnectionPreference.Speed)
     var feiniuConnectionPreferenceError by mutableStateOf<String?>(null)
     var feiniuConnectionPreferenceSaving by mutableStateOf(false)
-    suspend fun load() { feiniuConnectionPreference = load.invoke().toPresentationPreference() }
+
+    suspend fun load() {
+        feiniuConnectionPreference = load.invoke().toPresentationPreference()
+    }
+
     fun select(selected: FeiniuConnectionPreference) {
-        if (selected != feiniuConnectionPreference &&
-            !feiniuConnectionPreferenceSaving
-        ) {
+        if (selected != feiniuConnectionPreference && !feiniuConnectionPreferenceSaving) {
             feiniuConnectionPreferenceError = null
             feiniuConnectionPreferenceSaving = true
             scope.launch {
@@ -39,15 +41,17 @@ internal class FeiniuPreferenceState(
     }
 }
 
-private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
-    FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
-    FeiniuRoutePreference.Relay -> FeiniuConnectionPreference.Relay
-    FeiniuRoutePreference.Auto,
-    FeiniuRoutePreference.Speed -> FeiniuConnectionPreference.Speed
-}
+private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference =
+    when (this) {
+        FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
+        FeiniuRoutePreference.Relay -> FeiniuConnectionPreference.Relay
+        FeiniuRoutePreference.Auto,
+        FeiniuRoutePreference.Speed -> FeiniuConnectionPreference.Speed
+    }
 
-private fun FeiniuConnectionPreference.toProviderPreference(): FeiniuRoutePreference = when (this) {
-    FeiniuConnectionPreference.Speed -> FeiniuRoutePreference.Speed
-    FeiniuConnectionPreference.Public -> FeiniuRoutePreference.Public
-    FeiniuConnectionPreference.Relay -> FeiniuRoutePreference.Relay
-}
+private fun FeiniuConnectionPreference.toProviderPreference(): FeiniuRoutePreference =
+    when (this) {
+        FeiniuConnectionPreference.Speed -> FeiniuRoutePreference.Speed
+        FeiniuConnectionPreference.Public -> FeiniuRoutePreference.Public
+        FeiniuConnectionPreference.Relay -> FeiniuRoutePreference.Relay
+    }

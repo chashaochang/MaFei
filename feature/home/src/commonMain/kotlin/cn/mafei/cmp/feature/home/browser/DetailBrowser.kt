@@ -7,10 +7,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
 /**
- * The season document that was visible before an episode detail route took
- * over the provider detail slot. Returning to that route should reveal this
- * document immediately; a background refresh can update it later without
- * replacing the whole season page with a loading state.
+ * The season document that was visible before an episode detail route took over the provider detail slot. Returning to that route should reveal this document
+ * immediately; a background refresh can update it later without replacing the whole season page with a loading state.
  */
 private data class SeasonRestoreSnapshot(
     val series: MediaItem,
@@ -23,7 +21,8 @@ private data class SeasonRestoreSnapshot(
 )
 
 internal class DetailBrowser(context: BrowserContext, private val playbackPreferences: MediaPlaybackPreferences?) : BrowserController(context) {
-    val generation: Long get() = detailTicket
+    val generation: Long
+        get() = detailTicket
 
     private var detailTicket = 0L
     private var detailRefreshTicket = 0L
@@ -33,45 +32,43 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         val previous = state.value
         val previousDetail = previous.detail
         val previousSeasonId = previous.selectedSeasonId
-        if (
-            previousDetail?.mediaType == MediaType.Series &&
-            previous.detailEpisodes.any { it.id == id } &&
-            previousSeasonId != null
-        ) {
-            seasonRestoreSnapshot = SeasonRestoreSnapshot(
-                series = previousDetail,
-                seasons = previous.detailSeasons,
-                seasonId = previousSeasonId,
-                season = previous.selectedSeasonDetail,
-                episodes = previous.detailEpisodes,
-                seriesPlayTarget = previous.detailPlayTarget,
-                seasonPlayTarget = previous.selectedSeasonPlayTarget,
-            )
+        if (previousDetail?.mediaType == MediaType.Series && previous.detailEpisodes.any { it.id == id } && previousSeasonId != null) {
+            seasonRestoreSnapshot =
+                SeasonRestoreSnapshot(
+                    series = previousDetail,
+                    seasons = previous.detailSeasons,
+                    seasonId = previousSeasonId,
+                    season = previous.selectedSeasonDetail,
+                    episodes = previous.detailEpisodes,
+                    seriesPlayTarget = previous.detailPlayTarget,
+                    seasonPlayTarget = previous.selectedSeasonPlayTarget,
+                )
         }
         val operation = ++detailTicket
         ++detailRefreshTicket
-        mutableState.value = state.value.copy(
-            detailId = id,
-            // Keep the tapped card as the loading document. Besides avoiding a
-            // blank hero while the request is in flight, this gives the shared
-            // artwork transition a destination element during the route change.
-            detail = initialItem?.takeIf { it.id == id },
-            detailLoading = true,
-            detailError = null,
-            detailSeasons = emptyList(),
-            selectedSeasonId = null,
-            selectedSeasonDetail = null,
-            detailEpisodes = emptyList(),
-            detailPlayTarget = null,
-            selectedSeasonPlayTarget = null,
-            detailSectionsLoading = false,
-            detailSectionsError = null,
-            detailActionBusy = false,
-            detailActionError = null,
-            selectedMediaSourceId = null,
-            selectedAudioStreamIndex = null,
-            selectedSubtitleStreamIndex = null,
-        )
+        mutableState.value =
+            state.value.copy(
+                detailId = id,
+                // Keep the tapped card as the loading document. Besides avoiding a
+                // blank hero while the request is in flight, this gives the shared
+                // artwork transition a destination element during the route change.
+                detail = initialItem?.takeIf { it.id == id },
+                detailLoading = true,
+                detailError = null,
+                detailSeasons = emptyList(),
+                selectedSeasonId = null,
+                selectedSeasonDetail = null,
+                detailEpisodes = emptyList(),
+                detailPlayTarget = null,
+                selectedSeasonPlayTarget = null,
+                detailSectionsLoading = false,
+                detailSectionsError = null,
+                detailActionBusy = false,
+                detailActionError = null,
+                selectedMediaSourceId = null,
+                selectedAudioStreamIndex = null,
+                selectedSubtitleStreamIndex = null,
+            )
         try {
             val loaded = repository.item(session, id, refresh = true)
             if (operation != detailTicket) return
@@ -80,26 +77,27 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
             // 起播时也会把这个 source id 交给 Provider，而不是交回服务器猜测。
             var preferredSourceId: String? = null
             if (playableSources.size > 1) {
-                val remembered = try {
-                    playbackPreferences?.preferredMediaSourceId(session.accountId, id)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    null
-                }
-                preferredSourceId = remembered?.takeIf { candidate ->
-                    playableSources.any { it.id == candidate }
-                }
+                val remembered =
+                    try {
+                        playbackPreferences?.preferredMediaSourceId(session.accountId, id)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                preferredSourceId = remembered?.takeIf { candidate -> playableSources.any { it.id == candidate } }
             }
-            val selectedSource = playableSources.firstOrNull { it.id == preferredSourceId }
-                ?: playableSources.firstOrNull()
-            mutableState.value = state.value.copy(detail = loaded.value, detailLoading = false,
-                detailError = if (loaded.origin == MediaLoadOrigin.StaleCache) "连接暂不可用，显示缓存详情" else null,
-                selectedMediaSourceId = selectedSource?.id,
-                selectedAudioStreamIndex = selectedSource?.legacyDefaultAudioStreamIndex(),
-                selectedSubtitleStreamIndex = selectedSource?.legacyDefaultSubtitleStreamIndex(),
-                detailPlayTarget = loaded.value.takeIf { it.mediaType != MediaType.Series && it.canPlay },
-            )
+            val selectedSource = playableSources.firstOrNull { it.id == preferredSourceId } ?: playableSources.firstOrNull()
+            mutableState.value =
+                state.value.copy(
+                    detail = loaded.value,
+                    detailLoading = false,
+                    detailError = if (loaded.origin == MediaLoadOrigin.StaleCache) "连接暂不可用，显示缓存详情" else null,
+                    selectedMediaSourceId = selectedSource?.id,
+                    selectedAudioStreamIndex = selectedSource?.legacyDefaultAudioStreamIndex(),
+                    selectedSubtitleStreamIndex = selectedSource?.legacyDefaultSubtitleStreamIndex(),
+                    detailPlayTarget = loaded.value.takeIf { it.mediaType != MediaType.Series && it.canPlay },
+                )
             if (loaded.value.mediaType == MediaType.Series) {
                 loadSeriesSections(id, loaded.value, operation)
             }
@@ -112,10 +110,8 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
     }
 
     /**
-     * Refreshes the detail currently on screen without replacing its document
-     * state. This is used when a child route returns to a movie/series/episode:
-     * the old detail, scroll position, sections and actions remain available
-     * while the provider catches up in the background.
+     * Refreshes the detail currently on screen without replacing its document state. This is used when a child route returns to a movie/series/episode: the old
+     * detail, scroll position, sections and actions remain available while the provider catches up in the background.
      */
     suspend fun refreshDetail(id: MediaId) {
         val beforeRequest = state.value
@@ -124,11 +120,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         val detailGeneration = detailTicket
         try {
             val loaded = repository.item(session, id, refresh = true)
-            if (
-                operation != detailRefreshTicket ||
-                detailGeneration != detailTicket ||
-                state.value.detail?.id != id
-            ) return
+            if (operation != detailRefreshTicket || detailGeneration != detailTicket || state.value.detail?.id != id) return
             // A transient network failure may be represented by the repository
             // as a stale-cache success. The same detail is already visible, so
             // publishing an error row would only move the page for no new data.
@@ -137,31 +129,34 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
             val current = state.value
             val detail = loaded.value
             val playableSources = detail.mediaSources.filter { it.playable != false }
-            val selectedSource = playableSources.firstOrNull { it.id == current.selectedMediaSourceId }
-                ?: playableSources.firstOrNull()
+            val selectedSource = playableSources.firstOrNull { it.id == current.selectedMediaSourceId } ?: playableSources.firstOrNull()
             val sourceUnchanged = selectedSource?.id == current.selectedMediaSourceId
-            mutableState.value = current.copy(
-                detail = detail,
-                detailError = null,
-                selectedMediaSourceId = selectedSource?.id,
-                // A background data refresh must not silently undo a track the
-                // user selected on this same source.
-                selectedAudioStreamIndex = if (sourceUnchanged) {
-                    current.selectedAudioStreamIndex
-                } else {
-                    selectedSource?.legacyDefaultAudioStreamIndex()
-                },
-                selectedSubtitleStreamIndex = if (sourceUnchanged) {
-                    current.selectedSubtitleStreamIndex
-                } else {
-                    selectedSource?.legacyDefaultSubtitleStreamIndex()
-                },
-                detailPlayTarget = if (detail.mediaType == MediaType.Series) {
-                    current.detailPlayTarget
-                } else {
-                    detail.takeIf { it.canPlay }
-                },
-            )
+            mutableState.value =
+                current.copy(
+                    detail = detail,
+                    detailError = null,
+                    selectedMediaSourceId = selectedSource?.id,
+                    // A background data refresh must not silently undo a track the
+                    // user selected on this same source.
+                    selectedAudioStreamIndex =
+                        if (sourceUnchanged) {
+                            current.selectedAudioStreamIndex
+                        } else {
+                            selectedSource?.legacyDefaultAudioStreamIndex()
+                        },
+                    selectedSubtitleStreamIndex =
+                        if (sourceUnchanged) {
+                            current.selectedSubtitleStreamIndex
+                        } else {
+                            selectedSource?.legacyDefaultSubtitleStreamIndex()
+                        },
+                    detailPlayTarget =
+                        if (detail.mediaType == MediaType.Series) {
+                            current.detailPlayTarget
+                        } else {
+                            detail.takeIf { it.canPlay }
+                        },
+                )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -171,10 +166,8 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
     }
 
     /**
-     * Restores the season that was visible immediately before an episode was
-     * opened. This is intentionally synchronous and local: the season route
-     * must not flash a full-page loading state just because its child route
-     * used the shared detail slot.
+     * Restores the season that was visible immediately before an episode was opened. This is intentionally synchronous and local: the season route must not
+     * flash a full-page loading state just because its child route used the shared detail slot.
      *
      * @return true when a matching in-memory season snapshot was restored.
      */
@@ -182,38 +175,35 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         val snapshot = seasonRestoreSnapshot ?: return false
         if (snapshot.series.id != seriesId || snapshot.seasonId != seasonId) return false
 
-        val currentEpisode = state.value.detail?.takeIf { item ->
-            snapshot.episodes.any { it.id == item.id }
-        }
-        val episodes = if (currentEpisode == null) {
-            snapshot.episodes
-        } else {
-            snapshot.episodes.map { episode ->
-                if (episode.id == currentEpisode.id) currentEpisode else episode
+        val currentEpisode = state.value.detail?.takeIf { item -> snapshot.episodes.any { it.id == item.id } }
+        val episodes =
+            if (currentEpisode == null) {
+                snapshot.episodes
+            } else {
+                snapshot.episodes.map { episode -> if (episode.id == currentEpisode.id) currentEpisode else episode }
             }
-        }
         ++detailTicket
         ++detailRefreshTicket
-        mutableState.value = state.value.copy(
-            detailId = snapshot.series.id,
-            detail = snapshot.series,
-            detailLoading = false,
-            detailError = null,
-            detailSeasons = snapshot.seasons,
-            selectedSeasonId = snapshot.seasonId,
-            selectedSeasonDetail = snapshot.season
-                ?: snapshot.seasons.firstOrNull { it.id == snapshot.seasonId },
-            detailEpisodes = episodes,
-            detailPlayTarget = snapshot.seriesPlayTarget,
-            selectedSeasonPlayTarget = snapshot.seasonPlayTarget,
-            detailSectionsLoading = false,
-            detailSectionsError = null,
-            detailActionBusy = false,
-            detailActionError = null,
-            selectedMediaSourceId = null,
-            selectedAudioStreamIndex = null,
-            selectedSubtitleStreamIndex = null,
-        )
+        mutableState.value =
+            state.value.copy(
+                detailId = snapshot.series.id,
+                detail = snapshot.series,
+                detailLoading = false,
+                detailError = null,
+                detailSeasons = snapshot.seasons,
+                selectedSeasonId = snapshot.seasonId,
+                selectedSeasonDetail = snapshot.season ?: snapshot.seasons.firstOrNull { it.id == snapshot.seasonId },
+                detailEpisodes = episodes,
+                detailPlayTarget = snapshot.seriesPlayTarget,
+                selectedSeasonPlayTarget = snapshot.seasonPlayTarget,
+                detailSectionsLoading = false,
+                detailSectionsError = null,
+                detailActionBusy = false,
+                detailActionError = null,
+                selectedMediaSourceId = null,
+                selectedAudioStreamIndex = null,
+                selectedSubtitleStreamIndex = null,
+            )
         seasonRestoreSnapshot = null
         return true
     }
@@ -223,21 +213,23 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         val seriesId = current.detail?.takeIf { it.mediaType == MediaType.Series }?.id ?: return
         if (current.detailSeasons.none { it.id == id }) return
         val operation = detailTicket
-        mutableState.value = current.copy(
-            selectedSeasonId = id,
-            selectedSeasonDetail = null,
-            detailEpisodes = emptyList(),
-            selectedSeasonPlayTarget = null,
-            detailSectionsLoading = true,
-            detailSectionsError = null,
-        )
-        val seasonDetail = try {
-            repository.item(session, id, refresh = true).value
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
+        mutableState.value =
+            current.copy(
+                selectedSeasonId = id,
+                selectedSeasonDetail = null,
+                detailEpisodes = emptyList(),
+                selectedSeasonPlayTarget = null,
+                detailSectionsLoading = true,
+                detailSectionsError = null,
+            )
+        val seasonDetail =
+            try {
+                repository.item(session, id, refresh = true).value
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
         if (operation != detailTicket || state.value.selectedSeasonId != id) return
         mutableState.value = state.value.copy(selectedSeasonDetail = seasonDetail)
         loadEpisodes(
@@ -253,39 +245,40 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
     private suspend fun loadSeriesSections(seriesId: MediaId, detail: MediaItem, operation: Long) {
         mutableState.value = state.value.copy(detailSectionsLoading = true, detailSectionsError = null)
         try {
-            val (loaded, providerNextUp) = coroutineScope {
-                val seasons = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                    repository.browse(session, MediaQuery.Seasons(seriesId), refresh = true)
+            val (loaded, providerNextUp) =
+                coroutineScope {
+                    val seasons =
+                        async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                            repository.browse(session, MediaQuery.Seasons(seriesId), refresh = true)
+                        }
+                    val nextUp =
+                        async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                            if (detail.playbackTarget != null) return@async null
+                            try {
+                                repository.browse(session, MediaQuery.NextUp(seriesId), refresh = true).value.items.firstOrNull()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                // Legacy preferredSeriesTarget deliberately treats a
+                                // failed Next Up lookup as "no target".
+                                null
+                            }
+                        }
+                    seasons.await() to nextUp.await()
                 }
-                val nextUp = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                    if (detail.playbackTarget != null) return@async null
-                    try {
-                        repository.browse(session, MediaQuery.NextUp(seriesId), refresh = true).value.items.firstOrNull()
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        // Legacy preferredSeriesTarget deliberately treats a
-                        // failed Next Up lookup as "no target".
-                        null
-                    }
-                }
-                seasons.await() to nextUp.await()
-            }
             if (operation != detailTicket) return
-            val seasons = loaded.value.items.sortedWith(
-                compareBy<MediaItem> { it.seasonNumber ?: Int.MAX_VALUE }.thenBy { it.title },
-            )
+            val seasons = loaded.value.items.sortedWith(compareBy<MediaItem> { it.seasonNumber ?: Int.MAX_VALUE }.thenBy { it.title })
             val playbackTarget = detail.playbackTarget ?: providerNextUp?.toPlaybackTarget()
-            val selected = playbackTarget?.seasonNumber?.let { targetSeason ->
-                seasons.firstOrNull { it.seasonNumber == targetSeason }
-            } ?: seasons.firstOrNull()
-            mutableState.value = state.value.copy(
-                detailSeasons = seasons,
-                selectedSeasonId = selected?.id,
-                selectedSeasonDetail = null,
-                detailSectionsLoading = selected != null,
-                detailSectionsError = null,
-            )
+            val selected =
+                playbackTarget?.seasonNumber?.let { targetSeason -> seasons.firstOrNull { it.seasonNumber == targetSeason } } ?: seasons.firstOrNull()
+            mutableState.value =
+                state.value.copy(
+                    detailSeasons = seasons,
+                    selectedSeasonId = selected?.id,
+                    selectedSeasonDetail = null,
+                    detailSectionsLoading = selected != null,
+                    detailSectionsError = null,
+                )
             if (selected != null) {
                 loadEpisodes(
                     seriesId = seriesId,
@@ -296,30 +289,26 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                     updateSeriesTarget = true,
                 )
             } else {
-                val directTarget = providerNextUp ?: playbackTarget?.id?.let { id ->
-                    try {
-                        repository.item(session, id, refresh = true).value
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
+                val directTarget =
+                    providerNextUp
+                        ?: playbackTarget?.id?.let { id ->
+                            try {
+                                repository.item(session, id, refresh = true).value
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
                 if (operation == detailTicket) {
-                    mutableState.value = state.value.copy(
-                        detailPlayTarget = directTarget,
-                        detailSectionsLoading = false,
-                    )
+                    mutableState.value = state.value.copy(detailPlayTarget = directTarget, detailSectionsLoading = false)
                 }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket) {
-                mutableState.value = state.value.copy(
-                    detailSectionsLoading = false,
-                    detailSectionsError = browseError(failure),
-                )
+                mutableState.value = state.value.copy(detailSectionsLoading = false, detailSectionsError = browseError(failure))
             }
         }
     }
@@ -336,43 +325,30 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
             // Legacy requests one 1000-item window. PageRequest is capped at
             // 500, so consume at most two provider pages and intentionally
             // ignore any remaining cursor rather than inventing UI pagination.
-            val loaded = repository.browse(
-                session,
-                MediaQuery.Episodes(seriesId, seasonId),
-                PageRequest(pageSize = 500),
-                refresh = true,
-            )
+            val loaded = repository.browse(session, MediaQuery.Episodes(seriesId, seasonId), PageRequest(pageSize = 500), refresh = true)
             if (operation != detailTicket || state.value.selectedSeasonId != seasonId) return
             val freshPages = MediaPageAccumulator()
             var page = freshPages.append(null, loaded.value)
             page.nextCursor?.let { secondCursor ->
-                val second = repository.browse(
-                    session,
-                    MediaQuery.Episodes(seriesId, seasonId),
-                    PageRequest(cursor = secondCursor, pageSize = 500),
-                )
+                val second = repository.browse(session, MediaQuery.Episodes(seriesId, seasonId), PageRequest(cursor = secondCursor, pageSize = 500))
                 if (operation != detailTicket || state.value.selectedSeasonId != seasonId) return
                 page = freshPages.append(secondCursor, second.value)
             }
-            val episodes = page.items.sortedWith(
-                compareBy<MediaItem> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.title },
-            )
+            val episodes = page.items.sortedWith(compareBy<MediaItem> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.title })
             val playTarget = resolveEpisodePlaybackTarget(episodes, playbackTarget, preferProgressFallback)
-            mutableState.value = state.value.copy(
-                detailEpisodes = episodes,
-                detailPlayTarget = if (updateSeriesTarget) playTarget else state.value.detailPlayTarget,
-                selectedSeasonPlayTarget = playTarget,
-                detailSectionsLoading = false,
-                detailSectionsError = null,
-            )
+            mutableState.value =
+                state.value.copy(
+                    detailEpisodes = episodes,
+                    detailPlayTarget = if (updateSeriesTarget) playTarget else state.value.detailPlayTarget,
+                    selectedSeasonPlayTarget = playTarget,
+                    detailSectionsLoading = false,
+                    detailSectionsError = null,
+                )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket && state.value.selectedSeasonId == seasonId) {
-                mutableState.value = state.value.copy(
-                    detailSectionsLoading = false,
-                    detailSectionsError = browseError(failure),
-                )
+                mutableState.value = state.value.copy(detailSectionsLoading = false, detailSectionsError = browseError(failure))
             }
         }
     }
@@ -380,24 +356,25 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
     fun back() {
         ++detailTicket
         ++detailRefreshTicket
-        mutableState.value = state.value.copy(
-            detailId = null,
-            detail = null,
-            detailLoading = false,
-            detailError = null,
-            detailSeasons = emptyList(),
-            selectedSeasonId = null,
-            selectedSeasonDetail = null,
-            detailEpisodes = emptyList(),
-            detailPlayTarget = null,
-            selectedSeasonPlayTarget = null,
-            detailSectionsLoading = false,
-            detailSectionsError = null,
-            detailActionBusy = false,
-            detailActionError = null,
-            selectedMediaSourceId = null,
-            selectedAudioStreamIndex = null,
-            selectedSubtitleStreamIndex = null,
-        )
+        mutableState.value =
+            state.value.copy(
+                detailId = null,
+                detail = null,
+                detailLoading = false,
+                detailError = null,
+                detailSeasons = emptyList(),
+                selectedSeasonId = null,
+                selectedSeasonDetail = null,
+                detailEpisodes = emptyList(),
+                detailPlayTarget = null,
+                selectedSeasonPlayTarget = null,
+                detailSectionsLoading = false,
+                detailSectionsError = null,
+                detailActionBusy = false,
+                detailActionError = null,
+                selectedMediaSourceId = null,
+                selectedAudioStreamIndex = null,
+                selectedSubtitleStreamIndex = null,
+            )
     }
 }

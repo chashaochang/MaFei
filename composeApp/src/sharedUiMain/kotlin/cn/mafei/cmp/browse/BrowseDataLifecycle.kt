@@ -28,9 +28,7 @@ internal fun BindBrowseDataLifecycle(
             feiniu.load()
         }
     }
-    LaunchedEffect(state.selectedCollection) {
-        libraryGridState.scrollToItem(0)
-    }
+    LaunchedEffect(state.selectedCollection) { libraryGridState.scrollToItem(0) }
     LaunchedEffect(currentRoute) {
         if (currentRoute == BrowseFavoriteRoute || currentRoute == BrowseLibraryIndexRoute) {
             browser.refreshFavorites()
@@ -39,9 +37,7 @@ internal fun BindBrowseDataLifecycle(
     }
     // Legacy MineTab refreshes its independent resume + completed preview every
     // time the account surface becomes visible; it never borrows HomeFeed.resume.
-    LaunchedEffect(account.minePresented) {
-        if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview()
-    }
+    LaunchedEffect(account.minePresented) { if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview() }
     // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
     // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
     LaunchedEffect(account.mineBackStack.lastOrNull()) {

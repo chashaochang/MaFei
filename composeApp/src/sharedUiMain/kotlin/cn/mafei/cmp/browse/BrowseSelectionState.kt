@@ -8,5 +8,6 @@ import cn.mafei.cmp.session.*
 internal class BrowseSelectionState {
     var pendingDeleteMedia by mutableStateOf<List<MediaId>?>(null)
     var librarySelectedIds by mutableStateOf(emptySet<String>())
-    val librarySelectionMode get() = librarySelectedIds.isNotEmpty()
+    val librarySelectionMode
+        get() = librarySelectedIds.isNotEmpty()
 }

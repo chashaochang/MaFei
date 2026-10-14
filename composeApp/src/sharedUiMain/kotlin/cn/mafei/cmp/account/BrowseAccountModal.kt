@@ -21,19 +21,15 @@ internal fun BrowseAccountModal(
     // 大屏：居中的详情页同规格模态。复用同一个 mineNavContent，
     // 所以来回切形态时里面停在哪一页、翻了几层都保持不变。
     if (account.minePresented && !mineFullScreen) {
-        MineAccountSheet(
-            layout = layout,
-            backdrop = backdrop,
-            onDismiss = { account.minePresented = false },
-            content = mineNavContent,
-        )
+        MineAccountSheet(layout = layout, backdrop = backdrop, onDismiss = { account.minePresented = false }, content = mineNavContent)
     }
-    if (authenticationMessage != null && !account.authenticationNoticeDismissed &&
-        account.mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !player.playerExpanded
+    if (
+        authenticationMessage != null &&
+            !account.authenticationNoticeDismissed &&
+            account.mineBackStack.lastOrNull() !is BrowseConnectAccountRoute &&
+            !player.playerExpanded
     ) {
-        cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) {
-            account.authenticationNoticeDismissed = true
-        }
+        cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) { account.authenticationNoticeDismissed = true }
         MaFeiGlassConfirmDialog(
             title = "账号验证",
             content = authenticationMessage,

@@ -1,5 +1,12 @@
 # MaFei 2.0 开发约束
 
+## 应用入口与状态边界
+
+1. 修改共享应用流程前先阅读 [`composeApp/ARCHITECTURE.md`](composeApp/ARCHITECTURE.md)，按其中的职责表定位状态所有者和路由绑定。`App.kt` 只装配根流程，不能重新加入业务请求、页面实现或导航栈。
+2. `MediaBrowser` 保持兼容门面；请求序号、分页、重试和缓存归对应控制器。跨页面媒体事实只通过统一读模型更新，不能复制第二份实体状态。
+3. 新路由需显式定义参数、来源和壳层映射；路由绑定只接收需要的能力、存储和事件，不能获取整个 `ApplicationRuntime`。
+4. 修改上述边界后运行 `./gradlew verifyAppBoundaries verifyDependencyBoundaries` 及相关行为测试。不能通过放宽门禁或增加无依据例外来绕过职责划分。
+
 ## 苹果风格 UI 强制约束
 
 1. MaFei 的产品视觉与交互以苹果 iOS / iPadOS / macOS 风格为准，适用于 Android、HarmonyOS、iOS 和桌面全部端。Compose 是实现技术，不是采用 Google Material Design 风格的理由。除用户明确批准外，不得改为 Material 风格。

@@ -10,10 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** Account surface state and requests survive its child routes, and end with the signed-in session. */
-internal class AccountFlowState(
-    val access: AccountAccess,
-    private val scope: kotlinx.coroutines.CoroutineScope,
-) {
+internal class AccountFlowState(val access: AccountAccess, private val scope: kotlinx.coroutines.CoroutineScope) {
     var accountConnections by mutableStateOf(emptyList<SavedConnection>())
     var accountPasswordKeys by mutableStateOf(emptySet<String>())
     var accountsLoading by mutableStateOf(false)
@@ -52,9 +49,7 @@ internal class AccountFlowState(
     }
 
     fun switchAccount(item: AccountSwitchItem, onLoginRequired: (SavedConnection) -> Unit) {
-        val connection = accountConnections.firstOrNull {
-            it.credentialKey == item.key
-        }
+        val connection = accountConnections.firstOrNull { it.credentialKey == item.key }
         if (connection != null && switchingAccountKey == null) {
             switchingAccountKey = item.key
             accountsError = null
@@ -74,18 +69,13 @@ internal class AccountFlowState(
                 } finally {
                     switchingAccountKey = null
                 }
-    }
-}
-
+            }
+        }
     }
 
     fun deleteAccount(item: AccountSwitchItem) {
-        val connection = accountConnections.firstOrNull {
-            it.credentialKey == item.key
-        }
-        if (connection != null && !item.isCurrent &&
-            switchingAccountKey == null && deletingAccountKey == null
-        ) {
+        val connection = accountConnections.firstOrNull { it.credentialKey == item.key }
+        if (connection != null && !item.isCurrent && switchingAccountKey == null && deletingAccountKey == null) {
             deletingAccountKey = item.key
             accountsError = null
             scope.launch {
@@ -100,9 +90,8 @@ internal class AccountFlowState(
                 } finally {
                     deletingAccountKey = null
                 }
-    }
-}
-
+            }
+        }
     }
 
     fun connect(provider: ProviderKind, address: String, name: String, password: String, rememberPassword: Boolean, onConnected: () -> Unit) {
@@ -120,8 +109,7 @@ internal class AccountFlowState(
                 } finally {
                     accountConnectBusy = false
                 }
-    }
-}
-
+            }
+        }
     }
 }

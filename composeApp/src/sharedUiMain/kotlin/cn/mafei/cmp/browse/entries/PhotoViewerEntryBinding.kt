@@ -17,12 +17,19 @@ internal fun PhotoViewerEntryBinding(
     repository: cn.mafei.cmp.data.repositories.MediaRepository,
     mediaSession: cn.mafei.cmp.data.repositories.MediaSession,
 ) {
-    PhotoViewerRouteContent(photoStore, route.parentId, route.photoId, navigation.browseInitialItems[route.photoId], navigator::pop,
+    PhotoViewerRouteContent(
+        photoStore,
+        route.parentId,
+        route.photoId,
+        navigation.browseInitialItems[route.photoId],
+        navigator::pop,
         loadItem = { id -> repository.item(mediaSession, id).value },
         onFavorite = { item -> repository.setFavorite(mediaSession, item.id, !item.userData.isFavorite) },
-        onSave = if (photoSaver.supported) {{ item ->
-            photoSaver.save(repository.photoOriginal(mediaSession, item.id))
-        }} else null,
+        onSave =
+            if (photoSaver.supported) {
+                { item -> photoSaver.save(repository.photoOriginal(mediaSession, item.id)) }
+            } else null,
         fetch = { image, _ -> fetchPhotoArtwork(image) },
-        artworkNamespace = "${session.connection.credentialKey}/photos")
+        artworkNamespace = "${session.connection.credentialKey}/photos",
+    )
 }

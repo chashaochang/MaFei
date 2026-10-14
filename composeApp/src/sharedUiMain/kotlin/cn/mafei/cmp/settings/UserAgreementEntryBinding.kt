@@ -7,11 +7,6 @@ import cn.mafei.cmp.feature.settings.UserAgreementScreen
 import cn.mafei.cmp.session.*
 
 @Composable
-internal fun UserAgreementEntryBinding(
-    popMineRoute: () -> Unit,
-) {
-    UserAgreementScreen(
-        onBack = popMineRoute,
-        modifier = Modifier.fillMaxSize(),
-    )
+internal fun UserAgreementEntryBinding(popMineRoute: () -> Unit) {
+    UserAgreementScreen(onBack = popMineRoute, modifier = Modifier.fillMaxSize())
 }

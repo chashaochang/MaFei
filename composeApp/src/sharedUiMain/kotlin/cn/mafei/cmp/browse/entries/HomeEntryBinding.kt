@@ -1,14 +1,16 @@
 package cn.mafei.cmp
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.MediaArtwork
@@ -23,13 +25,12 @@ import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.feature.home.legacyHomeHeroDetailTarget
 import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
 import cn.mafei.cmp.session.*
-import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import kotlinx.coroutines.launch
-import cn.mafei.cmp.common.design_system.MaFeiLayout
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun HomeEntryBinding(
-    sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
     authenticationFailure: cn.mafei.cmp.core.domain.AuthFailureKind?,
     selectDestination: (String) -> Unit,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -49,9 +50,7 @@ internal fun HomeEntryBinding(
     val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
         with(sharedTransitionScope) {
             modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(
-                    key = "media-artwork:${item.id.value}",
-                ),
+                sharedContentState = rememberSharedContentState(key = "media-artwork:${item.id.value}"),
                 animatedVisibilityScope = LocalNavAnimatedContentScope.current,
                 enter = fadeIn(tween(320)),
                 exit = fadeOut(tween(320)),
@@ -87,24 +86,20 @@ internal fun HomeEntryBinding(
             val route = BrowseLatestRoute(collection.id.value)
             if (navigation.browseBackStack.lastOrNull() != route) navigation.browseBackStack += route
         },
-        onItem = { item ->
-            navigator.openDetail(item, item.legacyHomeLatestMediaName(state.collections))
-        },
+        onItem = { item -> navigator.openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
         onHeroItem = { item ->
             val target = item.legacyHomeHeroDetailTarget()
-            navigator.openDetailId(
-                target.mediaId,
-                target.mediaName,
-                item.takeIf { it.id == target.mediaId },
-            )
+            navigator.openDetailId(target.mediaId, target.mediaName, item.takeIf { it.id == target.mediaId })
         },
         onPlay = player.startPlayback,
-        onToggleWatched = if (browser.capabilities.watchedEdit) {
-            { item -> scope.launch { browser.toggleWatched(item) } }
-        } else null,
-        onToggleFavorite = if (browser.capabilities.favoritesEdit) {
-            { item -> scope.launch { browser.toggleFavorite(item) } }
-        } else null,
+        onToggleWatched =
+            if (browser.capabilities.watchedEdit) {
+                { item -> scope.launch { browser.toggleWatched(item) } }
+            } else null,
+        onToggleFavorite =
+            if (browser.capabilities.favoritesEdit) {
+                { item -> scope.launch { browser.toggleFavorite(item) } }
+            } else null,
         onRetry = { scope.launch { browser.refresh() } },
         onLoadMore = { scope.launch { browser.loadMore() } },
         // The library shelf still opens the library index. The
@@ -141,28 +136,15 @@ internal fun HomeEntryBinding(
                 targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
             )
         },
-        prefetchBackdrop = if (layout.family == MaFeiLayoutFamily.Phone) {
-            null
-        } else {
-            { item ->
-                prefetchLandscapeArtwork(
-                    item,
-                    artworkCache,
-                    fetchArtwork,
-                    targetWidthPx = 960,
-                )
-            }
-        },
+        prefetchBackdrop =
+            if (layout.family == MaFeiLayoutFamily.Phone) {
+                null
+            } else {
+                { item -> prefetchLandscapeArtwork(item, artworkCache, fetchArtwork, targetWidthPx = 960) }
+            },
         heroBackdropState = heroBackdrop,
         shelfArtwork = { item, modifier ->
-            MediaArtwork(
-                item.landscapeArtworkCandidates(),
-                item.title,
-                artworkCache,
-                fetchArtwork,
-                modifier,
-                targetWidthPx = 480,
-            )
+            MediaArtwork(item.landscapeArtworkCandidates(), item.title, artworkCache, fetchArtwork, modifier, targetWidthPx = 480)
         },
     )
 }

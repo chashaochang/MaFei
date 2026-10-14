@@ -16,8 +16,7 @@ internal fun AboutPrivacyEntryBinding(
     AboutPrivacyScreen(
         onBack = popMineRoute,
         onPrivacy = {
-            if (embeddedWebHost === UnsupportedEmbeddedWebHost) uriHandler.openUri(PRIVACY_AGREEMENT_URL)
-            else account.mineBackStack += BrowsePrivacyWebRoute
+            if (embeddedWebHost === UnsupportedEmbeddedWebHost) uriHandler.openUri(PRIVACY_AGREEMENT_URL) else account.mineBackStack += BrowsePrivacyWebRoute
         },
         onUserAgreement = {
             if (account.mineBackStack.lastOrNull() != BrowseUserAgreementRoute) {

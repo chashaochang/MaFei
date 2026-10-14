@@ -37,35 +37,32 @@ internal fun SettingsEntryBinding(
         },
         appearanceTitle = appearanceStore.state.collectAsState().value.title,
         glassStyleTitle = glassStyleStore.state.collectAsState().value.title,
-        feiniuRoutePreferenceTitle = if (
-            session.selection.provider == ProviderKind.Feiniu
-        ) {
-            feiniu.feiniuConnectionPreference.title
-        } else {
-            null
-        },
-        onOpenFeiniuPreference = if (
-            session.selection.provider == ProviderKind.Feiniu
-        ) {
-            {
-                feiniu.feiniuConnectionPreferenceError = null
-                if (account.mineBackStack.lastOrNull() != BrowseFeiniuConnectionPreferenceRoute) {
-                    account.mineBackStack += BrowseFeiniuConnectionPreferenceRoute
-                }
-            }
+        feiniuRoutePreferenceTitle =
+            if (session.selection.provider == ProviderKind.Feiniu) {
+                feiniu.feiniuConnectionPreference.title
             } else {
-            null
-        },
+                null
+            },
+        onOpenFeiniuPreference =
+            if (session.selection.provider == ProviderKind.Feiniu) {
+                {
+                    feiniu.feiniuConnectionPreferenceError = null
+                    if (account.mineBackStack.lastOrNull() != BrowseFeiniuConnectionPreferenceRoute) {
+                        account.mineBackStack += BrowseFeiniuConnectionPreferenceRoute
+                    }
+                }
+            } else {
+                null
+            },
         homeCarouselVisible = { homeCarouselVisible.value },
         onHomeCarouselVisibleChanged = onHomeCarouselVisibleChanged,
         showPlayerRenderMode = playerRenderModeSupported,
-        onOpenPlayerSettings = if (playback?.controller?.capabilities?.playbackPreferences == true) {
-            { account.mineBackStack += BrowsePlayerSettingsRoute }
-        } else null,
+        onOpenPlayerSettings =
+            if (playback?.controller?.capabilities?.playbackPreferences == true) {
+                { account.mineBackStack += BrowsePlayerSettingsRoute }
+            } else null,
         playerRenderMode = { currentPlayerRenderMode.value.storageValue },
-        onPlayerRenderModeChanged = { value ->
-            currentPlayerRenderModeChanged.value(value.toPlayerRenderMode())
-        },
+        onPlayerRenderModeChanged = { value -> currentPlayerRenderModeChanged.value(value.toPlayerRenderMode()) },
         modifier = Modifier.fillMaxSize(),
     )
 }

@@ -332,7 +332,21 @@ check(missingRequiredModules.isEmpty()) {
 tasks.register<Exec>("verifyArchitecture") {
     group = "verification"
     description = "Checks module build files, frozen CPF versions and ARM-only host configuration."
+    dependsOn("verifyAppBoundaries")
     commandLine("node", rootProject.file("scripts/verify-cmp-foundation.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyAppBoundaryTests") {
+    group = "verification"
+    description = "Tests the application boundary guard against architectural regressions."
+    commandLine("node", "--test", rootProject.file("scripts/verify-app-boundaries.test.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyAppBoundaries") {
+    group = "verification"
+    description = "Keeps application roots, route bindings and browser controllers within their responsibilities."
+    dependsOn("verifyAppBoundaryTests")
+    commandLine("node", rootProject.file("scripts/verify-app-boundaries.mjs").absolutePath)
 }
 
 tasks.register<Exec>("verifyNoNativeMaterialUi") {

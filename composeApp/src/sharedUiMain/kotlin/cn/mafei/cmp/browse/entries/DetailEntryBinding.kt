@@ -1,13 +1,15 @@
 package cn.mafei.cmp
 
-import androidx.compose.foundation.layout.*
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.layout.ContentScale
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.CachedBlurredArtwork
@@ -22,16 +24,15 @@ import cn.mafei.cmp.feature.chasing.ChasingSelection
 import cn.mafei.cmp.feature.detail.DetailScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
-import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import kotlinx.coroutines.launch
-import cn.mafei.cmp.common.design_system.MaFeiLayout
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun DetailEntryBinding(
     route: BrowseDetailRoute,
     playback: SessionPlaybackRuntime?,
     uriHandler: androidx.compose.ui.platform.UriHandler,
-    sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
     state: cn.mafei.cmp.feature.home.MediaBrowserState,
@@ -48,9 +49,7 @@ internal fun DetailEntryBinding(
     val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
         with(sharedTransitionScope) {
             modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(
-                    key = "media-artwork:${item.id.value}",
-                ),
+                sharedContentState = rememberSharedContentState(key = "media-artwork:${item.id.value}"),
                 animatedVisibilityScope = LocalNavAnimatedContentScope.current,
                 enter = fadeIn(tween(320)),
                 exit = fadeOut(tween(320)),
@@ -70,12 +69,8 @@ internal fun DetailEntryBinding(
         loading = state.detailLoading,
         error = state.detailError,
         onBack = navigator::pop,
-        onRetry = {
-            state.detailId?.let { id -> scope.launch { browser.openDetail(id) } }
-        },
-        onPlay = detailPlayTarget?.takeIf { playback != null }?.let { item ->
-            { player.startPlayback(item) }
-        },
+        onRetry = { state.detailId?.let { id -> scope.launch { browser.openDetail(id) } } },
+        onPlay = detailPlayTarget?.takeIf { playback != null }?.let { item -> { player.startPlayback(item) } },
         playTarget = detailPlayTarget,
         onOpenExternalUrl = { url ->
             try {
@@ -84,28 +79,28 @@ internal fun DetailEntryBinding(
                 player.playbackError = "无法打开外部链接"
             }
         },
-        onDelete = if (state.deleteAvailable == true) {
-            { state.detailId?.let { id -> selection.pendingDeleteMedia = listOf(id) } }
-        } else null,
+        onDelete =
+            if (state.deleteAvailable == true) {
+                { state.detailId?.let { id -> selection.pendingDeleteMedia = listOf(id) } }
+            } else null,
         selectedMediaSourceId = state.selectedMediaSourceId,
-        onSelectMediaSource = { id ->
-            scope.launch { browser.selectMediaSource(id) }
-        },
+        onSelectMediaSource = { id -> scope.launch { browser.selectMediaSource(id) } },
         selectedAudioStreamIndex = state.selectedAudioStreamIndex,
         onSelectAudioTrack = { browser.selectAudioTrack(it) },
         selectedSubtitleStreamIndex = state.selectedSubtitleStreamIndex,
         onSelectSubtitleTrack = { browser.selectSubtitleTrack(it) },
-        onToggleFavorite = if (browser.capabilities.favoritesEdit) {
-            { scope.launch { browser.toggleFavorite() } }
-        } else null,
-        onTogglePlayed = if (browser.capabilities.watchedEdit) {
-            { scope.launch { browser.toggleWatched() } }
-        } else null,
-        onToggleChasing = state.detail?.takeIf {
-            browser.capabilities.chasing && it.mediaType == MediaType.Series
-        }?.let { series ->
-            { scope.launch { chasingSelection.toggle(series.id) } }
-        },
+        onToggleFavorite =
+            if (browser.capabilities.favoritesEdit) {
+                { scope.launch { browser.toggleFavorite() } }
+            } else null,
+        onTogglePlayed =
+            if (browser.capabilities.watchedEdit) {
+                { scope.launch { browser.toggleWatched() } }
+            } else null,
+        onToggleChasing =
+            state.detail
+                ?.takeIf { browser.capabilities.chasing && it.mediaType == MediaType.Series }
+                ?.let { series -> { scope.launch { chasingSelection.toggle(series.id) } } },
         isChasing = state.detail?.id in chasingSelectionState.ids,
         chasingBusy = chasingSelectionState.saving,
         actionsBusy = state.detailActionBusy,
@@ -115,13 +110,14 @@ internal fun DetailEntryBinding(
         sectionsError = state.detailSectionsError,
         onSeasonSelected = { season ->
             if (navigation.browseBackStack.lastOrNull() !is BrowseSeasonRoute) {
-                navigation.browseBackStack += BrowseSeasonRoute(
-                    seriesId = route.mediaId,
-                    seasonId = season.id.value,
-                    mediaName = route.mediaName,
-                    origin = route.origin,
-                    libraryId = route.libraryId,
-                )
+                navigation.browseBackStack +=
+                    BrowseSeasonRoute(
+                        seriesId = route.mediaId,
+                        seasonId = season.id.value,
+                        mediaName = route.mediaName,
+                        origin = route.origin,
+                        libraryId = route.libraryId,
+                    )
             }
         },
         playbackBusy = player.playbackBusy,
@@ -129,14 +125,7 @@ internal fun DetailEntryBinding(
         libraryName = route.mediaName,
         modifier = Modifier.fillMaxSize(),
         artwork = { item, modifier ->
-            MediaArtwork(
-                item.legacyPrimaryThenBackdropArtworkCandidates(),
-                item.title,
-                artworkCache,
-                fetchArtwork,
-                modifier,
-                targetWidthPx = 480,
-            )
+            MediaArtwork(item.legacyPrimaryThenBackdropArtworkCandidates(), item.title, artworkCache, fetchArtwork, modifier, targetWidthPx = 480)
         },
         sharedArtworkModifier = sharedArtworkModifier,
         backdropArtwork = { item, modifier ->
@@ -164,13 +153,7 @@ internal fun DetailEntryBinding(
             )
         },
         personArtwork = { person, modifier ->
-            LegacyPersonArtwork(
-                image = person.image,
-                name = person.name,
-                cache = artworkCache,
-                fetch = fetchArtwork,
-                modifier = modifier,
-            )
+            LegacyPersonArtwork(image = person.image, name = person.name, cache = artworkCache, fetch = fetchArtwork, modifier = modifier)
         },
         onPersonSelected = navigator.openPerson,
         atmosphereArtwork = { item, radius, modifier ->
@@ -181,9 +164,7 @@ internal fun DetailEntryBinding(
                 fetch = fetchArtwork,
                 modifier = modifier,
                 targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 240 else 960,
-                bitmapContent = { bitmap, imageModifier ->
-                    CachedBlurredArtwork(bitmap, radius, imageModifier, cache = artworkCache)
-                },
+                bitmapContent = { bitmap, imageModifier -> CachedBlurredArtwork(bitmap, radius, imageModifier, cache = artworkCache) },
             )
         },
     )

@@ -4,12 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.feature.home.LibraryIndexScreen
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.launch
-import cn.mafei.cmp.common.design_system.MaFeiLayout
 
 @Composable
 internal fun LibraryIndexEntryBinding(
@@ -29,9 +29,10 @@ internal fun LibraryIndexEntryBinding(
         error = state.error,
         layout = layout,
         onCollection = navigator.browseCollection,
-        onChasing = if (browser.capabilities.chasing) {
-            { navigation.browseBackStack += BrowseChasingRoute }
-        } else null,
+        onChasing =
+            if (browser.capabilities.chasing) {
+                { navigation.browseBackStack += BrowseChasingRoute }
+            } else null,
         onFavorite = {
             if (navigation.browseBackStack.lastOrNull() != BrowseFavoriteRoute) {
                 navigation.browseBackStack += BrowseFavoriteRoute

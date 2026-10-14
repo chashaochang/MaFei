@@ -32,9 +32,7 @@ internal fun BrowseDeleteConfirmation(
                     browser.deleteMedia(ids)
                     // 详情页里删除自身：数据已删，回退出详情（与旧版行为一致）。
                     if (ids.any { it == state.detailId }) {
-                        if (navigation.browseBackStack.lastOrNull() is BrowseDetailRoute ||
-                            navigation.browseBackStack.lastOrNull() is BrowseEpisodeRoute
-                        ) {
+                        if (navigation.browseBackStack.lastOrNull() is BrowseDetailRoute || navigation.browseBackStack.lastOrNull() is BrowseEpisodeRoute) {
                             navigation.browseBackStack.removeLastOrNull()
                         }
                         browser.back()

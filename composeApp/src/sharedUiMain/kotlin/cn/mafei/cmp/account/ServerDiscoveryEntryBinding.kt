@@ -7,10 +7,7 @@ import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
 import cn.mafei.cmp.session.*
 
 @Composable
-internal fun ServerDiscoveryEntryBinding(
-    account: AccountFlowState,
-    popMineRoute: () -> Unit,
-) {
+internal fun ServerDiscoveryEntryBinding(account: AccountFlowState, popMineRoute: () -> Unit) {
     ServerDiscoveryScreen(
         loadSavedServers = { savedJellyfinServerSuggestions(account.access) },
         discoverServers = { discoveredJellyfinServerSuggestions() },

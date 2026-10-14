@@ -18,11 +18,26 @@ internal fun PhotoAlbumEntryBinding(
     navigation: BrowseNavigationState,
     photoStore: cn.mafei.cmp.data.repositories.PagedMediaStore<cn.mafei.cmp.data.adapter_contract.PhotoCatalogQuery>,
 ) {
-    PhotoCatalogRouteContent(photoStore, route.albumId, route.title, library = false, onBack = navigator::pop,
-        onPhoto = { item -> navigation.browseInitialItems[item.id.value] = item
-            navigation.browseBackStack += BrowsePhotoViewerRoute(route.albumId, item.id.value, route.libraryId, route.origin) },
+    PhotoCatalogRouteContent(
+        photoStore,
+        route.albumId,
+        route.title,
+        library = false,
+        onBack = navigator::pop,
+        onPhoto = { item ->
+            navigation.browseInitialItems[item.id.value] = item
+            navigation.browseBackStack += BrowsePhotoViewerRoute(route.albumId, item.id.value, route.libraryId, route.origin)
+        },
         onAlbum = { item -> navigation.browseBackStack += BrowsePhotoAlbumRoute(item.id.value, item.title, route.libraryId, route.origin) },
-        artwork = { item, modifier -> MediaArtwork(item.primaryImage, item.title, artworkCache,
-            { image, _ -> fetchPhotoArtwork(image) }, modifier,
-            fallback = { LegacyPosterPlaceholder(MediaType.PhotoAlbum, it) }) })
+        artwork = { item, modifier ->
+            MediaArtwork(
+                item.primaryImage,
+                item.title,
+                artworkCache,
+                { image, _ -> fetchPhotoArtwork(image) },
+                modifier,
+                fallback = { LegacyPosterPlaceholder(MediaType.PhotoAlbum, it) },
+            )
+        },
+    )
 }

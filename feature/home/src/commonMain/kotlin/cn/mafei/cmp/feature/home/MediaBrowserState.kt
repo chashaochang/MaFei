@@ -88,5 +88,6 @@ data class MediaBrowserState(
 /** Durable playback selections keyed exactly like legacy: provider account + media item. */
 interface MediaPlaybackPreferences {
     suspend fun preferredMediaSourceId(accountId: AccountId, mediaId: MediaId): String?
+
     suspend fun setPreferredMediaSourceId(accountId: AccountId, mediaId: MediaId, sourceId: String)
 }

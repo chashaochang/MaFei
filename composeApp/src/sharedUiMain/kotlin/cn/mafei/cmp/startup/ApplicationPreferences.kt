@@ -10,10 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Application-owned preferences; route transitions must not cancel pending writes. */
-internal class ApplicationPreferences(
-    private val runtime: ApplicationRuntime,
-    private val scope: kotlinx.coroutines.CoroutineScope,
-) {
+internal class ApplicationPreferences(private val runtime: ApplicationRuntime, private val scope: kotlinx.coroutines.CoroutineScope) {
     var liquidGlassIntensity by mutableFloatStateOf(DefaultGlassIntensity)
     var glassIntensitySaveJob by mutableStateOf<Job?>(null)
     val homeCarouselVisibleState = mutableStateOf(true)
@@ -21,30 +18,26 @@ internal class ApplicationPreferences(
     var playerRenderMode by mutableStateOf(PlayerRenderMode.Buffer)
     var playerRenderModeSaveJob by mutableStateOf<Job?>(null)
 
-
     fun setGlassIntensity(value: Float) {
         liquidGlassIntensity = value
         glassIntensitySaveJob?.cancel()
-        glassIntensitySaveJob = scope.launch {
-            delay(180)
-            runtime.saveGlassIntensity(value)
-        }
+        glassIntensitySaveJob =
+            scope.launch {
+                delay(180)
+                runtime.saveGlassIntensity(value)
+            }
     }
 
     fun setHomeCarouselVisible(visible: Boolean) {
         homeCarouselVisibleState.value = visible
         homeCarouselSaveJob?.cancel()
-        homeCarouselSaveJob = scope.launch {
-            runtime.saveHomeCarouselVisible(visible)
-        }
+        homeCarouselSaveJob = scope.launch { runtime.saveHomeCarouselVisible(visible) }
     }
 
     fun setRenderMode(mode: PlayerRenderMode) {
         playerRenderMode = mode
         playerRenderModeSaveJob?.cancel()
-        playerRenderModeSaveJob = scope.launch {
-            runtime.savePlayerRenderMode(mode.storageValue)
-        }
+        playerRenderModeSaveJob = scope.launch { runtime.savePlayerRenderMode(mode.storageValue) }
     }
 }
 
@@ -52,23 +45,16 @@ internal class ApplicationPreferences(
 internal fun rememberApplicationPreferences(runtime: ApplicationRuntime): ApplicationPreferences {
     val scope = rememberCoroutineScope()
     val state = remember(runtime) { ApplicationPreferences(runtime, scope) }
-    LaunchedEffect(runtime) {
-        state.liquidGlassIntensity = runtime.loadGlassIntensity()
-    }
+    LaunchedEffect(runtime) { state.liquidGlassIntensity = runtime.loadGlassIntensity() }
 
-    LaunchedEffect(runtime) {
-        state.homeCarouselVisibleState.value = runtime.loadHomeCarouselVisible()
-    }
+    LaunchedEffect(runtime) { state.homeCarouselVisibleState.value = runtime.loadHomeCarouselVisible() }
 
-    LaunchedEffect(runtime) {
-        state.playerRenderMode = runtime.loadPlayerRenderMode().toPlayerRenderMode()
-    }
+    LaunchedEffect(runtime) { state.playerRenderMode = runtime.loadPlayerRenderMode().toPlayerRenderMode() }
 
     return state
 }
 
-internal fun String.toPlayerRenderMode(): PlayerRenderMode =
-    if (equals("direct", ignoreCase = true)) PlayerRenderMode.Direct else PlayerRenderMode.Buffer
+internal fun String.toPlayerRenderMode(): PlayerRenderMode = if (equals("direct", ignoreCase = true)) PlayerRenderMode.Direct else PlayerRenderMode.Buffer
 
 internal val PlayerRenderMode.storageValue: String
     get() = if (this == PlayerRenderMode.Direct) "direct" else "buffer"

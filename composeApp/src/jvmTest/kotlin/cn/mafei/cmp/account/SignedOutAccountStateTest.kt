@@ -4,8 +4,8 @@ import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.repositories.session.SessionSelection
 import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
 import cn.mafei.cmp.session.*
-import kotlinx.coroutines.*
 import kotlin.test.*
+import kotlinx.coroutines.*
 
 class SignedOutAccountStateTest {
     private class Accounts : AccountAccess {
@@ -17,121 +17,163 @@ class SignedOutAccountStateTest {
         var switch: suspend () -> Unit = { error("credentials unavailable") }
         var connectAction: suspend () -> Unit = {}
         var mayDelete = true
-        override suspend fun savedConnections(): List<SavedConnection> { reads++; return load() }
+
+        override suspend fun savedConnections(): List<SavedConnection> {
+            reads++
+            return load()
+        }
+
         override suspend fun savedPasswordKeys(connections: List<SavedConnection>) = setOf(connection.credentialKey)
+
         override suspend fun savedPassword(connection: SavedConnection) = "remembered"
+
         override suspend fun switchAccount(connection: SavedConnection) = switch()
+
         override suspend fun deleteSavedConnection(connection: SavedConnection) = mayDelete
-        override suspend fun connect(provider: ProviderKind, baseUrl: String, username: String, password: String,
-            rememberPassword: Boolean) = connectAction()
-        fun item() = ConnectionHistoryItem(connection.credentialKey, server.provider, server.id, server.name,
-            connection.account.displayName, server.baseUrl, isCurrent = false)
+
+        override suspend fun connect(provider: ProviderKind, baseUrl: String, username: String, password: String, rememberPassword: Boolean) = connectAction()
+
+        fun item() =
+            ConnectionHistoryItem(
+                connection.credentialKey,
+                server.provider,
+                server.id,
+                server.name,
+                connection.account.displayName,
+                server.baseUrl,
+                isCurrent = false,
+            )
     }
 
-    @Test fun concurrentRefreshIsDeduplicatedAndCancellationIsNotAnError() = runBlocking<Unit> {
-        val accounts = Accounts()
-        val entered = CompletableDeferred<Unit>()
-        accounts.load = { entered.complete(Unit); awaitCancellation() }
-        val job = SupervisorJob()
-        val scope = CoroutineScope(coroutineContext + job)
-        val state = SignedOutAccountState(accounts, scope, { false }, {}, {})
-        state.loadHistory(); state.loadHistory()
-        entered.await()
-        assertEquals(1, accounts.reads)
-        assertTrue(state.historyLoading)
-        job.cancelAndJoin()
-        assertFalse(state.historyLoading)
-        assertNull(state.historyError)
-    }
+    @Test
+    fun concurrentRefreshIsDeduplicatedAndCancellationIsNotAnError() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val entered = CompletableDeferred<Unit>()
+            accounts.load = {
+                entered.complete(Unit)
+                awaitCancellation()
+            }
+            val job = SupervisorJob()
+            val scope = CoroutineScope(coroutineContext + job)
+            val state = SignedOutAccountState(accounts, scope, { false }, {}, {})
+            state.loadHistory()
+            state.loadHistory()
+            entered.await()
+            assertEquals(1, accounts.reads)
+            assertTrue(state.historyLoading)
+            job.cancelAndJoin()
+            assertFalse(state.historyLoading)
+            assertNull(state.historyError)
+        }
 
-    @Test fun successfulDeletionKeepsTheRemainingRowsWithoutReloading() = runBlocking<Unit> {
-        val accounts = Accounts()
-        val scope = CoroutineScope(coroutineContext + Dispatchers.Unconfined)
-        val state = SignedOutAccountState(accounts, scope, { false }, {}, {})
-        state.loadHistory()
-        state.deleteAccount(accounts.item())
-        assertEquals(1, accounts.reads)
-        assertTrue(state.historyConnections.isEmpty())
-        assertTrue(state.rememberedPasswordKeys.isEmpty())
-        assertFalse(state.historyLoading)
-        assertNull(state.deletingAccountKey)
-    }
+    @Test
+    fun successfulDeletionKeepsTheRemainingRowsWithoutReloading() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val scope = CoroutineScope(coroutineContext + Dispatchers.Unconfined)
+            val state = SignedOutAccountState(accounts, scope, { false }, {}, {})
+            state.loadHistory()
+            state.deleteAccount(accounts.item())
+            assertEquals(1, accounts.reads)
+            assertTrue(state.historyConnections.isEmpty())
+            assertTrue(state.rememberedPasswordKeys.isEmpty())
+            assertFalse(state.historyLoading)
+            assertNull(state.deletingAccountKey)
+        }
 
-    @Test fun activeAccountRefusalPreservesHistoryAndPasswordMarker() = runBlocking<Unit> {
-        val accounts = Accounts().apply { mayDelete = false }
-        val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined), { false }, {}, {})
-        state.loadHistory(); state.deleteAccount(accounts.item())
-        assertEquals(listOf(accounts.connection), state.historyConnections)
-        assertTrue(accounts.connection.credentialKey in state.rememberedPasswordKeys)
-        assertNotNull(state.historyError)
-    }
+    @Test
+    fun activeAccountRefusalPreservesHistoryAndPasswordMarker() =
+        runBlocking<Unit> {
+            val accounts = Accounts().apply { mayDelete = false }
+            val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined), { false }, {}, {})
+            state.loadHistory()
+            state.deleteAccount(accounts.item())
+            assertEquals(listOf(accounts.connection), state.historyConnections)
+            assertTrue(accounts.connection.credentialKey in state.rememberedPasswordKeys)
+            assertNotNull(state.historyError)
+        }
 
-    @Test fun failedRestoreReturnsLoginPrefillButCancelledRestoreDoesNot() = runBlocking<Unit> {
-        val accounts = Accounts()
-        var busy = false
-        val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined),
-            { busy }, { busy = it }, {})
-        state.loadHistory()
-        var prefill: Pair<SavedConnection, String?>? = null
-        state.select(accounts.item()) { c, p -> prefill = c to p }
-        assertEquals(accounts.connection to "remembered", prefill)
-        assertFalse(busy)
-        prefill = null
-        accounts.switch = { throw CancellationException("flow removed") }
-        state.select(accounts.item()) { c, p -> prefill = c to p }
-        assertNull(prefill)
-        assertFalse(busy)
-        assertNull(state.historyError)
-    }
+    @Test
+    fun failedRestoreReturnsLoginPrefillButCancelledRestoreDoesNot() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            var busy = false
+            val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined), { busy }, { busy = it }, {})
+            state.loadHistory()
+            var prefill: Pair<SavedConnection, String?>? = null
+            state.select(accounts.item()) { c, p -> prefill = c to p }
+            assertEquals(accounts.connection to "remembered", prefill)
+            assertFalse(busy)
+            prefill = null
+            accounts.switch = { throw CancellationException("flow removed") }
+            state.select(accounts.item()) { c, p -> prefill = c to p }
+            assertNull(prefill)
+            assertFalse(busy)
+            assertNull(state.historyError)
+        }
 
-    @Test fun connectRejectsDuplicateSubmitAndCancellationReleasesBusy() = runBlocking<Unit> {
-        val accounts = Accounts()
-        val entered = CompletableDeferred<Unit>()
-        var calls = 0
-        accounts.connectAction = { calls++; entered.complete(Unit); awaitCancellation() }
-        val job = SupervisorJob()
-        var busy = false
-        var error: String? = null
-        val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + job),
-            { busy }, { busy = it }, { error = it })
-        repeat(2) { state.connect(ProviderKind.Jellyfin, "https://media.test", "a", "test", true) }
-        entered.await()
-        assertEquals(1, calls)
-        job.cancelAndJoin()
-        assertFalse(busy)
-        assertNull(error)
-    }
-    @Test fun signedInAccountFlowRequestsLoginOnlyForUnrestorableCredentials() = runBlocking<Unit> {
-        val accounts = Accounts()
-        val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined))
-        state.loadAccounts()
-        var loginRequired = false
-        state.switchAccount(accounts.item()) { loginRequired = true }
-        assertFalse(loginRequired)
-        assertNotNull(state.accountsError)
-        assertNull(state.switchingAccountKey)
-        accounts.switch = { throw SavedAccountRequiresLoginException(accounts.connection.selection) }
-        state.switchAccount(accounts.item()) { loginRequired = true }
-        assertTrue(loginRequired)
-        assertNull(state.accountsError)
-        assertNull(state.switchingAccountKey)
-    }
+    @Test
+    fun connectRejectsDuplicateSubmitAndCancellationReleasesBusy() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val entered = CompletableDeferred<Unit>()
+            var calls = 0
+            accounts.connectAction = {
+                calls++
+                entered.complete(Unit)
+                awaitCancellation()
+            }
+            val job = SupervisorJob()
+            var busy = false
+            var error: String? = null
+            val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + job), { busy }, { busy = it }, { error = it })
+            repeat(2) { state.connect(ProviderKind.Jellyfin, "https://media.test", "a", "test", true) }
+            entered.await()
+            assertEquals(1, calls)
+            job.cancelAndJoin()
+            assertFalse(busy)
+            assertNull(error)
+        }
 
-    @Test fun cancelledSignedInConnectKeepsItsNavigationAndReleasesBusy() = runBlocking<Unit> {
-        val accounts = Accounts()
-        val entered = CompletableDeferred<Unit>()
-        accounts.connectAction = { entered.complete(Unit); awaitCancellation() }
-        val job = SupervisorJob()
-        val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + job))
-        state.minePresented = true
-        var connected = false
-        state.connect(ProviderKind.Jellyfin, "https://media.test", "a", "test", true) { connected = true }
-        entered.await(); job.cancelAndJoin()
-        assertFalse(connected)
-        assertTrue(state.minePresented)
-        assertFalse(state.accountConnectBusy)
-        assertNull(state.accountConnectError)
-        assertEquals(listOf(BrowseMineRoute), state.mineBackStack.toList())
-    }
+    @Test
+    fun signedInAccountFlowRequestsLoginOnlyForUnrestorableCredentials() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined))
+            state.loadAccounts()
+            var loginRequired = false
+            state.switchAccount(accounts.item()) { loginRequired = true }
+            assertFalse(loginRequired)
+            assertNotNull(state.accountsError)
+            assertNull(state.switchingAccountKey)
+            accounts.switch = { throw SavedAccountRequiresLoginException(accounts.connection.selection) }
+            state.switchAccount(accounts.item()) { loginRequired = true }
+            assertTrue(loginRequired)
+            assertNull(state.accountsError)
+            assertNull(state.switchingAccountKey)
+        }
 
+    @Test
+    fun cancelledSignedInConnectKeepsItsNavigationAndReleasesBusy() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val entered = CompletableDeferred<Unit>()
+            accounts.connectAction = {
+                entered.complete(Unit)
+                awaitCancellation()
+            }
+            val job = SupervisorJob()
+            val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + job))
+            state.minePresented = true
+            var connected = false
+            state.connect(ProviderKind.Jellyfin, "https://media.test", "a", "test", true) { connected = true }
+            entered.await()
+            job.cancelAndJoin()
+            assertFalse(connected)
+            assertTrue(state.minePresented)
+            assertFalse(state.accountConnectBusy)
+            assertNull(state.accountConnectError)
+            assertEquals(listOf(BrowseMineRoute), state.mineBackStack.toList())
+        }
 }

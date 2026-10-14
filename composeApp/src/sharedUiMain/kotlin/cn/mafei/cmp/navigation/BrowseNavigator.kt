@@ -5,13 +5,12 @@ import androidx.compose.runtime.*
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.legacyDetailBackdropArtworkCandidates
 import cn.mafei.cmp.common.media.prefetchArtwork
-import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.core.domain.MediaId
+import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
-import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -34,12 +33,7 @@ internal class BrowseNavigator(
         libraryId: String? = shellContext.libraryId,
     ) {
         if (navigation.browseBackStack.lastOrNull() !is BrowseDetailRoute) {
-            navigation.browseBackStack += BrowseDetailRoute(
-                mediaId = id.value,
-                mediaName = mediaName,
-                origin = origin,
-                libraryId = libraryId,
-            )
+            navigation.browseBackStack += BrowseDetailRoute(mediaId = id.value, mediaName = mediaName, origin = origin, libraryId = libraryId)
         }
         // Start the landscape request as soon as a home card is
         // tapped. The portrait card remains the shared-transition
@@ -47,16 +41,12 @@ internal class BrowseNavigator(
         // Backdrop without waiting for the detail JSON round trip.
         initialItem?.let { tappedItem ->
             scope.launch {
-                prefetchArtwork(
-                    tappedItem.legacyDetailBackdropArtworkCandidates(),
-                    artworkCache,
-                    fetchArtwork,
-                    targetWidthPx = if (phoneLayout) 720 else 960,
-                )
+                prefetchArtwork(tappedItem.legacyDetailBackdropArtworkCandidates(), artworkCache, fetchArtwork, targetWidthPx = if (phoneLayout) 720 else 960)
             }
         }
         scope.launch { browser.openDetail(id, initialItem) }
     }
+
     fun openDetail(
         item: MediaItem,
         mediaName: String?,
@@ -72,14 +62,16 @@ internal class BrowseNavigator(
             navigation.browseBackStack += BrowsePhotoViewerRoute(item.parentId?.value ?: libraryId, item.id.value, libraryId, origin)
         } else openDetailId(item.id, mediaName, item, origin, libraryId)
     }
+
     val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->
         person.id?.let { id ->
-            val route = BrowsePersonRoute(
-                personId = id.value,
-                personName = person.name,
-                origin = shellContext.origin ?: BrowseDetailOrigin.Home,
-                libraryId = shellContext.libraryId,
-            )
+            val route =
+                BrowsePersonRoute(
+                    personId = id.value,
+                    personName = person.name,
+                    origin = shellContext.origin ?: BrowseDetailOrigin.Home,
+                    libraryId = shellContext.libraryId,
+                )
             if (navigation.browseBackStack.lastOrNull() != route) {
                 navigation.browseBackStack += route
                 scope.launch { browser.openPerson(id, person.name) }
@@ -108,6 +100,7 @@ internal class BrowseNavigator(
             navigation.browseBackStack += route
         }
     }
+
     fun pop() {
         val route = navigation.browseBackStack.lastOrNull()
         val revealed = navigation.browseBackStack.getOrNull(navigation.browseBackStack.lastIndex - 1)
@@ -115,14 +108,12 @@ internal class BrowseNavigator(
         // Restore the season document before removing the episode route so
         // Navigation 3 never renders an intermediate full-page loading
         // state during the pop transition.
-        val restoredSeasonContext = if (route is BrowseEpisodeRoute && revealed is BrowseSeasonRoute) {
-            browser.restoreSeasonContext(
-                seriesId = MediaId(revealed.seriesId),
-                seasonId = MediaId(revealed.seasonId),
-            )
-        } else {
-            false
-        }
+        val restoredSeasonContext =
+            if (route is BrowseEpisodeRoute && revealed is BrowseSeasonRoute) {
+                browser.restoreSeasonContext(seriesId = MediaId(revealed.seriesId), seasonId = MediaId(revealed.seasonId))
+            } else {
+                false
+            }
         when (route) {
             // Keep the detail document composed while NavDisplay runs the
             // pop transition so the shared-element source remains alive.
@@ -145,31 +136,34 @@ internal class BrowseNavigator(
             }
             when (revealed) {
                 BrowseHomeRoute -> scope.launch { browser.refreshHome() }
-                is BrowseDetailRoute -> scope.launch {
-                    val id = MediaId(revealed.mediaId)
-                    if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
-                }
-                is BrowseEpisodeRoute -> scope.launch {
-                    val id = MediaId(revealed.episodeId)
-                    if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
-                }
-                is BrowseSeasonRoute -> if (!restoredSeasonContext) scope.launch {
-                    val seriesId = MediaId(revealed.seriesId)
-                    val seasonId = MediaId(revealed.seasonId)
-                    // Episode details temporarily use the provider detail
-                    // slot. If no in-memory snapshot is available, use the
-                    // existing sequential restore as a cold fallback.
-                    if (!browser.restoreSeasonContext(seriesId, seasonId)) {
-                        val current = browser.state.value
-                        val requiresRestore = current.detail?.id != seriesId ||
-                            current.selectedSeasonId != seasonId
-                        if (current.detail?.id != seriesId) browser.openDetail(seriesId)
-                        if (browser.state.value.selectedSeasonId != seasonId) {
-                            browser.selectSeason(seasonId)
-                        }
-                        if (!requiresRestore) browser.refreshDetail(seriesId)
+                is BrowseDetailRoute ->
+                    scope.launch {
+                        val id = MediaId(revealed.mediaId)
+                        if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
                     }
-                }
+                is BrowseEpisodeRoute ->
+                    scope.launch {
+                        val id = MediaId(revealed.episodeId)
+                        if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
+                    }
+                is BrowseSeasonRoute ->
+                    if (!restoredSeasonContext)
+                        scope.launch {
+                            val seriesId = MediaId(revealed.seriesId)
+                            val seasonId = MediaId(revealed.seasonId)
+                            // Episode details temporarily use the provider detail
+                            // slot. If no in-memory snapshot is available, use the
+                            // existing sequential restore as a cold fallback.
+                            if (!browser.restoreSeasonContext(seriesId, seasonId)) {
+                                val current = browser.state.value
+                                val requiresRestore = current.detail?.id != seriesId || current.selectedSeasonId != seasonId
+                                if (current.detail?.id != seriesId) browser.openDetail(seriesId)
+                                if (browser.state.value.selectedSeasonId != seasonId) {
+                                    browser.selectSeason(seasonId)
+                                }
+                                if (!requiresRestore) browser.refreshDetail(seriesId)
+                            }
+                        }
                 else -> Unit
             }
         }

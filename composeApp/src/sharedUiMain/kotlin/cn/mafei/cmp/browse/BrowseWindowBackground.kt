@@ -35,11 +35,13 @@ internal fun BrowseWindowBackground(
             state = heroBackdrop,
             ambientArtwork = { item, radius, modifier ->
                 MediaArtwork(
-                    item.landscapeArtworkCandidates(), item.title, artworkCache, fetchArtwork, modifier,
+                    item.landscapeArtworkCandidates(),
+                    item.title,
+                    artworkCache,
+                    fetchArtwork,
+                    modifier,
                     targetWidthPx = if (layout.family == MaFeiLayoutFamily.Phone) 720 else 960,
-                    bitmapContent = { bitmap, imageModifier ->
-                        CachedBlurredArtwork(bitmap, radius, imageModifier, cache = artworkCache)
-                    },
+                    bitmapContent = { bitmap, imageModifier -> CachedBlurredArtwork(bitmap, radius, imageModifier, cache = artworkCache) },
                 )
             },
             artwork = { item, modifier ->

@@ -6,9 +6,9 @@ import androidx.compose.ui.input.key.key
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
 import cn.mafei.cmp.session.*
+import cn.mafei.cmp.session.AccountAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import cn.mafei.cmp.session.AccountAccess
 
 /** Request state survives navigation between login and history; disposal cancels its scope. */
 internal class SignedOutAccountState(
@@ -62,9 +62,7 @@ internal class SignedOutAccountState(
                         // The mutation already succeeded. Update the local source directly so
                         // deleting the last row does not start a loading state that would remove
                         // the shared dissolve surface before its animation finishes.
-                        historyConnections = historyConnections.filterNot {
-                            it.credentialKey == item.key
-                        }
+                        historyConnections = historyConnections.filterNot { it.credentialKey == item.key }
                         rememberedPasswordKeys = rememberedPasswordKeys - item.key
                     } else {
                         historyError = "该账号正在使用，无法删除"
@@ -99,9 +97,7 @@ internal class SignedOutAccountState(
     }
 
     fun select(item: ConnectionHistoryItem, onLoginRequired: (SavedConnection, String?) -> Unit) {
-        val connection = historyConnections.firstOrNull {
-            it.credentialKey == item.key
-        }
+        val connection = historyConnections.firstOrNull { it.credentialKey == item.key }
         if (connection == null) {
             historyError = "历史账号已失效，请刷新后重试"
         } else if (!isBusy()) {
@@ -116,13 +112,14 @@ internal class SignedOutAccountState(
                     // Logout deliberately removes restorable secrets,
                     // while the non-secret history entry remains. Fall
                     // back to a prefilled login form for re-authentication.
-                    val savedPassword = try {
-                        accounts.savedPassword(connection)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
+                    val savedPassword =
+                        try {
+                            accounts.savedPassword(connection)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            null
+                        }
                     onLoginRequired(connection, savedPassword)
                     historyError = null
                     onErrorChange(null)

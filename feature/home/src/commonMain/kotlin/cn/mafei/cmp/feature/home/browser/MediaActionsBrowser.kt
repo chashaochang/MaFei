@@ -5,8 +5,13 @@ import cn.mafei.cmp.data.repositories.*
 import kotlinx.coroutines.CancellationException
 
 internal class MediaActionsBrowser(context: BrowserContext, private val detailGeneration: () -> Long) : BrowserController(context) {
-    private enum class UserDataAction { Watched, Favorite }
+    private enum class UserDataAction {
+        Watched,
+        Favorite,
+    }
+
     private data class UserDataActionKey(val id: MediaId, val action: UserDataAction)
+
     private val userDataActionLocks = mutableSetOf<UserDataActionKey>()
 
     suspend fun toggleFavorite() {
@@ -40,26 +45,28 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
             mutableState.value = state.value.copy(deleteAvailable = false)
             return
         }
-        val available = try {
-            repository.canDeleteMedia(session)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            false
-        }
+        val available =
+            try {
+                repository.canDeleteMedia(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
         mutableState.value = state.value.copy(deleteAvailable = available)
     }
 
     /** 旧版“我的”页角色标签：Jellyfin Policy / 飞牛 user/info 是唯一来源。 */
     suspend fun refreshAdministratorStatus() {
         if (state.value.administrator != null) return
-        val administrator = try {
-            repository.isAdministrator(session)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            false
-        }
+        val administrator =
+            try {
+                repository.isAdministrator(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
         mutableState.value = state.value.copy(administrator = administrator)
     }
 
@@ -81,11 +88,7 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
         }
     }
 
-    private suspend fun mutateDetail(
-        detail: MediaItem,
-        favorite: Boolean?,
-        watched: Boolean?,
-    ) {
+    private suspend fun mutateDetail(detail: MediaItem, favorite: Boolean?, watched: Boolean?) {
         val operation = detailGeneration()
         if (state.value.detailActionBusy) return
         mutableState.value = state.value.copy(detailActionBusy = true, detailActionError = null)
@@ -95,14 +98,8 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
                 else -> repository.setWatched(session, detail.id, checkNotNull(watched))
             }
             if (operation != detailGeneration() || !state.value.containsMedia(detail.id)) return
-            val nextUserData = detail.userData.copy(
-                isFavorite = favorite ?: detail.userData.isFavorite,
-                isPlayed = watched ?: detail.userData.isPlayed,
-            )
-            mutableState.value = state.value.replaceUserData(detail.id, nextUserData).copy(
-                detailActionBusy = false,
-                detailActionError = null,
-            )
+            val nextUserData = detail.userData.copy(isFavorite = favorite ?: detail.userData.isFavorite, isPlayed = watched ?: detail.userData.isPlayed)
+            mutableState.value = state.value.replaceUserData(detail.id, nextUserData).copy(detailActionBusy = false, detailActionError = null)
         } catch (cancelled: CancellationException) {
             if (operation == detailGeneration()) {
                 mutableState.value = state.value.copy(detailActionBusy = false)
@@ -110,60 +107,58 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailGeneration()) {
-                mutableState.value = state.value.copy(
-                    detailActionBusy = false,
-                    detailActionError = browseError(failure),
-                )
+                mutableState.value = state.value.copy(detailActionBusy = false, detailActionError = browseError(failure))
             }
         }
     }
 
     /**
-     * Mutates a card action without requiring the item to be the currently
-     * opened detail. The old implementation reused [mutateDetail], whose
-     * stale-detail guard silently discarded list actions because ordinary
-     * library/home items are not part of the detail state. Keep one lock per
-     * media/action pair so a favorite request cannot block a watched request
-     * for the same card, and publish the optimistic state through every feed
-     * before the provider round trip completes.
+     * Mutates a card action without requiring the item to be the currently opened detail. The old implementation reused [mutateDetail], whose stale-detail
+     * guard silently discarded list actions because ordinary library/home items are not part of the detail state. Keep one lock per media/action pair so a
+     * favorite request cannot block a watched request for the same card, and publish the optimistic state through every feed before the provider round trip
+     * completes.
      */
     private suspend fun mutateListItem(item: MediaItem, action: UserDataAction) {
         val key = UserDataActionKey(item.id, action)
         if (!userDataActionLocks.add(key)) return
         val current = state.value.userDataFor(item.id) ?: item.userData
-        val previous = when (action) {
-            UserDataAction.Watched -> current.isPlayed
-            UserDataAction.Favorite -> current.isFavorite
-        }
-        val target = !previous
-        mutableState.value = state.value.replaceUserData(item.id) { data ->
+        val previous =
             when (action) {
-                UserDataAction.Watched -> data.copy(isPlayed = target)
-                UserDataAction.Favorite -> data.copy(isFavorite = target)
+                UserDataAction.Watched -> current.isPlayed
+                UserDataAction.Favorite -> current.isFavorite
             }
-        }
+        val target = !previous
+        mutableState.value =
+            state.value.replaceUserData(item.id) { data ->
+                when (action) {
+                    UserDataAction.Watched -> data.copy(isPlayed = target)
+                    UserDataAction.Favorite -> data.copy(isFavorite = target)
+                }
+            }
         try {
             when (action) {
                 UserDataAction.Watched -> repository.setWatched(session, item.id, target)
                 UserDataAction.Favorite -> repository.setFavorite(session, item.id, target)
             }
         } catch (cancelled: CancellationException) {
-            mutableState.value = state.value.replaceUserData(item.id) { data ->
-                when (action) {
-                    UserDataAction.Watched -> data.copy(isPlayed = previous)
-                    UserDataAction.Favorite -> data.copy(isFavorite = previous)
+            mutableState.value =
+                state.value.replaceUserData(item.id) { data ->
+                    when (action) {
+                        UserDataAction.Watched -> data.copy(isPlayed = previous)
+                        UserDataAction.Favorite -> data.copy(isFavorite = previous)
+                    }
                 }
-            }
             throw cancelled
         } catch (failure: Exception) {
-            mutableState.value = state.value.replaceUserData(item.id) { data ->
-                when (action) {
-                    UserDataAction.Watched -> data.copy(isPlayed = previous)
-                    UserDataAction.Favorite -> data.copy(isFavorite = previous)
-                }
-            }.copy(
-                detailActionError = browseError(failure).takeIf { state.value.detail?.id == item.id },
-            )
+            mutableState.value =
+                state.value
+                    .replaceUserData(item.id) { data ->
+                        when (action) {
+                            UserDataAction.Watched -> data.copy(isPlayed = previous)
+                            UserDataAction.Favorite -> data.copy(isFavorite = previous)
+                        }
+                    }
+                    .copy(detailActionError = browseError(failure).takeIf { state.value.detail?.id == item.id })
         } finally {
             userDataActionLocks.remove(key)
         }
