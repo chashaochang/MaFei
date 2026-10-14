@@ -64,6 +64,8 @@ fun LiquidButton(
 ) {
     val glassIntensity = LocalGlassIntensity.current
     val style = currentGlassStyle()
+    val currentTint by rememberUpdatedState(tint)
+    val currentSurfaceColor by rememberUpdatedState(surfaceColor)
     val fallbackSurface by rememberUpdatedState(MaterialTheme.colorScheme.surface.copy(alpha = style.surfaceAlpha(0f)))
     val animationScope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
@@ -127,12 +129,12 @@ fun LiquidButton(
                 },
                 onDrawSurface = {
                     if (style != GlassStyle.Liquid) drawRect(fallbackSurface)
-                    if (tint.isSpecified) {
-                        drawRect(tint, blendMode = BlendMode.Hue)
-                        drawRect(tint.copy(alpha = 0.75f))
+                    if (currentTint.isSpecified) {
+                        drawRect(currentTint, blendMode = BlendMode.Hue)
+                        drawRect(currentTint.copy(alpha = 0.75f))
                     }
-                    if (surfaceColor.isSpecified) {
-                        drawRect(surfaceColor)
+                    if (currentSurfaceColor.isSpecified) {
+                        drawRect(currentSurfaceColor)
                     }
                 }
             )
