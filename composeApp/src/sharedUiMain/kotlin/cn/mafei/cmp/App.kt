@@ -187,7 +187,6 @@ import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.CancellationException
@@ -197,7 +196,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
 
 val LocalApplicationRuntime = staticCompositionLocalOf<ApplicationRuntime> {
@@ -605,201 +603,6 @@ fun App(
             }
         }
     }
-}
-
-@Serializable
-private sealed interface SignedOutRoute : NavKey
-
-@Serializable
-private data object ConnectRoute : SignedOutRoute
-
-@Serializable
-private data object AccountHistoryRoute : SignedOutRoute
-
-@Serializable
-private data object ServerDiscoveryRoute : SignedOutRoute
-
-@Serializable
-private sealed interface BrowseRoute : NavKey
-
-@Serializable
-private data object BrowseHomeRoute : BrowseRoute
-
-@Serializable
-private data object BrowseChasingRoute : BrowseRoute
-
-@Serializable
-private data object BrowseFavoriteRoute : BrowseRoute
-
-@Serializable
-private data object BrowseLibraryIndexRoute : BrowseRoute
-
-/** The home "最近添加 / 更多" feed. This is a list of the home feed, not the library index. */
-@Serializable
-private data class BrowseLatestRoute(val collectionId: String? = null) : BrowseRoute
-
-@Serializable
-private data object BrowseSearchRoute : BrowseRoute
-
-@Serializable
-private data object BrowseMineRoute : BrowseRoute
-
-@Serializable
-private data object BrowseMineHistoryRoute : BrowseRoute
-
-@Serializable
-private data object BrowseAccountSwitchRoute : BrowseRoute
-
-@Serializable
-private data object BrowseAddAccountRoute : BrowseRoute
-
-@Serializable
-private data class BrowseConnectAccountRoute(
-    val provider: ProviderKind,
-    /** Re-authentication passes only non-secret account metadata in the route. */
-    val presetBaseUrl: String? = null,
-    val presetUsername: String? = null,
-    val credentialKey: String? = null,
-    val returnToBrowseOnBack: Boolean = false,
-) : BrowseRoute
-
-@Serializable
-private data object BrowseServerDiscoveryRoute : BrowseRoute
-
-@Serializable
-private data object BrowseSettingsRoute : BrowseRoute
-
-@Serializable
-private data class BrowseManagementRoute(val taskId: String? = null, val sessionId: String? = null) : BrowseRoute
-private data class BrowseManagementDevicesRoute(val deviceId: String? = null) : BrowseRoute
-
-@Serializable
-private data object BrowseFeiniuConnectionPreferenceRoute : BrowseRoute
-
-/** Reachable only once the appearance entry in `SettingsScreen` is re-enabled. */
-@Serializable
-private data object BrowseAppearanceRoute : BrowseRoute
-
-@Serializable
-private data object BrowseGlassStyleRoute : BrowseRoute
-
-@Serializable
-private data object BrowsePlayerSettingsRoute : BrowseRoute
-
-@Serializable
-private data object BrowseAddGroupRoute : BrowseRoute
-
-@Serializable
-private data object BrowseAboutPrivacyRoute : BrowseRoute
-
-@Serializable
-private data object BrowseUserAgreementRoute : BrowseRoute
-
-@Serializable
-private data object BrowseWebITongRoute : BrowseRoute
-
-@Serializable
-private data object BrowsePrivacyWebRoute : BrowseRoute
-
-@Serializable
-private data class BrowseLibraryRoute(val collectionId: String) : BrowseRoute
-
-@Serializable
-private data class BrowseMusicDetailRoute(
-    val mediaId: String, val title: String, val artist: Boolean, val libraryId: String? = null,
-    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
-) : BrowseRoute
-
-@Serializable
-private data class BrowsePhotoAlbumRoute(val albumId: String, val title: String, val libraryId: String?, val origin: BrowseDetailOrigin) : BrowseRoute
-
-@Serializable
-private data class BrowsePhotoViewerRoute(val parentId: String?, val photoId: String, val libraryId: String?, val origin: BrowseDetailOrigin) : BrowseRoute
-
-/**
- * The shell selection is part of the navigation route, not of the browser's
- * mutable collection state.  A home shelf can open a detail while the last
- * selected collection is still, for example, 短剧; using that mutable state
- * for the sidebar would then highlight the wrong library.
- */
-@Serializable
-private enum class BrowseDetailOrigin {
-    Home,
-    Chasing,
-    Favorite,
-    Search,
-    Library,
-}
-
-@Serializable
-private data class BrowseDetailRoute(
-    val mediaId: String,
-    /** Legacy VideoDetailPage route parameter used in the secondary metadata line. */
-    val mediaName: String? = null,
-    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
-    val libraryId: String? = null,
-) : BrowseRoute
-
-@Serializable
-private data class BrowsePersonRoute(
-    val personId: String,
-    val personName: String,
-    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
-    val libraryId: String? = null,
-) : BrowseRoute
-
-@Serializable
-private data class BrowseSeasonRoute(
-    val seriesId: String,
-    val seasonId: String,
-    /** Preserved through series -> season -> episode exactly like the ArkUI route chain. */
-    val mediaName: String? = null,
-    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
-    val libraryId: String? = null,
-) : BrowseRoute
-
-@Serializable
-private data class BrowseEpisodeRoute(
-    val seriesId: String,
-    val seasonId: String,
-    val episodeId: String,
-    val mediaName: String? = null,
-    val origin: BrowseDetailOrigin = BrowseDetailOrigin.Home,
-    val libraryId: String? = null,
-) : BrowseRoute
-
-private data class BrowseShellContext(
-    val destination: String,
-    val libraryId: String? = null,
-    val origin: BrowseDetailOrigin? = null,
-)
-
-private fun BrowseDetailOrigin.shellContext(libraryId: String?): BrowseShellContext = when (this) {
-    BrowseDetailOrigin.Home -> BrowseShellContext(HomeDestination, origin = this)
-    BrowseDetailOrigin.Chasing -> BrowseShellContext(ChasingDestination, origin = this)
-    BrowseDetailOrigin.Favorite -> BrowseShellContext(FavoriteDestination, origin = this)
-    // Search is rendered by the home content host, but has no selected sidebar
-    // destination while it is open.
-    BrowseDetailOrigin.Search -> BrowseShellContext("", origin = this)
-    BrowseDetailOrigin.Library -> BrowseShellContext(LibraryDestination, libraryId, this)
-}
-
-private fun BrowseRoute.shellContext(): BrowseShellContext = when (this) {
-    BrowseHomeRoute -> BrowseDetailOrigin.Home.shellContext(null)
-    BrowseChasingRoute -> BrowseDetailOrigin.Chasing.shellContext(null)
-    BrowseFavoriteRoute -> BrowseDetailOrigin.Favorite.shellContext(null)
-    is BrowseLatestRoute -> BrowseDetailOrigin.Home.shellContext(null)
-    BrowseSearchRoute -> BrowseDetailOrigin.Search.shellContext(null)
-    BrowseLibraryIndexRoute -> BrowseDetailOrigin.Library.shellContext(null)
-    is BrowseLibraryRoute -> BrowseDetailOrigin.Library.shellContext(collectionId)
-    is BrowseMusicDetailRoute -> origin.shellContext(libraryId)
-    is BrowsePhotoAlbumRoute -> origin.shellContext(libraryId)
-    is BrowsePhotoViewerRoute -> origin.shellContext(libraryId)
-    is BrowseDetailRoute -> origin.shellContext(libraryId)
-    is BrowsePersonRoute -> origin.shellContext(libraryId)
-    is BrowseSeasonRoute -> origin.shellContext(libraryId)
-    is BrowseEpisodeRoute -> origin.shellContext(libraryId)
-    else -> BrowseShellContext(MineDestination)
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -1397,7 +1200,8 @@ private fun BrowseContent(
     // Keep the chrome selection derived from the route that opened the page.
     // `state.selectedCollection` is provider/browser state and may still point
     // at the last library even when the user opened a Home shelf item.
-    val shellContext = currentRoute.shellContext()
+    val shellPresentation = currentRoute.shellPresentation()
+    val shellContext = shellPresentation.context
     val libraryTabId = rememberLibraryTabId(
         currentLibraryId = shellContext.libraryId,
         serverId = session.selection.serverId.value,
@@ -1579,23 +1383,10 @@ private fun BrowseContent(
                 }
             }
         }
-        val showingMediaDetail = currentRoute is BrowseDetailRoute ||
-            currentRoute is BrowseSeasonRoute || currentRoute is BrowseEpisodeRoute
-        val showingPersonDetail = currentRoute is BrowsePersonRoute
-        val showingDetail = showingMediaDetail || showingPersonDetail || currentRoute is BrowseMusicDetailRoute ||
-            currentRoute is BrowsePhotoAlbumRoute || currentRoute is BrowsePhotoViewerRoute
-        // 「我的」的二级页现在住在它自己的回退栈里，不再出现在 currentRoute 上。
-        // A concrete media library is a pushed secondary page, not another
-        // bottom-tab root.  The legacy ArkUI route uses VideoListPage as a
-        // NavDestination after selecting a library, so the bottom navigation
-        // must leave the scene entirely while that list is visible.  Keeping
-        // it mounted made the list appear underneath the dock; adding more
-        // scroll padding could only mask that routing error.
-        val showingFullPageRoute = showingDetail ||
-            currentRoute is BrowseLatestRoute ||
-            currentRoute == BrowseSearchRoute ||
-            currentRoute == BrowseFavoriteRoute ||
-            currentRoute is BrowseLibraryRoute
+        val showingMediaDetail = shellPresentation.mediaDetail
+        val showingPersonDetail = shellPresentation.personDetail
+        val showingDetail = shellPresentation.detail
+        val showingFullPageRoute = shellPresentation.fullPage
         // 「我的」容器的两种形态：小屏（手机）全屏铺开、看起来就是普通页面跳转；其余尺寸
         // 用居中的毛玻璃模态。形态只由窗口决定，容器自己的回退栈不受影响。
         // Phone owns a full-screen Mine stack; tablet/desktop keep the root
@@ -1613,44 +1404,16 @@ private fun BrowseContent(
             showingMediaDetail -> state.detail ?: state.items.firstOrNull { it.id == state.detailId }
             else -> null
         }
-        val destinations = remember(browser.capabilities.chasing) {
-            buildList {
-                add(MaFeiNavItem(HomeDestination, "首页", MaFeiGlyph.Home))
-                if (browser.capabilities.chasing) {
-                    add(MaFeiNavItem(ChasingDestination, "追剧", MaFeiGlyph.History))
-                }
-                add(MaFeiNavItem(LibraryDestination, "媒体库", MaFeiGlyph.Library))
-                add(MaFeiNavItem(MineDestination, "我的", MaFeiGlyph.Account))
-            }
-        }
-        // 收藏 is a content entry in the full sidebar, but it is grouped into
-        // 媒体库 on the phone bottom bar. Keep that distinction explicit
-        // instead of reintroducing a fourth bottom tab.
-        val sidebarDestinations = remember(destinations) {
-            destinations.filterNot { it.key == ChasingDestination }.toMutableList().apply {
-                add(1, MaFeiNavItem(FavoriteDestination, "收藏", MaFeiGlyph.Favorite))
-            }
-        }
         val libraries = state.collections.map { collection ->
             MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library)
         }
-        // The collapsed large-screen bar follows the iPadOS-style shell:
-        // it always keeps Home and Favorite. A third text tab is added only
-        // after a concrete secondary library has been selected; the generic
-        // library index is intentionally not duplicated in this bar.
-        val topTabDestinations = buildList {
-            destinations.firstOrNull { it.key == HomeDestination }?.let(::add)
-            sidebarDestinations.firstOrNull { it.key == FavoriteDestination }?.let(::add)
-            if (libraryTabId != null) {
-                libraries.firstOrNull { it.key == libraryTabId }?.let(::add)
-            }
+        val navigationItems = remember(browser.capabilities.chasing, libraries, libraryTabId) {
+            browseNavigationItems(browser.capabilities.chasing, libraries, libraryTabId)
         }
-        val topTabSelectedDestination = when {
-            currentRoute is BrowseLibraryRoute -> currentRoute.collectionId
-            shellContext.libraryId != null -> shellContext.libraryId
-            destination == LibraryDestination -> ""
-            else -> shellDestination
-        }
+        val destinations = navigationItems.bottom
+        val sidebarDestinations = navigationItems.sidebar
+        val topTabDestinations = navigationItems.topTabs
+        val topTabSelectedDestination = shellContext.topTabDestination
         val selectDestination: (String) -> Unit = { next ->
             if (next == MineDestination) {
                 // 「我的」是一个带独立导航的容器，不是一个普通页面：下层的浏览路由保持原样
@@ -2465,7 +2228,7 @@ private fun BrowseContent(
         // top-tab row. Its leading slot is the route back action; root pages
         // deliberately leave that slot as the sidebar-expander instead.
         val collapsedTopBarBack: (() -> Unit)? = when {
-            (showingDetail || currentRoute is BrowseLatestRoute) && browseBackStack.size > 1 -> popBrowseRoute
+            shellPresentation.secondaryContent && browseBackStack.size > 1 -> popBrowseRoute
             minePresented && mineBackStack.size > 1 -> popMineRoute
             else -> null
         }
@@ -2669,16 +2432,18 @@ private fun BrowseContent(
             // 具体媒体库、搜索和详情页虽然是全屏内容，但用户仍需要通过顶部 Tab、抽屉
             // 或常驻侧栏切换根页面；之前把 showingFullPageRoute 直接传进外壳，会连大屏
             // 导航一起隐藏，进入媒体库列表后就像导航栈被清空了一样。
-            showBottomNavigation = !layout.isPhoneNavigation ||
-                (!showingFullPageRoute &&
-                    !(minePresented && mineFullScreen && mineBackStack.size > 1)),
+            showBottomNavigation = shellPresentation.showBottomNavigation(
+                isPhoneNavigation = layout.isPhoneNavigation,
+                accountPresented = minePresented,
+                accountStackDepth = mineBackStack.size,
+            ),
             // Search is the primary shell action represented by the final
             // icon in the collapsed top bar. Keep that bar mounted with the
             // search action selected; only pushed details and the Mine stack
             // switch a collapsed large sidebar to the compact rail.
-            contentNavigationActive = showingDetail || currentRoute is BrowseLatestRoute || minePresented,
+            contentNavigationActive = shellPresentation.secondaryContent || minePresented,
             onSearch = openSearch,
-            selectedSearch = currentRoute == BrowseSearchRoute,
+            selectedSearch = shellPresentation.search,
             // The compact dock is the other half of the mini-player morph.
             // With no active media there is nothing to merge into, so page
             // scrolling must leave the primary navigation at full size.
@@ -4406,11 +4171,6 @@ private suspend fun discoveredJellyfinServerSuggestions(): List<ServerDiscoveryS
         )
     }
 
-private const val HomeDestination = "home"
-private const val ChasingDestination = "chasing"
-private const val FavoriteDestination = "favorite"
-private const val LibraryDestination = "library"
-private const val MineDestination = "mine"
 
 private fun String.toPlayerRenderMode(): PlayerRenderMode =
     if (equals("direct", ignoreCase = true)) PlayerRenderMode.Direct else PlayerRenderMode.Buffer

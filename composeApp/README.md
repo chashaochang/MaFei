@@ -1,5 +1,11 @@
 # Application runtime / login and browsing
 
+## 当前导航代码入口
+
+路由定义、壳层映射及首批重构的验证说明见
+[应用导航边界](src/sharedUiMain/kotlin/cn/mafei/cmp/navigation/README.md)。
+下方带日期的记录是历史验证结果，不能代替当前代码的验收。
+
 ## Login/home completed increment — 2026-09-09
 
 The packaged Mac application now completes **form login → real library/artwork →
