@@ -67,6 +67,8 @@ interface MaFeiPlayerTrackState {
   kind: string;
   label: string;
   language?: string;
+  codec?: string;
+  isExternal?: boolean;
   selected: boolean;
 }
 
@@ -822,16 +824,20 @@ struct MaFeiPlayerSurfaceHost {
       (track: PlayerTrack): MaFeiPlayerTrackState => ({
         id: track.id,
         kind: 'audio',
-        label: track.title.trim().length > 0 ? track.title : `音轨 ${track.id}`,
+        label: track.title,
         language: track.language,
+        codec: track.codec,
+        isExternal: track.isExternal,
         selected: track.isSelected
       }));
     const subtitleTracks = (includeTracks ? subtitleSource : []).map(
       (track: PlayerTrack): MaFeiPlayerTrackState => ({
         id: track.id,
         kind: 'subtitle',
-        label: track.title.trim().length > 0 ? track.title : `字幕 ${track.id}`,
+        label: track.title,
         language: track.language,
+        codec: track.codec,
+        isExternal: track.isExternal,
         selected: track.isSelected
       }));
     if (includeTracks) {

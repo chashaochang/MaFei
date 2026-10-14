@@ -35,6 +35,7 @@ import cn.mafei.cmp.player.api.PlayerPlaybackPreferences
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.api.PlayerSurfaceHandle
 import cn.mafei.cmp.player.api.PlayerTrack
+import cn.mafei.cmp.player.api.playerTrackDisplayLabel
 import cn.mafei.cmp.player.api.TrackKind
 import cn.mafei.cmp.player.runtime_ohos.OhosNativePlayerBridge
 import cn.mafei.cmp.player.runtime_ohos.OhosNativePlayerEvent
@@ -108,6 +109,8 @@ private data class OhosPlayerTrackPayload(
     val label: String,
     val language: String? = null,
     val selected: Boolean = false,
+    val codec: String? = null,
+    val isExternal: Boolean = false,
 )
 
 /** Owned JSON copied synchronously from N-API; no JS handle escapes the call. */
@@ -501,7 +504,15 @@ private object OhosPlayerHostState {
                     "subtitle" -> TrackKind.Subtitle
                     else -> null
                 } ?: return@mapNotNull null
-                PlayerTrack(track.id.toString(), kind, track.label, track.language, track.selected)
+                PlayerTrack(
+                    id = track.id.toString(),
+                    kind = kind,
+                    label = playerTrackDisplayLabel(
+                        track.id.toString(), kind, track.label, track.language, track.codec, track.isExternal,
+                    ),
+                    language = track.language,
+                    selected = track.selected,
+                )
             },
         )
         "diagnostics" -> OhosNativePlayerEvent.Diagnostics(
