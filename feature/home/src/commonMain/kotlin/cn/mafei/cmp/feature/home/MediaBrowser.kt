@@ -129,6 +129,9 @@ class MediaBrowser(
 ) {
     private val mutableState = MutableStateFlow(MediaBrowserState(loading = true, homeLoading = true))
     val state: StateFlow<MediaBrowserState> = mutableState.asStateFlow()
+    private val mutableAuthenticationFailure = MutableStateFlow<AuthFailureKind?>(null)
+    /** Account-scoped recovery state; only a replacement authenticated browser clears it. */
+    val authenticationFailure: StateFlow<AuthFailureKind?> = mutableAuthenticationFailure.asStateFlow()
     private var ticket = 0L
     private var homeTicket = 0L
     private var detailTicket = 0L
@@ -306,12 +309,13 @@ class MediaBrowser(
             throw cancelled
         } catch (failure: Exception) {
             if (operation != homeTicket) return
+            val message = browseError(failure)
             // A background refresh must not insert an error row above existing
             // content and shift the user's established viewport. With no home
             // content at all, exposing the failure remains the honest fallback.
             if (state.value.homeFeed == HomeFeed()) {
                 mutableState.value = state.value.copy(
-                    homeError = browseError(failure),
+                    homeError = message,
                     homeStale = false,
                 )
             }
@@ -390,9 +394,11 @@ class MediaBrowser(
             throw cancelled
         } catch (failure: Exception) {
             if (homeLatestTickets[id] == operation) {
+                val message = browseError(failure)
                 mutableState.value = state.value.copy(
                     homeLatestLoading = state.value.homeLatestLoading - id,
-                    homeLatestErrors = state.value.homeLatestErrors + (id to browseError(failure)),
+                    homeLatestErrors = if (message == null) state.value.homeLatestErrors - id
+                        else state.value.homeLatestErrors + (id to message),
                 )
             }
         } finally {
@@ -1706,6 +1712,14 @@ class MediaBrowser(
         }
     }
 
+    private fun browseError(error: Exception): String? {
+        if (error is AuthenticationError) {
+            mutableAuthenticationFailure.value = error.kind
+            return null // Account recovery belongs to the shell, never the content list.
+        }
+        return browseErrorMessage(error)
+    }
+
     fun back() {
         ++detailTicket
         ++detailRefreshTicket
@@ -1936,8 +1950,15 @@ private val HistoryMediaTypes = setOf(MediaType.Movie, MediaType.Episode)
 private val FavoriteMediaTypes = setOf(MediaType.Movie, MediaType.Series, MediaType.Episode, MediaType.Video)
 
 /** Never display exception messages, URLs, response bodies or credential-bearing causes. */
-private fun browseError(error: Exception): String = when (error) {
-    is AuthenticationError -> "登录已失效，请退出后重新登录"
+fun authenticationRecoveryMessage(kind: AuthFailureKind): String = when (kind) {
+    AuthFailureKind.TokenExpired, AuthFailureKind.TokenRevoked -> "当前账号登录已过期，请重新登录"
+    AuthFailureKind.AccountLocked -> "当前账号已被锁定，请联系服务器管理员"
+    AuthFailureKind.MfaRequired -> "当前账号需要重新验证，请重新登录"
+    AuthFailureKind.InvalidCredentials -> "当前账号认证未通过，请重新登录"
+}
+
+private fun browseErrorMessage(error: Exception): String = when (error) {
+    is AuthenticationError -> authenticationRecoveryMessage(error.kind)
     is AuthorizationError -> "当前账号没有访问权限"
     is NetworkUnreachableError, is TimeoutError -> "无法连接服务器，请检查网络后重试"
     is ResourceNotFoundError -> "内容已不存在或不可见"

@@ -45,6 +45,25 @@ class HomeLoadingStatusTest {
         composeRule.onNodeWithText("这里还没有媒体库").assertDoesNotExist()
     }
 
+    @Test fun expiredAuthenticationNeverInsertsANoticeOrMisleadingEmptyStateIntoTheFeed() {
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    collections = emptyList(), items = emptyList(), selectedCollection = null,
+                    loading = false, homeLoading = false, error = null,
+                    authenticationRequired = true,
+                    stale = false, canLoadMore = false, overview = true,
+                    layout = mafeiLayout(390f, 844f), onCollection = {}, onItem = {},
+                    onRetry = {}, onLoadMore = {}, onOpenLibrary = {},
+                    showHomeHero = false, gridState = rememberLazyGridState(),
+                )
+            }
+        }
+        composeRule.onNodeWithText("重新登录").assertDoesNotExist()
+        composeRule.onNodeWithText("当前账号登录已过期，请重新登录").assertDoesNotExist()
+        composeRule.onNodeWithText("这里还没有媒体库").assertDoesNotExist()
+    }
+
     @Test fun wideRecentMoreOpensThatLibrarysRecentListNotTheLibraryEntry() {
         val collection = MediaCollection(CollectionId("shows"), ServerId("server"),
             ProviderKind.Jellyfin, "电视剧", mediaTypes = setOf(MediaType.Series))

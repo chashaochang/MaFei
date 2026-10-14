@@ -99,6 +99,7 @@ fun MineScreen(
     onPrivacy: () -> Unit,
     onAddGroup: () -> Unit,
     onLogout: () -> Unit,
+    onReauthenticate: (() -> Unit)? = null,
     onWebITong: (() -> Unit)? = null,
     onManagement: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -194,8 +195,15 @@ fun MineScreen(
                         }
                     }
                     LegacyListGroup(
-                        items = listOf(LegacyListGroupItem("退出登录", showArrow = false)),
-                        onItemClick = { if (!busy) onLogout() },
+                        items = buildList {
+                            if (onReauthenticate != null) add(LegacyListGroupItem("重新登录", showArrow = false))
+                            add(LegacyListGroupItem("退出登录", showArrow = false))
+                        },
+                        onItemClick = { index ->
+                            if (!busy) {
+                                if (index == 0 && onReauthenticate != null) onReauthenticate() else onLogout()
+                            }
+                        },
                     )
                 }
             }

@@ -1,9 +1,20 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.down
+import androidx.compose.ui.test.up
+import androidx.compose.ui.unit.dp
+import cn.mafei.cmp.common.design_system.MaFeiTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -16,6 +27,9 @@ import androidx.compose.ui.test.performTouchInput
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import java.awt.image.BufferedImage
+import java.io.File
+import javax.imageio.ImageIO
 
 /** The confirmation owns dismissal, so only the pressed control may fire. */
 class MaFeiGlassConfirmDialogTest {
@@ -72,5 +86,58 @@ class MaFeiGlassConfirmDialogTest {
             .performTouchInput { click(Offset(8f, 8f)) }
         assertEquals(1, dismissed)
         assertEquals(0, confirmed)
+    }
+
+    @Test
+    fun accountRecoveryOverlaysThePageWithoutMovingOrReplacingItsContent() {
+        val visible = mutableStateOf(false)
+        val dark = mutableStateOf(true)
+        val width = mutableStateOf(390)
+        composeRule.setContent {
+            MaFeiTheme(darkTheme = dark.value) {
+                Box(Modifier.size(width.value.dp, 640.dp).testTag("accountScene")) {
+                    Text("最近添加", Modifier.testTag("pageContent"))
+                    val backdrop = rememberGlassBackdrop()
+                    if (visible.value) MaFeiGlassConfirmDialog(
+                        title = "账号验证", content = "当前账号登录已过期，请重新登录",
+                        confirmText = "重新登录", dismissText = "取消", backdrop = backdrop,
+                        onConfirm = { confirmed++; visible.value = false },
+                        onDismiss = { dismissed++; visible.value = false },
+                    )
+                }
+            }
+        }
+        for (size in listOf(390, 900)) for (isDark in listOf(true, false)) {
+            composeRule.runOnIdle { width.value = size; dark.value = isDark }
+            val before = composeRule.onNodeWithTag("pageContent").fetchSemanticsNode().boundsInRoot
+            composeRule.runOnIdle { visible.value = true }
+            assertEquals(before, composeRule.onNodeWithTag("pageContent").fetchSemanticsNode().boundsInRoot)
+            val confirm = composeRule.onNodeWithText("重新登录").assertIsDisplayed()
+            confirm.fetchSemanticsNode().boundsInRoot
+            for (pressed in listOf(false, true)) {
+                if (pressed) confirm.performTouchInput { down(center) }
+                System.getenv("MAFEI_CAPTURE_DIR")?.let { directory ->
+                    val pixels = composeRule.onNodeWithTag("accountScene").captureToImage().toPixelMap()
+                    val bitmap = BufferedImage(pixels.width, pixels.height, BufferedImage.TYPE_INT_ARGB)
+                    for (y in 0 until pixels.height) for (x in 0 until pixels.width) {
+                        bitmap.setRGB(x, y, pixels[x, y].toArgb())
+                    }
+                    ImageIO.write(bitmap, "png", File(File(directory).apply { mkdirs() },
+                        "dialog-$size-${if (isDark) "dark" else "light"}-${if (pressed) "pressed" else "idle"}.png"))
+                }
+                if (pressed) {
+                    // Confirm on release, then reopen to exercise Cancel independently.
+                    confirm.performTouchInput { up() }
+                    composeRule.runOnIdle { visible.value = true }
+                }
+            }
+            val accepted = confirmed
+            composeRule.onNodeWithText("取消").performClick()
+            composeRule.onNodeWithText("重新登录").assertDoesNotExist()
+            assertEquals(accepted, confirmed)
+            assertEquals(before, composeRule.onNodeWithTag("pageContent").fetchSemanticsNode().boundsInRoot)
+        }
+        assertEquals(4, dismissed)
+        assertEquals(4, confirmed)
     }
 }

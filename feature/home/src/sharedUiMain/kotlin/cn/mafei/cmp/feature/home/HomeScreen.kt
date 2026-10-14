@@ -229,6 +229,7 @@ fun HomeScreen(
     refreshing: Boolean = false,
     loadingMore: Boolean = false,
     error: String?,
+    authenticationRequired: Boolean = false,
     stale: Boolean,
     canLoadMore: Boolean,
     overview: Boolean,
@@ -382,8 +383,8 @@ fun HomeScreen(
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
     val showRefreshAction = refreshing && overviewHasContent
-    val showStatus = stale || error != null ||
-        if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty()
+    val showStatus = !authenticationRequired && (stale || error != null ||
+        if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty())
     val latestGap = if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp
     // Home library tabs have their own cached request stream. The ordinary
     // media-library cursor belongs to a different screen and must never be

@@ -1036,8 +1036,51 @@ class MediaBrowserTest {
     @Test fun authenticationFailureNeverShowsRawServerMessage() = runBlocking<Unit> {
         val a = Adapter(); a.fetch = { _, _ -> throw AuthenticationError(AuthFailureKind.TokenExpired, "token=secret") }
         val b = browser(a); b.start()
-        assertEquals("登录已失效，请退出后重新登录", b.state.value.error)
+        assertNull(b.state.value.error, "Authentication is a shell dialog, not a content error row")
+        assertEquals(AuthFailureKind.TokenExpired, b.authenticationFailure.value)
         assertFalse(b.state.value.loading); assertTrue(b.state.value.items.isEmpty())
+    }
+
+    @Test fun backgroundAuthenticationFailureKeepsVisibleHomeAndExposesRecovery() = runBlocking<Unit> {
+        val a = Adapter().apply { feed = HomeFeed(latest = listOf(media("cached"))) }
+        val b = browser(a)
+        b.start()
+        val visible = b.state.value.homeFeed
+        a.homeFailure = AuthenticationError(AuthFailureKind.TokenRevoked, "secret")
+        b.refreshHome()
+        assertSame(visible, b.state.value.homeFeed)
+        assertNull(b.state.value.homeError)
+        assertEquals(AuthFailureKind.TokenRevoked, b.authenticationFailure.value)
+        assertNull(browser(Adapter()).authenticationFailure.value)
+    }
+
+    @Test fun networkServerPermissionAndDecodeFailuresDoNotAskForLogin() = runBlocking<Unit> {
+        for (failure in listOf(NetworkUnreachableError(), TimeoutError(), AuthorizationError(),
+            ProtocolDecodingError(), ServerError(statusCode = 503))) {
+            val a = Adapter().apply { fetch = { _, _ -> throw failure } }
+            val b = browser(a)
+            b.start()
+            assertNull(b.authenticationFailure.value, failure::class.simpleName)
+        }
+    }
+
+    @Test fun obsoleteSearchAuthenticationFailureCannotRaiseRecovery() = runBlocking<Unit> {
+        withTimeout(5000) {
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val a = Adapter().apply { searchFetch = { _, _ ->
+                entered.complete(Unit)
+                release.await()
+                throw AuthenticationError(AuthFailureKind.TokenExpired)
+            } }
+            val b = browser(a)
+            val pending = launch { b.search("old") }
+            entered.await()
+            b.clearSearch()
+            release.complete(Unit)
+            pending.join()
+            assertNull(b.authenticationFailure.value)
+        }
     }
 
     @Test fun cancellationPropagatesWithoutAnErrorBanner() = runBlocking<Unit> {
@@ -1045,6 +1088,7 @@ class MediaBrowserTest {
         val b = browser(a)
         assertFailsWith<CancellationException> { b.start() }
         assertNull(b.state.value.error); assertFalse(b.state.value.loading)
+        assertNull(b.authenticationFailure.value)
     }
 
     @Test fun replacedLibraryCannotShowPreviousLibraryItemsOnFailure() = runBlocking<Unit> {

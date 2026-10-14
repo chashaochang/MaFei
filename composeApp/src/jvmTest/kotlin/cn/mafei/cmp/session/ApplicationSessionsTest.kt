@@ -102,6 +102,31 @@ class ApplicationSessionsTest {
         } finally { h.close() }
     }
 
+    @Test fun expiredSessionCanBeReauthenticatedWithoutLogoutOrLosingHistoryAndPreferences() = runBlocking<Unit> {
+        val h = Harness(); val c = connection()
+        try {
+            val original = h.sessions.activate(c, h.binding(c))
+            h.secrets.save(c.passwordAlias, SecureSecret.Password("remembered"))
+            h.settings.putString("appearance-test", "dark")
+            h.transport.statusCode = 401
+            assertFailsWith<AuthenticationError> { h.sessions.media.collections(original.media, refresh = true) }
+            assertEquals(ApplicationSessionStatus.Ready, h.sessions.state.value.status)
+            assertSame(original, h.sessions.state.value.session)
+            assertEquals(listOf(c.selection), h.sessions.savedConnections().map { it.selection })
+
+            h.transport.statusCode = 200
+            val renewed = h.factory.restore(c, mapOf(c.tokenAlias to SecureSecret.AuthToken("MediaBrowser", "renewed-token")))
+            val restored = h.sessions.activate(c, renewed)
+            assertNotSame(original, restored)
+            assertEquals(c.selection, restored.selection)
+            h.sessions.media.collections(restored.media, refresh = true)
+            assertTrue(h.transport.requests.last().headers.first("Authorization")!!.contains("renewed-token"))
+            assertEquals(listOf(c.selection), h.sessions.savedConnections().map { it.selection })
+            assertEquals(SecureSecret.Password("remembered"), h.secrets.read(c.passwordAlias))
+            assertEquals("dark", h.settings.getString("appearance-test"))
+        } finally { h.close() }
+    }
+
     @Test fun switchingPreservesSavedAccountsButRevokesOldSdkCacheAndLogoutHandle() = runBlocking<Unit> {
         val h = Harness(); val a = connection(); val b = connection("b")
         try {

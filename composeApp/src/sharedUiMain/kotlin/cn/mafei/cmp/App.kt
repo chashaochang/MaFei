@@ -153,6 +153,7 @@ import cn.mafei.cmp.feature.music.MusicCatalogStore
 import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.feature.music.toMusicTrackOrNull
 import cn.mafei.cmp.feature.home.MediaBrowser
+import cn.mafei.cmp.feature.home.authenticationRecoveryMessage
 import cn.mafei.cmp.feature.home.PlaybackQueue
 import cn.mafei.cmp.feature.home.legacyHomeHeroDetailTarget
 import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
@@ -655,9 +656,11 @@ private data object BrowseAddAccountRoute : BrowseRoute
 @Serializable
 private data class BrowseConnectAccountRoute(
     val provider: ProviderKind,
-    /** 重新登录既有账号时预填（保存的凭据已不可恢复）。 */
+    /** Re-authentication passes only non-secret account metadata in the route. */
     val presetBaseUrl: String? = null,
     val presetUsername: String? = null,
+    val credentialKey: String? = null,
+    val returnToBrowseOnBack: Boolean = false,
 ) : BrowseRoute
 
 @Serializable
@@ -1182,6 +1185,9 @@ private fun BrowseContent(
         )
     }
     val state by browser.state.collectAsState()
+    val authenticationFailure by browser.authenticationFailure.collectAsState()
+    val authenticationMessage = authenticationFailure?.let(::authenticationRecoveryMessage)
+    var authenticationNoticeDismissed by remember(session) { mutableStateOf(false) }
     val chasingBrowser = remember(session) {
         ChasingBrowser(
             repository = runtime.sessions.media,
@@ -1406,6 +1412,21 @@ private fun BrowseContent(
     val mineBackStack = remember(session.selection.serverId.value, session.selection.accountId.value) {
         mutableStateListOf<BrowseRoute>(BrowseMineRoute)
     }
+    val reauthenticate: () -> Unit = {
+        authenticationNoticeDismissed = true
+        accountConnectError = null
+        pendingDiscoveredServerAddress = null
+        mineBackStack.clear()
+        mineBackStack += BrowseMineRoute
+        mineBackStack += BrowseConnectAccountRoute(
+            provider = session.connection.server.provider,
+            presetBaseUrl = session.connection.feiniuOriginalAddress ?: session.connection.server.baseUrl,
+            presetUsername = session.connection.account.userName,
+            credentialKey = session.connection.credentialKey,
+            returnToBrowseOnBack = true,
+        )
+        minePresented = true
+    }
     val destination = shellContext.destination
     // `destination` already carries Search's intentionally empty selection;
     // keep a named value because the shell and the content host use it for
@@ -1462,7 +1483,7 @@ private fun BrowseContent(
     // Legacy MineTab refreshes its independent resume + completed preview every
     // time the account surface becomes visible; it never borrows HomeFeed.resume.
     LaunchedEffect(minePresented) {
-        if (minePresented) browser.loadHistoryPreview()
+        if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview()
     }
     // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
     // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
@@ -1864,6 +1885,7 @@ private fun BrowseContent(
                         onLogout()
                     }
                 },
+                onReauthenticate = mineRootAction(reauthenticate).takeIf { authenticationFailure != null },
                 modifier = mineModifier,
                 avatar = session.connection.account.avatarImage?.let { image ->
                     { avatarModifier ->
@@ -1882,8 +1904,11 @@ private fun BrowseContent(
             )
         }
         val popMineRoute: () -> Unit = {
-            when (mineBackStack.lastOrNull()) {
-                is BrowseConnectAccountRoute -> accountConnectError = null
+            when (val route = mineBackStack.lastOrNull()) {
+                is BrowseConnectAccountRoute -> {
+                    accountConnectError = null
+                    if (route.returnToBrowseOnBack) minePresented = false
+                }
                 else -> Unit
             }
             if (mineBackStack.size > 1) mineBackStack.removeLastOrNull()
@@ -1990,6 +2015,7 @@ private fun BrowseContent(
                                                         provider = connection.server.provider,
                                                         presetBaseUrl = connection.server.baseUrl,
                                                         presetUsername = connection.account.userName,
+                                                        credentialKey = connection.credentialKey,
                                                     )
                                                 } catch (_: Exception) {
                                                     accountsError = "账号切换失败，请稍后重试"
@@ -2042,6 +2068,7 @@ private fun BrowseContent(
                             }
                             is BrowseConnectAccountRoute -> NavEntry(route) {
                                 val formState = rememberConnectFormState()
+                                var prefilling by remember(route) { mutableStateOf(route.credentialKey != null) }
                                 LaunchedEffect(formState, route) {
                                     // Returning from discovery may recreate this entry. Preserve the
                                     // selected address until the result effect below consumes it.
@@ -2051,6 +2078,25 @@ private fun BrowseContent(
                                         formState.username = route.presetUsername.orEmpty()
                                         formState.password = ""
                                         formState.rememberPassword = true
+                                        try {
+                                            val connection = route.credentialKey?.let { key ->
+                                                session.connection.takeIf { it.credentialKey == key }
+                                                    ?: runtime.savedConnections().firstOrNull { it.credentialKey == key }
+                                            }
+                                            if (connection != null) {
+                                                val password = runtime.savedPassword(connection)
+                                                formState.password = password.orEmpty()
+                                                formState.rememberPassword = password != null
+                                            }
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (_: Exception) {
+                                            accountConnectError = "无法读取已保存的密码，请手动输入"
+                                        } finally {
+                                            prefilling = false
+                                        }
+                                    } else {
+                                        prefilling = false
                                     }
                                 }
                                 LaunchedEffect(formState, pendingDiscoveredServerAddress) {
@@ -2061,15 +2107,18 @@ private fun BrowseContent(
                                     pendingDiscoveredServerAddress = null
                                 }
                                 ConnectScreen(
-                                    busy = accountConnectBusy,
+                                    busy = accountConnectBusy || prefilling,
                                     error = accountConnectError,
                                     onSubmit = { provider, address, name, password, rememberPassword ->
-                                        if (!accountConnectBusy) {
+                                        if (!accountConnectBusy && !prefilling) {
                                             accountConnectBusy = true
                                             accountConnectError = null
                                             scope.launch {
                                                 try {
                                                     runtime.connect(provider, address, name, password, rememberPassword)
+                                                    minePresented = false
+                                                    mineBackStack.clear()
+                                                    mineBackStack += BrowseMineRoute
                                                 } catch (cancelled: CancellationException) {
                                                     throw cancelled
                                                 } catch (failure: Exception) {
@@ -2798,6 +2847,7 @@ private fun BrowseContent(
                                     refreshing = state.refreshing,
                                     loadingMore = state.loadingMore,
                                     error = state.homeError ?: state.error,
+                                    authenticationRequired = authenticationFailure != null,
                                     stale = state.stale || state.homeStale,
                                     canLoadMore = state.nextCursor != null,
                                     overview = true,
@@ -3866,6 +3916,22 @@ private fun BrowseContent(
                         backdrop = backdrop,
                         onDismiss = { minePresented = false },
                         content = mineNavContent,
+                    )
+                }
+                if (authenticationMessage != null && !authenticationNoticeDismissed &&
+                    mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !playerExpanded
+                ) {
+                    cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) {
+                        authenticationNoticeDismissed = true
+                    }
+                    MaFeiGlassConfirmDialog(
+                        title = "账号验证",
+                        content = authenticationMessage,
+                        confirmText = "重新登录",
+                        dismissText = "取消",
+                        onConfirm = reauthenticate,
+                        onDismiss = { authenticationNoticeDismissed = true },
+                        backdrop = backdrop,
                     )
                 }
             },
