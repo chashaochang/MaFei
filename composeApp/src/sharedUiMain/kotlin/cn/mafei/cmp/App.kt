@@ -1,24 +1,14 @@
 package cn.mafei.cmp
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,13 +19,10 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -46,22 +33,14 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.MaFeiLayout
@@ -77,19 +56,16 @@ import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
-import cn.mafei.cmp.common.glass.DefaultGlassIntensity
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassSurface
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
-import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.glass.GlassLevel
 import cn.mafei.cmp.common.glass.GlassMaterial
 import cn.mafei.cmp.common.glass.GlassRole
 import cn.mafei.cmp.common.glass.GlassSurfaceSpec
-import cn.mafei.cmp.common.design_system.MaFeiSurface
 import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
 import cn.mafei.cmp.common.design_system.MaFeiPopupReferenceColors
 import cn.mafei.cmp.common.ui.mafeiInteractive
@@ -113,8 +89,6 @@ import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiNavItem
-import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
-import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.LegacyPosterPlaceholder
 import cn.mafei.cmp.common.ui.LegacySortChoice
 import cn.mafei.cmp.core.domain.ImageKind
@@ -127,13 +101,8 @@ import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.SortDirection
-import cn.mafei.cmp.feature.connect.ConnectAtmosphere
-import cn.mafei.cmp.feature.connect.AccountHistoryScreen
 import cn.mafei.cmp.feature.connect.ConnectScreen
-import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
 import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
-import cn.mafei.cmp.feature.connect.ServerDiscoverySuggestion
-import cn.mafei.cmp.feature.connect.ServerSuggestionType
 import cn.mafei.cmp.feature.connect.rememberConnectFormState
 import cn.mafei.cmp.feature.chasing.ChasingBrowser
 import cn.mafei.cmp.feature.chasing.ChasingScreen
@@ -164,7 +133,6 @@ import cn.mafei.cmp.feature.settings.AccountSwitchScreen
 import cn.mafei.cmp.feature.settings.AddAccountScreen
 import cn.mafei.cmp.feature.settings.AddGroupScreen
 import cn.mafei.cmp.feature.settings.AboutPrivacyScreen
-import cn.mafei.cmp.feature.settings.AppearanceScreen
 import cn.mafei.cmp.feature.settings.FeiniuConnectionPreference
 import cn.mafei.cmp.feature.settings.FeiniuConnectionPreferenceScreen
 import cn.mafei.cmp.feature.settings.MineHistoryScreen
@@ -183,7 +151,6 @@ import cn.mafei.cmp.player.ui.toMiniPlayerPresentation
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerTrack
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
-import cn.mafei.cmp.providers.jellyfin.discovery.discoverLocalJellyfinServers
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
@@ -422,50 +389,10 @@ fun App(
     val darkAppearance = appearance.dark(androidx.compose.foundation.isSystemInDarkTheme())
     LaunchedEffect(runtime) { runtime.appearance.load() }
     LaunchedEffect(runtime) { runtime.glassStyle.load() }
-    val scope = rememberCoroutineScope()
     var probe by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var starting by remember(runtime) { mutableStateOf(true) }
-    var showStartupProgress by remember(runtime) { mutableStateOf(false) }
-    var startupExiting by remember(runtime) { mutableStateOf(false) }
-    var liquidGlassIntensity by remember(runtime) { mutableFloatStateOf(DefaultGlassIntensity) }
-    var glassIntensitySaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
-    val homeCarouselVisibleState = remember(runtime) { mutableStateOf(true) }
-    var homeCarouselSaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
-    var playerRenderMode by remember(runtime) { mutableStateOf(PlayerRenderMode.Buffer) }
-    var playerRenderModeSaveJob by remember(runtime) { mutableStateOf<Job?>(null) }
-
-    LaunchedEffect(runtime) {
-        liquidGlassIntensity = runtime.loadGlassIntensity()
-    }
-
-    LaunchedEffect(runtime) {
-        homeCarouselVisibleState.value = runtime.loadHomeCarouselVisible()
-    }
-
-    LaunchedEffect(runtime) {
-        playerRenderMode = runtime.loadPlayerRenderMode().toPlayerRenderMode()
-    }
-
-    LaunchedEffect(runtime) {
-        val progress = launch {
-            delay(450)
-            showStartupProgress = true
-        }
-        try {
-            runtime.start()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            error = "旧版本数据迁移未完成，请稍后重试"
-        } finally {
-            progress.cancel()
-            startupExiting = true
-            delay(220)
-            starting = false
-        }
-    }
+    val accounts = remember(runtime) { runtime.accountAccess() }
+    val startup = rememberApplicationStartup(runtime)
+    val preferences = rememberApplicationPreferences(runtime)
     CompositionLocalProvider(LocalApplicationRuntime provides runtime) {
         if (probe) {
             Column(Modifier.fillMaxSize()) {
@@ -486,22 +413,22 @@ fun App(
             SideEffect { onThemeChanged(darkAppearance) }
             MaFeiTheme(darkTheme = darkAppearance) {
                 val health = rememberGlassRenderHealth()
-                GlassRenderingEnvironment(health, intensity = liquidGlassIntensity, style = glassStyle) {
+                GlassRenderingEnvironment(health, intensity = preferences.liquidGlassIntensity, style = glassStyle) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                        if (starting) {
+                        if (startup.starting) {
                             StaticAppCanvas {
-                                if (showStartupProgress) PonyStartupLoading(exiting = startupExiting)
+                                if (startup.showStartupProgress) PonyStartupLoading(exiting = startup.startupExiting)
                             }
                         } else when (sessionState.status) {
                             ApplicationSessionStatus.NotStarted,
                             ApplicationSessionStatus.Restoring -> StaticAppCanvas { }
 
                             ApplicationSessionStatus.SignedOut -> SignedOutFlow(
-                                runtime = runtime,
-                                busy = busy,
-                                error = error,
-                                onBusyChange = { busy = it },
-                                onErrorChange = { error = it },
+                                accounts = accounts,
+                                busy = startup.busy,
+                                error = startup.error,
+                                onBusyChange = { startup.busy = it },
+                                onErrorChange = { startup.error = it },
                                 windowControls = windowControls,
                                 windowDragArea = windowDragArea,
                             )
@@ -515,55 +442,20 @@ fun App(
                                         BrowseContent(
                                             runtime = runtime,
                                             session = session,
-                                            busy = busy,
-                                            liquidGlassIntensity = liquidGlassIntensity,
-                                            onLiquidGlassIntensityChanged = { value ->
-                                                liquidGlassIntensity = value
-                                                glassIntensitySaveJob?.cancel()
-                                                glassIntensitySaveJob = scope.launch {
-                                                    delay(180)
-                                                    runtime.saveGlassIntensity(value)
-                                                }
-                                            },
-                                            homeCarouselVisible = homeCarouselVisibleState,
-                                            onHomeCarouselVisibleChanged = { visible ->
-                                                homeCarouselVisibleState.value = visible
-                                                homeCarouselSaveJob?.cancel()
-                                                homeCarouselSaveJob = scope.launch {
-                                                    runtime.saveHomeCarouselVisible(visible)
-                                                }
-                                            },
-                                            playerRenderMode = playerRenderMode,
+                                            busy = startup.busy,
+                                            liquidGlassIntensity = preferences.liquidGlassIntensity,
+                                            onLiquidGlassIntensityChanged = preferences::setGlassIntensity,
+                                            homeCarouselVisible = preferences.homeCarouselVisibleState,
+                                            onHomeCarouselVisibleChanged = preferences::setHomeCarouselVisible,
+                                            playerRenderMode = preferences.playerRenderMode,
                                             playerRenderModeSupported = playerRenderModeSupported,
-                                            onPlayerRenderModeChanged = { mode ->
-                                                playerRenderMode = mode
-                                                playerRenderModeSaveJob?.cancel()
-                                                playerRenderModeSaveJob = scope.launch {
-                                                    runtime.savePlayerRenderMode(mode.storageValue)
-                                                }
-                                            },
+                                            onPlayerRenderModeChanged = preferences::setRenderMode,
                                             playerSurface = playerSurface,
                                             onPlayerScreenChanged = onPlayerScreenChanged,
                                             onPlayerFullscreenChanged = onPlayerFullscreenChanged,
                                             windowControls = windowControls,
                                             windowDragArea = windowDragArea,
-                                            onLogout = {
-                                                if (!busy) {
-                                                    busy = true
-                                                    error = null
-                                                    scope.launch {
-                                                        try {
-                                                            runtime.sessions.logout(session)
-                                                        } catch (cancelled: CancellationException) {
-                                                            throw cancelled
-                                                        } catch (_: Exception) {
-                                                            error = "安全凭证清理未完成，请重试"
-                                                        } finally {
-                                                            busy = false
-                                                        }
-                                                    }
-                                                }
-                                            },
+                                            onLogout = { startup.logout(session) },
                                         )
                                     }
                                 }
@@ -571,26 +463,10 @@ fun App(
 
                             ApplicationSessionStatus.NeedsAttention -> StaticAppCanvas {
                                 SessionMessage(
-                                    message = error ?: "账号恢复或保存未完成。可以重试恢复，或先完成退出再登录。",
-                                    busy = busy,
-                                    onRetry = { scope.launch { runtime.sessions.start() } },
-                                    onCleanup = {
-                                        if (!busy) {
-                                            busy = true
-                                            scope.launch {
-                                                try {
-                                                    runtime.sessions.retryCleanup()
-                                                    error = null
-                                                } catch (cancelled: CancellationException) {
-                                                    throw cancelled
-                                                } catch (_: Exception) {
-                                                    error = "安全凭证清理仍未完成，请稍后重试"
-                                                } finally {
-                                                    busy = false
-                                                }
-                                            }
-                                        }
-                                    },
+                                    message = startup.error ?: "账号恢复或保存未完成。可以重试恢复，或先完成退出再登录。",
+                                    busy = startup.busy,
+                                    onRetry = startup::retry,
+                                    onCleanup = startup::cleanup,
                                 )
                             }
 
@@ -601,343 +477,6 @@ fun App(
                     }
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-private fun SignedOutFlow(
-    runtime: ApplicationRuntime,
-    busy: Boolean,
-    error: String?,
-    onBusyChange: (Boolean) -> Unit,
-    onErrorChange: (String?) -> Unit,
-    windowControls: @Composable RowScope.() -> Unit,
-    windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val backStack = remember { mutableStateListOf<SignedOutRoute>(ConnectRoute) }
-    var historyConnections by remember(runtime) { mutableStateOf(emptyList<SavedConnection>()) }
-    var rememberedPasswordKeys by remember(runtime) { mutableStateOf(emptySet<String>()) }
-    var historyLoading by remember(runtime) { mutableStateOf(false) }
-    var historyError by remember(runtime) { mutableStateOf<String?>(null) }
-    var deletingAccountKey by remember(runtime) { mutableStateOf<String?>(null) }
-    var pendingDeleteAccount by remember(runtime) { mutableStateOf<ConnectionHistoryItem?>(null) }
-    // 窗口背景层的源：影视墙铺在窗口层、两个面板共享，所以它在整窗里是同一面墙。
-    // 建在这里是因为两个面板的 lambda 都要引用它。
-    val pageBackdrop = rememberGlassBackdrop()
-    val connectFormState = rememberConnectFormState()
-    // Signed out means no account is in use, but the history panel must never
-    // offer to delete whatever account the runtime still holds.
-    val activeSelection = runtime.sessions.state.value.session?.selection
-    val historyItems = historyConnections.map { connection ->
-        ConnectionHistoryItem(
-            key = connection.credentialKey,
-            provider = connection.server.provider,
-            serverId = connection.server.id,
-            displayName = connection.account.displayName,
-            serverName = connection.server.name,
-            address = connection.server.baseUrl,
-            hasRememberedPassword = connection.credentialKey in rememberedPasswordKeys,
-            isCurrent = connection.selection == activeSelection,
-        )
-    }
-    val loadHistory: () -> Unit = {
-        if (!historyLoading) {
-            historyLoading = true
-            historyError = null
-            scope.launch {
-                try {
-                    val connections = runtime.savedConnections()
-                    val passwordKeys = runtime.savedPasswordKeys(connections)
-                    historyConnections = connections
-                    rememberedPasswordKeys = passwordKeys
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    historyConnections = emptyList()
-                    rememberedPasswordKeys = emptySet()
-                    historyError = "历史账号读取失败，请稍后重试"
-                } finally {
-                    historyLoading = false
-                }
-            }
-        }
-    }
-
-    // Deletes restorable credentials, the remembered password and the history row
-    // itself. The account in use refuses, which its row already does not offer.
-    val deleteAccount: (ConnectionHistoryItem) -> Unit = { item ->
-        val connection = historyConnections.firstOrNull { it.credentialKey == item.key }
-        if (connection == null) {
-            historyError = "历史账号已失效，请刷新后重试"
-        } else if (deletingAccountKey == null && !busy) {
-            deletingAccountKey = item.key
-            historyError = null
-            scope.launch {
-                try {
-                    if (runtime.deleteSavedConnection(connection)) {
-                        // The mutation already succeeded. Update the local source directly so
-                        // deleting the last row does not start a loading state that would remove
-                        // the shared dissolve surface before its animation finishes.
-                        historyConnections = historyConnections.filterNot {
-                            it.credentialKey == item.key
-                        }
-                        rememberedPasswordKeys = rememberedPasswordKeys - item.key
-                    } else {
-                        historyError = "该账号正在使用，无法删除"
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    historyError = "账号删除失败，请稍后重试"
-                } finally {
-                    deletingAccountKey = null
-                }
-            }
-        }
-    }
-
-    val connectContent: @Composable () -> Unit = {
-        ConnectScreen(
-            busy = busy,
-            error = error,
-            onOpenHistory = {
-                if (backStack.lastOrNull() != AccountHistoryRoute) {
-                    backStack.add(AccountHistoryRoute)
-                }
-                loadHistory()
-            },
-            onOpenServerDiscovery = {
-                if (backStack.lastOrNull() != ServerDiscoveryRoute) {
-                    backStack.add(ServerDiscoveryRoute)
-                }
-            },
-            onSubmit = { provider, address, name, password, rememberPassword ->
-                if (!busy) {
-                    onBusyChange(true)
-                    onErrorChange(null)
-                    scope.launch {
-                        try {
-                            runtime.connect(provider, address, name, password, rememberPassword)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Exception) {
-                            onErrorChange(connectFailureMessage(failure))
-                        } finally {
-                            onBusyChange(false)
-                        }
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            pageBackdrop = pageBackdrop,
-            formState = connectFormState,
-        )
-    }
-    val historyContent: @Composable () -> Unit = {
-        AccountHistoryScreen(
-            items = historyItems,
-            // Keep the rendered rows visible during a post-delete refresh so the shared
-            // dissolve animation is not replaced by a full-screen loading indicator.
-            loading = historyLoading && historyItems.isEmpty(),
-            error = historyError,
-            busy = busy,
-            onBack = { backStack.removeLastOrNull() },
-            onRetry = loadHistory,
-            onSelected = { item ->
-                val connection = historyConnections.firstOrNull {
-                    it.credentialKey == item.key
-                }
-                if (connection == null) {
-                    historyError = "历史账号已失效，请刷新后重试"
-                } else if (!busy) {
-                    onBusyChange(true)
-                    historyError = null
-                    scope.launch {
-                        try {
-                            runtime.switchAccount(connection)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            // Logout deliberately removes restorable secrets,
-                            // while the non-secret history entry remains. Fall
-                            // back to a prefilled login form for re-authentication.
-                            val savedPassword = try {
-                                runtime.savedPassword(connection)
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                null
-                            }
-                            connectFormState.provider = connection.server.provider
-                            connectFormState.baseUrl = connection.server.baseUrl
-                            connectFormState.username = connection.account.displayName
-                            connectFormState.password = savedPassword.orEmpty()
-                            connectFormState.rememberPassword = savedPassword != null
-                            historyError = null
-                            onErrorChange(null)
-                            backStack.removeLastOrNull()
-                        } finally {
-                            onBusyChange(false)
-                        }
-                    }
-                }
-            },
-            deletingKey = deletingAccountKey,
-            onRequestDelete = { pendingDeleteAccount = it },
-            modifier = Modifier.fillMaxSize(),
-            pageBackdrop = pageBackdrop,
-        )
-    }
-    val discoveryContent: @Composable () -> Unit = {
-        ServerDiscoveryScreen(
-            loadSavedServers = { savedJellyfinServerSuggestions(runtime) },
-            discoverServers = { discoveredJellyfinServerSuggestions() },
-            onBack = { backStack.removeLastOrNull() },
-            onSelectServer = { address ->
-                connectFormState.provider = ProviderKind.Jellyfin
-                connectFormState.baseUrl = address
-                connectFormState.requestServerAddressFocus()
-                backStack.removeLastOrNull()
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val fontScale = LocalDensity.current.fontScale
-        val windowFeatures = LocalMaFeiWindowFeatures.current
-        val adaptiveWindow = remember(maxWidth, maxHeight, fontScale, windowFeatures) {
-            mafeiAdaptiveWindow(
-                MaFeiWindowEnvironment(
-                    widthDp = maxWidth.value,
-                    heightDp = maxHeight.value,
-                    fontScale = fontScale,
-                    safeInsets = windowFeatures.safeInsets,
-                    occlusions = windowFeatures.occlusions,
-                    foldPosture = windowFeatures.foldPosture,
-                    displayRole = windowFeatures.displayRole,
-                ),
-            )
-        }
-        val supportsTwoPane = adaptiveWindow.contentBounds.width >= 900f
-        // The window's own capture source. The confirmation panel below samples it,
-        // so it is captured on the pane host and never on the panel itself.
-        val shellBackdrop = rememberGlassBackdrop()
-        // 窗口层 Box 会遮蔽 BoxWithConstraintsScope，先把宽度取出来。
-        val paneHostWidth = maxWidth
-
-        // 免登录流程（连接页 / 账号历史）**不走外壳**，但里面的 `MaFeiActionBar` 读的是
-        // `LocalMaFeiSafeArea` —— 外壳之外那个组合本地的默认值是全 0，于是标题栏会顶进
-        // 状态栏里（而列表用的是 `currentMaFeiSafeArea()`，所以只有标题栏没适配）。这里把
-        // 真实窗口安全区补上，两条取法就一致了。
-        CompositionLocalProvider(LocalMaFeiSafeArea provides currentMaFeiSafeArea()) {
-        // 影视墙铺在窗口层：两个面板共享同一个源 —— 墙在整窗里是连续的（各栏各画一遍
-        // 会在分界线上拼出两套格子），而且源不随面板宽度动画变化，模糊不会被拉花。
-        Box(Modifier.fillMaxSize().captureGlassBackdrop(shellBackdrop)) {
-            Box(Modifier.fillMaxSize().captureGlassBackdrop(pageBackdrop)) {
-                ConnectAtmosphere()
-            }
-            if (supportsTwoPane && backStack.lastOrNull() != ServerDiscoveryRoute) {
-                val historyOpen = backStack.lastOrNull() == AccountHistoryRoute
-                val historyConnectPaneWidth = (paneHostWidth * .43f).coerceIn(420.dp, 560.dp)
-                val connectPaneWidth by animateDpAsState(
-                    targetValue = if (historyOpen) historyConnectPaneWidth else paneHostWidth,
-                    animationSpec = tween(durationMillis = 240),
-                    label = "signed out connect pane width",
-                )
-                Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.width(connectPaneWidth).fillMaxHeight()) {
-                        connectContent()
-                    }
-                    AnimatedVisibility(
-                        visible = historyOpen,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        enter = fadeIn(tween(180, delayMillis = 60)) +
-                            slideInHorizontally(tween(240)) { it / 8 },
-                        exit = fadeOut(tween(120)) +
-                            slideOutHorizontally(tween(180)) { it / 10 },
-                    ) {
-                        Row(Modifier.fillMaxSize()) {
-                            Box(
-                                Modifier.width(1.dp).fillMaxHeight()
-                                    .background(Color.White.copy(alpha = .12f)),
-                            )
-                            Box(Modifier.weight(1f).fillMaxHeight()) {
-                                historyContent()
-                            }
-                        }
-                    }
-                }
-            } else {
-                NavDisplay(
-                    backStack = backStack,
-                    onBack = {
-                        if (backStack.size > 1) backStack.removeLastOrNull()
-                    },
-                    transitionSpec = {
-                        (slideInHorizontally(tween(durationMillis = 320)) { it } +
-                            fadeIn(tween(durationMillis = 180))) togetherWith
-                            (slideOutHorizontally(tween(durationMillis = 320)) { -it / 5 } +
-                                fadeOut(tween(durationMillis = 180)))
-                    },
-                    popTransitionSpec = {
-                        (slideInHorizontally(tween(durationMillis = 300)) { -it / 5 } +
-                            fadeIn(tween(durationMillis = 180))) togetherWith
-                            (slideOutHorizontally(tween(durationMillis = 300)) { it } +
-                                fadeOut(tween(durationMillis = 180)))
-                    },
-                    predictivePopTransitionSpec = {
-                        (slideInHorizontally(tween(durationMillis = 300)) { -it / 5 } +
-                            fadeIn(tween(durationMillis = 180))) togetherWith
-                            (slideOutHorizontally(tween(durationMillis = 300)) { it } +
-                                fadeOut(tween(durationMillis = 180)))
-                    },
-                    entryProvider = { route ->
-                        when (route) {
-                            ConnectRoute -> NavEntry(route) { connectContent() }
-                            AccountHistoryRoute -> NavEntry(route) { historyContent() }
-                            ServerDiscoveryRoute -> NavEntry(route) { discoveryContent() }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-        pendingDeleteAccount?.let { item ->
-            MaFeiGlassConfirmDialog(
-                title = "删除账号",
-                content = "确定要删除「${item.displayName}」这个账号吗？",
-                confirmText = "删除",
-                dismissText = "取消",
-                destructive = true,
-                backdrop = shellBackdrop,
-                onDismiss = { pendingDeleteAccount = null },
-                onConfirm = {
-                    pendingDeleteAccount = null
-                    deleteAccount(item)
-                },
-            )
-        }
-        // An undecorated Mac window also needs a close/minimize/maximize hit
-        // area before an account is connected. The signed-in shell places the
-        // same controls in its sidebar header; the signed-out flow keeps only
-        // the compact chrome row so the login content remains unchanged.
-        Box(
-            Modifier.align(Alignment.TopStart)
-                .padding(top = currentMaFeiSafeArea().top + 10.dp, start = 12.dp),
-        ) {
-            windowDragArea {
-                Row(
-                    Modifier.height(44.dp).width(74.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    windowControls()
-                }
-            }
-        }
         }
     }
 }
@@ -1911,7 +1450,7 @@ private fun BrowseContent(
                             }
                             BrowseServerDiscoveryRoute -> NavEntry(route) {
                                 ServerDiscoveryScreen(
-                                    loadSavedServers = { savedJellyfinServerSuggestions(runtime) },
+                                    loadSavedServers = { savedJellyfinServerSuggestions(runtime.accountAccess()) },
                                     discoverServers = { discoveredJellyfinServerSuggestions() },
                                     onBack = popMineRoute,
                                     onSelectServer = { address ->
@@ -3950,151 +3489,6 @@ private fun legacyConnectionDescription(connection: SavedConnection): String {
 }
 
 @Composable
-private fun StaticAppCanvas(content: @Composable BoxScope.() -> Unit) {
-    Box(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        content = content,
-    )
-}
-
-@Composable
-private fun PonyStartupLoading(exiting: Boolean) {
-    val density = LocalDensity.current
-    val transition = rememberInfiniteTransition(label = "pony-startup")
-    val frameProgress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(480, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "pony-frames",
-    )
-    val streakProgress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(720, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "pony-streaks",
-    )
-    val breathing by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "pony-breathing",
-    )
-    val exitProgress by animateFloatAsState(
-        targetValue = if (exiting) 1f else 0f,
-        animationSpec = tween(220, easing = LinearEasing),
-        label = "pony-exit",
-    )
-    val primary = MaterialTheme.colorScheme.primary
-    val frames = remember { MaFeiLegacyDrawables.ponyLoadingFrames }
-    val frame = frames[frameProgress.toInt().coerceIn(0, frames.lastIndex)]
-    val imageYOffsetPx = with(density) { 18.dp.toPx() }
-    val exitYOffsetPx = with(density) { 12.dp.toPx() }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .graphicsLayer { alpha = 1f - exitProgress },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 360.dp)
-                .height(250.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(Modifier.matchParentSize().padding(horizontal = 22.dp)) {
-                val lineY = size.height * 0.83f
-                val lineGap = 52.dp.toPx()
-                val lineHeight = 3.dp.toPx()
-                val phase = streakProgress * lineGap
-                repeat(5) { index ->
-                    val lineWidth = (28 + (index % 3) * 10).dp.toPx()
-                    val x = size.width - ((index * lineGap + phase) % (size.width + lineWidth))
-                    val y = lineY + ((index % 2) * 7).dp.toPx()
-                    drawRoundRect(
-                        color = primary.copy(alpha = 0.16f + breathing * 0.08f),
-                        topLeft = Offset(x, y),
-                        size = Size(lineWidth, lineHeight),
-                        cornerRadius = CornerRadius(lineHeight / 2f),
-                    )
-                }
-            }
-            Image(
-                painter = painterResource(frame),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(160.dp)
-                    .graphicsLayer {
-                        translationY = -imageYOffsetPx - exitProgress * exitYOffsetPx
-                        val scale = 0.98f + breathing * 0.02f + exitProgress * 0.06f
-                        scaleX = scale
-                        scaleY = scale
-                    },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "正在启动…",
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
-        )
-    }
-}
-
-@Composable
-private fun SessionMessage(
-    message: String,
-    busy: Boolean = false,
-    onRetry: (() -> Unit)? = null,
-    onCleanup: (() -> Unit)? = null,
-) {
-    Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(Modifier.widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(message)
-            if (busy) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Button)
-                    Text("正在处理", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            onRetry?.let {
-                Text(
-                    "重试恢复",
-                    Modifier.mafeiInteractive(it, enabled = !busy, radiusDp = 20f, label = "重试恢复")
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (busy) .45f else 1f),
-                )
-            }
-            onCleanup?.let {
-                Text(
-                    "完成退出，重新登录",
-                    Modifier.mafeiInteractive(it, enabled = !busy, radiusDp = 20f, label = "完成退出，重新登录")
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (busy) .45f else 1f),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun LegacyPersonArtwork(
     image: MediaImage?,
     name: String,
@@ -4139,44 +3533,6 @@ private fun MediaItem.miniPlayerSubtitle(): String = if (mediaType == MediaType.
         else -> null
     },
 ).joinToString(" · ")
-
-private suspend fun savedJellyfinServerSuggestions(
-    runtime: ApplicationRuntime,
-): List<ServerDiscoverySuggestion> = runtime.savedConnections()
-    .asSequence()
-    .filter { it.server.provider == ProviderKind.Jellyfin }
-    .distinctBy { it.server.baseUrl }
-    // ArkUI's loadPreviouslyUsedServers() reads the current server only. The
-    // CMP catalog is already ordered by last activity, so after sign-out the
-    // first Jellyfin row is the retained equivalent of currentServerId; do not
-    // turn the discovery page into a second account-history list.
-    .take(1)
-    .map { connection ->
-        // The ArkUI page deliberately displayed the saved hostname in both rows;
-        // the friendly server name is reserved for an actual UDP discovery reply.
-        ServerDiscoverySuggestion(
-            type = ServerSuggestionType.Saved,
-            name = connection.server.baseUrl,
-            address = connection.server.baseUrl,
-        )
-    }
-    .toList()
-
-private suspend fun discoveredJellyfinServerSuggestions(): List<ServerDiscoverySuggestion> =
-    discoverLocalJellyfinServers().map { server ->
-        ServerDiscoverySuggestion(
-            type = ServerSuggestionType.Discovered,
-            name = server.name.orEmpty(),
-            address = server.address.orEmpty(),
-        )
-    }
-
-
-private fun String.toPlayerRenderMode(): PlayerRenderMode =
-    if (equals("direct", ignoreCase = true)) PlayerRenderMode.Direct else PlayerRenderMode.Buffer
-
-private val PlayerRenderMode.storageValue: String
-    get() = if (this == PlayerRenderMode.Direct) "direct" else "buffer"
 
 private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
     FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
