@@ -12,9 +12,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -2466,19 +2463,18 @@ private fun HomeMediaShelf(
         ) {
             items(items, key = { it.id.value }) { item ->
                 val text = homeShelfText(item, kind)
-                val interactionSource = remember(item.id) { MutableInteractionSource() }
-                val hovered by interactionSource.collectIsHoveredAsState()
-                val focused by interactionSource.collectIsFocusedAsState()
+                val interaction = rememberMediaCardInteraction()
                 val cardBounds = Modifier.width(width)
                 Column(
-                    (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiInteractive(
+                    (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiMediaCardInteraction(
+                        interaction,
                         onClick = { onItem(item) },
                         label = "查看${text.title}",
-                        interactionSource = interactionSource,
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                        .mafeiArtworkFeedback(interaction, RoundedCornerShape(10.dp))) {
                         val posterModifier = Modifier.fillMaxSize()
                         if (artwork != null) {
                             artwork(item, posterModifier)
@@ -2493,20 +2489,19 @@ private fun HomeMediaShelf(
                                 trackColor = Color.Black.copy(alpha = .36f),
                             )
                         }
-                        if (hovered || focused) {
-                            MediaCardHoverOverlay(
-                                title = text.title,
-                                onPlay = { (onPlay ?: onItem)(item) },
-                                onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
-                                onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
-                                isWatched = item.userData.isPlayed,
-                                isFavorite = item.userData.isFavorite,
-                            )
-                        }
+                        MediaCardHoverOverlay(
+                            visible = interaction.showActions,
+                            title = text.title,
+                            onPlay = { (onPlay ?: onItem)(item) },
+                            onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
+                            onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
+                            isWatched = item.userData.isPlayed,
+                            isFavorite = item.userData.isFavorite,
+                        )
                     }
                     Text(
                         text.title,
-                        color = if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         lineHeight = 19.sp,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,

@@ -17,9 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -137,6 +134,9 @@ import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
+import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
+import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
 import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.ImageKind
@@ -2264,23 +2264,20 @@ internal fun LegacyPeopleSection(
                 people,
                 key = { it.id?.value ?: "${it.name}:${it.role.orEmpty()}:${it.personType}" },
             ) { person ->
-                val interactionSource = remember(person) { MutableInteractionSource() }
-                val hovered by interactionSource.collectIsHoveredAsState()
-                val focused by interactionSource.collectIsFocusedAsState()
+                val interaction = rememberMediaCardInteraction()
                 val personInteractive = person.id != null
                 Column(
-                    Modifier.width(avatarSize).mafeiInteractive(
+                    Modifier.width(avatarSize).mafeiMediaCardInteraction(
+                        interaction,
                         onClick = { onPersonSelected(person) },
                         enabled = personInteractive,
-                        radiusDp = avatarSize.value / 2f,
                         label = "查看${person.name}",
-                        interactionSource = interactionSource,
                     ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(textSpacing),
                 ) {
                     Box(
-                        Modifier.size(avatarSize).clip(CircleShape)
+                        Modifier.size(avatarSize).mafeiArtworkFeedback(interaction, CircleShape, enabled = personInteractive)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -2293,22 +2290,11 @@ internal fun LegacyPeopleSection(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        if ((hovered || focused) && personInteractive) {
-                            Box(
-                                Modifier.fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = .54f)),
-                            )
-                        }
                     }
                     Text(
                         person.name,
                         Modifier.width(avatarSize),
-                        color = if ((hovered || focused) && personInteractive) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            LocalContentColor.current
-                        },
+                        color = LocalContentColor.current,
                         fontSize = nameSize,
                         lineHeight = if (largeLayout) 18.sp else 15.sp,
                         fontWeight = FontWeight.Medium,

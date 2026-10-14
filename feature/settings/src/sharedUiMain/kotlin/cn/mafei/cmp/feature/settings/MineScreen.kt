@@ -62,6 +62,9 @@ import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiProgressLine
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
+import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
+import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PlaybackHistoryItem
 import cn.mafei.cmp.core.domain.movieRatingText
@@ -367,12 +370,13 @@ private fun MineHistoryPoster(
     val popupColors = LocalMaFeiPopupColors.current
     val badgeText = item.movieRatingText ?: item.updateBadgeText
     val progress = item.progressPercent
+    val interaction = rememberMediaCardInteraction()
     Column(
-        modifier.mafeiInteractive(onClick, radiusDp = 10f, label = item.titleText),
+        modifier.mafeiMediaCardInteraction(interaction, onClick, label = item.titleText),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp))
+            Modifier.fillMaxWidth().aspectRatio(2f / 3f).mafeiArtworkFeedback(interaction, RoundedCornerShape(10.dp))
                 .background(popupColors?.container ?: MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (artwork != null) artwork(item.media, Modifier.fillMaxSize())

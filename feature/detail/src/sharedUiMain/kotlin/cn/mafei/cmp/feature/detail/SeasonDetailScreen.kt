@@ -95,6 +95,9 @@ import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.ui.TextPoster
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.mafeiArtworkFeedback
+import cn.mafei.cmp.common.ui.mafeiMediaCardInteraction
+import cn.mafei.cmp.common.ui.rememberMediaCardInteraction
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PersonRef
 import org.jetbrains.compose.resources.painterResource
@@ -774,16 +777,17 @@ private fun SeasonEpisodeCard(
     onOverview: (String) -> Unit,
 ) {
     val cardBounds = Modifier.width(180.dp).height(204.dp)
+    val interaction = rememberMediaCardInteraction()
     Column(
         (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds)
-            .mafeiInteractive(onClick, radiusDp = 6f, label = item.title),
+            .mafeiMediaCardInteraction(interaction, onClick, label = item.title),
         horizontalAlignment = Alignment.Start,
     ) {
         val imageShape = RoundedCornerShape(6.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, imageShape)
-                .clip(imageShape),
+                .mafeiArtworkFeedback(interaction, imageShape)
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, imageShape),
         ) {
             if (artwork != null) {
                 val artworkModifier = Modifier.fillMaxSize()
