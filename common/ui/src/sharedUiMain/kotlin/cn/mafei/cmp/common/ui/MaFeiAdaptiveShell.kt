@@ -591,19 +591,27 @@ fun MaFeiAdaptiveShell(
         }
 
         if (drawer) {
-            // Keep the modal above MediumTopTabs. The legacy Drawer opens a
-            // full-screen scrim with a 240dp panel, never an embedded sheet.
+            // The scrim is stationary: dim the whole window before the panel
+            // enters, and retain the dimming until the panel finishes leaving.
             AnimatedVisibility(
                 visible = drawerOpen,
-                enter = slideInHorizontally { -it } + fadeIn(),
-                exit = slideOutHorizontally { -it } + fadeOut(),
+                enter = fadeIn(tween(100)),
+                exit = fadeOut(tween(120, delayMillis = 280)),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = .50f))
                         .semantics { contentDescription = "关闭侧边栏" }
                         .mafeiInteractive({ drawerOpen = false }, label = "关闭侧边栏"),
-                ) {
+                )
+            }
+            AnimatedVisibility(
+                visible = drawerOpen,
+                enter = slideInHorizontally(tween(280, delayMillis = 100)) { -it },
+                exit = slideOutHorizontally(tween(280)) { -it },
+                modifier = Modifier.align(Alignment.TopStart)
+                    .padding(start = safeArea.start).width(240.dp).fillMaxHeight(),
+            ) {
                     SidebarPanel(
                         destinations = sidebarDestinations,
                         libraries = libraries,
@@ -636,14 +644,9 @@ fun MaFeiAdaptiveShell(
                         windowControls = {},
                         windowDragArea = { content -> content() },
                         desktop = false,
-                        modifier = Modifier
-                            .testTag("drawerSidebarPanel")
-                            .align(Alignment.TopStart)
-                            // 与常驻侧栏同一条规则：面板贴满上下边，安全区改成内部内边距。
-                            .padding(start = safeArea.start)
-                            .width(240.dp),
+                        modalDrawer = true,
+                        modifier = Modifier.fillMaxSize().testTag("drawerSidebarPanel"),
                     )
-                }
             }
         }
 
@@ -741,6 +744,7 @@ private fun SidebarPanel(
     windowControls: @Composable RowScope.() -> Unit,
     windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
     desktop: Boolean,
+    modalDrawer: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // 媒体库列表的展开/收起由侧边栏自己持有，不上升为外壳状态。
@@ -756,10 +760,10 @@ private fun SidebarPanel(
     MaFeiSurface(
         GlassSurfaceSpec(
             GlassRole.Navigation,
-            GlassLevel.Full,
+            if (modalDrawer) GlassLevel.Opaque else GlassLevel.Full,
             // 整块侧栏（含顶部 logo 区与底部账号区）就是这一种材质，顶/底不再
             // 叠任何额外玻璃层；滚进来的列表项由滚动区的上下渐隐淡出。
-            tintAlpha = .16f,
+            tintAlpha = if (modalDrawer) 1f else .16f,
             intensity = 1f,
             // 贴窗口边缘的整块面板：不要圆角、不要液态玻璃的折射与高光描边，只做高斯模糊
             // + 染色。折射会在四条边上各画一条可见的线（读成"浮起来的卡片"），而整屏高度
@@ -768,7 +772,9 @@ private fun SidebarPanel(
             material = GlassMaterial.Frosted,
         ),
         modifier.fillMaxHeight(),
-        backdrop,
+        // A modal drawer is an ordinary theme panel. Sampling the page here
+        // bypasses the scrim and makes the sidebar appear to shine through it.
+        if (modalDrawer) null else backdrop,
         exportedBackdrop = sidebarMaterialBackdrop,
     ) {
         Box(Modifier.fillMaxSize()) {
