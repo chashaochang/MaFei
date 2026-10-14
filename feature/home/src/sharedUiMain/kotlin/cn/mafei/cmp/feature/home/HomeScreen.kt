@@ -54,6 +54,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1087,6 +1088,8 @@ fun HomeScreen(
               layout = layout,
               gridState = gridState,
               topPadding = safeArea.top + 12.dp,
+              contentStartPadding = gridStartPadding,
+              contentEndPadding = gridEndPadding,
               heroHeight = homeHeroHeight(layout),
               extraHeight = heroExtraHeight,
               windowWidth = navigationChrome.windowWidthDp ?: maxWidth,
@@ -1734,6 +1737,8 @@ private fun HomeHeroForegroundOverlay(
     layout: MaFeiLayout,
     gridState: LazyGridState,
     topPadding: Dp,
+    contentStartPadding: Dp,
+    contentEndPadding: Dp,
     heroHeight: Dp,
     extraHeight: Dp,
     windowWidth: Dp,
@@ -1888,9 +1893,12 @@ private fun HomeHeroForegroundOverlay(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(
-                            horizontal = if (layout.horizontalHero) 36.dp else 16.dp,
-                            vertical = 14.dp,
-                        ),
+                            start = contentStartPadding,
+                            end = contentEndPadding,
+                            top = 14.dp,
+                            bottom = 14.dp,
+                        )
+                        .testTag("homeHeroIndicator"),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items.indices.forEach { index ->
