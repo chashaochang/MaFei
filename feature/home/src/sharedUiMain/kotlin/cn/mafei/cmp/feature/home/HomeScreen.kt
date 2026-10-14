@@ -2251,10 +2251,10 @@ private fun RecommendationHero(
                         }
                     }
                 }
-                if (layout.navigation != NavigationPlacement.Sidebar && !featherIntoAmbient) {
-                    // Sidebar 大屏不再叠加文字底部的黑色渐变遮罩：图片下沉到背景
-                    // 后它就是「文字区域下面一块黑色半透明」，可读性由背景层的
-                    // 全局 scrim 与羽化负责，这层只贡献脏块。
+                if (drawImageInPager && !featherIntoAmbient) {
+                    // A scrim belongs to the image it shades, not to a navigation
+                    // type. Tablet Drawer/Rail also use the window artwork;
+                    // shading their otherwise empty pager painted a dark rectangle.
                     Box(Modifier.fillMaxSize().background(readabilityScrim))
                 }
                 // 仅 fallback 图片需要在 Pager 底部收进普通画布。窗口背景启用时
