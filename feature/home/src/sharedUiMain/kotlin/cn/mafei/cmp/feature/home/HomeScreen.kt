@@ -339,19 +339,18 @@ fun HomeScreen(
         }
     }
     val selectedFeedCollection = collections.firstOrNull { it.id.value == selectedFeedKey }
-    // Sidebar/Rail layouts do not render the phone Floating Tabs. Their shelf
-    // is always the global home feed, even if a previous phone session left a
-    // library tab selected in rememberSaveable state.
-    val wideHomeShelf = layout.navigation == NavigationPlacement.Sidebar ||
-        layout.navigation == NavigationPlacement.Rail
+    // Tablet drawers and persistent sidebars own library navigation alike.
+    // Only phone navigation uses the floating feed selector; rotation must
+    // not change the tablet's per-library home structure.
+    val showFloatingTabs = layout.isPhoneNavigation
     val latestItems = remember(
         selectedFeedKey,
         selectedFeedCollection,
         recentItems,
         homeLatestByCollection,
-        wideHomeShelf,
+        showFloatingTabs,
     ) {
-        if (selectedFeedKey == RecentFeedKey || wideHomeShelf) recentItems
+        if (selectedFeedKey == RecentFeedKey || !showFloatingTabs) recentItems
         else selectedFeedCollection?.let { homeLatestByCollection[it.id] }.orEmpty().distinctByMediaId()
     }
     // Selecting an uncached library changes [selectedFeedKey] in the same
@@ -530,13 +529,6 @@ fun HomeScreen(
             NavigationPlacement.Rail -> safeArea.top
             NavigationPlacement.Bottom -> safeArea.top + 12.dp
         }.roundToPx()
-    }
-    // 浮动 feed 切换条（最近添加 / 各媒体库 Tab）是手机与中屏的信息结构。大屏的
-    // 常驻导航形态（Sidebar / Rail）改用「最近添加」横向 shelf + 查看更多；侧栏
-    // 收起只是让内容区变宽，不改变信息结构 —— Pad 上收起侧栏不允许退回小屏布局。
-    val showFloatingTabs = when (layout.navigation) {
-        NavigationPlacement.Drawer, NavigationPlacement.Bottom -> true
-        NavigationPlacement.Rail, NavigationPlacement.Sidebar -> false
     }
     // The real sticky header remains in the lazy grid, so its measured item is
     // the sole source of truth for visibility, pinning and position. The glass
@@ -865,7 +857,7 @@ fun HomeScreen(
 
         if (overview) {
             if (!showFloatingTabs) {
-                // Desktop sidebar layout keeps each provider media library as
+                // Tablet/desktop home keeps each provider media library as
                 // its own recent-additions shelf. A single merged row loses
                 // the library context and made the More action jump to an
                 // unrelated global route.
