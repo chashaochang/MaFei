@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.drawWithContent
@@ -30,6 +32,9 @@ import androidx.compose.ui.util.fastCoerceAtMost
 import androidx.compose.ui.util.lerp
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassBlurTokens
+import cn.mafei.cmp.common.glass.GlassStyle
+import cn.mafei.cmp.common.glass.currentGlassStyle
+import cn.mafei.cmp.common.glass.surfaceAlpha
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
 import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
@@ -58,6 +63,8 @@ fun LiquidButton(
     content: @Composable RowScope.() -> Unit
 ) {
     val glassIntensity = LocalGlassIntensity.current
+    val style = currentGlassStyle()
+    val fallbackSurface by rememberUpdatedState(MaterialTheme.colorScheme.surface.copy(alpha = style.surfaceAlpha(0f)))
     val animationScope = rememberCoroutineScope()
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -119,6 +126,7 @@ fun LiquidButton(
                     null
                 },
                 onDrawSurface = {
+                    if (style != GlassStyle.Liquid) drawRect(fallbackSurface)
                     if (tint.isSpecified) {
                         drawRect(tint, blendMode = BlendMode.Hue)
                         drawRect(tint.copy(alpha = 0.75f))

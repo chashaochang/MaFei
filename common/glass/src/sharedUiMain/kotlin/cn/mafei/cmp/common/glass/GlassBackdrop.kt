@@ -68,7 +68,7 @@ fun Modifier.drawStyledBackdrop(
 ): Modifier = composed {
     val style = LocalGlassStyle.current
     val health = LocalGlassRenderHealth.current
-    val translucentSurface = MaterialTheme.colorScheme.surface.copy(alpha = .28f)
+    val translucentSurface = MaterialTheme.colorScheme.surface.copy(alpha = style.surfaceAlpha(0f))
     when (style) {
         GlassStyle.Liquid -> vendorDrawBackdrop(
             backdrop = backdrop,
@@ -226,7 +226,7 @@ fun GlassSurface(
     }
     val liquid = spec.material == GlassMaterial.Liquid
     val material = if (style == GlassStyle.Translucent) {
-        Modifier.background(tint.copy(alpha = spec.tintAlpha.coerceIn(0f, .34f)), shape)
+        Modifier.background(tint.copy(alpha = style.surfaceAlpha(spec.tintAlpha)), shape)
     } else if (level == GlassLevel.Opaque || backdrop == null) {
         Modifier.background(tint.copy(alpha = 1f), shape)
     } else {
@@ -272,7 +272,7 @@ fun GlassSurface(
                 drawRect(
                     tint.copy(
                         alpha = if (health.effectFailed) 1f
-                        else spec.tintAlpha.coerceIn(0f, 1f),
+                        else style.surfaceAlpha(spec.tintAlpha),
                     ),
                 )
                     if (!failedLiquidEffects && level != GlassLevel.Opaque && liquid && style == GlassStyle.Liquid) {
