@@ -270,6 +270,18 @@ fun HomeScreen(
     val navigationChrome = LocalMaFeiNavigationChrome.current
     val layout = navigationChrome.effectiveLayout ?: layout
     val selected = collections.firstOrNull { it.id == selectedCollection }
+    // Idle posters need no shared-bounds layer or lookahead bookkeeping. Keep
+    // only the clicked source registered, including on return from details.
+    // The source identifies the shelf too: one media can appear in several rows.
+    var selectedArtworkSource by rememberSaveable { mutableStateOf<String?>(null) }
+    val openArtwork: (MediaItem, String) -> Unit = { item, source ->
+        selectedArtworkSource = source
+        onItem(item)
+    }
+    val transitionArtwork: @Composable (MediaItem, String, Modifier) -> Modifier = { item, source, bounds ->
+        if (source == selectedArtworkSource) sharedArtworkModifier?.invoke(item, bounds) ?: bounds
+        else bounds
+    }
     // Provider feeds can contain the same media more than once (the Jellyfin
     // test server currently does). Lazy layouts require unique keys, and the
     // home page should not render duplicate cards anyway, so normalize every
@@ -792,9 +804,11 @@ fun HomeScreen(
                     HomeMediaShelf(
                         title = "继续观看",
                         items = progressItems,
-                        onItem = onPlay ?: onItem,
+                        onItem = onPlay ?: { item -> openArtwork(item, "resume:${item.id.value}") },
                         artwork = shelfArtwork,
-                        sharedArtworkModifier = sharedArtworkModifier,
+                        sharedArtworkModifier = { item, bounds ->
+                            transitionArtwork(item, "resume:${item.id.value}", bounds)
+                        },
                         kind = HomeShelfKind.Resume,
                         layout = layout,
                         leadingInset = sceneControlLeading,
@@ -809,9 +823,11 @@ fun HomeScreen(
                     HomeMediaShelf(
                         title = "接下来",
                         items = nextUpItems,
-                        onItem = onPlay ?: onItem,
+                        onItem = onPlay ?: { item -> openArtwork(item, "next-up:${item.id.value}") },
                         artwork = shelfArtwork,
-                        sharedArtworkModifier = sharedArtworkModifier,
+                        sharedArtworkModifier = { item, bounds ->
+                            transitionArtwork(item, "next-up:${item.id.value}", bounds)
+                        },
                         kind = HomeShelfKind.NextUp,
                         layout = layout,
                         leadingInset = sceneControlLeading,
@@ -929,10 +945,11 @@ fun HomeScreen(
                             ) {
                                 items(collectionItems, key = { it.id.value }) { item ->
                                     val text = homeLatestText(item)
+                                    val artworkSource = "latest:${collection.id.value}:${item.id.value}"
                                     MediaCard(
                                         text.title,
                                         text.subtitle,
-                                        onClick = { onItem(item) },
+                                        onClick = { openArtwork(item, artworkSource) },
                                         poster = artwork?.let { painter ->
                                             { posterModifier ->
                                                 painter(item, posterModifier)
@@ -944,8 +961,7 @@ fun HomeScreen(
                                         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         isWatched = item.userData.isPlayed,
                                         isFavorite = item.userData.isFavorite,
-                                        modifier = sharedArtworkModifier?.invoke(item, Modifier.width(140.dp))
-                                            ?: Modifier.width(140.dp),
+                                        modifier = transitionArtwork(item, artworkSource, Modifier.width(140.dp)),
                                     )
                                 }
                             }
@@ -986,16 +1002,17 @@ fun HomeScreen(
             } else if (displayed.isNotEmpty()) {
                 items(displayed, key = { item -> "$renderedFeedKey:${item.id.value}" }) { item ->
                     val text = homeLatestText(item)
+                    val artworkSource = "feed:$renderedFeedKey:${item.id.value}"
                     MediaCard(
                         text.title,
                         text.subtitle,
-                        onClick = { onItem(item) },
+                        onClick = { openArtwork(item, artworkSource) },
                         poster = artwork?.let { painter ->
                             { posterModifier ->
                                 painter(item, posterModifier)
                             }
                         },
-                        modifier = sharedArtworkModifier?.invoke(item, Modifier) ?: Modifier,
+                        modifier = transitionArtwork(item, artworkSource, Modifier),
                         progress = progress(item),
                         onPlay = onPlay?.let { play -> { play(item) } },
                         onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
@@ -1048,14 +1065,15 @@ fun HomeScreen(
             }
             items(displayed, key = { it.id.value }) { item ->
                 val text = HomeCardText(item.title, item.metaLine)
+                val artworkSource = "browse:${item.id.value}"
                 MediaCard(
-                    text.title, text.subtitle, onClick = { onItem(item) },
+                    text.title, text.subtitle, onClick = { openArtwork(item, artworkSource) },
                     poster = artwork?.let { painter ->
                         { posterModifier ->
                             painter(item, posterModifier)
                         }
                     },
-                    modifier = sharedArtworkModifier?.invoke(item, Modifier) ?: Modifier,
+                    modifier = transitionArtwork(item, artworkSource, Modifier),
                     progress = progress(item),
                     onPlay = onPlay?.let { play -> { play(item) } },
                     onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
