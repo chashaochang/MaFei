@@ -167,6 +167,97 @@ class FeiniuAdapterPlaybackTest {
     }
 
     @Test
+    fun strmPlaybackKeepsTheOfficialAudioAndSubtitleMetadata() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{
+            "audio_streams":[
+                {"guid":"au-0001","index":1,"title":"国语配音","language":"chi","codec_name":"aac","channels":2},
+                {"guid":"au-0002","index":2,"language":"eng","codec_type":"eac3","channels":6}
+            ],
+            "subtitle_streams":[
+                {"guid":"sb-0001","index":3,"title":"简体中文","language":"chi","codec_name":"ass"},
+                {"guid":"sb-0002","index":4,"language":"eng","format":"srt","is_external":1}
+            ],
+            "direct_link_qualities":[{"url":"https://direct.cloud.test/movie.mp4"}]
+        }}""")
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+        val audio = ready.tracks.filter { it.kind == PlaybackTrackKind.Audio }
+        val subtitles = ready.tracks.filter { it.kind == PlaybackTrackKind.Subtitle }
+        assertEquals(listOf("国语配音", "eng · EAC3 · 6声道"), audio.map { it.displayTitle })
+        assertEquals(listOf("简体中文", "eng · SRT · 外挂"), subtitles.map { it.displayTitle })
+        assertEquals(listOf("aac", "eac3"), audio.map { it.codec })
+        assertEquals(listOf(1, 2, 3, 4), ready.tracks.map { it.index })
+        assertEquals(listOf(true, false), audio.map { it.selected })
+        assertEquals(listOf(true, false), subtitles.map { it.selected })
+        assertEquals(listOf(false, false, false, true), ready.tracks.map { it.renegotiate })
+        assertEquals(null, ready.subtitleUrl, "Metadata must not load an unselected external subtitle")
+        assertFalse(ready.headers.containsKey("Authorization"))
+        assertEquals(4, fixture.transport.requests.size)
+    }
+
+    @Test
+    fun officialTrackMetadataEnrichesTheListWithoutDiscardingItsIdentityOrSelection() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{
+            "files":[{"guid":"md-0001","file_name":"movie.strm"}],
+            "audio_streams":[{"media_guid":"md-0001","guid":"au-0001","index":1,"language":"chi"}],
+            "subtitle_streams":[{"media_guid":"md-0001","guid":"sb-0001","index":3,"language":"chi"}]
+        }}""")
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{
+            "audio_streams":[{"index":1,"title":"中文配音","codec_name":"aac","channels":2}],
+            "subtitle_streams":[{"index":3,"title":"中文字幕","format":"ass","is_external":1}],
+            "direct_link_qualities":[{"url":"https://direct.cloud.test/movie.mp4"}]
+        }}""")
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+        assertEquals(listOf("中文配音", "中文字幕"), ready.tracks.map { it.displayTitle })
+        assertEquals(listOf("chi", "chi"), ready.tracks.map { it.language })
+        assertTrue(ready.tracks.all { it.selected })
+        assertEquals("https://feiniu.test/v/api/v1/subtitle/dl/sb-0001", ready.subtitleUrl)
+    }
+
+    @Test
+    fun ordinaryPlaybackUsesTheSameTrackTitlesAsDetailMetadata() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{
+            "files":[{"guid":"md-0001","file_name":"movie.mkv"}],
+            "audio_streams":[{"guid":"au-0001","index":1,"language":" chi ","codec_type":" ac3 ","channels":6}],
+            "subtitle_streams":[{"guid":"sb-0001","index":3,"language":" eng ","codec_type":" subrip ","is_external":1}]
+        }}""")
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(MediaId("it-0001")))
+        assertEquals(listOf("chi · AC3 · 6声道", "eng · SUBRIP · 外挂"), ready.tracks.map { it.displayTitle })
+        assertEquals(listOf("ac3", "subrip"), ready.tracks.map { it.codec })
+    }
+
+    @Test
+    fun strmMetadataDoesNotReenableExplicitlyDisabledExternalSubtitles() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)
+        fixture.transport.enqueueJson(200, STRM_STREAM_LIST)
+        fixture.transport.enqueueJson(200, USER_INFO_WITH_SOURCE)
+        fixture.transport.enqueueJson(200, """{"code":0,"data":{
+            "subtitle_streams":[{"guid":"sb-0001","index":3,"language":"chi","format":"ass","extra_file":1}],
+            "direct_link_qualities":[{"url":"https://direct.cloud.test/movie.mp4"}]
+        }}""")
+
+        val ready = assertIs<PlaybackPreparation.Ready>(fixture.adapter.preparePlayback(
+            MediaId("it-0001"), PlaybackOptions(subtitleStreamIndex = -1),
+        ))
+        assertEquals("chi · ASS · 外挂", ready.tracks.single().displayTitle)
+        assertTrue(ready.tracks.single().isExternal)
+        assertFalse(ready.tracks.single().selected)
+        assertEquals(null, ready.subtitleUrl)
+    }
+
+    @Test
     fun strmFallsBackFromDirectQualitiesToOrdinaryQualities() = runTest {
         val fixture = Fixture()
         fixture.transport.enqueueJson(200, FeiniuFixtures.PLAY_INFO)

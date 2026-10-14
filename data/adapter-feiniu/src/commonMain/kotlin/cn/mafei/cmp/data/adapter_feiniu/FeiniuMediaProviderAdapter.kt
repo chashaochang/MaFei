@@ -22,7 +22,6 @@ import cn.mafei.cmp.core.domain.ServerId
 import cn.mafei.cmp.core.domain.SortDirection
 import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaSortField
-import cn.mafei.cmp.core.domain.mediaLanguageDisplayName
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.AdapterCapability
 import cn.mafei.cmp.data.adapter_contract.HomeFeed
@@ -1101,11 +1100,11 @@ class FeiniuMediaProviderAdapter(
             PlaybackTrack(
                 index = index,
                 kind = PlaybackTrackKind.Audio,
-                displayTitle = stream.title?.takeIf { it.isNotBlank() }
-                    ?: feiniuTrackFallbackName(stream.language, stream.codecName, stream.channels),
-                title = stream.title?.takeIf { it.isNotBlank() },
-                language = stream.language?.takeIf { it.isNotBlank() },
-                codec = stream.codecName?.takeIf { it.isNotBlank() },
+                displayTitle = stream.feiniuAudioDisplayTitle(),
+                title = stream.title?.trim()?.takeIf { it.isNotEmpty() },
+                language = stream.language?.trim()?.takeIf { it.isNotEmpty() },
+                codec = stream.codecName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: stream.codecType?.trim()?.takeIf { it.isNotEmpty() },
                 channels = stream.channels,
                 selected = index == selectedAudioIndex,
                 isExternal = false,
@@ -1115,15 +1114,16 @@ class FeiniuMediaProviderAdapter(
         }
         val subtitleTracks = streams.subtitleStreams.mapNotNull { stream ->
             val index = stream.index ?: return@mapNotNull null
-            val external = stream.isExternal == 1
+            val external = (stream.isExternal ?: 0) > 0 || (stream.extraFile ?: 0) > 0
             PlaybackTrack(
                 index = index,
                 kind = PlaybackTrackKind.Subtitle,
-                displayTitle = stream.title?.takeIf { it.isNotBlank() }
-                    ?: feiniuTrackFallbackName(stream.language, stream.format ?: stream.codecName, null),
-                title = stream.title?.takeIf { it.isNotBlank() },
-                language = stream.language?.takeIf { it.isNotBlank() },
-                codec = (stream.format ?: stream.codecName)?.takeIf { it.isNotBlank() },
+                displayTitle = stream.feiniuSubtitleDisplayTitle(),
+                title = stream.title?.trim()?.takeIf { it.isNotEmpty() },
+                language = stream.language?.trim()?.takeIf { it.isNotEmpty() },
+                codec = stream.codecName?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: stream.codecType?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: stream.format?.trim()?.takeIf { it.isNotEmpty() },
                 channels = null,
                 selected = selectedSubtitleIndex != null && selectedSubtitleIndex >= 0 &&
                     index == selectedSubtitleIndex,
@@ -1144,25 +1144,11 @@ class FeiniuMediaProviderAdapter(
         info: FeiniuPlayInfoData,
         requestedSubtitleIndex: Int?,
     ): String? {
-        if (requestedSubtitleIndex != null && requestedSubtitleIndex < 0) return null // 关闭字幕
-        val selectedGuid = info.subtitleGuid?.takeIf { it.isNotBlank() }
-        val external = streams.subtitleStreams.filter { it.isExternal == 1 && !it.guid.isNullOrBlank() }
-        val track = when (requestedSubtitleIndex) {
-            null -> external.firstOrNull { it.guid?.trim() == selectedGuid }
-                ?: external.firstOrNull { it.isDefault == 1 }
-                ?: external.firstOrNull()
-            else -> external.firstOrNull { it.index == requestedSubtitleIndex }
-        } ?: return null
+        val track = selectedSubtitleStream(streams, info, requestedSubtitleIndex) ?: return null
+        if ((track.isExternal ?: 0) <= 0 && (track.extraFile ?: 0) <= 0) return null
         val guid = track.guid?.trim()?.takeIf(String::isNotEmpty) ?: return null
         return facade.assets.subtitleDownloadUrl(resolution.preferred.baseUrl, guid)
     }
-
-    private fun feiniuTrackFallbackName(language: String?, codec: String?, channels: Int?): String =
-        buildList {
-            language?.takeIf { it.isNotBlank() }?.let { add(mediaLanguageDisplayName(it)) }
-            codec?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
-            channels?.takeIf { it > 0 }?.let { add("${it}ch") }
-        }.joinToString(" · ").takeIf { it.isNotEmpty() } ?: "默认轨道"
 
     /**
      * Mechanical equivalent of the old HarmonyOS STRM path. fnOS returns 8192
@@ -1220,10 +1206,14 @@ class FeiniuMediaProviderAdapter(
         val quality = ladder.pickQuality(ceiling) ?: return null
         val streamUrl = quality.url?.trim().orEmpty()
         val appliedBitrate = ceiling?.let { quality.bitrate?.takeIf { bitrate -> bitrate > 0 }?.toInt() }
+        val playbackStreams = mergeFeiniuOfficialStreams(
+            listed = streams,
+            entries = listOf(mediaGuid to official),
+        )
         return PlaybackPreparation.Ready(
             streamUrl = streamUrl,
-            subtitleUrl = externalSubtitleUrl(streams, info, options.subtitleStreamIndex),
-            tracks = playbackTracks(streams, info, options),
+            subtitleUrl = externalSubtitleUrl(playbackStreams, info, options.subtitleStreamIndex),
+            tracks = playbackTracks(playbackStreams, info, options),
             headers = official.header.toPlaybackHeaders(),
             allowInsecureTls = streamUrl.startsWith("https://", ignoreCase = true),
             multiConnectionAllowed = false,

@@ -599,7 +599,7 @@ internal fun feiniuDetailMediaGuids(
 
 /** Official `/stream` data wins field-by-field and preserves missing values from the list endpoints. */
 internal fun mergeFeiniuOfficialStreams(
-    detail: FeiniuItemDetail,
+    detail: FeiniuItemDetail? = null,
     listed: FeiniuStreamListData,
     entries: List<Pair<String, FeiniuOfficialStreamData>>,
 ): FeiniuStreamListData {
@@ -621,7 +621,7 @@ internal fun mergeFeiniuOfficialStreams(
         } else if (files.none { it.guid?.trim() == mediaGuid }) {
             files += FeiniuStreamFileInfo(
                 guid = mediaGuid,
-                fileName = detail.fileName,
+                fileName = detail?.fileName,
                 path = "",
                 sizeBytes = 0,
                 directLinkQualities = qualities,
@@ -971,7 +971,7 @@ private fun FeiniuVideoStream.feiniuVideoDisplayTitle(): String {
         ?: "视频"
 }
 
-private fun FeiniuAudioStream.feiniuAudioDisplayTitle(): String {
+internal fun FeiniuAudioStream.feiniuAudioDisplayTitle(): String {
     title?.trim()?.takeIf(String::isNotEmpty)?.let { return it }
     val parts = buildList {
         language?.trim()?.takeIf(String::isNotEmpty)?.let { add(it) }
@@ -984,7 +984,7 @@ private fun FeiniuAudioStream.feiniuAudioDisplayTitle(): String {
     return if (parts.isNotEmpty()) parts.joinToString(" · ") else "音轨"
 }
 
-private fun FeiniuSubtitleStream.feiniuSubtitleDisplayTitle(): String {
+internal fun FeiniuSubtitleStream.feiniuSubtitleDisplayTitle(): String {
     title?.trim()?.takeIf(String::isNotEmpty)?.let { return it }
     val parts = buildList {
         language?.trim()?.takeIf(String::isNotEmpty)?.let { add(it) }
