@@ -18,7 +18,7 @@ class MediaBrowserTest {
         override val provider = ProviderKind.Jellyfin
         override val serverId = ServerId("s")
         override val accountId = AccountId("a")
-        override val capabilities = AdapterCapabilities()
+        override var capabilities = AdapterCapabilities()
         fun media(id: String) = MediaItem(MediaId(id), serverId, provider, id)
         var libraryList = listOf("first", "second").map { MediaCollection(CollectionId(it), serverId, provider, it) }
         var fetch: suspend (CollectionId?, PageRequest) -> Page<MediaItem> = { id, _ -> Page(listOf(media(id!!.value))) }
@@ -75,7 +75,8 @@ class MediaBrowserTest {
             resumeRequests += request
             return resumeFetch(request)
         }
-        override suspend fun setFavorite(id: MediaId, favorite: Boolean): Unit = error("unused")
+        var favoriteAction: suspend (MediaId, Boolean) -> Unit = { _, _ -> error("unused") }
+        override suspend fun setFavorite(id: MediaId, favorite: Boolean) = favoriteAction(id, favorite)
         override suspend fun setWatched(id: MediaId, watched: Boolean): Unit = error("unused")
         override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions): PlaybackPreparation = error("unused")
         override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent): Unit = error("unused")
@@ -96,7 +97,44 @@ class MediaBrowserTest {
 
     private suspend fun browser(a: Adapter, preferences: MediaPlaybackPreferences? = null): MediaBrowser {
         val repository = MediaRepository(FixedEpochClock())
-        return MediaBrowser(repository, repository.open(a), playbackPreferences = preferences)
+        return MediaBrowser(repository, repository.open(a), capabilities = a.capabilities, playbackPreferences = preferences)
+    }
+
+    @Test fun favoriteFailureRollsBackTheSameMediaAcrossIndependentControllers() = runBlocking<Unit> {
+        val a = Adapter().apply { capabilities = AdapterCapabilities(favoritesEdit = true) }
+        val item = a.media("shared").copy(mediaType = MediaType.Movie)
+        a.fetch = { _, _ -> Page(listOf(item)) }
+        a.searchFetch = { _, _ -> Page(listOf(item)) }
+        a.detail = { item }
+        a.feed = HomeFeed(latest = listOf(item))
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        a.favoriteAction = { _, _ -> entered.complete(Unit); release.await(); throw NetworkUnreachableError() }
+        val b = browser(a)
+        b.start(); b.search("shared"); b.openDetail(item.id)
+        val mutation = launch { b.toggleFavorite(item) }
+        entered.await()
+        fun favorites() = b.state.value.let { state -> listOf(state.items.single(),
+            state.searchItems.single(), state.homeFeed.latest.single(), state.detail!!).map { it.userData.isFavorite } }
+        assertEquals(listOf(true, true, true, true), favorites())
+        release.complete(Unit); mutation.join()
+        assertEquals(listOf(false, false, false, false), favorites())
+    }
+
+    @Test fun detailActionCompletionCannotOverwriteANewerDetailGeneration() = runBlocking<Unit> {
+        val a = Adapter().apply { capabilities = AdapterCapabilities(favoritesEdit = true) }
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        a.favoriteAction = { _, _ -> entered.complete(Unit); release.await() }
+        val b = browser(a)
+        b.openDetail(MediaId("first"))
+        val mutation = launch { b.toggleFavorite() }
+        entered.await()
+        b.openDetail(MediaId("second"))
+        release.complete(Unit); mutation.join()
+        assertEquals(MediaId("second"), b.state.value.detail?.id)
+        assertFalse(b.state.value.detail!!.userData.isFavorite)
+        assertFalse(b.state.value.detailActionBusy)
     }
 
     @Test fun startupLoadsRealCollectionsAndFirstLibraryOnlyOnce() = runBlocking<Unit> {
