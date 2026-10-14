@@ -88,6 +88,8 @@ import cn.mafei.cmp.common.design_system.*
 import cn.mafei.cmp.common.glass.*
 import cn.mafei.cmp.common.glass.components.LiquidBottomTab
 import cn.mafei.cmp.common.glass.components.LiquidBottomTabs
+import cn.mafei.cmp.common.glass.components.LiquidBottomTabsStyle
+import cn.mafei.cmp.common.design_system.BottomNavigationType
 import cn.mafei.cmp.common.ui.generated.resources.Res
 import cn.mafei.cmp.common.ui.generated.resources.ic_home_sel
 import cn.mafei.cmp.common.ui.generated.resources.ic_home_unsel
@@ -192,6 +194,7 @@ fun MaFeiAdaptiveShell(
     onLibrary: (String) -> Unit,
     accountLabel: String,
     showBottomNavigation: Boolean = true,
+    bottomNavigationType: BottomNavigationType = BottomNavigationType.Floating,
     /**
      * True while the root content has pushed a detail/secondary route. On a
      * large shell this changes the leading control of the retained top-tab
@@ -645,19 +648,22 @@ fun MaFeiAdaptiveShell(
         }
 
         if (bottomNavigationVisible) {
+            val docked = bottomNavigationType == BottomNavigationType.Bar
             BottomNavigationLayer(
                 destinations = destinations,
                 selectedDestination = selectedDestination,
                 onDestination = onDestination,
                 backdrop = backdrop,
                 compactProgress = bottomNavigationCompactProgress,
+                type = bottomNavigationType,
+                bottomInset = safeArea.bottom,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(
-                    start = safeArea.start + 18.dp,
-                    end = safeArea.end + 18.dp,
-                    top = 14.dp,
-                    bottom = safeArea.bottom,
+                    start = if (docked) 0.dp else safeArea.start + 18.dp,
+                    end = if (docked) 0.dp else safeArea.end + 18.dp,
+                    top = if (docked) 0.dp else 14.dp,
+                    bottom = if (docked) 0.dp else safeArea.bottom,
                 )
-                    .widthIn(max = 430.dp).fillMaxWidth(),
+                    .then(if (docked) Modifier else Modifier.widthIn(max = 430.dp)).fillMaxWidth(),
             )
         }
 
@@ -1574,10 +1580,12 @@ private fun BottomNavigationLayer(
     onDestination: (String) -> Unit,
     backdrop: GlassBackdrop,
     compactProgress: () -> Float,
+    type: BottomNavigationType,
+    bottomInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     val selectedIndex = destinations.indexOfFirst { it.key == selectedDestination }.coerceAtLeast(0)
-    val resolvedCompactProgress = compactProgress().coerceIn(0f, 1f)
+    val resolvedCompactProgress = if (type == BottomNavigationType.Bar) 0f else compactProgress().coerceIn(0f, 1f)
     LiquidBottomTabs(
         selectedTabIndex = { selectedIndex },
         onTabSelected = { index -> destinations.getOrNull(index)?.let { onDestination(it.key) } },
@@ -1585,6 +1593,8 @@ private fun BottomNavigationLayer(
         tabsCount = destinations.size,
         widthBaselineTabCount = 4,
         compactProgress = { resolvedCompactProgress },
+        style = if (type == BottomNavigationType.Bar) LiquidBottomTabsStyle.Bar else LiquidBottomTabsStyle.Standard,
+        bottomInset = bottomInset,
         modifier = modifier,
     ) {
         destinations.forEachIndexed { index, item ->

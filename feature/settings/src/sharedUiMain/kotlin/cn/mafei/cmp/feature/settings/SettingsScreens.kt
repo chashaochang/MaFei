@@ -52,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.design_system.BottomNavigationType
 import cn.mafei.cmp.common.design_system.MaFeiGlassDefaults
 import cn.mafei.cmp.common.glass.DefaultGlassIntensity
 import cn.mafei.cmp.common.glass.GlassBackdrop
@@ -410,6 +411,8 @@ fun GlassStyleScreen(
     error: String? = null,
     onSelectStyle: (GlassStyle) -> Unit = {},
     onLiquidGlassIntensityChanged: (Float) -> Unit = {},
+    bottomNavigationType: BottomNavigationType = BottomNavigationType.Floating,
+    onSelectBottomNavigation: (BottomNavigationType) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     MaFeiActionBarScaffold(
@@ -439,6 +442,15 @@ fun GlassStyleScreen(
                         onValueChange = onLiquidGlassIntensityChanged,
                     )
                 }
+                Text("底部导航栏类型", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, top = 14.dp))
+                LegacyListGroup(
+                    items = BottomNavigationType.entries.map {
+                        LegacyListGroupItem(it.title, isSelected = it == bottomNavigationType)
+                    },
+                    enabled = !saving,
+                    onItemClick = { onSelectBottomNavigation(BottomNavigationType.entries[it]) },
+                )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         }

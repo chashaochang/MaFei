@@ -1168,6 +1168,7 @@ private fun BrowseContent(
     val currentLiquidGlassIntensityChanged = rememberUpdatedState(onLiquidGlassIntensityChanged)
     val currentPlayerRenderMode = rememberUpdatedState(playerRenderMode)
     val currentPlayerRenderModeChanged = rememberUpdatedState(onPlayerRenderModeChanged)
+    val bottomNavigationType by runtime.glassStyle.bottomNavigation.collectAsState()
     val browser = remember(session) {
         MediaBrowser(
             repository = runtime.sessions.media,
@@ -2587,6 +2588,7 @@ private fun BrowseContent(
         } else browseContentStateHolder.SaveableStateProvider("browse-content") {
         MaFeiAdaptiveShell(
             layout = layout,
+            bottomNavigationType = bottomNavigationType,
             destinations = destinations,
             sidebarDestinations = sidebarDestinations,
             topTabDestinations = topTabDestinations,

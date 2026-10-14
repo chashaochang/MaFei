@@ -22,32 +22,39 @@ internal fun GlassStyleRoute(
     modifier: Modifier = Modifier,
 ) {
     val style by store.state.collectAsState()
+    val bottomNavigation by store.bottomNavigation.collectAsState()
     val scope = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    fun saveSetting(action: suspend () -> Unit) {
+        if (saving) return
+        saving = true
+        error = null
+        scope.launch {
+            try {
+                action()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                error = "保存失败，请重试"
+            } finally {
+                saving = false
+            }
+        }
+    }
     GlassStyleScreen(
         onBack = onBack,
         modifier = modifier,
         style = style,
+        bottomNavigationType = bottomNavigation,
         liquidGlassIntensity = liquidGlassIntensity,
         saving = saving,
         error = error,
         onSelectStyle = { selected ->
-            if (!saving && selected != style) {
-                saving = true
-                error = null
-                scope.launch {
-                    try {
-                        store.save(selected)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        error = "保存失败，请重试"
-                    } finally {
-                        saving = false
-                    }
-                }
-            }
+            if (selected != style) saveSetting { store.save(selected) }
+        },
+        onSelectBottomNavigation = { selected ->
+            if (selected != bottomNavigation) saveSetting { store.saveBottomNavigation(selected) }
         },
         onLiquidGlassIntensityChanged = onLiquidGlassIntensityChanged,
     )
