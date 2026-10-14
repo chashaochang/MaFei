@@ -403,7 +403,6 @@ fun MaFeiAdaptiveShell(
                             !leadingEdge -> synchronizedContentTrailingInset + safeArea.end
                             else -> 0.dp
                         },
-                        top = if (desktop) MaFeiNavigationControlSizeDp else 0.dp,
                     ),
                 ) {
                 // Persistent navigation chrome owns its physical avoid
@@ -432,24 +431,9 @@ fun MaFeiAdaptiveShell(
             }
         }
 
-        // The undecorated Mac window has no native title bar. Reserve the same
-        // 44dp strip used by the sidebar header on the content side as a real
-        // drag surface. Keeping it outside the scene means a pointer on the
-        // hero artwork still clicks the artwork instead of being interpreted as
-        // a window move; the artwork itself starts immediately below the strip.
-        if (desktop) {
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = synchronizedContentLeadingInset + safeArea.start)
-                    .fillMaxWidth()
-                    .height(MaFeiNavigationControlSizeDp),
-            ) {
-                windowDragArea {
-                    Spacer(Modifier.fillMaxSize())
-                }
-            }
-        }
+        // The sidebar owns custom window controls and dragging. Content reaches the window top;
+        // each page handles its own ActionBar and the host's actual safe area, without a second
+        // synthetic titlebar or invisible drag target over the right-hand pane.
 
         // 状态栏的渐进模糊：内容滚动后只处理真实的物理状态栏安全区。
         // 顶部 Tab / ActionBar 是独立的玻璃消费者，不能再在它下面叠一层同色渐变，
