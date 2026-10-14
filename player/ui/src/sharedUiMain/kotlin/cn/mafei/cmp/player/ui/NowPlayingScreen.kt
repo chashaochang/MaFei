@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,6 +65,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -74,6 +76,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -91,9 +94,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -104,6 +111,12 @@ import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
 import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassMaterial
+import cn.mafei.cmp.common.glass.GlassRole
+import cn.mafei.cmp.common.glass.GlassSurface
+import cn.mafei.cmp.common.glass.GlassStyle
+import cn.mafei.cmp.common.glass.currentGlassStyle
+import cn.mafei.cmp.common.design_system.MaFeiGlassDefaults
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
@@ -297,6 +310,9 @@ fun NowPlayingScreen(
     var locked by remember(media.id, state.generation) { mutableStateOf(false) }
     var danmakuEnabled by remember(media.id) { mutableStateOf(false) }
     var panel by remember(media.id, state.generation) { mutableStateOf(PlayerChromePanel.None) }
+    val panelAnchors = remember(media.id, state.generation) { mutableStateMapOf<PlayerChromePanel, Rect>() }
+    var panelAnchor by remember(media.id, state.generation) { mutableStateOf<Rect?>(null) }
+    var sceneOrigin by remember { mutableStateOf(Offset.Zero) }
     var panelContainerVisible by remember(media.id, state.generation) { mutableStateOf(false) }
     var panelClosing by remember(media.id, state.generation) { mutableStateOf(false) }
     var panelAnimationToken by remember(media.id, state.generation) { mutableIntStateOf(0) }
@@ -390,6 +406,7 @@ fun NowPlayingScreen(
         if (state.casting && next in listOf(PlayerChromePanel.Audio, PlayerChromePanel.Subtitle,
                 PlayerChromePanel.Quality, PlayerChromePanel.AspectRatio)) return
         panelAnimationToken++
+        panelAnchor = panelAnchors[next] ?: panelAnchor
         panel = next
         panelClosing = false
         panelContainerVisible = true
@@ -428,8 +445,8 @@ fun NowPlayingScreen(
         }
     }
 
-    val materialVisible = panel == PlayerChromePanel.None &&
-        !state.pictureInPicture && (locked || controlsVisible || !fullscreen)
+    val materialVisible = !state.pictureInPicture &&
+        (panel != PlayerChromePanel.None || locked || controlsVisible || !fullscreen)
     DisposableEffect(nativeBackdrop, materialVisible, media.id, state.generation) {
         nativeBackdrop?.sampling = materialVisible
         onDispose { nativeBackdrop?.sampling = false }
@@ -451,7 +468,8 @@ fun NowPlayingScreen(
     }
 
     BoxWithConstraints(
-        modifier.background(Color.Black).onSizeChanged { sceneSize = it },
+        modifier.background(Color.Black).onSizeChanged { sceneSize = it }
+            .onGloballyPositioned { sceneOrigin = it.positionInRoot() },
     ) {
         val durationMs = state.durationMs?.takeIf { it > 0L }
         // The player used to switch to its richer control set only after the
@@ -473,6 +491,8 @@ fun NowPlayingScreen(
         val tabletWindow = !windowFeatures.desktopWindow && !windowFeatures.windowedHost &&
             minOf(maxWidth.value, maxHeight.value) >= 600f
         val landscapeWindow = maxWidth.value > maxHeight.value
+        val anchoredMenus = largeWindow && (tabletWindow || windowFeatures.desktopWindow ||
+            windowFeatures.windowedHost || minOf(maxWidth.value, maxHeight.value) >= 600f)
 
         // Legacy PlayerPage.onBackPress priority: close the open menu/panel first,
         // then the playback-info card (the old page reports it as menu-visible
@@ -723,7 +743,7 @@ fun NowPlayingScreen(
                 },
         )
 
-        if (!fullscreen && !locked && panel == PlayerChromePanel.None) {
+        if (!fullscreen && !locked && (panel == PlayerChromePanel.None || anchoredMenus)) {
             PlayerChromeButton(
                 glyph = null,
                 label = "返回",
@@ -742,7 +762,7 @@ fun NowPlayingScreen(
         }
 
         AnimatedVisibility(
-            visible = controlsVisible && !locked,
+            visible = (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,
             enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
                 slideInVertically(tween(PlayerControlTransitionDurationMs)) { -24 },
             exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
@@ -763,13 +783,14 @@ fun NowPlayingScreen(
                 showMenu = localCapabilities.contentMode || playbackFacts != null,
                 onBack = handleBack,
                 onMenu = { openPanel(PlayerChromePanel.More) },
+                onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
                 onPictureInPicture = onPictureInPicture,
                 onCasting = onCasting,
             )
         }
 
         AnimatedVisibility(
-            visible = controlsVisible && !locked,
+            visible = (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,
             enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
                 slideInVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
             exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
@@ -800,11 +821,13 @@ fun NowPlayingScreen(
                 onFullscreenRequest = onFullscreenRequest,
                 tabletWindow = tabletWindow,
                 landscapeWindow = landscapeWindow,
+                largeTextControls = anchoredMenus,
                 onNext = onNext,
                 onPrevious = onPrevious,
                 episodes = episodes,
                 qualityOptions = availableQualities,
                 onPanel = ::openPanel,
+                onPanelBounds = { target, bounds -> panelAnchors[target] = bounds },
                 capabilities = localCapabilities,
                 tracks = tracks,
                 danmakuEnabled = danmakuEnabled,
@@ -924,10 +947,14 @@ fun NowPlayingScreen(
                     qualityOptions = availableQualities,
                     fullscreen = fullscreen,
                     largeWindow = largeWindow,
+                    anchoredMenu = anchoredMenus,
+                    anchor = (panelAnchors[if (panel == PlayerChromePanel.AspectRatio) PlayerChromePanel.More else panel]
+                        ?: panelAnchor)?.translate(-sceneOrigin),
                     showAspectRatio = localCapabilities.contentMode,
                     showPlaybackInfo = playbackFacts != null,
                     backdrop = backdrop,
                     safeEnd = safeArea.end,
+                    safeStart = safeArea.start,
                     safeTop = safeArea.top + windowControlTopInset,
                     safeBottom = safeArea.bottom,
                     onDismiss = { closePanel() },
@@ -996,6 +1023,7 @@ private fun PlayerTopChrome(
     showMenu: Boolean,
     onBack: () -> Unit,
     onMenu: () -> Unit,
+    onMenuBounds: (Rect) -> Unit,
     onPictureInPicture: (() -> Unit)?,
     onCasting: (() -> Unit)?,
 ) {
@@ -1089,6 +1117,7 @@ private fun PlayerTopChrome(
                     iconSize = 22,
                     backdrop = backdrop,
                     onClick = onMenu,
+                    modifier = Modifier.onGloballyPositioned { onMenuBounds(it.boundsInRoot()) },
                 )
             }
             // 旧版把时间/电量放在「更多」之后的同一行，且只有全屏才有这一格。
@@ -1127,11 +1156,13 @@ private fun PlayerBottomChrome(
     onFullscreenRequest: ((Boolean) -> Unit)?,
     tabletWindow: Boolean,
     landscapeWindow: Boolean,
+    largeTextControls: Boolean,
     onNext: (() -> Unit)?,
     onPrevious: (() -> Unit)?,
     episodes: List<cn.mafei.cmp.core.domain.MediaItem>,
     qualityOptions: List<PlayerQualityOption>,
     onPanel: (PlayerChromePanel) -> Unit,
+    onPanelBounds: (PlayerChromePanel, Rect) -> Unit,
     capabilities: PlayerCapabilities,
     danmakuEnabled: Boolean = false,
     onDanmakuToggle: (() -> Unit)? = null,
@@ -1228,20 +1259,31 @@ private fun PlayerBottomChrome(
                         }
                     }
                     if (capabilities.trackSelection && audioTracks.size > 1) {
-                        PlayerTextControl("音轨") { onPanel(PlayerChromePanel.Audio) }
+                        PlayerTextControl("音轨", largeTextControls, Modifier.onGloballyPositioned {
+                            onPanelBounds(PlayerChromePanel.Audio, it.boundsInRoot())
+                        }) { onPanel(PlayerChromePanel.Audio) }
                     }
                     if (capabilities.trackSelection && subtitleTracks.isNotEmpty()) {
-                        PlayerTextControl("字幕") { onPanel(PlayerChromePanel.Subtitle) }
+                        PlayerTextControl("字幕", largeTextControls, Modifier.onGloballyPositioned {
+                            onPanelBounds(PlayerChromePanel.Subtitle, it.boundsInRoot())
+                        }) { onPanel(PlayerChromePanel.Subtitle) }
                     }
                     // Legacy order: 音轨 → 字幕 → 选集 → 清晰度 → 倍速.
                     if (!live && episodes.size > 1) {
-                        PlayerTextControl("选集") { onPanel(PlayerChromePanel.Episodes) }
+                        PlayerTextControl("选集", largeTextControls, Modifier.onGloballyPositioned {
+                            onPanelBounds(PlayerChromePanel.Episodes, it.boundsInRoot())
+                        }) { onPanel(PlayerChromePanel.Episodes) }
                     }
                     if (qualityOptions.isNotEmpty()) {
-                        PlayerTextControl("清晰度") { onPanel(PlayerChromePanel.Quality) }
+                        PlayerTextControl("清晰度", largeTextControls, Modifier.onGloballyPositioned {
+                            onPanelBounds(PlayerChromePanel.Quality, it.boundsInRoot())
+                        }) { onPanel(PlayerChromePanel.Quality) }
                     }
                     if (capabilities.speed) {
-                        PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x") {
+                        PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x",
+                            largeTextControls, Modifier.onGloballyPositioned {
+                                onPanelBounds(PlayerChromePanel.Speed, it.boundsInRoot())
+                            }) {
                             onPanel(PlayerChromePanel.Speed)
                         }
                     }
@@ -1491,10 +1533,13 @@ private fun PlayerSidePanel(
     qualityOptions: List<PlayerQualityOption>,
     fullscreen: Boolean,
     largeWindow: Boolean,
+    anchoredMenu: Boolean,
+    anchor: Rect?,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
     backdrop: GlassBackdrop,
     safeEnd: androidx.compose.ui.unit.Dp,
+    safeStart: androidx.compose.ui.unit.Dp,
     safeTop: androidx.compose.ui.unit.Dp,
     safeBottom: androidx.compose.ui.unit.Dp,
     onDismiss: () -> Unit,
@@ -1549,7 +1594,44 @@ private fun PlayerSidePanel(
         PlayerChromePanel.More -> Pair(270.dp, emptyList())
         PlayerChromePanel.None -> return
     }
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val scale = density.fontScale.coerceAtLeast(1f)
+        val rowHeight = if (anchoredMenu) (52f * scale).dp else 44.dp
+        val popupWidth = (when (panel) {
+            PlayerChromePanel.Speed -> 216.dp
+            PlayerChromePanel.Episodes -> 360.dp
+            PlayerChromePanel.Audio, PlayerChromePanel.Subtitle -> 320.dp
+            PlayerChromePanel.More -> 296.dp
+            else -> 248.dp
+        } * scale.coerceAtMost(1.3f)).coerceAtMost(
+            (maxWidth - safeStart - safeEnd - 24.dp).coerceAtLeast(1.dp),
+        )
+        val optionCount = if (isMorePanel) listOf(showAspectRatio, showPlaybackInfo).count { it }
+            else options.size
+        val desiredHeight = if (isEpisodePanel) {
+            40.dp + PlayerEpisodeRowHeight * minOf(episodes.size, 6) + 24.dp
+        } else {
+            rowHeight * optionCount.coerceAtLeast(1) + 24.dp + if (isMorePanel) 1.dp else 0.dp
+        }
+        val popupHeight = desiredHeight.coerceAtMost((420f * scale).dp).coerceAtMost(
+            (maxHeight - safeTop - safeBottom - 24.dp).coerceAtLeast(1.dp),
+        )
+        val anchorRight = anchor?.let { with(density) { it.right.toDp() } } ?: (maxWidth - safeEnd - 16.dp)
+        val anchorTop = anchor?.let { with(density) { it.top.toDp() } } ?: (safeTop + 16.dp)
+        val anchorBottom = anchor?.let { with(density) { it.bottom.toDp() } } ?: (safeTop + 60.dp)
+        val left = (anchorRight - popupWidth).coerceIn(
+            safeStart + 12.dp,
+            (maxWidth - safeEnd - 12.dp - popupWidth).coerceAtLeast(safeStart + 12.dp),
+        )
+        val top = (if ((anchorTop + anchorBottom) / 2 > maxHeight / 2) {
+            anchorTop - 8.dp - popupHeight
+        } else {
+            anchorBottom + 8.dp
+        }).coerceIn(
+            safeTop + 12.dp,
+            (maxHeight - safeBottom - 12.dp - popupHeight).coerceAtLeast(safeTop + 12.dp),
+        )
         Box(
             Modifier.fillMaxSize()
                 // The player menu is a same-layer overlay. Raw tap detection
@@ -1558,21 +1640,18 @@ private fun PlayerSidePanel(
                 // the video surface below.
                 .mafeiDismissOnOutsidePointer(onDismiss),
         )
-        Box(
-            Modifier.align(Alignment.CenterEnd)
-                .then(if (fullscreen || largeWindow) Modifier.width(width + safeEnd)
-                    else Modifier.fillMaxWidth(.84f))
-                .fillMaxHeight()
-                .background(PlayerMenuGradient)
-                .testTag("playerMenuPanel"),
-        ) {
+        val content: @Composable () -> Unit = {
             Column(
-                Modifier.fillMaxSize().padding(
-                    start = 16.dp,
-                    end = safeEnd + 16.dp,
-                    top = safeTop + if (fullscreen || largeWindow) 18.dp else 8.dp,
-                    bottom = safeBottom + if (fullscreen || largeWindow) 18.dp else 8.dp,
-                ),
+                Modifier.fillMaxSize().padding(if (anchoredMenu) {
+                    androidx.compose.foundation.layout.PaddingValues(12.dp)
+                } else {
+                    androidx.compose.foundation.layout.PaddingValues(
+                        start = 16.dp,
+                        end = safeEnd + 16.dp,
+                        top = safeTop + if (fullscreen || largeWindow) 18.dp else 8.dp,
+                        bottom = safeBottom + if (fullscreen || largeWindow) 18.dp else 8.dp,
+                    )
+                }),
             ) {
                 when {
                 isMorePanel -> PlayerMorePanel(
@@ -1583,6 +1662,8 @@ private fun PlayerSidePanel(
                     closing = closing,
                     onAspectRatio = { onOpenPanel(PlayerChromePanel.AspectRatio) },
                     onPlaybackInfo = onOpenPlaybackInfo,
+                    largeType = anchoredMenu,
+                    rowHeight = rowHeight,
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
                 isEpisodePanel -> {
@@ -1598,6 +1679,7 @@ private fun PlayerSidePanel(
                             ),
                         color = PlayerMenuText,
                         style = MaterialTheme.typography.titleSmall,
+                        fontSize = if (anchoredMenu) 18.sp else MaterialTheme.typography.titleSmall.fontSize,
                         fontWeight = FontWeight.Medium,
                     )
                     PlayerEpisodePanel(
@@ -1606,6 +1688,7 @@ private fun PlayerSidePanel(
                         entranceVisible = entranceVisible,
                         closing = closing,
                         onSelectEpisode = onSelectEpisode,
+                        largeType = anchoredMenu,
                         modifier = Modifier.fillMaxWidth().weight(1f),
                     )
                 }
@@ -1616,6 +1699,8 @@ private fun PlayerSidePanel(
                                 entranceVisible = entranceVisible && !closing,
                                 index = index,
                                 count = options.size,
+                                largeType = anchoredMenu,
+                                rowHeight = rowHeight,
                             ) {
                                 when (panel) {
                                     PlayerChromePanel.Speed -> onSpeed(option.id.toFloat())
@@ -1634,6 +1719,36 @@ private fun PlayerSidePanel(
                 }
             }
         }
+        if (anchoredMenu) {
+            GlassSurface(
+                backdrop = backdrop,
+                spec = MaFeiGlassDefaults.spec(GlassRole.PlayerOverlay).copy(
+                    tintAlpha = .90f,
+                    cornerRadiusDp = 16f,
+                    material = GlassMaterial.Frosted,
+                ),
+                // A lower-alpha style still needs enough luminance to separate
+                // the menu from a pure-black video; blur alone cannot do that.
+                tint = if (currentGlassStyle() == GlassStyle.Translucent) Color(0xFF747986)
+                    else Color(0xFF30333B),
+                modifier = Modifier.offset {
+                    IntOffset(left.roundToPx(), top.roundToPx())
+                }.width(popupWidth).height(popupHeight)
+                    .border(1.dp, Color.White.copy(alpha = .16f), RoundedCornerShape(16.dp))
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+                    .testTag("playerMenuPanel"),
+                content = content,
+            )
+        } else {
+            Box(
+                Modifier.align(Alignment.CenterEnd)
+                    .then(if (fullscreen || largeWindow) Modifier.width(width + safeEnd)
+                        else Modifier.fillMaxWidth(.84f))
+                    .fillMaxHeight()
+                    .background(PlayerMenuGradient)
+                    .testTag("playerMenuPanel"),
+            ) { content() }
+        }
     }
 }
 
@@ -1651,6 +1766,8 @@ private fun PlayerMorePanel(
     onAspectRatio: () -> Unit,
     onPlaybackInfo: () -> Unit,
     modifier: Modifier = Modifier,
+    largeType: Boolean = false,
+    rowHeight: androidx.compose.ui.unit.Dp = 44.dp,
 ) {
     val count = listOf(showAspectRatio, showPlaybackInfo).count { it }
     Column(modifier) {
@@ -1660,6 +1777,8 @@ private fun PlayerMorePanel(
                 entranceVisible = entranceVisible && !closing,
                 index = 0,
                 count = count,
+                largeType = largeType,
+                rowHeight = rowHeight,
                 onClick = onAspectRatio,
             )
         }
@@ -1674,6 +1793,8 @@ private fun PlayerMorePanel(
                 entranceVisible = entranceVisible && !closing,
                 index = if (showAspectRatio) 1 else 0,
                 count = count,
+                largeType = largeType,
+                rowHeight = rowHeight,
                 onClick = onPlaybackInfo,
             )
         }
@@ -1795,6 +1916,7 @@ private fun PlayerEpisodePanel(
     closing: Boolean,
     onSelectEpisode: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    largeType: Boolean = false,
 ) {
     if (episodes.isEmpty()) return
     if (episodes.size > PlayerEpisodeListMaxCount) {
@@ -1831,6 +1953,7 @@ private fun PlayerEpisodePanel(
                         episode.episodeNumber?.toString() ?: "${index + 1}",
                         color = Color.White,
                         style = MaterialTheme.typography.labelMedium,
+                        fontSize = if (largeType) 16.sp else MaterialTheme.typography.labelMedium.fontSize,
                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     )
                 }
@@ -1874,6 +1997,7 @@ private fun PlayerEpisodePanel(
                             episode.title,
                             color = if (selected) PlayerAccent else PlayerMenuText,
                             style = MaterialTheme.typography.bodyMedium,
+                            fontSize = if (largeType) 16.sp else MaterialTheme.typography.bodyMedium.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -1923,6 +2047,8 @@ private fun PlayerPanelOptionRow(
     entranceVisible: Boolean,
     index: Int,
     count: Int,
+    largeType: Boolean = false,
+    rowHeight: androidx.compose.ui.unit.Dp = 44.dp,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1934,7 +2060,7 @@ private fun PlayerPanelOptionRow(
         else -> Color.Transparent
     }
     Box(
-        Modifier.fillMaxWidth().height(44.dp)
+        Modifier.fillMaxWidth().height(rowHeight)
             .playerStaggeredEntrance(
                 visible = entranceVisible,
                 index = index,
@@ -1955,8 +2081,11 @@ private fun PlayerPanelOptionRow(
     ) {
         Text(
             option.label,
-            color = if (option.selected) PlayerAccent else PlayerMenuText,
+            color = if (option.selected && largeType) Color(0xFF79B8FF)
+                else if (option.selected) PlayerAccent else PlayerMenuText,
             style = MaterialTheme.typography.bodyMedium,
+            fontSize = if (largeType) 16.sp else MaterialTheme.typography.bodyMedium.fontSize,
+            lineHeight = if (largeType) 22.sp else MaterialTheme.typography.bodyMedium.lineHeight,
             fontWeight = if (option.selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -2017,7 +2146,12 @@ private fun playerPanelContentExitDurationMs(
 }
 
 @Composable
-private fun PlayerTextControl(text: String, onClick: () -> Unit) {
+private fun PlayerTextControl(
+    text: String,
+    largeWindow: Boolean = false,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val pressed by interactionSource.collectIsPressedAsState()
@@ -2027,7 +2161,7 @@ private fun PlayerTextControl(text: String, onClick: () -> Unit) {
         else -> 0f
     }
     Box(
-        Modifier.height(36.dp)
+        modifier.height(if (largeWindow) 48.dp else 36.dp)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = surfaceAlpha))
             .hoverable(interactionSource)
@@ -2043,6 +2177,7 @@ private fun PlayerTextControl(text: String, onClick: () -> Unit) {
             text,
             color = Color.White.copy(alpha = if (hovered || pressed) 1f else .92f),
             style = MaterialTheme.typography.labelMedium,
+            fontSize = if (largeWindow) 16.sp else MaterialTheme.typography.labelMedium.fontSize,
         )
     }
 }

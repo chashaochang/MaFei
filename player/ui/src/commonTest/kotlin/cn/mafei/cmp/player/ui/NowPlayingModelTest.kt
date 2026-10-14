@@ -56,7 +56,9 @@ class NowPlayingModelTest {
     @Test
     fun layoutSwitchesForWideAndLandscapeForms() {
         assertFalse(useWideNowPlayingLayout(430f, 860f))
-        assertFalse(useWideNowPlayingLayout(720f, 1_000f))
+        assertTrue(useWideNowPlayingLayout(720f, 1_000f))
+        assertTrue(useWideNowPlayingLayout(600f, 960f))
+        assertFalse(useWideNowPlayingLayout(599f, 960f))
         assertTrue(useWideNowPlayingLayout(700f, 400f))
         assertTrue(useWideNowPlayingLayout(1_180f, 780f))
     }

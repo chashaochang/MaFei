@@ -30,7 +30,7 @@ data class NowPlayingPresentation(
 )
 
 internal fun useWideNowPlayingLayout(widthDp: Float, heightDp: Float): Boolean =
-    widthDp >= 760f || (widthDp >= 600f && widthDp > heightDp)
+    widthDp >= 600f && (heightDp >= 600f || widthDp > heightDp)
 
 fun PlayerState.toNowPlayingPresentation(
     capabilities: PlayerCapabilities,

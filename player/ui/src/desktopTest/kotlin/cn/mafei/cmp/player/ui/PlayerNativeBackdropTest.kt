@@ -46,4 +46,21 @@ class PlayerNativeBackdropTest {
         val visibleVideo = rule.onRoot().captureToImage().toPixelMap()
         assertEquals(Color.Black, visibleVideo[80, 200], "The sample must never be painted over the native video")
     }
+
+    @Test fun openingATabletMenuKeepsItsVideoBackdropLive() {
+        val source = PlayerVideoBackdropSource().apply { frame = frame(Color.Black) }
+        rule.setContent {
+            CompositionLocalProvider(LocalPlayerVideoBackdropSource provides source) { MaFeiTheme {
+                Box(Modifier.requiredSize(900.dp, 600.dp)) {
+                    NowPlayingScreen(NowPlayingMedia("v", "影片", ""), PlayerState(phase = PlayerPhase.Paused),
+                        capabilities = PlayerCapabilities(contentMode = true), fullscreen = true,
+                        onBack = {}, onTogglePlay = {}, onRetry = {}, onSeek = {}, onSpeed = {},
+                        onSelectTrack = { _, _ -> }, videoSurface = { Box(it.background(Color.Black)) })
+                }
+            } }
+        }
+        rule.onNodeWithContentDescription("更多设置").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        assertTrue(source.sampling, "A visible backdrop consumer must not freeze its video sampler")
+    }
 }
