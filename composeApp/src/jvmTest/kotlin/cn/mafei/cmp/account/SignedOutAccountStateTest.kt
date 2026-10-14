@@ -101,4 +101,37 @@ class SignedOutAccountStateTest {
         assertFalse(busy)
         assertNull(error)
     }
+    @Test fun signedInAccountFlowRequestsLoginOnlyForUnrestorableCredentials() = runBlocking<Unit> {
+        val accounts = Accounts()
+        val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined))
+        state.loadAccounts()
+        var loginRequired = false
+        state.switchAccount(accounts.item()) { loginRequired = true }
+        assertFalse(loginRequired)
+        assertNotNull(state.accountsError)
+        assertNull(state.switchingAccountKey)
+        accounts.switch = { throw SavedAccountRequiresLoginException(accounts.connection.selection) }
+        state.switchAccount(accounts.item()) { loginRequired = true }
+        assertTrue(loginRequired)
+        assertNull(state.accountsError)
+        assertNull(state.switchingAccountKey)
+    }
+
+    @Test fun cancelledSignedInConnectKeepsItsNavigationAndReleasesBusy() = runBlocking<Unit> {
+        val accounts = Accounts()
+        val entered = CompletableDeferred<Unit>()
+        accounts.connectAction = { entered.complete(Unit); awaitCancellation() }
+        val job = SupervisorJob()
+        val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + job))
+        state.minePresented = true
+        var connected = false
+        state.connect(ProviderKind.Jellyfin, "https://media.test", "a", "test", true) { connected = true }
+        entered.await(); job.cancelAndJoin()
+        assertFalse(connected)
+        assertTrue(state.minePresented)
+        assertFalse(state.accountConnectBusy)
+        assertNull(state.accountConnectError)
+        assertEquals(listOf(BrowseMineRoute), state.mineBackStack.toList())
+    }
+
 }

@@ -2,7 +2,6 @@ package cn.mafei.cmp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -15,35 +14,20 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.shape.RoundedCornerShape
 import cn.mafei.cmp.common.design_system.MaFeiTheme
-import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.MaFeiPersistentSidebarWidthDp
 import cn.mafei.cmp.common.design_system.isPhoneNavigation
@@ -51,22 +35,12 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.design_system.MaFeiWindowEnvironment
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
-import cn.mafei.cmp.common.design_system.MaFeiSafeArea
 import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.glass.GlassRenderingEnvironment
 import cn.mafei.cmp.common.glass.rememberGlassRenderHealth
-import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.glass.GlassSurface
-import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
-import cn.mafei.cmp.common.glass.GlassLevel
-import cn.mafei.cmp.common.glass.GlassMaterial
-import cn.mafei.cmp.common.glass.GlassRole
-import cn.mafei.cmp.common.glass.GlassSurfaceSpec
-import cn.mafei.cmp.common.design_system.LocalMaFeiPopupColors
-import cn.mafei.cmp.common.design_system.MaFeiPopupReferenceColors
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.rememberArtworkMemoryCache
@@ -85,7 +59,6 @@ import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
-import cn.mafei.cmp.common.ui.mafeiDismissOnOutsidePointer
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiNavItem
 import cn.mafei.cmp.common.ui.LegacyPosterPlaceholder
@@ -100,9 +73,6 @@ import cn.mafei.cmp.core.domain.MediaSort
 import cn.mafei.cmp.core.domain.MediaSortField
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.domain.SortDirection
-import cn.mafei.cmp.feature.connect.ConnectScreen
-import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
-import cn.mafei.cmp.feature.connect.rememberConnectFormState
 import cn.mafei.cmp.feature.chasing.ChasingBrowser
 import cn.mafei.cmp.feature.chasing.ChasingScreen
 import cn.mafei.cmp.feature.chasing.ChasingSelection
@@ -124,23 +94,11 @@ import cn.mafei.cmp.feature.home.legacyHomeHeroDetailTarget
 import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
 import cn.mafei.cmp.feature.media.VideoListScreen
 import cn.mafei.cmp.feature.search.SearchScreen
-import cn.mafei.cmp.feature.settings.AccountSwitchItem
-import cn.mafei.cmp.feature.settings.AccountSwitchScreen
-import cn.mafei.cmp.feature.settings.AddAccountScreen
-import cn.mafei.cmp.feature.settings.AddGroupScreen
-import cn.mafei.cmp.feature.settings.AboutPrivacyScreen
-import cn.mafei.cmp.feature.settings.FeiniuConnectionPreference
-import cn.mafei.cmp.feature.settings.FeiniuConnectionPreferenceScreen
-import cn.mafei.cmp.feature.settings.MineHistoryScreen
-import cn.mafei.cmp.feature.settings.MineProfile
-import cn.mafei.cmp.feature.settings.MineScreen as LegacyMineScreen
 import cn.mafei.cmp.feature.settings.SettingsScreen
-import cn.mafei.cmp.feature.settings.UserAgreementScreen
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.player.ui.MiniPlayerMedia
 import cn.mafei.cmp.player.api.PlayerController
-import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import cn.mafei.cmp.session.*
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -322,7 +280,6 @@ private fun BrowseContent(
     val state by browser.state.collectAsState()
     val authenticationFailure by browser.authenticationFailure.collectAsState()
     val authenticationMessage = authenticationFailure?.let(::authenticationRecoveryMessage)
-    var authenticationNoticeDismissed by remember(session) { mutableStateOf(false) }
     val chasingBrowser = remember(session) {
         ChasingBrowser(
             repository = runtime.sessions.media,
@@ -341,10 +298,11 @@ private fun BrowseContent(
         if (browser.capabilities.chasing) chasingSelection.load()
     }
     val scope = rememberCoroutineScope()
+    val account = remember(session) { AccountFlowState(runtime.accountAccess(), scope) }
+    val feiniu = remember(session) { FeiniuPreferenceState(runtime::loadFeiniuRoutePreference, runtime::saveFeiniuRoutePreference, scope) }
     val uriHandler = LocalUriHandler.current
     val embeddedWebHost = LocalEmbeddedWebHost.current
     val embeddedWebMemory = remember(session) { EmbeddedWebPageState() }
-    var returnToEmbeddedWeb by remember(session) { mutableStateOf(false) }
     // 管理员媒体删除：确认弹窗 + 待删集合。入口由 browser 探测的服务器策略决定。
     var pendingDeleteMedia by remember(session) { mutableStateOf<List<MediaId>?>(null) }
     val deleteConfirmBackdrop = rememberGlassBackdrop()
@@ -364,21 +322,7 @@ private fun BrowseContent(
     val searchGridState = rememberLazyGridState()
     var searchJob by remember(session) { mutableStateOf<Job?>(null) }
     var searchHistories by remember(session) { mutableStateOf(emptyList<String>()) }
-    var accountConnections by remember(session) { mutableStateOf(emptyList<SavedConnection>()) }
     val browseContentStateHolder = rememberSaveableStateHolder()
-    var accountPasswordKeys by remember(session) { mutableStateOf(emptySet<String>()) }
-    var accountsLoading by remember(session) { mutableStateOf(false) }
-    var accountsError by remember(session) { mutableStateOf<String?>(null) }
-    var switchingAccountKey by remember(session) { mutableStateOf<String?>(null) }
-    var deletingAccountKey by remember(session) { mutableStateOf<String?>(null) }
-    var accountConnectBusy by remember(session) { mutableStateOf(false) }
-    var accountConnectError by remember(session) { mutableStateOf<String?>(null) }
-    var pendingDiscoveredServerAddress by remember(session) { mutableStateOf<String?>(null) }
-    var feiniuConnectionPreference by remember(session) {
-        mutableStateOf(FeiniuConnectionPreference.Speed)
-    }
-    var feiniuConnectionPreferenceError by remember(session) { mutableStateOf<String?>(null) }
-    var feiniuConnectionPreferenceSaving by remember(session) { mutableStateOf(false) }
     val artworkCache = rememberArtworkMemoryCache(session, session.connection.credentialKey)
     val fetchArtwork: suspend (MediaImage, Int) -> ByteArray? = remember(session) {
         { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) }
@@ -426,9 +370,6 @@ private fun BrowseContent(
     // Apple presents the account surface above the current document instead of
     // navigating away from it. "我的" therefore opens a modal sheet; the browse
     // route, its scroll position and its loaded data all stay untouched behind it.
-    var minePresented by remember(session.selection.serverId.value, session.selection.accountId.value) {
-        mutableStateOf(false)
-    }
     val browseBackStack = remember(session.selection.serverId.value, session.selection.accountId.value) {
         mutableStateListOf<BrowseRoute>(BrowseHomeRoute)
     }
@@ -457,23 +398,20 @@ private fun BrowseContent(
     // 「我的」有独立的导航容器：回退栈只装「我的」自己的页面，从我的进入的二级页不会压到
     // 主浏览栈上。容器在大屏以居中毛玻璃模态呈现、小屏以全屏页呈现，切换形态时这个栈原样
     // 保留（它是状态而不是渲染树的一部分），所以用户不会觉得断片。
-    val mineBackStack = remember(session.selection.serverId.value, session.selection.accountId.value) {
-        mutableStateListOf<BrowseRoute>(BrowseMineRoute)
-    }
     val reauthenticate: () -> Unit = {
-        authenticationNoticeDismissed = true
-        accountConnectError = null
-        pendingDiscoveredServerAddress = null
-        mineBackStack.clear()
-        mineBackStack += BrowseMineRoute
-        mineBackStack += BrowseConnectAccountRoute(
+        account.authenticationNoticeDismissed = true
+        account.accountConnectError = null
+        account.pendingDiscoveredServerAddress = null
+        account.mineBackStack.clear()
+        account.mineBackStack += BrowseMineRoute
+        account.mineBackStack += BrowseConnectAccountRoute(
             provider = session.connection.server.provider,
             presetBaseUrl = session.connection.feiniuOriginalAddress ?: session.connection.server.baseUrl,
             presetUsername = session.connection.account.userName,
             credentialKey = session.connection.credentialKey,
             returnToBrowseOnBack = true,
         )
-        minePresented = true
+        account.minePresented = true
     }
     val destination = shellContext.destination
     // `destination` already carries Search's intentionally empty selection;
@@ -516,7 +454,7 @@ private fun BrowseContent(
     }
     LaunchedEffect(runtime, session.selection) {
         if (session.selection.provider == ProviderKind.Feiniu) {
-            feiniuConnectionPreference = runtime.loadFeiniuRoutePreference().toPresentationPreference()
+            feiniu.load()
         }
     }
     LaunchedEffect(state.selectedCollection) {
@@ -530,13 +468,13 @@ private fun BrowseContent(
     }
     // Legacy MineTab refreshes its independent resume + completed preview every
     // time the account surface becomes visible; it never borrows HomeFeed.resume.
-    LaunchedEffect(minePresented) {
-        if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview()
+    LaunchedEffect(account.minePresented) {
+        if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview()
     }
     // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
     // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
-    LaunchedEffect(mineBackStack.lastOrNull()) {
-        if (mineBackStack.lastOrNull() == BrowseMineHistoryRoute) browser.loadHistory()
+    LaunchedEffect(account.mineBackStack.lastOrNull()) {
+        if (account.mineBackStack.lastOrNull() == BrowseMineHistoryRoute) browser.loadHistory()
         librarySelectedIds = emptySet()
     }
     // 删除可用性只探测一次：服务器用户策略决定是否出现删除入口。
@@ -544,28 +482,7 @@ private fun BrowseContent(
         browser.refreshDeleteAvailability()
         browser.refreshAdministratorStatus()
     }
-    val loadAccounts: () -> Unit = {
-        if (!accountsLoading) {
-            accountsLoading = true
-            accountsError = null
-            scope.launch {
-                try {
-                    val connections = runtime.savedConnections()
-                    val passwordKeys = runtime.savedPasswordKeys(connections)
-                    accountConnections = connections
-                    accountPasswordKeys = passwordKeys
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    accountConnections = emptyList()
-                    accountPasswordKeys = emptySet()
-                    accountsError = "加载失败"
-                } finally {
-                    accountsLoading = false
-                }
-            }
-        }
-    }
+
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val fontScale = LocalDensity.current.fontScale
@@ -640,13 +557,13 @@ private fun BrowseContent(
             if (next == MineDestination) {
                 // 「我的」是一个带独立导航的容器，不是一个普通页面：下层的浏览路由保持原样
                 // （回来还是原来那页、原来那个滚动位置）。每次从标签栏进来都回到根页。
-                mineBackStack.clear()
-                mineBackStack += BrowseMineRoute
-                minePresented = true
+                account.mineBackStack.clear()
+                account.mineBackStack += BrowseMineRoute
+                account.minePresented = true
             } else {
                 // 小屏上容器是全屏铺开的、标签栏仍然可见，所以切到别的标签必须把它收起来，
                 // 否则会盖在上面走不掉。大屏是模态（有遮罩），这条只是顺带保持一致。
-                minePresented = false
+                account.minePresented = false
                 if (showingPersonDetail) browser.clearPerson()
                 if (state.detailId != null) browser.back()
                 if (next == HomeDestination) {
@@ -686,104 +603,27 @@ private fun BrowseContent(
         // One source for the account surface, shared by the modal sheet and the
         // (now unreachable from the sidebar) legacy route. Secondary entries close
         // the sheet first so the pushed page is not hidden behind the modal.
-        val mineContent: @Composable (Modifier) -> Unit = { mineModifier ->
-            // Navigation 3 keeps the outgoing entry composed during a transition.
-            // Read the route at event time so a late pointer delivered to that
-            // stale entry cannot mutate the active session.
-            fun mineRootAction(action: () -> Unit): () -> Unit = {
-                if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) action()
-            }
-            fun mineRootMediaAction(action: (MediaItem) -> Unit): (MediaItem) -> Unit = { item ->
-                if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) action(item)
-            }
-            LegacyMineScreen(
-                profile = MineProfile(
-                    userName = session.connection.account.displayName,
-                    serverName = legacyVisibleServerName(session.connection),
-                    serverVersion = session.connection.server.serverVersion.orEmpty(),
-                    connectionDescription = legacyConnectionDescription(session.connection),
-                    policy = if (state.administrator == true) "管理员" else "普通用户",
-                ),
-                historyItems = state.historyItems,
-                historyLoading = state.historyLoading && state.historyItems.isEmpty(),
-                historyError = state.historyError,
-                layout = layout,
-                busy = busy,
-                onHistoryItem = mineRootMediaAction(player.startPlayback),
-                onHistoryRetry = mineRootAction { scope.launch { browser.loadHistoryPreview() } },
-                // 「我的」里的二级页推到**容器自己的**回退栈上，容器不关闭 —— 模态 / 全屏
-                // 两种呈现共用同一条栈。
-                onHistoryMore = {
-                    if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) {
-                        mineBackStack += BrowseMineHistoryRoute
-                    }
-                },
-                onSwitchAccount = mineRootAction {
-                    loadAccounts()
-                    if (mineBackStack.lastOrNull() != BrowseAccountSwitchRoute) {
-                        mineBackStack += BrowseAccountSwitchRoute
-                    }
-                },
-                onSettings = mineRootAction {
-                    if (mineBackStack.lastOrNull() != BrowseSettingsRoute) {
-                        mineBackStack += BrowseSettingsRoute
-                    }
-                },
-                onWebITong = if (session.selection.provider == ProviderKind.Jellyfin &&
-                    embeddedWebHost.nativePlaybackSupported) mineRootAction { mineBackStack += BrowseWebITongRoute } else null,
-                onManagement = if (state.administrator == true && session.binding.adapter.management != null)
-                    mineRootAction { mineBackStack += BrowseManagementRoute() } else null,
-                onPrivacy = mineRootAction {
-                    if (embeddedWebHost === UnsupportedEmbeddedWebHost) uriHandler.openUri(PRIVACY_AGREEMENT_URL)
-                    else mineBackStack += BrowsePrivacyWebRoute
-                },
-                onAddGroup = mineRootAction {
-                    if (mineBackStack.lastOrNull() != BrowseAddGroupRoute) {
-                        mineBackStack += BrowseAddGroupRoute
-                    }
-                },
-                onLogout = {
-                    if (minePresented && mineBackStack.lastOrNull() == BrowseMineRoute) {
-                        minePresented = false
-                        onLogout()
-                    }
-                },
-                onReauthenticate = mineRootAction(reauthenticate).takeIf { authenticationFailure != null },
-                modifier = mineModifier,
-                avatar = session.connection.account.avatarImage?.let { image ->
-                    { avatarModifier ->
-                        MediaArtwork(
-                            image = image,
-                            title = session.connection.account.displayName,
-                            cache = artworkCache,
-                            fetch = fetchArtwork,
-                            modifier = avatarModifier,
-                        )
-                    }
-                },
-                artwork = { item, itemModifier ->
-                    MediaArtwork(item.preferredPoster(), item.title, artworkCache, fetchArtwork, itemModifier)
-                },
-            )
+        val mineContent: @Composable (Modifier) -> Unit = { modifier ->
+            AccountRootBinding(modifier, account, scope, browser, state, session, layout, busy, player, artworkCache, fetchArtwork, uriHandler, embeddedWebHost, reauthenticate, onLogout, authenticationFailure)
         }
         val popMineRoute: () -> Unit = {
-            when (val route = mineBackStack.lastOrNull()) {
+            when (val route = account.mineBackStack.lastOrNull()) {
                 is BrowseConnectAccountRoute -> {
-                    accountConnectError = null
-                    if (route.returnToBrowseOnBack) minePresented = false
+                    account.accountConnectError = null
+                    if (route.returnToBrowseOnBack) account.minePresented = false
                 }
                 else -> Unit
             }
-            if (mineBackStack.size > 1) mineBackStack.removeLastOrNull()
+            if (account.mineBackStack.size > 1) account.mineBackStack.removeLastOrNull()
         }
         val mineNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
             // Registered before NavDisplay so child routes/sheets handle Back
             // first; at the account root it closes the whole account surface.
-            cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = minePresented) {
-                minePresented = false
+            cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = account.minePresented) {
+                account.minePresented = false
             }
             NavDisplay(
-                backStack = mineBackStack,
+                backStack = account.mineBackStack,
                 onBack = { popMineRoute() },
                 transitionSpec = {
                     (fadeIn(tween(180)) + slideInHorizontally(tween(260)) { it / 8 }) togetherWith
@@ -800,403 +640,58 @@ private fun BrowseContent(
                 entryProvider = { route ->
                     when (route) {
                             BrowseMineRoute -> NavEntry(route) {
-                                // 不给它加标题栏：旧版「我的」作为底部标签时顶部是**空的**
-                                // （只留 `safeTop + ACTION_BAR_HEIGHT` 的占位），标题栏只在
-                                // 「我的」被当页面推出来（fromHome）时才出现。页面自己按同样的
-                                // 规则留位，见 MineScreen.destinationOwnsTitleBar。
-                                mineContent(Modifier.fillMaxSize())
+                                MineEntryBinding(mineContent)
                             }
                             BrowseMineHistoryRoute -> NavEntry(route) {
-                                MineHistoryScreen(
-                                    items = state.historyItems,
-                                    loading = state.historyLoading && state.historyItems.isEmpty(),
-                                    error = state.historyError,
-                                    layout = layout,
-                                    onBack = popMineRoute,
-                                    onRetry = { scope.launch { browser.loadHistory() } },
-                                    onItem = player.startPlayback,
-                                    canLoadMore = state.historyCanLoadMore,
-                                    loadingMore = state.historyLoadingMore,
-                                    loadMoreFailed = state.historyLoadMoreFailed,
-                                    onLoadMore = { scope.launch { browser.loadMoreHistory() } },
-                                    onRetryLoadMore = { scope.launch { browser.retryLoadMoreHistory() } },
-                                    modifier = Modifier.fillMaxSize(),
-                                    artwork = { item, modifier ->
-                                        MediaArtwork(
-                                            item.preferredPoster(),
-                                            item.title,
-                                            artworkCache,
-                                            fetchArtwork,
-                                            modifier,
-                                            fallback = { fallbackModifier ->
-                                                LegacyPosterPlaceholder(item.mediaType, fallbackModifier)
-                                            },
-                                        )
-                                    },
-                                )
+                                MineHistoryEntryBinding(scope, browser, state, layout, player, popMineRoute, artworkCache, fetchArtwork)
                             }
                             BrowseAccountSwitchRoute -> NavEntry(route) {
-                                val accountItems = accountConnections.map { connection ->
-                                    AccountSwitchItem(
-                                        key = connection.credentialKey,
-                                        provider = connection.server.provider,
-                                        serverId = connection.server.id,
-                                        serverName = connection.server.name,
-                                        displayName = connection.account.displayName,
-                                        address = connection.server.baseUrl,
-                                        lastUsedEpochMs = connection.account.lastActiveEpochMs,
-                                        isCurrent = connection.selection == session.selection,
-                                        hasRememberedPassword = connection.credentialKey in accountPasswordKeys,
-                                    )
-                                }
-                                AccountSwitchScreen(
-                                    items = accountItems,
-                                    loading = accountsLoading,
-                                    busyKey = switchingAccountKey,
-                                    deletingKey = deletingAccountKey,
-                                    error = accountsError,
-                                    onBack = popMineRoute,
-                                    onRetry = loadAccounts,
-                                    onAccount = { item ->
-                                        val connection = accountConnections.firstOrNull {
-                                            it.credentialKey == item.key
-                                        }
-                                        if (connection != null && switchingAccountKey == null) {
-                                            switchingAccountKey = item.key
-                                            accountsError = null
-                                            scope.launch {
-                                                try {
-                                                    runtime.switchAccount(connection)
-                                                } catch (cancelled: CancellationException) {
-                                                    throw cancelled
-                                                } catch (needsLogin: SavedAccountRequiresLoginException) {
-                                                    // 保存的凭据不可恢复（系统清理/卸载重装/当初未落盘）：
-                                                    // 这不是"切换失败"，而是"需要重新登录"。把用户带到
-                                                    // 这台服务器的登录页并预填地址与用户名，登录一次即可。
-                                                    accountsError = null
-                                                    mineBackStack += BrowseConnectAccountRoute(
-                                                        provider = connection.server.provider,
-                                                        presetBaseUrl = connection.server.baseUrl,
-                                                        presetUsername = connection.account.userName,
-                                                        credentialKey = connection.credentialKey,
-                                                    )
-                                                } catch (_: Exception) {
-                                                    accountsError = "账号切换失败，请稍后重试"
-                                                } finally {
-                                                    switchingAccountKey = null
-                                                }
-                                            }
-                                        }
-                                    },
-                                    onDelete = { item ->
-                                        val connection = accountConnections.firstOrNull {
-                                            it.credentialKey == item.key
-                                        }
-                                        if (connection != null && !item.isCurrent &&
-                                            switchingAccountKey == null && deletingAccountKey == null
-                                        ) {
-                                            deletingAccountKey = item.key
-                                            accountsError = null
-                                            scope.launch {
-                                                try {
-                                                    runtime.deleteSavedConnection(connection)
-                                                    accountConnections = runtime.savedConnections()
-                                                    accountPasswordKeys = accountPasswordKeys - connection.credentialKey
-                                                } catch (cancelled: CancellationException) {
-                                                    throw cancelled
-                                                } catch (_: Exception) {
-                                                    accountsError = "账号删除失败，请稍后重试"
-                                                } finally {
-                                                    deletingAccountKey = null
-                                                }
-                                            }
-                                        }
-                                    },
-                                    onAddProvider = { provider ->
-                                        accountConnectError = null
-                                        mineBackStack += BrowseConnectAccountRoute(provider)
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                AccountSwitchEntryBinding(account, session, popMineRoute)
                             }
                             BrowseAddAccountRoute -> NavEntry(route) {
-                                AddAccountScreen(
-                                    onBack = popMineRoute,
-                                    onProvider = { provider ->
-                                        accountConnectError = null
-                                        mineBackStack += BrowseConnectAccountRoute(provider)
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                AddAccountEntryBinding(account, popMineRoute)
                             }
                             is BrowseConnectAccountRoute -> NavEntry(route) {
-                                val formState = rememberConnectFormState()
-                                var prefilling by remember(route) { mutableStateOf(route.credentialKey != null) }
-                                LaunchedEffect(formState, route) {
-                                    // Returning from discovery may recreate this entry. Preserve the
-                                    // selected address until the result effect below consumes it.
-                                    if (pendingDiscoveredServerAddress == null) {
-                                        formState.provider = route.provider
-                                        formState.baseUrl = route.presetBaseUrl.orEmpty()
-                                        formState.username = route.presetUsername.orEmpty()
-                                        formState.password = ""
-                                        formState.rememberPassword = true
-                                        try {
-                                            val connection = route.credentialKey?.let { key ->
-                                                session.connection.takeIf { it.credentialKey == key }
-                                                    ?: runtime.savedConnections().firstOrNull { it.credentialKey == key }
-                                            }
-                                            if (connection != null) {
-                                                val password = runtime.savedPassword(connection)
-                                                formState.password = password.orEmpty()
-                                                formState.rememberPassword = password != null
-                                            }
-                                        } catch (cancelled: CancellationException) {
-                                            throw cancelled
-                                        } catch (_: Exception) {
-                                            accountConnectError = "无法读取已保存的密码，请手动输入"
-                                        } finally {
-                                            prefilling = false
-                                        }
-                                    } else {
-                                        prefilling = false
-                                    }
-                                }
-                                LaunchedEffect(formState, pendingDiscoveredServerAddress) {
-                                    val address = pendingDiscoveredServerAddress ?: return@LaunchedEffect
-                                    formState.provider = ProviderKind.Jellyfin
-                                    formState.baseUrl = address
-                                    formState.requestServerAddressFocus()
-                                    pendingDiscoveredServerAddress = null
-                                }
-                                ConnectScreen(
-                                    busy = accountConnectBusy || prefilling,
-                                    error = accountConnectError,
-                                    onSubmit = { provider, address, name, password, rememberPassword ->
-                                        if (!accountConnectBusy && !prefilling) {
-                                            accountConnectBusy = true
-                                            accountConnectError = null
-                                            scope.launch {
-                                                try {
-                                                    runtime.connect(provider, address, name, password, rememberPassword)
-                                                    minePresented = false
-                                                    mineBackStack.clear()
-                                                    mineBackStack += BrowseMineRoute
-                                                } catch (cancelled: CancellationException) {
-                                                    throw cancelled
-                                                } catch (failure: Exception) {
-                                                    accountConnectError = connectFailureMessage(failure)
-                                                } finally {
-                                                    accountConnectBusy = false
-                                                }
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                    formState = formState,
-                                    routeTitle = if (route.provider == ProviderKind.Jellyfin) {
-                                        "连接 Jellyfin"
-                                    } else {
-                                        "连接飞牛影视"
-                                    },
-                                    onBack = popMineRoute,
-                                    showProviderSwitcher = false,
-                                    showHistory = false,
-                                    onOpenServerDiscovery = {
-                                        if (mineBackStack.lastOrNull() != BrowseServerDiscoveryRoute) {
-                                            mineBackStack += BrowseServerDiscoveryRoute
-                                        }
-                                    },
-                                )
+                                ConnectAccountEntryBinding(route, account, session, busy, popMineRoute)
                             }
                             BrowseServerDiscoveryRoute -> NavEntry(route) {
-                                ServerDiscoveryScreen(
-                                    loadSavedServers = { savedJellyfinServerSuggestions(runtime.accountAccess()) },
-                                    discoverServers = { discoveredJellyfinServerSuggestions() },
-                                    onBack = popMineRoute,
-                                    onSelectServer = { address ->
-                                        pendingDiscoveredServerAddress = address
-                                        popMineRoute()
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                ServerDiscoveryEntryBinding(account, popMineRoute)
                             }
                             BrowseSettingsRoute -> NavEntry(route) {
-                                SettingsScreen(
-                                    onBack = popMineRoute,
-                                    onOpenAppearance = {
-                                        if (mineBackStack.lastOrNull() != BrowseAppearanceRoute) {
-                                            mineBackStack += BrowseAppearanceRoute
-                                        }
-                                    },
-                                    onOpenGlassStyleSettings = {
-                                        if (mineBackStack.lastOrNull() != BrowseGlassStyleRoute) {
-                                            mineBackStack += BrowseGlassStyleRoute
-                                        }
-                                    },
-                                    appearanceTitle = runtime.appearance.state.collectAsState().value.title,
-                                    glassStyleTitle = runtime.glassStyle.state.collectAsState().value.title,
-                                    feiniuRoutePreferenceTitle = if (
-                                        session.selection.provider == ProviderKind.Feiniu
-                                    ) {
-                                        feiniuConnectionPreference.title
-                                    } else {
-                                        null
-                                    },
-                                    onOpenFeiniuPreference = if (
-                                        session.selection.provider == ProviderKind.Feiniu
-                                    ) {
-                                        {
-                                            feiniuConnectionPreferenceError = null
-                                            if (mineBackStack.lastOrNull() != BrowseFeiniuConnectionPreferenceRoute) {
-                                                mineBackStack += BrowseFeiniuConnectionPreferenceRoute
-                                            }
-                                        }
-                                        } else {
-                                        null
-                                    },
-                                    homeCarouselVisible = { homeCarouselVisible.value },
-                                    onHomeCarouselVisibleChanged = onHomeCarouselVisibleChanged,
-                                    showPlayerRenderMode = playerRenderModeSupported,
-                                    onOpenPlayerSettings = if (playback?.controller?.capabilities?.playbackPreferences == true) {
-                                        { mineBackStack += BrowsePlayerSettingsRoute }
-                                    } else null,
-                                    playerRenderMode = { currentPlayerRenderMode.value.storageValue },
-                                    onPlayerRenderModeChanged = { value ->
-                                        currentPlayerRenderModeChanged.value(value.toPlayerRenderMode())
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                SettingsEntryBinding(account, feiniu, session, playback, popMineRoute, runtime.appearance, runtime.glassStyle, homeCarouselVisible, onHomeCarouselVisibleChanged, currentPlayerRenderMode, currentPlayerRenderModeChanged, playerRenderModeSupported)
                             }
                             BrowsePlayerSettingsRoute -> NavEntry(route) {
-                                PlayerSettingsRoute(runtime.playerPreferences, engineSelection = playback?.controller?.capabilities?.engineSelection == true, onBack = popMineRoute)
+                                PlayerSettingsEntryBinding(playback, popMineRoute, runtime.playerPreferences)
                             }
                             is BrowseManagementRoute -> NavEntry(route) {
-                                ManagementRoute(runtime.sessions.media, session.media, route.taskId, popMineRoute,
-                                    onTask = { id -> mineBackStack += BrowseManagementRoute(taskId = id) }, Modifier.fillMaxSize(),
-                                    sessionId = route.sessionId, onSession = { id -> mineBackStack += BrowseManagementRoute(sessionId = id) },
-                                    onDevices = { mineBackStack += BrowseManagementDevicesRoute() })
+                                ManagementEntryBinding(route, account, session, popMineRoute, runtime)
                             }
                             is BrowseManagementDevicesRoute -> NavEntry(route) {
-                                ManagementDevicesRoute(runtime.sessions.media, session.media, route.deviceId, popMineRoute,
-                                    onDevice = { id -> mineBackStack += BrowseManagementDevicesRoute(id) }, Modifier.fillMaxSize())
+                                ManagementDevicesEntryBinding(route, account, session, popMineRoute, runtime)
                             }
                             BrowseFeiniuConnectionPreferenceRoute -> NavEntry(route) {
-                                FeiniuConnectionPreferenceScreen(
-                                    selectedPreference = feiniuConnectionPreference,
-                                    onSelect = { selected ->
-                                        if (selected != feiniuConnectionPreference &&
-                                            !feiniuConnectionPreferenceSaving
-                                        ) {
-                                            feiniuConnectionPreferenceError = null
-                                            feiniuConnectionPreferenceSaving = true
-                                            scope.launch {
-                                                try {
-                                                    runtime.saveFeiniuRoutePreference(selected.toProviderPreference())
-                                                    feiniuConnectionPreference = selected
-                                                } catch (cancelled: CancellationException) {
-                                                    throw cancelled
-                                                } catch (_: Exception) {
-                                                    feiniuConnectionPreferenceError = "连接策略保存失败，请重试"
-                                                } finally {
-                                                    feiniuConnectionPreferenceSaving = false
-                                                }
-                                            }
-                                        }
-                                    },
-                                    onBack = popMineRoute,
-                                    errorMessage = feiniuConnectionPreferenceError,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                FeiniuConnectionPreferenceEntryBinding(feiniu, popMineRoute)
                             }
                             BrowseAppearanceRoute -> NavEntry(route) {
-                                AppearanceRoute(runtime.appearance,
-                                    onBack = popMineRoute,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                AppearanceEntryBinding(popMineRoute, runtime.appearance)
                             }
                             BrowseGlassStyleRoute -> NavEntry(route) {
-                                GlassStyleRoute(
-                                    store = runtime.glassStyle,
-                                    liquidGlassIntensity = currentLiquidGlassIntensity.value,
-                                    onLiquidGlassIntensityChanged = currentLiquidGlassIntensityChanged.value,
-                                    onBack = popMineRoute,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                GlassStyleEntryBinding(popMineRoute, runtime.glassStyle, currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged)
                             }
                             BrowseAddGroupRoute -> NavEntry(route) {
-                                AddGroupScreen(
-                                    onBack = popMineRoute,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                AddGroupEntryBinding(popMineRoute)
                             }
                             BrowseAboutPrivacyRoute -> NavEntry(route) {
-                                AboutPrivacyScreen(
-                                    onBack = popMineRoute,
-                                    onPrivacy = {
-                                        if (embeddedWebHost === UnsupportedEmbeddedWebHost) uriHandler.openUri(PRIVACY_AGREEMENT_URL)
-                                        else mineBackStack += BrowsePrivacyWebRoute
-                                    },
-                                    onUserAgreement = {
-                                        if (mineBackStack.lastOrNull() != BrowseUserAgreementRoute) {
-                                            mineBackStack += BrowseUserAgreementRoute
-                                        }
-                                    },
-                                    onOpenUrl = uriHandler::openUri,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                AboutPrivacyEntryBinding(account, popMineRoute, uriHandler, embeddedWebHost)
                             }
                             BrowsePrivacyWebRoute -> NavEntry(route) {
-                                val page = remember { cn.mafei.cmp.session.WebPageRequest(PRIVACY_AGREEMENT_URL, "隐私协议") }
-                                EmbeddedWebPage(LocalEmbeddedWebHost.current, page, page.title, null, popMineRoute, {},
-                                    { action, value -> if (action == "openUrl") uriHandler.openUri(value) }, Modifier.fillMaxSize())
+                                PrivacyWebEntryBinding(popMineRoute, uriHandler)
                             }
                             BrowseWebITongRoute -> NavEntry(route) {
-                                JellyfinEmbeddedPage(session, embeddedWebMemory, popMineRoute) { action, raw ->
-                                    if (mineBackStack.lastOrNull() == BrowseWebITongRoute && runtime.sessions.state.value.session === session) {
-                                        scope.launch {
-                                            try {
-                                                when (action) {
-                                                    "loadPlayer" -> {
-                                                        val options = cn.mafei.cmp.core.serialization.MafeiJson.Default.decodeFromString(
-                                                            cn.mafei.cmp.session.WebNativePlaybackRequest.serializer(), raw)
-                                                        val items = options.ids.map { id -> runtime.sessions.media.item(session.media, MediaId(id)).value }
-                                                        if (runtime.sessions.state.value.session === session) {
-                                                            returnToEmbeddedWeb = true
-                                                            minePresented = false
-                                                            player.startPlaybackItem(items[options.startIndex], PlaybackQueue(items, options.startIndex),
-                                                                options.startMs, options.options())
-                                                        }
-                                                    }
-                                                    "pausePlayer" -> playback?.controller?.pause()
-                                                    "resumePlayer" -> playback?.controller?.play()
-                                                    "stopPlayer", "destroyPlayer" -> playback?.stop()
-                                                    "seek" -> raw.toLongOrNull()?.takeIf { it >= 0 }?.let { playback?.controller?.seek(it / 10_000L) }
-                                                    "seekMs" -> raw.toLongOrNull()?.takeIf { it >= 0 }?.let { playback?.controller?.seek(it) }
-                                                    "setVolume" -> raw.toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..100f }?.let {
-                                                        val controls = runtime.deviceControls
-                                                        if (controls.maxVolume() > 0) controls.setVolume((it / 100f * controls.maxVolume()).toInt())
-                                                    }
-                                                    "openUrl" -> cn.mafei.cmp.core.http_contract.HttpUrl.parseOrNull(raw)?.let { uriHandler.openUri(it.toString()) }
-                                                    "openClientSettings" -> mineBackStack += BrowseSettingsRoute
-                                                    "openServerSelection" -> { loadAccounts(); mineBackStack += BrowseAccountSwitchRoute }
-                                                    "enableFullscreen", "disableFullscreen" -> {
-                                                        player.playerFullscreen = action == "enableFullscreen"
-                                                        onPlayerFullscreenChanged(player.playerFullscreen)
-                                                    }
-                                                    "exitApp" -> popMineRoute()
-                                                }
-                                            } catch (cancelled: CancellationException) { throw cancelled }
-                                            catch (_: Exception) { player.playbackError = "网页操作失败，请重试" }
-                                        }
-                                    }
-                                }
+                                WebITongEntryBinding(account, scope, session, player, playback, popMineRoute, uriHandler, embeddedWebMemory, onPlayerFullscreenChanged, runtime)
                             }
                             BrowseUserAgreementRoute -> NavEntry(route) {
-                                UserAgreementScreen(
-                                    onBack = popMineRoute,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                UserAgreementEntryBinding(popMineRoute)
                             }
                         else -> NavEntry(route) { }
                     }
@@ -1313,7 +808,7 @@ private fun BrowseContent(
         // deliberately leave that slot as the sidebar-expander instead.
         val collapsedTopBarBack: (() -> Unit)? = when {
             shellPresentation.secondaryContent && browseBackStack.size > 1 -> popBrowseRoute
-            minePresented && mineBackStack.size > 1 -> popMineRoute
+            account.minePresented && account.mineBackStack.size > 1 -> popMineRoute
             else -> null
         }
 
@@ -1321,12 +816,12 @@ private fun BrowseContent(
         // handlers are registered deeper in the Navigation 3 tree and win
         // first; this handler only owns the root surface and route stacks.
         MaFeiBackHandler(
-            enabled = minePresented || browseBackStack.size > 1,
+            enabled = account.minePresented || browseBackStack.size > 1,
             onBack = {
                 when {
-                    minePresented && mineBackStack.size > 1 -> popMineRoute()
+                    account.minePresented && account.mineBackStack.size > 1 -> popMineRoute()
                     browseBackStack.size > 1 -> popBrowseRoute()
-                    minePresented -> minePresented = false
+                    account.minePresented -> account.minePresented = false
                 }
             },
         )
@@ -1356,9 +851,9 @@ private fun BrowseContent(
             windowDragArea = windowDragArea,
             onPlayerFullscreenChanged = onPlayerFullscreenChanged,
             onReturnToBrowse = {
-                if (returnToEmbeddedWeb) {
-                    returnToEmbeddedWeb = false
-                    minePresented = true
+                if (account.returnToEmbeddedWeb) {
+                    account.returnToEmbeddedWeb = false
+                    account.minePresented = true
                 }
             },
         )
@@ -1370,7 +865,7 @@ private fun BrowseContent(
             sidebarDestinations = sidebarDestinations,
             topTabDestinations = topTabDestinations,
             topTabSelectedDestination = topTabSelectedDestination,
-            selectedDestination = if (minePresented) MineDestination else shellDestination,
+            selectedDestination = if (account.minePresented) MineDestination else shellDestination,
             onDestination = selectDestination,
             onTopBarBack = collapsedTopBarBack,
             accountName = session.connection.account.displayName,
@@ -1388,14 +883,14 @@ private fun BrowseContent(
             // 导航一起隐藏，进入媒体库列表后就像导航栈被清空了一样。
             showBottomNavigation = shellPresentation.showBottomNavigation(
                 isPhoneNavigation = layout.isPhoneNavigation,
-                accountPresented = minePresented,
-                accountStackDepth = mineBackStack.size,
+                accountPresented = account.minePresented,
+                accountStackDepth = account.mineBackStack.size,
             ),
             // Search is the primary shell action represented by the final
             // icon in the collapsed top bar. Keep that bar mounted with the
             // search action selected; only pushed details and the Mine stack
             // switch a collapsed large sidebar to the compact rail.
-            contentNavigationActive = shellPresentation.secondaryContent || minePresented,
+            contentNavigationActive = shellPresentation.secondaryContent || account.minePresented,
             onSearch = openSearch,
             selectedSearch = shellPresentation.search,
             // The compact dock is the other half of the mini-player morph.
@@ -2587,7 +2082,7 @@ private fun BrowseContent(
                 // 是场景的兄弟节点（在场景之后合成），所以标签栏照样折射"我的"页面上的内容；
                 // 放进 overlay 会让标签栏得到一个平底，看起来就是"两层、标签栏不动"。
                 // 内外边距由页面自己处理：MineScreen 底部留 112dp 给标签栏，子页面各自带头部。
-                if (minePresented && mineFullScreen) {
+                if (account.minePresented && mineFullScreen) {
                     MineFullScreenHost { mineNavContent(it) }
                 }
             },
@@ -2629,19 +2124,19 @@ private fun BrowseContent(
             modal = { backdrop ->
                 // 大屏：居中的详情页同规格模态。复用同一个 mineNavContent，
                 // 所以来回切形态时里面停在哪一页、翻了几层都保持不变。
-                if (minePresented && !mineFullScreen) {
+                if (account.minePresented && !mineFullScreen) {
                     MineAccountSheet(
                         layout = layout,
                         backdrop = backdrop,
-                        onDismiss = { minePresented = false },
+                        onDismiss = { account.minePresented = false },
                         content = mineNavContent,
                     )
                 }
-                if (authenticationMessage != null && !authenticationNoticeDismissed &&
-                    mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !player.playerExpanded
+                if (authenticationMessage != null && !account.authenticationNoticeDismissed &&
+                    account.mineBackStack.lastOrNull() !is BrowseConnectAccountRoute && !player.playerExpanded
                 ) {
                     cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) {
-                        authenticationNoticeDismissed = true
+                        account.authenticationNoticeDismissed = true
                     }
                     MaFeiGlassConfirmDialog(
                         title = "账号验证",
@@ -2649,7 +2144,7 @@ private fun BrowseContent(
                         confirmText = "重新登录",
                         dismissText = "取消",
                         onConfirm = reauthenticate,
-                        onDismiss = { authenticationNoticeDismissed = true },
+                        onDismiss = { account.authenticationNoticeDismissed = true },
                         backdrop = backdrop,
                     )
                 }
@@ -2689,219 +2184,7 @@ private fun BrowseContent(
     }
 }
 
-/**
- * 小屏（手机）上的「我的」容器：全屏铺开、非模态，看起来和普通页面跳转一样。
- *
- * 它画在场景里（`scene` 槽，在浏览页之后），所以外壳的底部标签栏是它的兄弟节点：标签栏
- * 照样折射这一页的内容，不会变成一块压在上面的"死"浮层。铺一层窗口底色是为了盖住下面
- * 仍然活着的浏览页（NavDisplay 换了路由是先画后画、不是替换，所以底下那页还在）。
- */
-@Composable
-private fun MineFullScreenHost(
-    content: @Composable (Modifier) -> Unit,
-) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        content(Modifier.fillMaxSize())
-    }
-}
-
-/**
- * Modal account surface, modelled on the macOS/iPadOS account popover.
- *
- * It is a sibling of the scene rather than a platform Dialog, so the glass panel
- * samples the real page underneath, the scrim dims the whole window (sidebar
- * included) and dismissing restores the untouched route. Escape, the scrim and
- * the explicit close control all dismiss it; the panel swallows its own taps so
- * pressing inside never falls through to the scrim.
- */
-@Composable
-private fun MineAccountSheet(
-    layout: MaFeiLayout,
-    backdrop: GlassBackdrop,
-    onDismiss: () -> Unit,
-    content: @Composable (Modifier) -> Unit,
-) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val largeWindow = layout.navigation != NavigationPlacement.Bottom
-        val sheetWidth = if (largeWindow) {
-            // Keep the modal visually subordinate to the page behind it. The
-            // previous large-screen width is the baseline, then the sheet is
-            // reduced to roughly two thirds of that width.
-            ((maxWidth - 48.dp).coerceIn(280.dp, 720.dp) * (2f / 3f))
-                .coerceAtLeast(280.dp)
-        } else {
-            maxWidth
-        }
-        val sheetHeight = (maxHeight * .74f).coerceAtLeast(320.dp)
-        val topBarHeight = if (largeWindow) MineSheetLargeTopBarHeight else MineSheetTopBarHeight
-        val closeButtonTopInset = (topBarHeight - 44.dp) / 2f
-        val closeButtonEndInset = if (largeWindow) 16.dp else 8.dp
-        val focusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) {
-            runCatching { focusRequester.requestFocus() }
-        }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        onDismiss()
-                        true
-                    } else {
-                        false
-                    }
-                },
-        ) {
-            Box(
-                Modifier.fillMaxSize()
-                    .background(Color.Black.copy(alpha = .46f))
-                    .mafeiDismissOnOutsidePointer(onDismiss),
-            )
-            Box(
-                Modifier
-                    .align(if (largeWindow) Alignment.Center else Alignment.BottomCenter)
-                    .width(sheetWidth)
-                    .height(sheetHeight)
-                    .clip(RoundedCornerShape(MineSheetCornerDp))
-                    .pointerInput(Unit) { detectTapGestures { } }
-                    .semantics { contentDescription = "我的" },
-            ) {
-                val sheetBackdrop = rememberGlassBackdrop()
-                val closeButtonBackdrop = sheetBackdrop
-                GlassSurface(
-                    backdrop = backdrop,
-                    spec = MineAccountSheetSurfaceSpec,
-                    // The modal is a canvas; its list groups/cards use surface.
-                    // Using surface here as well made every item disappear into
-                    // the popup body.
-                    tint = MaFeiPopupReferenceColors.container,
-                    modifier = Modifier.fillMaxSize(),
-                    exportedBackdrop = sheetBackdrop,
-                ) {
-                    CompositionLocalProvider(
-                        LocalMaFeiSafeArea provides MaFeiSafeArea(),
-                        LocalMaFeiPopupColors provides MaFeiPopupReferenceColors,
-                        // MineScreen is also rendered as a window-level dark
-                        // surface. Keep its loading/empty labels in the same
-                        // light ink hierarchy as the rest of the popup.
-                        LocalContentColor provides Color.White,
-                    ) {
-                        content(
-                            Modifier.fillMaxSize().padding(top = topBarHeight)
-                                .testTag("mineAccountSheetContent"),
-                        )
-                    }
-                }
-                // 移动端保留底部弹窗拖拽指示器；大屏居中弹窗只保留标题和关闭按钮。
-                Box(
-                    Modifier.fillMaxWidth().height(topBarHeight),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!largeWindow) {
-                        Box(
-                            Modifier.align(Alignment.TopCenter).padding(top = 8.dp).width(36.dp).height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .36f)),
-                        )
-                    }
-                    Text(
-                        "我的",
-                        Modifier.fillMaxWidth().padding(horizontal = 52.dp),
-                        color = Color.White,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        fontSize = 18.sp,
-                        lineHeight = 24.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                    )
-                }
-                LiquidButton(
-                    onClick = onDismiss,
-                    backdrop = closeButtonBackdrop,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = closeButtonTopInset, end = closeButtonEndInset)
-                        .size(44.dp)
-                        .semantics { contentDescription = "关闭我的" },
-                    height = 44.dp,
-                    horizontalPadding = 0.dp,
-                ) {
-                    MaFeiIcon(
-                        MaFeiGlyph.Close,
-                        Modifier.size(20.dp),
-                        Color.White,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 弹窗顶部导航区（关闭按钮所在条带）的高度：所有子页面内容在此之下。 */
-private val MineSheetTopBarHeight = 56.dp
-// Keep the 12dp inset used by the reference while centering the 44dp control:
-// (68 - 44) / 2 = 12dp on both sides.
-private val MineSheetLargeTopBarHeight = 68.dp
-private const val MineSheetCornerDp = 24f
 private const val BrowseSharedReturnDurationMs = 460L
-
-private val MineAccountSheetSurfaceSpec = GlassSurfaceSpec(
-    role = GlassRole.Dialog,
-    level = GlassLevel.Opaque,
-    tintAlpha = 1f,
-    intensity = 0f,
-    cornerRadiusDp = MineSheetCornerDp,
-    material = GlassMaterial.Frosted,
-)
-
-private const val PRIVACY_AGREEMENT_URL =
-    "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1915508141466875008"
-
-private fun legacyVisibleServerName(connection: SavedConnection): String {
-    if (connection.server.provider != ProviderKind.Feiniu) return connection.server.name
-    val name = connection.server.name.trim()
-    val address = connection.server.baseUrl.trim()
-    val normalized = name.lowercase()
-    return if (
-        name.isEmpty() || name == address || normalized.startsWith("http://") ||
-        normalized.startsWith("https://") || ".5ddd.com" in normalized || ".fnos.net" in normalized
-    ) {
-        "飞牛影视"
-    } else {
-        name
-    }
-}
-
-private fun legacyConnectionDescription(connection: SavedConnection): String {
-    if (connection.server.provider != ProviderKind.Feiniu) return ""
-    val route = connection.feiniuRoutes.firstOrNull()
-    val baseUrl = route?.baseUrl ?: connection.server.baseUrl
-    val host = baseUrl.substringAfter("://", baseUrl).substringBefore('/').let { authority ->
-        if (authority.startsWith('[')) authority.substringAfter('[').substringBefore(']')
-        else authority.substringBefore(':')
-    }.lowercase()
-    val addressType = when {
-        ':' in host -> "IPv6"
-        host.split('.').let { parts -> parts.size == 4 && parts.all { it.toIntOrNull() in 0..255 } } -> "IPv4"
-        else -> ""
-    }
-    return when (route?.route) {
-        "Relay" -> "飞牛中转"
-        "Local" -> if (addressType.isNotEmpty()) "内网 $addressType" else "内网连接"
-        "Public" -> if (addressType.isNotEmpty()) "公网 $addressType" else "公网连接"
-        else -> when {
-            host == "localhost" || host == "::1" -> "内网连接"
-            host.startsWith("10.") || host.startsWith("127.") || host.startsWith("192.168.") ||
-                host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:") ||
-                host.split('.').let { parts ->
-                    parts.size == 4 && parts[0] == "172" && (parts[1].toIntOrNull() ?: -1) in 16..31
-                } -> if (addressType.isNotEmpty()) "内网 $addressType" else "内网连接"
-            addressType.isNotEmpty() -> "公网 $addressType"
-            else -> "公网直连"
-        }
-    }
-}
 
 @Composable
 private fun LegacyPersonArtwork(
@@ -2936,19 +2219,6 @@ private fun MediaItem.preferredLandscape(): List<MediaImage> = landscapeArtworkC
 private fun MediaItem.preferredLogo(): MediaImage? =
     images.firstOrNull { it.kind == ImageKind.Logo }
 
-
-private fun FeiniuRoutePreference.toPresentationPreference(): FeiniuConnectionPreference = when (this) {
-    FeiniuRoutePreference.Public -> FeiniuConnectionPreference.Public
-    FeiniuRoutePreference.Relay -> FeiniuConnectionPreference.Relay
-    FeiniuRoutePreference.Auto,
-    FeiniuRoutePreference.Speed -> FeiniuConnectionPreference.Speed
-}
-
-private fun FeiniuConnectionPreference.toProviderPreference(): FeiniuRoutePreference = when (this) {
-    FeiniuConnectionPreference.Speed -> FeiniuRoutePreference.Speed
-    FeiniuConnectionPreference.Public -> FeiniuRoutePreference.Public
-    FeiniuConnectionPreference.Relay -> FeiniuRoutePreference.Relay
-}
 
 private fun legacySortChoices(
     provider: ProviderKind,
