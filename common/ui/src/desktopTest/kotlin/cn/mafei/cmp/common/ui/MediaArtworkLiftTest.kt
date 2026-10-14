@@ -114,12 +114,11 @@ class MediaArtworkLiftTest {
             val actions = listOf("播放影片", "设置已观看", "收藏").map(::action)
             val bounds = actions.map { it.fetchSemanticsNode().boundsInRoot }
             bounds.forEach { assertTrue(artwork.contains(it.topLeft) && artwork.contains(it.bottomRight)) }
-            assertEquals(artwork.center.x, bounds[0].center.x, 1f, "Play stays centered")
-            assertEquals(artwork.center.y, bounds[0].center.y, 1f, "Play stays centered vertically")
-            assertTrue(bounds[1].center.x < artwork.center.x, "Watched belongs at the bottom left")
-            assertTrue(bounds[2].center.x > artwork.center.x, "Favorite belongs at the bottom right")
+            if (!isLandscape || isWide) assertEquals(artwork.center.x, bounds[0].center.x, 1f)
+            else assertTrue(bounds[0].center.x < artwork.center.x, "Narrow covers keep play clear of the action cluster")
+            assertTrue(bounds[1].center.x > artwork.center.x, "Watched belongs in the lower-right cluster")
+            assertTrue(bounds[2].left > bounds[1].right, "Favorite follows watched")
             assertEquals(bounds[1].center.y, bounds[2].center.y, 1f)
-            assertEquals(artwork.right - bounds[2].right, bounds[1].left - artwork.left, 1f)
             for (i in bounds.indices) for (j in i + 1 until bounds.size)
                 assertTrue(!bounds[i].overlaps(bounds[j]), "Actions overlap: $isLandscape/$isWide")
             actions.forEach { it.performMouseInput { moveTo(center); click() } }
@@ -130,6 +129,28 @@ class MediaArtworkLiftTest {
         assertEquals(3, plays)
         assertEquals(3, watched)
         assertEquals(3, favorites)
+    }
+
+    @Test fun playUsesASolidWhiteTriangleOverATranslucentCircle() {
+        val background = mutableStateOf(Color(0xFF80C0E0))
+        rule.setContent {
+            TestTheme {
+                Box(Modifier.size(140.dp, 210.dp).background(background.value)) {
+                    MediaCardHoverOverlay("影片", {}, null, null, liftArtwork = true)
+                }
+            }
+        }
+        for (color in listOf(Color(0xFF80C0E0), Color(0xFF486078))) {
+            rule.runOnIdle { background.value = color; clearFocus() }
+            val play = action("播放影片").captureToImage().toPixelMap()
+            val triangle = play[play.width / 2, play.height / 2]
+            assertTrue(triangle.red > .95f && triangle.green > .95f && triangle.blue > .95f,
+                "The triangle must be solid white")
+            val tint = play[play.width / 2, play.height / 6]
+            assertEquals(color.red * .66f, tint.red, .03f)
+            assertEquals(color.green * .66f, tint.green, .03f)
+            assertEquals(color.blue * .66f, tint.blue, .03f)
+        }
     }
 
     @Test fun quickPassDoesNotFlashControlsAndSettledHoverDoesNotKeepAnimating() {

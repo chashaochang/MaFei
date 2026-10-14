@@ -22,8 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -141,29 +139,29 @@ fun MediaCardHoverOverlay(
             val playSize = if (compact) 40.dp else 52.dp
             val actionSize = if (compact || liftArtwork) 32.dp else 40.dp
             val hasActions = onToggleWatched != null || onToggleFavorite != null
-            val playAtStart = landscape && hasActions && !liftArtwork
+            val playAtStart = landscape && hasActions && (!liftArtwork || maxWidth < 200.dp)
             val playSource = remember { MutableInteractionSource() }
             val playHovered by playSource.collectIsHoveredAsState()
             val playFocused by playSource.collectIsFocusedAsState()
             val playPressed by playSource.collectIsPressedAsState()
             val playScale = animateFloatAsState(if (playPressed) .94f else if (playHovered || playFocused) 1.08f else 1f,
                 tween(120), label = "quick play scale")
+            val playBackgroundAlpha = animateFloatAsState(
+                if (playPressed) .52f else if (playHovered || playFocused) .46f else .34f,
+                tween(120), label = "quick play background",
+            )
             Box(
                 Modifier.align(if (playAtStart) Alignment.CenterStart else Alignment.Center)
                     .padding(start = if (playAtStart) 12.dp else 0.dp,
-                        bottom = if (!liftArtwork && !landscape && hasActions) 12.dp else 0.dp)
+                        bottom = if (!landscape && hasActions) 12.dp else 0.dp)
                     .size(playSize)
-                    .then(if (liftArtwork) Modifier.drawBehind {
-                        drawCircle(Brush.radialGradient(
-                            listOf(Color.Black.copy(alpha = .24f), Color.Transparent),
-                            center = center, radius = size.minDimension * .9f,
-                        ), radius = size.minDimension * .9f)
-                    } else Modifier)
                     .graphicsLayer { scaleX = playScale.value; scaleY = playScale.value }
-                    .then(if (liftArtwork) Modifier.shadow(6.dp, CircleShape, clip = false,
-                        ambientColor = Color.Black.copy(alpha = .20f), spotColor = Color.Black.copy(alpha = .25f)) else Modifier)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = .96f))
+                    .drawWithContent {
+                        drawCircle(if (liftArtwork) Color.Black.copy(alpha = playBackgroundAlpha.value)
+                            else Color.White.copy(alpha = .96f))
+                        drawContent()
+                    }
                     .mafeiInteractive(
                         onClick = onPlay,
                         enabled = visible,
@@ -173,12 +171,15 @@ fun MediaCardHoverOverlay(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                MaFeiIcon(MaFeiGlyph.Play, Modifier.size(if (compact) 20.dp else 26.dp), Color(0xFF1A1A1A))
+                MaFeiIcon(
+                    MaFeiGlyph.Play,
+                    Modifier.size(if (liftArtwork) { if (compact) 26.dp else 32.dp } else if (compact) 20.dp else 26.dp),
+                    if (liftArtwork) Color.White else Color(0xFF1A1A1A),
+                )
             }
             if (hasActions) {
                 Row(
-                    Modifier.align(if (liftArtwork) Alignment.BottomCenter else if (landscape) Alignment.CenterEnd else Alignment.BottomCenter)
-                        .then(if (liftArtwork) Modifier.fillMaxWidth() else Modifier)
+                    Modifier.align(if (liftArtwork) Alignment.BottomEnd else if (landscape) Alignment.CenterEnd else Alignment.BottomCenter)
                         .padding(horizontal = if (compact) 6.dp else 10.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -192,7 +193,6 @@ fun MediaCardHoverOverlay(
                         enabled = visible,
                         localScrim = liftArtwork,
                     )
-                    if (liftArtwork) Spacer(Modifier.weight(1f))
                     if (onToggleFavorite != null) CardHoverAction(
                         glyph = MaFeiGlyph.Favorite,
                         label = if (isFavorite) "取消收藏" else "收藏",
