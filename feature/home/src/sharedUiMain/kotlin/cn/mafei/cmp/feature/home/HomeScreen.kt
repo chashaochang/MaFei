@@ -676,7 +676,9 @@ fun HomeScreen(
       val gridEndPadding = layout.pagePaddingDp.dp + safeArea.end
       val gridBottomPadding = (if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 48.dp) +
           safeArea.bottom + bottomOverlayInset
-      val gridVerticalGap = if (layout.family == MaFeiLayoutFamily.Phone) 20.dp else 16.dp
+      val posterWidth = (layout.gridWidthDp.dp - latestGap * (latestColumns - 1)) / latestColumns
+      val gridVerticalGap = if (overview) maxOf(20.dp, mediaArtworkHoverTopInset(posterWidth * 1.5f))
+          else if (layout.family == MaFeiLayoutFamily.Phone) 20.dp else 16.dp
       // Match the legacy HomeLatestFeedContent.constraintSize(minHeight): a
       // short/loading/empty feed must still be tall enough for its sticky
       // header to remain at the top. Without this tail the lazy grid clamps to
@@ -868,7 +870,7 @@ fun HomeScreen(
                         key = "home-latest-shelf:${collection.id.value}",
                         span = { GridItemSpan(maxLineSpan) },
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column {
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = sceneControlLeading),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -923,15 +925,25 @@ fun HomeScreen(
                         }
                         if (collectionLoading && collectionItems.isEmpty()) {
                             LazyRow(
+                                modifier = Modifier.mafeiArtworkShelfBleed(mediaArtworkHoverSideInset(140.dp)),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                contentPadding = PaddingValues(horizontal = sceneControlLeading),
+                                contentPadding = PaddingValues(
+                                    start = sceneControlLeading + mediaArtworkHoverSideInset(140.dp),
+                                    end = sceneControlLeading + mediaArtworkHoverSideInset(140.dp),
+                                    top = mediaArtworkHoverTopInset(210.dp),
+                                ),
                             ) {
                                 items(HomeLoadingPlaceholderCount) { MediaPlaceholder(Modifier.width(140.dp)) }
                             }
                         } else if (collectionItems.isNotEmpty()) {
                             LazyRow(
+                                modifier = Modifier.mafeiArtworkShelfBleed(mediaArtworkHoverSideInset(140.dp)),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                contentPadding = PaddingValues(horizontal = sceneControlLeading),
+                                contentPadding = PaddingValues(
+                                    start = sceneControlLeading + mediaArtworkHoverSideInset(140.dp),
+                                    end = sceneControlLeading + mediaArtworkHoverSideInset(140.dp),
+                                    top = mediaArtworkHoverTopInset(210.dp),
+                                ),
                             ) {
                                 items(collectionItems, key = { it.id.value }) { item ->
                                     val text = homeLatestText(item)
@@ -939,6 +951,7 @@ fun HomeScreen(
                                     MediaCard(
                                         text.title,
                                         text.subtitle,
+                                        liftArtwork = true,
                                         onClick = { openArtwork(item, artworkSource) },
                                         poster = artwork?.let { painter ->
                                             { posterModifier ->
@@ -996,6 +1009,7 @@ fun HomeScreen(
                     MediaCard(
                         text.title,
                         text.subtitle,
+                        liftArtwork = overview,
                         onClick = { openArtwork(item, artworkSource) },
                         poster = artwork?.let { painter ->
                             { posterModifier ->
@@ -1058,6 +1072,7 @@ fun HomeScreen(
                 val artworkSource = "browse:${item.id.value}"
                 MediaCard(
                     text.title, text.subtitle, onClick = { openArtwork(item, artworkSource) },
+                    liftArtwork = overview,
                     poster = artwork?.let { painter ->
                         { posterModifier ->
                             painter(item, posterModifier)
@@ -2423,7 +2438,7 @@ private fun HomeMediaShelf(
     onOpenMore: (() -> Unit)? = null,
 ) {
     val width = if (layout.family == MaFeiLayoutFamily.Phone) 160.dp else 240.dp
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = leadingInset),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2459,12 +2474,17 @@ private fun HomeMediaShelf(
             }
         }
         LazyRow(
+            modifier = Modifier.mafeiArtworkShelfBleed(mediaArtworkHoverSideInset(width)),
             horizontalArrangement = Arrangement.spacedBy(if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp),
-            contentPadding = PaddingValues(horizontal = leadingInset),
+            contentPadding = PaddingValues(
+                start = leadingInset + mediaArtworkHoverSideInset(width),
+                end = leadingInset + mediaArtworkHoverSideInset(width),
+                top = mediaArtworkHoverTopInset(width * 9f / 16f),
+            ),
         ) {
             items(items, key = { it.id.value }) { item ->
                 val text = homeShelfText(item, kind)
-                val interaction = rememberMediaCardInteraction()
+                val interaction = rememberMediaCardInteraction(liftArtwork = true)
                 val cardBounds = Modifier.width(width)
                 Column(
                     (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiMediaCardInteraction(
@@ -2491,6 +2511,7 @@ private fun HomeMediaShelf(
                             )
                         }
                         MediaCardHoverOverlay(
+                            liftArtwork = true,
                             visible = interaction.showActions,
                             title = text.title,
                             onPlay = { (onPlay ?: onItem)(item) },
