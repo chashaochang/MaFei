@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
@@ -39,31 +40,59 @@ class MaFeiDrawerPresentationTest {
     private val sceneColor = mutableStateOf(Color.Red)
     private val style = mutableStateOf(GlassStyle.Liquid)
     private val dark = mutableStateOf(true)
+    private val portrait = mutableStateOf(true)
     private var surfaceColor = Color.Unspecified
     private val destinations = listOf(
         MaFeiNavItem("home", "首页", MaFeiGlyph.Home),
         MaFeiNavItem("favorite", "收藏", MaFeiGlyph.Favorite),
     )
 
-    @Test fun drawerHasAnOrdinaryThemeBackgroundInEveryStyle() {
+    @Test fun drawerAndPersistentSidebarShareTheSameLiveMaterialInEveryStyle() {
         mount()
-        compose.onNodeWithContentDescription("展开侧边栏").performClick()
-        compose.waitForIdle()
-        for (material in GlassStyle.entries) for (isDark in listOf(true, false)) {
-            compose.runOnIdle { style.value = material; dark.value = isDark }
-            for (scene in listOf(Color.Red, Color.Blue)) {
-                compose.runOnIdle { sceneColor.value = scene }
-                val pixels = compose.onNodeWithTag("drawerSidebarPanel", useUnmergedTree = true)
-                    .captureToImage().toPixelMap()
-                val sample = pixels[pixels.width - 4, pixels.height / 2]
-                assertEquals(surfaceColor.red, sample.red, .005f, "$material/$isDark red")
-                assertEquals(surfaceColor.green, sample.green, .005f, "$material/$isDark green")
-                assertEquals(surfaceColor.blue, sample.blue, .005f, "$material/$isDark blue")
-                if (material == GlassStyle.Liquid && scene == Color.Blue) {
-                    capture("drawer-${if (isDark) "dark" else "light"}")
+        val landscapeSamples = mutableMapOf<Triple<GlassStyle, Boolean, Color>, Color>()
+        for (isPortrait in listOf(false, true)) {
+            compose.runOnIdle { portrait.value = isPortrait }
+            if (isPortrait) {
+                compose.onNodeWithContentDescription("展开侧边栏").performClick()
+            }
+            compose.waitForIdle()
+            for (material in GlassStyle.entries) for (isDark in listOf(true, false)) {
+                compose.runOnIdle { style.value = material; dark.value = isDark }
+                for (scene in listOf(Color.Red, Color.Blue)) {
+                    compose.runOnIdle { sceneColor.value = scene }
+                    val pixels = compose.onRoot().captureToImage().toPixelMap()
+                    // Empty panel inset, clear of navigation labels and its edge.
+                    val sample = pixels[8, pixels.height / 2]
+                    val alpha = when (material) {
+                        GlassStyle.Translucent -> .60f
+                        GlassStyle.GaussianBlur -> .42f
+                        GlassStyle.Liquid -> .16f
+                    }
+                    // The translucent fallback has no backdrop, so its ordinary
+                    // alpha composition includes the drawer scrim underneath.
+                    val behind = if (isPortrait && material == GlassStyle.Translucent) {
+                        Color.Black.copy(alpha = .5f).compositeOver(scene)
+                    } else scene
+                    val expected = surfaceColor.copy(alpha = alpha).compositeOver(behind)
+                    val key = Triple(material, isDark, scene)
+                    assertColor(expected, sample, "$key portrait=$isPortrait")
+                    if (isPortrait && material != GlassStyle.Translucent) {
+                        assertColor(landscapeSamples.getValue(key), sample, "orientation parity: $key")
+                    } else if (!isPortrait) {
+                        landscapeSamples[key] = sample
+                    }
+                    if (material == GlassStyle.Liquid && scene == Color.Blue) {
+                        capture("sidebar-${if (isPortrait) "portrait" else "landscape"}-${if (isDark) "dark" else "light"}")
+                    }
                 }
             }
         }
+    }
+
+    private fun assertColor(expected: Color, actual: Color, message: String) {
+        assertEquals(expected.red, actual.red, .012f, "$message red")
+        assertEquals(expected.green, actual.green, .012f, "$message green")
+        assertEquals(expected.blue, actual.blue, .012f, "$message blue")
     }
 
     @Test fun scrimFadesInBeforeThePanelAndNeverSlidesWithIt() {
@@ -160,13 +189,15 @@ class MaFeiDrawerPresentationTest {
             MaFeiTheme(darkTheme = dark.value) {
                 surfaceColor = MaterialTheme.colorScheme.surface
                 GlassStyleScope(style.value) {
-                    Box(Modifier.size(740.dp, 1000.dp)) {
+                    val width = if (portrait.value) 740f else 1000f
+                    val height = if (portrait.value) 1000f else 740f
+                    Box(Modifier.size(width.dp, height.dp)) {
                         MaFeiAdaptiveShell(
-                            layout = mafeiLayout(740f, 1000f),
+                            layout = mafeiLayout(width, height),
                             destinations = destinations, selectedDestination = "home", onDestination = {},
                             libraries = emptyList(), selectedLibrary = null, onLibrary = {}, accountLabel = "测试",
-                            background = {}, accountActions = {},
-                            scene = { Box(Modifier.fillMaxSize().background(sceneColor.value)) }, overlay = {},
+                            background = { Box(Modifier.fillMaxSize().background(sceneColor.value)) },
+                            accountActions = {}, scene = {}, overlay = {},
                         )
                     }
                 }

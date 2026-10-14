@@ -646,7 +646,6 @@ fun MaFeiAdaptiveShell(
                         windowControls = {},
                         windowDragArea = { content -> content() },
                         desktop = false,
-                        modalDrawer = true,
                         modifier = Modifier.fillMaxSize().testTag("drawerSidebarPanel"),
                     )
             }
@@ -746,7 +745,6 @@ private fun SidebarPanel(
     windowControls: @Composable RowScope.() -> Unit,
     windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
     desktop: Boolean,
-    modalDrawer: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // 媒体库列表的展开/收起由侧边栏自己持有，不上升为外壳状态。
@@ -762,10 +760,10 @@ private fun SidebarPanel(
     MaFeiSurface(
         GlassSurfaceSpec(
             GlassRole.Navigation,
-            if (modalDrawer) GlassLevel.Opaque else GlassLevel.Full,
+            GlassLevel.Full,
             // 整块侧栏（含顶部 logo 区与底部账号区）就是这一种材质，顶/底不再
             // 叠任何额外玻璃层；滚进来的列表项由滚动区的上下渐隐淡出。
-            tintAlpha = if (modalDrawer) 1f else .16f,
+            tintAlpha = .16f,
             intensity = 1f,
             // 贴窗口边缘的整块面板：不要圆角、不要液态玻璃的折射与高光描边，只做高斯模糊
             // + 染色。折射会在四条边上各画一条可见的线（读成"浮起来的卡片"），而整屏高度
@@ -774,9 +772,9 @@ private fun SidebarPanel(
             material = GlassMaterial.Frosted,
         ),
         modifier.fillMaxHeight(),
-        // A modal drawer is an ordinary theme panel. Sampling the page here
-        // bypasses the scrim and makes the sidebar appear to shine through it.
-        if (modalDrawer) null else backdrop,
+        // Both presentations use the same page material; the drawer scrim only
+        // dims the surrounding page and is not part of the sidebar's sampling.
+        backdrop,
         exportedBackdrop = sidebarMaterialBackdrop,
     ) {
         Box(Modifier.fillMaxSize()) {
