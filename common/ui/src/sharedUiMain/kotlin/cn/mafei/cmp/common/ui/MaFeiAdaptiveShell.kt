@@ -602,7 +602,9 @@ fun MaFeiAdaptiveShell(
                 Box(
                     Modifier.fillMaxSize().background(Color.Black.copy(alpha = .50f))
                         .semantics { contentDescription = "关闭侧边栏" }
-                        .mafeiInteractive({ drawerOpen = false }, label = "关闭侧边栏"),
+                        .mafeiInteractive(
+                            { drawerOpen = false }, label = "关闭侧边栏", visualFeedback = false,
+                        ),
                 )
             }
             AnimatedVisibility(

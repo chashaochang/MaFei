@@ -14,12 +14,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.down
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiTheme
 import cn.mafei.cmp.common.design_system.mafeiLayout
@@ -114,6 +116,27 @@ class MaFeiDrawerPresentationTest {
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithContentDescription("关闭侧边栏").assertDoesNotExist()
         compose.onNodeWithTag("drawerSidebarPanel", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun pressingTheScrimDoesNotAddButtonTintOrShapeFeedback() {
+        mount()
+        compose.onNodeWithContentDescription("展开侧边栏").performClick()
+        compose.waitForIdle()
+        val before = compose.onRoot().captureToImage().toPixelMap()
+        val sample = before[before.width - 10, before.height / 2]
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("关闭侧边栏").performTouchInput {
+            down(androidx.compose.ui.geometry.Offset(width - 8f, height / 2f))
+        }
+        compose.mainClock.advanceTimeBy(160)
+        compose.waitForIdle()
+        val held = compose.onRoot().captureToImage().toPixelMap()
+        assertEquals(sample, held[held.width - 10, held.height / 2],
+            "A full-window scrim is not a pressable card")
+        capture("drawer-scrim-pressed")
+        compose.onNodeWithContentDescription("关闭侧边栏").performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
     }
 
     private fun dismiss() {
