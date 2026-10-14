@@ -28,11 +28,13 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -89,9 +91,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -99,6 +105,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -183,6 +192,9 @@ enum class PlayerChromeGlyph {
     Pause,
     Retry,
     Fullscreen,
+    ExitFullscreen,
+    WindowFullscreen,
+    WindowRestore,
     Lock,
     Unlock,
     Previous,
@@ -191,6 +203,7 @@ enum class PlayerChromeGlyph {
     Orientation,
     Brightness,
     Volume,
+    Muted,
 }
 
 /**
@@ -218,9 +231,9 @@ fun NowPlayingScreen(
     videoSurface: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * 请求切换全屏（旧版 `onFullscreenToggle`）。参数是**目标形态**而不是「翻一下」：
-     * 当前形态由本组件按窗口横竖算出来，所以由它决定目标，调用方只负责执行。
-     * 之前这里是个无参 toggle，接线方接成「永远请求全屏」，进全屏后返回键和按钮都失效。
+     * Explicit target: windowed hosts enter actual system fullscreen; ordinary
+     * mobile hosts retain their player orientation policy. Window fill never
+     * invokes this callback.
      */
     onFullscreenRequest: ((Boolean) -> Unit)? = null,
     /**
@@ -254,6 +267,9 @@ fun NowPlayingScreen(
         PlayerDeviceControls.Unsupported,
     /** Loads a real provider frame while the seek bar is being dragged. */
     loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
+    /** Host chrome is composed only in normal windowed playback. */
+    hostWindowControls: @Composable RowScope.() -> Unit = {},
+    hostWindowDragArea: @Composable (@Composable () -> Unit) -> Unit = { it() },
 ) {
     val nativeBackdrop = LocalPlayerVideoBackdropSource.current
     val currentVideoMode by rememberUpdatedState(state.contentMode)
@@ -299,10 +315,15 @@ fun NowPlayingScreen(
     val availableQualities = if (state.casting) emptyList() else qualityOptions
     val presentation = state.toNowPlayingPresentation(if (media.live) capabilities.copy(seek = false) else capabilities)
     val safeArea = currentMaFeiSafeArea()
+    val hostFeatures = LocalMaFeiWindowFeatures.current
+    val windowedController = hostFeatures.windowedHost
     val latestTogglePlay by rememberUpdatedState(onTogglePlay)
     val latestSeek by rememberUpdatedState(onSeek)
     val latestSpeed by rememberUpdatedState(onSpeed)
     val latestPlaybackSpeed by rememberUpdatedState(state.speed)
+    val latestFullscreen by rememberUpdatedState(fullscreen)
+    val latestFullscreenRequest by rememberUpdatedState(onFullscreenRequest)
+    val latestPresentation by rememberUpdatedState(presentation)
     val animationScope = rememberCoroutineScope()
     val playerFocusRequester = remember { FocusRequester() }
 
@@ -327,6 +348,10 @@ fun NowPlayingScreen(
     var speedBeforeLongPress by remember(media.id, state.generation) { mutableFloatStateOf(1f) }
     var busyVisible by remember(media.id, state.generation) { mutableStateOf(false) }
     var lastPointerActivityMs by remember(media.id, state.generation) { mutableLongStateOf(0L) }
+    var mouseInput by remember { mutableStateOf(false) }
+    var windowFullscreen by remember(media.id) { mutableStateOf(false) }
+    val controllerInteractions = remember { MutableInteractionSource() }
+    val controlsHovered by controllerInteractions.collectIsHoveredAsState()
     // 竖向手势的亮度/音量反馈（旧版 PlayerGestureFeedback.Brightness/Volume）。
     var levelFeedback by remember(media.id, state.generation) { mutableStateOf<PlayerGestureFeedback.Level?>(null) }
     // 播放信息卡片是独立于侧栏面板的一层（旧版 isShowPlayBackInfo）：它盖住画面、
@@ -347,13 +372,6 @@ fun NowPlayingScreen(
     LaunchedEffect(media.id) {
         // 平台状态（亮度/音量）在部分平台靠事件推送：进页面先要一次，手势才有基准值。
         deviceControls.refresh()
-    }
-
-    // Desktop keyboards should operate the player without stealing the video
-    // surface's pointer gestures. The overlay owns focus, while the runtime
-    // remains the only source of playback truth.
-    LaunchedEffect(media.id, state.generation) {
-        runCatching { playerFocusRequester.requestFocus() }
     }
 
     LaunchedEffect(state.positionMs, draggingSlider) {
@@ -377,8 +395,9 @@ fun NowPlayingScreen(
             null
         }
     }
-    LaunchedEffect(controlsVisible, panel, locked, state.phase, autoHideGeneration) {
-        if (controlsVisible && panel == PlayerChromePanel.None && !locked && state.phase == PlayerPhase.Playing) {
+    LaunchedEffect(controlsVisible, panel, locked, state.phase, autoHideGeneration, controlsHovered, draggingSlider) {
+        if (controlsVisible && panel == PlayerChromePanel.None && !locked &&
+            !controlsHovered && !draggingSlider && state.phase == PlayerPhase.Playing) {
             delay(PlayerAutoHideDelayMs)
             controlsVisible = false
         }
@@ -446,7 +465,7 @@ fun NowPlayingScreen(
     }
 
     val materialVisible = !state.pictureInPicture &&
-        (panel != PlayerChromePanel.None || locked || controlsVisible || !fullscreen)
+        (panel != PlayerChromePanel.None || locked || controlsVisible || (!fullscreen && !windowedController))
     DisposableEffect(nativeBackdrop, materialVisible, media.id, state.generation) {
         nativeBackdrop?.sampling = materialVisible
         onDispose { nativeBackdrop?.sampling = false }
@@ -454,6 +473,7 @@ fun NowPlayingScreen(
 
     LaunchedEffect(state.pictureInPicture) {
         if (state.pictureInPicture) {
+            if (windowedController && latestFullscreen) latestFullscreenRequest?.invoke(false)
             panelAnimationToken++
             panel = PlayerChromePanel.None
             panelContainerVisible = false
@@ -467,11 +487,58 @@ fun NowPlayingScreen(
         }
     }
 
+    val durationMs = state.durationMs?.takeIf { it > 0L }
+    val requestFullscreen = onFullscreenRequest
+    val handleBack: () -> Unit = {
+        when (playerBackStep(panel != PlayerChromePanel.None, playbackInfoVisible,
+            fullscreen, requestFullscreen != null, windowedController && windowFullscreen)) {
+            PlayerBackStep.ClosePanel -> closePanel()
+            PlayerBackStep.ClosePlaybackInfo -> { playbackInfoVisible = false; showControlsTemporarily() }
+            PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
+            PlayerBackStep.ExitWindowFullscreen -> windowFullscreen = false
+            PlayerBackStep.LeavePlayer -> onBack()
+        }
+    }
+    fun fillWindow() {
+        if (fullscreen) requestFullscreen?.invoke(false)
+        windowFullscreen = if (fullscreen) true else !windowFullscreen
+        showControlsTemporarily()
+    }
+    fun adjustVolume(delta: Int) {
+        val max = deviceControls.maxVolume()
+        val volume = deviceControls.volume() ?: return
+        if (max > 0) deviceControls.setVolume((volume + delta).coerceIn(0, max))
+        showControlsTemporarily()
+    }
     BoxWithConstraints(
-        modifier.background(Color.Black).onSizeChanged { sceneSize = it }
-            .onGloballyPositioned { sceneOrigin = it.positionInRoot() },
+        modifier.background(Color.Black).playerKeyboardControls(
+            onBack = handleBack,
+            onTogglePlay = { if (!locked) { latestTogglePlay(); showControlsTemporarily() } },
+            onSeekBy = if (!locked && presentation.canSeek && durationMs != null) {
+                { delta -> latestSeek((state.positionMs + delta).coerceIn(0L, durationMs)); showControlsTemporarily() }
+            } else null,
+            onFullscreen = if (!locked && requestFullscreen != null) {{ requestFullscreen(!fullscreen) }} else null,
+            onWindowFullscreen = if (!locked && windowedController) ::fillWindow else null,
+            onVolumeBy = if (!locked && deviceControls.maxVolume() > 0) ::adjustVolume else null,
+            onMute = if (!locked && deviceControls.maxVolume() > 0) {{
+                val volume = deviceControls.volume() ?: 0
+                deviceControls.setVolume(if (volume > 0) 0 else (deviceControls.maxVolume() / 2).coerceAtLeast(1))
+                showControlsTemporarily()
+            }} else null,
+        ),
     ) {
-        val durationMs = state.durationMs?.takeIf { it > 0L }
+        val immersive = fullscreen || (windowedController && windowFullscreen)
+        val windowHeaderVisible = windowedController && !immersive
+        val stackedNativeChrome = maxWidth < 700.dp && hostFeatures.windowControlTopInsetDp > 0f
+        val headerContentTop = safeArea.top + if (stackedNativeChrome) hostFeatures.windowControlTopInsetDp.dp else 0.dp
+        val windowHeaderHeight = if (windowHeaderVisible) headerContentTop + 52.dp else 0.dp
+        val viewportTop = when {
+            windowHeaderVisible -> windowHeaderHeight
+            windowedController && !fullscreen -> safeArea.top + hostFeatures.windowControlTopInsetDp.dp
+            else -> 0.dp
+        }
+        BoxWithConstraints(Modifier.fillMaxSize().padding(top = viewportTop)
+            .onSizeChanged { sceneSize = it }.onGloballyPositioned { sceneOrigin = it.positionInRoot() }) {
         // The player used to switch to its richer control set only after the
         // explicit fullscreen request. On tablets and desktop the player page
         // already owns the whole window, so that left the wide layout with the
@@ -483,7 +550,7 @@ fun NowPlayingScreen(
         // Normal tablets use this control to rotate the player; desktop hosts
         // keep a real window-fullscreen action.
         val windowFeatures = LocalMaFeiWindowFeatures.current
-        val windowControlTopInset = if (windowFeatures.windowedHost) {
+        val windowControlTopInset = if (windowFeatures.windowedHost && !windowHeaderVisible && !immersive) {
             windowFeatures.windowControlTopInsetDp.dp
         } else {
             0.dp
@@ -491,7 +558,7 @@ fun NowPlayingScreen(
         val tabletWindow = !windowFeatures.desktopWindow && !windowFeatures.windowedHost &&
             minOf(maxWidth.value, maxHeight.value) >= 600f
         val landscapeWindow = maxWidth.value > maxHeight.value
-        val anchoredMenus = largeWindow && (tabletWindow || windowFeatures.desktopWindow ||
+        val anchoredMenus = windowedController || largeWindow && (tabletWindow || windowFeatures.desktopWindow ||
             windowFeatures.windowedHost || minOf(maxWidth.value, maxHeight.value) >= 600f)
 
         // Legacy PlayerPage.onBackPress priority: close the open menu/panel first,
@@ -499,28 +566,6 @@ fun NowPlayingScreen(
         // too), then leave fullscreen, and only then pop the player. Every back
         // entry (system back and both on-screen back buttons) must share this
         // ladder — route the chrome buttons through it too, or they shortcut layers.
-        val requestFullscreen = onFullscreenRequest
-        val handleBack: () -> Unit = {
-            when (
-                playerBackStep(
-                    panelOpen = panel != PlayerChromePanel.None,
-                    playbackInfoVisible = playbackInfoVisible,
-                    fullscreen = fullscreen,
-                    fullscreenToggleAvailable = requestFullscreen != null,
-                )
-            ) {
-                PlayerBackStep.ClosePanel -> {
-                    closePanel()
-                }
-                PlayerBackStep.ClosePlaybackInfo -> {
-                    playbackInfoVisible = false
-                    showControlsTemporarily()
-                }
-                // 退全屏：明确请求 false，绝不「再切一次」。
-                PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
-                PlayerBackStep.LeavePlayer -> onBack()
-            }
-        }
 
         // The video AREA: the surface fills whatever shape the current ratio
         // asks for, and the page (black) shows through around it. 原始比例 uses
@@ -577,41 +622,18 @@ fun NowPlayingScreen(
             Modifier.fillMaxSize()
                 .focusRequester(playerFocusRequester)
                 .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Escape -> {
-                            handleBack()
-                            true
-                        }
-                        Key.Spacebar -> {
-                            latestTogglePlay()
-                            showControlsTemporarily()
-                            true
-                        }
-                        Key.DirectionLeft,
-                        Key.DirectionRight -> {
-                            if (!presentation.canSeek || durationMs == null) {
-                                false
-                            } else {
-                                val step = if (event.key == Key.DirectionLeft) -10_000L else 10_000L
-                                val target = (state.positionMs + step).coerceIn(0L, durationMs)
-                                latestSeek(target)
-                                showControlsTemporarily()
-                                true
-                            }
-                        }
-                        else -> false
-                    }
-                }
+                .testTag("playerInputSurface")
                 .pointerInput(media.id, state.generation, locked) {
                     // A desktop pointer should bring the chrome back without
                     // requiring a click. Touch and drag gestures keep their
                     // existing handlers below; this observer never consumes.
                     awaitPointerEventScope {
                         while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.type == PointerEventType.Move && !locked) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press) {
+                                mouseInput = event.changes.any { it.type == PointerType.Mouse }
+                            }
+                            if (event.type == PointerEventType.Move && !locked && event.changes.any { it.type == PointerType.Mouse }) {
                                 val now = cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs()
                                 if (now - lastPointerActivityMs >= 250L) {
                                     lastPointerActivityMs = now
@@ -625,18 +647,24 @@ fun NowPlayingScreen(
                     detectTapGestures(
                         onTap = {
                             if (!locked) {
-                                controlsVisible = !controlsVisible
-                                if (controlsVisible) autoHideGeneration++
+                                if (mouseInput) {
+                                    latestTogglePlay()
+                                    showControlsTemporarily()
+                                } else {
+                                    controlsVisible = !controlsVisible
+                                    if (controlsVisible) autoHideGeneration++
+                                }
                             }
                         },
                         onDoubleTap = {
                             if (!locked) {
-                                latestTogglePlay()
+                                if (mouseInput && latestFullscreenRequest != null) latestFullscreenRequest?.invoke(!latestFullscreen)
+                                else latestTogglePlay()
                                 showControlsTemporarily()
                             }
                         },
                         onLongPress = {
-                            if (!locked && presentation.isPlaying && capabilities.speed) {
+                            if (!mouseInput && !locked && latestPresentation.isPlaying && capabilities.speed) {
                                 speedBeforeLongPress = latestPlaybackSpeed
                                 longPressSpeedActive = true
                                 latestSpeed(PlayerLongPressSpeed)
@@ -667,7 +695,8 @@ fun NowPlayingScreen(
                     var startVolume = 0
                     var maxVolume = 0
                     detectDragGestures(
-                        onDragStart = { offset ->
+                        onDragStart = dragStart@ { offset ->
+                            if (mouseInput) return@dragStart
                             accumulatedX = 0f
                             accumulatedY = 0f
                             dragAxis = 0
@@ -687,7 +716,8 @@ fun NowPlayingScreen(
                                 PlayerGestureLevel.Volume -> if (maxVolume > 0) side else null
                             }
                         },
-                        onDrag = { change, dragAmount ->
+                        onDrag = drag@ { change, dragAmount ->
+                            if (change.type == PointerType.Mouse) return@drag
                             accumulatedX += dragAmount.x
                             accumulatedY += dragAmount.y
                             if (dragAxis == 0 && maxOf(abs(accumulatedX), abs(accumulatedY)) >= 4f) {
@@ -743,7 +773,7 @@ fun NowPlayingScreen(
                 },
         )
 
-        if (!fullscreen && !locked && (panel == PlayerChromePanel.None || anchoredMenus)) {
+        if (!immersive && !windowHeaderVisible && !locked && (panel == PlayerChromePanel.None || anchoredMenus)) {
             PlayerChromeButton(
                 glyph = null,
                 label = "返回",
@@ -762,16 +792,16 @@ fun NowPlayingScreen(
         }
 
         AnimatedVisibility(
-            visible = (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,
+            visible = !windowHeaderVisible && (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,
             enter = fadeIn(tween(PlayerControlTransitionDurationMs)) +
                 slideInVertically(tween(PlayerControlTransitionDurationMs)) { -24 },
             exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
                 slideOutVertically(tween(PlayerControlTransitionDurationMs)) { -24 },
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.TopCenter).hoverable(controllerInteractions),
         ) {
             PlayerTopChrome(
                 title = media.title,
-                fullscreen = fullscreen,
+                fullscreen = immersive,
                 largeWindow = largeWindow,
                 safeStart = safeArea.start,
                 safeTop = safeArea.top,
@@ -795,7 +825,7 @@ fun NowPlayingScreen(
                 slideInVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
             exit = fadeOut(tween(PlayerControlTransitionDurationMs)) +
                 slideOutVertically(tween(PlayerControlTransitionDurationMs)) { 24 },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).hoverable(controllerInteractions),
         ) {
             PlayerBottomChrome(
                 live = media.live,
@@ -822,6 +852,10 @@ fun NowPlayingScreen(
                 tabletWindow = tabletWindow,
                 landscapeWindow = landscapeWindow,
                 largeTextControls = anchoredMenus,
+                windowedController = windowedController,
+                windowFullscreen = windowFullscreen,
+                onWindowFullscreen = ::fillWindow,
+                deviceControls = deviceControls,
                 onNext = onNext,
                 onPrevious = onPrevious,
                 episodes = episodes,
@@ -838,7 +872,7 @@ fun NowPlayingScreen(
         }
 
         AnimatedVisibility(
-            visible = fullscreen && controlsVisible && !locked,
+            visible = !windowedController && fullscreen && controlsVisible && !locked,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.CenterStart),
@@ -1007,6 +1041,78 @@ fun NowPlayingScreen(
                 },
             )
         }
+        // BoxWithConstraints subcomposes this scene during measurement. The
+        // focus request belongs here, after its focus target has been composed,
+        // not in the parent composition before the subcomposition exists.
+        LaunchedEffect(media.id, state.generation) {
+            playerFocusRequester.requestFocus()
+        }
+        }
+        if (windowHeaderVisible && !state.pictureInPicture) {
+            PlayerWindowHeader(
+                title = media.title, endInset = if (stackedNativeChrome) 0.dp else hostFeatures.windowControlEndInsetDp.dp,
+                height = windowHeaderHeight, backdrop = backdrop, topInset = headerContentTop,
+                startInset = safeArea.start,
+                windowControls = hostWindowControls, dragArea = hostWindowDragArea,
+                onBack = {
+                    if (panel != PlayerChromePanel.None) closePanel()
+                    else if (playbackInfoVisible) playbackInfoVisible = false
+                    else onBack()
+                },
+                onMenu = { openPanel(PlayerChromePanel.More) },
+                onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
+                showMenu = localCapabilities.contentMode || playbackFacts != null,
+                onPictureInPicture = onPictureInPicture, onCasting = onCasting,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerWindowHeader(
+    title: String,
+    endInset: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    topInset: androidx.compose.ui.unit.Dp,
+    startInset: androidx.compose.ui.unit.Dp,
+    backdrop: GlassBackdrop,
+    windowControls: @Composable RowScope.() -> Unit,
+    dragArea: @Composable (@Composable () -> Unit) -> Unit,
+    onBack: () -> Unit,
+    onMenu: () -> Unit,
+    onMenuBounds: (Rect) -> Unit,
+    showMenu: Boolean,
+    onPictureInPicture: (() -> Unit)?,
+    onCasting: (() -> Unit)?,
+) {
+    dragArea {
+        Row(
+            Modifier.fillMaxWidth().height(height).background(Color(0xFF141414))
+                .padding(start = 16.dp + startInset, top = topInset, end = 12.dp + endInset).testTag("playerWindowHeader"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            windowControls()
+            PlayerChromeButton(null, "返回", 44, 20, backdrop, onBack, transparent = true) {
+                MaFeiIcon(MaFeiGlyph.Back, Modifier.size(20.dp), Color.White)
+            }
+            Text(title, Modifier.weight(1f), color = Color.White,
+                style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (onPictureInPicture != null) {
+                PlayerChromeButton(null, "画中画", 44, 20, backdrop, onPictureInPicture, transparent = true) {
+                    Image(painterResource(MaFeiLegacyDrawables.pictureInPicture), null, Modifier.size(20.dp),
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White))
+                }
+            }
+            if (onCasting != null) {
+                PlayerChromeButton(null, "投屏", 44, 20, backdrop, onCasting, transparent = true) {
+                    Image(painterResource(MaFeiLegacyDrawables.wirelessProjection), null, Modifier.size(20.dp),
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White))
+                }
+            }
+            if (showMenu) PlayerChromeButton(PlayerChromeGlyph.More, "更多设置", 44, 20,
+                backdrop, onMenu, Modifier.onGloballyPositioned { onMenuBounds(it.boundsInRoot()) }, transparent = true)
+        }
     }
 }
 
@@ -1033,7 +1139,7 @@ private fun PlayerTopChrome(
     } else {
         0.dp
     }
-    val windowControlTopInset = if (windowFeatures.windowedHost) {
+    val windowControlTopInset = if (windowFeatures.windowedHost && !fullscreen) {
         windowFeatures.windowControlTopInsetDp.dp
     } else {
         0.dp
@@ -1166,10 +1272,69 @@ private fun PlayerBottomChrome(
     capabilities: PlayerCapabilities,
     danmakuEnabled: Boolean = false,
     onDanmakuToggle: (() -> Unit)? = null,
+    windowedController: Boolean = false,
+    windowFullscreen: Boolean = false,
+    onWindowFullscreen: () -> Unit = {},
+    deviceControls: PlayerDeviceControls = PlayerDeviceControls.Unsupported,
 ) {
     val audioTracks = tracks.filter { it.kind == TrackKind.Audio }
     val subtitleTracks = tracks.filter { it.kind == TrackKind.Subtitle }
     val duration = state.durationMs?.takeIf { it > 0L }
+    val playbackOptions: @Composable RowScope.() -> Unit = {
+        if (onDanmakuToggle != null) {
+            PlayerChromeButton(glyph = null, label = if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
+                diameter = if (windowedController) 44 else if (largeWindow) 42 else 30,
+                iconSize = 20, backdrop = backdrop, transparent = true, onClick = onDanmakuToggle) {
+                Image(painterResource(if (danmakuEnabled) MaFeiLegacyDrawables.danmakuOpen else MaFeiLegacyDrawables.danmakuClose),
+                    null, Modifier.size(20.dp))
+            }
+        }
+        fun anchor(target: PlayerChromePanel) = Modifier.onGloballyPositioned { onPanelBounds(target, it.boundsInRoot()) }
+        if (capabilities.trackSelection && audioTracks.size > 1) {
+            PlayerTextControl("音轨", largeTextControls, anchor(PlayerChromePanel.Audio)) { onPanel(PlayerChromePanel.Audio) }
+        }
+        if (capabilities.trackSelection && subtitleTracks.isNotEmpty()) {
+            PlayerTextControl("字幕", largeTextControls, anchor(PlayerChromePanel.Subtitle)) { onPanel(PlayerChromePanel.Subtitle) }
+        }
+        if (!live && episodes.size > 1) {
+            PlayerTextControl("选集", largeTextControls, anchor(PlayerChromePanel.Episodes)) { onPanel(PlayerChromePanel.Episodes) }
+        }
+        if (qualityOptions.isNotEmpty()) {
+            PlayerTextControl("清晰度", largeTextControls, anchor(PlayerChromePanel.Quality)) { onPanel(PlayerChromePanel.Quality) }
+        }
+        if (capabilities.speed) {
+            PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x",
+                largeTextControls, anchor(PlayerChromePanel.Speed)) { onPanel(PlayerChromePanel.Speed) }
+        }
+    }
+    if (windowedController) {
+        PlayerWindowController(
+            safeStart, safeEnd, safeBottom,
+            timeline = { timelineModifier -> if (!live) PlayerTimelineRow(state, sliderPositionMs, duration,
+                presentation.canSeek, 12, onDraggingChanged, onSliderPositionChanged, onSeek, timelineModifier) },
+            transport = {
+                if (onPrevious != null) PlayerChromeButton(PlayerChromeGlyph.Previous, "上一集", 44, 20, backdrop, onPrevious, transparent = true)
+                PlayerChromeButton(playbackGlyph(presentation), playbackLabel(presentation), 44, 22,
+                    backdrop, if (presentation.showRetry) onRetry else onTogglePlay, transparent = true)
+                if (onNext != null) PlayerChromeButton(PlayerChromeGlyph.Next, "下一集", 44, 20, backdrop, onNext, transparent = true)
+            },
+            options = playbackOptions,
+            volume = { PlayerWindowVolume(deviceControls, backdrop) },
+            screenModes = {
+                PlayerChromeButton(
+                    if (windowFullscreen && !fullscreen) PlayerChromeGlyph.WindowRestore else PlayerChromeGlyph.WindowFullscreen,
+                    if (windowFullscreen && !fullscreen) "退出窗口内全屏" else "窗口内全屏", 44, 20,
+                    backdrop, onWindowFullscreen, transparent = true,
+                )
+                if (onFullscreenRequest != null) PlayerChromeButton(
+                    if (fullscreen) PlayerChromeGlyph.ExitFullscreen else PlayerChromeGlyph.Fullscreen,
+                    if (fullscreen) "退出系统全屏" else "系统全屏", 44, 20,
+                    backdrop, { onFullscreenRequest(!fullscreen) }, transparent = true,
+                )
+            },
+        )
+        return
+    }
     // Wide windows keep the full player control set even before the user
     // enters explicit fullscreen. Fullscreen is an orientation/window-state
     // request; it must not also decide whether core playback controls exist.
@@ -1250,43 +1415,7 @@ private fun PlayerBottomChrome(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    if (onDanmakuToggle != null) {
-                        PlayerChromeButton(glyph = null, label = if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
-                            diameter = if (largeWindow) 42 else 30, iconSize = 20,
-                            backdrop = backdrop, transparent = true, onClick = onDanmakuToggle) {
-                            Image(painterResource(if (danmakuEnabled) MaFeiLegacyDrawables.danmakuOpen else MaFeiLegacyDrawables.danmakuClose),
-                                null, Modifier.size(20.dp))
-                        }
-                    }
-                    if (capabilities.trackSelection && audioTracks.size > 1) {
-                        PlayerTextControl("音轨", largeTextControls, Modifier.onGloballyPositioned {
-                            onPanelBounds(PlayerChromePanel.Audio, it.boundsInRoot())
-                        }) { onPanel(PlayerChromePanel.Audio) }
-                    }
-                    if (capabilities.trackSelection && subtitleTracks.isNotEmpty()) {
-                        PlayerTextControl("字幕", largeTextControls, Modifier.onGloballyPositioned {
-                            onPanelBounds(PlayerChromePanel.Subtitle, it.boundsInRoot())
-                        }) { onPanel(PlayerChromePanel.Subtitle) }
-                    }
-                    // Legacy order: 音轨 → 字幕 → 选集 → 清晰度 → 倍速.
-                    if (!live && episodes.size > 1) {
-                        PlayerTextControl("选集", largeTextControls, Modifier.onGloballyPositioned {
-                            onPanelBounds(PlayerChromePanel.Episodes, it.boundsInRoot())
-                        }) { onPanel(PlayerChromePanel.Episodes) }
-                    }
-                    if (qualityOptions.isNotEmpty()) {
-                        PlayerTextControl("清晰度", largeTextControls, Modifier.onGloballyPositioned {
-                            onPanelBounds(PlayerChromePanel.Quality, it.boundsInRoot())
-                        }) { onPanel(PlayerChromePanel.Quality) }
-                    }
-                    if (capabilities.speed) {
-                        PlayerTextControl(if (abs(state.speed - 1f) < .01f) "倍速" else "${state.speed}x",
-                            largeTextControls, Modifier.onGloballyPositioned {
-                                onPanelBounds(PlayerChromePanel.Speed, it.boundsInRoot())
-                            }) {
-                            onPanel(PlayerChromePanel.Speed)
-                        }
-                    }
+                    playbackOptions()
                     if (largeWindow && onFullscreenRequest != null) {
                         PlayerChromeButton(
                             glyph = if (tabletWindow) PlayerChromeGlyph.Orientation
@@ -1391,6 +1520,36 @@ private fun PlayerBottomChrome(
 }
 
 @Composable
+private fun PlayerWindowVolume(deviceControls: PlayerDeviceControls, backdrop: GlassBackdrop) {
+    val max = deviceControls.maxVolume()
+    if (max <= 0 || deviceControls.volume() == null) return
+    var volume by remember(deviceControls) { mutableIntStateOf(deviceControls.volume() ?: 0) }
+    var volumeBeforeMute by remember(deviceControls) { mutableIntStateOf(max / 2) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(deviceControls, dragging) {
+        if (!dragging) while (true) {
+            deviceControls.refresh()
+            volume = deviceControls.volume() ?: volume
+            delay(500)
+        }
+    }
+    fun setVolume(value: Long) {
+        volume = value.toInt().coerceIn(0, max)
+        deviceControls.setVolume(volume)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        PlayerChromeButton(if (volume == 0) PlayerChromeGlyph.Muted else PlayerChromeGlyph.Volume,
+            if (volume == 0) "取消静音" else "静音", 44, 20, backdrop, {
+                if (volume > 0) { volumeBeforeMute = volume; setVolume(0) }
+                else setVolume(volumeBeforeMute.coerceAtLeast(1).toLong())
+            }, transparent = true)
+        LegacyPlayerSeekBar(volume.toLong(), 0, max.toLong(), true, 10,
+            onDraggingChanged = { dragging = it }, onValueChanged = ::setVolume, onSeek = ::setVolume,
+            modifier = Modifier.width(64.dp).height(32.dp), label = "音量")
+    }
+}
+
+@Composable
 private fun PlayerTimelineRow(
     state: PlayerState,
     positionMs: Long,
@@ -1434,10 +1593,13 @@ private fun LegacyPlayerSeekBar(
     onValueChanged: (Long) -> Unit,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    label: String = "播放进度",
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     var dragValue by remember { mutableLongStateOf(valueMs) }
     var directManipulation by remember { mutableStateOf(false) }
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
     val total = totalMs?.coerceAtLeast(1L) ?: 1L
     val valueFraction = (valueMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
     val bufferedFraction = (bufferedMs.toDouble() / total).toFloat().coerceIn(0f, 1f)
@@ -1456,7 +1618,28 @@ private fun LegacyPlayerSeekBar(
     }
     Canvas(
         modifier.onSizeChanged { size = it }
-            .semantics { contentDescription = "播放进度" }
+            .semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(valueMs.toFloat(), 0f..total.toFloat())
+                if (enabled) setProgress { target ->
+                    val value = target.toLong().coerceIn(0, total)
+                    onValueChanged(value); onSeek(value); true
+                }
+            }
+            .onKeyEvent { event ->
+                if (!enabled || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val step = if (label == "音量") 1L else 5_000L
+                val target = when (event.key) {
+                    Key.DirectionLeft -> valueMs - step
+                    Key.DirectionRight -> valueMs + step
+                    Key.MoveHome -> 0L
+                    Key.MoveEnd -> total
+                    else -> return@onKeyEvent false
+                }.coerceIn(0, total)
+                onValueChanged(target); onSeek(target); true
+            }
+            .focusable(enabled, interactions)
+            .pointerHoverIcon(PointerIcon.Hand)
             .pointerInput(enabled, total, size) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
@@ -1494,7 +1677,7 @@ private fun LegacyPlayerSeekBar(
             },
     ) {
         val centerY = size.height / 2f
-        val trackHeight = 4.dp.toPx()
+        val trackHeight = (if (focused) 6.dp else 4.dp).toPx()
         val radius = trackHeight / 2f
         drawRoundRect(
             color = Color(0x66FFFFFF),
@@ -2334,11 +2517,13 @@ private fun PlayerChromeButton(
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val pressed by interactionSource.collectIsPressedAsState()
-    val buttonModifier = modifier.size(diameter.dp).semantics { contentDescription = label }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val buttonModifier = Modifier.size(diameter.dp).semantics { contentDescription = label }
     val buttonContent: @Composable () -> Unit = {
         if (content != null) content()
         else if (glyph != null) ChromeGlyph(glyph, Modifier.size(iconSize.dp), Color.White)
     }
+    Box(modifier.size(diameter.dp).hoverable(interactionSource).pointerHoverIcon(PointerIcon.Hand)) {
     if (!transparent) {
         LiquidButton(
             onClick = onClick,
@@ -2351,6 +2536,7 @@ private fun PlayerChromeButton(
         Box(
             buttonModifier
                 .clip(CircleShape)
+                .border(if (focused) 1.dp else 0.dp, if (focused) Color.White.copy(alpha = .85f) else Color.Transparent, CircleShape)
                 .background(
                     when {
                         pressed -> Color.White.copy(alpha = .18f)
@@ -2368,6 +2554,8 @@ private fun PlayerChromeButton(
         ) {
             buttonContent()
         }
+    }
+    PlayerPointerTooltip(label, hovered)
     }
 }
 
@@ -2413,6 +2601,24 @@ fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: 
                 line(.62f, .12f, .88f, .12f); line(.88f, .12f, .88f, .38f)
                 line(.12f, .62f, .12f, .88f); line(.12f, .88f, .38f, .88f)
                 line(.62f, .88f, .88f, .88f); line(.88f, .62f, .88f, .88f)
+            }
+            PlayerChromeGlyph.ExitFullscreen -> {
+                line(.12f, .38f, .38f, .38f); line(.38f, .38f, .38f, .12f)
+                line(.62f, .12f, .62f, .38f); line(.62f, .38f, .88f, .38f)
+                line(.12f, .62f, .38f, .62f); line(.38f, .62f, .38f, .88f)
+                line(.62f, .88f, .62f, .62f); line(.62f, .62f, .88f, .62f)
+            }
+            PlayerChromeGlyph.WindowFullscreen, PlayerChromeGlyph.WindowRestore -> {
+                drawRoundRect(color, Offset(size.width * .12f, size.height * .22f),
+                    Size(size.width * .76f, size.height * .56f),
+                    androidx.compose.ui.geometry.CornerRadius(size.width * .05f), style = Stroke(stroke))
+                if (glyph == PlayerChromeGlyph.WindowFullscreen) {
+                    line(.26f, .4f, .26f, .64f); line(.26f, .64f, .52f, .64f)
+                    line(.48f, .36f, .74f, .36f); line(.74f, .36f, .74f, .60f)
+                } else {
+                    line(.24f, .48f, .44f, .48f); line(.44f, .48f, .44f, .3f)
+                    line(.56f, .7f, .56f, .52f); line(.56f, .52f, .76f, .52f)
+                }
             }
             PlayerChromeGlyph.Orientation -> {
                 // Screen-rotation glyph: a small device frame makes this
@@ -2499,7 +2705,7 @@ fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: 
                     )
                 }
             }
-            PlayerChromeGlyph.Volume -> {
+            PlayerChromeGlyph.Volume, PlayerChromeGlyph.Muted -> {
                 drawPath(Path().apply {
                     moveTo(size.width * .12f, size.height * .38f)
                     lineTo(size.width * .3f, size.height * .38f)
@@ -2509,13 +2715,15 @@ fun ChromeGlyph(glyph: PlayerChromeGlyph, modifier: Modifier = Modifier, color: 
                     lineTo(size.width * .12f, size.height * .62f)
                     close()
                 }, color)
-                drawArc(
+                if (glyph == PlayerChromeGlyph.Muted) {
+                    line(.65f, .35f, .9f, .65f); line(.9f, .35f, .65f, .65f)
+                } else drawArc(
                     color, -55f, 110f, false,
                     topLeft = Offset(size.width * .42f, size.height * .3f),
                     size = Size(size.width * .3f, size.height * .4f),
                     style = Stroke(stroke, cap = StrokeCap.Round),
                 )
-                drawArc(
+                if (glyph != PlayerChromeGlyph.Muted) drawArc(
                     color, -55f, 110f, false,
                     topLeft = Offset(size.width * .5f, size.height * .2f),
                     size = Size(size.width * .42f, size.height * .6f),

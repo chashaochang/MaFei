@@ -103,12 +103,6 @@ fun main() = application {
             ?.coerceIn(PcMinimumWindowHeight.value.toInt(), 1600) ?: initialHeight).dp,
     )
     val playerWindowMode = remember { DesktopPlayerWindowMode() }
-    val requestPlayerFullscreen: (Boolean) -> Unit = remember(windowState) {
-        { requested -> windowState.placement = playerWindowMode.request(windowState.placement, requested) }
-    }
-    val playerScreenChanged: (Boolean) -> Unit = remember(windowState) {
-        { visible -> if (!visible) windowState.placement = playerWindowMode.playerClosed(windowState.placement) }
-    }
     Window(
         icon = painterResource(Res.drawable.app_launcher_icon),
         state = windowState,
@@ -117,6 +111,23 @@ fun main() = application {
         onCloseRequest = { runtime.requestClose { exitApplication() } },
         title = if (usesDesktopDevelopmentStorage()) "马飞 · 开发测试（本地登录态）" else "马飞",
     ) {
+        val applyPlacement: (WindowPlacement) -> Unit = remember(window, windowState) {
+            { target ->
+                // ComposeWindow's Maximized setter changes the AWT maximize
+                // bit but does not clear Skiko fullscreen. Exit that native
+                // mode first, then restore the user's maximized placement.
+                if (window.placement == WindowPlacement.Fullscreen && target != WindowPlacement.Fullscreen) {
+                    window.placement = WindowPlacement.Floating
+                }
+                windowState.placement = target
+            }
+        }
+        val requestPlayerFullscreen: (Boolean) -> Unit = remember(windowState, applyPlacement) {
+            { requested -> applyPlacement(playerWindowMode.request(windowState.placement, requested)) }
+        }
+        val playerScreenChanged: (Boolean) -> Unit = remember(windowState, applyPlacement) {
+            { visible -> if (!visible) applyPlacement(playerWindowMode.playerClosed(windowState.placement)) }
+        }
         DisposableEffect(Unit) {
             // Compose Desktop exposes the native frame through FrameWindowScope.
             // Enforce the product's supported PC range at the host boundary so

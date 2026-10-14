@@ -25,6 +25,7 @@ internal class MacPlayerHost {
                 var handle: PlayerSurfaceHandle? = null
                 override fun addNotify() {
                     super.addNotify()
+                    isFocusable = false
                     background = java.awt.Color.BLACK
                     layer = MacVideoSurface.create(this)
                     if (layer != 0L) {
@@ -40,7 +41,7 @@ internal class MacPlayerHost {
                 }
             }
         }
-        SwingPanel(factory = { JPanel(BorderLayout()).apply { background = java.awt.Color.BLACK; add(canvas, BorderLayout.CENTER) } },
+        SwingPanel(factory = { JPanel(BorderLayout()).apply { isFocusable = false; background = java.awt.Color.BLACK; add(canvas, BorderLayout.CENTER) } },
             modifier = modifier, background = androidx.compose.ui.graphics.Color.Black)
     }
 }

@@ -6,6 +6,12 @@ import kotlin.test.assertEquals
 /** 返回优先级：旧版 PlayerPage.onBackPress 的三层（菜单 → 全屏 → 退出播放页）。 */
 class PlayerBackLadderTest {
 
+    @Test fun windowFillIsUnwoundAfterSystemFullscreenAndBeforeLeavingThePlayer() {
+        assertEquals(PlayerBackStep.ExitFullscreen, playerBackStep(false, false, true, true, true))
+        assertEquals(PlayerBackStep.ExitWindowFullscreen, playerBackStep(false, false, false, true, true))
+        assertEquals(PlayerBackStep.ClosePanel, playerBackStep(true, false, true, true, true))
+    }
+
     @Test
     fun panelWinsOverEverythingElse() {
         assertEquals(

@@ -12,20 +12,23 @@ package cn.mafei.cmp.player.ui
  * (`requestFullscreen(false)`)，不能是「再切一次」—— 曾经接线成永远请求 true，
  * 结果全屏里侧滑返回被消费掉却什么都不发生。
  */
-enum class PlayerBackStep { ClosePanel, ClosePlaybackInfo, ExitFullscreen, LeavePlayer }
+enum class PlayerBackStep { ClosePanel, ClosePlaybackInfo, ExitFullscreen, ExitWindowFullscreen, LeavePlayer }
 
 fun playerBackStep(
     /** 侧栏面板（更多/倍速/音轨/字幕/选集/清晰度/画面比例）是否打开。 */
     panelOpen: Boolean,
     /** 「播放信息」卡是否可见。 */
     playbackInfoVisible: Boolean,
-    /** 当前画面是否为全屏（本组件按窗口横竖判定）。 */
+    /** Actual system fullscreen, or the explicit mobile orientation-fullscreen state. */
     fullscreen: Boolean,
     /** 宿主是否提供全屏切换；不提供时这一步跳过，直接离开播放页。 */
     fullscreenToggleAvailable: Boolean,
+    /** Filling only the current app window is separate from system fullscreen. */
+    windowFullscreen: Boolean = false,
 ): PlayerBackStep = when {
     panelOpen -> PlayerBackStep.ClosePanel
     playbackInfoVisible -> PlayerBackStep.ClosePlaybackInfo
     fullscreen && fullscreenToggleAvailable -> PlayerBackStep.ExitFullscreen
+    windowFullscreen -> PlayerBackStep.ExitWindowFullscreen
     else -> PlayerBackStep.LeavePlayer
 }

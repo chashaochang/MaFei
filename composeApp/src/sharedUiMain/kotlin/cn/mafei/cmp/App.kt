@@ -255,6 +255,8 @@ private fun BoundNowPlayingScreen(
     /** 全屏是显式状态（旧版 AppUIState.isFullScreen），不是从窗口横竖推出来的。 */
     fullscreen: Boolean = false,
     loadSeekPreview: (suspend (Long) -> PlayerSeekPreviewFrame?)? = null,
+    hostWindowControls: @Composable RowScope.() -> Unit = {},
+    hostWindowDragArea: @Composable (@Composable () -> Unit) -> Unit = { it() },
 ) {
     // Keep the 250-500 ms progress stream inside the player subtree. The
     // application shell only observes the low-frequency phase/resource pair.
@@ -339,6 +341,8 @@ private fun BoundNowPlayingScreen(
             { windowControls.pictureInPicture() }
         } else null,
         loadSeekPreview = loadSeekPreview,
+        hostWindowControls = hostWindowControls,
+        hostWindowDragArea = hostWindowDragArea,
         fullscreen = fullscreen,
         onFullscreenRequest = { requested -> onFullscreenChanged(requested) },
         videoSurface = { surfaceModifier ->
@@ -1345,10 +1349,11 @@ private fun BrowseContent(
         }
     }
     val videoPlayerPresented = playerExpanded && playingMedia?.mediaType != MediaType.Audio
-    DisposableEffect(videoPlayerPresented, onPlayerScreenChanged) {
-        onPlayerScreenChanged(videoPlayerPresented)
+    val currentPlayerScreenChanged by rememberUpdatedState(onPlayerScreenChanged)
+    DisposableEffect(videoPlayerPresented) {
+        currentPlayerScreenChanged(videoPlayerPresented)
         onDispose {
-            if (videoPlayerPresented) onPlayerScreenChanged(false)
+            if (videoPlayerPresented) currentPlayerScreenChanged(false)
         }
     }
     val currentFullscreenChanged by rememberUpdatedState(onPlayerFullscreenChanged)
@@ -1358,7 +1363,11 @@ private fun BrowseContent(
             // 清晰度是**本次播放会话**的选择，不是全局偏好：看完退出就回到自动。
             requestedBitrate = null
         }
-        onDispose { if (playerFullscreen) currentFullscreenChanged(false) }
+        onDispose {
+            // Window hosts restore only transitions owned by the player via
+            // onPlayerScreenChanged(false), not an app-wide native fullscreen.
+            if (playerFullscreen && !hostWindowFeatures.windowedHost) currentFullscreenChanged(false)
+        }
     }
     var pendingSeekPosition by remember(session) { mutableStateOf<Long?>(null) }
     // Apple presents the account surface above the current document instead of
@@ -2502,7 +2511,7 @@ private fun BrowseContent(
                         minePresented = true
                     }
                     playerFullscreen = false
-                    onPlayerFullscreenChanged(false)
+                    if (!hostWindowFeatures.windowedHost) onPlayerFullscreenChanged(false)
                     scope.launch {
                         try {
                             playback.stop()
@@ -2540,6 +2549,8 @@ private fun BrowseContent(
                 },
                 playerSurface = playerSurface,
                 preparing = playbackBusy,
+                hostWindowControls = windowControls,
+                hostWindowDragArea = windowDragArea,
                 playbackError = playbackError,
                 modifier = Modifier.fillMaxSize(),
                 queue = playQueue,
