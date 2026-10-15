@@ -25,7 +25,7 @@ MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己�
 
 > **2.0 正在开发中。** 下方截图展示开发版界面，不代表应用市场版本或各平台均已正式可用；下载渠道与开发状态见[平台说明](#下载与平台)。
 
-![MaFei 2.0 开发版：HarmonyOS 平板上的全幅首页推荐与继续观看](screenshots/current/tablet-home.jpg)
+![MaFei 2.0 开发版：HarmonyOS 平板侧栏展开，展示媒体库导航、首页推荐与继续观看；底部账号信息已遮挡](screenshots/current/tablet-home-sidebar.webp)
 
 ## 核心体验
 
@@ -51,7 +51,7 @@ MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己�
 
 ## 界面预览
 
-按功能浏览真实界面，**点击缩略图可查看大图**。手机每行三张，平板每行两张；部分图片裁去系统状态栏或仅展示功能区域，未补绘界面。
+按功能浏览真实界面，**点击缩略图可查看大图**。手机每行三张，平板每行两张；部分图片裁去系统状态栏或仅展示功能区域。侧栏展开截图只遮挡底部账号信息，保留导航与真实内容布局。
 
 ### 手机 · 发现、搜索与观看准备
 
@@ -78,15 +78,15 @@ MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己�
   </tr>
 </table>
 
-### 平板 · 宽屏浏览与收藏
+### 平板 · 侧栏导航与宽屏浏览
 
 <table>
   <tr>
-    <th align="center">宽屏媒体库</th>
+    <th align="center">侧栏展开 · 媒体库</th>
     <th align="center">搜索结果</th>
   </tr>
   <tr>
-    <td align="center"><a href="screenshots/current/tablet-library.jpg"><img src="screenshots/current/tablet-library.jpg" width="380" alt="平板：收起侧栏后的宽屏电影媒体库" /></a></td>
+    <td align="center"><a href="screenshots/current/tablet-library-sidebar.webp"><img src="screenshots/current/tablet-library-sidebar.webp" width="380" alt="平板：侧栏展开的动画电影媒体库，展示导航分组、媒体库切换与当前选中项；底部账号信息已遮挡" /></a></td>
     <td align="center"><a href="screenshots/current/tablet-search.webp"><img src="screenshots/current/tablet-search.webp" width="380" alt="平板：真相关键词的跨影片与剧集搜索结果" /></a></td>
   </tr>
   <tr>
