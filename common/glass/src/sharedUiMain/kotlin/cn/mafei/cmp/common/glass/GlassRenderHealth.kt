@@ -41,6 +41,9 @@ internal val LocalGlassRenderHealth = staticCompositionLocalOf<GlassRenderHealth
 internal val LocalGlassIntensity = staticCompositionLocalOf { DefaultGlassIntensity }
 internal val LocalGlassStyle = staticCompositionLocalOf { GlassStyle.Liquid }
 
+@Composable
+fun currentGlassStyle(): GlassStyle = LocalGlassStyle.current
+
 /** No process-global latch: independent windows have independent rendering health. */
 @Composable
 fun GlassRenderingEnvironment(
