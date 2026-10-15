@@ -1,5 +1,14 @@
 # MaFei 2.0 开发约束
 
+## 任务持续执行规则
+
+1. 用户授权实施完整计划后，该计划整体就是任务范围，无需逐阶段重复授权。
+2. 阶段完成、测试通过、独立提交都是中间节点；汇报进度后继续下一项，不因此结束任务。
+3. 多阶段任务维护完整计划，不通过缩小计划、遗漏阶段或改称“后续工作”宣布完成。
+4. 只有整体目标完成、用户明确暂停，或存在无法自行解决且阻断剩余工作的必要决策、权限或外部条件时才停止；先完成其余可独立推进的工作。
+5. 最终回复前逐项核对原始请求、后续约束和完整计划，如实说明未完成内容，不能把阶段成果描述为整体完成。
+6. 持续执行限定在已授权范围内，不扩大需求或加入无关重构。
+
 ## 应用入口与状态边界
 
 1. 修改共享应用流程前先阅读 [`composeApp/ARCHITECTURE.md`](composeApp/ARCHITECTURE.md)，按其中的职责表定位状态所有者和路由绑定。`App.kt` 只装配根流程，不能重新加入业务请求、页面实现或导航栈。
@@ -117,8 +126,10 @@ MaFei 的空列表状态使用自己的插画语法，不采用 Material 3 的�
 - 窗口尺寸变化只重算壳层形态，必须保留当前媒体库选择、路由栈和滚动状态。
 
 实现入口：`common/ui/.../MaFeiAdaptiveShell.kt` 负责壳层呈现，
-`composeApp/.../App.kt` 负责把当前二级媒体库映射到顶部第三项。修改前先对照
-`docs/superpowers/specs/2026-09-02-pad-secondary-navigation-design.md` 的完整状态机。
+`composeApp/.../browse/BrowseApplication.kt` 装配 `LibraryTabSelection.kt` 的最近媒体库状态，
+`navigation/BrowseShellMapping.kt` 负责路由选中项和顶部入口的纯映射。
+修改前阅读[导航边界与已知展示差异](composeApp/src/sharedUiMain/kotlin/cn/mafei/cmp/navigation/README.md)；
+产品契约以本节为准，不依赖未纳入版本控制的旧设计文档。
 
 ## 旧 ArkUI 参考代码规则
 
