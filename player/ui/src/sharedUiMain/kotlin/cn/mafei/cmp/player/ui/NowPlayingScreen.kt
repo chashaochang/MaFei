@@ -773,23 +773,6 @@ fun NowPlayingScreen(
                 },
         )
 
-        if (!immersive && !windowHeaderVisible && !locked && (panel == PlayerChromePanel.None || anchoredMenus)) {
-            PlayerChromeButton(
-                glyph = null,
-                label = "返回",
-                diameter = 44,
-                iconSize = 22,
-                backdrop = backdrop,
-                onClick = handleBack,
-                modifier = Modifier.align(Alignment.TopStart)
-                    .padding(
-                        start = 12.dp + safeArea.start,
-                        top = 10.dp + safeArea.top + windowControlTopInset,
-                    ),
-            ) {
-                MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
-            }
-        }
 
         AnimatedVisibility(
             visible = !windowHeaderVisible && (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,
@@ -818,6 +801,27 @@ fun NowPlayingScreen(
                 onCasting = onCasting,
             )
         }
+
+        // The non-fullscreen back control must follow the top chrome in hit-test
+        // order: its full-width hover observer otherwise covers this button.
+        if (!immersive && !windowHeaderVisible && !locked && (panel == PlayerChromePanel.None || anchoredMenus)) {
+            PlayerChromeButton(
+                glyph = null,
+                label = "返回",
+                diameter = 44,
+                iconSize = 22,
+                backdrop = backdrop,
+                onClick = handleBack,
+                modifier = Modifier.align(Alignment.TopStart)
+                    .padding(
+                        start = 12.dp + safeArea.start,
+                        top = 10.dp + safeArea.top + windowControlTopInset,
+                    ),
+            ) {
+                MaFeiIcon(MaFeiGlyph.Back, Modifier.size(22.dp), Color.White)
+            }
+        }
+
 
         AnimatedVisibility(
             visible = (controlsVisible || (anchoredMenus && panel != PlayerChromePanel.None)) && !locked,

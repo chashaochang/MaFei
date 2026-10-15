@@ -58,6 +58,15 @@ class PlayerWindowControllerTest {
         }
     }
 
+    @Test fun portraitBackAcceptsTouchWhileTheControlsAreVisible() {
+        show(400, 800, windowed = false, phase = PlayerPhase.Error)
+        rule.onNodeWithContentDescription("更多设置").assertIsDisplayed()
+        // Inject an actual touch at the node's measured centre. A semantic
+        // performClick would bypass the overlapping chrome's hit testing.
+        rule.onNodeWithContentDescription("返回").performTouchInput { click(center) }
+        rule.runOnIdle { assertEquals(1, backs) }
+    }
+
     @Test fun systemAndWindowFullscreenAreIndependentAndInTheRequestedOrder() {
         show()
         val window = rule.onNodeWithContentDescription("窗口内全屏").fetchSemanticsNode().boundsInRoot
