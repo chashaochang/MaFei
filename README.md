@@ -1,64 +1,99 @@
-# MaFei · 马飞
+<p align="center">
+  <img src="website/logo.png" width="112" alt="马飞 Logo" />
+</p>
 
-**连接自己的媒体服务器，在手机、平板和桌面上浏览与观看。**
+<h1 align="center">MaFei · 马飞</h1>
 
-MaFei 是一款面向个人媒体库的第三方客户端，支持连接 Jellyfin，并提供飞牛影视的兼容接入。从首页的最近添加、继续观看，到海报墙、影片详情和剧集选集，把存放在服务器上的影视内容带到日常使用的设备上。
+<p align="center">
+  <strong>连接你的媒体服务器，让个人媒体库在不同屏幕上自然展开。</strong>
+</p>
 
-使用 MaFei 需要已有的媒体服务器和账号；影片、海报与媒体资料来自你连接的服务器，应用本身不提供影视资源。
+<p align="center">
+  Jellyfin · 飞牛影视兼容接入 · 苹果风格交互 · 手机与宽屏布局
+</p>
 
-[华为应用市场下载](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei) · [反馈问题](https://github.com/chashaochang/MaFei/issues) · [开发与构建](composeApp/README.md)
+<p align="center">
+  <a href="#下载与平台">下载与平台</a> ·
+  <a href="#核心体验">核心体验</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="composeApp/README.md">开发文档</a> ·
+  <a href="https://github.com/chashaochang/MaFei/issues">反馈问题</a>
+</p>
 
-## 用 MaFei 做什么
+MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己的 Jellyfin 或飞牛影视服务，从最近添加、继续观看到海报墙与剧集选集，在熟悉的媒体内容之间浏览、发现与观看。
 
-- **找到想看的内容**：浏览最近添加与分类媒体库，通过搜索查找影片和剧集，查看简介、评分和演职人员。
-- **接着上次观看**：从首页的继续观看回到播放进度，按季、集浏览电视剧，管理收藏与观看记录。
-- **选择合适的播放方式**：提供续播、字幕、音轨、清晰度和倍速等控制，具体可用项取决于媒体源、服务器和平台播放器。
-- **连接多个媒体库**：保存服务器与账号，切换不同连接，并通过局域网发现寻找服务。
-- **适应不同屏幕**：手机使用紧凑导航，平板与宽屏提供侧栏和更开阔的海报布局；界面以苹果平台的视觉与交互习惯为参考。
-- **管理自己的服务器**：具备相应权限的 Jellyfin 账号可进入管理控制台，查看和管理媒体库、用户、设备与活动会话。
+> **2.0 正在开发中。** 下方截图展示开发版界面，不代表应用市场版本或各平台均已正式可用；下载渠道与开发状态见[平台说明](#下载与平台)。
 
-## 看看现在的 MaFei
+![MaFei 2.0 开发版：HarmonyOS 平板上的全幅首页推荐与继续观看](screenshots/current/tablet-home.jpg)
 
-以下均为 **2026 年 10 月 15 日重新采集的 2.0 开发版界面**，不代表应用市场版本。手机来自 Android 模拟器，平板来自 HUAWEI MatePad 11.5 S 真机。截图选取不显示账号和服务器路径的页面，保留真实界面与媒体内容。
+## 核心体验
 
-### 手机 · 浏览媒体与剧集
+- **自己的媒体库，集中浏览**：连接 Jellyfin 或兼容接入飞牛影视，保存服务器与账号，在不同连接间切换。
+- **从发现到接着看**：浏览最近添加、搜索影片、管理收藏，从继续观看回到进度；电影详情、分季与选集让内容脉络更清楚。
+- **小屏紧凑，宽屏舒展**：手机使用紧凑导航，平板与宽屏提供侧栏和更开阔的海报布局，视觉与交互以苹果平台习惯为参考。
+- **按内容选择播放方式**：提供续播、字幕、音轨、清晰度与倍速等控制，具体可用项取决于媒体源、服务器与平台播放器，开发版仍在逐端验证。
 
-<table>
-  <tr>
-    <td align="center"><img src="screenshots/current/phone-library.webp" width="320" alt="Android 手机模拟器：动画电影媒体库海报墙" /></td>
-    <td align="center"><img src="screenshots/current/phone-series.webp" width="320" alt="Android 手机模拟器：武林外传剧集详情与分季入口" /></td>
-  </tr>
-  <tr>
-    <td align="center">媒体库与海报墙</td>
-    <td align="center">剧集详情与分季浏览</td>
-  </tr>
-</table>
-
-### 平板 · 首页与宽屏媒体库
-
-![HarmonyOS 平板真机：全幅首页推荐与继续观看](screenshots/current/tablet-home.jpg)
-
-![HarmonyOS 平板真机：收起侧栏后的宽屏媒体库](screenshots/current/tablet-library.jpg)
-
-截图来源与隐私检查见[截图说明](screenshots/current/README.md)。
+具备相应权限的 Jellyfin 账号还可进入管理控制台，查看和管理媒体库、用户、设备与活动会话。
 
 ## 下载与平台
 
-| 平台 | 当前获取方式与状态 |
-| --- | --- |
-| HarmonyOS | [华为应用市场](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei)提供已发布版本；本仓库的 2.0 开发线面向 ARM64 手机、平板与 PC。 |
-| Android | 2.0 开发中，面向 ARM64；可从源码构建，以上手机截图来自模拟器。 |
-| iOS / iPadOS | 2.0 开发中，面向 ARM64；仓库包含 Xcode 宿主，尚未在此提供正式下载。 |
-| macOS | 2.0 开发中，面向 Apple Silicon；仓库包含桌面入口，尚未在此提供正式下载。 |
+**HarmonyOS 已发布版本：** [前往华为应用市场](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei)。商店版本的功能与界面以实际发布为准，请勿将下方的 2.0 开发状态视为商店版本说明。
 
-各平台的功能和播放能力仍在逐步验证。当前开发版的已知问题与实际验证范围见[验收记录](composeApp/REFACTOR_ACCEPTANCE.md)，正式使用请以对应发布版本为准。
+| 平台 | 公开获取方式 | 2.0 开发状态与目标设备 |
+| --- | --- | --- |
+| HarmonyOS | 华为应用市场已有发布版本；开发版见[构建说明](harmonyApp/README.md) | 开发中，面向 ARM64 手机、平板与 PC；当前平板截图来自真机 |
+| Android | 暂无正式下载；可[从源码构建](composeApp/README.md) | 开发中，面向 ARM64；当前手机截图来自模拟器 |
+| iOS / iPadOS | 暂无正式下载；仓库包含 [Xcode 宿主](iosApp/README.md) | 开发中，面向 ARM64，尚未完成完整设备验收 |
+| macOS | 暂无正式下载；可[从源码运行](composeApp/README.md) | 开发中，面向 Apple Silicon，尚未完成本轮完整窗口与播放验收 |
 
-## 参与开发
+目标平台不等于功能已全部验证。准备体验 2.0 前，请先阅读下方[使用须知](#使用须知)。
 
-MaFei 2.0 使用 Kotlin Multiplatform / Compose Multiplatform 共享应用逻辑与界面。环境准备、目录职责、运行及打包命令统一放在[开发文档](composeApp/README.md)；修改代码前请阅读[架构说明](composeApp/ARCHITECTURE.md)与[项目约束](AGENTS.md)。
+## 界面预览
 
-欢迎通过 [Issue](https://github.com/chashaochang/MaFei/issues)反馈问题或提出建议。提交问题时请说明平台、应用版本和复现步骤，日志与截图中的账号、地址、令牌等个人信息请先隐藏。
+### 手机 · 从媒体库到剧集
 
-## 许可证
+<p align="center">
+  <img src="screenshots/current/phone-library.webp" width="230" alt="Android 手机模拟器：动画电影媒体库海报墙" />
+  &nbsp;
+  <img src="screenshots/current/phone-series.webp" width="230" alt="Android 手机模拟器：武林外传剧集详情与分季入口" />
+</p>
 
-除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布，第三方组件遵循各自许可证。HarmonyOS 播放器使用的 MFPlayer 是独立授权的本地 SDK，不随公开仓库分发；构建前提见[开发文档](composeApp/README.md#本地资料与依赖)。
+<p align="center"><sub>媒体库与海报墙 · 剧集详情与分季浏览</sub></p>
+
+<details>
+<summary>更多界面：平板宽屏媒体库</summary>
+
+![HarmonyOS 平板真机：收起侧栏后的宽屏媒体库](screenshots/current/tablet-library.jpg)
+
+</details>
+
+以上截图均为 2.0 开发版真实界面。设备、采集日期、版本与隐私检查见[截图说明](screenshots/current/README.md)。
+
+## 快速开始
+
+1. **准备媒体服务**：你需要可访问的 Jellyfin 或飞牛影视服务，以及对应账号；确认设备能够访问服务器地址。
+2. **安装并添加连接**：从对应平台渠道获取应用，添加服务器地址并登录。2.0 开发版的构建前提见[开发文档](composeApp/README.md)。
+3. **打开自己的媒体库**：浏览或搜索内容，进入详情选片、选集；已有观看进度的内容可从继续观看进入。
+
+应用本身不提供影视资源。影片、海报与媒体资料来自你连接的服务器，请仅访问你有权使用的内容。
+
+## 使用须知
+
+- **独立第三方项目**：MaFei 不是 Jellyfin 或飞牛影视的官方客户端，与其无官方隶属或合作关系；不同媒体服务的功能与兼容性可能存在差异。
+- **开发版不等于发布版**：2.0 的平台能力与播放表现仍在验证，界面截图不作为播放或发布验收证明。
+- **当前开发版的已知限制**：2026-10-15 验收记录中，Android 模拟器存在解码或起播失败，最终完整工作区鸿蒙包存在起播黑屏；宽屏部分导航展示也尚未收口。详情与验证范围见[验收记录](composeApp/REFACTOR_ACCEPTANCE.md)，不要将开发版视为已全面验证的稳定版本。
+
+## 开发与贡献
+
+MaFei 2.0 使用 **Kotlin Multiplatform / Compose Multiplatform** 共享应用逻辑与界面，平台宿主承接系统能力。
+
+- [开发与构建](composeApp/README.md)：环境准备、目录职责、运行、打包与本地依赖。
+- [架构说明](composeApp/ARCHITECTURE.md)：应用装配、状态归属与模块边界。
+- [项目约束](AGENTS.md)：参与修改前需要了解的开发规则。
+- [反馈问题与建议](https://github.com/chashaochang/MaFei/issues)：请附平台、应用版本和复现步骤；日志与截图中的账号、地址和令牌请先隐藏。
+
+## 许可证与第三方依赖
+
+除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布，第三方组件遵循各自许可证。
+
+HarmonyOS 播放器使用的 **MFPlayer** 是独立授权的本地 SDK，不随公开仓库分发，也不属于本仓库的开源许可。构建前提见[本地资料与依赖](composeApp/README.md#本地资料与依赖)。
