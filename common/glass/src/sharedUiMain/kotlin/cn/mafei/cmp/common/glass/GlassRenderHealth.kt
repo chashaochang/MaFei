@@ -44,6 +44,12 @@ internal val LocalGlassStyle = staticCompositionLocalOf { GlassStyle.Liquid }
 @Composable
 fun currentGlassStyle(): GlassStyle = LocalGlassStyle.current
 
+/** Provides a page-specific material fallback for content hosted outside Compose. */
+@Composable
+fun GlassStyleScope(style: GlassStyle, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalGlassStyle provides style, content = content)
+}
+
 /** No process-global latch: independent windows have independent rendering health. */
 @Composable
 fun GlassRenderingEnvironment(
