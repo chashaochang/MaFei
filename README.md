@@ -15,6 +15,7 @@
 <p align="center">
   <a href="#下载与平台">下载与平台</a> ·
   <a href="#核心体验">核心体验</a> ·
+  <a href="#界面预览">界面预览</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="composeApp/README.md">开发文档</a> ·
   <a href="https://github.com/chashaochang/MaFei/issues">反馈问题</a>
@@ -50,24 +51,63 @@ MaFei 是一款面向个人媒体库的独立第三方客户端。连接自己�
 
 ## 界面预览
 
-### 手机 · 从媒体库到剧集
+按功能浏览真实界面，**点击缩略图可查看大图**。手机每行三张，平板每行两张；部分图片裁去系统状态栏或仅展示功能区域，未补绘界面。
 
-<p align="center">
-  <img src="screenshots/current/phone-library.webp" width="230" alt="Android 手机模拟器：动画电影媒体库海报墙" />
-  &nbsp;
-  <img src="screenshots/current/phone-series.webp" width="230" alt="Android 手机模拟器：武林外传剧集详情与分季入口" />
-</p>
+### 手机 · 发现、搜索与观看准备
 
-<p align="center"><sub>媒体库与海报墙 · 剧集详情与分季浏览</sub></p>
+<table>
+  <tr>
+    <th align="center">首页与续看</th>
+    <th align="center">媒体库海报墙</th>
+    <th align="center">搜索结果</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="screenshots/current/phone-home.webp"><img src="screenshots/current/phone-home.webp" width="200" alt="手机：首页推荐、继续观看与接下来" /></a></td>
+    <td align="center"><a href="screenshots/current/phone-library.webp"><img src="screenshots/current/phone-library.webp" width="200" alt="手机：动画电影媒体库与海报墙" /></a></td>
+    <td align="center"><a href="screenshots/current/phone-search.webp"><img src="screenshots/current/phone-search.webp" width="200" alt="手机：搜索 SPEC 后的影片与剧集结果" /></a></td>
+  </tr>
+  <tr>
+    <th align="center">电影详情</th>
+    <th align="center">剧集与分季</th>
+    <th align="center">风格设置</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="screenshots/current/phone-movie.webp"><img src="screenshots/current/phone-movie.webp" width="200" alt="手机：电影元数据、播放入口、音轨字幕与演职人员；已裁去文件信息区域" /></a></td>
+    <td align="center"><a href="screenshots/current/phone-series.webp"><img src="screenshots/current/phone-series.webp" width="200" alt="手机：武林外传剧集详情与分季入口" /></a></td>
+    <td align="center"><a href="screenshots/current/phone-style.webp"><img src="screenshots/current/phone-style.webp" width="200" alt="手机：半透明、高斯模糊、液态玻璃与底部导航风格选项" /></a></td>
+  </tr>
+</table>
 
-<details>
-<summary>更多界面：平板宽屏媒体库</summary>
+### 平板 · 宽屏浏览与收藏
 
-![HarmonyOS 平板真机：收起侧栏后的宽屏媒体库](screenshots/current/tablet-library.jpg)
+<table>
+  <tr>
+    <th align="center">宽屏媒体库</th>
+    <th align="center">搜索结果</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="screenshots/current/tablet-library.jpg"><img src="screenshots/current/tablet-library.jpg" width="380" alt="平板：收起侧栏后的宽屏电影媒体库" /></a></td>
+    <td align="center"><a href="screenshots/current/tablet-search.webp"><img src="screenshots/current/tablet-search.webp" width="380" alt="平板：真相关键词的跨影片与剧集搜索结果" /></a></td>
+  </tr>
+  <tr>
+    <th align="center">我的收藏</th>
+    <th align="center">单集详情与播放入口</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="screenshots/current/tablet-favorites.webp"><img src="screenshots/current/tablet-favorites.webp" width="380" alt="平板：已有收藏内容列表" /></a></td>
+    <td align="center"><a href="screenshots/current/tablet-episode-detail.webp"><img src="screenshots/current/tablet-episode-detail.webp" width="380" alt="平板：单集元数据、音轨字幕入口与演职人员" /></a></td>
+  </tr>
+  <tr>
+    <th align="center">分季目录 · 局部</th>
+    <th align="center">季内选集</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="screenshots/current/tablet-seasons.webp"><img src="screenshots/current/tablet-seasons.webp" width="380" alt="平板：爱情公寓五季目录，展示各季集数和年份的局部截图" /></a></td>
+    <td align="center"><a href="screenshots/current/tablet-episodes.webp"><img src="screenshots/current/tablet-episodes.webp" width="380" alt="平板：武林外传季内选集、集数分组、分集简介与时长" /></a></td>
+  </tr>
+</table>
 
-</details>
-
-以上截图均为 2.0 开发版真实界面。设备、采集日期、版本与隐私检查见[截图说明](screenshots/current/README.md)。
+以上均为 2.0 开发版截图，手机来自 Android 模拟器，平板来自 HarmonyOS 真机。截图展示界面与入口，不代表对应播放能力已验收；设备、版本、裁切范围与隐私检查见[截图说明](screenshots/current/README.md)。
 
 ## 快速开始
 
