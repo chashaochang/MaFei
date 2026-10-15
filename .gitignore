@@ -21,6 +21,7 @@ harmonyApp/.hvigor/
 harmonyApp/.cxx/
 harmonyApp/entry/oh_modules/
 harmonyApp/entry/libs/*.har
+harmonyApp/entry/libs/*.har.*
 harmonyApp/entry/libs/arm64-v8a/libkn.so
 harmonyApp/entry/src/main/cpp/include/arm64-v8a/libkn_api.h
 harmonyApp/entry/src/main/resources/rawfile/composeResources/
@@ -45,6 +46,12 @@ legacy/harmony-arkts-reference/**/api-config.ets
 /.private/
 /.local/
 /.tmp/
+/.hvigor/
+/.konan/
+/.deveco-flow/
+/.rcodex/
+/.windsurfrules
+/opencode.json
 /.agents/
 /.codex/
 /.claude/

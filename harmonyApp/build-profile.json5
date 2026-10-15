@@ -3,7 +3,6 @@
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
         "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
@@ -23,21 +22,7 @@
         "name": "release"
       }
     ],
-    "signingConfigs": [
-      {
-        "name": "default",
-        "type": "HarmonyOS",
-        "material": {
-          "certpath": "/Users/machunjiang/.ohos/config/default_harmonyApp_1KhGwoG1xjaiUpWBcpU90N3nTNC0TUbHMKxzzubfJgA=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001A5123DEFC3123514E3396F5CCF74A081D79011FC721935C63D2205D810774F16C29A0877BD8BD",
-          "profile": "/Users/machunjiang/.ohos/config/default_harmonyApp_1KhGwoG1xjaiUpWBcpU90N3nTNC0TUbHMKxzzubfJgA=.p7b",
-          "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/machunjiang/.ohos/config/default_harmonyApp_1KhGwoG1xjaiUpWBcpU90N3nTNC0TUbHMKxzzubfJgA=.p12",
-          "storePassword": "0000001AAE7E35A6F9771CC860B9195958AF2B5AD4CB31ADEFA7F92720EA4CF82CD64A453CC0F80F08AD"
-        }
-      }
-    ]
+    "signingConfigs": []
   },
   "modules": [
     {
