@@ -1,0 +1,57 @@
+{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      }
+    ],
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        "description": "$string:EntryAbility_desc",
+        "label": "$string:EntryAbility_label",
+        "icon": "$media:layered_image",
+        "startWindowIcon": "$media:app_icon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "orientation": "auto_rotation_unspecified",
+        "backgroundModes": ["audioPlayback"],
+        // Freeform windows use the desktop shell. Keep the window above the
+        // shared large-screen minimum so the sidebar and content pane never
+        // collapse into an unusable overlap.
+        "minWindowWidth": 1000,
+        "supportWindowMode": [
+          "floating",
+          "split",
+          "fullscreen"
+        ],
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "ohos.want.action.home"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

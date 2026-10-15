@@ -1,0 +1,179 @@
+package cn.mafei.cmp.common.glass.components
+
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.util.fastCoerceAtMost
+import androidx.compose.ui.util.lerp
+import cn.mafei.cmp.common.glass.GlassBackdrop
+import cn.mafei.cmp.common.glass.GlassBlurTokens
+import cn.mafei.cmp.common.glass.GlassStyle
+import cn.mafei.cmp.common.glass.currentGlassStyle
+import cn.mafei.cmp.common.glass.surfaceAlpha
+import cn.mafei.cmp.common.glass.LocalGlassIntensity
+import cn.mafei.cmp.common.glass.utils.InteractiveHighlight
+import cn.mafei.cmp.common.glass.drawStyledBackdrop as drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.shapes.Capsule
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.tanh
+
+@Composable
+fun LiquidButton(
+    onClick: (() -> Unit)?,
+    backdrop: GlassBackdrop,
+    modifier: Modifier = Modifier,
+    isInteractive: Boolean = true,
+    enablePressEffect: Boolean = true,
+    tint: Color = Color.Unspecified,
+    surfaceColor: Color = Color.Unspecified,
+    chromaticAberration: Boolean = false,
+    height: Dp = 48.dp,
+    horizontalPadding: Dp = 16.dp,
+    content: @Composable RowScope.() -> Unit
+) {
+    val glassIntensity = LocalGlassIntensity.current
+    val style = currentGlassStyle()
+    val currentTint by rememberUpdatedState(tint)
+    val currentSurfaceColor by rememberUpdatedState(surfaceColor)
+    val fallbackSurface by rememberUpdatedState(MaterialTheme.colorScheme.surface.copy(alpha = style.surfaceAlpha(0f)))
+    val animationScope = rememberCoroutineScope()
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val hoverActive = isInteractive && onClick != null && (hovered || focused)
+    val pressEffectActive = enablePressEffect && isInteractive && onClick != null
+    val hoverScale by animateFloatAsState(
+        targetValue = if (hoverActive) 1.025f else 1f,
+        animationSpec = tween(140),
+        label = "liquid-button-hover-scale",
+    )
+
+    val interactiveHighlight = remember(animationScope) {
+        InteractiveHighlight(
+            animationScope = animationScope
+        )
+    }
+
+    Row(
+        modifier
+            .drawBackdrop(
+                backdrop = backdrop.layer,
+                shape = { Capsule() },
+                effects = {
+                    vibrancy()
+                    blur(GlassBlurTokens.button.toPx() * glassIntensity)
+                    lens(
+                        12f.dp.toPx(),
+                        24f.dp.toPx(),
+                        chromaticAberration = chromaticAberration,
+                    )
+                },
+                layerBlock = if (pressEffectActive) {
+                    {
+                        val width = size.width
+                        val height = size.height
+
+                        val progress = interactiveHighlight.pressProgress
+                        val scale = lerp(1f, 1f + 4f.dp.toPx() / size.height, progress)
+
+                        val maxOffset = size.minDimension
+                        val initialDerivative = 0.05f
+                        val offset = interactiveHighlight.offset
+                        translationX = maxOffset * tanh(initialDerivative * offset.x / maxOffset)
+                        translationY = maxOffset * tanh(initialDerivative * offset.y / maxOffset)
+
+                        val maxDragScale = 4f.dp.toPx() / size.height
+                        val offsetAngle = atan2(offset.y, offset.x)
+                        scaleX =
+                            scale +
+                                    maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
+                                    (width / height).fastCoerceAtMost(1f)
+                        scaleY =
+                            scale +
+                                    maxDragScale * abs(sin(offsetAngle) * offset.y / size.maxDimension) *
+                                    (height / width).fastCoerceAtMost(1f)
+                    }
+                } else {
+                    null
+                },
+                onDrawSurface = {
+                    if (style != GlassStyle.Liquid) drawRect(fallbackSurface)
+                    if (currentTint.isSpecified) {
+                        drawRect(currentTint, blendMode = BlendMode.Hue)
+                        drawRect(currentTint.copy(alpha = 0.75f))
+                    }
+                    if (currentSurfaceColor.isSpecified) {
+                        drawRect(currentSurfaceColor)
+                    }
+                }
+            )
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = if (isInteractive) null else LocalIndication.current,
+                    role = Role.Button,
+                    onClick = onClick,
+                ) else Modifier
+            )
+            .then(
+                if (isInteractive && onClick != null) {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        if (hovered) drawRect(Color.White.copy(alpha = .085f))
+                    }
+                } else Modifier
+            )
+            .graphicsLayer {
+                // Keep the layout and hit target stable while making a pointer
+                // hover readable on a busy backdrop. Press/drag distortion is
+                // still owned by InteractiveHighlight inside drawBackdrop.
+                scaleX = hoverScale
+                scaleY = hoverScale
+            }
+            .then(
+                if (pressEffectActive) {
+                    Modifier
+                        .then(interactiveHighlight.modifier)
+                        .then(interactiveHighlight.gestureModifier)
+                } else {
+                    Modifier
+                }
+            )
+            .height(height)
+            .padding(horizontal = horizontalPadding),
+        horizontalArrangement = Arrangement.spacedBy(8f.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}

@@ -1,0 +1,10 @@
+{
+  "app": {
+    "bundleName": "cn.xiaobai.mafei",
+    "vendor": "xiaobaihome",
+    "versionCode": 2000006,
+    "versionName": "2.0.0.6-dev",
+    "icon": "$media:layered_image",
+    "label": "$string:app_name"
+  }
+}

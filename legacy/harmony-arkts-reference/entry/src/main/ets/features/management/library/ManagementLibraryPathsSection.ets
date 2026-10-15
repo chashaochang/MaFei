@@ -1,0 +1,202 @@
+import { ThemeStyle } from '../../../entity/ThemeStyle'
+import { AppThemeMaterialRole, AppThemeSurfaceResolver } from '../../../theme/AppThemeSurfaceResolver'
+import { AppThemeTokens } from '../../../theme/AppThemeTokens'
+
+@ComponentV2
+struct ManagementLibraryPathRow {
+  @Require @Param path: string
+  @Require @Param errorText: string
+  @Require @Param isLast: boolean
+  @Require @Param themeStyle: ThemeStyle
+  @Require @Param nativeThemeAvailable: boolean
+  @Require @Param nativeTheme: boolean
+  @Require @Param nativeMaterial: boolean
+  @Event onRemove: () => void = () => {}
+
+  private primaryTextColor(): ResourceColor {
+    return this.nativeTheme ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(): ResourceColor {
+    return this.nativeTheme ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  build() {
+    Column() {
+      Row({ space: 10 }) {
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(20)
+          .fontColor([this.nativeTheme ?
+            $r('sys.color.icon_secondary') : $r('app.color.color_main')])
+        Column({ space: 4 }) {
+          Text(this.path)
+            .fontSize(14)
+            .fontColor(this.primaryTextColor())
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Start)
+          if (this.errorText.length > 0) {
+            Text(this.errorText)
+              .fontSize(12)
+              .fontColor($r('app.color.main_red_color'))
+              .maxLines(3)
+              .textAlign(TextAlign.Start)
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Button() {
+          SymbolGlyph($r('sys.symbol.trash'))
+            .fontSize(18)
+            .fontColor([$r('app.color.main_red_color')])
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor(Color.Transparent)
+        .attributeModifier(AppThemeSurfaceResolver.modifier(
+          AppThemeMaterialRole.AdaptiveControl, this.nativeMaterial))
+        .accessibilityText($r('app.string.management_library_path_remove'))
+        .onClick(() => this.onRemove())
+      }
+      .width(this.nativeTheme ? '100%' : 'calc(100% - 24vp)')
+      .constraintSize({ minHeight: 58 })
+      .padding({
+        left: this.nativeTheme ? 0 : 12,
+        right: this.nativeTheme ? 0 : 12,
+        top: 8,
+        bottom: 8
+      })
+      if (!this.isLast) {
+        if (this.nativeTheme) {
+          Divider()
+            .color(AppThemeSurfaceResolver.contentDivider(this.themeStyle, this.nativeThemeAvailable))
+            .margin({ left: 42 })
+        } else {
+          Divider()
+            .color(this.secondaryTextColor())
+            .opacity(0.2)
+            .margin({ left: 42 })
+        }
+      }
+    }
+    .width('100%')
+  }
+}
+
+@ComponentV2
+export struct ManagementLibraryPathsSection {
+  @Require @Param paths: string[]
+  @Require @Param pathErrors: Map<string, string>
+  @Require @Param themeStyle: ThemeStyle
+  @Require @Param nativeThemeAvailable: boolean
+  @Require @Param onAdd: () => void
+  @Require @Param onRemove: (path: string) => void
+
+  private useNativeMaterial(): boolean {
+    return AppThemeSurfaceResolver.useNativeSurface(this.themeStyle, this.nativeThemeAvailable)
+  }
+
+  private isNativeTheme(): boolean {
+    return AppThemeTokens.isNative(this.themeStyle)
+  }
+
+  private primaryTextColor(): ResourceColor {
+    return this.isNativeTheme() ? $r('sys.color.font_primary') : $r('app.color.text_primary')
+  }
+
+  private secondaryTextColor(): ResourceColor {
+    return this.isNativeTheme() ? $r('sys.color.font_secondary') : $r('app.color.text_1')
+  }
+
+  private groupBackground(): ResourceColor {
+    return this.isNativeTheme() ? AppThemeSurfaceResolver.contentGroupBackground() : $r('app.color.bg_1')
+  }
+
+  private getString(name: string): string {
+    try {
+      return this.getUIContext().getHostContext()?.resourceManager.getStringByNameSync(name) || name
+    } catch (error) {
+      return name
+    }
+  }
+
+  private errorText(path: string): string {
+    const error = this.pathErrors.get(path) || ''
+    if (!error) return ''
+    return error.startsWith('management_') ? this.getString(error) : error
+  }
+
+  build() {
+    Column() {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          if (this.isNativeTheme()) {
+            Text($r('app.string.management_library_paths'))
+              .layoutWeight(1)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.primaryTextColor())
+              .textAlign(TextAlign.Start)
+          } else {
+            Column({ space: 3 }) {
+              Text($r('app.string.management_library_paths'))
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.primaryTextColor())
+              Text($r('app.string.management_library_paths_hint'))
+                .fontSize(12)
+                .fontColor(this.secondaryTextColor())
+                .maxLines(3)
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+          }
+          Button($r('app.string.management_library_add_path'), { type: ButtonType.Normal })
+            .height(38)
+            .padding({ left: 16, right: 16 })
+            .borderRadius(19)
+            .fontColor($r('app.color.color_main'))
+            .backgroundColor(Color.Transparent)
+            .attributeModifier(AppThemeSurfaceResolver.modifier(
+              AppThemeMaterialRole.AdaptiveControl, this.useNativeMaterial()))
+            .onClick(() => this.onAdd())
+        }
+        if (this.paths.length === 0) {
+          Text($r('app.string.management_library_paths_empty'))
+            .fontSize(13)
+            .fontColor(this.secondaryTextColor())
+            .textAlign(TextAlign.Start)
+            .padding({ top: 6, bottom: 6 })
+        } else {
+          Column() {
+            ForEach(this.paths, (path: string, index: number) => {
+              ManagementLibraryPathRow({
+                path: path,
+                errorText: this.errorText(path),
+                isLast: index === this.paths.length - 1,
+                themeStyle: this.themeStyle,
+                nativeThemeAvailable: this.nativeThemeAvailable,
+                nativeTheme: this.isNativeTheme(),
+                nativeMaterial: this.useNativeMaterial(),
+                onRemove: () => this.onRemove(path)
+              })
+            }, (path: string) => path)
+          }
+        }
+      }
+      .width(this.isNativeTheme() ? 'calc(100% - 24vp)' : 'calc(100% - 32vp)')
+      .padding({
+        left: this.isNativeTheme() ? 12 : 16,
+        right: this.isNativeTheme() ? 12 : 16,
+        top: this.isNativeTheme() ? 14 : 16,
+        bottom: this.isNativeTheme() ? 14 : 16
+      })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .borderRadius(AppThemeTokens.groupRadius(this.themeStyle))
+    .backgroundColor(this.groupBackground())
+    .clip(true)
+  }
+}

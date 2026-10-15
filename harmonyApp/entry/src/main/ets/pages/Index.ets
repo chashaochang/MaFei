@@ -1,0 +1,127 @@
+import { ArkUIViewController, Compose, forwardHostKeyEvent } from '@cpf-kmp-cmp/compose';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import nativeApi from 'libentry.so';
+import { registerMaFeiPlayerInteropBuilder } from '../player/PlayerInterop';
+import { common } from '@kit.AbilityKit';
+import { registerEmbeddedWebInterop } from '../web/EmbeddedWebInterop';
+import { registerPhotoSaveInterop, releasePhotoSaveInterop } from '../media/PhotoSaveInterop';
+import {
+  captureLegacyAccountSnapshot,
+  captureLegacyCmpSettings
+} from '../migration/LegacyAccountSnapshotBridge';
+
+const DOMAIN = 0x4D46;
+
+@Entry
+@Component
+struct Index {
+  @State controller: ArkUIViewController | undefined = undefined;
+
+  @State errorMessage: string = 'Compose runtime is starting';
+
+  async aboutToAppear(): Promise<void> {
+    if (nativeApi === undefined) {
+      this.errorMessage = 'Native Compose module is unavailable';
+      hilog.error(DOMAIN, 'MaFeiCMP', 'libentry.so was not loaded');
+      return;
+    }
+
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (!context) {
+        this.errorMessage = 'Application context is unavailable';
+        return;
+      }
+      const legacySnapshot = await captureLegacyAccountSnapshot(
+        context,
+        context.applicationInfo.name
+      );
+      const legacyCmpSettings = captureLegacyCmpSettings(context);
+      // Register the native video surface before CPF creates its ArkUIView
+      // node. CMP owns the visible player UI and interaction layer.
+      registerMaFeiPlayerInteropBuilder();
+      registerEmbeddedWebInterop();
+      registerPhotoSaveInterop(context as common.UIAbilityContext);
+      this.controller = nativeApi.MainArkUIViewController(
+        context.filesDir,
+        context.applicationInfo.name,
+        legacySnapshot,
+        legacyCmpSettings
+      );
+      if (!this.controller) {
+        this.errorMessage = 'Compose controller creation failed';
+      }
+    } catch (error) {
+      this.errorMessage = 'Compose controller creation failed';
+      hilog.error(DOMAIN, 'MaFeiCMP', 'Controller error: %{public}s', JSON.stringify(error));
+    }
+  }
+
+  build() {
+    Column() {
+      if (this.controller) {
+        Compose({
+          controller: this.controller,
+          libraryName: 'entry',
+          // CPF invokes this callback only after Compose has declined the
+          // back event. Calling controller.onBackPress() here re-enters the
+          // same BackHandler and overflows the JS stack.
+          onBackPressed: () => false
+        })
+          .width('100%')
+          .height('100%')
+          .expandSafeArea(
+            [SafeAreaType.SYSTEM, SafeAreaType.CUTOUT],
+            [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
+          )
+      } else {
+        Text(this.errorMessage)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
+    .focusable(true)
+    // ArkUI owns the host window's keyboard focus. Forward native events at
+    // the page boundary so Compose can route Space, arrows, Enter and Escape
+    // to the focused player overlay.
+    .onKeyEvent((event) => {
+      const composeHandled = this.controller !== undefined &&
+        forwardHostKeyEvent(this.controller as ArkUIViewController, event);
+      if (composeHandled) {
+        return true;
+      }
+      if (nativeApi.IsOhosPlayerScreenVisible()) {
+        return nativeApi.HandleOhosPlayerKey(event.keyCode, event.type);
+      }
+      return false;
+    })
+  }
+
+  onPageHide(): void {
+    this.controller?.onPageHide();
+  }
+
+  aboutToDisappear(): void {
+    releasePhotoSaveInterop();
+  }
+
+  onPageShow(): void {
+    this.controller?.onPageShow();
+  }
+
+  onBackPress(): boolean {
+    // Native dialogs/IME and CPF callbacks get first refusal. The fallback
+    // enters the same Navigation 3 handler chain, preserving overlay priority.
+    if (this.controller?.onBackPress()) {
+      return true;
+    }
+    if (nativeApi.HandleOhosComposeBack()) {
+      return true;
+    }
+    if (nativeApi.IsOhosPlayerScreenVisible() && nativeApi.HandleOhosPlayerBack()) {
+      return true;
+    }
+    return false;
+  }
+}

@@ -1,0 +1,61 @@
+import { emitter } from "@kit.BasicServicesKit"
+
+export class Constants {
+  static readonly PLAYER_EVENT: emitter.InnerEvent = {
+    eventId: 100001
+  }
+  static readonly PLAYER_PAGE_EVENT: emitter.InnerEvent = {
+    eventId: 100002
+  }
+  /**
+   *  Cast playing initial
+   */
+  static readonly PLAYBACK_STATE_INITIAL: number = 0;
+  /**
+   *  Cast playing prepare
+   */
+  static readonly PLAYBACK_STATE_PREPARE: number = 1;
+  /**
+   *  Cast playing pause
+   */
+  static readonly PLAYBACK_STATE_PAUSE: number = 3;
+  /**
+   *  Cast playing stop
+   */
+  static readonly PLAYBACK_STATE_STOP: number = 6;
+  /**
+   *  Cast playing play
+   */
+  static readonly PLAYBACK_STATE_PLAY: number = 2;
+  static readonly APP_INFO_NAME = "马飞"
+  // Webapp constants
+  static readonly INITIAL_CONNECTION_TIMEOUT = 10000 // 10 seconds
+
+  // Preference keys
+  static readonly PREF_SERVER_ID = "pref_server_id"
+  static readonly PREF_SERVER_SYSTEM_ID = "pref_server_system_id"
+  static readonly PREF_USER_ID = "pref_user_id"
+  static readonly PREF_ACCESS_TOKEN = "pref_access_token"
+  static readonly PREF_USER_NAME = "pref_user_name"
+  static readonly PREF_REMEMBER_PW = "pref_remember_pw"
+  static readonly PREF_COLOR_MODE = "pref_color_mode"
+  static readonly PREF_THEME_STYLE = "pref_theme_style"
+  static readonly PREF_THEME_PROMPT_VERSION = "pref_theme_prompt_version"
+  static readonly PREF_PLAYER_ENGINE = "pref_player_engine"
+  static readonly PREF_MPV_HARDWARE_DECODE = "pref_mpv_hardware_decode"
+  static readonly PREF_MPV_CACHE_SIZE_MB = "pref_mpv_cache_size_mb"
+  static readonly PREF_FEINIU_CONNECTION_PREFERENCE = "pref_feiniu_connection_preference"
+  static readonly PREF_SEARCH_HISTORY = "pref_search_history"
+  static readonly PREF_REPORTED_CONTENT_IDS = "pref_reported_content_ids"
+  static readonly PREF_CHASING_SERIES_IDS = "pref_chasing_series_ids"
+  static readonly PREF_MEDIA_SOURCE_SELECTIONS = "pref_media_source_selections"
+  static readonly MAIN_BUNDLE_PATH_REGEX =
+    /.*\/main\.[^/\s]+\.bundle\.js/ //new Regex(""".*/main\.[^/\s]+\.bundle\.js""")
+  static readonly SESSION_CAPABILITIES_PATH = 'sessions/capabilities/full'
+  static readonly TICKS_PER_MILLISECOND = 10000
+  static readonly NAVIGATION_ID = 'mainNavigation'
+  static readonly HOME_CONTENT_NAVIGATION_ID = 'homeContentNavigation'
+  static readonly PLAYER_NAVIGATION_ID = 'playerNavigation'
+  // Video player constants
+  static readonly LANGUAGE_UNDEFINED = "und"
+}

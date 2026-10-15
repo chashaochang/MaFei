@@ -1,0 +1,196 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#efefef"
+    },
+    {
+      "name": "native_canvas_background",
+      "value": "#F1F2F4"
+    },
+    {
+      "name": "native_detail_atmosphere_overlay_top",
+      "value": "#00F1F2F4"
+    },
+    {
+      "name": "native_detail_atmosphere_overlay_bottom",
+      "value": "#B8F1F2F4"
+    },
+    {
+      "name": "native_detail_page_overlay_strong",
+      "value": "#70F1F2F4"
+    },
+    {
+      "name": "native_detail_page_overlay_soft",
+      "value": "#38F1F2F4"
+    },
+    {
+      "name": "native_detail_information_background",
+      "value": "#66FFFFFF"
+    },
+    {
+      "name": "native_fallback_content_group",
+      "value": "#FFFFFFFF"
+    },
+    {
+      "name": "native_fallback_floating",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "native_fallback_interactive_floating",
+      "value": "#D9FFFFFF"
+    },
+    {
+      "name": "native_fallback_adaptive_interactive",
+      "value": "#C2FFFFFF"
+    },
+    {
+      "name": "native_fallback_music_mini_player",
+      "value": "#EDFFFFFF"
+    },
+    {
+      "name": "native_fallback_home_library_chip",
+      "value": "#B8FFFFFF"
+    },
+    {
+      "name": "native_fallback_home_library_chip_selected",
+      "value": "#F2FFFFFF"
+    },
+    {
+      "name": "native_navigation_accent",
+      "value": "#0A59F7"
+    },
+    {
+      "name": "color_main",
+      "value": "#2173df"
+    },
+    {
+      "name": "on_primary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "main_red_color",
+      "value": "#FF3E50"
+    },
+    {
+      "name": "status_success",
+      "value": "#34C759"
+    },
+    {
+      "name": "status_warning",
+      "value": "#FF9F0A"
+    },
+    {
+      "name": "reload_title_color",
+      "value": "#99000000"
+    },
+    {
+      "name": "media_badge_background",
+      "value": "#99000000"
+    },
+    {
+      "name": "media_progress_track_on_image",
+      "value": "#55FFFFFF"
+    },
+    {
+      "name": "player_control_surface",
+      "value": "#52000000"
+    },
+    {
+      "name": "player_control_mask",
+      "value": "#66000000"
+    },
+    {
+      "name": "player_panel_surface",
+      "value": "#E61A1A1C"
+    },
+    {
+      "name": "player_progress_track",
+      "value": "#4DFFFFFF"
+    },
+    {
+      "name": "player_progress_buffered",
+      "value": "#8AFFFFFF"
+    },
+    {
+      "name": "player_feedback_surface",
+      "value": "#C9000000"
+    },
+    {
+      "name": "safe_cancel_button_bg",
+      "value": "#0D666666"
+    },
+    {
+      "name": "bg_main",
+      "value": "#f1f4f9"
+    },
+    {
+      "name": "component_bg",
+      "value": "#F3F4F6"
+    },
+    {
+      "name": "text_score",
+      "value": "#FFF1B020"
+    },
+    {
+      "name": "bg_1",
+      "value": "#ffffff"
+    },
+    {
+      "name": "primary_light_hover",
+      "value": "#E3F2FD"
+    },
+    {
+      "name": "border",
+      "value": "#40a0aec0"
+    },
+    {
+      "name": "border_1",
+      "value": "#FF7F878A"
+    },
+    {
+      "name": "bg_hover",
+      "value": "#fff2f2f2"
+    },
+    {
+      "name": "text_primary",
+      "value": "#121212"
+    },
+    {
+      "name": "border_input",
+      "value": "#C8BEAE"
+    },
+    {
+      "name": "text_1",
+      "value": "#4a5568"
+    },
+    {
+      "name": "bg_2",
+      "value": "#ffffff"
+    },
+    {
+      "name": "text_2",
+      "value": "#8496ae"
+    },
+    {
+      "name": "tab",
+      "value": "#ffffff"
+    },
+    {
+      "name": "bg_tab",
+      "value": "#15000000"
+    },
+    {
+      "name": "bg_tab_item",
+      "value": "#80FFFFFF"
+    },
+    {
+      "name": "menu_item_bg",
+      "value": "#D3D4D6"
+    },
+    {
+      "name": "sidebar_item_selected_bg",
+      "value": "#1F000000"
+    }
+  ]
+}

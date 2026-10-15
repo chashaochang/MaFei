@@ -1,0 +1,58 @@
+# GLM-05 播放器四端 Runtime 说明
+
+日期：2026-09-09。基线：GLM-04C 后主线（含 04B 冻结 `fb32976`）。范围：四端 `player/runtime-*`；common 层（player:api / core / facade / testkit）此前已完成并保持原样，**本批无接口变更**（`PlayerSurfaceHandle` 维持 opaque final 类——平台对象通过各 runtime 的 registry 注册，正是 API 注释预设的形态）。
+
+## 平台状态总览（不夸大）
+
+| 平台 | 模块 | 引擎 | 状态 |
+| --- | --- | --- | --- |
+| Android | runtime-android | `android.media.MediaPlayer`（零新依赖） | **Implemented**（翻译层 JVM 单测 11/11 全绿；`SystemMediaPlayerEngine` 真实现编译通过；真实解码/渲染/后台行为待真机 = **Pending**） |
+| Apple Silicon macOS | runtime-macos | AVPlayer（JNI dylib，ObjC 桥） | **Implemented**（翻译层 10/10 全绿 + **真实 JNI 链接验证 1/1**：dylib 编译、加载、AVPlayer 创建/销毁、查询面全部真实执行）。视频合成到 Compose 桌面窗口属 UI 层（Codex）——音频已完整，视频输出 **Pending** |
+| iOS | runtime-ios | AVPlayer（bridge 模式） | **Compile-only**：直接 KMP 绑定被工具链阻断（证据见下），交付接口 + 翻译层 + 宿主接线说明；iosTest 已编写，执行需 iOS 模拟器窗口 |
+| HarmonyOS | runtime-ohos | native AVPlayer（bridge 模式） | **Pending**（按任务要求）：接口 + 翻译层 + 宿主接线说明已交付；真实引擎与 Surface 证据待宿主窗口 |
+
+翻译层四端同构：命令翻译、generation 过滤（引用相等）、轮询驱动事件（全部源自引擎回调/查询，**无任何伪造 ready/playing/progress**）、Release 幂等且解绑 sink、Stop 先停旧资源再 Load、非法 SelectTrack 诚实抛 `UnsupportedPlayerCapability`。
+
+## 工具链缺口证据（iOS 直接绑定不可编译）
+
+Kotlin 发行版 `2.2.21-1.0.0` 的 ios_arm64 `platform.AVFoundation` klib 导出 `AVPlayer` 类型壳但**无任何成员**（`play`/`pause`/`seekToTime`/`rate`/`currentItem`/`timeControlStatus`/`replaceCurrentItemWithPlayerItem` 全部 unresolved），协议 `AVMediaPlayback`/`AVPlayerItems` 也无法解析；对照实验 `platform.UIKit`/`platform.Foundation` 类型可解析。最小探针复现步骤见 git 历史。因此在恢复完整 klib（升级官方发行版或补 cinterop def）之前，iOS 走 bridge 注入模式。
+
+## OHOS / iOS 宿主接线说明
+
+1. 宿主实现 `OhosAvPlayerBridge` / `IosAvPlayerBridge`：每个 handle 一个 native AVPlayer 会话；`loadUrl` 设置媒体源；查询方法直读引擎真实状态（OHOS: `AVPlayerState`/`duration`/`currentTime`; iOS: `timeControlStatus`/`AVPlayerItemStatus`/`loadedTimeRanges`）。
+2. Surface：宿主创建 XComponent（OHOS）/ CALayer（iOS）后调用 `OhosSurfaceRegistry.register(surfaceId)` / `IosSurfaceRegistry.register(layer)` 取 opaque handle，经 controller `attachSurface(handle)` 下发；runtime 只向 bridge 传 surfaceId/layer。
+3. 宿主以主循环定时器实现 `*PollScheduler`（250ms 建议），驱动 `runtime.poll()`。
+4. 事件经 `runtime.bind { }` 回调进 `DefaultPlayerController`（common 层负责 generation 过滤与播放上报编排）。
+
+## 复审修正（GLM-05 review）
+
+1. **Android 泄漏与会话标记**：`reset` 改为 RELEASE 旧 MediaPlayer（native 解码器/surface 即时回收），每次 load 全新实例；listener 闭包捕获**创建时**的 session id——旧 player 的迟到回调保持旧身份被 runtime 丢弃，绝不会被误标成新会话。
+2. **未知时长/直播**：macOS/iOS/OHOS 以 `itemStatus == READY/prepared` 为准发 `Ready(durationMs=null)`，不再要求 duration > 0；Android onPrepared 路径本就如此。三端各补测试。
+3. **headers 不再静默丢弃**：bridge `loadUrl` 增加 headers 参数；无法应用自定义 header 的引擎（macOS AVURLAsset）必须抛 `UnsupportedOperationException` → runtime 转为 `Failed(UnsupportedMedia)` 明确失败，绝不发货注定 401 的播放（飞牛 Token/Cookie 依赖）。OHOS 原生 AVPlayer 支持 headers，宿主桥实现即可用。
+4. **iOS/OHOS 轮询任务泄漏**：`pollTicket` 保存并在 Release 关闭，定时器不再永久持有 Runtime。
+5. **macOS detachLayer**：桥带 layer 指针，解绑时把 `AVPlayerLayer.player = nil`——Surface 销毁不再残留末帧与 Player 引用。
+6. **macOS 数据竞争**：命令与轮询全部串行到 runtime 内部单线程 dispatcher，普通字段无需同步；测试注入同步 dispatcher 保持确定性。
+7. **Android Surface 测试假阳性**：测试与 runtime 使用同一 registry，断言精确对象引用（非前缀字符串）；补“加载中途挂载”与“attach 先于 load（load 路径重放 pending surface）”两条真实路径。
+
+## 二次复审修正
+
+1. **Android session 失配**：engine.reset() 自增引擎会话、runtime 又在 load 自增自身计数——每次 Stop 后两者永久错位，下一个 load 的回调被整体误丢。改为 load 时采用 engine 复位后的会话为唯一真源（`session = engine.session`），Stop→Reload 的回调匹配有回归测试。
+2. **Android 错误分类**：onError 不再一律报 Decode，按 `what` 码映射（IO/TIMED_OUT→Network、MALFORMED→Decode、UNSUPPORTED→UnsupportedMedia、SERVER_DIED/未知→Engine），五类各一断言。
+3. **macOS Release 幂等**：原路径把 Release 入队，dispatcher 关闭后第二次 release() 抛 RejectedExecutionException。改为 CAS 先占（`AtomicBoolean.compareAndSet`）再入队，败者立即返回；真实 dispatcher 下连发两次 Release 的回归测试验证不抛。
+
+## 决策记录
+
+1. **轮询驱动而非回调驱动**：四端统一从引擎真实状态推导事件，规避各引擎回调线程差异；状态机（common）天然过滤重复/过期事件。
+2. **generation 纪律**：`PlaybackGeneration` 引用相等比对在 common 状态机完成；runtime 层再以 engine session/handle 隔离旧回调（Android session 计数、macOS/iOS/OHOS 单 handle + generation 快照），双保险。
+3. **Android headers**：`setDataSource(context, uri, headers)` 支持；**macOS/iOS P0 不支持自定义 HTTP header**（AVURLAsset 需 resource-loader 代理）——KDoc/Pending 注明，不得静默假装生效。
+4. **Surface 注册表**：`PlayerSurfaceHandle` 不可继承（final），Android/macOS/iOS/OHOS 各自 registry 映射真实 Surface/AVPlayerLayer/CALayer/surfaceId。
+5. **速度 API**：Android 公共 SDK jar 无 `setPlaybackSpeed`，用 `PlaybackParams.setSpeed`（start 与 setPlaybackSpeed 两处同步）；macOS 用 `AVPlayer.rate`。
+6. **禁改清单遵守**：未触碰 player/ui、composeApp、feature、common/ui、design-system、harmonyApp、gradle.properties、output/、runscript/。
+
+## 验证（实际执行）
+
+- `:player:core:desktopTest` 26/26、`:player:facade:desktopTest` 9/9（common 基线，未改动）。
+- `:player:runtime-android:testDebugUnitTest` 11/11（fake engine 翻译层：load/ready、旧 session 丢弃、poll 派生、错误映射、外来 generation 忽略、surface 重挂、Release 幂等解绑 sink、SelectTrack 拒绝）。
+- `:player:runtime-macos:desktopTest` 11/11（10 翻译层 + 1 真实 JNI：dylib 编译加载、AVPlayer 创建/销毁/查询真实执行）。
+- 编译：runtime-android `compileDebugKotlinAndroid`、runtime-ios `compileKotlinIosArm64`、runtime-ohos `compileKotlinOhosArm64`、runtime-macos `compileKotlinDesktop` 全部通过；`verifyArchitecture`、`git diff --check` 通过。
+- **未运行**：iOS 模拟器测试（iosTest 已编写）、OHOS 模拟器测试、Android 真机/模拟器播放、macOS 音频实播——全部如实列为 Pending，不以"编译通过"冒充真实验证。

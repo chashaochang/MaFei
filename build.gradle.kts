@@ -1,7 +1,368 @@
+import com.android.build.api.dsl.LibraryExtension
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+
 plugins {
-    alias(libs.plugins.androidApplication) apply false
-    alias(libs.plugins.composeCompiler) apply false
-    alias(libs.plugins.composeMultiplatform) apply false
-    alias(libs.plugins.kotlinMultiplatform) apply false
-    alias(libs.plugins.kotlinxSerialization) apply false
+    base
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.jetbrains.compose) apply false
+}
+
+group = "cn.mafei"
+version = "2.0.0-SNAPSHOT"
+
+allprojects {
+    version = rootProject.version
+}
+
+fun KotlinMultiplatformExtension.configureCommonTests() {
+    sourceSets.commonTest.dependencies {
+        implementation("org.jetbrains.kotlin:kotlin-test:2.2.21-1.1.0")
+    }
+}
+
+fun KotlinMultiplatformExtension.configureSharedTargets() {
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+    jvm("desktop")
+    iosArm64()
+    iosSimulatorArm64()
+    ohosArm64()
+
+    sourceSets {
+        val commonMain by getting
+        val commonTest by getting
+
+        getByName("androidMain").dependsOn(commonMain)
+        getByName("androidUnitTest").dependsOn(commonTest)
+        getByName("desktopMain").dependsOn(commonMain)
+        getByName("desktopTest").dependsOn(commonTest)
+
+        val iosMain by creating {
+            dependsOn(commonMain)
+        }
+        val iosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("iosArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Test").dependsOn(iosTest)
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosSimulatorArm64Test").dependsOn(iosTest)
+
+        val ohosMain by creating {
+            dependsOn(commonMain)
+        }
+        val ohosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("ohosArm64Main").dependsOn(ohosMain)
+        getByName("ohosArm64Test").dependsOn(ohosTest)
+    }
+    configureCommonTests()
+}
+
+fun KotlinMultiplatformExtension.configureCmpTargets() {
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+    jvm("desktop")
+    iosArm64()
+    iosSimulatorArm64()
+    ohosArm64()
+
+    sourceSets {
+        val commonMain by getting
+        val commonTest by getting
+
+        val cpfUiMain by creating {
+            dependsOn(commonMain)
+            kotlin.srcDir("src/sharedUiMain/kotlin")
+            dependencies {
+                implementation("org.jetbrains.compose.runtime:runtime:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.foundation:foundation:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.ui:ui:1.9.2-1.1.0")
+                implementation("org.jetbrains.compose.material3:material3:1.9.2-1.1.0")
+                implementation(
+                    "org.jetbrains.compose.components:components-resources:1.9.2-1.1.0",
+                )
+            }
+        }
+
+        getByName("androidMain").dependsOn(cpfUiMain)
+        getByName("androidUnitTest").dependsOn(commonTest)
+
+        val desktopMain by getting {
+            dependsOn(commonMain)
+            kotlin.srcDir("src/sharedUiMain/kotlin")
+            dependencies {
+                implementation("org.jetbrains.compose.runtime:runtime:1.9.2")
+                implementation("org.jetbrains.compose.foundation:foundation:1.9.2")
+                implementation("org.jetbrains.compose.ui:ui:1.9.2")
+                implementation("org.jetbrains.compose.material3:material3:1.9.0")
+                implementation("org.jetbrains.compose.components:components-resources:1.9.2")
+            }
+        }
+        getByName("desktopTest").dependsOn(commonTest)
+
+        val iosMain by creating {
+            dependsOn(cpfUiMain)
+        }
+        val iosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("iosArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Test").dependsOn(iosTest)
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosSimulatorArm64Test").dependsOn(iosTest)
+
+        val ohosMain by creating {
+            dependsOn(cpfUiMain)
+        }
+        val ohosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("ohosArm64Main").dependsOn(ohosMain)
+        getByName("ohosArm64Test").dependsOn(ohosTest)
+    }
+    configureCommonTests()
+}
+
+fun KotlinMultiplatformExtension.configureAndroidTargetOnly() {
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+    configureCommonTests()
+}
+
+fun KotlinMultiplatformExtension.configureAppleTargetsOnly() {
+    iosArm64()
+    iosSimulatorArm64()
+
+    sourceSets {
+        val commonMain by getting
+        val commonTest by getting
+        val iosMain by creating {
+            dependsOn(commonMain)
+        }
+        val iosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("iosArm64Main").dependsOn(iosMain)
+        getByName("iosArm64Test").dependsOn(iosTest)
+        getByName("iosSimulatorArm64Main").dependsOn(iosMain)
+        getByName("iosSimulatorArm64Test").dependsOn(iosTest)
+    }
+    configureCommonTests()
+}
+
+fun KotlinMultiplatformExtension.configureOhosTargetOnly() {
+    ohosArm64()
+
+    sourceSets {
+        val commonMain by getting
+        val commonTest by getting
+        val ohosMain by creating {
+            dependsOn(commonMain)
+        }
+        val ohosTest by creating {
+            dependsOn(commonTest)
+        }
+        getByName("ohosArm64Main").dependsOn(ohosMain)
+        getByName("ohosArm64Test").dependsOn(ohosTest)
+    }
+    configureCommonTests()
+}
+
+fun KotlinMultiplatformExtension.configureDesktopTargetOnly() {
+    jvm("desktop")
+    configureCommonTests()
+}
+
+val verifyNoSvgResources = tasks.register("verifyNoSvgResources") {
+    group = "verification"
+    description = "Rejects SVG source resources; active app artwork must use PNG."
+    val sourceRootPaths = rootProject.subprojects
+        .map { project -> project.projectDir.resolve("src").absolutePath }
+    inputs.property("projectRootPath", rootProject.projectDir.absolutePath)
+    inputs.property("sourceRootPaths", sourceRootPaths)
+    inputs.files(sourceRootPaths.map(::File))
+
+    doLast {
+        val projectRoot = File(inputs.properties.getValue("projectRootPath").toString())
+        val sourceRoots = (inputs.properties.getValue("sourceRootPaths") as List<*>)
+            .map { path -> File(path.toString()) }
+        val offenders = sourceRoots
+            .asSequence()
+            .filter(File::exists)
+            .flatMap { sourceRoot ->
+                sourceRoot.walkTopDown()
+                    .filter { file -> file.isFile && file.extension.equals("svg", ignoreCase = true) }
+            }
+            .map { file -> file.relativeTo(projectRoot).invariantSeparatorsPath }
+            .sorted()
+            .toList()
+
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("SVG resources are forbidden in active CMP modules. Convert them to PNG:")
+                    offenders.forEach { path -> appendLine(" - $path") }
+                }.trimEnd(),
+            )
+        }
+
+        logger.lifecycle("PASS: ${sourceRoots.size} active CMP modules contain no SVG source resources")
+    }
+}
+
+subprojects {
+    configurations.configureEach {
+        val platformConfiguration = this
+        resolutionStrategy.eachDependency {
+            // CPF Coil's Android variant targets JVM 18. Resolve upstream Coil
+            // on Android without changing CPF Native metadata or the JVM target.
+            if (requested.group == "io.coil-kt.coil3" &&
+                platformConfiguration.attributes.getAttribute(KotlinPlatformType.attribute) == KotlinPlatformType.androidJvm
+            ) {
+                useVersion(libs.versions.coil.upstream.get())
+                because("Android uses upstream Coil; CPF adaptation is required only on Native targets")
+            }
+        }
+    }
+    val groupSegments = path
+        .split(":")
+        .filter { it.isNotBlank() }
+        .dropLast(1)
+    group = (listOf("cn", "mafei", "cmp") + groupSegments).joinToString(".")
+
+    tasks.matching { it.name.startsWith("prepareComposeResourcesTaskFor") }
+        .configureEach {
+            dependsOn(rootProject.tasks.named("verifyNoSvgResources"))
+        }
+
+    if (path == ":composeApp") {
+        return@subprojects
+    }
+
+    plugins.withId("org.jetbrains.kotlin.multiplatform") {
+        when {
+            path.endsWith("-ios") -> extensions.configure<KotlinMultiplatformExtension> {
+                configureAppleTargetsOnly()
+            }
+            path.endsWith("-ohos") -> extensions.configure<KotlinMultiplatformExtension> {
+                configureOhosTargetOnly()
+            }
+            path.endsWith("-macos") -> extensions.configure<KotlinMultiplatformExtension> {
+                configureDesktopTargetOnly()
+            }
+            else -> plugins.withId("com.android.library") {
+                if (path.endsWith("-android")) {
+                    extensions.configure<KotlinMultiplatformExtension> {
+                        configureAndroidTargetOnly()
+                    }
+                } else if (
+                    path.startsWith(":common:") && path != ":common:core" ||
+                    path == ":player:ui" ||
+                    path.startsWith(":feature:")
+                ) {
+                    plugins.withId("org.jetbrains.compose") {
+                        extensions.configure<KotlinMultiplatformExtension> {
+                            configureCmpTargets()
+                        }
+                    }
+                } else {
+                    extensions.configure<KotlinMultiplatformExtension> {
+                        configureSharedTargets()
+                    }
+                }
+            }
+        }
+    }
+
+    plugins.withId("com.android.library") {
+        extensions.configure<LibraryExtension> {
+            namespace = "cn.mafei.cmp" + project.path
+                .split(":")
+                .filter { it.isNotBlank() }
+                .joinToString(separator = "") { "." + it.replace("-", "_") }
+            compileSdk = 37
+
+            defaultConfig {
+                minSdk = 24
+            }
+
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_11
+                targetCompatibility = JavaVersion.VERSION_11
+            }
+        }
+    }
+
+}
+
+val missingRequiredModules = listOf(
+    "core/domain",
+    "core/http-contract",
+    "providers/jellyfin/facade",
+    "providers/feiniu/facade",
+    "data/repositories",
+    "common/glass",
+    "common/design-system",
+    "player/api",
+    "player/core",
+    "composeApp",
+).filterNot { layout.projectDirectory.dir(it).asFile.isDirectory }
+
+check(missingRequiredModules.isEmpty()) {
+    "Missing CMP module directories: " + missingRequiredModules.joinToString()
+}
+
+tasks.register<Exec>("verifyArchitecture") {
+    group = "verification"
+    description = "Checks module build files, frozen CPF versions and ARM-only host configuration."
+    dependsOn("verifyAppBoundaries")
+    commandLine("node", rootProject.file("scripts/verify-cmp-foundation.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyAppBoundaryTests") {
+    group = "verification"
+    description = "Tests the application boundary guard against architectural regressions."
+    commandLine("node", "--test", rootProject.file("scripts/verify-app-boundaries.test.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyAppBoundaries") {
+    group = "verification"
+    description = "Keeps application roots, route bindings and browser controllers within their responsibilities."
+    dependsOn("verifyAppBoundaryTests")
+    commandLine("node", rootProject.file("scripts/verify-app-boundaries.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyNoNativeMaterialUi") {
+    group = "verification"
+    description = "Rejects native Material visual widgets in production CMP UI."
+    commandLine("node", rootProject.file("scripts/verify-no-native-material-ui.mjs").absolutePath,
+        rootProject.projectDir.absolutePath)
+}
+
+val verifyDependencyBoundaries by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Checks production source dependencies independently of CPF/ABI configuration."
+    commandLine("node", rootProject.file("scripts/verify-dependency-boundaries.mjs").absolutePath)
+}
+
+tasks.named("check") {
+    dependsOn(verifyDependencyBoundaries)
+    dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")
 }

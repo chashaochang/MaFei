@@ -1,0 +1,8 @@
+{
+  "modelVersion": "6.0.0",
+  "description": "MaFei HarmonyOS host",
+  "dependencies": {
+    "@cpf-kmp-cmp/compose": "1.9.2-1.1.0"
+  },
+  "devDependencies": {}
+}

@@ -1,9 +1,0 @@
-{
-  "module": {
-    "name": "mpvplayer",
-    "type": "har",
-    "deviceTypes": [
-      "default"
-    ]
-  }
-}

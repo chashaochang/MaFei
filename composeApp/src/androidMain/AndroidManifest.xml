@@ -1,32 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:name=".MaFeiApp"
+        android:usesCleartextTraffic="true"
+        android:label="马飞"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaFei"
-        android:usesCleartextTraffic="true">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <service android:name="cn.mafei.cmp.AndroidMusicService" android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <activity
-            android:name=".AndroidPlaybackActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape"
-            android:windowSoftInputMode="adjustNothing" />
-        <activity
+            android:name="cn.mafei.cmp.MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize"
-            android:name=".MainActivity">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|navigation">
+            <!--
+                Playback fullscreen works by requesting SENSOR_LANDSCAPE
+                (MainActivity.applyOrientationPolicy). Without configChanges the
+                system would DESTROY and RECREATE the Activity on every rotation,
+                and the player page is Compose state (App.kt: playerExpanded /
+                playingMedia are plain `remember`) — so entering fullscreen would
+                silently drop the player and land back on the browse shell.
+                Declaring the geometry changes here lets Compose re-measure the
+                new window instead, exactly like the ArkUI build does.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
-
 </manifest>

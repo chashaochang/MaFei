@@ -1,0 +1,13 @@
+{
+  "name": "entry",
+  "version": "2.0.0",
+  "description": "MaFei thin HarmonyOS entry",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "libentry.so": "file:./src/main/cpp/types/libentry",
+    "@cpf-kmp-cmp/compose": "1.9.2-1.1.0",
+    "mfplayer": "file:./libs/mfplayer.har"
+  }
+}

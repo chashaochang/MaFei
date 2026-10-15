@@ -1,0 +1,2956 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "马飞客户端模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "马飞主应用"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "马飞"
+    },
+    {
+      "name": "appearance_title",
+      "value": "外观与主题"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "appearance_settings_title",
+      "value": "外观与显示"
+    },
+    {
+      "name": "feiniu_connection_strategy_title",
+      "value": "飞牛连接策略"
+    },
+    {
+      "name": "feiniu_connection_strategy_speed",
+      "value": "速度优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_public",
+      "value": "公网优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_relay",
+      "value": "中转优先"
+    },
+    {
+      "name": "feiniu_connection_strategy_save_failed",
+      "value": "连接策略保存失败，请重试"
+    },
+    {
+      "name": "mine_recent_watching",
+      "value": "最近在看"
+    },
+    {
+      "name": "mine_history_retry",
+      "value": "播放历史加载失败，点击重试"
+    },
+    {
+      "name": "mine_history_title",
+      "value": "播放历史"
+    },
+    {
+      "name": "mine_history_more",
+      "value": "更多"
+    },
+    {
+      "name": "mine_history_empty",
+      "value": "暂无播放记录"
+    },
+    {
+      "name": "mine_history_loading_more",
+      "value": "正在加载"
+    },
+    {
+      "name": "mine_history_load_more_failed",
+      "value": "加载更多失败，点击重试"
+    },
+    {
+      "name": "mine_history_unnamed",
+      "value": "未命名内容"
+    },
+    {
+      "name": "mine_history_episode_title_single",
+      "value": "%s · 第%d集"
+    },
+    {
+      "name": "mine_history_episode_title_season",
+      "value": "%s · 第%d季第%d集"
+    },
+    {
+      "name": "mine_history_updated_to_episode",
+      "value": "更新至%d集"
+    },
+    {
+      "name": "mine_history_updated_to_season_episode",
+      "value": "更新至%d季%d集"
+    },
+    {
+      "name": "playback_settings_title",
+      "value": "播放"
+    },
+    {
+      "name": "theme_style_title",
+      "value": "主题风格"
+    },
+    {
+      "name": "theme_native_name",
+      "value": "原生主题"
+    },
+    {
+      "name": "theme_native_desc",
+      "value": "更舒展的系统层级与圆角组件"
+    },
+    {
+      "name": "theme_feiniu_name",
+      "value": "飞牛主题"
+    },
+    {
+      "name": "theme_feiniu_desc",
+      "value": "延续当前 MaFei 的紧凑布局"
+    },
+    {
+      "name": "color_mode_title",
+      "value": "颜色模式"
+    },
+    {
+      "name": "color_mode_auto_desc",
+      "value": "跟随设备的系统设置切换深浅色"
+    },
+    {
+      "name": "theme_prompt_title",
+      "value": "选择你喜欢的主题"
+    },
+    {
+      "name": "theme_prompt_content",
+      "value": "新增原生主题，你也可以继续使用熟悉的飞牛主题。"
+    },
+    {
+      "name": "theme_prompt_feiniu_action",
+      "value": "继续使用飞牛主题"
+    },
+    {
+      "name": "theme_prompt_native_action",
+      "value": "体验原生主题"
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "主题保存失败，请重试"
+    },
+    {
+      "name": "account_switch_desc",
+      "value": "管理服务器与登录用户"
+    },
+    {
+      "name": "web_itong_desc",
+      "value": "打开服务器 Web 页面"
+    },
+    {
+      "name": "player_engine_desc",
+      "value": "选择播放器与解码方式"
+    },
+    {
+      "name": "management_title",
+      "value": "服务器控制台"
+    },
+    {
+      "name": "management_entry_desc",
+      "value": "查看状态、会话与服务器任务"
+    },
+    {
+      "name": "management_online",
+      "value": "服务器在线"
+    },
+    {
+      "name": "management_offline",
+      "value": "服务器离线"
+    },
+    {
+      "name": "management_server_unknown",
+      "value": "未知服务器"
+    },
+    {
+      "name": "management_movies",
+      "value": "电影"
+    },
+    {
+      "name": "management_series",
+      "value": "剧集"
+    },
+    {
+      "name": "management_episodes",
+      "value": "单集"
+    },
+    {
+      "name": "management_scan_library",
+      "value": "扫描媒体库"
+    },
+    {
+      "name": "management_scan_starting",
+      "value": "正在启动扫描"
+    },
+    {
+      "name": "management_scan_running",
+      "value": "媒体库正在扫描"
+    },
+    {
+      "name": "management_scan_started",
+      "value": "已开始扫描媒体库"
+    },
+    {
+      "name": "management_scan_failed",
+      "value": "启动扫描失败，请重试"
+    },
+    {
+      "name": "management_scan_unsupported",
+      "value": "当前服务器未提供媒体库扫描任务"
+    },
+    {
+      "name": "management_scan_confirm_title",
+      "value": "扫描媒体库"
+    },
+    {
+      "name": "management_scan_confirm_content",
+      "value": "确定要触发 Jellyfin 服务器扫描全部媒体库吗？"
+    },
+    {
+      "name": "management_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "management_confirm",
+      "value": "开始扫描"
+    },
+    {
+      "name": "management_running_tasks",
+      "value": "正在运行的任务"
+    },
+    {
+      "name": "management_active_sessions",
+      "value": "当前播放会话"
+    },
+    {
+      "name": "management_recent_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "management_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_tasks_empty",
+      "value": "当前没有正在运行的任务"
+    },
+    {
+      "name": "management_sessions_empty",
+      "value": "当前没有播放中的会话"
+    },
+    {
+      "name": "management_activity_empty",
+      "value": "暂无活动记录"
+    },
+    {
+      "name": "management_tasks_failed",
+      "value": "任务信息加载失败"
+    },
+    {
+      "name": "management_sessions_failed",
+      "value": "会话信息加载失败"
+    },
+    {
+      "name": "management_stale_result",
+      "value": "刷新失败，正在显示上次结果"
+    },
+    {
+      "name": "management_activity_failed",
+      "value": "活动记录加载失败"
+    },
+    {
+      "name": "management_counts_failed",
+      "value": "媒体数量加载失败"
+    },
+    {
+      "name": "management_server_failed",
+      "value": "服务器信息加载失败"
+    },
+    {
+      "name": "management_session_detail_title",
+      "value": "会话详情"
+    },
+    {
+      "name": "management_task_detail_title",
+      "value": "任务详情"
+    },
+    {
+      "name": "management_detail_unavailable",
+      "value": "信息已失效，请返回后重试"
+    },
+    {
+      "name": "management_detail_unknown",
+      "value": "未提供"
+    },
+    {
+      "name": "management_detail_playing",
+      "value": "播放中"
+    },
+    {
+      "name": "management_detail_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "management_detail_running",
+      "value": "运行中"
+    },
+    {
+      "name": "management_detail_cancelling",
+      "value": "正在取消"
+    },
+    {
+      "name": "management_detail_user",
+      "value": "用户"
+    },
+    {
+      "name": "management_detail_status",
+      "value": "状态"
+    },
+    {
+      "name": "management_detail_position",
+      "value": "播放位置"
+    },
+    {
+      "name": "management_detail_device",
+      "value": "设备"
+    },
+    {
+      "name": "management_detail_device_type",
+      "value": "设备类型"
+    },
+    {
+      "name": "management_detail_client",
+      "value": "客户端"
+    },
+    {
+      "name": "management_detail_app_version",
+      "value": "客户端版本"
+    },
+    {
+      "name": "management_detail_remote_endpoint",
+      "value": "网络地址"
+    },
+    {
+      "name": "management_detail_play_method",
+      "value": "播放方式"
+    },
+    {
+      "name": "management_detail_direct_play",
+      "value": "直接播放"
+    },
+    {
+      "name": "management_detail_direct_stream",
+      "value": "直接串流"
+    },
+    {
+      "name": "management_detail_transcode",
+      "value": "转码"
+    },
+    {
+      "name": "management_detail_volume",
+      "value": "音量"
+    },
+    {
+      "name": "management_detail_muted",
+      "value": "已静音"
+    },
+    {
+      "name": "management_detail_audio_stream",
+      "value": "音轨索引"
+    },
+    {
+      "name": "management_detail_subtitle_stream",
+      "value": "字幕索引"
+    },
+    {
+      "name": "management_detail_seekable",
+      "value": "支持拖动"
+    },
+    {
+      "name": "management_detail_media_control",
+      "value": "媒体控制"
+    },
+    {
+      "name": "management_detail_remote_control",
+      "value": "远程控制"
+    },
+    {
+      "name": "management_detail_supported",
+      "value": "支持"
+    },
+    {
+      "name": "management_detail_unsupported",
+      "value": "不支持"
+    },
+    {
+      "name": "management_detail_last_activity",
+      "value": "最后活动"
+    },
+    {
+      "name": "management_detail_task_name",
+      "value": "任务名称"
+    },
+    {
+      "name": "management_detail_category",
+      "value": "分类"
+    },
+    {
+      "name": "management_detail_progress",
+      "value": "进度"
+    },
+    {
+      "name": "management_detail_description",
+      "value": "说明"
+    },
+    {
+      "name": "management_detail_task_key",
+      "value": "任务标识"
+    },
+    {
+      "name": "management_detail_last_start",
+      "value": "上次开始"
+    },
+    {
+      "name": "management_detail_last_end",
+      "value": "上次结束"
+    },
+    {
+      "name": "management_detail_last_result",
+      "value": "上次结果"
+    },
+    {
+      "name": "management_detail_last_error",
+      "value": "上次错误"
+    },
+    {
+      "name": "management_section_unsupported",
+      "value": "当前服务器版本不支持此信息"
+    },
+    {
+      "name": "management_permission_denied",
+      "value": "当前账号不是服务器管理员"
+    },
+    {
+      "name": "management_permission_check_failed",
+      "value": "无法确认管理员权限，请检查服务器连接"
+    },
+    {
+      "name": "management_access_no_server",
+      "value": "当前没有可用的服务器连接"
+    },
+    {
+      "name": "management_access_offline",
+      "value": "无法连接当前服务器，请检查网络后重试"
+    },
+    {
+      "name": "management_user_title",
+      "value": "用户管理"
+    },
+    {
+      "name": "management_user_summary_total",
+      "value": "用户总数"
+    },
+    {
+      "name": "management_user_summary_administrators",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_summary_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_load_failed",
+      "value": "无法加载用户，请重试"
+    },
+    {
+      "name": "management_user_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "management_user_filter_administrators",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_filter_standard",
+      "value": "普通用户"
+    },
+    {
+      "name": "management_user_filter_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_filter_hidden",
+      "value": "已隐藏"
+    },
+    {
+      "name": "management_filter_reset",
+      "value": "重置"
+    },
+    {
+      "name": "management_filter_apply",
+      "value": "应用"
+    },
+    {
+      "name": "management_user_filter_title",
+      "value": "筛选用户"
+    },
+    {
+      "name": "management_user_filter_status",
+      "value": "状态"
+    },
+    {
+      "name": "management_user_filter_visibility",
+      "value": "可见性"
+    },
+    {
+      "name": "management_user_filter_sort",
+      "value": "排序"
+    },
+    {
+      "name": "management_user_status_all",
+      "value": "全部状态"
+    },
+    {
+      "name": "management_user_visibility_all",
+      "value": "全部用户"
+    },
+    {
+      "name": "management_user_visibility_visible",
+      "value": "可见用户"
+    },
+    {
+      "name": "management_user_visibility_hidden",
+      "value": "隐藏用户"
+    },
+    {
+      "name": "management_user_sort_name",
+      "value": "名称"
+    },
+    {
+      "name": "management_user_sort_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_user_sort_ascending",
+      "value": "升序"
+    },
+    {
+      "name": "management_user_access_scope",
+      "value": "访问范围"
+    },
+    {
+      "name": "management_user_advanced_access",
+      "value": "高级访问权限"
+    },
+    {
+      "name": "management_user_role_administrator",
+      "value": "管理员"
+    },
+    {
+      "name": "management_user_role_standard",
+      "value": "普通用户"
+    },
+    {
+      "name": "management_user_status_enabled",
+      "value": "已启用"
+    },
+    {
+      "name": "management_user_status_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "management_user_status_hidden",
+      "value": "登录页隐藏"
+    },
+    {
+      "name": "management_user_never",
+      "value": "从未"
+    },
+    {
+      "name": "management_user_last_login",
+      "value": "登录"
+    },
+    {
+      "name": "management_user_last_activity",
+      "value": "活动"
+    },
+    {
+      "name": "management_user_search_placeholder",
+      "value": "搜索用户名"
+    },
+    {
+      "name": "management_user_menu_profile",
+      "value": "资料"
+    },
+    {
+      "name": "management_user_menu_access",
+      "value": "访问"
+    },
+    {
+      "name": "management_user_menu_parental",
+      "value": "家长控制"
+    },
+    {
+      "name": "management_user_password_set",
+      "value": "已设置密码"
+    },
+    {
+      "name": "management_user_password_not_set",
+      "value": "未设置密码"
+    },
+    {
+      "name": "management_user_more_actions",
+      "value": "更多用户操作"
+    },
+    {
+      "name": "management_user_empty",
+      "value": "服务器没有可管理用户"
+    },
+    {
+      "name": "management_user_create",
+      "value": "新建用户"
+    },
+    {
+      "name": "management_user_name_required",
+      "value": "请输入用户名"
+    },
+    {
+      "name": "management_user_initial_password",
+      "value": "初始密码（可选）"
+    },
+    {
+      "name": "management_user_create_failed",
+      "value": "创建用户失败"
+    },
+    {
+      "name": "management_user_created_policy_pending",
+      "value": "用户已创建，但访问配置未完整保存"
+    },
+    {
+      "name": "management_user_create_retry_access",
+      "value": "重试访问配置"
+    },
+    {
+      "name": "management_user_retry_access_failed",
+      "value": "访问配置仍未保存，请重试"
+    },
+    {
+      "name": "management_user_create_success",
+      "value": "用户已创建"
+    },
+    {
+      "name": "management_user_no_results",
+      "value": "没有符合条件的用户"
+    },
+    {
+      "name": "management_user_clear_filters",
+      "value": "清除条件"
+    },
+    {
+      "name": "management_user_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_user_stale",
+      "value": "当前显示上次获取的数据"
+    },
+    {
+      "name": "management_user_open_details",
+      "value": "打开用户详情"
+    },
+    {
+      "name": "management_user_select_hint",
+      "value": "选择一个用户以查看详情"
+    },
+    {
+      "name": "management_user_delete_title",
+      "value": "删除用户"
+    },
+    {
+      "name": "management_user_delete_message",
+      "value": "此操作无法撤销。确认删除用户："
+    },
+    {
+      "name": "management_user_delete_impact",
+      "value": "删除后该用户将无法登录，相关个人数据可能无法恢复"
+    },
+    {
+      "name": "management_user_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "management_user_delete",
+      "value": "删除"
+    },
+    {
+      "name": "management_user_delete_success",
+      "value": "用户已删除"
+    },
+    {
+      "name": "management_user_delete_failed",
+      "value": "删除用户失败"
+    },
+    {
+      "name": "management_user_invalid_parameter",
+      "value": "用户参数无效"
+    },
+    {
+      "name": "management_user_tab_profile",
+      "value": "资料"
+    },
+    {
+      "name": "management_user_tab_access",
+      "value": "访问"
+    },
+    {
+      "name": "management_user_tab_parental",
+      "value": "家长控制"
+    },
+    {
+      "name": "management_user_tab_password",
+      "value": "密码"
+    },
+    {
+      "name": "management_user_password_mismatch",
+      "value": "两次输入的密码不一致"
+    },
+    {
+      "name": "management_user_operation_in_progress",
+      "value": "已有用户操作正在进行"
+    },
+    {
+      "name": "management_user_save_failed",
+      "value": "保存失败，请重试"
+    },
+    {
+      "name": "management_user_unsaved_title",
+      "value": "有未保存的修改"
+    },
+    {
+      "name": "management_user_unsaved_message",
+      "value": "保存当前修改、放弃修改，或继续编辑。"
+    },
+    {
+      "name": "management_user_discard",
+      "value": "放弃"
+    },
+    {
+      "name": "management_user_continue_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "management_user_save",
+      "value": "保存"
+    },
+    {
+      "name": "management_user_profile_placeholder",
+      "value": "基本资料和权限设置将在此处编辑"
+    },
+    {
+      "name": "management_user_access_placeholder",
+      "value": "媒体库、频道和设备访问范围将在此处编辑"
+    },
+    {
+      "name": "management_user_parental_placeholder",
+      "value": "分级、标签和访问时间计划将在此处编辑"
+    },
+    {
+      "name": "management_user_password_placeholder",
+      "value": "用户密码将在此处安全更新"
+    },
+    {
+      "name": "management_user_password_required",
+      "value": "请输入新密码"
+    },
+    {
+      "name": "management_user_current_password_required",
+      "value": "修改当前账号密码时必须输入当前密码"
+    },
+    {
+      "name": "management_user_password_update_failed",
+      "value": "密码更新失败"
+    },
+    {
+      "name": "management_user_password_group_update",
+      "value": "设置密码"
+    },
+    {
+      "name": "management_user_password_group_update_self_desc",
+      "value": "验证当前密码后，为当前管理员设置新密码"
+    },
+    {
+      "name": "management_user_password_group_update_other_desc",
+      "value": "管理员可直接为此用户设置新密码"
+    },
+    {
+      "name": "management_user_current_password",
+      "value": "当前密码"
+    },
+    {
+      "name": "management_user_current_password_placeholder",
+      "value": "输入当前密码"
+    },
+    {
+      "name": "management_user_new_password",
+      "value": "新密码"
+    },
+    {
+      "name": "management_user_new_password_placeholder",
+      "value": "输入新密码"
+    },
+    {
+      "name": "management_user_confirm_password",
+      "value": "确认新密码"
+    },
+    {
+      "name": "management_user_confirm_password_placeholder",
+      "value": "再次输入新密码"
+    },
+    {
+      "name": "management_user_set_password",
+      "value": "设置密码"
+    },
+    {
+      "name": "management_user_password_updated",
+      "value": "密码已更新"
+    },
+    {
+      "name": "management_user_password_group_danger",
+      "value": "密码危险操作"
+    },
+    {
+      "name": "management_user_password_group_danger_desc",
+      "value": "重置或清除密码前会再次确认"
+    },
+    {
+      "name": "management_user_reset_password",
+      "value": "重置密码"
+    },
+    {
+      "name": "management_user_reset_password_title",
+      "value": "确认重置密码"
+    },
+    {
+      "name": "management_user_reset_password_message",
+      "value": "服务器将重置此用户的密码状态。此操作不会显示任何密码内容。"
+    },
+    {
+      "name": "management_user_password_reset_success",
+      "value": "密码已重置"
+    },
+    {
+      "name": "management_user_clear_password",
+      "value": "清除密码"
+    },
+    {
+      "name": "management_user_clear_password_title",
+      "value": "确认清除密码"
+    },
+    {
+      "name": "management_user_clear_password_message",
+      "value": "清除后，此用户无需密码即可登录。"
+    },
+    {
+      "name": "management_user_password_clear_success",
+      "value": "密码已清除"
+    },
+    {
+      "name": "management_user_change_avatar",
+      "value": "更换头像"
+    },
+    {
+      "name": "management_user_remove_avatar",
+      "value": "移除头像"
+    },
+    {
+      "name": "management_user_remove_avatar_title",
+      "value": "确认移除头像"
+    },
+    {
+      "name": "management_user_remove_avatar_message",
+      "value": "将恢复为默认用户头像。"
+    },
+    {
+      "name": "management_user_avatar_updated",
+      "value": "头像已更新"
+    },
+    {
+      "name": "management_user_avatar_removed",
+      "value": "头像已移除"
+    },
+    {
+      "name": "management_user_avatar_unsupported_type",
+      "value": "仅支持 JPEG、PNG 或 WebP 图片"
+    },
+    {
+      "name": "management_user_avatar_empty",
+      "value": "所选图片为空"
+    },
+    {
+      "name": "management_user_avatar_too_large",
+      "value": "头像图片不能超过 10 MiB"
+    },
+    {
+      "name": "management_user_avatar_read_failed",
+      "value": "无法读取所选图片"
+    },
+    {
+      "name": "management_user_unsaved_short",
+      "value": "当前分区有未保存修改"
+    },
+    {
+      "name": "management_user_saving",
+      "value": "保存中"
+    },
+    {
+      "name": "management_user_loading",
+      "value": "正在加载用户"
+    },
+    {
+      "name": "management_user_group_identity",
+      "value": "身份与登录"
+    },
+    {
+      "name": "management_user_group_identity_desc",
+      "value": "设置用户名、登录提供程序和登录页可见性"
+    },
+    {
+      "name": "management_user_name",
+      "value": "用户名"
+    },
+    {
+      "name": "management_user_name_placeholder",
+      "value": "输入用户名"
+    },
+    {
+      "name": "management_user_auth_provider",
+      "value": "认证提供程序"
+    },
+    {
+      "name": "management_user_password_reset_provider",
+      "value": "密码重置提供程序"
+    },
+    {
+      "name": "management_user_hidden",
+      "value": "在登录页隐藏"
+    },
+    {
+      "name": "management_user_hidden_desc",
+      "value": "用户仍可通过手动输入用户名登录"
+    },
+    {
+      "name": "management_user_group_privileges",
+      "value": "管理权限"
+    },
+    {
+      "name": "management_user_group_privileges_desc",
+      "value": "授予服务器内容和服务的管理能力"
+    },
+    {
+      "name": "management_user_privilege_collections",
+      "value": "管理合集"
+    },
+    {
+      "name": "management_user_privilege_collections_desc",
+      "value": "允许创建和修改合集"
+    },
+    {
+      "name": "management_user_privilege_subtitles",
+      "value": "管理字幕"
+    },
+    {
+      "name": "management_user_privilege_subtitles_desc",
+      "value": "允许编辑和下载字幕"
+    },
+    {
+      "name": "management_user_privilege_lyrics",
+      "value": "管理歌词"
+    },
+    {
+      "name": "management_user_privilege_lyrics_desc",
+      "value": "允许编辑和下载歌词"
+    },
+    {
+      "name": "management_user_privilege_live_tv",
+      "value": "管理电视直播"
+    },
+    {
+      "name": "management_user_privilege_live_tv_desc",
+      "value": "允许管理电视直播和录制设置"
+    },
+    {
+      "name": "management_user_group_playback",
+      "value": "播放与转码"
+    },
+    {
+      "name": "management_user_group_playback_desc",
+      "value": "控制媒体播放、转码和下载能力"
+    },
+    {
+      "name": "management_user_playback_media",
+      "value": "播放媒体"
+    },
+    {
+      "name": "management_user_playback_media_desc",
+      "value": "允许播放服务器中的媒体"
+    },
+    {
+      "name": "management_user_playback_live_tv",
+      "value": "播放电视直播"
+    },
+    {
+      "name": "management_user_playback_live_tv_desc",
+      "value": "允许观看电视直播和录制内容"
+    },
+    {
+      "name": "management_user_transcode_audio",
+      "value": "音频转码"
+    },
+    {
+      "name": "management_user_transcode_audio_desc",
+      "value": "允许服务器转换音频格式"
+    },
+    {
+      "name": "management_user_transcode_video",
+      "value": "视频转码"
+    },
+    {
+      "name": "management_user_transcode_video_desc",
+      "value": "允许服务器转换视频格式"
+    },
+    {
+      "name": "management_user_playback_remux",
+      "value": "重新封装媒体"
+    },
+    {
+      "name": "management_user_playback_remux_desc",
+      "value": "允许在不转码的情况下更换容器"
+    },
+    {
+      "name": "management_user_force_remote_transcode",
+      "value": "强制远程源转码"
+    },
+    {
+      "name": "management_user_force_remote_transcode_desc",
+      "value": "远程媒体源播放时始终经过服务器转码"
+    },
+    {
+      "name": "management_user_content_download",
+      "value": "下载媒体"
+    },
+    {
+      "name": "management_user_content_download_desc",
+      "value": "允许将媒体保存到客户端设备"
+    },
+    {
+      "name": "management_user_group_remote",
+      "value": "远程访问与删除"
+    },
+    {
+      "name": "management_user_group_remote_desc",
+      "value": "控制外网访问、设备控制和内容删除"
+    },
+    {
+      "name": "management_user_remote_access",
+      "value": "允许远程访问"
+    },
+    {
+      "name": "management_user_remote_access_desc",
+      "value": "允许从服务器局域网以外连接"
+    },
+    {
+      "name": "management_user_remote_control",
+      "value": "控制其他用户"
+    },
+    {
+      "name": "management_user_remote_control_desc",
+      "value": "允许向其他用户的播放会话发送控制命令"
+    },
+    {
+      "name": "management_user_shared_device_control",
+      "value": "控制共享设备"
+    },
+    {
+      "name": "management_user_shared_device_control_desc",
+      "value": "允许控制电视等共享播放设备"
+    },
+    {
+      "name": "management_user_delete_all_content",
+      "value": "删除所有媒体库内容"
+    },
+    {
+      "name": "management_user_delete_all_content_desc",
+      "value": "关闭后可单独选择允许删除的媒体库"
+    },
+    {
+      "name": "management_user_delete_folders",
+      "value": "允许删除的媒体库"
+    },
+    {
+      "name": "management_user_group_limits",
+      "value": "限制与 SyncPlay"
+    },
+    {
+      "name": "management_user_group_limits_desc",
+      "value": "设置远程码率、登录保护和并发会话"
+    },
+    {
+      "name": "management_user_remote_bitrate",
+      "value": "远程码率上限（Mbps）"
+    },
+    {
+      "name": "management_user_remote_bitrate_desc",
+      "value": "0 表示不限制远程客户端码率"
+    },
+    {
+      "name": "management_user_lockout_attempts",
+      "value": "锁定前失败次数"
+    },
+    {
+      "name": "management_user_lockout_attempts_desc",
+      "value": "0 表示使用服务器默认设置"
+    },
+    {
+      "name": "management_user_max_sessions",
+      "value": "最大并发会话"
+    },
+    {
+      "name": "management_user_max_sessions_desc",
+      "value": "0 表示不限制同时活动的会话"
+    },
+    {
+      "name": "management_user_sync_play",
+      "value": "SyncPlay 权限"
+    },
+    {
+      "name": "management_user_sync_play_none",
+      "value": "不可使用"
+    },
+    {
+      "name": "management_user_sync_play_join",
+      "value": "仅加入群组"
+    },
+    {
+      "name": "management_user_sync_play_create",
+      "value": "创建和加入群组"
+    },
+    {
+      "name": "management_user_group_status",
+      "value": "账号状态"
+    },
+    {
+      "name": "management_user_group_status_desc",
+      "value": "管理员权限和停用操作受安全保护"
+    },
+    {
+      "name": "management_user_administrator",
+      "value": "服务器管理员"
+    },
+    {
+      "name": "management_user_administrator_desc",
+      "value": "允许访问和修改服务器全部管理设置"
+    },
+    {
+      "name": "management_user_disabled",
+      "value": "停用此用户"
+    },
+    {
+      "name": "management_user_disabled_desc",
+      "value": "阻止该用户继续登录服务器"
+    },
+    {
+      "name": "management_user_protect_current_admin",
+      "value": "当前管理员不能移除自己的权限或停用自己"
+    },
+    {
+      "name": "management_user_protect_last_admin",
+      "value": "服务器必须保留至少一个已启用管理员"
+    },
+    {
+      "name": "management_user_access_folders",
+      "value": "媒体库访问"
+    },
+    {
+      "name": "management_user_access_folders_desc",
+      "value": "选择此用户可以浏览的媒体库"
+    },
+    {
+      "name": "management_user_access_all_folders",
+      "value": "允许访问全部媒体库"
+    },
+    {
+      "name": "management_user_access_all_folders_desc",
+      "value": "关闭后使用下方的媒体库列表"
+    },
+    {
+      "name": "management_user_access_channels",
+      "value": "频道访问"
+    },
+    {
+      "name": "management_user_access_channels_desc",
+      "value": "选择此用户可以访问的频道"
+    },
+    {
+      "name": "management_user_access_all_channels",
+      "value": "允许访问全部频道"
+    },
+    {
+      "name": "management_user_access_all_channels_desc",
+      "value": "关闭后使用下方的频道列表"
+    },
+    {
+      "name": "management_user_access_devices",
+      "value": "设备访问"
+    },
+    {
+      "name": "management_user_access_devices_desc",
+      "value": "选择允许该用户登录的客户端设备"
+    },
+    {
+      "name": "management_user_access_all_devices",
+      "value": "允许所有设备"
+    },
+    {
+      "name": "management_user_access_all_devices_desc",
+      "value": "关闭后仅允许下方选中的设备"
+    },
+    {
+      "name": "management_user_access_empty",
+      "value": "服务器没有返回可选项目"
+    },
+    {
+      "name": "management_user_access_options_failed",
+      "value": "无法加载此分组的可选项目"
+    },
+    {
+      "name": "management_user_parental_rating",
+      "value": "内容分级"
+    },
+    {
+      "name": "management_user_parental_rating_desc",
+      "value": "限制高于指定分级的内容"
+    },
+    {
+      "name": "management_user_parental_max_rating",
+      "value": "最高允许分级"
+    },
+    {
+      "name": "management_user_parental_rating_unrestricted",
+      "value": "不限制"
+    },
+    {
+      "name": "management_user_parental_unrated",
+      "value": "未分级内容"
+    },
+    {
+      "name": "management_user_parental_unrated_desc",
+      "value": "阻止未提供分级信息的指定内容类型"
+    },
+    {
+      "name": "management_user_unrated_movie",
+      "value": "电影"
+    },
+    {
+      "name": "management_user_unrated_trailer",
+      "value": "预告片"
+    },
+    {
+      "name": "management_user_unrated_series",
+      "value": "剧集"
+    },
+    {
+      "name": "management_user_unrated_music",
+      "value": "音乐"
+    },
+    {
+      "name": "management_user_unrated_book",
+      "value": "图书"
+    },
+    {
+      "name": "management_user_unrated_live_tv_channel",
+      "value": "电视直播频道"
+    },
+    {
+      "name": "management_user_unrated_live_tv_program",
+      "value": "电视直播节目"
+    },
+    {
+      "name": "management_user_unrated_channel_content",
+      "value": "频道内容"
+    },
+    {
+      "name": "management_user_unrated_other",
+      "value": "其他内容"
+    },
+    {
+      "name": "management_user_parental_tags",
+      "value": "标签规则"
+    },
+    {
+      "name": "management_user_parental_tags_desc",
+      "value": "按媒体标签明确允许或阻止内容"
+    },
+    {
+      "name": "management_user_parental_allowed_tags",
+      "value": "允许的标签"
+    },
+    {
+      "name": "management_user_parental_blocked_tags",
+      "value": "阻止的标签"
+    },
+    {
+      "name": "management_user_parental_add_tag",
+      "value": "添加标签"
+    },
+    {
+      "name": "management_user_parental_no_tags",
+      "value": "尚未设置标签"
+    },
+    {
+      "name": "management_user_parental_add_allowed_tag",
+      "value": "添加允许标签"
+    },
+    {
+      "name": "management_user_parental_add_blocked_tag",
+      "value": "添加阻止标签"
+    },
+    {
+      "name": "management_user_parental_tag_placeholder",
+      "value": "输入媒体标签"
+    },
+    {
+      "name": "management_user_parental_add",
+      "value": "添加"
+    },
+    {
+      "name": "management_user_parental_conflicting_tags",
+      "value": "同一标签不能同时允许和阻止"
+    },
+    {
+      "name": "management_user_parental_schedule",
+      "value": "访问时间计划"
+    },
+    {
+      "name": "management_user_parental_schedule_desc",
+      "value": "限制用户可以登录和访问服务器的时间"
+    },
+    {
+      "name": "management_user_parental_admin_schedule_hidden",
+      "value": "管理员账号不应用访问时间限制"
+    },
+    {
+      "name": "management_user_parental_add_schedule",
+      "value": "添加时间计划"
+    },
+    {
+      "name": "management_user_parental_remove_schedule",
+      "value": "删除时间计划"
+    },
+    {
+      "name": "management_user_parental_start_hour",
+      "value": "开始小时"
+    },
+    {
+      "name": "management_user_parental_end_hour",
+      "value": "结束小时"
+    },
+    {
+      "name": "management_user_parental_invalid_schedule",
+      "value": "结束小时必须晚于开始小时，范围为 0 至 24"
+    },
+    {
+      "name": "management_user_day_everyday",
+      "value": "每天"
+    },
+    {
+      "name": "management_user_day_weekday",
+      "value": "工作日"
+    },
+    {
+      "name": "management_user_day_weekend",
+      "value": "周末"
+    },
+    {
+      "name": "management_user_day_sunday",
+      "value": "星期日"
+    },
+    {
+      "name": "management_user_day_monday",
+      "value": "星期一"
+    },
+    {
+      "name": "management_user_day_tuesday",
+      "value": "星期二"
+    },
+    {
+      "name": "management_user_day_wednesday",
+      "value": "星期三"
+    },
+    {
+      "name": "management_user_day_thursday",
+      "value": "星期四"
+    },
+    {
+      "name": "management_user_day_friday",
+      "value": "星期五"
+    },
+    {
+      "name": "management_user_day_saturday",
+      "value": "星期六"
+    },
+    {
+      "name": "management_activity_all",
+      "value": "全部"
+    },
+    {
+      "name": "management_activity_days",
+      "value": "天"
+    },
+    {
+      "name": "management_activity_info",
+      "value": "详情"
+    },
+    {
+      "name": "management_activity_item",
+      "value": "查看项目"
+    },
+    {
+      "name": "management_activity_item_unavailable",
+      "value": "项目已不存在或暂不支持"
+    },
+    {
+      "name": "management_activity_item_failed",
+      "value": "无法打开项目，请稍后重试"
+    },
+    {
+      "name": "management_activity_next",
+      "value": "下一页"
+    },
+    {
+      "name": "management_activity_previous",
+      "value": "上一页"
+    },
+    {
+      "name": "management_activity_search",
+      "value": "搜索名称、详情或类型"
+    },
+    {
+      "name": "management_activity_sort_date",
+      "value": "按时间"
+    },
+    {
+      "name": "management_activity_sort_name",
+      "value": "按名称"
+    },
+    {
+      "name": "management_activity_sort_severity",
+      "value": "按级别"
+    },
+    {
+      "name": "management_activity_sort_user",
+      "value": "按用户"
+    },
+    {
+      "name": "management_activity_system",
+      "value": "系统"
+    },
+    {
+      "name": "management_activity_time_all",
+      "value": "全部时间"
+    },
+    {
+      "name": "management_activity_title",
+      "value": "活动"
+    },
+    {
+      "name": "management_activity_user",
+      "value": "用户"
+    },
+    {
+      "name": "management_activity_view_all",
+      "value": "查看全部"
+    },
+    {
+      "name": "management_device_action_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "management_device_action_in_progress",
+      "value": "设备操作进行中"
+    },
+    {
+      "name": "management_device_all_time",
+      "value": "全部时间"
+    },
+    {
+      "name": "management_device_app",
+      "value": "应用"
+    },
+    {
+      "name": "management_device_authorized",
+      "value": "已授权"
+    },
+    {
+      "name": "management_device_batch_failed",
+      "value": "失败"
+    },
+    {
+      "name": "management_device_batch_success",
+      "value": "成功"
+    },
+    {
+      "name": "management_device_current",
+      "value": "当前设备"
+    },
+    {
+      "name": "management_device_current_protected",
+      "value": "当前设备不能撤销授权"
+    },
+    {
+      "name": "management_device_current_will_remain",
+      "value": "当前设备将保留授权"
+    },
+    {
+      "name": "management_device_custom_name",
+      "value": "自定义名称"
+    },
+    {
+      "name": "management_device_days",
+      "value": "天"
+    },
+    {
+      "name": "management_device_detail_title",
+      "value": "设备详情"
+    },
+    {
+      "name": "management_device_filter_sort",
+      "value": "排序"
+    },
+    {
+      "name": "management_device_filter_time",
+      "value": "活动时间"
+    },
+    {
+      "name": "management_device_filter_title",
+      "value": "筛选设备"
+    },
+    {
+      "name": "management_device_filter_user",
+      "value": "最近用户"
+    },
+    {
+      "name": "management_device_empty",
+      "value": "暂无已授权设备"
+    },
+    {
+      "name": "management_device_last_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "management_device_last_user",
+      "value": "最近用户"
+    },
+    {
+      "name": "management_device_load_failed",
+      "value": "设备加载失败"
+    },
+    {
+      "name": "management_device_next",
+      "value": "下一页"
+    },
+    {
+      "name": "management_device_previous",
+      "value": "上一页"
+    },
+    {
+      "name": "management_device_rename_failed",
+      "value": "设备改名失败"
+    },
+    {
+      "name": "management_device_rename_success",
+      "value": "设备名称已更新"
+    },
+    {
+      "name": "management_device_revoke",
+      "value": "撤销授权"
+    },
+    {
+      "name": "management_device_revoke_failed",
+      "value": "撤销授权失败"
+    },
+    {
+      "name": "management_device_revoke_others",
+      "value": "撤销其他设备"
+    },
+    {
+      "name": "management_device_revoke_others_count",
+      "value": "将撤销设备数量："
+    },
+    {
+      "name": "management_device_revoke_success",
+      "value": "已撤销设备授权"
+    },
+    {
+      "name": "management_device_revoke_title",
+      "value": "撤销设备授权？"
+    },
+    {
+      "name": "management_device_save_name",
+      "value": "保存名称"
+    },
+    {
+      "name": "management_device_search",
+      "value": "搜索设备、应用或用户"
+    },
+    {
+      "name": "management_device_sort_app",
+      "value": "按应用"
+    },
+    {
+      "name": "management_device_sort_ascending",
+      "value": "升序"
+    },
+    {
+      "name": "management_device_sort_name",
+      "value": "按名称"
+    },
+    {
+      "name": "management_device_sort_recent",
+      "value": "按最近活动"
+    },
+    {
+      "name": "management_device_sort_user",
+      "value": "按用户"
+    },
+    {
+      "name": "management_device_unsupported",
+      "value": "当前服务器不支持设备管理"
+    },
+    {
+      "name": "management_devices_title",
+      "value": "设备"
+    },
+    {
+      "name": "management_session_action_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "management_session_action_in_progress",
+      "value": "会话操作进行中"
+    },
+    {
+      "name": "management_session_action_sent",
+      "value": "命令已发送"
+    },
+    {
+      "name": "management_session_audio_codec",
+      "value": "音频编码"
+    },
+    {
+      "name": "management_session_bitrate",
+      "value": "码率"
+    },
+    {
+      "name": "management_session_container",
+      "value": "容器"
+    },
+    {
+      "name": "management_session_control_unavailable",
+      "value": "当前会话不支持此操作"
+    },
+    {
+      "name": "management_session_ended",
+      "value": "会话已结束"
+    },
+    {
+      "name": "management_session_framerate",
+      "value": "帧率"
+    },
+    {
+      "name": "management_session_idle",
+      "value": "空闲"
+    },
+    {
+      "name": "management_session_message_empty",
+      "value": "消息不能为空"
+    },
+    {
+      "name": "management_session_message_placeholder",
+      "value": "输入要发送到此设备的消息"
+    },
+    {
+      "name": "management_session_message_sent",
+      "value": "消息已发送"
+    },
+    {
+      "name": "management_session_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "management_session_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "management_session_playback_direct_play",
+      "value": "直接播放"
+    },
+    {
+      "name": "management_session_playback_direct_stream",
+      "value": "直接串流"
+    },
+    {
+      "name": "management_session_playback_method",
+      "value": "播放方式"
+    },
+    {
+      "name": "management_session_playback_remux",
+      "value": "封装转换"
+    },
+    {
+      "name": "management_session_playback_transcode",
+      "value": "转码"
+    },
+    {
+      "name": "management_session_playing",
+      "value": "播放中"
+    },
+    {
+      "name": "management_session_resolution",
+      "value": "分辨率"
+    },
+    {
+      "name": "management_session_resume",
+      "value": "继续"
+    },
+    {
+      "name": "management_session_send",
+      "value": "发送"
+    },
+    {
+      "name": "management_session_stop",
+      "value": "停止"
+    },
+    {
+      "name": "management_session_stop_title",
+      "value": "停止此会话？"
+    },
+    {
+      "name": "management_session_transcode_reasons",
+      "value": "转码原因"
+    },
+    {
+      "name": "management_session_transcoding",
+      "value": "转码中"
+    },
+    {
+      "name": "management_session_video_codec",
+      "value": "视频编码"
+    },
+    {
+      "name": "management_session_return_dashboard",
+      "value": "返回管理控制台"
+    },
+    {
+      "name": "management_session_transcode_reason_container",
+      "value": "容器格式或码率不受支持"
+    },
+    {
+      "name": "management_session_transcode_reason_video",
+      "value": "视频格式超出设备播放能力"
+    },
+    {
+      "name": "management_session_transcode_reason_audio",
+      "value": "音频格式超出设备播放能力"
+    },
+    {
+      "name": "management_session_transcode_reason_subtitle",
+      "value": "字幕格式不受支持"
+    },
+    {
+      "name": "management_session_transcode_reason_stream_info",
+      "value": "媒体流信息不完整"
+    },
+    {
+      "name": "management_session_transcode_reason_direct_play",
+      "value": "直接播放失败"
+    },
+    {
+      "name": "management_session_transcode_reason_other",
+      "value": "服务器需要转换此媒体"
+    },
+    {
+      "name": "management_task_start",
+      "value": "启动任务"
+    },
+    {
+      "name": "management_task_starting",
+      "value": "正在启动"
+    },
+    {
+      "name": "management_task_cancel",
+      "value": "取消任务"
+    },
+    {
+      "name": "management_task_cancelling",
+      "value": "正在取消"
+    },
+    {
+      "name": "management_task_started",
+      "value": "任务已启动"
+    },
+    {
+      "name": "management_task_cancelled",
+      "value": "已请求取消任务"
+    },
+    {
+      "name": "management_task_action_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "management_activity_filter_title",
+      "value": "筛选活动"
+    },
+    {
+      "name": "management_activity_detail_title",
+      "value": "活动详情"
+    },
+    {
+      "name": "management_library_title",
+      "value": "媒体库管理"
+    },
+    {
+      "name": "management_library_add",
+      "value": "添加媒体库"
+    },
+    {
+      "name": "management_library_scan_all",
+      "value": "扫描全部媒体库"
+    },
+    {
+      "name": "management_library_scan_all_message",
+      "value": "启动 Jellyfin 全部媒体库扫描？"
+    },
+    {
+      "name": "management_library_start_scan",
+      "value": "开始扫描"
+    },
+    {
+      "name": "management_library_scan_one",
+      "value": "扫描此媒体库"
+    },
+    {
+      "name": "management_library_scan_started",
+      "value": "已请求服务器开始扫描"
+    },
+    {
+      "name": "management_library_scanning",
+      "value": "扫描中"
+    },
+    {
+      "name": "management_library_ready",
+      "value": "就绪"
+    },
+    {
+      "name": "management_library_edit",
+      "value": "编辑媒体库"
+    },
+    {
+      "name": "management_library_remove",
+      "value": "移除媒体库"
+    },
+    {
+      "name": "management_library_remove_title",
+      "value": "确认移除媒体库"
+    },
+    {
+      "name": "management_library_remove_message",
+      "value": "将移除媒体库："
+    },
+    {
+      "name": "management_library_remove_notice",
+      "value": "此操作只移除 Jellyfin 虚拟媒体库配置，不删除服务器上的源文件。"
+    },
+    {
+      "name": "management_library_remove_success",
+      "value": "媒体库已移除"
+    },
+    {
+      "name": "management_library_more_actions",
+      "value": "更多媒体库操作"
+    },
+    {
+      "name": "management_library_empty",
+      "value": "服务器还没有媒体库"
+    },
+    {
+      "name": "management_library_load_failed",
+      "value": "无法加载媒体库"
+    },
+    {
+      "name": "management_library_unsupported",
+      "value": "当前服务器不支持媒体库管理"
+    },
+    {
+      "name": "management_library_stale",
+      "value": "刷新失败，正在显示上次加载的数据"
+    },
+    {
+      "name": "management_library_operation_in_progress",
+      "value": "已有媒体库操作正在进行"
+    },
+    {
+      "name": "management_library_operation_failed",
+      "value": "媒体库操作失败"
+    },
+    {
+      "name": "management_library_no_paths",
+      "value": "未配置媒体路径"
+    },
+    {
+      "name": "management_library_paths_unit",
+      "value": "个路径"
+    },
+    {
+      "name": "management_library_select_hint",
+      "value": "选择一个媒体库查看详情"
+    },
+    {
+      "name": "management_library_path_title",
+      "value": "选择服务器目录"
+    },
+    {
+      "name": "management_library_path_root",
+      "value": "服务器根目录"
+    },
+    {
+      "name": "management_library_path_choose",
+      "value": "选择"
+    },
+    {
+      "name": "management_library_path_manual_title",
+      "value": "手动输入服务器路径"
+    },
+    {
+      "name": "management_library_path_placeholder",
+      "value": "/media/videos"
+    },
+    {
+      "name": "management_library_path_validating",
+      "value": "验证中"
+    },
+    {
+      "name": "management_library_path_validate",
+      "value": "验证路径"
+    },
+    {
+      "name": "management_library_path_use",
+      "value": "使用此路径"
+    },
+    {
+      "name": "management_library_path_validation_success",
+      "value": "路径验证通过"
+    },
+    {
+      "name": "management_library_path_validation_failed",
+      "value": "路径不可用或服务器没有写入权限"
+    },
+    {
+      "name": "management_library_path_loading",
+      "value": "正在读取服务器目录"
+    },
+    {
+      "name": "management_library_path_empty",
+      "value": "此位置没有可进入的目录"
+    },
+    {
+      "name": "management_library_path_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_library_path_load_failed",
+      "value": "无法读取服务器目录"
+    },
+    {
+      "name": "management_library_add_path",
+      "value": "添加路径"
+    },
+    {
+      "name": "management_library_advanced",
+      "value": "高级设置"
+    },
+    {
+      "name": "management_library_advanced_hint",
+      "value": "不常用的扫描、元数据、字幕和图片选项"
+    },
+    {
+      "name": "management_library_advanced_scan_group",
+      "value": "扫描与媒体处理"
+    },
+    {
+      "name": "management_library_advanced_metadata_group",
+      "value": "元数据与识别"
+    },
+    {
+      "name": "management_library_advanced_subtitle_group",
+      "value": "字幕与歌词"
+    },
+    {
+      "name": "management_library_advanced_image_group",
+      "value": "图片、标签与合集"
+    },
+    {
+      "name": "management_library_archive_media",
+      "value": "启用压缩包媒体"
+    },
+    {
+      "name": "management_library_array_placeholder",
+      "value": "每行输入一项"
+    },
+    {
+      "name": "management_library_authentication_expired",
+      "value": "登录状态已失效，请重新登录"
+    },
+    {
+      "name": "management_library_auto_add_collection",
+      "value": "自动加入合集"
+    },
+    {
+      "name": "management_library_auto_series_grouping",
+      "value": "自动合并来自不同文件夹的剧集"
+    },
+    {
+      "name": "management_library_automatic",
+      "value": "自动"
+    },
+    {
+      "name": "management_library_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "management_library_chapter_images",
+      "value": "提取章节图片"
+    },
+    {
+      "name": "management_library_chapter_images_during_scan",
+      "value": "媒体库扫描时提取章节图片"
+    },
+    {
+      "name": "management_library_country",
+      "value": "元数据国家或地区"
+    },
+    {
+      "name": "management_library_custom_delimiters",
+      "value": "自定义标签分隔符"
+    },
+    {
+      "name": "management_library_delimiter_whitelist",
+      "value": "保留的分隔符"
+    },
+    {
+      "name": "management_library_discard",
+      "value": "放弃更改"
+    },
+    {
+      "name": "management_library_editor_loading",
+      "value": "正在加载媒体库设置"
+    },
+    {
+      "name": "management_library_embedded_episode_info",
+      "value": "优先使用内嵌剧集信息"
+    },
+    {
+      "name": "management_library_embedded_extra_titles",
+      "value": "优先使用内嵌附加内容标题"
+    },
+    {
+      "name": "management_library_embedded_subtitles",
+      "value": "允许的内嵌字幕"
+    },
+    {
+      "name": "management_library_embedded_subtitles_all",
+      "value": "全部允许"
+    },
+    {
+      "name": "management_library_embedded_subtitles_image",
+      "value": "仅图形字幕"
+    },
+    {
+      "name": "management_library_embedded_subtitles_none",
+      "value": "全部禁用"
+    },
+    {
+      "name": "management_library_embedded_subtitles_text",
+      "value": "仅文本字幕"
+    },
+    {
+      "name": "management_library_embedded_titles",
+      "value": "优先使用内嵌标题"
+    },
+    {
+      "name": "management_library_enabled",
+      "value": "启用此媒体库"
+    },
+    {
+      "name": "management_library_image_fetchers",
+      "value": "图片获取器"
+    },
+    {
+      "name": "management_library_image_limit",
+      "value": "数量上限"
+    },
+    {
+      "name": "management_library_image_min_width",
+      "value": "最小宽度"
+    },
+    {
+      "name": "management_library_image_options",
+      "value": "图片选项"
+    },
+    {
+      "name": "management_library_internet_providers",
+      "value": "启用互联网元数据提供程序"
+    },
+    {
+      "name": "management_library_keep_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "management_library_lufs_scan",
+      "value": "扫描音频响度（LUFS）"
+    },
+    {
+      "name": "management_library_lyric_fetchers",
+      "value": "歌词获取器"
+    },
+    {
+      "name": "management_library_media_segment_providers",
+      "value": "媒体片段提供程序"
+    },
+    {
+      "name": "management_library_metadata_fetchers",
+      "value": "元数据获取器"
+    },
+    {
+      "name": "management_library_metadata_language",
+      "value": "首选元数据语言"
+    },
+    {
+      "name": "management_library_metadata_readers",
+      "value": "本地元数据读取器"
+    },
+    {
+      "name": "management_library_metadata_savers",
+      "value": "元数据保存器"
+    },
+    {
+      "name": "management_library_name",
+      "value": "名称"
+    },
+    {
+      "name": "management_library_name_placeholder",
+      "value": "输入媒体库名称"
+    },
+    {
+      "name": "management_library_name_required",
+      "value": "请输入媒体库名称"
+    },
+    {
+      "name": "management_library_not_found",
+      "value": "媒体库不存在或已被移除"
+    },
+    {
+      "name": "management_library_options_load_failed",
+      "value": "无法加载服务器支持的媒体库选项"
+    },
+    {
+      "name": "management_library_path_duplicate",
+      "value": "媒体库路径不能重复"
+    },
+    {
+      "name": "management_library_path_remove",
+      "value": "移除此路径"
+    },
+    {
+      "name": "management_library_path_required",
+      "value": "请至少添加一个媒体库路径"
+    },
+    {
+      "name": "management_library_paths",
+      "value": "媒体库路径"
+    },
+    {
+      "name": "management_library_paths_empty",
+      "value": "尚未添加路径"
+    },
+    {
+      "name": "management_library_paths_hint",
+      "value": "路径位于 Jellyfin 服务器上，保存前会验证写入权限"
+    },
+    {
+      "name": "management_library_perfect_subtitle_match",
+      "value": "仅下载完全匹配的字幕"
+    },
+    {
+      "name": "management_library_photos",
+      "value": "启用照片识别"
+    },
+    {
+      "name": "management_library_prefer_nonstandard_artist_tag",
+      "value": "优先使用非标准艺术家标签"
+    },
+    {
+      "name": "management_library_provider_item_type",
+      "value": "媒体类型"
+    },
+    {
+      "name": "management_library_provider_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "management_library_provider_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "management_library_providers",
+      "value": "元数据提供程序"
+    },
+    {
+      "name": "management_library_providers_hint",
+      "value": "勾选启用项，并按服务器调用顺序排列"
+    },
+    {
+      "name": "management_library_realtime_monitor",
+      "value": "实时监控文件变化"
+    },
+    {
+      "name": "management_library_retry",
+      "value": "重试"
+    },
+    {
+      "name": "management_library_save",
+      "value": "保存"
+    },
+    {
+      "name": "management_library_save_failed",
+      "value": "保存失败，请检查服务器返回的信息"
+    },
+    {
+      "name": "management_library_save_local_metadata",
+      "value": "将元数据保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_lyrics",
+      "value": "将歌词保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_partial",
+      "value": "服务器已完成部分更改，请核对当前媒体库状态后重试"
+    },
+    {
+      "name": "management_library_save_subtitles",
+      "value": "将字幕保存到媒体目录"
+    },
+    {
+      "name": "management_library_save_success",
+      "value": "媒体库已保存"
+    },
+    {
+      "name": "management_library_save_trickplay",
+      "value": "将 Trickplay 图片保存到媒体目录"
+    },
+    {
+      "name": "management_library_saved_state",
+      "value": "没有未保存的更改"
+    },
+    {
+      "name": "management_library_saving",
+      "value": "正在保存"
+    },
+    {
+      "name": "management_library_scan_interval",
+      "value": "自动刷新间隔（天）"
+    },
+    {
+      "name": "management_library_season_zero_name",
+      "value": "第 0 季显示名称"
+    },
+    {
+      "name": "management_library_season_zero_placeholder",
+      "value": "特别篇"
+    },
+    {
+      "name": "management_library_similar_item_providers",
+      "value": "相似项目提供程序"
+    },
+    {
+      "name": "management_library_skip_subtitles_audio_match",
+      "value": "音轨语言匹配时跳过字幕下载"
+    },
+    {
+      "name": "management_library_skip_subtitles_embedded",
+      "value": "已有内嵌字幕时跳过字幕下载"
+    },
+    {
+      "name": "management_library_subtitle_fetchers",
+      "value": "字幕获取器"
+    },
+    {
+      "name": "management_library_subtitle_languages",
+      "value": "字幕下载语言"
+    },
+    {
+      "name": "management_library_trickplay",
+      "value": "生成 Trickplay 图片"
+    },
+    {
+      "name": "management_library_trickplay_during_scan",
+      "value": "媒体库扫描时生成 Trickplay 图片"
+    },
+    {
+      "name": "management_library_type",
+      "value": "内容类型"
+    },
+    {
+      "name": "management_library_type_books",
+      "value": "图书"
+    },
+    {
+      "name": "management_library_type_boxsets",
+      "value": "合集"
+    },
+    {
+      "name": "management_library_type_create_hint",
+      "value": "创建后内容类型不可更改"
+    },
+    {
+      "name": "management_library_type_homevideos",
+      "value": "家庭视频与照片"
+    },
+    {
+      "name": "management_library_type_locked_hint",
+      "value": "现有媒体库不能更改内容类型"
+    },
+    {
+      "name": "management_library_type_mixed",
+      "value": "混合内容"
+    },
+    {
+      "name": "management_library_type_movies",
+      "value": "电影"
+    },
+    {
+      "name": "management_library_type_music",
+      "value": "音乐"
+    },
+    {
+      "name": "management_library_type_musicvideos",
+      "value": "音乐视频"
+    },
+    {
+      "name": "management_library_type_tvshows",
+      "value": "电视节目"
+    },
+    {
+      "name": "management_library_unsaved_message",
+      "value": "当前更改尚未保存。确定要放弃并返回吗？"
+    },
+    {
+      "name": "management_library_unsaved_state",
+      "value": "有未保存的更改"
+    },
+    {
+      "name": "management_library_unsaved_title",
+      "value": "放弃未保存的更改？"
+    },
+    {
+      "name": "management_library_unsupported_option",
+      "value": "服务器返回但当前界面未识别的字段会原样保留，不会在保存时丢失"
+    },
+    {
+      "name": "management_library_use_custom_delimiters",
+      "value": "使用自定义标签分隔符"
+    },
+    {
+      "name": "management_media_delete_title",
+      "value": "删除媒体文件"
+    },
+    {
+      "name": "management_media_delete_message",
+      "value": "将从媒体服务器和文件系统中永久删除此媒体："
+    },
+    {
+      "name": "management_media_delete_count",
+      "value": "将从媒体服务器和文件系统中永久删除 %d 个媒体文件："
+    },
+    {
+      "name": "management_media_delete_more",
+      "value": "还有 %d 个媒体文件"
+    },
+    {
+      "name": "management_media_delete_path",
+      "value": "文件路径"
+    },
+    {
+      "name": "management_media_delete_notice",
+      "value": "此操作不可撤销，删除后文件可能无法恢复。"
+    },
+    {
+      "name": "management_media_delete_blocked",
+      "value": "以下项目未获得服务器删除许可，不会被删除："
+    },
+    {
+      "name": "management_media_delete",
+      "value": "删除"
+    },
+    {
+      "name": "management_media_delete_success",
+      "value": "媒体文件已删除"
+    },
+    {
+      "name": "management_media_delete_no_eligible",
+      "value": "服务器未允许删除此媒体文件"
+    },
+    {
+      "name": "management_media_delete_conflict",
+      "value": "删除操作冲突，请稍后重试"
+    },
+    {
+      "name": "management_media_delete_failed",
+      "value": "删除媒体文件失败"
+    },
+    {
+      "name": "music_albums",
+      "value": "专辑"
+    },
+    {
+      "name": "music_artists",
+      "value": "艺术家"
+    },
+    {
+      "name": "music_tracks",
+      "value": "歌曲"
+    },
+    {
+      "name": "music_popular_tracks",
+      "value": "常听歌曲"
+    },
+    {
+      "name": "music_play_all",
+      "value": "播放全部"
+    },
+    {
+      "name": "music_favorite",
+      "value": "收藏"
+    },
+    {
+      "name": "music_unfavorite",
+      "value": "取消收藏"
+    },
+    {
+      "name": "music_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "music_retry",
+      "value": "重试"
+    },
+    {
+      "name": "music_loading_more",
+      "value": "正在加载更多"
+    },
+    {
+      "name": "music_load_more_failed",
+      "value": "加载失败，点击重试"
+    },
+    {
+      "name": "music_load_failed",
+      "value": "音乐内容加载失败"
+    },
+    {
+      "name": "music_empty_albums",
+      "value": "暂无专辑"
+    },
+    {
+      "name": "music_empty_artists",
+      "value": "暂无艺术家"
+    },
+    {
+      "name": "music_empty_tracks",
+      "value": "暂无歌曲"
+    },
+    {
+      "name": "music_track_unit",
+      "value": "首歌曲"
+    },
+    {
+      "name": "music_no_overview",
+      "value": "暂无简介"
+    },
+    {
+      "name": "media_library_type_unsupported",
+      "value": "此媒体库类型将在后续版本支持"
+    },
+    {
+      "name": "music_favorite_failed",
+      "value": "收藏状态更新失败"
+    },
+    {
+      "name": "music_play",
+      "value": "播放"
+    },
+    {
+      "name": "music_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "music_previous",
+      "value": "上一首"
+    },
+    {
+      "name": "music_next",
+      "value": "下一首"
+    },
+    {
+      "name": "music_close_player",
+      "value": "关闭播放器"
+    },
+    {
+      "name": "music_queue",
+      "value": "播放队列"
+    },
+    {
+      "name": "music_remove",
+      "value": "从队列移除"
+    },
+    {
+      "name": "music_clear",
+      "value": "清空"
+    },
+    {
+      "name": "music_clear_queue",
+      "value": "清空播放队列"
+    },
+    {
+      "name": "music_clear_queue_message",
+      "value": "确定要清空播放队列吗？"
+    },
+    {
+      "name": "music_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "music_skip",
+      "value": "跳过"
+    },
+    {
+      "name": "music_playback_failed",
+      "value": "播放失败"
+    },
+    {
+      "name": "music_error_authentication_expired",
+      "value": "登录状态已过期，请重新登录"
+    },
+    {
+      "name": "music_error_permission_denied",
+      "value": "当前账号没有播放此音乐的权限"
+    },
+    {
+      "name": "music_browse_error_permission_denied",
+      "value": "当前账号没有访问该音乐库的权限"
+    },
+    {
+      "name": "music_error_not_found",
+      "value": "音乐已被移除或不存在"
+    },
+    {
+      "name": "music_error_offline",
+      "value": "网络连接不可用"
+    },
+    {
+      "name": "music_error_no_playable_source",
+      "value": "服务器没有返回可播放的音频源"
+    },
+    {
+      "name": "music_error_transcoding_failed",
+      "value": "服务器音频转码失败"
+    },
+    {
+      "name": "music_error_system_player",
+      "value": "系统播放器无法播放此音频"
+    },
+    {
+      "name": "music_repeat_off",
+      "value": "关闭循环"
+    },
+    {
+      "name": "music_repeat_all",
+      "value": "列表循环"
+    },
+    {
+      "name": "music_repeat_one",
+      "value": "单曲循环"
+    },
+    {
+      "name": "music_back",
+      "value": "返回"
+    },
+    {
+      "name": "music_nothing_playing",
+      "value": "暂无正在播放的音乐"
+    },
+    {
+      "name": "photo_library_title",
+      "value": "照片"
+    },
+    {
+      "name": "photo_tab_photos",
+      "value": "照片"
+    },
+    {
+      "name": "photo_tab_albums",
+      "value": "相册"
+    },
+    {
+      "name": "photo_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "photo_retry",
+      "value": "重试"
+    },
+    {
+      "name": "photo_loading_more",
+      "value": "正在加载更多"
+    },
+    {
+      "name": "photo_load_more_failed",
+      "value": "加载失败，点击重试"
+    },
+    {
+      "name": "photo_load_failed",
+      "value": "照片内容加载失败"
+    },
+    {
+      "name": "photo_error_authentication_expired",
+      "value": "登录状态已过期，请重新登录"
+    },
+    {
+      "name": "photo_error_permission_denied",
+      "value": "当前账号没有查看照片的权限"
+    },
+    {
+      "name": "photo_error_not_found",
+      "value": "照片内容已被移除或不存在"
+    },
+    {
+      "name": "photo_error_offline",
+      "value": "网络连接不可用"
+    },
+    {
+      "name": "photo_empty_photos",
+      "value": "暂无照片"
+    },
+    {
+      "name": "photo_empty_albums",
+      "value": "暂无相册"
+    },
+    {
+      "name": "photo_unknown_date",
+      "value": "未知日期"
+    },
+    {
+      "name": "photo_viewer_load_failed",
+      "value": "无法打开照片"
+    },
+    {
+      "name": "photo_back",
+      "value": "返回"
+    },
+    {
+      "name": "photo_favorite",
+      "value": "收藏"
+    },
+    {
+      "name": "photo_unfavorite",
+      "value": "取消收藏"
+    },
+    {
+      "name": "photo_favorite_failed",
+      "value": "收藏状态更新失败"
+    },
+    {
+      "name": "photo_info",
+      "value": "照片信息"
+    },
+    {
+      "name": "photo_slideshow_start",
+      "value": "播放幻灯片"
+    },
+    {
+      "name": "photo_slideshow_stop",
+      "value": "停止幻灯片"
+    },
+    {
+      "name": "photo_save_success",
+      "value": "已保存到图库"
+    },
+    {
+      "name": "photo_save_failed",
+      "value": "保存照片失败"
+    },
+    {
+      "name": "photo_save_authorization_failed",
+      "value": "未获得保存授权"
+    },
+    {
+      "name": "photo_save_authorization_unavailable",
+      "value": "保存授权不可用，请重试"
+    },
+    {
+      "name": "photo_save_unavailable",
+      "value": "服务器不允许下载这张照片"
+    },
+    {
+      "name": "photo_info_date",
+      "value": "日期"
+    },
+    {
+      "name": "photo_info_dimensions",
+      "value": "尺寸"
+    },
+    {
+      "name": "photo_info_file_name",
+      "value": "文件名"
+    },
+    {
+      "name": "photo_info_format",
+      "value": "格式"
+    },
+    {
+      "name": "photo_info_path",
+      "value": "路径"
+    },
+    {
+      "name": "photo_info_camera",
+      "value": "相机"
+    },
+    {
+      "name": "photo_info_software",
+      "value": "软件"
+    },
+    {
+      "name": "photo_info_exposure",
+      "value": "曝光时间"
+    },
+    {
+      "name": "photo_info_focal_length",
+      "value": "焦距"
+    },
+    {
+      "name": "photo_info_aperture",
+      "value": "光圈"
+    },
+    {
+      "name": "photo_info_shutter_speed",
+      "value": "快门速度"
+    },
+    {
+      "name": "photo_info_iso",
+      "value": "ISO"
+    },
+    {
+      "name": "photo_info_location",
+      "value": "位置"
+    },
+    {
+      "name": "photo_info_orientation",
+      "value": "方向"
+    },
+    {
+      "name": "photo_orientation_normal",
+      "value": "正常"
+    },
+    {
+      "name": "photo_orientation_mirrored",
+      "value": "镜像"
+    },
+    {
+      "name": "photo_loading_info",
+      "value": "正在读取照片信息"
+    },
+    {
+      "name": "photo_info_load_failed",
+      "value": "照片详细信息加载失败"
+    },
+    {
+      "name": "feiniu_video_service_name",
+      "value": "飞牛影视"
+    },
+    {
+      "name": "feiniu_video_connect_title",
+      "value": "连接飞牛影视"
+    },
+    {
+      "name": "feiniu_video_address_placeholder",
+      "value": "FNID 或服务器地址"
+    },
+    {
+      "name": "feiniu_video_login_action",
+      "value": "登录"
+    },
+    {
+      "name": "feiniu_video_logging_in",
+      "value": "正在登录"
+    },
+    {
+      "name": "feiniu_video_password_notice",
+      "value": "密码仅用于本次登录，不会保存在应用中"
+    },
+    {
+      "name": "feiniu_video_username_placeholder",
+      "value": "请输入用户名"
+    },
+    {
+      "name": "feiniu_video_password_placeholder",
+      "value": "请输入密码"
+    },
+    {
+      "name": "feiniu_video_connection_error",
+      "value": "无法连接飞牛影视，请检查 FNID、服务器地址和网络连接"
+    },
+    {
+      "name": "feiniu_video_invalid_address_error",
+      "value": "请输入有效的 FNID 或 HTTP/HTTPS 服务器地址"
+    },
+    {
+      "name": "feiniu_video_invalid_credentials_error",
+      "value": "登录失败，用户名或密码错误"
+    },
+    {
+      "name": "feiniu_video_login_failed_error",
+      "value": "飞牛影视登录失败，请稍后重试"
+    },
+    {
+      "name": "feiniu_video_invalid_response_error",
+      "value": "飞牛影视服务返回异常，请检查服务状态后重试"
+    },
+    {
+      "name": "feiniu_video_credentials_required_error",
+      "value": "请输入用户名和密码"
+    },
+    {
+      "name": "feiniu_video_session_expired",
+      "value": "飞牛影视登录已失效，请重新登录"
+    },
+    {
+      "name": "account_add_title",
+      "value": "新增账号"
+    },
+    {
+      "name": "account_add_description",
+      "value": "选择要连接的媒体服务"
+    },
+    {
+      "name": "provider_jellyfin_name",
+      "value": "Jellyfin"
+    },
+    {
+      "name": "provider_jellyfin_description",
+      "value": "连接现有 Jellyfin 服务器"
+    },
+    {
+      "name": "provider_feiniu_video_description",
+      "value": "使用 FNID 或服务器地址连接飞牛影视"
+    },
+    {
+      "name": "jellyfin_connect_title",
+      "value": "连接 Jellyfin"
+    },
+    {
+      "name": "account_history_title",
+      "value": "历史登录"
+    },
+    {
+      "name": "account_switch_title",
+      "value": "切换账号"
+    },
+    {
+      "name": "account_current",
+      "value": "当前账号"
+    },
+    {
+      "name": "account_empty",
+      "value": "暂无已保存账号"
+    },
+    {
+      "name": "account_delete_title",
+      "value": "删除账号"
+    },
+    {
+      "name": "account_delete_message",
+      "value": "确定要删除这个账号吗？"
+    },
+    {
+      "name": "account_delete_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "account_delete_confirm",
+      "value": "删除"
+    },
+    {
+      "name": "account_switch_failed",
+      "value": "账号切换失败，请稍后重试"
+    },
+    {
+      "name": "account_delete_failed",
+      "value": "账号删除失败，请稍后重试"
+    },
+    {
+      "name": "jellyfin_session_expired",
+      "value": "Jellyfin 登录已失效，请重新登录"
+    },
+    {
+      "name": "feiniu_video_restore_failed_title",
+      "value": "暂时无法连接飞牛影视"
+    },
+    {
+      "name": "feiniu_video_restore_connection_error",
+      "value": "账号和登录信息已保留，请检查网络后重试"
+    },
+    {
+      "name": "common_retry",
+      "value": "重试"
+    },
+    {
+      "name": "account_choose_other",
+      "value": "选择其他账号"
+    },
+    {
+      "name": "video_detail_playback_version",
+      "value": "播放版本"
+    },
+    {
+      "name": "video_detail_choose_playback_version",
+      "value": "选择播放版本"
+    }
+  ]
+}

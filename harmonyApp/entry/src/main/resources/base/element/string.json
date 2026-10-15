@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "MaFei Compose Multiplatform host"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "马飞"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "马飞"
+    }
+  ]
+}
