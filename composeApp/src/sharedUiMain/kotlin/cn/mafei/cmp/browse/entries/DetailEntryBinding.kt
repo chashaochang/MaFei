@@ -45,6 +45,7 @@ internal fun DetailEntryBinding(
     selection: BrowseSelectionState,
     chasingSelection: ChasingSelection,
     chasingSelectionState: cn.mafei.cmp.feature.chasing.ChasingSelectionState,
+    chasingEnabled: Boolean,
 ) {
     val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
         with(sharedTransitionScope) {
@@ -99,7 +100,7 @@ internal fun DetailEntryBinding(
             } else null,
         onToggleChasing =
             state.detail
-                ?.takeIf { browser.capabilities.chasing && it.mediaType == MediaType.Series }
+                ?.takeIf { chasingEnabled && it.mediaType == MediaType.Series }
                 ?.let { series -> { scope.launch { chasingSelection.toggle(series.id) } } },
         isChasing = state.detail?.id in chasingSelectionState.ids,
         chasingBusy = chasingSelectionState.saving,

@@ -19,6 +19,7 @@ internal fun LibraryIndexEntryBinding(
     layout: MaFeiLayout,
     navigator: BrowseNavigator,
     navigation: BrowseNavigationState,
+    chasingEnabled: Boolean,
     musicMiniPlayerMedia: MediaItem?,
 ) {
     LibraryIndexScreen(
@@ -30,7 +31,7 @@ internal fun LibraryIndexEntryBinding(
         layout = layout,
         onCollection = navigator.browseCollection,
         onChasing =
-            if (browser.capabilities.chasing) {
+            if (chasingEnabled) {
                 { navigation.browseBackStack += BrowseChasingRoute }
             } else null,
         onFavorite = {

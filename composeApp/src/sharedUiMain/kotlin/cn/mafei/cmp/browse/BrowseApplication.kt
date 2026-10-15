@@ -89,10 +89,12 @@ internal fun BrowseApplication(
                 nowEpochMs = SystemEpochClock::nowEpochMs,
             )
         }
+    // 追剧仍未对用户开放：保留 provider、存储与迁移实现，只隐藏产品入口。
+    val chasingEnabled = ChasingFeatureReleased && browser.capabilities.chasing
     val chasingState by chasingBrowser.state.collectAsState()
     val chasingSelection = remember(session) { ChasingSelection(session.media.accountId, runtime.chasingSeriesStore) }
     val chasingSelectionState by chasingSelection.state.collectAsState()
-    LaunchedEffect(chasingSelection) { if (browser.capabilities.chasing) chasingSelection.load() }
+    LaunchedEffect(chasingSelection, chasingEnabled) { if (chasingEnabled) chasingSelection.load() }
     val scope = rememberCoroutineScope()
     val search = remember(session) { BrowseSearchState(browser::search, runtime::searchHistory, runtime::saveSearchHistory, scope) }
     val selection = remember(session) { BrowseSelectionState() }
@@ -186,8 +188,7 @@ internal fun BrowseApplication(
         // shell visible while child content changes in the content stack.
         val mineFullScreen = layout.isPhoneNavigation
         val libraries = state.collections.map { collection -> MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library) }
-        val navigationItems =
-            remember(browser.capabilities.chasing, libraries, libraryTabId) { browseNavigationItems(browser.capabilities.chasing, libraries, libraryTabId) }
+        val navigationItems = remember(chasingEnabled, libraries, libraryTabId) { browseNavigationItems(chasingEnabled, libraries, libraryTabId) }
         val destinations = navigationItems.bottom
         val sidebarDestinations = navigationItems.sidebar
         val topTabDestinations = navigationItems.topTabs
@@ -499,7 +500,16 @@ internal fun BrowseApplication(
                                                     }
                                                 BrowseLibraryIndexRoute ->
                                                     NavEntry(route) {
-                                                        LibraryIndexEntryBinding(scope, browser, state, layout, navigator, navigation, musicMiniPlayerMedia)
+                                                        LibraryIndexEntryBinding(
+                                                            scope,
+                                                            browser,
+                                                            state,
+                                                            layout,
+                                                            navigator,
+                                                            navigation,
+                                                            chasingEnabled,
+                                                            musicMiniPlayerMedia,
+                                                        )
                                                     }
                                                 BrowseChasingRoute ->
                                                     NavEntry(route) {
@@ -634,6 +644,7 @@ internal fun BrowseApplication(
                                                             selection,
                                                             chasingSelection,
                                                             chasingSelectionState,
+                                                            chasingEnabled,
                                                         )
                                                     }
                                                 is BrowsePersonRoute ->

@@ -51,6 +51,8 @@ internal fun MediaItem.preferredLandscape(): List<MediaImage> = landscapeArtwork
 
 internal fun MediaItem.preferredLogo(): MediaImage? = images.firstOrNull { it.kind == ImageKind.Logo }
 
+internal const val ChasingFeatureReleased = false
+
 internal fun legacySortChoices(provider: ProviderKind, direction: SortDirection): List<LegacySortChoice<MediaSort>> {
     // 可排序字段集由 model 的展示风格表给出（core:domain/MediaPresentation.kt），
     // 此处不再判断 provider；UI 只负责把字段翻译成菜单文案。
