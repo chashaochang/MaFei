@@ -1,62 +1,64 @@
-# 马飞 2.0
+# MaFei · 马飞
 
-马飞是连接 Jellyfin 与飞牛影视的媒体客户端。本开发线采用 Kotlin Multiplatform / Compose Multiplatform，仓库根目录就是活动工程；HarmonyOS 通过 CPF Compose 薄宿主承载共享界面。
+**连接自己的媒体服务器，在手机、平板和桌面上浏览与观看。**
 
-[华为应用市场下载](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei)（已发布版本与本开发线的验证状态分别管理）。
+MaFei 是一款面向个人媒体库的第三方客户端，支持连接 Jellyfin，并提供飞牛影视的兼容接入。从首页的最近添加、继续观看，到海报墙、影片详情和剧集选集，把存放在服务器上的影视内容带到日常使用的设备上。
 
-## 从这里开始
+使用 MaFei 需要已有的媒体服务器和账号；影片、海报与媒体资料来自你连接的服务器，应用本身不提供影视资源。
 
-- [应用架构与修改入口](composeApp/ARCHITECTURE.md)：按需求定位状态所有者、路由绑定与测试。
-- [应用运行与验证](composeApp/README.md)：平台入口、常用命令和会话边界。
-- [开发约束](AGENTS.md)：共享 UI、苹果风格、导航、Git 署名和任务持续执行规则。
-- [本轮重构验收记录](composeApp/REFACTOR_ACCEPTANCE.md)：自动测试、设备结果和已知问题。
-- [HarmonyOS 宿主](harmonyApp/README.md)、[iOS 宿主](iosApp/README.md)：各端环境与打包要求。
+[华为应用市场下载](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei) · [反馈问题](https://github.com/chashaochang/MaFei/issues) · [开发与构建](composeApp/README.md)
 
-当前开发线包含账号恢复/切换、媒体浏览、搜索、详情和播放接入。功能存在不等于所有平台均已验收；尤其播放仍有已记录的 Android 模拟器解码失败与鸿蒙完整工作区包黑屏问题。追剧入口目前保持关闭。
+## 用 MaFei 做什么
 
-## 目录与职责
+- **找到想看的内容**：浏览最近添加与分类媒体库，通过搜索查找影片和剧集，查看简介、评分和演职人员。
+- **接着上次观看**：从首页的继续观看回到播放进度，按季、集浏览电视剧，管理收藏与观看记录。
+- **选择合适的播放方式**：提供续播、字幕、音轨、清晰度和倍速等控制，具体可用项取决于媒体源、服务器和平台播放器。
+- **连接多个媒体库**：保存服务器与账号，切换不同连接，并通过局域网发现寻找服务。
+- **适应不同屏幕**：手机使用紧凑导航，平板与宽屏提供侧栏和更开阔的海报布局；界面以苹果平台的视觉与交互习惯为参考。
+- **管理自己的服务器**：具备相应权限的 Jellyfin 账号可进入管理控制台，查看和管理媒体库、用户、设备与活动会话。
 
-```text
-common/       公共基础、设计系统、Glass 与复用 UI
-core/         领域、存储、序列化与安全凭据契约
-providers/    媒体服务 SDK
-data/         Provider 适配、Repository 与旧数据迁移
-player/       统一播放器 API、核心、UI 与平台 runtime
-platform/     网络、安全存储等平台实现
-feature/      按业务域拆分的 Compose Feature
-composeApp/   Android、iOS、macOS、HarmonyOS 应用装配
-harmonyApp/   CPF Compose 的 HarmonyOS ARM64 薄宿主
-iosApp/       iOS 原生宿主
-legacy/       旧 HarmonyOS ArkTS 行为与数据兼容参考
-```
+## 看看现在的 MaFei
 
-`App.kt` 只装配根流程，业务请求由对应控制器和 Repository 负责；页面绑定不能取得整个运行时。
-`harmonyApp/` 只负责 HAP、Ability 生命周期、N-API、资源及系统桥接，不新增 ArkUI 业务页面。
-[旧版参考](legacy/harmony-arkts-reference) 默认只读，不参与根 Gradle 构建。
+以下均为 **2026 年 10 月 15 日重新采集的 2.0 开发版界面**，不代表应用市场版本。手机来自 Android 模拟器，平板来自 HUAWEI MatePad 11.5 S 真机。截图选取不显示账号和服务器路径的页面，保留真实界面与媒体内容。
 
-目标平台为 HarmonyOS ARM64 手机/平板/PC、Android ARM64、iOS/iPadOS ARM64 和 Apple Silicon macOS。x86/x64、Intel Mac、Windows、Linux 不在首发目标中；目标矩阵不代表逐端验收完成。
+### 手机 · 浏览媒体与剧集
 
-## 构建与检查
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/current/phone-library.webp" width="320" alt="Android 手机模拟器：动画电影媒体库海报墙" /></td>
+    <td align="center"><img src="screenshots/current/phone-series.webp" width="320" alt="Android 手机模拟器：武林外传剧集详情与分季入口" /></td>
+  </tr>
+  <tr>
+    <td align="center">媒体库与海报墙</td>
+    <td align="center">剧集详情与分季浏览</td>
+  </tr>
+</table>
 
-使用仓库 Gradle Wrapper（8.14.3），安装 JDK 17 或更新的兼容版本及 Android SDK 37，并在本机配置 SDK 路径。CPF Kotlin/Compose 的固定版本见 [版本目录](gradle/libs.versions.toml)，不要单独升级其中一项。iOS 需要 Xcode；HarmonyOS 需要 DevEco Studio 及本地 MFPlayer SDK。
+### 平板 · 首页与宽屏媒体库
 
-在仓库根目录运行：
+![HarmonyOS 平板真机：全幅首页推荐与继续观看](screenshots/current/tablet-home.jpg)
 
-```bash
-./gradlew :check
-node --test scripts/*.test.mjs scripts/*.test.cjs
-./gradlew :composeApp:desktopTest :composeApp:testDebugUnitTest
-./gradlew :composeApp:assembleDebug
-```
+![HarmonyOS 平板真机：收起侧栏后的宽屏媒体库](screenshots/current/tablet-library.jpg)
 
-`:check` 包含架构、依赖、应用职责及 UI 约束门禁，不等于全模块行为测试或设备验收。修改特定模块时还需运行该模块的相关测试。
+截图来源与隐私检查见[截图说明](screenshots/current/README.md)。
 
-HarmonyOS 先运行 `./gradlew :composeApp:publishDebugBinariesToHarmonyApp`，再按[宿主说明](harmonyApp/README.md)打包。`libkn.so` 与 `libkn_api.h` 必须来自同一次链接，不能拼接不同构建产物。
+## 下载与平台
 
-## 本地资料与许可证
+| 平台 | 当前获取方式与状态 |
+| --- | --- |
+| HarmonyOS | [华为应用市场](https://appgallery.huawei.com/app/detail?id=cn.xiaobai.mafei)提供已发布版本；本仓库的 2.0 开发线面向 ARM64 手机、平板与 PC。 |
+| Android | 2.0 开发中，面向 ARM64；可从源码构建，以上手机截图来自模拟器。 |
+| iOS / iPadOS | 2.0 开发中，面向 ARM64；仓库包含 Xcode 宿主，尚未在此提供正式下载。 |
+| macOS | 2.0 开发中，面向 Apple Silicon；仓库包含桌面入口，尚未在此提供正式下载。 |
 
-签名资料、凭据、个人设备日志及未获授权分发的依赖不得加入提交。MFPlayer 是独立的闭源本地 SDK，不随当前源码树分发，也不属于本仓库开源许可；合法持有 SDK 的开发者按[本地前提](harmonyApp/README.md#local-prerequisites)配置。
+各平台的功能和播放能力仍在逐步验证。当前开发版的已知问题与实际验证范围见[验收记录](composeApp/REFACTOR_ACCEPTANCE.md)，正式使用请以对应发布版本为准。
 
-历史清理范围、提交号映射与本地备份边界见 [历史清理记录](composeApp/HISTORY_CLEANUP.md)。
+## 参与开发
 
-除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布。第三方组件遵循各自许可证。
+MaFei 2.0 使用 Kotlin Multiplatform / Compose Multiplatform 共享应用逻辑与界面。环境准备、目录职责、运行及打包命令统一放在[开发文档](composeApp/README.md)；修改代码前请阅读[架构说明](composeApp/ARCHITECTURE.md)与[项目约束](AGENTS.md)。
+
+欢迎通过 [Issue](https://github.com/chashaochang/MaFei/issues)反馈问题或提出建议。提交问题时请说明平台、应用版本和复现步骤，日志与截图中的账号、地址、令牌等个人信息请先隐藏。
+
+## 许可证
+
+除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布，第三方组件遵循各自许可证。HarmonyOS 播放器使用的 MFPlayer 是独立授权的本地 SDK，不随公开仓库分发；构建前提见[开发文档](composeApp/README.md#本地资料与依赖)。
