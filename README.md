@@ -57,4 +57,6 @@ HarmonyOS 先运行 `./gradlew :composeApp:publishDebugBinariesToHarmonyApp`，�
 
 签名资料、凭据、个人设备日志及未获授权分发的依赖不得加入提交。MFPlayer 是独立的闭源本地 SDK，不随当前源码树分发，也不属于本仓库开源许可；合法持有 SDK 的开发者按[本地前提](harmonyApp/README.md#local-prerequisites)配置。
 
+历史清理范围、提交号映射与本地备份边界见 [历史清理记录](composeApp/HISTORY_CLEANUP.md)。
+
 除单独声明外，代码按 [GPL-3.0-or-later](LICENSE) 发布。第三方组件遵循各自许可证。
