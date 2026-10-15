@@ -383,8 +383,13 @@ fun HomeScreen(
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
     val showRefreshAction = refreshing && overviewHasContent
-    val showStatus = !authenticationRequired && (stale || error != null ||
+    val showStatus = !authenticationRequired && error == null && (stale ||
         if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty())
+    // Connection failures are modal feedback; keep the media grid and its
+    // scroll state intact instead of inserting a retry row into the feed.
+    var connectionErrorDismissed by remember(error, loading, homeLoading, refreshing) { mutableStateOf(false) }
+    val showConnectionError = error != null && !authenticationRequired &&
+        !loading && !homeLoading && !refreshing && !connectionErrorDismissed
     val latestGap = if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp
     // Home library tabs have their own cached request stream. The ordinary
     // media-library cursor belongs to a different screen and must never be
@@ -1238,6 +1243,18 @@ fun HomeScreen(
                       )
                   }
               },
+          )
+      }
+      if (showConnectionError) {
+          cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) { connectionErrorDismissed = true }
+          cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog(
+              title = "连接失败",
+              content = error.orEmpty(),
+              confirmText = "重试",
+              dismissText = "取消",
+              onConfirm = { connectionErrorDismissed = true; onRetry() },
+              onDismiss = { connectionErrorDismissed = true },
+              backdrop = floatingTabsBackdrop,
           )
       }
       }

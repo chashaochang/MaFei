@@ -64,6 +64,32 @@ class HomeLoadingStatusTest {
         composeRule.onNodeWithText("这里还没有媒体库").assertDoesNotExist()
     }
 
+    @Test fun connectionFailureRetriesFromTheSharedDialogWithoutReplacingCachedMedia() {
+        var retries = 0
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    collections = emptyList(), items = emptyList(), selectedCollection = null,
+                    homeResume = listOf(MediaItem(MediaId("movie"), ServerId("server"),
+                        ProviderKind.Jellyfin, "已加载的影片", mediaType = MediaType.Movie)),
+                    loading = false, homeLoading = false, error = "服务器暂时不可用",
+                    stale = true, canLoadMore = false, overview = true,
+                    layout = mafeiLayout(390f, 844f), onCollection = {}, onItem = {},
+                    onRetry = { retries++ }, onLoadMore = {}, onOpenLibrary = {},
+                    showHomeHero = false, gridState = rememberLazyGridState(),
+                )
+            }
+        }
+        composeRule.onNodeWithText("连接失败").assertExists()
+        composeRule.onNodeWithText("已加载的影片").assertExists()
+        // A single match also rejects a second, inline retry in the media feed.
+        composeRule.onNodeWithText("重试").performClick()
+        assertEquals(1, retries)
+        composeRule.onNodeWithText("连接失败").assertDoesNotExist()
+        composeRule.onNodeWithText("重试").assertDoesNotExist()
+        composeRule.onNodeWithText("已加载的影片").assertExists()
+    }
+
     @Test fun wideRecentMoreOpensThatLibrarysRecentListNotTheLibraryEntry() {
         val collection = MediaCollection(CollectionId("shows"), ServerId("server"),
             ProviderKind.Jellyfin, "电视剧", mediaTypes = setOf(MediaType.Series))
