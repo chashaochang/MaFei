@@ -1,0 +1,4 @@
+# Default search targets active source. Read old behavior explicitly with:
+# rg --no-ignore PATTERN legacy/harmony-arkts-reference/
+/legacy/
+/docs/archive/

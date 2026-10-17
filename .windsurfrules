@@ -1,0 +1,2 @@
+Read AGENTS.md first, then its task-specific references.
+Active app: root Kotlin/Compose Multiplatform. HarmonyOS host: harmonyApp/build-profile.json5; read harmonyApp/AGENTS.md before host changes.

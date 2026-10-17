@@ -7,7 +7,7 @@ description: MaFei 液态玻璃材质、背景采样与组件接入规范。涉�
 
 ## 适用范围
 
-本 Skill 仅负责液态玻璃的材质、采样、组件接入、降级、性能与专项验收。全局产品风格、主动设计职责、普通卡片交互和空状态规范统一见 [`AGENTS.md`](AGENTS.md)，不在此重复定义。
+本 Skill 仅负责液态玻璃的材质、采样、组件接入、降级、性能与专项验收。全局产品风格、主动设计职责、普通卡片交互和空状态规范统一见 [`UI_POLICY.md`](../ui/UI_POLICY.md)，不在此重复定义。
 
 液态玻璃负责承载悬浮控制与层级关系，不负责把所有内容装进透明圆角矩形。
 
@@ -32,8 +32,10 @@ description: MaFei 液态玻璃材质、背景采样与组件接入规范。涉�
 
 参考实现：
 
-- `/Users/machunjiang/AndroidStudioProjects/AndroidLiquidGlass/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/components`
-- `/Users/machunjiang/AndroidStudioProjects/AndroidLiquidGlass/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations`
+- 用环境变量 `MAFEI_LIQUID_GLASS_REFERENCE` 指向本机 AndroidLiquidGlass 参考检出目录（不提交个人绝对路径）。
+- 组件参考：`$MAFEI_LIQUID_GLASS_REFERENCE/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/components`。
+- 页面参考：`$MAFEI_LIQUID_GLASS_REFERENCE/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations`。
+- 参考检出不可用时明确报告，不能声称完成了参考 diff 或视觉对照。
 - MaFei vendor 底层：`common/glass/vendor/liquidglass`
 
 ## 金标准规则

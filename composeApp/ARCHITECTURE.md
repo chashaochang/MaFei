@@ -1,6 +1,6 @@
 # 应用架构与修改入口
 
-本文描述 App 入口重构后的当前结构。全局设计、交互、Git 和持续执行规则以根 `AGENTS.md` 为准。
+本文描述 App 入口重构后的当前结构。通用规则与任务必读索引见根 `AGENTS.md`；产品视觉与交互见 `common/ui/UI_POLICY.md`。
 目标是让一次需求只触及明确的状态所有者、路由绑定和已有展示组件，并由行为测试约束结果。
 
 ## 从需求定位实现
@@ -78,15 +78,8 @@
 `MediaBrowserTest`、`PlayerShellObservationTest`、`ApplicationRuntimePlaybackTest`、`PlayerPreferencesTest`。
 边界脚本本身的负例测试使用 `node --test scripts/verify-app-boundaries.test.mjs`。
 
-本次范围是行为保持的结构重构，不是视觉重做、发布或平台升级。源码/自动测试、设备运行与视觉验收要分开报告。
+结构调整应保持现有行为。源码/自动测试、设备运行与视觉验收要分开报告。
 已发现的旧宽屏二级页收起态展示与根导航契约的差异见 [导航文档](src/sharedUiMain/kotlin/cn/mafei/cmp/navigation/README.md)，
 该既有展示差异不在本次结构迁移中修正或宣称验收。
 
-## 本轮验证记录（2026-10-15）
-
-- 重构及验收修复已形成独立提交。`App.kt` 为 130 行，`MediaBrowser.kt` 为 102 行。
-- `currentGlassStyle()` 与已有播放器测试使用的 `GlassStyleScope` 已分别通过 `a762a5c`、`9faeca3` 纳入提交，独立检出不再依赖临时补丁。
-- 纯提交源码通过应用 Desktop 211 项、Android JVM 192 项测试、iOS/OHOS Kotlin 编译与架构门禁；播放器触摸回归 16 项、首页反馈回归 5 项通过。
-- 设备回归发现并修复播放器返回按钮被顶部悬停层遮挡的问题；原有追剧关闭开关已纳入提交，首页普通连接错误改为标准提示框。
-- 最终安装包来自包含原有未提交改动的完整工作区。纯提交验证与完整工作区安装验证是两种证据，不能互相替代。不得用隔离基线包覆盖用户工作版本后，遗漏恢复完整工作区包。
-- 构建、设备检查、片源限制和安装包指纹见 [重构验收记录](REFACTOR_ACCEPTANCE.md)。本轮未发布或推送远端，不声明全平台视觉验收完成。
+历史验证记录见 [VALIDATION_HISTORY](../docs/validation/VALIDATION_HISTORY.md)。

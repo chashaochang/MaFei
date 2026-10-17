@@ -41,7 +41,13 @@ legacy/harmony-arkts-reference/entry/src/main/resources/rawfile/hm_router_map.js
 legacy/harmony-arkts-reference/**/api-config.ets
 
 # Private project material
-/docs/
+/docs/*
+!/docs/README.md
+!/docs/architecture/
+!/docs/specs/
+!/docs/validation/
+!/docs/archive/
+!/docs/agent-git-identities-2026-09-08.md
 /diagnosis/
 /.private/
 /.local/
@@ -50,8 +56,6 @@ legacy/harmony-arkts-reference/**/api-config.ets
 /.konan/
 /.deveco-flow/
 /.rcodex/
-/.windsurfrules
-/opencode.json
 /.agents/
 /.codex/
 /.claude/
@@ -72,3 +76,14 @@ agconnect-services.json
 
 # Workspace-local assistant data (memory, session logs)
 .workbuddy/
+
+# Local generated images, UI dumps and scratch work (never product assets)
+/output/
+/outputs/
+/tmp/
+/generated-images/
+/mafei-layout.json
+
+# Shared agent entrances override older workspace-local exclusions.
+!/.windsurfrules
+!/opencode.json
