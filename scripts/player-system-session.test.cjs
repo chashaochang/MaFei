@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const ts = require(process.env.MAFEI_TYPESCRIPT || '/Applications/DevEco-Studio.app/Contents/tools/ohpm/node_modules/typescript');
+const ts = require(process.env.MAFEI_TYPESCRIPT || 'typescript');
 
 function harness(createOverride) {
   const sessions = [], actions = [], errors = [], images = [], castImages = [];

@@ -1,0 +1,13 @@
+{
+  "name": "mafei-verification",
+  "private": true,
+  "scripts": {
+    "test": "node --test scripts/*.test.cjs scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "4.9.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

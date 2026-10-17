@@ -87,3 +87,6 @@ agconnect-services.json
 # Shared agent entrances override older workspace-local exclusions.
 !/.windsurfrules
 !/opencode.json
+
+# Root verification-only npm dependencies
+/node_modules/

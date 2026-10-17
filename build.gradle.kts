@@ -132,7 +132,14 @@ val verifyDependencyBoundaries by tasks.registering(Exec::class) {
     commandLine("node", rootProject.file("scripts/verify-dependency-boundaries.mjs").absolutePath)
 }
 
+tasks.register<Exec>("verifySourceSize") {
+    group = "verification"
+    description = "Keeps active Kotlin source files within the versioned, downward-only size budgets."
+    commandLine("node", rootProject.file("scripts/verify-source-size.mjs").absolutePath)
+}
+
 tasks.named("check") {
+    dependsOn("verifySourceSize")
     dependsOn(gradle.includedBuild("build-logic").task(":test"))
     dependsOn(verifyDependencyBoundaries)
     dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")

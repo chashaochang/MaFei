@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const ts = require('/Applications/DevEco-Studio.app/Contents/tools/ohpm/node_modules/typescript');
+const ts = require(process.env.MAFEI_TYPESCRIPT || 'typescript');
 
 test('ability visibility reaches the shared playback reducer before native surface observers', () => {
   const events = [], module = { exports: {} };

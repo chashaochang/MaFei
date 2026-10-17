@@ -11,7 +11,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenLocal()
+        // CI must not depend on unpublished artifacts from an agent workstation.
+        if (providers.environmentVariable("CI").orNull != "true") mavenLocal()
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-releases/")
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-public/")
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
