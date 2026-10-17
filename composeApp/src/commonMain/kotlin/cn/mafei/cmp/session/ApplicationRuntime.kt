@@ -1,17 +1,12 @@
 package cn.mafei.cmp.session
 
 import cn.mafei.cmp.common.core.SystemEpochClock
-import cn.mafei.cmp.core.domain.AccountId
-import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.core.http_contract.HttpTransport
 import cn.mafei.cmp.core.secure_credential_api.SecureCredentialStore
 import cn.mafei.cmp.core.secure_credential_api.CredentialAccessException
-import cn.mafei.cmp.core.secure_credential_api.CredentialFailureKind
 import cn.mafei.cmp.core.secure_credential_api.SecureSecret
 import cn.mafei.cmp.core.storage_api.SettingsStorage
-import cn.mafei.cmp.core.storage_api.getBoolean
-import cn.mafei.cmp.core.storage_api.putBoolean
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.session.SessionRepository
 import cn.mafei.cmp.player.api.PlayerRuntime
@@ -23,14 +18,10 @@ import cn.mafei.cmp.providers.feiniu.core.FeiniuHostResolution
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoute
 import cn.mafei.cmp.providers.feiniu.core.FeiniuRoutePreference
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** Process-scoped services, not an Activity/ViewController-scoped persistence writer. */
@@ -70,13 +61,8 @@ class ApplicationRuntime(
     var isClosed: Boolean = false
         private set
 
-    /** Copy-on-write session playback map; guarded by [playbackMutex] + CAS. */
-    private val playbackMutex = Mutex()
-    private val playbacks = MutableStateFlow(emptyMap<ApplicationSession, SessionPlaybackRuntime>())
-    private var hostForeground = true
-    private var playbackObserver: Job? = null
     private var deferredFeiniuRouteRefresh: Job? = null
-    val sessions = ApplicationSessions(
+    val sessions: ApplicationSessions = ApplicationSessions(
         SessionRepository(secureStore, settings, persistenceStageReporter),
         MediaRepository(
             SystemEpochClock,
@@ -87,7 +73,7 @@ class ApplicationRuntime(
             ),
         ),
         ConnectionCatalog(settings), DefaultProviderSessionFactory(transport), scope, failureReporter,
-        beforeExplicitLogout = { suppressLegacyAccountRecovery() },
+        beforeExplicitLogout = { legacyMigration.suppressLegacyAccountRecovery() },
     )
     private val connectionCatalog = ConnectionCatalog(settings)
     val playerPreferences = PlayerPreferencesStore(settings)
@@ -105,65 +91,17 @@ class ApplicationRuntime(
     )
     private val artwork = SessionArtwork(transport)
 
-    /** Legacy-compatible account + item scoped media-source selections. */
-    val playbackPreferences: cn.mafei.cmp.feature.home.MediaPlaybackPreferences by lazy {
-        val storage = cn.mafei.cmp.core.storage_api.JsonSnapshotStorage(
-            settings,
-            Json { ignoreUnknownKeys = true },
-            { SystemEpochClock.nowEpochMs() },
-        )
-        val preferenceMutex = Mutex()
-        object : cn.mafei.cmp.feature.home.MediaPlaybackPreferences {
-            override suspend fun preferredMediaSourceId(accountId: AccountId, mediaId: MediaId): String? =
-                preferenceMutex.withLock {
-                    try {
-                        val current = storage.load(
-                            PreferredMediaSourcesKey,
-                            PreferredMediaSources.serializer(),
-                        )
-                        current?.entries?.firstOrNull {
-                            it.accountId == accountId.value && it.mediaId == mediaId.value
-                        }?.sourceId ?: storage.load(PreferredMediaSourceKey, String.serializer())
-                    } catch (cancelled: kotlin.coroutines.cancellation.CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
+    private val preferences = RuntimePreferences(settings, appearance, { isClosed }, failureReporter)
+    private val playbackRegistry = ApplicationPlaybackRegistry(
+        sessions, scope, transport, playerRuntimeFactory, playerPreferences, externalSubtitleOverlay, { isClosed },
+    )
+    private val legacyMigration = ApplicationLegacyMigration(
+        settings, secureStore, transport, legacySnapshotReader, sessions, connectionCatalog,
+        persistedChasingSeries, failureReporter, persistenceStageReporter, { isClosed },
+    )
 
-            override suspend fun setPreferredMediaSourceId(
-                accountId: AccountId,
-                mediaId: MediaId,
-                sourceId: String,
-            ) {
-                preferenceMutex.withLock {
-                    try {
-                        val retained = storage.load(
-                            PreferredMediaSourcesKey,
-                            PreferredMediaSources.serializer(),
-                        )?.entries.orEmpty().filterNot {
-                            it.accountId == accountId.value && it.mediaId == mediaId.value
-                        }
-                        storage.save(
-                            PreferredMediaSourcesKey,
-                            PreferredMediaSources(
-                                (listOf(PreferredMediaSource(accountId.value, mediaId.value, sourceId)) + retained)
-                                    .take(PreferredMediaSourceLimit),
-                            ),
-                            PreferredMediaSources.serializer(),
-                        )
-                        // The previous CMP draft stored one global string. Once a scoped
-                        // selection is written it must not leak into unrelated items.
-                        storage.delete(PreferredMediaSourceKey)
-                    } catch (cancelled: kotlin.coroutines.cancellation.CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        // A preference write must not block playback or source switching.
-                    }
-                }
-            }
-        }
-    }
+    val playbackPreferences: cn.mafei.cmp.feature.home.MediaPlaybackPreferences
+        get() = preferences.playbackPreferences
 
     suspend fun loadArtwork(
         session: ApplicationSession,
@@ -329,106 +267,21 @@ class ApplicationRuntime(
             failureReporter("history-catalog-read", failure)
             throw failure
         }
-        importLegacyRememberedPasswordsSafely(saved, "history-password-import")
+        legacyMigration.importRememberedPasswordsSafely(saved, "history-password-import")
         return saved
     }
 
-    /** Same non-secret search history that ArkUI stored in AppPreference. */
-    suspend fun searchHistory(): List<String> {
-        check(!isClosed) { "Application is closed" }
-        val raw = settings.getString(SEARCH_HISTORY_KEY) ?: return emptyList()
-        return runCatching {
-            RuntimeSettingsJson.decodeFromString(ListSerializer(String.serializer()), raw)
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .take(10)
-        }.getOrDefault(emptyList())
-    }
+    suspend fun searchHistory(): List<String> = preferences.searchHistory()
+    suspend fun saveSearchHistory(items: List<String>) = preferences.saveSearchHistory(items)
+    suspend fun loadAppearanceMode(): String? = preferences.loadAppearanceMode()
+    suspend fun saveAppearanceMode(value: String) = preferences.saveAppearanceMode(value)
+    suspend fun loadGlassIntensity(): Float = preferences.loadGlassIntensity()
+    suspend fun saveGlassIntensity(value: Float) = preferences.saveGlassIntensity(value)
+    suspend fun loadHomeCarouselVisible(): Boolean = preferences.loadHomeCarouselVisible()
+    suspend fun saveHomeCarouselVisible(value: Boolean) = preferences.saveHomeCarouselVisible(value)
+    suspend fun loadPlayerRenderMode(): String = preferences.loadPlayerRenderMode()
+    suspend fun savePlayerRenderMode(value: String) = preferences.savePlayerRenderMode(value)
 
-    suspend fun saveSearchHistory(items: List<String>) {
-        check(!isClosed) { "Application is closed" }
-        val normalized = items.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10)
-        settings.putString(
-            SEARCH_HISTORY_KEY,
-            RuntimeSettingsJson.encodeToString(ListSerializer(String.serializer()), normalized),
-        )
-    }
-
-    /** Uses the existing ordinary-settings key, independent of account storage. */
-    suspend fun loadAppearanceMode(): String? {
-        check(!isClosed) { "Application is closed" }
-        return appearance.storedMode()
-    }
-
-    suspend fun saveAppearanceMode(value: String) {
-        check(!isClosed) { "Application is closed" }
-        val mode = cn.mafei.cmp.common.design_system.AppearanceMode.entries.firstOrNull { it.storageValue == value }
-            ?: throw IllegalArgumentException("Unsupported appearance mode")
-        appearance.save(mode)
-    }
-
-    /** Product-wide Liquid Glass strength, persisted as a 0..100 percentage. */
-    suspend fun loadGlassIntensity(): Float {
-        check(!isClosed) { "Application is closed" }
-        return try {
-            settings.getString(GLASS_INTENSITY_KEY)
-                ?.toIntOrNull()
-                ?.coerceIn(0, 100)
-                ?.div(100f)
-                ?: DEFAULT_GLASS_INTENSITY
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            failureReporter("glass-intensity-read", failure)
-            DEFAULT_GLASS_INTENSITY
-        }
-    }
-
-    suspend fun saveGlassIntensity(value: Float) {
-        check(!isClosed) { "Application is closed" }
-        settings.putString(
-            GLASS_INTENSITY_KEY,
-            (value.coerceIn(0f, 1f) * 100f).toInt().toString(),
-        )
-    }
-
-    /** Whether the home page should render its recommendation carousel. */
-    suspend fun loadHomeCarouselVisible(): Boolean {
-        check(!isClosed) { "Application is closed" }
-        return try {
-            settings.getBoolean(HOME_CAROUSEL_VISIBLE_KEY, default = true)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            failureReporter("home-carousel-visibility-read", failure)
-            true
-        }
-    }
-
-    suspend fun saveHomeCarouselVisible(value: Boolean) {
-        check(!isClosed) { "Application is closed" }
-        settings.putBoolean(HOME_CAROUSEL_VISIBLE_KEY, value)
-    }
-
-    /** Native player output path. Buffer is the safe default on OHOS phones/tablets. */
-    suspend fun loadPlayerRenderMode(): String {
-        check(!isClosed) { "Application is closed" }
-        return when (settings.getString(PLAYER_RENDER_MODE_KEY)) {
-            PLAYER_RENDER_MODE_DIRECT -> PLAYER_RENDER_MODE_DIRECT
-            else -> PLAYER_RENDER_MODE_BUFFER
-        }
-    }
-
-    suspend fun savePlayerRenderMode(value: String) {
-        check(!isClosed) { "Application is closed" }
-        settings.putString(
-            PLAYER_RENDER_MODE_KEY,
-            if (value == PLAYER_RENDER_MODE_DIRECT) PLAYER_RENDER_MODE_DIRECT else PLAYER_RENDER_MODE_BUFFER,
-        )
-    }
-
-    /** ArkUI-compatible Feiniu route strategy. Missing/corrupt values are Speed. */
     suspend fun loadFeiniuRoutePreference(): FeiniuRoutePreference {
         check(!isClosed) { "Application is closed" }
         return try {
@@ -476,7 +329,7 @@ class ApplicationRuntime(
         val active = sessions.state.value.session
             ?.takeIf { it.selection.provider == ProviderKind.Feiniu }
             ?: return
-        val playback = playbacks.value[active]
+        val playback = playbackRegistry.existing(active)
         if (playback != null && playback.controller.state.value.phase.isActivePlaybackPhase()) {
             deferredFeiniuRouteRefresh?.cancel()
             deferredFeiniuRouteRefresh = scope.launch {
@@ -531,22 +384,6 @@ class ApplicationRuntime(
         sessions.activate(refreshed, binding)
     }
 
-    private suspend fun importLegacyRememberedPasswordsSafely(
-        saved: List<SavedConnection>,
-        failureStage: String,
-    ) {
-        try {
-            importLegacyRememberedPasswords(saved)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            // Password recovery is optional. A locked or temporarily unavailable
-            // credential backend must not hide accounts or block normal startup.
-            // Leave the import marker unset so a later attempt can retry it.
-            failureReporter(failureStage, failure)
-        }
-    }
-
     /** Returns null only when this account has no saved password or the alias contains another secret type. */
     suspend fun savedPassword(connection: SavedConnection): String? {
         check(!isClosed) { "Application is closed" }
@@ -569,40 +406,6 @@ class ApplicationRuntime(
             if (hasSavedPassword(connection)) add(connection.credentialKey)
         }
     }
-
-    /**
-     * Older ArkUI builds stored remembered Jellyfin passwords under an AssetStore alias that is
-     * unrelated to the CMP session namespace. The Harmony host includes those values in its
-     * in-memory legacy snapshot; import each missing password once without touching the old asset.
-     */
-    private suspend fun importLegacyRememberedPasswords(saved: List<SavedConnection>) {
-        val reader = legacySnapshotReader ?: return
-        if (settings.getString(LEGACY_PASSWORD_IMPORT_KEY) == LEGACY_PASSWORD_IMPORT_DONE) return
-        val captured = reader.read() as? cn.mafei.cmp.data.migration.LegacyReadResult.Captured ?: return
-        val snapshot = captured.snapshot
-        val servers = snapshot.servers.associateBy { it.key }
-        for (account in snapshot.accounts) {
-            val remembered = account.password ?: continue
-            val oldServer = servers[account.serverKey] ?: continue
-            val connection = saved.firstOrNull { candidate ->
-                candidate.server.provider == oldServer.provider &&
-                    candidate.remoteUserId == account.remoteUserId &&
-                    candidate.server.baseUrl.trimEnd('/') == oldServer.baseUrl.trimEnd('/')
-            } ?: continue
-            // A later explicit "do not remember" login is authoritative. Do not let a
-            // still-present ArkUI AssetStore record resurrect the password.
-            if (!connection.rememberLogin) continue
-            if (secureStore.read(connection.passwordAlias) == null) {
-                try {
-                    secureStore.save(connection.passwordAlias, remembered, overwrite = false)
-                } catch (failure: CredentialAccessException) {
-                    if (failure.kind != CredentialFailureKind.AlreadyExists) throw failure
-                }
-            }
-        }
-        settings.putString(LEGACY_PASSWORD_IMPORT_KEY, LEGACY_PASSWORD_IMPORT_DONE)
-    }
-
     suspend fun switchAccount(connection: SavedConnection): ApplicationSession {
         check(!isClosed) { "Application is closed" }
         return sessions.switchAccount(connection.selection)
@@ -633,7 +436,7 @@ class ApplicationRuntime(
         }
         val restored = sessions.start()
         if (restored != null) {
-            importLegacyRememberedPasswordsSafely(
+            legacyMigration.importRememberedPasswordsSafely(
                 sessions.savedConnections(),
                 "startup-password-import",
             )
@@ -644,20 +447,20 @@ class ApplicationRuntime(
                 cn.mafei.cmp.core.storage_api.VersionedSettingsStorage(settings)
                     .completedMigrations().isNotEmpty()
             ) {
-                markLegacyMigrationConsumed()
+                legacyMigration.markLegacyMigrationConsumed()
             }
             return restored
         }
         if (sessions.state.value.status != ApplicationSessionStatus.SignedOut || legacySnapshotReader == null) return null
 
-        if (isLegacyMigrationConsumed()) {
+        if (legacyMigration.isLegacyMigrationConsumed()) {
             // Some development builds replaced the CMP session index while
             // leaving the legacy ArkUI databases and credentials intact. A
             // consumed marker alone cannot prove that the user logged out.
             // Repair that specific state once unless an explicit logout (or a
             // confirmed empty source) durably suppressed legacy recovery.
-            if (isLegacyAccountRecoverySuppressed() || isLegacyMigrationConfirmedEmpty()) return null
-            return migrateLegacyData(allowConsumedRecovery = true).let { sessions.state.value.session }
+            if (legacyMigration.isLegacyAccountRecoverySuppressed() || legacyMigration.isLegacyMigrationConfirmedEmpty()) return null
+            return legacyMigration.migrateLegacyData(allowConsumedRecovery = true).let { sessions.state.value.session }
         }
 
         migrateLegacyData()
@@ -670,191 +473,22 @@ class ApplicationRuntime(
      * the session-state observer, and [close] releases everything. Returns
      * null when no platform engine factory was configured.
      */
-    fun playback(session: ApplicationSession): SessionPlaybackRuntime? {
-        check(!isClosed) { "Application is closed" }
-        val factory = playerRuntimeFactory ?: return null
-        // Refuse sessions that were logged out or switched away: a stale
-        // session must never obtain a fresh player bound to retired adapters.
-        if (session !== sessions.state.value.session) {
-            throw IllegalStateException("Session is no longer active")
-        }
-        while (true) {
-            val current = playbacks.value
-            current[session]?.let { return it }
-            val created = SessionPlaybackRuntime.create(
-                provider = session.selection.provider,
-                adapter = session.binding.adapter,
-                runtime = PreferenceApplyingPlayerRuntime(factory(session.selection.provider).let { engine ->
-                    if (externalSubtitleOverlay) ExternalSubtitlePlayerRuntime(engine, transport, scope) else engine
-                }) {
-                    playerPreferences.state.value
-                },
-                scope = scope,
-                nowMs = { cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs() },
-            )
-            if (playbacks.compareAndSet(current, current + (session to created))) {
-                ensurePlaybackObserver()
-                if (!hostForeground) scope.launch {
-                    playbackMutex.withLock {
-                        if (!hostForeground && playbacks.value[session] === created) created.controller.background()
-                    }
-                }
-                return created
-            }
-            // CAS lost to a concurrent lifecycle change: release the loser
-            // asynchronously so engines, timers and workers never leak.
-            scope.launch(NonCancellable) {
-                try { created.release() }
-                catch (e: CancellationException) { throw e }
-                catch (_: Exception) { } // best-effort cleanup of a discarded instance
-            }
-        }
-    }
+    fun playback(session: ApplicationSession): SessionPlaybackRuntime? = playbackRegistry.getOrCreate(session)
 
-    /** Host visibility only; never changes account state or destroys a music queue. */
-    fun setHostForeground(foreground: Boolean) {
-        if (isClosed || hostForeground == foreground) return
-        hostForeground = foreground
-        scope.launch {
-            playbackMutex.withLock {
-                // A newer lifecycle event can supersede one still queued on the main thread.
-                if (isClosed || hostForeground != foreground) return@withLock
-                for (playback in playbacks.value.values) {
-                    if (foreground) playback.controller.foreground() else playback.controller.background()
-                }
-            }
-        }
-    }
+    /** Host visibility only; account state and music queues remain owned by their services. */
+    fun setHostForeground(foreground: Boolean) = playbackRegistry.setHostForeground(foreground)
 
-    private fun ensurePlaybackObserver() {
-        if (playbackObserver != null) return
-        playbackObserver = scope.launch {
-            sessions.state.collect { state ->
-                playbackMutex.withLock {
-                    for ((session, runtime) in playbacks.value) {
-                        if (session !== state.session) {
-                            playbacks.value -= session
-                            runtime.release()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun releaseAllPlaybacks() {
-        playbackMutex.withLock {
-            for ((_, runtime) in playbacks.value) runtime.release()
-            playbacks.value = emptyMap()
-        }
-    }
-
-    /**
-     * One-shot legacy migration: runs the frozen engine over the injected
-     * reader, persists the business records durably, saves the resulting
-     * connections into the catalog and activates the migrated current
-     * account through the SAME session pipeline as a fresh login. Null when
-     * no reader is configured (platform Pending) or legacy data is absent.
-     */
     suspend fun migrateLegacyData(): cn.mafei.cmp.data.migration.MigrationResult? =
-        migrateLegacyData(allowConsumedRecovery = false)
-
-    private suspend fun migrateLegacyData(
-        allowConsumedRecovery: Boolean,
-    ): cn.mafei.cmp.data.migration.MigrationResult? {
-        val reader = legacySnapshotReader ?: return null
-        check(!isClosed) { "Application is closed" }
-        if (isLegacyMigrationConsumed() && !allowConsumedRecovery) return null
-        val journal = cn.mafei.cmp.core.storage_api.VersionedSettingsStorage(settings)
-        val sink = cn.mafei.cmp.data.migration.SettingsBackedMigrationSink(settings)
-        val engine = cn.mafei.cmp.data.migration.LegacyMigrationEngine(
-            reader = reader,
-            secure = secureStore,
-            journal = journal,
-            sink = sink,
-            nowEpochMs = { SystemEpochClock.nowEpochMs() },
-            reportStage = { persistenceStageReporter("migration-$it") },
-        )
-        val result = try {
-            engine.migrate()
-        } catch (failure: Throwable) {
-            failureReporter("migration", failure)
-            throw failure
-        }
-        if (result == cn.mafei.cmp.data.migration.MigrationResult.NotNeeded) {
-            settings.putString(LEGACY_MIGRATION_EMPTY_KEY, LEGACY_MIGRATION_EMPTY)
-            markLegacyMigrationConsumed()
-            return result
-        }
-        if (result is cn.mafei.cmp.data.migration.MigrationResult.Completed) {
-            persistenceStageReporter("migration-records-read")
-            val records = sink.storedRecords(result.migrationId)
-                ?: return result
-            persistenceStageReporter("migration-chasing-save")
-            persistedChasingSeries.importMigrated(records.chasing)
-            // Persist every mappable connection, then admit the migrated
-            // current account through the SAME activate pipeline as a fresh
-            // login: credentials are read from the secure store by the
-            // SavedConnection aliases (which the planner shaped to match).
-            val mapping = records.toSavedConnections()
-            for (connection in mapping.connections) {
-                persistenceStageReporter("migration-catalog-save")
-                connectionCatalog.save(connection)
-            }
-            // A first activation may have failed after the migration receipt
-            // was committed. Re-read the receipt on later starts and retry the
-            // same activation until the normal session index is durable.
-            if (sessions.state.value.session == null) {
-                val connection = records.selectedAccountId?.let { selected ->
-                    mapping.connections.firstOrNull { it.account.id == selected }
-                } ?: mapping.connections.maxWithOrNull(
-                    compareBy<SavedConnection> { it.account.lastActiveEpochMs ?: Long.MIN_VALUE }
-                        .thenBy { it.account.id.value },
-                )
-                connection?.let {
-                    persistenceStageReporter("migration-credential-restore")
-                    val secrets = it.aliases.mapNotNull { alias ->
-                        secureStore.read(alias)?.let { alias to it }
-                    }.toMap()
-                    if (secrets.isEmpty()) return result
-                    persistenceStageReporter("migration-session-activate")
-                    sessions.activate(it, cn.mafei.cmp.session.DefaultProviderSessionFactory(transport).restore(it, secrets))
-                }
-            }
-            markLegacyMigrationConsumed()
-            settings.putString(LEGACY_PASSWORD_IMPORT_KEY, LEGACY_PASSWORD_IMPORT_DONE)
-        }
-        return result
-    }
-
-    private suspend fun isLegacyMigrationConsumed(): Boolean =
-        settings.getString(LEGACY_MIGRATION_CONSUMED_KEY) == LEGACY_MIGRATION_CONSUMED
-
-    private suspend fun markLegacyMigrationConsumed() {
-        if (!isLegacyMigrationConsumed()) {
-            settings.putString(LEGACY_MIGRATION_CONSUMED_KEY, LEGACY_MIGRATION_CONSUMED)
-        }
-    }
-
-    private suspend fun isLegacyMigrationConfirmedEmpty(): Boolean =
-        settings.getString(LEGACY_MIGRATION_EMPTY_KEY) == LEGACY_MIGRATION_EMPTY
-
-    private suspend fun isLegacyAccountRecoverySuppressed(): Boolean =
-        settings.getString(LEGACY_RECOVERY_SUPPRESSED_KEY) == LEGACY_RECOVERY_SUPPRESSED
-
-    private suspend fun suppressLegacyAccountRecovery() {
-        settings.putString(LEGACY_RECOVERY_SUPPRESSED_KEY, LEGACY_RECOVERY_SUPPRESSED)
-    }
+        legacyMigration.migrateLegacyData()
 
     suspend fun close() = withContext(NonCancellable) {
         closeMutex.withLock {
             if (isClosed) return@withLock
             try {
-                releaseAllPlaybacks()
+                playbackRegistry.releaseAll()
                 deferredFeiniuRouteRefresh?.cancel()
                 deferredFeiniuRouteRefresh = null
-                playbackObserver?.cancel()
-                playbackObserver = null
+                playbackRegistry.cancelObserver()
                 sessions.close()
             } finally {
                 isClosed = true; transport.close(); scope.cancel()
@@ -869,27 +503,10 @@ class ApplicationRuntime(
     }
 
     private companion object {
-        const val GLASS_INTENSITY_KEY = "mafei.ui.liquid-glass-intensity.v1"
-        const val DEFAULT_GLASS_INTENSITY = .5f
-        const val HOME_CAROUSEL_VISIBLE_KEY = "mafei.ui.home-carousel-visible.v1"
-        const val PLAYER_RENDER_MODE_KEY = "mafei.player.render-mode.v1"
-        const val PLAYER_RENDER_MODE_BUFFER = "buffer"
-        const val PLAYER_RENDER_MODE_DIRECT = "direct"
         const val FEINIU_ROUTE_PREFERENCE_KEY = "pref_feiniu_connection_preference"
         const val FEINIU_ROUTE_SPEED = "speed"
         const val FEINIU_ROUTE_PUBLIC = "public"
         const val FEINIU_ROUTE_RELAY = "relay"
-        const val LEGACY_MIGRATION_CONSUMED_KEY = "mafei.legacy-migration.v1.consumed"
-        const val LEGACY_MIGRATION_CONSUMED = "done"
-        const val LEGACY_MIGRATION_EMPTY_KEY = "mafei.legacy-migration.v1.empty"
-        const val LEGACY_MIGRATION_EMPTY = "confirmed"
-        const val LEGACY_RECOVERY_SUPPRESSED_KEY = "mafei.legacy-migration.v1.recovery-suppressed"
-        const val LEGACY_RECOVERY_SUPPRESSED = "logout"
-        // v1 was written before the ArkUI password bridge was reliable. v2 could then be
-        // committed while the HAP used a different signing certificate, making AssetStore
-        // appear empty. Use a fresh receipt after restoring the historical signing identity.
-        const val LEGACY_PASSWORD_IMPORT_KEY = "mafei.legacy-password.v3.imported"
-        const val LEGACY_PASSWORD_IMPORT_DONE = "done"
     }
 }
 
@@ -929,24 +546,6 @@ private fun PlayerPhase.isActivePlaybackPhase(): Boolean = when (this) {
     PlayerPhase.Error,
     PlayerPhase.Released -> false
 }
-
-private val RuntimeSettingsJson = Json { ignoreUnknownKeys = true }
-private const val SEARCH_HISTORY_KEY = "mafei/ui/search-history-v1"
-private const val PreferredMediaSourceKey = "mafei/media/playback/preferred-media-source-v1"
-private const val PreferredMediaSourcesKey = "mafei/media/playback/preferred-media-sources-v2"
-private const val PreferredMediaSourceLimit = 128
-
-@Serializable
-private data class PreferredMediaSource(
-    val accountId: String,
-    val mediaId: String,
-    val sourceId: String,
-)
-
-@Serializable
-private data class PreferredMediaSources(
-    val entries: List<PreferredMediaSource> = emptyList(),
-)
 
 /** Called only by platform main-thread entry points. Rotation does not create a second writer. */
 internal object ProcessApplication {
