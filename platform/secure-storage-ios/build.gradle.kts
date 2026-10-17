@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.TestExecutable
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
+    id("mafei.kmp.ios")
 }
 
 kotlin.targets.withType<KotlinNativeTarget>().configureEach {

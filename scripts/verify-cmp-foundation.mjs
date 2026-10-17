@@ -12,7 +12,8 @@ export function verifyFoundation(root) {
   const version = key => catalog.match(new RegExp(`^${key} = "([^"]+)"`, 'm'))?.[1];
   const expected = {
     kotlin: '2.2.21-1.1.0', compose: '1.9.2-1.1.0',
-    'compose-desktop': '1.9.2', coroutines: '1.10.2-1.0.0',
+    'compose-desktop': '1.9.2', 'compose-material3-upstream': '1.9.0',
+    'navigation3-upstream': '1.0.0+dev2861', coroutines: '1.10.2-1.0.0',
     serialization: '1.9.1-1.0.0', koin: '4.1.1-1.0.0',
   };
   for (const [name, value] of Object.entries(expected)) {
@@ -41,8 +42,14 @@ export function verifyFoundation(root) {
       check(version === frozen, `${file}: hardcoded CPF dependency ${module}:${version}, expected ${frozen}`);
     }
   }
-  for (const file of ['build.gradle.kts', 'composeApp/build.gradle.kts']) {
+  for (const file of ['build.gradle.kts', 'composeApp/build.gradle.kts', 'build-logic/src/main/kotlin/MaFeiKmpConventions.kt']) {
     check(!/\b(?:iosX64|ohosX64|macosX64)\s*\(/.test(read(file)), `${file}: Intel/x64 target forbidden`);
+  }
+  for (const module of modules.filter(module => module !== ':composeApp')) {
+    const file = `${module.slice(1).replaceAll(':', '/')}/build.gradle.kts`;
+    if (!existsSync(resolve(root, file))) continue;
+    const conventions = [...read(file).matchAll(/id\("mafei\.kmp\.(?:shared|ui|android|ios|ohos|desktop)"\)/g)];
+    check(conventions.length === 1, `${module}: choose exactly one explicit MaFei target convention`);
   }
   const app = read('composeApp/build.gradle.kts');
   const androidAbi = app.match(/ndk\s*\{([^}]+)\}/)?.[1];

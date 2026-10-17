@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.compose)
     alias(libs.plugins.kotlin.compose)
+    id("mafei.kmp.ui")
 }
 
 
@@ -18,9 +19,9 @@ kotlin {
         val desktopGlassMain by creating {
             dependsOn(getByName("commonMain"))
             dependencies {
-                implementation("org.jetbrains.compose.runtime:runtime:1.9.2")
-                implementation("org.jetbrains.compose.foundation:foundation:1.9.2")
-                implementation("org.jetbrains.compose.ui:ui:1.9.2")
+                implementation(libs.compose.upstream.runtime)
+                implementation(libs.compose.upstream.foundation)
+                implementation(libs.compose.upstream.ui)
             }
         }
         getByName("desktopMain").dependsOn(desktopGlassMain)

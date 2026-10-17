@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.compose)
     alias(libs.plugins.kotlin.compose)
+    id("mafei.kmp.ui")
 }
 
 
@@ -12,6 +13,6 @@ dependencies {
     add("commonMainApi", project(":common:ui"))
     add("commonMainApi", project(":common:media"))
     add("commonMainImplementation", project(":data:repositories"))
-    add("desktopTestImplementation", "org.jetbrains.compose.ui:ui-test-junit4:1.9.2")
+    add("desktopTestImplementation", libs.compose.upstream.ui.test)
     add("desktopTestImplementation", libs.compose.desktop)
 }

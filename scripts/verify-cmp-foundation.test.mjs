@@ -10,7 +10,7 @@ const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function fixture(run) {
   const root = mkdtempSync(resolve(tmpdir(), 'mafei-foundation-test-'));
   const files = ['settings.gradle.kts', 'build.gradle.kts', 'gradle.properties', 'gradle/libs.versions.toml',
-    'harmonyApp/entry/build-profile.json5', 'harmonyApp/oh-package.json5', 'harmonyApp/entry/oh-package.json5', 'iosApp/MaFei.xcodeproj/project.pbxproj',
+    'build-logic/src/main/kotlin/MaFeiKmpConventions.kt', 'harmonyApp/entry/build-profile.json5', 'harmonyApp/oh-package.json5', 'harmonyApp/entry/oh-package.json5', 'iosApp/MaFei.xcodeproj/project.pbxproj',
     'iosApp/MaFei/Info.plist', 'composeApp/src/androidMain/AndroidManifest.xml'];
   const settings = readFileSync(resolve(source, 'settings.gradle.kts'), 'utf8');
   for (const match of settings.matchAll(/"(:[a-zA-Z0-9-]+(?::[a-zA-Z0-9-]+)*)"/g)) {
@@ -44,11 +44,11 @@ test('root Harmony Compose package must match the frozen release', () => fixture
   assert.throws(() => verifyFoundation(root), /root compose HAR/);
 }));
 test('hardcoded Kotlin dependency cannot retain a different CPF release', () => fixture(root => {
-  replace(root, 'build.gradle.kts', 'kotlin-test:2.2.21-1.1.0', 'kotlin-test:2.2.21-1.0.0');
+  replace(root, 'build.gradle.kts', 'base', 'base\n    // Regression fixture coordinate: \"org.jetbrains.kotlin:kotlin-test:2.2.21-1.0.0\"');
   assert.throws(() => verifyFoundation(root), /hardcoded CPF dependency/);
 }));
 test('hardcoded navigation dependency cannot retain a different CPF release', () => fixture(root => {
-  replace(root, 'common/ui/build.gradle.kts', 'navigationevent-compose:1.9.2-1.1.0', 'navigationevent-compose:1.9.2-1.0.0');
+  replace(root, 'common/ui/build.gradle.kts', 'libs.navigationevent.compose', '\"org.jetbrains.androidx.navigationevent:navigationevent-compose:1.9.2-1.0.0\"');
   assert.throws(() => verifyFoundation(root), /hardcoded CPF dependency/);
 }));
 test('x64 target fails', () => fixture(root => {
@@ -66,4 +66,13 @@ test('iOS high-refresh startup requirement fails closed', () => fixture(root => 
 test('wrong Android launcher package fails', () => fixture(root => {
   replace(root, 'composeApp/src/androidMain/AndroidManifest.xml', 'cn.mafei.cmp.MainActivity', '.MainActivity');
   assert.throws(() => verifyFoundation(root), /launcher/);
+}));
+
+test('missing explicit module target convention fails', () => fixture(root => {
+  replace(root, 'feature/home/build.gradle.kts', 'id("mafei.kmp.ui")', '');
+  assert.throws(() => verifyFoundation(root), /explicit MaFei target convention/);
+}));
+test('x64 convention target fails', () => fixture(root => {
+  replace(root, 'build-logic/src/main/kotlin/MaFeiKmpConventions.kt', 'iosArm64()', 'iosX64()');
+  assert.throws(() => verifyFoundation(root), /x64 target/);
 }));

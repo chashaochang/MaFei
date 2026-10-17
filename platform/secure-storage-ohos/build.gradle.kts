@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
+    id("mafei.kmp.ohos")
 }
 
 // Host-only runner for the injected common transaction tests. The app still

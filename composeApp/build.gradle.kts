@@ -152,16 +152,16 @@ kotlin {
             dependsOn(commonMain)
             kotlin.srcDir("src/sharedUiMain/kotlin")
             dependencies {
-                implementation("org.jetbrains.compose.runtime:runtime:1.9.2")
-                implementation("org.jetbrains.compose.foundation:foundation:1.9.2")
-                implementation("org.jetbrains.compose.ui:ui:1.9.2")
-                implementation("org.jetbrains.compose.material3:material3:1.9.0")
-                implementation("org.jetbrains.compose.components:components-resources:1.9.2")
+                implementation(libs.compose.upstream.runtime)
+                implementation(libs.compose.upstream.foundation)
+                implementation(libs.compose.upstream.ui)
+                implementation(libs.compose.upstream.material3)
+                implementation(libs.compose.upstream.resources)
                 implementation(
-                    "org.jetbrains.androidx.navigation3:navigation3-runtime-desktop:1.0.0+dev2861",
+                    libs.navigation3.upstream.runtime,
                 )
                 implementation(
-                    "org.jetbrains.androidx.navigation3:navigation3-ui-desktop:1.0.0+dev2861",
+                    libs.navigation3.upstream.ui,
                 )
                 // CPF publishes the OHOS Compose artifacts with a -1.1.0 suffix,
                 // but no matching Desktop bundle exists. MaFei only targets ARM Macs,
