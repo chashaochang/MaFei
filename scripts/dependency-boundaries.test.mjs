@@ -12,3 +12,10 @@ test('shared UI and player core cannot reverse-depend on features/data', () => {
   assert.equal(boundaryViolations(':player:core', 'import cn.mafei.cmp.data.repositories.MediaRepository').length, 1);
   assert.deepEqual(boundaryViolations(':core:domain', '/* cn.mafei.cmp.feature.home.Example */\nclass Model'), []);
 });
+
+test('typealias cannot hide provider or host references', () => {
+  assert.deepEqual(boundaryViolations(':feature:search',
+    'typealias Hidden = cn.mafei.cmp.providers.jellyfin.Facade'), ['cn.mafei.cmp.providers.jellyfin']);
+  assert.deepEqual(boundaryViolations(':common:ui',
+    'typealias Runtime = cn.mafei.cmp.session.ApplicationRuntime'), ['cn.mafei.cmp.session.ApplicationRuntime']);
+});

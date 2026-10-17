@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 plugins {
     base
+    id("mafei.dependency-boundaries")
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.multiplatform) apply false
@@ -132,6 +133,7 @@ val verifyDependencyBoundaries by tasks.registering(Exec::class) {
 }
 
 tasks.named("check") {
+    dependsOn(gradle.includedBuild("build-logic").task(":test"))
     dependsOn(verifyDependencyBoundaries)
     dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")
 }

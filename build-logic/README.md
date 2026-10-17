@@ -37,3 +37,10 @@ Android/iOS/OHOS and in `desktopMain` against upstream Desktop dependencies.
 After changing a convention, run `./gradlew :check` and representative Kotlin
 compilation/tests for the affected targets. A configuration check does not prove
 Native linking, device behavior or packaging.
+
+The root applies `mafei.dependency-boundaries`. Its verification task snapshots
+actual production Gradle project edges, including inherited configurations,
+without resolving private/native SDKs. It complements the source reference gate;
+fully qualified names and typealiases are already covered by that source gate.
+Test-only dependencies are exempt unless a production configuration inherits them.
+`./gradlew :check` also runs the convention build's Gradle TestKit regressions.

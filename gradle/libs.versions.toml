@@ -21,6 +21,7 @@ ktor = "3.3.3-1.0.0"
 sqldelight = "2.2.1-1.0.0"
 
 [libraries]
+junit4 = { module = "junit:junit", version = "4.13.2" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 compose-upstream-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-desktop" }
