@@ -1,17 +1,13 @@
 {
   "defaultMaxLines": 800,
   "files": {
-    "common/ui/src/sharedUiMain/kotlin/cn/mafei/cmp/common/ui/MaFeiAdaptiveShell.kt": 1686,
-    "composeApp/src/commonMain/kotlin/cn/mafei/cmp/session/ApplicationRuntime.kt": 960,
     "composeApp/src/ohosMain/kotlin/cn/mafei/cmp/OhosPlayerHost.kt": 885,
     "data/adapter-feiniu/src/commonMain/kotlin/cn/mafei/cmp/data/adapter_feiniu/FeiniuMapper.kt": 1058,
-    "data/adapter-feiniu/src/commonMain/kotlin/cn/mafei/cmp/data/adapter_feiniu/FeiniuMediaProviderAdapter.kt": 2251,
     "data/adapter-jellyfin/src/commonMain/kotlin/cn/mafei/cmp/data/adapter_jellyfin/JellyfinMediaProviderAdapter.kt": 1045,
     "feature/detail/src/commonMain/kotlin/cn/mafei/cmp/feature/detail/VideoDetailPresentation.kt": 801,
-    "feature/detail/src/sharedUiMain/kotlin/cn/mafei/cmp/feature/detail/DetailScreen.kt": 2596,
     "feature/detail/src/sharedUiMain/kotlin/cn/mafei/cmp/feature/detail/SeasonDetailScreen.kt": 937,
-    "feature/home/src/sharedUiMain/kotlin/cn/mafei/cmp/feature/home/HomeScreen.kt": 2644,
+    "feature/home/src/sharedUiMain/kotlin/cn/mafei/cmp/feature/home/HomeScreen.kt": 1133,
     "feature/settings/src/sharedUiMain/kotlin/cn/mafei/cmp/feature/settings/SettingsScreens.kt": 885,
-    "player/ui/src/sharedUiMain/kotlin/cn/mafei/cmp/player/ui/NowPlayingScreen.kt": 2761
+    "player/ui/src/sharedUiMain/kotlin/cn/mafei/cmp/player/ui/NowPlayingScreen.kt": 965
   }
 }
