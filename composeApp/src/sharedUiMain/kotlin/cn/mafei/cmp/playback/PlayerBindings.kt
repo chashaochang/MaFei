@@ -159,6 +159,7 @@ internal fun BoundNowPlayingScreen(
         onFullscreenRequest = { requested -> onFullscreenChanged(requested) },
         videoSurface = { surfaceModifier ->
             CompositionLocalProvider(
+                LocalVideoScreenAwake provides state.keepVideoScreenAwake(),
                 LocalPlatformPlaybackActions provides
                     PlatformPlaybackActions(
                         generation = state.generation,

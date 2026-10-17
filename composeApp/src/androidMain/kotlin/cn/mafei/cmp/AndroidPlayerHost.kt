@@ -46,6 +46,7 @@ internal class AndroidPlayerHost private constructor(context: Context) {
         modifier: Modifier = Modifier,
     ) {
         val latestController = rememberUpdatedState(controller)
+        val keepScreenAwake = LocalVideoScreenAwake.current
         val latestActions by rememberUpdatedState(LocalPlatformPlaybackActions.current)
         val generation by remember(controller) { controller.state.map { it.generation }.distinctUntilChanged() }
             .collectAsState(controller.state.value.generation)
@@ -68,7 +69,9 @@ internal class AndroidPlayerHost private constructor(context: Context) {
                 }
             },
             modifier = modifier,
+            update = { view -> view.keepScreenOn = keepScreenAwake },
             onRelease = { view ->
+                view.keepScreenOn = false
                 view.holder.removeCallback(binding)
                 binding.release()
             },

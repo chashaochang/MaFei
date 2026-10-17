@@ -27,6 +27,9 @@ internal data class PlatformPlaybackActions(
 
 internal val LocalPlatformPlaybackActions = staticCompositionLocalOf<PlatformPlaybackActions?> { null }
 
+/** Defaults to false for music's hidden native surface and every non-video route. */
+internal val LocalVideoScreenAwake = staticCompositionLocalOf { false }
+
 @Composable
 internal fun rememberPlatformArtworkLoader(item: MediaItem?): (suspend () -> ByteArray?)? {
     val runtime = LocalApplicationRuntime.current

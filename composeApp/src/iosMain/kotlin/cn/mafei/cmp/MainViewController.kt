@@ -13,7 +13,10 @@ import cn.mafei.cmp.platform.http_ios.createIosHttpTransport
 private var processPlayerHost: IosPlayerHost? = null
 
 /** SceneDelegate aggregates all visible scenes before forwarding to the process controller. */
-fun SetApplicationForeground(foreground: Boolean) = ProcessApplication.setForeground(foreground)
+fun SetApplicationForeground(foreground: Boolean) {
+    IosVideoScreenAwake.setForeground(foreground)
+    ProcessApplication.setForeground(foreground)
+}
 
 fun MainViewController(
     onPlayerScreenChanged: (Boolean) -> Unit,

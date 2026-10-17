@@ -28,6 +28,12 @@ internal class IosPlayerHost(private val bridge: IosAvPlayerBridge) {
     @OptIn(ExperimentalForeignApi::class)
     @Composable
     fun Surface(controller: PlayerController, modifier: Modifier) {
+        val screenAwakeOwner = remember { Any() }
+        val keepScreenAwake = LocalVideoScreenAwake.current
+        DisposableEffect(screenAwakeOwner, keepScreenAwake) {
+            IosVideoScreenAwake.setRequested(screenAwakeOwner, keepScreenAwake)
+            onDispose { IosVideoScreenAwake.setRequested(screenAwakeOwner, false) }
+        }
         val latestActions by rememberUpdatedState(LocalPlatformPlaybackActions.current)
         val generation by remember(controller) { controller.state.map { it.generation }.distinctUntilChanged() }
             .collectAsState(controller.state.value.generation)

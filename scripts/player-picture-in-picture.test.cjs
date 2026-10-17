@@ -49,8 +49,10 @@ function surfaceLifecycle(pictureInPicture) {
   const module = { exports: {} };
   const lifecycle = `export class SurfaceLifecycle {
     hostForeground = true;
+    screenAwakeUpdates = [];
     glassBackdrop = { stops: 0, syncs: 0, stop() { this.stops++; } };
     constructor(public pictureInPicture: Object) {}
+    syncScreenAwake() { this.screenAwakeUpdates.push(this.hostForeground); }
     syncGlassBackdrop() { this.glassBackdrop.syncs++; }
     ${callbacks.join('\n')}
   }`;
@@ -113,6 +115,7 @@ for (const playing of [true, false]) {
     assert.equal(lifecycle.hostForeground, true);
     assert.equal(lifecycle.glassBackdrop.stops, 2);
     assert.equal(lifecycle.glassBackdrop.syncs, 2);
+    assert.deepEqual(Array.from(lifecycle.screenAwakeUpdates), [false, true, false, true]);
     assert.equal(h.host.active, true);
     assert.equal(h.controllers.length, 1); assert.equal(h.controllers[0].stops, 0);
     assert.equal(h.controllers[0].starts, 1); assert.deepEqual(h.actions, []);

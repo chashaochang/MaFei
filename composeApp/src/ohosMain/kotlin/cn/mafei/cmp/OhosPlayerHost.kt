@@ -731,6 +731,7 @@ fun OhosPlayerSurface(
     modifier: Modifier = Modifier,
 ) {
     val command = OhosPlayerHostState.command
+    val keepScreenAwake = LocalVideoScreenAwake.current
     SideEffect {
         logOhosPlayer("surface compose command=${command.commandId} action=${command.action}")
     }
@@ -799,18 +800,19 @@ fun OhosPlayerSurface(
         ArkUIView2(
             name = "MaFeiPlayerSurface",
             modifier = Modifier.fillMaxSize(),
-            parameter = command.toJsParameter(latestSystemActions, artworkData),
+            parameter = command.toJsParameter(latestSystemActions, artworkData, keepScreenAwake),
             background = Color.Black,
             interactive = false,
         )
     }
 }
 
-private fun OhosPlayerCommandState.toJsParameter(actions: PlatformPlaybackActions?, artworkData: String): JsObject {
+private fun OhosPlayerCommandState.toJsParameter(actions: PlatformPlaybackActions?, artworkData: String, keepScreenAwake: Boolean): JsObject {
     val headerValues = JsArray(JsEnv.createArray(headers.size))
     headers.forEachIndexed { index, value -> headerValues[index] = value.nApiValue() }
     return js {
         "commandId"(commandId.nApiValue())
+        "keepScreenAwake"(keepScreenAwake)
         "backdropRevision"(ohosVideoBackdropRevision.nApiValue())
         "backdropSampling"(ohosVideoBackdropSource.sampling)
         "handle"(handle.nApiValue())

@@ -26,11 +26,13 @@ import { PlayerSystemSession, SystemPlaybackMetadata, SystemPlaybackSnapshot } f
 import { SystemAvPlayerEngine, SystemEngineSnapshot, SystemEngineSource, SystemEngineTrack } from './SystemAvPlayerEngine';
 import { PlayerPictureInPicture, PlayerPiPSnapshot } from './PlayerPictureInPicture';
 import { PlayerBackgroundAudio } from './PlayerBackgroundAudio';
+import { playerScreenAwake } from './PlayerScreenAwake';
 import { CastEvent } from './PlayerCasting';
 import { PlayerVideoBackdropCapture } from './PlayerVideoBackdropCapture';
 
 interface MaFeiPlayerSurfaceArgs extends SystemEngineSource {
   commandId: number;
+  keepScreenAwake: boolean;
   backdropRevision: number;
   backdropSampling: boolean;
   handle: number;
@@ -151,6 +153,7 @@ struct MaFeiPlayerSurfaceHost {
     (handle: number, revision: number, width: number, height: number, alpha: number, pixels: ArrayBuffer): boolean =>
       nativeApi.UpdateOhosPlayerBackdrop(handle, revision, width, height, alpha, pixels));
   private hostForeground: boolean = true;
+  private hostMounted: boolean = false;
   private mpvSurface: XComponentController | undefined = undefined;
   @State private usingSystem: boolean = false;
   private readonly systemSurface: XComponentController = new XComponentController();
@@ -177,14 +180,18 @@ struct MaFeiPlayerSurfaceHost {
   };
   private readonly onHostBackground = (): void => {
     this.hostForeground = false;
+    this.syncScreenAwake();
     this.glassBackdrop.stop();
   };
   private readonly onHostForeground = (): void => {
     this.hostForeground = true;
+    this.syncScreenAwake();
     this.syncGlassBackdrop();
   };
 
   aboutToAppear(): void {
+    this.hostMounted = true;
+    this.syncScreenAwake();
     hilog.info(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'surface host appear command=%{public}d action=%{public}s',
       this.args.commandId, this.args.action);
     const context = getContext(this) as common.UIAbilityContext;
@@ -198,6 +205,8 @@ struct MaFeiPlayerSurfaceHost {
   }
 
   aboutToDisappear(): void {
+    this.hostMounted = false;
+    this.syncScreenAwake();
     this.glassBackdrop.stop();
     const context = getContext(this) as common.UIAbilityContext;
     this.emitProgress(true);
@@ -213,9 +222,15 @@ struct MaFeiPlayerSurfaceHost {
   }
 
   onArgsChanged(): void {
+    this.syncScreenAwake();
     this.applyCommand();
     this.syncSystemArtwork();
     this.syncGlassBackdrop();
+  }
+
+  private syncScreenAwake(): void {
+    playerScreenAwake.update(this, this.hostMounted && this.hostForeground &&
+      this.args.keepScreenAwake && !this.args.audioOnly, (): Promise<window.Window | undefined> => this.resolveWindow());
   }
 
   private syncSystemArtwork(): void {
