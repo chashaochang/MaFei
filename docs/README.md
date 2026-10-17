@@ -9,3 +9,5 @@
 `output/`、`outputs/`、`tmp/`、`generated-images/` 和 `mafei-layout.json` 是本地生成内容。产品资源放所属模块 `src` 资源目录。`runscript/` 是受维护的跨平台构建/运行入口，继续入库。
 
 应用重构的历史验收见 [验证历史](validation/VALIDATION_HISTORY.md)。历史 SHA 处理见 [署名记录](agent-git-identities-2026-09-08.md) 和 [SDK 清理](../composeApp/HISTORY_CLEANUP.md)。
+
+2026-10-18 的逐项核实、整改与验证结果见 [AI 可维护性 review](architecture/2026-10-18-ai-maintainability-review.md)；新增源码规则见 [规模门禁](architecture/source-size.md)。

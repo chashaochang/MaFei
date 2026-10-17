@@ -2,7 +2,7 @@
 
 `composeApp` 装配启动、账号、浏览、设置和播放流程。Feature 拥有页面展示，浏览控制器拥有请求和数据状态；`App.kt` 仅选择根流程和注入平台回调。
 
-修改前先读 [架构与职责表](ARCHITECTURE.md)，再看 [导航边界](src/sharedUiMain/kotlin/cn/mafei/cmp/navigation/README.md)及 [浏览控制器](../feature/home/src/commonMain/kotlin/cn/mafei/cmp/feature/home/browser/README.md)。全局规则以根 [AGENTS.md](../AGENTS.md) 为准。
+修改前先读 [架构与职责表](ARCHITECTURE.md)，再看 [导航边界](src/sharedUiMain/kotlin/cn/mafei/cmp/navigation/README.md)及 [浏览控制器](../feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/browser/README.md)。通用规则和必读索引见根 [AGENTS.md](../AGENTS.md)，产品 UI 规范见 [UI_POLICY.md](../common/ui/UI_POLICY.md)。
 
 ## 平台入口
 

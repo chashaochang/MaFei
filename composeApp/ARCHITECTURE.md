@@ -21,6 +21,7 @@
 | 浏览返回、季快照恢复、详情预取 | `navigation/BrowseNavigator.kt` | 命令操作 `BrowseNavigationState`，不拥有页面 |
 | 搜索取消、提交历史 | `browse/BrowseSearchState.kt` | 仅成功提交记录历史；替代请求取消前一个 |
 | 选择与删除确认 | `browse/BrowseSelectionState.kt`、`BrowseDeleteConfirmation.kt` | 多入口使用同一待删状态 |
+| 页面内容路由 | `settings/*Route.kt`、`account/Management*Route.kt`、`browse/entries/MusicRoutes.kt` / `PhotoRoutes.kt` | 保留现有 package 与类型标识，只组合展示 |
 | 页面绑定 | `browse/entries/*EntryBinding.kt` | Feature 提供展示，绑定提供状态、事件与导航 |
 | 浏览会话装配 | `browse/BrowseApplication.kt` | 创建所有者、注册路由、连接壳层；不写请求算法或 Feature 页面 |
 | 数据加载的触发与生命周期 | `browse/BrowseDataLifecycle.kt`、`BrowseCatalogs.kt` | 在动画路由之上持有，避免转场重建请求与缓存 |
@@ -60,7 +61,7 @@
 
 ## 新增需求的执行方式
 
-1. 写清进入条件、用户事件、预期页面/数据变化、错误与返回行为；明确不变项。视觉目标按根 `AGENTS.md` 的参考和验收规则处理。
+1. 写清进入条件、用户事件、预期页面/数据变化、错误与返回行为；明确不变项。视觉目标按 `common/ui/UI_POLICY.md` 的参考和验收规则处理。
 2. 在上表定位唯一状态所有者。复用 Feature UI 和共享组件；业务规则放在控制器/Repository，绑定只连接数据与事件。
 3. 新路由保持类型化参数，补全纯壳层映射；现有序列化类型名和 package 不因目录迁移改变。
 4. 测试可观察行为：请求竞争、取消、失败回滚、跨列表同步、账号切换、返回恢复。编译检查不能代替这些行为，也不能代替视觉验收。
