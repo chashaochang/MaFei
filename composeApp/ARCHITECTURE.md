@@ -28,9 +28,14 @@
 | 全屏、宿主回调、自动下一集 | `playback/PlayerLifecycle.kt` | 进度与字幕变化不通知整个浏览壳层 |
 | 完整播放器和 Mini Player | `playback/BrowsePlayerHost.kt`、`BrowsePlayerOverlay.kt` | 复用已有 Player UI 与原生 Surface |
 
-浏览数据实现位于 `feature/home/src/commonMain/kotlin/cn/mafei/cmp/feature/home/`：
+浏览数据实现位于 `feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/`：
+该纯共享 Kotlin 模块保留兼容包名，`feature/home` 只保留首页展示。
 `MediaBrowser.kt` 是兼容门面，`browser/` 内 8 个控制器分别拥有目录、搜索、收藏、详情、播放选择、
-人物、历史和媒体操作。具体职责与状态归属见该目录的 [README](../feature/home/src/commonMain/kotlin/cn/mafei/cmp/feature/home/browser/README.md)。
+人物、历史和媒体操作。具体职责与状态归属见该目录的 [README](../feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/browser/README.md)。
+
+进程服务的所有者与兼容门面见 [session/README](src/commonMain/kotlin/cn/mafei/cmp/session/README.md)：
+`ApplicationPlaybackRegistry` 管理进程播放器，`RuntimePreferences` 管理偏好，
+`ApplicationLegacyMigration` 管理旧库导入，`ApplicationRuntime` 保留账号与会话装配。
 
 ## 依赖与状态生命周期
 
@@ -71,6 +76,7 @@
 ```bash
 ./gradlew verifyAppBoundaries verifyDependencyBoundaries verifyArchitecture
 ./gradlew :composeApp:desktopTest :composeApp:testDebugUnitTest
+./gradlew :feature:browse-core:desktopTest :feature:browse-core:testDebugUnitTest
 ./gradlew :composeApp:compileKotlinIosArm64 :composeApp:compileKotlinOhosArm64
 ```
 

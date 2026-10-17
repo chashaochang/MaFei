@@ -93,6 +93,7 @@ include(
 
     ":feature:connect",
     ":feature:home",
+    ":feature:browse-core",
     ":feature:media",
     ":feature:detail",
     ":feature:search",

@@ -3,7 +3,7 @@ import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ui = 'composeApp/src/sharedUiMain/kotlin/cn/mafei/cmp/';
-const home = 'feature/home/src/commonMain/kotlin/cn/mafei/cmp/feature/home/';
+const home = 'feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/';
 const controllers = ['CatalogBrowser', 'SearchBrowser', 'FavoriteBrowser', 'DetailBrowser',
   'PlaybackSelectionBrowser', 'PersonBrowser', 'HistoryBrowser', 'MediaActionsBrowser'];
 

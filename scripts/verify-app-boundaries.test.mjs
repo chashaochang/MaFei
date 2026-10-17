@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appBoundaryViolations as check } from './verify-app-boundaries.mjs';
 const ui = 'composeApp/src/sharedUiMain/kotlin/cn/mafei/cmp/';
-const home = 'feature/home/src/commonMain/kotlin/cn/mafei/cmp/feature/home/';
+const home = 'feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/';
 
 test('root permits assembly but rejects a new state owner or page implementation', () => {
   assert.deepEqual(check(`${ui}App.kt`, 'fun App() { BrowseApplication(runtime) }'), []);

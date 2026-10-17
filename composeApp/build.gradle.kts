@@ -99,6 +99,7 @@ kotlin {
 
                 implementation(project(":feature:connect"))
                 implementation(project(":feature:home"))
+                implementation(project(":feature:browse-core"))
                 implementation(project(":feature:media"))
                 implementation(project(":feature:detail"))
                 implementation(project(":feature:search"))

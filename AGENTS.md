@@ -10,7 +10,7 @@
 
 ## 模块与必读索引
 
-依赖方向：`core → providers → data → feature/common/player → composeApp`；平台能力在 `platform/*` 和 `player/runtime-*`。浏览请求、分页、缓存属于浏览控制器；Feature Screen 负责展示。
+依赖方向：`core → providers → data → feature/common/player → composeApp`；平台能力在 `platform/*` 和 `player/runtime-*`。浏览请求、分页、缓存属于 `feature/browse-core` 的浏览控制器；Feature Screen 负责展示。
 
 | 修改范围 | 动手前阅读 |
 | --- | --- |
@@ -20,7 +20,7 @@
 | HarmonyOS 宿主、打包、桥接 | [宿主规则](harmonyApp/AGENTS.md) |
 | 旧版参考或迁移夹具 | [旧版规则](legacy/AGENTS.md)，显式搜索旧版路径 |
 | 文档、参考与验证记录 | [文档策略](docs/README.md) |
-| 构建目标、版本与 CI | [构建配置](build.gradle.kts) 与 [版本目录](gradle/libs.versions.toml) |
+| 构建目标、版本与 CI | [构建约定](build-logic/README.md) 与 [版本目录](gradle/libs.versions.toml) |
 
 `App.kt` 只装配根流程；`MediaBrowser` 保持兼容门面；媒体事实只通过统一读模型发布，控制器不互持。路由显式定义参数、来源、壳层映射；绑定仅接收需要的能力、存储与事件，不获取整个 `ApplicationRuntime`。不得放宽门禁或增加无依据例外。
 
