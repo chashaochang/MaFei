@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.PagerState
@@ -121,8 +120,12 @@ fun HomeScreen(
     // 全窗，与侧栏让位无关），HomeScreen 只负责把状态喂给它。
     heroBackdropState: HomeHeroBackdropState? = null,
 ) {
-    val pageActive = LocalMaFeiPageActive.current
-    val currentPageActive = rememberUpdatedState(pageActive)
+    // Event handlers read this holder outside composition. Only the small
+    // activity host observes tab visibility; the feed does not capture it.
+    val currentPageActive = remember { mutableStateOf(false) }
+    HomePageActivity { pageActive ->
+        SideEffect { currentPageActive.value = pageActive }
+    }
     val safeArea = LocalMaFeiSafeArea.current
     val navigationChrome = LocalMaFeiNavigationChrome.current
     val layout = navigationChrome.effectiveLayout ?: layout
@@ -136,7 +139,7 @@ fun HomeScreen(
         onItem(item)
     }
     val transitionArtwork: @Composable (MediaItem, String, Modifier) -> Modifier = { item, source, bounds ->
-        if (pageActive && source == selectedArtworkSource) sharedArtworkModifier?.invoke(item, bounds) ?: bounds
+        if (source == selectedArtworkSource && LocalMaFeiPageActive.current) sharedArtworkModifier?.invoke(item, bounds) ?: bounds
         else bounds
     }
     // Provider feeds can contain the same media more than once (the Jellyfin
@@ -184,7 +187,8 @@ fun HomeScreen(
     val renderedFeedKey = selectedFeedKey
     var browseSortIndex by rememberSaveable { mutableStateOf(0) }
     var browseDescending by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(pageActive, collections) {
+    HomePageActivity { pageActive ->
+      LaunchedEffect(pageActive, collections) {
         if (!pageActive) return@LaunchedEffect
         // A refresh can briefly publish an empty collection list. Keep the
         // current feed through that transient state instead of visibly jumping
@@ -195,6 +199,7 @@ fun HomeScreen(
         ) {
             selectedFeedKey = RecentFeedKey
         }
+      }
     }
     val selectedFeedCollection = collections.firstOrNull { it.id.value == selectedFeedKey }
     // Tablet drawers and persistent sidebars own library navigation alike.
@@ -270,7 +275,8 @@ fun HomeScreen(
             ),
         )
     }
-    LaunchedEffect(pageActive, overview, showHomeHero, showHero) {
+    HomePageActivity { pageActive ->
+      LaunchedEffect(pageActive, overview, showHomeHero, showHero) {
         if (!pageActive) return@LaunchedEffect
         // Align once immediately and once when the first real hero is ready.
         // The latter closes the one-frame anchor race without interrupting
@@ -279,8 +285,8 @@ fun HomeScreen(
             gridState.scrollToItem(0)
             if (showHero || !showHomeHero) initialHeroAlignmentPending = false
         }
-    }
-    LaunchedEffect(pageActive, gridState, paginationEnabled, displayed.size) {
+      }
+      LaunchedEffect(pageActive, gridState, paginationEnabled, displayed.size) {
         if (!pageActive || !paginationEnabled) return@LaunchedEffect
         snapshotFlow {
             val info = gridState.layoutInfo
@@ -291,6 +297,7 @@ fun HomeScreen(
                 currentLoadMore()
             }
         }
+      }
     }
     // 首页浮层必须使用页面自己的记录层。HomeScreen 本身位于 shell 的捕获子树中，
     // 若在这里消费 LocalShellBackdrop，就会把“读取 shell layer”的节点重新录进同一个
@@ -387,12 +394,14 @@ fun HomeScreen(
             }
         }
     }
-    LaunchedEffect(pageActive, stretchHeroRefresh) {
+    HomePageActivity { pageActive ->
+      LaunchedEffect(pageActive, stretchHeroRefresh) {
         if (!pageActive || !stretchHeroRefresh) {
             heroSettleJob.value?.cancel()
             heroSettleJob.value = null
             heroStretchPx.floatValue = 0f
         }
+      }
     }
     val heroExtraHeight = with(density) { heroStretchPx.floatValue.toDp() }
     val heroRefreshProgress = (heroStretchPx.floatValue / heroRefreshThresholdPx).coerceIn(0f, 1f)
@@ -470,7 +479,8 @@ fun HomeScreen(
     // remaining 960px hero after a fixed delay still competed with the first
     // user scroll on slower devices. A settled-page change cancels stale work
     // and advances this three-image window instead.
-    LaunchedEffect(pageActive, heroItems, prefetchBackdrop, heroPagerState, showHomeHero) {
+    HomePageActivity { pageActive ->
+      LaunchedEffect(pageActive, heroItems, prefetchBackdrop, heroPagerState, showHomeHero) {
         if (!pageActive) return@LaunchedEffect
         val prefetch = prefetchBackdrop ?: return@LaunchedEffect
         if (!showHomeHero || heroItems.isEmpty()) return@LaunchedEffect
@@ -491,8 +501,8 @@ fun HomeScreen(
                     prefetch(heroItems[index])
                 }
             }
-    }
-    LaunchedEffect(pageActive, gridState, heroPagerState) {
+      }
+      LaunchedEffect(pageActive, gridState, heroPagerState) {
         if (!pageActive) {
             feedSelectionJob.value?.cancel()
             feedSelectionJob.value = null
@@ -500,11 +510,12 @@ fun HomeScreen(
             if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
             if (heroPagerState.isScrollInProgress) heroPagerState.stopScroll(MutatePriority.PreventUserInput)
         }
-    }
-    BindHomeHeroBackdrop(
+      }
+      BindHomeHeroBackdrop(
         pageActive, heroBackdropState, heroItems, heroPagerState, gridState,
         layout, heroExtraHeight, heroVisibleForAutoplay, activeHeroItem,
-    )
+      )
+    }
     // The shell already paints the full-window canvas. Painting another opaque
     // canvas inside the content pane creates a visible seam behind the sidebar.
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -572,12 +583,10 @@ fun HomeScreen(
         heroStretchConnection = heroStretchConnection,
         modifier = Modifier.fillMaxSize(),
       ) {
-        LazyVerticalGrid(
+        HomeFeedGrid(
             columns = GridCells.Fixed(if (overview) latestColumns else legacyMediaColumns(layout.gridWidthDp)),
             state = gridState,
             modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
-            overscrollEffect = null,
-            userScrollEnabled = pageActive,
             contentPadding = PaddingValues(
                 start = gridStartPadding,
                 end = gridEndPadding,
@@ -610,7 +619,7 @@ fun HomeScreen(
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
-                        autoplay = pageActive && heroAutoplay && heroVisibleForAutoplay,
+                        autoplay = heroAutoplay && heroVisibleForAutoplay,
                         scrolling = gridScrolling,
                         onActiveItemChanged = { item ->
                             activeHeroItem = item
