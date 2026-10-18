@@ -37,6 +37,7 @@ internal fun ApplicationNavDisplay(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun BrowseStackDisplay(
     backStack: List<BrowseRoute>,
