@@ -4,9 +4,18 @@ import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.repositories.*
 import kotlinx.coroutines.CancellationException
 
-internal class SearchBrowser(context: BrowserContext) : BrowserController(context) {
+internal class SearchBrowser(context: BrowserContext) : BrowserController(context), BrowserTabParticipant {
     private var searchTicket = 0L
     private var searchPages = MediaPageAccumulator()
+
+    override fun switchTabContext(previous: String, target: String, retained: Set<String>) {
+        ++searchTicket
+        searchPages = MediaPageAccumulator()
+    }
+
+    override suspend fun resumeTabRequests(requests: Set<BrowserTabRequest>) {
+        if (BrowserTabRequest.Search in requests && !state.value.searchLoading) search(state.value.searchQuery, keepContent = true)
+    }
 
     /**
      * Legacy SearchViewModel semantics: one screen load, at most 800 visible Movie/Series/Episode/Video results, with no UI-driven pagination.
@@ -17,9 +26,10 @@ internal class SearchBrowser(context: BrowserContext) : BrowserController(contex
      * @return true only when the current request completed successfully. The caller uses this to preserve the old "submit saves history after success"
      *   behavior; incremental text changes ignore the return value.
      */
-    suspend fun search(term: String): Boolean {
+    suspend fun search(term: String, keepContent: Boolean = false): Boolean {
         val normalized = term.trim()
         val operation = ++searchTicket
+        mutableState.value = state.value.copy(tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Search)
         searchPages = MediaPageAccumulator()
         if (normalized.isEmpty()) {
             mutableState.value =
@@ -37,7 +47,7 @@ internal class SearchBrowser(context: BrowserContext) : BrowserController(contex
         mutableState.value =
             state.value.copy(
                 searchQuery = normalized,
-                searchItems = emptyList(),
+                searchItems = if (keepContent) state.value.searchItems else emptyList(),
                 searchLoading = true,
                 searchLoadingMore = false,
                 searchError = null,
@@ -80,7 +90,8 @@ internal class SearchBrowser(context: BrowserContext) : BrowserController(contex
                 )
             return true
         } catch (cancelled: CancellationException) {
-            if (operation == searchTicket) mutableState.value = state.value.copy(searchLoading = false)
+            if (operation == searchTicket) mutableState.value = state.value.copy(searchLoading = false, searchLoadingMore = false,
+                tabPendingRequests = state.value.tabPendingRequests + BrowserTabRequest.Search)
             throw cancelled
         } catch (failure: Exception) {
             if (operation == searchTicket) {
@@ -95,6 +106,7 @@ internal class SearchBrowser(context: BrowserContext) : BrowserController(contex
         searchPages = MediaPageAccumulator()
         mutableState.value =
             state.value.copy(
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Search,
                 searchQuery = "",
                 searchItems = emptyList(),
                 searchLoading = false,

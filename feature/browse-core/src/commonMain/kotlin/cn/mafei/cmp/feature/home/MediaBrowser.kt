@@ -29,6 +29,15 @@ class MediaBrowser(
     private val person = PersonBrowser(context)
     private val history = HistoryBrowser(context)
     private val mediaActions = MediaActionsBrowser(context, { detail.generation })
+    private val tabContexts = BrowserTabContexts(context, listOf(catalog, search, detail, person))
+
+    fun switchTabContext(key: String, retainedKeys: Set<String>? = null) = tabContexts.switchTabContext(key, retainedKeys)
+
+    fun stateForTab(key: String): StateFlow<MediaBrowserState> = tabContexts.stateForTab(key)
+
+    fun retainTabContexts(keys: Set<String>) = tabContexts.retainTabContexts(keys)
+
+    suspend fun resumeTabContext() = tabContexts.resumeTabContext()
 
     suspend fun start() = catalog.start()
 

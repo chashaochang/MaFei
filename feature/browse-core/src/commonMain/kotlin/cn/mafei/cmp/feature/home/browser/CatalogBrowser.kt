@@ -7,13 +7,34 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 
-internal class CatalogBrowser(context: BrowserContext) : BrowserController(context) {
+internal class CatalogBrowser(context: BrowserContext) : BrowserController(context), BrowserTabParticipant {
     private var ticket = 0L
+    private var collectionsTicket = 0L
     private var homeTicket = 0L
     private var homeLatestSequence = 0L
     private val homeLatestTickets = mutableMapOf<CollectionId, Long>()
     private var initialized = false
     private var pages = MediaPageAccumulator()
+    private val tabPages = mutableMapOf<String, MediaPageAccumulator>()
+
+    override fun switchTabContext(previous: String, target: String, retained: Set<String>) {
+        ++ticket
+        tabPages[previous] = pages
+        pages = tabPages.remove(target) ?: MediaPageAccumulator()
+        tabPages.keys.retainAll(retained)
+    }
+
+    override suspend fun resumeTabRequests(requests: Set<BrowserTabRequest>) {
+        val current = state.value
+        if (BrowserTabRequest.Library in requests && !current.loading && !current.refreshing) {
+            val id = current.selectedCollection ?: current.collections.firstOrNull()?.id
+            if (id != null) select(id, keepContent = current.selectedCollection == id)
+            else if (!initialized) refresh()
+            else mutableState.value = current.copy(tabPendingRequests = current.tabPendingRequests - BrowserTabRequest.Library)
+        } else if (BrowserTabRequest.LibraryMore in requests && !current.loadingMore) loadMore()
+    }
+
+    override fun retainTabContexts(keys: Set<String>) { tabPages.keys.retainAll(keys) }
 
     suspend fun start() {
         if (initialized) return
@@ -22,9 +43,11 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
 
     suspend fun refresh() {
         val operation = ++ticket
+        val collectionsOperation = ++collectionsTicket
         val homeOperation = ++homeTicket
         mutableState.value =
-            state.value.copy(loading = !initialized, refreshing = initialized, loadingMore = false, error = null, homeError = null, homeLoading = true)
+            state.value.copy(loading = !initialized, refreshing = initialized, loadingMore = false, error = null, homeError = null, homeLoading = true,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Library - BrowserTabRequest.LibraryMore)
         try {
             // The home feed, the library list and the first library page are
             // independent requests. Run them as concurrent streams and publish
@@ -67,6 +90,11 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
                 launch {
                     try {
                         val libraries = repository.collections(session, refresh = true)
+                        if (collectionsOperation != collectionsTicket) return@launch
+                        // Library discovery is account-wide even when the originating
+                        // Tab's item request has been invalidated by a switch.
+                        initialized = true
+                        mutableState.value = state.value.copy(collections = libraries.value.items)
                         if (operation != ticket) return@launch
                         val selected =
                             state.value.selectedCollection?.takeIf { id -> libraries.value.items.any { it.id == id } }
@@ -84,7 +112,6 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
                                 homeLatestLoading = state.value.homeLatestLoading.filterTo(linkedSetOf()) { id -> libraries.value.items.any { it.id == id } },
                                 homeLatestErrors = state.value.homeLatestErrors.filterKeys { id -> libraries.value.items.any { it.id == id } },
                             )
-                        initialized = true
                         // An empty library response is a real empty state, not permission to list the entire server.
                         if (selected == null) {
                             pages = MediaPageAccumulator()
@@ -92,9 +119,7 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
                                 state.value.copy(items = emptyList(), nextCursor = null, totalEstimate = 0, loading = false, refreshing = false)
                         } else loadFirst(selected, operation, libraries.origin == MediaLoadOrigin.StaleCache)
                     } catch (cancelled: CancellationException) {
-                        if (operation == ticket) {
-                            mutableState.value = state.value.copy(loading = false, refreshing = false)
-                        }
+                        retainCancelledRequest(operation, BrowserTabRequest.Library)
                         cancellation = cancelled
                         throw cancelled
                     } catch (failure: Exception) {
@@ -106,9 +131,7 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
             }
             cancellation?.let { throw it }
         } catch (cancelled: CancellationException) {
-            if (operation == ticket) {
-                mutableState.value = state.value.copy(loading = false, refreshing = false)
-            }
+            retainCancelledRequest(operation, BrowserTabRequest.Library)
             throw cancelled
         } catch (failure: Exception) {
             if (operation == ticket) {
@@ -162,10 +185,10 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
             before.copy(homeFeed = before.homeFeed.mergeUnchangedSections(home.value), homeError = null, homeStale = home.origin == MediaLoadOrigin.StaleCache)
     }
 
-    suspend fun select(id: CollectionId) {
+    suspend fun select(id: CollectionId, keepContent: Boolean = false) {
         val collection = state.value.collections.firstOrNull { it.id == id } ?: return
         val operation = ++ticket
-        pages = MediaPageAccumulator()
+        if (!keepContent) pages = MediaPageAccumulator()
         val dedicatedCatalog =
             (capabilities.music && collection.mediaTypes.any { it in setOf(MediaType.Audio, MediaType.MusicAlbum, MediaType.MusicArtist) }) ||
                 (capabilities.photos && MediaType.Photo in collection.mediaTypes) ||
@@ -173,10 +196,12 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
         mutableState.value =
             state.value.copy(
                 selectedCollection = id,
-                items = emptyList(),
-                nextCursor = null,
-                totalEstimate = null,
-                loading = !dedicatedCatalog,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Library - BrowserTabRequest.LibraryMore,
+                items = if (keepContent) state.value.items else emptyList(),
+                nextCursor = state.value.nextCursor.takeIf { keepContent },
+                totalEstimate = state.value.totalEstimate.takeIf { keepContent },
+                loading = !dedicatedCatalog && !keepContent,
+                refreshing = !dedicatedCatalog && keepContent,
                 error = null,
                 stale = false,
             )
@@ -184,10 +209,10 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
         try {
             loadFirst(id, operation, false)
         } catch (cancelled: CancellationException) {
-            if (operation == ticket) mutableState.value = state.value.copy(loading = false)
+            retainCancelledRequest(operation, BrowserTabRequest.Library)
             throw cancelled
         } catch (failure: Exception) {
-            if (operation == ticket) mutableState.value = state.value.copy(loading = false, error = browseError(failure))
+            if (operation == ticket) mutableState.value = state.value.copy(loading = false, refreshing = false, error = browseError(failure))
         }
     }
 
@@ -257,21 +282,30 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
         val id = before.selectedCollection ?: return
         if (before.loading || before.refreshing || before.loadingMore) return
         val operation = ++ticket
-        mutableState.value = before.copy(loadingMore = true, error = null)
+        mutableState.value = before.copy(loadingMore = true, error = null,
+            tabPendingRequests = before.tabPendingRequests - BrowserTabRequest.LibraryMore)
         try {
             val loaded = repository.browse(session, MediaQuery.Items(id), libraryRequest(id, cursor))
             if (operation != ticket) return
+            // The page walk retains cursor history, while the published facts
+            // may have been edited/deleted since these earlier pages were read.
+            val visible = state.value.items.associateBy { it.id }
+            val previousRows = pages.snapshot().items.associateBy { it.id }
+            val removed = previousRows.keys - visible.keys
+            val edited = visible.filter { (id, item) -> previousRows[id]?.userData != item.userData }
             val page = pages.append(cursor, loaded.value)
             mutableState.value =
                 state.value.copy(
-                    items = page.items,
+                    items = page.items.filterNot { it.id in removed }.map { item ->
+                        edited[item.id]?.let { item.copy(userData = it.userData) } ?: item
+                    },
                     nextCursor = page.nextCursor,
                     totalEstimate = page.totalEstimate,
                     loadingMore = false,
                     stale = before.stale || loaded.origin == MediaLoadOrigin.StaleCache,
                 )
         } catch (cancelled: CancellationException) {
-            if (operation == ticket) mutableState.value = state.value.copy(loadingMore = false)
+            retainCancelledRequest(operation, BrowserTabRequest.LibraryMore)
             throw cancelled
         } catch (failure: Exception) {
             if (operation == ticket) {
@@ -285,6 +319,14 @@ internal class CatalogBrowser(context: BrowserContext) : BrowserController(conte
         val id = state.value.selectedCollection ?: return
         mutableState.value = state.value.copy(librarySort = sort)
         select(id)
+    }
+
+    private fun retainCancelledRequest(operation: Long, request: BrowserTabRequest) {
+        if (operation != ticket) return
+        val current = state.value
+        if (request == BrowserTabRequest.Library && !current.loading && !current.refreshing) return
+        mutableState.value = current.copy(loading = false, refreshing = false, loadingMore = false,
+            tabPendingRequests = current.tabPendingRequests + request)
     }
 
     private fun libraryRequest(id: CollectionId, cursor: PageCursor? = null): PageRequest =

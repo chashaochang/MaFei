@@ -6,27 +6,45 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
-/**
- * The season document that was visible before an episode detail route took over the provider detail slot. Returning to that route should reveal this document
- * immediately; a background refresh can update it later without replacing the whole season page with a loading state.
- */
-private data class SeasonRestoreSnapshot(
-    val series: MediaItem,
-    val seasons: List<MediaItem>,
-    val seasonId: MediaId,
-    val season: MediaItem?,
-    val episodes: List<MediaItem>,
-    val seriesPlayTarget: MediaItem?,
-    val seasonPlayTarget: MediaItem?,
-)
-
-internal class DetailBrowser(context: BrowserContext, private val playbackPreferences: MediaPlaybackPreferences?) : BrowserController(context) {
+/** Owns detail requests and the published season document used when an episode returns. */
+internal class DetailBrowser(context: BrowserContext, private val playbackPreferences: MediaPlaybackPreferences?) : BrowserController(context), BrowserTabParticipant {
     val generation: Long
         get() = detailTicket
 
     private var detailTicket = 0L
     private var detailRefreshTicket = 0L
-    private var seasonRestoreSnapshot: SeasonRestoreSnapshot? = null
+    private var detailRefreshInFlight = false
+    private var seasonRestoreSnapshot: BrowserSeasonDocument?
+        get() = state.value.seasonRestoreDocument
+        set(value) { mutableState.value = state.value.copy(seasonRestoreDocument = value) }
+
+    override fun switchTabContext(previous: String, target: String, retained: Set<String>) {
+        ++detailTicket
+        ++detailRefreshTicket
+        detailRefreshInFlight = false
+    }
+
+    override fun pendingTabRequests(): Set<BrowserTabRequest> =
+        if (detailRefreshInFlight) setOf(BrowserTabRequest.DetailRefresh) else emptySet()
+
+    override suspend fun resumeTabRequests(requests: Set<BrowserTabRequest>) {
+        val current = state.value
+        val id = current.detailId ?: return
+        if (BrowserTabRequest.Detail in requests && !current.detailLoading) {
+            openDetail(id, current.detail)
+        } else if (BrowserTabRequest.DetailRefresh in requests && !detailRefreshInFlight) {
+            val operation = detailTicket
+            refreshDetail(id)
+            if (operation != detailTicket) return
+            val season = current.selectedSeasonId
+            if (season != null) selectSeason(season, keepContent = true)
+            else state.value.detail?.takeIf { it.mediaType == MediaType.Series }?.let { loadSeriesSections(id, it, operation) }
+        } else if (BrowserTabRequest.DetailSections in requests && !current.detailSectionsLoading) {
+            val season = current.selectedSeasonId
+            if (season != null) selectSeason(season)
+            else current.detail?.let { loadSeriesSections(id, it, detailTicket) }
+        }
+    }
 
     suspend fun openDetail(id: MediaId, initialItem: MediaItem? = null) {
         val previous = state.value
@@ -34,7 +52,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         val previousSeasonId = previous.selectedSeasonId
         if (previousDetail?.mediaType == MediaType.Series && previous.detailEpisodes.any { it.id == id } && previousSeasonId != null) {
             seasonRestoreSnapshot =
-                SeasonRestoreSnapshot(
+                BrowserSeasonDocument(
                     series = previousDetail,
                     seasons = previous.detailSeasons,
                     seasonId = previousSeasonId,
@@ -46,9 +64,11 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         }
         val operation = ++detailTicket
         ++detailRefreshTicket
+        detailRefreshInFlight = false
         mutableState.value =
             state.value.copy(
                 detailId = id,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Detail - BrowserTabRequest.DetailSections - BrowserTabRequest.DetailRefresh,
                 // Keep the tapped card as the loading document. Besides avoiding a
                 // blank hero while the request is in flight, this gives the shared
                 // artwork transition a destination element during the route change.
@@ -87,6 +107,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                     }
                 preferredSourceId = remembered?.takeIf { candidate -> playableSources.any { it.id == candidate } }
             }
+            if (operation != detailTicket) return
             val selectedSource = playableSources.firstOrNull { it.id == preferredSourceId } ?: playableSources.firstOrNull()
             mutableState.value =
                 state.value.copy(
@@ -102,7 +123,15 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                 loadSeriesSections(id, loaded.value, operation)
             }
         } catch (cancelled: CancellationException) {
-            if (operation == detailTicket) mutableState.value = state.value.copy(detailLoading = false)
+            if (operation == detailTicket) {
+                val current = state.value
+                val pending = when {
+                    current.detailLoading -> current.tabPendingRequests + BrowserTabRequest.Detail
+                    current.detailSectionsLoading -> current.tabPendingRequests + BrowserTabRequest.DetailSections
+                    else -> current.tabPendingRequests
+                }
+                mutableState.value = current.copy(detailLoading = false, detailSectionsLoading = false, tabPendingRequests = pending)
+            }
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket) mutableState.value = state.value.copy(detailLoading = false, detailError = browseError(failure))
@@ -118,6 +147,9 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         if (beforeRequest.detail?.id != id || beforeRequest.detailLoading) return
         val operation = ++detailRefreshTicket
         val detailGeneration = detailTicket
+        detailRefreshInFlight = true
+        mutableState.value = beforeRequest.copy(
+            tabPendingRequests = beforeRequest.tabPendingRequests - BrowserTabRequest.DetailRefresh)
         try {
             val loaded = repository.item(session, id, refresh = true)
             if (operation != detailRefreshTicket || detailGeneration != detailTicket || state.value.detail?.id != id) return
@@ -158,10 +190,17 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                         },
                 )
         } catch (cancelled: CancellationException) {
+            if (operation == detailRefreshTicket && detailGeneration == detailTicket) {
+                mutableState.value = state.value.copy(tabPendingRequests = state.value.tabPendingRequests + BrowserTabRequest.DetailRefresh)
+            }
             throw cancelled
         } catch (_: Exception) {
             // Background refresh failures leave the presented detail exactly as
             // it was. Explicit retry still uses [openDetail] and exposes errors.
+        } finally {
+            if (operation == detailRefreshTicket && detailGeneration == detailTicket) {
+                detailRefreshInFlight = false
+            }
         }
     }
 
@@ -184,9 +223,11 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
             }
         ++detailTicket
         ++detailRefreshTicket
+        detailRefreshInFlight = false
         mutableState.value =
             state.value.copy(
                 detailId = snapshot.series.id,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Detail - BrowserTabRequest.DetailSections - BrowserTabRequest.DetailRefresh,
                 detail = snapshot.series,
                 detailLoading = false,
                 detailError = null,
@@ -208,7 +249,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         return true
     }
 
-    suspend fun selectSeason(id: MediaId) {
+    suspend fun selectSeason(id: MediaId, keepContent: Boolean = false) {
         val current = state.value
         val seriesId = current.detail?.takeIf { it.mediaType == MediaType.Series }?.id ?: return
         if (current.detailSeasons.none { it.id == id }) return
@@ -216,9 +257,10 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         mutableState.value =
             current.copy(
                 selectedSeasonId = id,
-                selectedSeasonDetail = null,
-                detailEpisodes = emptyList(),
-                selectedSeasonPlayTarget = null,
+                tabPendingRequests = current.tabPendingRequests - BrowserTabRequest.DetailSections,
+                selectedSeasonDetail = current.selectedSeasonDetail.takeIf { keepContent },
+                detailEpisodes = if (keepContent) current.detailEpisodes else emptyList(),
+                selectedSeasonPlayTarget = current.selectedSeasonPlayTarget.takeIf { keepContent },
                 detailSectionsLoading = true,
                 detailSectionsError = null,
             )
@@ -226,6 +268,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
             try {
                 repository.item(session, id, refresh = true).value
             } catch (cancelled: CancellationException) {
+                retainCancelledSections(operation, id)
                 throw cancelled
             } catch (_: Exception) {
                 null
@@ -243,7 +286,8 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
     }
 
     private suspend fun loadSeriesSections(seriesId: MediaId, detail: MediaItem, operation: Long) {
-        mutableState.value = state.value.copy(detailSectionsLoading = true, detailSectionsError = null)
+        mutableState.value = state.value.copy(detailSectionsLoading = true, detailSectionsError = null,
+            tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.DetailSections)
         try {
             val (loaded, providerNextUp) =
                 coroutineScope {
@@ -305,6 +349,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                 }
             }
         } catch (cancelled: CancellationException) {
+            retainCancelledSections(operation)
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket) {
@@ -345,6 +390,7 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
                     detailSectionsError = null,
                 )
         } catch (cancelled: CancellationException) {
+            retainCancelledSections(operation, seasonId)
             throw cancelled
         } catch (failure: Exception) {
             if (operation == detailTicket && state.value.selectedSeasonId == seasonId) {
@@ -353,12 +399,21 @@ internal class DetailBrowser(context: BrowserContext, private val playbackPrefer
         }
     }
 
+    private fun retainCancelledSections(operation: Long, seasonId: MediaId? = null) {
+        if (operation != detailTicket || (seasonId != null && state.value.selectedSeasonId != seasonId)) return
+        mutableState.value = state.value.copy(detailSectionsLoading = false,
+            tabPendingRequests = state.value.tabPendingRequests + BrowserTabRequest.DetailSections)
+    }
+
     fun back() {
         ++detailTicket
         ++detailRefreshTicket
+        detailRefreshInFlight = false
         mutableState.value =
             state.value.copy(
                 detailId = null,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Detail - BrowserTabRequest.DetailSections - BrowserTabRequest.DetailRefresh,
+                seasonRestoreDocument = null,
                 detail = null,
                 detailLoading = false,
                 detailError = null,

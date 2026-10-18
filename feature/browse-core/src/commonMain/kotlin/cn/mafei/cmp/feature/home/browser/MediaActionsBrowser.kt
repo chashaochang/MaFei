@@ -91,15 +91,20 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
     private suspend fun mutateDetail(detail: MediaItem, favorite: Boolean?, watched: Boolean?) {
         val operation = detailGeneration()
         if (state.value.detailActionBusy) return
+        val key = UserDataActionKey(detail.id, if (favorite != null) UserDataAction.Favorite else UserDataAction.Watched)
+        if (!userDataActionLocks.add(key)) return
         mutableState.value = state.value.copy(detailActionBusy = true, detailActionError = null)
         try {
             when {
                 favorite != null -> repository.setFavorite(session, detail.id, favorite)
                 else -> repository.setWatched(session, detail.id, checkNotNull(watched))
             }
-            if (operation != detailGeneration() || !state.value.containsMedia(detail.id)) return
-            val nextUserData = detail.userData.copy(isFavorite = favorite ?: detail.userData.isFavorite, isPlayed = watched ?: detail.userData.isPlayed)
-            mutableState.value = state.value.replaceUserData(detail.id, nextUserData).copy(detailActionBusy = false, detailActionError = null)
+            val updated = state.value.replaceUserData(detail.id) { data ->
+                data.copy(isFavorite = favorite ?: data.isFavorite, isPlayed = watched ?: data.isPlayed)
+            }
+            mutableState.value = if (operation == detailGeneration()) {
+                updated.copy(detailActionBusy = false, detailActionError = null)
+            } else updated
         } catch (cancelled: CancellationException) {
             if (operation == detailGeneration()) {
                 mutableState.value = state.value.copy(detailActionBusy = false)
@@ -109,6 +114,8 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
             if (operation == detailGeneration()) {
                 mutableState.value = state.value.copy(detailActionBusy = false, detailActionError = browseError(failure))
             }
+        } finally {
+            userDataActionLocks.remove(key)
         }
     }
 
@@ -139,6 +146,14 @@ internal class MediaActionsBrowser(context: BrowserContext, private val detailGe
             when (action) {
                 UserDataAction.Watched -> repository.setWatched(session, item.id, target)
                 UserDataAction.Favorite -> repository.setFavorite(session, item.id, target)
+            }
+            // Another Tab may have loaded this entity after the optimistic
+            // publish but before the provider accepted it. Reconcile that copy.
+            mutableState.value = state.value.replaceUserData(item.id) { data ->
+                when (action) {
+                    UserDataAction.Watched -> data.copy(isPlayed = target)
+                    UserDataAction.Favorite -> data.copy(isFavorite = target)
+                }
             }
         } catch (cancelled: CancellationException) {
             mutableState.value =

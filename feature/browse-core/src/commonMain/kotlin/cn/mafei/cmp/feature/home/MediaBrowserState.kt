@@ -83,6 +83,13 @@ data class MediaBrowserState(
     val administrator: Boolean? = null,
     val deleteBusy: Boolean = false,
     val deleteError: String? = null,
+    /** One published read model; inactive route documents are bounded by the Tab controller. */
+    val activeTabContext: String? = null,
+    val tabDocuments: Map<String, BrowserTabDocument> = emptyMap(),
+    val tabPendingRequests: Set<BrowserTabRequest> = emptySet(),
+    val tabRefreshRevision: Long? = null,
+    val seasonRestoreDocument: BrowserSeasonDocument? = null,
+    val personRequestedName: String = "",
 )
 
 /** Durable playback selections keyed exactly like legacy: provider account + media item. */

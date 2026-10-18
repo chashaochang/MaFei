@@ -6,21 +6,34 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
-internal class PersonBrowser(context: BrowserContext) : BrowserController(context) {
+internal class PersonBrowser(context: BrowserContext) : BrowserController(context), BrowserTabParticipant {
     private var personTicket = 0L
+    private val favoriteLocks = mutableSetOf<MediaId>()
+
+    override fun switchTabContext(previous: String, target: String, retained: Set<String>) { ++personTicket }
+
+    override suspend fun resumeTabRequests(requests: Set<BrowserTabRequest>) {
+        val current = state.value
+        if (BrowserTabRequest.Person in requests && !current.personLoading) {
+            current.personId?.let { openPerson(it, current.personRequestedName, keepContent = true) }
+        }
+    }
 
     /** Legacy CastDetailViewModel: detail first, then three independent ten-item work lists in parallel. */
-    suspend fun openPerson(id: MediaId, name: String) {
+    suspend fun openPerson(id: MediaId, name: String, keepContent: Boolean = false) {
         val operation = ++personTicket
+        val before = state.value
         mutableState.value =
             state.value.copy(
                 personId = id,
-                person = null,
+                personRequestedName = name,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Person,
+                person = before.person.takeIf { keepContent },
                 personLoading = true,
                 personError = null,
-                personMovies = emptyList(),
-                personSeries = emptyList(),
-                personEpisodes = emptyList(),
+                personMovies = if (keepContent) before.personMovies else emptyList(),
+                personSeries = if (keepContent) before.personSeries else emptyList(),
+                personEpisodes = if (keepContent) before.personEpisodes else emptyList(),
                 personSectionsLoading = false,
                 personFavoriteBusy = false,
             )
@@ -48,7 +61,8 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
                 state.value.copy(personMovies = works.first, personSeries = works.second, personEpisodes = works.third, personSectionsLoading = false)
         } catch (cancelled: CancellationException) {
             if (operation == personTicket) {
-                mutableState.value = state.value.copy(personLoading = false, personSectionsLoading = false)
+                mutableState.value = state.value.copy(personLoading = false, personSectionsLoading = false,
+                    tabPendingRequests = state.value.tabPendingRequests + BrowserTabRequest.Person)
             }
             throw cancelled
         } catch (failure: Exception) {
@@ -81,19 +95,20 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
     suspend fun togglePersonFavorite() {
         val person = state.value.person ?: return
         if (!capabilities.favoritesEdit || state.value.personFavoriteBusy) return
+        if (!favoriteLocks.add(person.id)) return
+        val operation = personTicket
         mutableState.value = state.value.copy(personFavoriteBusy = true)
         try {
             repository.setFavorite(session, person.id, !person.isFavorite)
-            if (state.value.person?.id == person.id) {
-                mutableState.value = state.value.copy(person = person.copy(isFavorite = !person.isFavorite), personFavoriteBusy = false)
-            } else {
-                mutableState.value = state.value.copy(personFavoriteBusy = false)
-            }
+            val updated = state.value.replacePersonFavorite(person.id, !person.isFavorite)
+            mutableState.value = if (operation == personTicket) updated.copy(personFavoriteBusy = false) else updated
         } catch (cancelled: CancellationException) {
-            mutableState.value = state.value.copy(personFavoriteBusy = false)
+            if (operation == personTicket) mutableState.value = state.value.copy(personFavoriteBusy = false)
             throw cancelled
         } catch (failure: Exception) {
-            mutableState.value = state.value.copy(personFavoriteBusy = false, personError = browseError(failure))
+            if (operation == personTicket) mutableState.value = state.value.copy(personFavoriteBusy = false, personError = browseError(failure))
+        } finally {
+            favoriteLocks.remove(person.id)
         }
     }
 
@@ -102,6 +117,8 @@ internal class PersonBrowser(context: BrowserContext) : BrowserController(contex
         mutableState.value =
             state.value.copy(
                 personId = null,
+                tabPendingRequests = state.value.tabPendingRequests - BrowserTabRequest.Person,
+                personRequestedName = "",
                 person = null,
                 personLoading = false,
                 personError = null,

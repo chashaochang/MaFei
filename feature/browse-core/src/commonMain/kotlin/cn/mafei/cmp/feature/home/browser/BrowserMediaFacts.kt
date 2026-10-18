@@ -84,6 +84,9 @@ internal fun MediaBrowserState.replaceUserData(id: MediaId, transform: (MediaUse
         items = items.replace(),
         favoriteItems = favoriteItems.replace(),
         searchItems = searchItems.replace(),
+        personMovies = personMovies.replace(),
+        personSeries = personSeries.replace(),
+        personEpisodes = personEpisodes.replace(),
         detail = detail?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
         selectedSeasonDetail = selectedSeasonDetail?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
         detailPlayTarget = detailPlayTarget?.let { item -> if (item.id == id) item.copy(userData = transform(item.userData)) else item },
@@ -99,6 +102,8 @@ internal fun MediaBrowserState.replaceUserData(id: MediaId, transform: (MediaUse
             ),
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.replace() },
         historyItems = historyItems.replaceHistory(),
+        seasonRestoreDocument = seasonRestoreDocument?.replaceUserData(id, transform),
+        tabDocuments = mapTabDocuments { it.replaceUserData(id, transform) },
     )
 }
 
@@ -113,12 +118,17 @@ internal fun MediaBrowserState.userDataFor(id: MediaId): MediaUserData? {
         ?: selectedSeasonPlayTarget?.takeIf { it.id == id }?.userData
         ?: detailSeasons.find()
         ?: detailEpisodes.find()
+        ?: personMovies.find()
+        ?: personSeries.find()
+        ?: personEpisodes.find()
         ?: homeFeed.recommendations.find()
         ?: homeFeed.resume.find()
         ?: homeFeed.nextUp.find()
         ?: homeFeed.latest.find()
         ?: homeLatestByCollection.values.asSequence().flatMap { it.asSequence() }.firstOrNull { it.id == id }?.userData
         ?: historyItems.firstOrNull { it.media.id == id }?.media?.userData
+        ?: seasonRestoreDocument?.mediaItems()?.firstOrNull { it.id == id }?.userData
+        ?: tabDocuments.values.firstNotNullOfOrNull { it.applyTo(MediaBrowserState()).userDataFor(id) }
 }
 
 internal fun MediaBrowserState.containsMedia(id: MediaId): Boolean =
@@ -128,12 +138,17 @@ internal fun MediaBrowserState.containsMedia(id: MediaId): Boolean =
 internal fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState {
     fun List<MediaItem>.prune() = filter { it.id !in ids }
     fun List<PlaybackHistoryItem>.pruneHistory() = filter { it.media.id !in ids }
+    val deletedDetail = detailId in ids || detail?.id in ids
     return copy(
         items = items.prune(),
         favoriteItems = favoriteItems.prune(),
         searchItems = searchItems.prune(),
+        detailId = detailId?.takeIf { !deletedDetail },
+        detail = detail?.takeIf { !deletedDetail },
+        detailLoading = detailLoading && !deletedDetail,
         detailEpisodes = detailEpisodes.prune(),
         detailSeasons = detailSeasons.prune(),
+        selectedSeasonId = selectedSeasonId?.takeIf { it !in ids },
         selectedSeasonDetail = selectedSeasonDetail?.takeIf { it.id !in ids },
         detailPlayTarget = detailPlayTarget?.takeIf { it.id !in ids },
         selectedSeasonPlayTarget = selectedSeasonPlayTarget?.takeIf { it.id !in ids },
@@ -151,6 +166,8 @@ internal fun MediaBrowserState.removeMedia(ids: Set<MediaId>): MediaBrowserState
                 latest = homeFeed.latest.prune(),
             ),
         homeLatestByCollection = homeLatestByCollection.mapValues { (_, media) -> media.prune() },
+        seasonRestoreDocument = seasonRestoreDocument?.removeMedia(ids),
+        tabDocuments = mapTabDocuments { it.removeMedia(ids) },
     )
 }
 
