@@ -107,8 +107,8 @@ internal fun BrowseApplication(
     val deleteConfirmBackdrop = rememberGlassBackdrop()
     // 列表页多选状态（legacy selectionMode）：切库/离开页面时自动退出多选。
     LaunchedEffect(state.selectedCollection) { selection.librarySelectedIds = emptySet() }
-    // Home always opens at its hero. Do not restore a process-saved grid
-    // position; route changes are handled explicitly by selectDestination.
+    // Start a new session at the hero, but retain this grid's anchor when
+    // switching tabs or returning from a document within the same session.
     val homeGridState = remember(session) { LazyGridState() }
     val chasingListState = rememberLazyListState()
     val favoriteGridState = rememberLazyGridState()
@@ -206,9 +206,6 @@ internal fun BrowseApplication(
                 account.minePresented = false
                 if (showingPersonDetail) browser.clearPerson()
                 if (state.detailId != null) browser.back()
-                if (next == HomeDestination) {
-                    scope.launch { homeGridState.scrollToItem(0) }
-                }
                 val selectedLibrary = libraries.firstOrNull { it.key == next }
                 navigation.browseBackStack.clear()
                 navigation.browseBackStack +=

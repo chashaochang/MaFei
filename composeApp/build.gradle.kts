@@ -180,6 +180,11 @@ kotlin {
         val desktopTest by getting {
             dependsOn(commonTest)
             kotlin.srcDir("src/jvmTest/kotlin")
+            dependencies {
+                implementation(libs.compose.upstream.ui.test)
+                implementation(libs.lifecycle.upstream.runtime)
+                implementation(libs.lifecycle.upstream.compose)
+            }
         }
 
         val iosMain by creating {

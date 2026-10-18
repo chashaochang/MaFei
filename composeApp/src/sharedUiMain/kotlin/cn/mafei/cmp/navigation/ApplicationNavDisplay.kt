@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
@@ -21,6 +22,27 @@ internal fun ApplicationNavDisplay(
     onBack: () -> Unit,
     entryProvider: (BrowseRoute) -> NavEntry<BrowseRoute>,
     modifier: Modifier = Modifier,
+) {
+    // A tab replaces the root instead of pushing a document. Give each root
+    // its own display lifetime so the outgoing page is removed immediately,
+    // while detail push/pop within that root keeps the normal transition.
+    // Preserve saveable page state (e.g. Home's selected feed) independently
+    // of that lifetime; retaining a scroll anchor without its feed is unsafe.
+    val rootStateHolder = rememberSaveableStateHolder()
+    val rootKey = backStack.first().toString()
+    key(rootKey) {
+        rootStateHolder.SaveableStateProvider(rootKey) {
+            BrowseStackDisplay(backStack, onBack, entryProvider, modifier)
+        }
+    }
+}
+
+@Composable
+private fun BrowseStackDisplay(
+    backStack: List<BrowseRoute>,
+    onBack: () -> Unit,
+    entryProvider: (BrowseRoute) -> NavEntry<BrowseRoute>,
+    modifier: Modifier,
 ) {
     NavDisplay(
         backStack = backStack,
