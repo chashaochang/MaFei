@@ -27,7 +27,7 @@ class MediaBrowser(
     private val detail = DetailBrowser(context, playbackPreferences)
     private val playbackSelection = PlaybackSelectionBrowser(context, playbackPreferences)
     private val person = PersonBrowser(context)
-    private val history = HistoryBrowser(context)
+    private val history = HistoryBrowser(context, nowEpochMs)
     private val mediaActions = MediaActionsBrowser(context, { detail.generation })
     private val tabContexts = BrowserTabContexts(context, listOf(catalog, search, detail, person))
 
@@ -94,6 +94,10 @@ class MediaBrowser(
     suspend fun loadHistory() = history.loadHistory()
 
     suspend fun loadHistoryPreview() = history.loadHistoryPreview()
+
+    suspend fun loadHistoryPreviewIfStale() = history.loadHistoryPreviewIfStale()
+
+    suspend fun ensureHistoryLoaded() = history.ensureHistoryLoaded()
 
     suspend fun loadMoreHistory() = history.loadMoreHistory()
 

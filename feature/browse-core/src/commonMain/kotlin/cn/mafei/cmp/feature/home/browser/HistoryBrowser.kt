@@ -4,10 +4,12 @@ import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.repositories.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 
-internal class HistoryBrowser(context: BrowserContext) : BrowserController(context) {
+internal class HistoryBrowser(context: BrowserContext, private val nowEpochMs: () -> Long) : BrowserController(context) {
     private var historyTicket = 0L
     private var historyResumePages = MediaPageAccumulator()
     private var historyCompletedPages = MediaPageAccumulator()
@@ -15,6 +17,11 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
     private var historyCompletedRetryInitial = false
     private var historyPageSize = HistoryPageSize
     private val historySeriesCache = mutableMapOf<MediaId, HistorySeriesCacheEntry>()
+    private var fullHistoryLoaded = false
+    private var activeRefresh: Long? = null
+    private var activeRefreshJob: Job? = null
+    private var successfulPreviewAt: Long? = null
+    private var successfulPreviewRevision: Long? = null
 
     // ------------------------------------------------------------- watch history
 
@@ -23,7 +30,9 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
         Completed,
     }
 
-    private data class HistorySourceLoad(val requested: Boolean, val failed: Boolean)
+    private data class HistorySourceLoad(val requested: Boolean, val failed: Boolean, val fresh: Boolean = !failed)
+
+    private data class HistoryInitialSource(val page: Page<MediaItem>?, val fresh: Boolean)
 
     private data class HistorySeriesPosition(val seasonNumber: Int, val episodeNumber: Int, val hasMultipleSeasons: Boolean)
 
@@ -36,35 +45,137 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
     suspend fun loadHistory() = loadHistory(HistoryPageSize)
 
     /** Legacy Mine tab preview: each source requests 24 rows, then the UI shows 6/8. */
-    suspend fun loadHistoryPreview() = loadHistory(MineHistoryPreviewSourceLimit)
+    suspend fun loadHistoryPreview() = loadHistoryPreview(force = true)
+
+    suspend fun loadHistoryPreviewIfStale() = loadHistoryPreview(force = false)
+
+    /** Reopening the history route keeps its entire page walk; cancelled initial loads can restart. */
+    suspend fun ensureHistoryLoaded() {
+        if (fullHistoryLoaded || refreshInFlight() || state.value.historyLoadingMore) return
+        loadHistory()
+    }
+
+    private fun refreshInFlight() = activeRefresh != null && activeRefreshJob?.isActive != false
+
+    private suspend fun loadHistoryPreview(force: Boolean) {
+        if (state.value.historyLoadingMore || (!force && refreshInFlight())) return
+        val operation = ++historyTicket
+        activeRefresh = operation
+        activeRefreshJob = currentCoroutineContext()[Job]
+        try {
+            val revision = repository.refreshRevision(session)
+            if (operation != historyTicket) return
+            val age = successfulPreviewAt?.let { nowEpochMs() - it }
+            if (!force && successfulPreviewRevision == revision && age != null && age in 0 until 30_000L) return
+            successfulPreviewAt = null
+            mutableState.value = state.value.copy(
+                historyLoading = state.value.historyItems.isEmpty(),
+                historyRefreshing = state.value.historyItems.isNotEmpty(),
+                historyError = null,
+            )
+            val (resume, completed) = coroutineScope {
+                val resume = async { loadInitialSource(HistorySource.Resume, MineHistoryPreviewSourceLimit) }
+                val completed = async { loadInitialSource(HistorySource.Completed, MineHistoryPreviewSourceLimit) }
+                resume.await() to completed.await()
+            }
+            if (operation != historyTicket) return
+            val anyFailed = !resume.fresh || !completed.fresh
+            // A preview is a head update, never the owner of the full history's page walk.
+            val previous = state.value.historyItems.map { it.media }
+            val retained = if (fullHistoryLoaded || anyFailed) previous else emptyList()
+            val merged = mergeHistory(resume.page?.items.orEmpty(), completed.page?.items.orEmpty(), retained)
+            mutableState.value = state.value.copy(
+                historyItems = merged,
+                historyLoading = false,
+                historyRefreshing = false,
+                historyError = if (resume.page == null && completed.page == null) HistoryLoadError else null,
+            )
+            if (!anyFailed) markPreviewFresh(operation, revision)
+            if (merged.isNotEmpty()) enrichHistorySeries(operation, merged)
+        } catch (cancelled: CancellationException) {
+            if (operation == historyTicket) {
+                successfulPreviewAt = null
+                mutableState.value = state.value.copy(historyLoading = false, historyRefreshing = false)
+            }
+            throw cancelled
+        } catch (failure: Exception) {
+            if (operation == historyTicket) {
+                successfulPreviewAt = null
+                mutableState.value = state.value.copy(historyLoading = false, historyRefreshing = false, historyError = browseError(failure))
+            }
+        } finally {
+            finishRefresh(operation)
+        }
+    }
+
+    private suspend fun loadInitialSource(source: HistorySource, pageSize: Int): HistoryInitialSource = try {
+        val loaded = when (source) {
+            HistorySource.Resume -> repository.browse(session, MediaQuery.Resume, historyResumeQuery(null, pageSize), refresh = true)
+            HistorySource.Completed -> repository.browse(session, MediaQuery.Items(null), historyCompletedQuery(null, pageSize), refresh = true)
+        }
+        HistoryInitialSource(loaded.value, fresh = loaded.origin != MediaLoadOrigin.StaleCache)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        HistoryInitialSource(null, fresh = false)
+    }
+
+    private suspend fun markPreviewFresh(operation: Long, revision: Long) {
+        val currentRevision = repository.refreshRevision(session)
+        if (operation == historyTicket && revision == currentRevision) {
+            successfulPreviewAt = nowEpochMs()
+            successfulPreviewRevision = revision
+        }
+    }
+
+    private fun finishRefresh(operation: Long) {
+        if (activeRefresh == operation) {
+            activeRefresh = null
+            activeRefreshJob = null
+        }
+    }
 
     private suspend fun loadHistory(pageSize: Int) {
         val operation = ++historyTicket
-        historyPageSize = pageSize
-        historyResumePages = MediaPageAccumulator()
-        historyCompletedPages = MediaPageAccumulator()
-        historyResumeRetryInitial = false
-        historyCompletedRetryInitial = false
+        activeRefresh = operation
+        activeRefreshJob = currentCoroutineContext()[Job]
+        successfulPreviewAt = null
         mutableState.value =
             state.value.copy(
-                historyLoading = true,
-                historyRefreshing = false,
+                historyLoading = state.value.historyItems.isEmpty(),
+                historyRefreshing = state.value.historyItems.isNotEmpty(),
                 historyLoadingMore = false,
-                historyLoadMoreFailed = false,
-                historyCanLoadMore = true,
                 historyError = null,
-                historyItems = emptyList(),
-                historyResumeCursor = null,
-                historyCompletedCursor = null,
             )
         try {
+            val revision = repository.refreshRevision(session)
             val (resume, completed) =
                 coroutineScope {
-                    val resume = async { loadHistorySource(operation, HistorySource.Resume, cursor = null, fetch = true) }
-                    val completed = async { loadHistorySource(operation, HistorySource.Completed, cursor = null, fetch = true) }
+                    val resume = async { loadInitialSource(HistorySource.Resume, pageSize) }
+                    val completed = async { loadInitialSource(HistorySource.Completed, pageSize) }
                     resume.await() to completed.await()
                 }
-            publishHistory(operation, initial = true, resume = resume, completed = completed)
+            if (operation != historyTicket) return
+            if (resume.page == null && completed.page == null && state.value.historyItems.isNotEmpty()) {
+                mutableState.value = state.value.copy(historyLoading = false, historyRefreshing = false, historyError = HistoryLoadError)
+            } else {
+                // Commit the replacement walk only after both requests settle. A cancelled or
+                // superseded refresh cannot leave retained rows pointing at empty accumulators.
+                val resumePages = MediaPageAccumulator()
+                val completedPages = MediaPageAccumulator()
+                resume.page?.let { resumePages.append(null, it) }
+                completed.page?.let { completedPages.append(null, it) }
+                historyPageSize = pageSize
+                historyResumePages = resumePages
+                historyCompletedPages = completedPages
+                historyResumeRetryInitial = resume.page == null
+                historyCompletedRetryInitial = completed.page == null
+                fullHistoryLoaded = resume.page != null || completed.page != null
+                publishHistory(operation, initial = true,
+                    resume = HistorySourceLoad(true, resume.page == null, resume.fresh),
+                    completed = HistorySourceLoad(true, completed.page == null, completed.fresh))
+            }
+            if (resume.fresh && completed.fresh) markPreviewFresh(operation, revision)
         } catch (cancelled: CancellationException) {
             if (operation == historyTicket) {
                 mutableState.value = state.value.copy(historyLoading = false, historyRefreshing = false)
@@ -73,8 +184,10 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
         } catch (failure: Exception) {
             if (operation == historyTicket) {
                 mutableState.value =
-                    state.value.copy(historyLoading = false, historyRefreshing = false, historyCanLoadMore = false, historyError = browseError(failure))
+                    state.value.copy(historyLoading = false, historyRefreshing = false, historyError = browseError(failure))
             }
+        } finally {
+            finishRefresh(operation)
         }
     }
 
@@ -118,13 +231,13 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
         loadMoreHistory()
     }
 
-    private fun historyResumeQuery(cursor: PageCursor?) =
-        PageRequest(cursor = cursor, pageSize = historyPageSize, filter = MediaFilter(mediaTypes = HistoryMediaTypes))
+    private fun historyResumeQuery(cursor: PageCursor?, pageSize: Int = historyPageSize) =
+        PageRequest(cursor = cursor, pageSize = pageSize, filter = MediaFilter(mediaTypes = HistoryMediaTypes))
 
-    private fun historyCompletedQuery(cursor: PageCursor?) =
+    private fun historyCompletedQuery(cursor: PageCursor?, pageSize: Int = historyPageSize) =
         PageRequest(
             cursor = cursor,
-            pageSize = historyPageSize,
+            pageSize = pageSize,
             sort = MediaSort(MediaSortField.DatePlayed, SortDirection.Descending),
             filter = MediaFilter(mediaTypes = HistoryMediaTypes, playedOnly = true),
         )
@@ -133,12 +246,13 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
     private suspend fun loadHistorySource(operation: Long, source: HistorySource, cursor: PageCursor?, fetch: Boolean): HistorySourceLoad {
         if (!fetch) return HistorySourceLoad(requested = false, failed = false)
         return try {
-            val page =
+            val loaded =
                 when (source) {
-                    HistorySource.Resume -> repository.browse(session, MediaQuery.Resume, historyResumeQuery(cursor), refresh = cursor == null).value
-                    HistorySource.Completed -> repository.browse(session, MediaQuery.Items(null), historyCompletedQuery(cursor), refresh = cursor == null).value
+                    HistorySource.Resume -> repository.browse(session, MediaQuery.Resume, historyResumeQuery(cursor), refresh = cursor == null)
+                    HistorySource.Completed -> repository.browse(session, MediaQuery.Items(null), historyCompletedQuery(cursor), refresh = cursor == null)
                 }
             if (operation != historyTicket) return HistorySourceLoad(requested = true, failed = false)
+            val page = loaded.value
             when (source) {
                 HistorySource.Resume -> {
                     historyResumePages.append(cursor, page)
@@ -149,7 +263,7 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
                     if (cursor == null) historyCompletedRetryInitial = false
                 }
             }
-            HistorySourceLoad(requested = true, failed = false)
+            HistorySourceLoad(requested = true, failed = false, fresh = loaded.origin != MediaLoadOrigin.StaleCache)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -164,7 +278,9 @@ internal class HistoryBrowser(context: BrowserContext) : BrowserController(conte
 
     private suspend fun publishHistory(operation: Long, initial: Boolean, resume: HistorySourceLoad, completed: HistorySourceLoad) {
         if (operation != historyTicket) return
-        val merged = mergeHistory(historyResumePages.snapshot().items, historyCompletedPages.snapshot().items)
+        // Preview head updates live in the same read model. Later pagination must not undo them.
+        val retained = if (initial) emptyList() else state.value.historyItems.map { it.media }
+        val merged = mergeHistory(retained, historyResumePages.snapshot().items, historyCompletedPages.snapshot().items)
         val requested = listOf(resume, completed).filter { it.requested }
         val anyFailed = requested.any { it.failed }
         val allRequestedFailed = requested.isNotEmpty() && requested.all { it.failed }

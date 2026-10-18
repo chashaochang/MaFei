@@ -38,18 +38,21 @@ internal fun BindBrowseDataLifecycle(
         }
         if (currentRoute == BrowseChasingRoute) chasingBrowser.refreshIfStale()
     }
-    // Legacy MineTab refreshes its independent resume + completed preview every
-    // time the account surface becomes visible; it never borrows HomeFeed.resume.
+    // Mine owns an independent resume + completed preview. Reentry keeps the
+    // cached content and only refreshes stale heads once the droplet is idle.
     LaunchedEffect(account.minePresented, account.mineBackStack.lastOrNull()) {
         if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) {
             tabInteraction?.awaitIdle()
-            browser.loadHistoryPreview()
+            browser.loadHistoryPreviewIfStale()
         }
     }
     // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
     // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
-    LaunchedEffect(account.mineBackStack.lastOrNull()) {
-        if (account.mineBackStack.lastOrNull() == BrowseMineHistoryRoute) browser.loadHistory()
+    LaunchedEffect(account.minePresented, account.mineBackStack.lastOrNull()) {
+        if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineHistoryRoute) {
+            tabInteraction?.awaitIdle()
+            browser.ensureHistoryLoaded()
+        }
         selection.librarySelectedIds = emptySet()
     }
     // 删除可用性只探测一次：服务器用户策略决定是否出现删除入口。

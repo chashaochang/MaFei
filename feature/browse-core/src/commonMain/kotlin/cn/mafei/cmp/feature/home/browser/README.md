@@ -46,6 +46,11 @@ Repository 的收藏、观看、删除或已确认播放 Stop 使 revision 变�
 调用与状态提交仍由 UI dispatcher 串行执行；网络操作可挂起，原有请求序号拒绝过时结果。
 取消异常必须继续传播；认证失败只进入账号恢复通道，不能把服务器原始错误写进内容列表。
 
+我的首页自动调用 `loadHistoryPreviewIfStale()`：两路均成功且 Repository revision 未变化时保鲜 30 秒，
+过期刷新保留原内容，失败/部分失败/陈旧缓存不延长时效。预览只合并头部到统一 `historyItems`，
+不得重置完整历史的分页累加器或游标。独立历史页自动调用 `ensureHistoryLoaded()`；初次取消/失败可以
+重新进入恢复，成功后的重入保留全部分页。用户手动刷新/重试仍调用 `loadHistory()` 强制重载。
+
 验证入口：本模块 `src/jvmTest/.../browser/` 的行为测试。新增场景优先验证请求竞争、分页、
 返回恢复、跨列表同步和失败回滚，而不是断言文件长度或复刻内部函数结构。
 Tab 回归入口：`BrowserTabDocumentsTest`、`BrowserTabConcurrencyTest`、`BrowserTabResumeCancellationTest`。
