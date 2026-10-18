@@ -16,7 +16,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class EffectLayerRecordingTest {
-    private val cache = EffectLayerRecording()
+    private val cache = EffectLayerRecording<Shadow>()
     private var recordings = 0
 
     private fun record(

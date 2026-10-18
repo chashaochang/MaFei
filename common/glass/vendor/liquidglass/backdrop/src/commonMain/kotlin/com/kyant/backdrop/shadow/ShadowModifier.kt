@@ -71,7 +71,7 @@ internal class ShadowNode(
     override val shouldAutoInvalidate: Boolean = false
 
     private var shadowLayer: GraphicsLayer? = null
-    private val recording = EffectLayerRecording()
+    private val recording = EffectLayerRecording(::sameShadowDrawingParameters)
 
     private val paint = Paint()
     private var prevBlurRadius = Float.NaN
@@ -154,6 +154,10 @@ internal class ShadowNode(
         }
     }
 }
+
+// Opacity and compositing mode remain live graphics-layer properties.
+internal fun sameShadowDrawingParameters(old: Shadow, new: Shadow): Boolean =
+    old.radius == new.radius && old.offset == new.offset && old.color == new.color
 
 private val ShadowMaskPaint = Paint().apply {
     blendMode = BlendMode.Clear

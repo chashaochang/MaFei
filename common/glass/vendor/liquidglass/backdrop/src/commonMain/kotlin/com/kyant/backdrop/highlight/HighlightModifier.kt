@@ -77,7 +77,7 @@ internal class HighlightNode(
     override val shouldAutoInvalidate: Boolean = false
 
     private var highlightLayer: GraphicsLayer? = null
-    private val recording = EffectLayerRecording()
+    private val recording = EffectLayerRecording(::sameHighlightDrawingParameters)
 
     private val paint =
         Paint().apply {
@@ -198,5 +198,23 @@ internal class HighlightNode(
                 }
             paint.setRuntimeShader(shader)
         }
+    }
+}
+
+// Alpha and blend mode are applied by the graphics layer, not the recorded paint.
+// Custom styles still bypass reuse because createShader may read animated state.
+internal fun sameHighlightDrawingParameters(old: Highlight, new: Highlight): Boolean {
+    if (old.width != new.width || old.blurRadius != new.blurRadius) return false
+    val oldStyle = old.style
+    val newStyle = new.style
+    return when {
+        oldStyle is HighlightStyle.Plain && newStyle is HighlightStyle.Plain ->
+            oldStyle.color == newStyle.color
+        oldStyle is HighlightStyle.Default && newStyle is HighlightStyle.Default ->
+            oldStyle.color == newStyle.color && oldStyle.angle == newStyle.angle &&
+                oldStyle.falloff == newStyle.falloff
+        oldStyle is HighlightStyle.Ambient && newStyle is HighlightStyle.Ambient ->
+            oldStyle == newStyle
+        else -> false
     }
 }

@@ -73,7 +73,7 @@ internal class InnerShadowNode(
     override val shouldAutoInvalidate: Boolean = false
 
     private var shadowLayer: GraphicsLayer? = null
-    private val recording = EffectLayerRecording()
+    private val recording = EffectLayerRecording<InnerShadow>()
 
     private val paint = Paint()
     private var clipPath: Path? = null
