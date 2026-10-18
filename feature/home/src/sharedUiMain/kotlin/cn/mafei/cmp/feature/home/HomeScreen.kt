@@ -4,8 +4,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -118,6 +121,8 @@ fun HomeScreen(
     // 全窗，与侧栏让位无关），HomeScreen 只负责把状态喂给它。
     heroBackdropState: HomeHeroBackdropState? = null,
 ) {
+    val pageActive = LocalMaFeiPageActive.current
+    val currentPageActive = rememberUpdatedState(pageActive)
     val safeArea = LocalMaFeiSafeArea.current
     val navigationChrome = LocalMaFeiNavigationChrome.current
     val layout = navigationChrome.effectiveLayout ?: layout
@@ -131,7 +136,7 @@ fun HomeScreen(
         onItem(item)
     }
     val transitionArtwork: @Composable (MediaItem, String, Modifier) -> Modifier = { item, source, bounds ->
-        if (source == selectedArtworkSource) sharedArtworkModifier?.invoke(item, bounds) ?: bounds
+        if (pageActive && source == selectedArtworkSource) sharedArtworkModifier?.invoke(item, bounds) ?: bounds
         else bounds
     }
     // Provider feeds can contain the same media more than once (the Jellyfin
@@ -179,7 +184,8 @@ fun HomeScreen(
     val renderedFeedKey = selectedFeedKey
     var browseSortIndex by rememberSaveable { mutableStateOf(0) }
     var browseDescending by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(collections) {
+    LaunchedEffect(pageActive, collections) {
+        if (!pageActive) return@LaunchedEffect
         // A refresh can briefly publish an empty collection list. Keep the
         // current feed through that transient state instead of visibly jumping
         // back to "最近添加"; reset only after a real collection snapshot exists.
@@ -264,7 +270,8 @@ fun HomeScreen(
             ),
         )
     }
-    LaunchedEffect(overview, showHomeHero, showHero) {
+    LaunchedEffect(pageActive, overview, showHomeHero, showHero) {
+        if (!pageActive) return@LaunchedEffect
         // Align once immediately and once when the first real hero is ready.
         // The latter closes the one-frame anchor race without interrupting
         // later provider refreshes or a user's established scroll position.
@@ -273,7 +280,8 @@ fun HomeScreen(
             if (showHero || !showHomeHero) initialHeroAlignmentPending = false
         }
     }
-    LaunchedEffect(gridState, paginationEnabled, displayed.size) {
+    LaunchedEffect(pageActive, gridState, paginationEnabled, displayed.size) {
+        if (!pageActive || !paginationEnabled) return@LaunchedEffect
         snapshotFlow {
             val info = gridState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -344,7 +352,7 @@ fun HomeScreen(
             }
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (!stretchHeroRefresh || source != NestedScrollSource.UserInput) return Offset.Zero
+                if (!currentPageActive.value || !stretchHeroRefresh || source != NestedScrollSource.UserInput) return Offset.Zero
                 return Offset(0f, consumeHeroDelta(available.y, mayStartStretch = atAbsoluteTop()))
             }
 
@@ -353,7 +361,7 @@ fun HomeScreen(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (!stretchHeroRefresh || source != NestedScrollSource.UserInput) return Offset.Zero
+                if (!currentPageActive.value || !stretchHeroRefresh || source != NestedScrollSource.UserInput) return Offset.Zero
                 // A single fast drag can reach index 0 inside the child scroll.
                 // Its unconsumed remainder arrives here, so absorb it into the
                 // hero during the same gesture instead of waiting for a second pull.
@@ -362,10 +370,11 @@ fun HomeScreen(
 
             override suspend fun onPreFling(available: Velocity): Velocity {
                 val start = heroStretchPx.floatValue
-                if (!stretchHeroRefresh || start <= 0f) return Velocity.Zero
+                if (!currentPageActive.value || !stretchHeroRefresh || start <= 0f) return Velocity.Zero
                 val requestRefresh = start >= heroRefreshThresholdPx && !currentRefreshing.value
                 heroSettleJob.value?.cancel()
                 heroSettleJob.value = heroRefreshScope.launch {
+                    if (!currentPageActive.value) return@launch
                     if (requestRefresh) currentRetry.value()
                     Animatable(start).animateTo(
                         targetValue = 0f,
@@ -378,8 +387,12 @@ fun HomeScreen(
             }
         }
     }
-    LaunchedEffect(stretchHeroRefresh) {
-        if (!stretchHeroRefresh) heroStretchPx.floatValue = 0f
+    LaunchedEffect(pageActive, stretchHeroRefresh) {
+        if (!pageActive || !stretchHeroRefresh) {
+            heroSettleJob.value?.cancel()
+            heroSettleJob.value = null
+            heroStretchPx.floatValue = 0f
+        }
     }
     val heroExtraHeight = with(density) { heroStretchPx.floatValue.toDp() }
     val heroRefreshProgress = (heroStretchPx.floatValue / heroRefreshThresholdPx).coerceIn(0f, 1f)
@@ -457,7 +470,8 @@ fun HomeScreen(
     // remaining 960px hero after a fixed delay still competed with the first
     // user scroll on slower devices. A settled-page change cancels stale work
     // and advances this three-image window instead.
-    LaunchedEffect(heroItems, prefetchBackdrop, heroPagerState, showHomeHero) {
+    LaunchedEffect(pageActive, heroItems, prefetchBackdrop, heroPagerState, showHomeHero) {
+        if (!pageActive) return@LaunchedEffect
         val prefetch = prefetchBackdrop ?: return@LaunchedEffect
         if (!showHomeHero || heroItems.isEmpty()) return@LaunchedEffect
         var initialEmission = true
@@ -478,47 +492,19 @@ fun HomeScreen(
                 }
             }
     }
-    DisposableEffect(heroBackdropState, heroPagerState, gridState) {
-        onDispose {
-            heroBackdropState?.detach(heroPagerState, gridState)
+    LaunchedEffect(pageActive, gridState, heroPagerState) {
+        if (!pageActive) {
+            feedSelectionJob.value?.cancel()
+            feedSelectionJob.value = null
+            heroAutoplayProgress.stop()
+            if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
+            if (heroPagerState.isScrollInProgress) heroPagerState.stopScroll(MutatePriority.PreventUserInput)
         }
     }
-    // 同步窗口级轮播背景的状态（背景画在 shell 窗口画布，不在 scene 里）。
-    LaunchedEffect(heroItems, heroBackdropState) {
-        heroBackdropState?.items = heroItems
-    }
-    LaunchedEffect(heroBackdropState, heroPagerState, gridState, layout) {
-        heroBackdropState?.let { state ->
-            state.pagerState = heroPagerState
-            state.gridState = gridState
-            // A 72dp full-window blur is disproportionately expensive on a
-            // 2800x1840 tablet: every ambient transition temporarily renders
-            // two large blurred layers. The clear hero still supplies the
-            // foreground detail, so the ambient only needs enough blur to
-            // carry colour and light into the feed below it.
-            state.blurRadius = when (layout.family) {
-                MaFeiLayoutFamily.Phone -> 40.dp
-                MaFeiLayoutFamily.Tablet -> 44.dp
-                MaFeiLayoutFamily.Desktop -> 48.dp
-            }
-            state.heroHeight = homeHeroHeight(layout)
-            state.clearCarouselEnabled = layout.family != MaFeiLayoutFamily.Phone
-        }
-    }
-    // `heroExtraHeight` changes on every resisted pull-down frame. Keeping it
-    // inside the attachment effect above left the window-level artwork at its
-    // initial height because that effect's keys are otherwise stable. Publish
-    // the latest value after each successful composition without restarting a
-    // coroutine for every gesture frame.
-    SideEffect {
-        heroBackdropState?.extraHeight = heroExtraHeight
-    }
-    LaunchedEffect(heroBackdropState, heroVisibleForAutoplay) {
-        heroBackdropState?.precomposeNeighbours = heroVisibleForAutoplay
-    }
-    LaunchedEffect(activeHeroItem, heroBackdropState) {
-        heroBackdropState?.activeItem = activeHeroItem
-    }
+    BindHomeHeroBackdrop(
+        pageActive, heroBackdropState, heroItems, heroPagerState, gridState,
+        layout, heroExtraHeight, heroVisibleForAutoplay, activeHeroItem,
+    )
     // The shell already paints the full-window canvas. Painting another opaque
     // canvas inside the content pane creates a visible seam behind the sidebar.
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -582,7 +568,7 @@ fun HomeScreen(
       HomeRefreshContainer(
         stretchHero = stretchHeroRefresh,
         refreshing = refreshing,
-        onRefresh = onRetry,
+        onRefresh = { if (currentPageActive.value) onRetry() },
         heroStretchConnection = heroStretchConnection,
         modifier = Modifier.fillMaxSize(),
       ) {
@@ -591,6 +577,7 @@ fun HomeScreen(
             state = gridState,
             modifier = Modifier.fillMaxHeight().widthIn(max = layout.contentMaxWidthDp.dp).fillMaxWidth(),
             overscrollEffect = null,
+            userScrollEnabled = pageActive,
             contentPadding = PaddingValues(
                 start = gridStartPadding,
                 end = gridEndPadding,
@@ -623,7 +610,7 @@ fun HomeScreen(
                         layout = layout,
                         onItem = onHeroItem,
                         artwork = backdropArtwork,
-                        autoplay = heroAutoplay && heroVisibleForAutoplay,
+                        autoplay = pageActive && heroAutoplay && heroVisibleForAutoplay,
                         scrolling = gridScrolling,
                         onActiveItemChanged = { item ->
                             activeHeroItem = item
@@ -995,6 +982,7 @@ fun HomeScreen(
                   labels = floatingTabLabels,
                   selectedIndex = selectedFloatingTab,
                   onSelected = { index ->
+                      if (!currentPageActive.value) return@LiquidFloatingTabs
                       if (index == selectedFloatingTab) return@LiquidFloatingTabs
                       val selectFeed = {
                           if (index == 0) {
@@ -1015,6 +1003,7 @@ fun HomeScreen(
                       // exhibit.
                       feedSelectionJob.value?.cancel()
                       feedSelectionJob.value = heroRefreshScope.launch {
+                          if (!currentPageActive.value) return@launch
                           gridState.animateScrollToItem(
                               index = anchorIndex,
                               // Leave the same 8dp breathing room below the
@@ -1023,6 +1012,7 @@ fun HomeScreen(
                               // slightly underneath the glass tabs on phone.
                               scrollOffset = -floatingTabsInsetPx,
                           )
+                          if (!currentPageActive.value) return@launch
                           selectFeed()
                           // selectedFeedKey replaces every poster key below
                           // the header. Pin the stable header during that same

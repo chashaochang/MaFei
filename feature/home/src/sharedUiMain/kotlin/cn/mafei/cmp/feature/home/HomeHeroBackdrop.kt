@@ -1,9 +1,12 @@
 package cn.mafei.cmp.feature.home
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
@@ -185,6 +188,7 @@ class HomeHeroBackdropState {
  * 所有一层都是 fillMaxSize —— 背景属于窗口，不属于被侧栏挤开的内容，任何
  * 让位补偿（requiredWidth/负偏移）都不需要也不允许出现。
  */
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun HomeHeroWindowBackdrop(
     state: HomeHeroBackdropState,
@@ -192,6 +196,13 @@ fun HomeHeroWindowBackdrop(
     modifier: Modifier = Modifier,
     ambientArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
+    val pageActive = LocalMaFeiPageActive.current
+    val ambientState = remember { SeekableTransitionState(state.activeItem) }
+    val ambientTransition = rememberTransition(ambientState, label = "mafei-hero-ambient")
+    LaunchedEffect(state.activeItem, pageActive) {
+        if (pageActive) ambientState.animateTo(state.activeItem)
+        else ambientState.snapTo(state.activeItem)
+    }
     val darkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val brightnessFilter = remember(darkMode) {
         val brightness = if (darkMode) .54f else .82f
@@ -224,11 +235,9 @@ fun HomeHeroWindowBackdrop(
                 }
                 .then(if (ambientArtwork == null) Modifier.blur(state.blurRadius) else Modifier),
         ) {
-            Crossfade(
-                targetState = state.activeItem,
+            ambientTransition.Crossfade(
                 modifier = Modifier.fillMaxSize(),
                 animationSpec = tween(durationMillis = HeroAmbientFadeMillis),
-                label = "mafei-hero-ambient",
             ) { target ->
                 if (target != null) {
                     if (ambientArtwork != null) {

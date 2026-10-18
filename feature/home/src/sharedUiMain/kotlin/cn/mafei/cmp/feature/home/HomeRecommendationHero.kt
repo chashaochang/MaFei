@@ -6,9 +6,11 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
@@ -41,6 +43,7 @@ import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -137,6 +140,8 @@ internal fun RecommendationHero(
     windowBackdropActive: Boolean,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
+    val pageActive = LocalMaFeiPageActive.current
+    val currentPageActive = rememberUpdatedState(pageActive)
     val itemKeys = remember(items) { items.map { it.id.value } }
     // 指针按住（鼠标左键 / 触屏手指）期间必须暂停自动轮播：按着不动时
     // interactionSource 不产生 drag 事件，collectIsDraggedAsState 检测不到，
@@ -147,7 +152,19 @@ internal fun RecommendationHero(
     // the page that happened to be underneath the pointer.
     val heroClickSuppressed = remember { mutableStateOf(false) }
     val heroGestureScope = rememberCoroutineScope()
-    val pagerPressTracker = Modifier.pointerInput(itemKeys, pagerState) {
+    val mousePagerJob = remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(pageActive, pagerState) {
+        if (!pageActive) {
+            mousePagerJob.value?.cancel()
+            mousePagerJob.value = null
+            heroPointerPressed.value = false
+            heroClickSuppressed.value = false
+            autoplayProgress.stop()
+            if (pagerState.isScrollInProgress) pagerState.stopScroll(MutatePriority.PreventUserInput)
+        }
+    }
+    val pagerPressTracker = Modifier.pointerInput(pageActive, itemKeys, pagerState) {
+        if (!pageActive) return@pointerInput
         awaitEachGesture {
             val down = awaitFirstDown(
                 requireUnconsumed = false,
@@ -202,13 +219,14 @@ internal fun RecommendationHero(
             } finally {
                 heroPointerPressed.value = false
             }
-            if (mouseDrag && dragging) {
+            if (currentPageActive.value && mouseDrag && dragging) {
                 val targetPage = if (totalDragX < 0f) {
                     startPage + 1
                 } else {
                     startPage - 1
                 }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
-                heroGestureScope.launch {
+                mousePagerJob.value?.cancel()
+                mousePagerJob.value = heroGestureScope.launch {
                     pagerState.animateScrollToPage(targetPage)
                 }
             }
@@ -229,10 +247,12 @@ internal fun RecommendationHero(
     val settledItemIndex = pagerState.settledPage % items.size
     val isUserDragging by pagerState.interactionSource.collectIsDraggedAsState()
     val automaticPagerScroll = remember { mutableStateOf(false) }
-    LaunchedEffect(itemKeys, settledItemIndex) {
+    LaunchedEffect(pageActive, itemKeys, settledItemIndex) {
+        if (!pageActive) return@LaunchedEffect
         onActiveItemChanged(items.getOrNull(settledItemIndex))
     }
-    LaunchedEffect(pagerState, itemKeys) {
+    LaunchedEffect(pageActive, pagerState, itemKeys) {
+        if (!pageActive) return@LaunchedEffect
         var previousSettledPage: Int? = null
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
@@ -244,8 +264,8 @@ internal fun RecommendationHero(
                 previousSettledPage = settledPage
             }
     }
-    LaunchedEffect(itemKeys, autoplay, scrolling) {
-        if (!autoplay || items.size <= 1 || scrolling) return@LaunchedEffect
+    LaunchedEffect(pageActive, itemKeys, autoplay, scrolling) {
+        if (!pageActive || !autoplay || items.size <= 1 || scrolling) return@LaunchedEffect
         // User input cancels the current countdown, but releasing the gesture
         // must start a fresh countdown reliably. Keeping the loop inside
         // collectLatest avoids depending on a transient drag-state recomposition
@@ -322,11 +342,12 @@ internal fun RecommendationHero(
                 layout.family != MaFeiLayoutFamily.Phone && items.size > 1
             ) 1 else 0,
             overscrollEffect = null,
+            userScrollEnabled = pageActive,
         ) { page ->
             val item = items[page % items.size]
             Box(
                 Modifier.fillMaxSize().mafeiInteractive(
-                    onClick = { if (!heroClickSuppressed.value) onItem(item) },
+                    onClick = { if (currentPageActive.value && !heroClickSuppressed.value) onItem(item) },
                     radiusDp = 0f,
                     label = "查看${item.title}",
                     // 全宽轮播是背景的一部分：hover 染色/微放大/按压 ripple 在

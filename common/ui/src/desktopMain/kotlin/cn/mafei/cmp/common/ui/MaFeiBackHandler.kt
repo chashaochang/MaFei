@@ -7,7 +7,7 @@ import androidx.navigationevent.compose.NavigationEventHandler
 @Composable
 fun MaFeiBackHandler(enabled: Boolean, onBack: () -> Unit) {
     if (LocalNavigationEventDispatcherOwner.current == null) return
-    NavigationEventHandler(enabled = enabled) { progress ->
+    NavigationEventHandler(enabled = enabled && LocalMaFeiPageActive.current) { progress ->
         progress.collect { }
         onBack()
     }

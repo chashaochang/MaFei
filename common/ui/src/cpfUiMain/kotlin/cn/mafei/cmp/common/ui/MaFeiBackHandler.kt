@@ -12,7 +12,7 @@ fun MaFeiBackHandler(enabled: Boolean, onBack: () -> Unit) {
     if (LocalNavigationEventDispatcherOwner.current == null) return
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = enabled,
+        isBackEnabled = enabled && LocalMaFeiPageActive.current,
         onBackCompleted = onBack,
     )
 }

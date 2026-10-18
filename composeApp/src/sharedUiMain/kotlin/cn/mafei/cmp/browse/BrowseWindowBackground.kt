@@ -10,6 +10,8 @@ import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.CachedBlurredArtwork
 import cn.mafei.cmp.common.media.MediaArtwork
 import cn.mafei.cmp.common.media.landscapeArtworkCandidates
+import cn.mafei.cmp.common.ui.MaFeiRetainedContent
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.feature.home.HomeHeroBackdropState
 import cn.mafei.cmp.feature.home.HomeHeroWindowBackdrop
@@ -25,12 +27,19 @@ internal fun BrowseWindowBackground(
     heroBackdrop: HomeHeroBackdropState,
     currentRoute: BrowseRoute,
     showingDetail: Boolean,
+    browseActive: Boolean = true,
+    browseVisible: Boolean = true,
 ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
     // 首页轮播背景画在窗口画布上：全窗、与侧栏让位无关。轮播背景是
     // 「窗口的背景」而不是「被侧栏挤开的内容区里伸回去的补丁」——
     // 侧栏收不收起，它都逐像素静止。
-    if (currentRoute == BrowseHomeRoute && !showingDetail && homeCarouselVisible.value) {
+    val homeVisible = browseVisible && currentRoute == BrowseHomeRoute && !showingDetail && homeCarouselVisible.value
+    var homeVisited by remember { mutableStateOf(false) }
+    SideEffect { if (homeVisible) homeVisited = true }
+    if (homeVisible || homeVisited) {
+      MaFeiRetainedContent(active = homeVisible, modifier = Modifier.fillMaxSize()) {
+       CompositionLocalProvider(LocalMaFeiPageActive provides (homeVisible && browseActive)) {
         HomeHeroWindowBackdrop(
             state = heroBackdrop,
             ambientArtwork = { item, radius, modifier ->
@@ -59,5 +68,7 @@ internal fun BrowseWindowBackground(
                 )
             },
         )
+       }
+      }
     }
 }
