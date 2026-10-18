@@ -40,17 +40,18 @@ class MaFeiWindowModalHostState internal constructor() {
 
 val LocalMaFeiWindowModalHost = staticCompositionLocalOf<MaFeiWindowModalHostState?> { null }
 
-/** Publishes [content] into the shell's topmost modal layer while [visible]. */
+/** Publishes [content] while [visible] and its retained page is active. */
 @Composable
 fun MaFeiWindowModalPortal(
     visible: Boolean,
     content: @Composable BoxScope.(GlassBackdrop) -> Unit,
 ) {
     val host = LocalMaFeiWindowModalHost.current
+    val presented = visible && LocalMaFeiPageActive.current
     val owner = remember { Any() }
     val latestContent = rememberUpdatedState(content)
-    DisposableEffect(host, owner, visible) {
-        if (host != null && visible) {
+    DisposableEffect(host, owner, presented) {
+        if (host != null && presented) {
             host.present(owner) { backdrop -> latestContent.value(this, backdrop) }
         }
         onDispose { host?.dismiss(owner) }

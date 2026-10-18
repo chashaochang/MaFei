@@ -14,6 +14,7 @@ fun LegacyConfirmDialog(
     onDismiss: () -> Unit,
     destructive: Boolean = false,
 ) {
+    if (!LocalMaFeiPageActive.current) return
     Dialog(onDismissRequest = onDismiss) {
         MaFeiConfirmDialogPanel(
             title = title,

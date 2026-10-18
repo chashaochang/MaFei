@@ -48,6 +48,7 @@ fun MaFeiGlassConfirmDialog(
     modifier: Modifier = Modifier,
     destructive: Boolean = false,
 ) {
+    if (!LocalMaFeiPageActive.current) return
     val scheme = MaterialTheme.colorScheme
     val isLightTheme = scheme.background.luminance() > .5f
     val dimColor = if (isLightTheme) Color(0xFF29293A).copy(alpha = .23f)

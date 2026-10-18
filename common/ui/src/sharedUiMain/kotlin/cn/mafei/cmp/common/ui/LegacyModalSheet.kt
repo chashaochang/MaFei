@@ -22,6 +22,7 @@ import androidx.compose.ui.window.DialogProperties
 fun LegacyModalSheet(title: String, onDismiss: () -> Unit, heightFraction: Float = .65f,
     scrimModifier: Modifier = Modifier, largeWindow: Boolean? = null,
     content: @Composable ColumnScope.() -> Unit) {
+    if (!LocalMaFeiPageActive.current) return
     val large = largeWindow ?: (LocalMaFeiNavigationChrome.current.effectiveLayout
         ?.let { it.navigation != cn.mafei.cmp.common.design_system.NavigationPlacement.Bottom } == true
     )
