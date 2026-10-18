@@ -178,6 +178,13 @@ class HomeHeroBackdropState {
     }
 }
 
+/** Crossfade also hashes its target, so keep the full media payload out of that identity. */
+@Stable
+private class HomeHeroAmbientTarget(initialItem: MediaItem) {
+    val contentKey = initialItem.serverId to initialItem.id
+    var item by mutableStateOf(initialItem, referentialEqualityPolicy())
+}
+
 /**
  * 首页轮播背景（窗口级）：
  * - 模糊层：当前 item 的全窗模糊版，Crossfade 在 settle 后切换 —— 全页氛围。
@@ -197,11 +204,18 @@ fun HomeHeroWindowBackdrop(
     ambientArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
 ) {
     val pageActive = LocalMaFeiPageActive.current
-    val ambientState = remember { SeekableTransitionState(state.activeItem) }
+    val activeItem = state.activeItem
+    val ambientTarget = remember(activeItem?.serverId, activeItem?.id) {
+        activeItem?.let(::HomeHeroAmbientTarget)
+    }
+    // A metadata/image refresh keeps the same transition target, but the
+    // retained artwork must receive its latest payload, including while fading out.
+    SideEffect { if (activeItem != null) ambientTarget?.item = activeItem }
+    val ambientState = remember { SeekableTransitionState(ambientTarget) }
     val ambientTransition = rememberTransition(ambientState, label = "mafei-hero-ambient")
-    LaunchedEffect(state.activeItem, pageActive) {
-        if (pageActive) ambientState.animateTo(state.activeItem)
-        else ambientState.snapTo(state.activeItem)
+    LaunchedEffect(ambientTarget, pageActive) {
+        if (pageActive) ambientState.animateTo(ambientTarget)
+        else ambientState.snapTo(ambientTarget)
     }
     val darkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val brightnessFilter = remember(darkMode) {
@@ -238,12 +252,14 @@ fun HomeHeroWindowBackdrop(
             ambientTransition.Crossfade(
                 modifier = Modifier.fillMaxSize(),
                 animationSpec = tween(durationMillis = HeroAmbientFadeMillis),
+                contentKey = { it?.contentKey },
             ) { target ->
-                if (target != null) {
+                val item = target?.item
+                if (item != null) {
                     if (ambientArtwork != null) {
-                        ambientArtwork(target, state.blurRadius, Modifier.fillMaxSize())
+                        ambientArtwork(item, state.blurRadius, Modifier.fillMaxSize())
                     } else if (artwork != null) {
-                        artwork(target, Modifier.fillMaxSize())
+                        artwork(item, Modifier.fillMaxSize())
                     }
                 }
             }
