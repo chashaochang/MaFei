@@ -3,6 +3,7 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.*
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiLayout
@@ -52,7 +53,11 @@ internal fun LibraryEntryBinding(
     val collection = state.collections.firstOrNull { it.id.value == route.collectionId }
     if (browser.capabilities.liveTv && collection?.mediaTypes?.contains(MediaType.LiveChannel) == true) {
         val pages by liveStore.pages.collectAsState()
-        LaunchedEffect(liveStore) { liveStore.load(Unit) }
+        val pageActive = LocalMaFeiPageActive.current
+        LaunchedEffect(pageActive, liveStore) {
+            if (!pageActive) return@LaunchedEffect
+            liveStore.load(Unit)
+        }
         cn.mafei.cmp.feature.livetv.LiveChannelScreen(
             collection.name,
             pages[Unit] ?: cn.mafei.cmp.data.repositories.MediaPageState(loading = true),

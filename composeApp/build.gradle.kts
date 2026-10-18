@@ -124,6 +124,8 @@ kotlin {
                 implementation(libs.compose.resources)
                 implementation(libs.navigation3.runtime)
                 implementation(libs.navigation3.ui)
+                implementation(libs.lifecycle.runtime)
+                implementation(libs.lifecycle.compose)
             }
         }
         val commonTest by getting {
@@ -158,6 +160,8 @@ kotlin {
                 implementation(libs.compose.upstream.ui)
                 implementation(libs.compose.upstream.material3)
                 implementation(libs.compose.upstream.resources)
+                implementation(libs.lifecycle.upstream.runtime)
+                implementation(libs.lifecycle.upstream.compose)
                 implementation(
                     libs.navigation3.upstream.runtime,
                 )

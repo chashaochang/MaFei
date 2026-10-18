@@ -4,7 +4,6 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -23,6 +22,8 @@ import cn.mafei.cmp.common.ui.MaFeiAdaptiveShell
 import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiNavItem
+import cn.mafei.cmp.common.ui.LocalMaFeiTabInteractionState
+import cn.mafei.cmp.common.ui.MaFeiTabInteractionState
 import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.chasing.ChasingBrowser
@@ -56,6 +57,8 @@ internal fun BrowseApplication(
     windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
     onLogout: () -> Unit,
 ) {
+    val tabInteraction = remember(session) { MaFeiTabInteractionState() }
+    CompositionLocalProvider(LocalMaFeiTabInteractionState provides tabInteraction) {
     // Navigation 3 keeps an existing NavEntry composed while its parent route
     // remains on the stack. Keep the setting in a stable State holder so the
     // already-composed SettingsScreen observes drag/click updates immediately;
@@ -76,7 +79,7 @@ internal fun BrowseApplication(
                 playbackPreferences = runtime.playbackPreferences,
             )
         }
-    val state by browser.state.collectAsState()
+    val browserState = browser.state.collectAsState()
     val authenticationFailure by browser.authenticationFailure.collectAsState()
     val authenticationMessage = authenticationFailure?.let(::authenticationRecoveryMessage)
     val chasingBrowser =
@@ -91,9 +94,7 @@ internal fun BrowseApplication(
         }
     // 追剧仍未对用户开放：保留 provider、存储与迁移实现，只隐藏产品入口。
     val chasingEnabled = ChasingFeatureReleased && browser.capabilities.chasing
-    val chasingState by chasingBrowser.state.collectAsState()
     val chasingSelection = remember(session) { ChasingSelection(session.media.accountId, runtime.chasingSeriesStore) }
-    val chasingSelectionState by chasingSelection.state.collectAsState()
     LaunchedEffect(chasingSelection, chasingEnabled) { if (chasingEnabled) chasingSelection.load() }
     val scope = rememberCoroutineScope()
     val search = remember(session) { BrowseSearchState(browser::search, runtime::searchHistory, runtime::saveSearchHistory, scope) }
@@ -106,36 +107,47 @@ internal fun BrowseApplication(
     // 管理员媒体删除：确认弹窗 + 待删集合。入口由 browser 探测的服务器策略决定。
     val deleteConfirmBackdrop = rememberGlassBackdrop()
     // 列表页多选状态（legacy selectionMode）：切库/离开页面时自动退出多选。
-    LaunchedEffect(state.selectedCollection) { selection.librarySelectedIds = emptySet() }
+    ResetBrowseSelectionOnCollectionChange(browserState, selection)
     // Start a new session at the hero, but retain this grid's anchor when
     // switching tabs or returning from a document within the same session.
     val homeGridState = remember(session) { LazyGridState() }
     val chasingListState = rememberLazyListState()
-    val favoriteGridState = rememberLazyGridState()
-    val libraryGridState = rememberLazyGridState()
-    val latestGridState = rememberLazyGridState()
-    val searchGridState = rememberLazyGridState()
+    val pageScrollStates = remember(session) { BrowsePageScrollStates() }
     val browseContentStateHolder = rememberSaveableStateHolder()
     val artworkCache = rememberArtworkMemoryCache(session, session.connection.credentialKey)
     val fetchArtwork: suspend (MediaImage, Int) -> ByteArray? =
         remember(session) { { image, targetWidthPx -> runtime.loadArtwork(session, image, targetWidthPx) } }
+    val fetchPhotoArtwork: suspend (MediaImage) -> ByteArray? =
+        remember(session) { { image -> runtime.loadPhotoArtwork(session, image) } }
     val playback = remember(session) { runtime.playback(session) }
     val player = remember(session) { BrowsePlayerState(playback, browser, scope) }
     val playerShellState = rememberPlayerShellState(playback)
-    BindBrowsePlayerLifecycle(player, playerShellState, playerRenderMode, state.detailId, onPlayerScreenChanged, onPlayerFullscreenChanged)
+    BindBrowseSessionPlayerLifecycle(player, playerShellState, playerRenderMode, browserState, onPlayerScreenChanged, onPlayerFullscreenChanged)
     val catalogs = rememberBrowseCatalogs(runtime.sessions.media, session.media)
     val musicStore = catalogs.music
-    val liveStore = catalogs.live
-    val photoStore = catalogs.photos
-    val latestStore = catalogs.latest
     val preparedStream = playback?.prepared?.collectAsState()?.value
     val qualityOptions = rememberPlayerQualityOptions(player.playingMedia, preparedStream)
-    val navigation = remember(session) { BrowseNavigationState() }
-    val currentRoute = navigation.currentRoute
+    val navigation = remember(session) {
+        BrowseNavigationState().also { browser.switchTabContext(it.activeRoot.toString()) }
+    }
+    PruneBrowsePageScrollStates(navigation, pageScrollStates)
+    BrowseShellRouteScope(navigation) { shellPresentation ->
+    val state = browserState.value
+    val libraryGridState by remember(navigation, pageScrollStates) {
+        derivedStateOf {
+            val route = navigation.browseBackStack.lastOrNull { it is BrowseLibraryRoute } ?: BrowseLibraryIndexRoute
+            pageScrollStates.grid(navigation.activeRoot, route)
+        }
+    }
+    val favoriteGridState by remember(navigation, pageScrollStates) {
+        derivedStateOf {
+            val route = navigation.browseBackStack.lastOrNull { it == BrowseFavoriteRoute } ?: BrowseFavoriteRoute
+            pageScrollStates.grid(navigation.activeRoot, route)
+        }
+    }
     // Keep the chrome selection derived from the route that opened the page.
     // `state.selectedCollection` is provider/browser state and may still point
     // at the last library even when the user opened a Home shelf item.
-    val shellPresentation = currentRoute.shellPresentation()
     val shellContext = shellPresentation.context
     val libraryTabId =
         rememberLibraryTabId(
@@ -146,21 +158,23 @@ internal fun BrowseApplication(
     // 首页轮播背景的窗口级状态：背景画在 shell 窗口画布上（全窗、与侧栏让位
     // 无关），HomeScreen 只往里喂实时状态（items/pager/滚动跟随参数）。
     val heroBackdrop = remember { HomeHeroBackdropState() }
-    val reauthenticate: () -> Unit = {
-        account.authenticationNoticeDismissed = true
-        account.accountConnectError = null
-        account.pendingDiscoveredServerAddress = null
-        account.mineBackStack.clear()
-        account.mineBackStack += BrowseMineRoute
-        account.mineBackStack +=
-            BrowseConnectAccountRoute(
-                provider = session.connection.server.provider,
-                presetBaseUrl = session.connection.feiniuOriginalAddress ?: session.connection.server.baseUrl,
-                presetUsername = session.connection.account.userName,
-                credentialKey = session.connection.credentialKey,
-                returnToBrowseOnBack = true,
-            )
-        account.minePresented = true
+    val reauthenticate: () -> Unit = remember(account, session) {
+        {
+            account.authenticationNoticeDismissed = true
+            account.accountConnectError = null
+            account.pendingDiscoveredServerAddress = null
+            account.mineBackStack.clear()
+            account.mineBackStack += BrowseMineRoute
+            account.mineBackStack +=
+                BrowseConnectAccountRoute(
+                    provider = session.connection.server.provider,
+                    presetBaseUrl = session.connection.feiniuOriginalAddress ?: session.connection.server.baseUrl,
+                    presetUsername = session.connection.account.userName,
+                    credentialKey = session.connection.credentialKey,
+                    returnToBrowseOnBack = true,
+                )
+            account.minePresented = true
+        }
     }
     val destination = shellContext.destination
     // `destination` already carries Search's intentionally empty selection;
@@ -169,17 +183,16 @@ internal fun BrowseApplication(
     val shellDestination = destination
     val chromeCompactProgress = rememberBrowseChromeProgress(destination, homeGridState, chasingListState, favoriteGridState, libraryGridState)
 
-    BindBrowseDataLifecycle(browser, search, feiniu, session.selection.provider, state, libraryGridState, currentRoute, chasingBrowser, account, selection)
+    BindBrowseNavigationDataLifecycle(browser, search, feiniu, session.selection.provider, state, navigation, chasingBrowser, account, selection)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val layout = rememberBrowseWindowLayout(maxWidth, maxHeight)
-        LaunchedEffect(currentRoute, state.collections, layout.isPhoneNavigation) {
-            if (currentRoute == BrowseHomeRoute && !layout.isPhoneNavigation) {
-                state.collections.forEach { collection -> launch { browser.loadHomeLatest(collection.id) } }
-            }
+        BindHomeLibraryPrefetch(navigation, browser, state.collections, layout.isPhoneNavigation, active = !account.minePresented)
+        val currentPhoneLayout = rememberUpdatedState(layout.family == MaFeiLayoutFamily.Phone)
+        val navigator = remember(browser, navigation, scope, search, artworkCache, fetchArtwork) {
+            BrowseNavigator(browser, navigation, scope, search, artworkCache, fetchArtwork) { currentPhoneLayout.value }
         }
-        val navigator = BrowseNavigator(browser, navigation, scope, search, shellContext, artworkCache, fetchArtwork, layout.family == MaFeiLayoutFamily.Phone)
-        val showingPersonDetail = shellPresentation.personDetail
+        val onBrowseBack = navigator.onBack
         val showingDetail = shellPresentation.detail
         val showingFullPageRoute = shellPresentation.fullPage
         // 「我的」容器的两种形态：小屏（手机）全屏铺开、看起来就是普通页面跳转；其余尺寸
@@ -193,40 +206,25 @@ internal fun BrowseApplication(
         val sidebarDestinations = navigationItems.sidebar
         val topTabDestinations = navigationItems.topTabs
         val topTabSelectedDestination = shellContext.topTabDestination
-        val selectDestination: (String) -> Unit = { next ->
-            if (next == MineDestination) {
-                // 「我的」是一个带独立导航的容器，不是一个普通页面：下层的浏览路由保持原样
-                // （回来还是原来那页、原来那个滚动位置）。每次从标签栏进来都回到根页。
-                account.mineBackStack.clear()
-                account.mineBackStack += BrowseMineRoute
-                account.minePresented = true
-            } else {
-                // 小屏上容器是全屏铺开的、标签栏仍然可见，所以切到别的标签必须把它收起来，
-                // 否则会盖在上面走不掉。大屏是模态（有遮罩），这条只是顺带保持一致。
-                account.minePresented = false
-                if (showingPersonDetail) browser.clearPerson()
-                if (state.detailId != null) browser.back()
-                val selectedLibrary = libraries.firstOrNull { it.key == next }
-                navigation.browseBackStack.clear()
-                navigation.browseBackStack +=
-                    when {
-                        selectedLibrary != null -> {
-                            state.collections
-                                .firstOrNull { it.id.value == selectedLibrary.key }
-                                ?.let { collection ->
-                                    if (
-                                        collection.id != state.selectedCollection && !(browser.capabilities.music && MediaType.Audio in collection.mediaTypes)
-                                    ) {
-                                        scope.launch { browser.select(collection.id) }
-                                    }
-                                }
-                            BrowseLibraryRoute(selectedLibrary.key)
+        val selectDestination: (String) -> Unit = remember(account, browser, navigator) {
+            { next ->
+                if (next == MineDestination) {
+                    account.minePresented = true
+                } else {
+                    account.minePresented = false
+                    val selectedCollection = browser.state.value.collections.firstOrNull { it.id.value == next }
+                    if (selectedCollection != null) {
+                        navigator.selectLibraryRoot(selectedCollection)
+                    } else {
+                        val root = when (next) {
+                            HomeDestination -> BrowseHomeRoute
+                            ChasingDestination -> BrowseChasingRoute
+                            FavoriteDestination -> BrowseFavoriteRoute
+                            else -> BrowseLibraryIndexRoute
                         }
-                        next == HomeDestination -> BrowseHomeRoute
-                        next == ChasingDestination -> BrowseChasingRoute
-                        next == FavoriteDestination -> BrowseFavoriteRoute
-                        else -> BrowseLibraryIndexRoute
+                        navigator.selectRoot(root)
                     }
+                }
             }
         }
 
@@ -250,17 +248,19 @@ internal fun BrowseApplication(
                 authenticationFailure,
             )
         }
-        val popMineRoute: () -> Unit = {
-            when (val route = account.mineBackStack.lastOrNull()) {
-                is BrowseConnectAccountRoute -> {
-                    account.accountConnectError = null
-                    if (route.returnToBrowseOnBack) account.minePresented = false
+        val popMineRoute: () -> Unit = remember(account) {
+            {
+                when (val route = account.mineBackStack.lastOrNull()) {
+                    is BrowseConnectAccountRoute -> {
+                        account.accountConnectError = null
+                        if (route.returnToBrowseOnBack) account.minePresented = false
+                    }
+                    else -> Unit
                 }
-                else -> Unit
+                if (account.mineBackStack.size > 1) account.mineBackStack.removeLastOrNull()
             }
-            if (account.mineBackStack.size > 1) account.mineBackStack.removeLastOrNull()
         }
-        val mineNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
+        val accountNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
             // Registered before NavDisplay so child routes/sheets handle Back
             // first; at the account root it closes the whole account surface.
             cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = account.minePresented) { account.minePresented = false }
@@ -331,6 +331,11 @@ internal fun BrowseApplication(
                 modifier = mineHostModifier,
             )
         }
+        val currentAccountNavContent = rememberUpdatedState(accountNavContent)
+        val mineNavContent = remember(account) {
+            movableContentOf<Modifier> { modifier -> currentAccountNavContent.value(modifier) }
+        }
+
         val activeMedia = player.playingMedia?.takeIf { it.id.value == playerShellState.resourceId }
         val playerMedia = if (player.playerExpanded) player.playingMedia else activeMedia
         // The floating mini player is the legacy MusicMiniPlayer. Video keeps
@@ -338,12 +343,10 @@ internal fun BrowseApplication(
         // appear above the app navigation after playback starts.
         val musicMiniPlayerMedia = activeMedia?.takeIf { it.mediaType == MediaType.Audio }
 
-        val librarySortChoices = legacySortChoices(provider = session.connection.server.provider, direction = state.librarySort.direction)
-        val favoriteSortChoices = legacySortChoices(provider = session.connection.server.provider, direction = state.favoriteSort.direction)
-
+        val browseCanGoBack by remember(navigation) { derivedStateOf { navigation.browseBackStack.size > 1 } }
         val collapsedTopBarBack: (() -> Unit)? =
             when {
-                shellPresentation.secondaryContent && navigation.browseBackStack.size > 1 -> navigator::pop
+                shellPresentation.secondaryContent && browseCanGoBack -> onBrowseBack
                 account.minePresented && account.mineBackStack.size > 1 -> popMineRoute
                 else -> null
             }
@@ -352,7 +355,7 @@ internal fun BrowseApplication(
         // handlers are registered deeper in the Navigation 3 tree and win
         // first; this handler only owns the root surface and route stacks.
         MaFeiBackHandler(
-            enabled = account.minePresented || navigation.browseBackStack.size > 1,
+            enabled = account.minePresented || browseCanGoBack,
             onBack = {
                 when {
                     account.minePresented && account.mineBackStack.size > 1 -> popMineRoute()
@@ -424,7 +427,7 @@ internal fun BrowseApplication(
                             // search action selected; only pushed details and the Mine stack
                             // switch a collapsed large sidebar to the compact rail.
                             contentNavigationActive = shellPresentation.secondaryContent || account.minePresented,
-                            onSearch = navigator::openSearch,
+                            onSearch = navigator.onOpenSearch,
                             selectedSearch = shellPresentation.search,
                             // The compact dock is the other half of the mini-player morph.
                             // With no active media there is nothing to merge into, so page
@@ -442,253 +445,39 @@ internal fun BrowseApplication(
                                     fetchArtwork,
                                     homeCarouselVisible,
                                     heroBackdrop,
-                                    currentRoute,
+                                    navigation.currentRoute,
                                     showingDetail,
+                                    browseActive = !account.minePresented,
+                                    browseVisible = !(account.minePresented && mineFullScreen),
                                 )
                             },
                             accountActions = {},
                             windowControls = windowControls,
                             windowDragArea = windowDragArea,
                             scene = {
-                                BrowseArtworkTransitionHost { sharedTransitionScope ->
-                                    ApplicationNavDisplay(
-                                        backStack = navigation.browseBackStack,
-                                        onBack = { navigator.pop() },
-                                        entryProvider = { route ->
-                                            when (route) {
-                                                BrowseHomeRoute ->
-                                                    NavEntry(route) {
-                                                        HomeEntryBinding(
-                                                            sharedTransitionScope,
-                                                            authenticationFailure,
-                                                            selectDestination,
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                            homeGridState,
-                                                            heroBackdrop,
-                                                            homeCarouselVisible,
-                                                            musicMiniPlayerMedia,
-                                                        )
-                                                    }
-                                                is BrowseLatestRoute ->
-                                                    NavEntry(route) {
-                                                        LatestEntryBinding(
-                                                            route,
-                                                            showingFullPageRoute,
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            latestGridState,
-                                                            musicMiniPlayerMedia,
-                                                            latestStore,
-                                                        )
-                                                    }
-                                                BrowseLibraryIndexRoute ->
-                                                    NavEntry(route) {
-                                                        LibraryIndexEntryBinding(
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            navigator,
-                                                            navigation,
-                                                            chasingEnabled,
-                                                            musicMiniPlayerMedia,
-                                                        )
-                                                    }
-                                                BrowseChasingRoute ->
-                                                    NavEntry(route) {
-                                                        ChasingEntryBinding(
-                                                            scope,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            chasingBrowser,
-                                                            chasingState,
-                                                            chasingListState,
-                                                            musicMiniPlayerMedia,
-                                                        )
-                                                    }
-                                                BrowseFavoriteRoute ->
-                                                    NavEntry(route) {
-                                                        FavoriteEntryBinding(
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            favoriteGridState,
-                                                            musicMiniPlayerMedia,
-                                                            favoriteSortChoices,
-                                                        )
-                                                    }
-                                                BrowseSearchRoute ->
-                                                    NavEntry(route) {
-                                                        SearchEntryBinding(
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            search,
-                                                            searchGridState,
-                                                        )
-                                                    }
-                                                is BrowseLibraryRoute ->
-                                                    NavEntry(route) {
-                                                        LibraryEntryBinding(
-                                                            route,
-                                                            showingFullPageRoute,
-                                                            playerShellState,
-                                                            { image -> runtime.loadPhotoArtwork(session, image) },
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                            selection,
-                                                            libraryGridState,
-                                                            musicMiniPlayerMedia,
-                                                            librarySortChoices,
-                                                            musicStore,
-                                                            liveStore,
-                                                            photoStore,
-                                                        )
-                                                    }
-                                                is BrowseMusicDetailRoute ->
-                                                    NavEntry(route) {
-                                                        MusicDetailEntryBinding(
-                                                            route,
-                                                            playerShellState,
-                                                            browser,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                            musicMiniPlayerMedia,
-                                                            musicStore,
-                                                            runtime.sessions.media,
-                                                            session.media,
-                                                        )
-                                                    }
-                                                is BrowsePhotoAlbumRoute ->
-                                                    NavEntry(route) {
-                                                        PhotoAlbumEntryBinding(
-                                                            route,
-                                                            { image -> runtime.loadPhotoArtwork(session, image) },
-                                                            artworkCache,
-                                                            navigator,
-                                                            navigation,
-                                                            photoStore,
-                                                        )
-                                                    }
-                                                is BrowsePhotoViewerRoute ->
-                                                    NavEntry(route) {
-                                                        PhotoViewerEntryBinding(
-                                                            route,
-                                                            runtime.photoSaver,
-                                                            { image -> runtime.loadPhotoArtwork(session, image) },
-                                                            session,
-                                                            navigator,
-                                                            navigation,
-                                                            photoStore,
-                                                            runtime.sessions.media,
-                                                            session.media,
-                                                        )
-                                                    }
-                                                is BrowseDetailRoute ->
-                                                    NavEntry(route) {
-                                                        DetailEntryBinding(
-                                                            route,
-                                                            playback,
-                                                            uriHandler,
-                                                            sharedTransitionScope,
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                            selection,
-                                                            chasingSelection,
-                                                            chasingSelectionState,
-                                                            chasingEnabled,
-                                                        )
-                                                    }
-                                                is BrowsePersonRoute ->
-                                                    NavEntry(route) { PersonEntryBinding(route, scope, browser, state, artworkCache, fetchArtwork, navigator) }
-                                                is BrowseSeasonRoute ->
-                                                    NavEntry(route) {
-                                                        SeasonEntryBinding(
-                                                            route,
-                                                            playback,
-                                                            sharedTransitionScope,
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                        )
-                                                    }
-                                                is BrowseEpisodeRoute ->
-                                                    NavEntry(route) {
-                                                        EpisodeEntryBinding(
-                                                            route,
-                                                            playback,
-                                                            uriHandler,
-                                                            sharedTransitionScope,
-                                                            scope,
-                                                            browser,
-                                                            state,
-                                                            layout,
-                                                            player,
-                                                            artworkCache,
-                                                            fetchArtwork,
-                                                            navigator,
-                                                            navigation,
-                                                            selection,
-                                                        )
-                                                    }
-                                                // 「我的」的分支已搬到它自己的导航容器（mineNavContent）。这里兜底。
-                                                else -> NavEntry(route) {}
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize(),
+                                val pageContent = rememberUpdatedState<@Composable (BrowseRoute) -> Unit> { route ->
+                                    BrowsePageEntry(
+                                        route, browser, scope, layout, player, playerShellState,
+                                        navigator, navigation, selection, selectDestination,
+                                        artworkCache, fetchArtwork, fetchPhotoArtwork,
+                                        homeGridState, pageScrollStates, chasingListState,
+                                        heroBackdrop, homeCarouselVisible, musicMiniPlayerMedia,
+                                        catalogs, search, chasingBrowser, chasingSelection,
+                                        chasingEnabled, playback, uriHandler, session,
+                                        runtime.sessions.media, runtime.photoSaver,
                                     )
                                 }
+                                val entryProvider = remember {
+                                    { route: BrowseRoute -> NavEntry(route) { pageContent.value(route) } }
+                                }
+                                ApplicationNavDisplay(
+                                    navigation = navigation,
+                                    onBack = onBrowseBack,
+                                    entryProvider = entryProvider,
+                                    modifier = Modifier.fillMaxSize(),
+                                    active = !account.minePresented,
+                                    visible = !(account.minePresented && mineFullScreen),
+                                )
                                 // 小屏（手机）：同一个「我的」容器，改成全屏铺开 —— 非模态，看起来和普通
                                 // 页面跳转一样。
                                 //
@@ -696,9 +485,7 @@ internal fun BrowseApplication(
                                 // 是场景的兄弟节点（在场景之后合成），所以标签栏照样折射"我的"页面上的内容；
                                 // 放进 overlay 会让标签栏得到一个平底，看起来就是"两层、标签栏不动"。
                                 // 内外边距由页面自己处理：MineScreen 底部留 112dp 给标签栏，子页面各自带头部。
-                                if (account.minePresented && mineFullScreen) {
-                                    MineFullScreenHost { mineNavContent(it) }
-                                }
+                                RetainedPhoneAccountHost(mineFullScreen, account.minePresented, mineNavContent)
                             },
                             overlay = { backdrop ->
                                 BrowsePlayerOverlay(
@@ -722,5 +509,7 @@ internal fun BrowseApplication(
         }
         // 管理员媒体删除确认（列表多选 / 详情页单条共用）。
         BrowseDeleteConfirmation(scope, browser, state, navigation, selection, deleteConfirmBackdrop)
+    }
+    }
     }
 }

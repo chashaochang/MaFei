@@ -1,12 +1,12 @@
 package cn.mafei.cmp
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.*
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.chasing.ChasingBrowser
 import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
+import cn.mafei.cmp.common.ui.LocalMaFeiTabInteractionState
 
 @Composable
 internal fun BindBrowseDataLifecycle(
@@ -15,12 +15,12 @@ internal fun BindBrowseDataLifecycle(
     feiniu: FeiniuPreferenceState,
     provider: ProviderKind,
     state: cn.mafei.cmp.feature.home.MediaBrowserState,
-    libraryGridState: LazyGridState,
     currentRoute: BrowseRoute,
     chasingBrowser: ChasingBrowser,
     account: AccountFlowState,
     selection: BrowseSelectionState,
 ) {
+    val tabInteraction = LocalMaFeiTabInteractionState.current
     LaunchedEffect(browser) { browser.start() }
     LaunchedEffect(search) { search.load() }
     LaunchedEffect(feiniu, provider) {
@@ -28,8 +28,11 @@ internal fun BindBrowseDataLifecycle(
             feiniu.load()
         }
     }
-    LaunchedEffect(state.selectedCollection) { libraryGridState.scrollToItem(0) }
-    LaunchedEffect(currentRoute) {
+    LaunchedEffect(currentRoute, account.minePresented) {
+        if (account.minePresented) return@LaunchedEffect
+        // Cached content is already on screen. Only start automatic requests
+        // after the navigation droplet settles; leaving cancels this wait.
+        tabInteraction?.awaitIdle()
         if (currentRoute == BrowseFavoriteRoute || currentRoute == BrowseLibraryIndexRoute) {
             browser.refreshFavoritesIfStale()
         }
@@ -37,7 +40,12 @@ internal fun BindBrowseDataLifecycle(
     }
     // Legacy MineTab refreshes its independent resume + completed preview every
     // time the account surface becomes visible; it never borrows HomeFeed.resume.
-    LaunchedEffect(account.minePresented) { if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) browser.loadHistoryPreview() }
+    LaunchedEffect(account.minePresented, account.mineBackStack.lastOrNull()) {
+        if (account.minePresented && account.mineBackStack.lastOrNull() == BrowseMineRoute) {
+            tabInteraction?.awaitIdle()
+            browser.loadHistoryPreview()
+        }
+    }
     // 独立播放历史：该页面已经迁入「我的」自己的回退栈，不能再监听主浏览路由。
     // 否则从账号浮层进入时 currentRoute 仍是首页/媒体库，只会留下 Mine 预览数据。
     LaunchedEffect(account.mineBackStack.lastOrNull()) {

@@ -3,6 +3,7 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.*
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cn.mafei.cmp.common.design_system.MaFeiLayout
@@ -49,7 +50,11 @@ internal fun LatestEntryBinding(
                 error = if (collectionLatest && collection == null) "媒体库已不可用" else null,
             )
     val collectionGridState = remember(route.collectionId) { LazyGridState() }
-    LaunchedEffect(latestStore, collection) { if (collection != null) latestStore.load(collection) }
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, latestStore, collection) {
+        if (!pageActive) return@LaunchedEffect
+        if (collection != null) latestStore.load(collection)
+    }
     if (layout.isPhoneNavigation || collectionLatest) {
         VideoListScreen(
             title = collection?.let { "最近添加 · ${it.name}" } ?: "最近添加",

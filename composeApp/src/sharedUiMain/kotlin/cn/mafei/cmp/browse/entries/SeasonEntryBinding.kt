@@ -1,13 +1,9 @@
 package cn.mafei.cmp
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.key
-import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
@@ -26,12 +22,11 @@ import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.launch
 
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun SeasonEntryBinding(
     route: BrowseSeasonRoute,
     playback: SessionPlaybackRuntime?,
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier,
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
     state: cn.mafei.cmp.feature.home.MediaBrowserState,
@@ -42,29 +37,19 @@ internal fun SeasonEntryBinding(
     navigator: BrowseNavigator,
     navigation: BrowseNavigationState,
 ) {
-    val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
-        with(sharedTransitionScope) {
-            modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(key = "media-artwork:${item.id.value}"),
-                animatedVisibilityScope = LocalNavAnimatedContentScope.current,
-                enter = fadeIn(tween(320)),
-                exit = fadeOut(tween(320)),
-                boundsTransform = { _, _ -> tween(420) },
-                zIndexInOverlay = 1f,
-            )
-        }
-    }
     // The ArkUI season page owns its own ViewModel. Our
     // provider-neutral browser has one detail slot, so an
     // episode page temporarily replaces the series in that
     // slot. Make the route the source of truth: entering or
     // returning to this destination restores the exact
     // series + season before rendering it.
-    LaunchedEffect(route.seriesId, route.seasonId) {
-        if (state.detail?.id?.value != route.seriesId) {
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, route.seriesId, route.seasonId) {
+        if (!pageActive) return@LaunchedEffect
+        if (state.detailId?.value != route.seriesId) {
             browser.openDetail(MediaId(route.seriesId))
         }
-        if (state.selectedSeasonId?.value != route.seasonId || state.selectedSeasonDetail?.id?.value != route.seasonId) {
+        if (state.selectedSeasonId?.value != route.seasonId) {
             browser.selectSeason(MediaId(route.seasonId))
         }
     }

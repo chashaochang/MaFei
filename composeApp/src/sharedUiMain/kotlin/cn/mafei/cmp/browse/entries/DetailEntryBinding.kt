@@ -1,14 +1,9 @@
 package cn.mafei.cmp
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.layout.ContentScale
-import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
@@ -26,13 +21,12 @@ import cn.mafei.cmp.feature.home.MediaBrowser
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.launch
 
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun DetailEntryBinding(
     route: BrowseDetailRoute,
     playback: SessionPlaybackRuntime?,
     uriHandler: androidx.compose.ui.platform.UriHandler,
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier,
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
     state: cn.mafei.cmp.feature.home.MediaBrowserState,
@@ -47,18 +41,6 @@ internal fun DetailEntryBinding(
     chasingSelectionState: cn.mafei.cmp.feature.chasing.ChasingSelectionState,
     chasingEnabled: Boolean,
 ) {
-    val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
-        with(sharedTransitionScope) {
-            modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(key = "media-artwork:${item.id.value}"),
-                animatedVisibilityScope = LocalNavAnimatedContentScope.current,
-                enter = fadeIn(tween(320)),
-                exit = fadeOut(tween(320)),
-                boundsTransform = { _, _ -> tween(420) },
-                zIndexInOverlay = 1f,
-            )
-        }
-    }
     // Feiniu's catalog rows do not always carry the
     // legacy can_play flag even when the detail/play
     // endpoint can resolve the item.  The resolved

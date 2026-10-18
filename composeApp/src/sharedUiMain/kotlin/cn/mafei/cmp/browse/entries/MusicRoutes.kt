@@ -1,6 +1,7 @@
 package cn.mafei.cmp
 
 import androidx.compose.runtime.*
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -29,7 +30,11 @@ internal fun MusicLibraryRouteContent(store: MusicCatalogStore, libraryId: Strin
     }
     val pages by store.pages.collectAsState()
     val scope = rememberCoroutineScope()
-    LaunchedEffect(store, query) { store.load(query) }
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, store, query) {
+        if (!pageActive) return@LaunchedEffect
+        store.load(query)
+    }
     MusicLibraryScreen(title, section, pages[query] ?: MusicPageState(loading = true), layout,
         onSection = { section = it }, onBack = onBack,
         onRetry = { scope.launch { store.load(query, refresh = true) } },
@@ -52,7 +57,9 @@ internal fun MusicDetailRouteContent(store: MusicCatalogStore, id: String, title
     val scope = rememberCoroutineScope()
     var favoriteBusy by remember(id) { mutableStateOf(false) }
     var favoriteError by remember(id) { mutableStateOf(false) }
-    LaunchedEffect(store, mediaId, artist) {
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, store, mediaId, artist) {
+        if (!pageActive) return@LaunchedEffect
         launch { store.detail(mediaId) }
         launch { store.load(trackQuery) }
         if (artist) launch { store.load(albumQuery) }

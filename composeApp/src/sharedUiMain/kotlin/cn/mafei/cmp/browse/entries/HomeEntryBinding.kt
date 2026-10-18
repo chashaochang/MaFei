@@ -1,15 +1,10 @@
 package cn.mafei.cmp
 
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.unit.dp
-import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
@@ -27,10 +22,9 @@ import cn.mafei.cmp.feature.home.legacyHomeLatestMediaName
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.launch
 
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun HomeEntryBinding(
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier,
     authenticationFailure: cn.mafei.cmp.core.domain.AuthFailureKind?,
     selectDestination: (String) -> Unit,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -47,18 +41,6 @@ internal fun HomeEntryBinding(
     homeCarouselVisible: State<Boolean>,
     musicMiniPlayerMedia: MediaItem?,
 ) {
-    val sharedArtworkModifier: @Composable (MediaItem, Modifier) -> Modifier = { item, modifier ->
-        with(sharedTransitionScope) {
-            modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(key = "media-artwork:${item.id.value}"),
-                animatedVisibilityScope = LocalNavAnimatedContentScope.current,
-                enter = fadeIn(tween(320)),
-                exit = fadeOut(tween(320)),
-                boundsTransform = { _, _ -> tween(420) },
-                zIndexInOverlay = 1f,
-            )
-        }
-    }
     HomeScreen(
         collections = state.collections,
         items = state.items,

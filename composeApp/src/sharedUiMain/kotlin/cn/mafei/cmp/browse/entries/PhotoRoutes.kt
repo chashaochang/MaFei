@@ -24,7 +24,11 @@ internal fun PhotoCatalogRouteContent(store: PagedMediaStore<PhotoCatalogQuery>,
     val query = remember(parentId, albums) { PhotoCatalogQuery(MediaId(parentId), albums) }
     val pages by store.pages.collectAsState()
     val scope = rememberCoroutineScope()
-    LaunchedEffect(store, query) { store.load(query) }
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, store, query) {
+        if (!pageActive) return@LaunchedEffect
+        store.load(query)
+    }
     PhotoCatalogScreen(title, albums, pages[query] ?: MediaPageState(loading = true), onBack,
         onSection = if (library) {{ albums = it }} else null,
         onRetry = { scope.launch { store.load(query, refresh = true) } },
@@ -40,7 +44,9 @@ internal fun PhotoViewerRouteContent(store: PagedMediaStore<PhotoCatalogQuery>, 
     val pages by store.pages.collectAsState()
     var single by remember(photoId) { mutableStateOf(initialItem) }
     var loadFailed by remember(photoId) { mutableStateOf(false) }
-    LaunchedEffect(store, query, photoId) {
+    val pageActive = LocalMaFeiPageActive.current
+    LaunchedEffect(pageActive, store, query, photoId) {
+        if (!pageActive) return@LaunchedEffect
         if (query != null) store.load(query)
         if (single?.photo == null) {
             try { single = loadItem(MediaId(photoId)) }
@@ -52,7 +58,8 @@ internal fun PhotoViewerRouteContent(store: PagedMediaStore<PhotoCatalogQuery>, 
     // Freeze the viewer's opening order. A catalog refresh must not jump the
     // pager to a different photo, and a tapped off-page photo is never lost.
     var opening by remember(photoId) { mutableStateOf<List<MediaItem>?>(null) }
-    LaunchedEffect(photoId, source, single) {
+    LaunchedEffect(pageActive, photoId, source, single) {
+        if (!pageActive) return@LaunchedEffect
         if (opening == null && (source.any { it.id.value == photoId } || single != null)) {
             opening = photoDateGroups(source).flatMap { it.second }.let { items ->
                 if (items.any { it.id.value == photoId }) items else listOfNotNull(single)

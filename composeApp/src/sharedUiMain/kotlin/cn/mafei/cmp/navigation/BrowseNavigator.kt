@@ -5,6 +5,7 @@ import androidx.compose.runtime.*
 import cn.mafei.cmp.common.media.ArtworkMemoryCache
 import cn.mafei.cmp.common.media.legacyDetailBackdropArtworkCandidates
 import cn.mafei.cmp.common.media.prefetchArtwork
+import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaImage
 import cn.mafei.cmp.core.domain.MediaItem
@@ -20,11 +21,32 @@ internal class BrowseNavigator(
     private val navigation: BrowseNavigationState,
     private val scope: kotlinx.coroutines.CoroutineScope,
     private val search: BrowseSearchState,
-    private val shellContext: BrowseShellContext,
     private val artworkCache: ArtworkMemoryCache,
     private val fetchArtwork: suspend (MediaImage, Int) -> ByteArray?,
-    private val phoneLayout: Boolean,
+    private val phoneLayout: () -> Boolean,
 ) {
+    private val shellContext: BrowseShellContext
+        get() = navigation.currentRoute.shellPresentation().context
+
+    val onBack: () -> Unit = ::pop
+    val onOpenSearch: () -> Unit = ::openSearch
+    val onOpenLatest: () -> Unit = ::openLatest
+
+    fun selectRoot(root: BrowseRoute) {
+        if (navigation.activeRoot == root) return
+        navigation.selectRoot(root)
+        browser.switchTabContext(root.toString(), navigation.retainedRoots.map { it.toString() }.toSet())
+    }
+
+    fun selectLibraryRoot(collection: MediaCollection) {
+        selectRoot(BrowseLibraryRoute(collection.id.value))
+        if (collection.id != browser.state.value.selectedCollection &&
+            !(browser.capabilities.music && MediaType.Audio in collection.mediaTypes)
+        ) {
+            launchForCurrentRoute { browser.select(collection.id) }
+        }
+    }
+
     fun openDetailId(
         id: MediaId,
         mediaName: String?,
@@ -40,11 +62,11 @@ internal class BrowseNavigator(
         // first frame; the detail Hero can then fade in the real
         // Backdrop without waiting for the detail JSON round trip.
         initialItem?.let { tappedItem ->
-            scope.launch {
-                prefetchArtwork(tappedItem.legacyDetailBackdropArtworkCandidates(), artworkCache, fetchArtwork, targetWidthPx = if (phoneLayout) 720 else 960)
+            launchForCurrentRoute {
+                prefetchArtwork(tappedItem.legacyDetailBackdropArtworkCandidates(), artworkCache, fetchArtwork, targetWidthPx = if (phoneLayout()) 720 else 960)
             }
         }
-        scope.launch { browser.openDetail(id, initialItem) }
+        launchForCurrentRoute { browser.openDetail(id, initialItem) }
     }
 
     fun openDetail(
@@ -74,16 +96,16 @@ internal class BrowseNavigator(
                 )
             if (navigation.browseBackStack.lastOrNull() != route) {
                 navigation.browseBackStack += route
-                scope.launch { browser.openPerson(id, person.name) }
+                launchForCurrentRoute { browser.openPerson(id, person.name) }
             }
         }
     }
     val browseCollection: (cn.mafei.cmp.core.domain.MediaCollection) -> Unit = { collection ->
-        if (collection.id != browser.state.value.selectedCollection) {
-            scope.launch { browser.select(collection.id) }
-        }
         if (navigation.browseBackStack.lastOrNull() != BrowseLibraryRoute(collection.id.value)) {
             navigation.browseBackStack += BrowseLibraryRoute(collection.id.value)
+        }
+        if (collection.id != browser.state.value.selectedCollection) {
+            launchForCurrentRoute { browser.select(collection.id) }
         }
     }
 
@@ -128,27 +150,26 @@ internal class BrowseNavigator(
         if (navigation.browseBackStack.size > 1) {
             navigation.browseBackStack.removeLastOrNull()
             if (deferDetailClear) {
-                val expectedStack = navigation.browseBackStack.toList()
-                scope.launch {
+                launchForCurrentRoute {
                     delay(BrowseSharedReturnDurationMs)
-                    if (navigation.browseBackStack == expectedStack) browser.back()
+                    if (it()) browser.back()
                 }
             }
             when (revealed) {
-                BrowseHomeRoute -> scope.launch { browser.refreshHome() }
+                BrowseHomeRoute -> launchForCurrentRoute { browser.refreshHome() }
                 is BrowseDetailRoute ->
-                    scope.launch {
+                    launchForCurrentRoute {
                         val id = MediaId(revealed.mediaId)
                         if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
                     }
                 is BrowseEpisodeRoute ->
-                    scope.launch {
+                    launchForCurrentRoute {
                         val id = MediaId(revealed.episodeId)
                         if (browser.state.value.detail?.id == id) browser.refreshDetail(id) else browser.openDetail(id)
                     }
                 is BrowseSeasonRoute ->
                     if (!restoredSeasonContext)
-                        scope.launch {
+                        launchForCurrentRoute { isCurrent ->
                             val seriesId = MediaId(revealed.seriesId)
                             val seasonId = MediaId(revealed.seasonId)
                             // Episode details temporarily use the provider detail
@@ -158,9 +179,11 @@ internal class BrowseNavigator(
                                 val current = browser.state.value
                                 val requiresRestore = current.detail?.id != seriesId || current.selectedSeasonId != seasonId
                                 if (current.detail?.id != seriesId) browser.openDetail(seriesId)
+                                if (!isCurrent()) return@launchForCurrentRoute
                                 if (browser.state.value.selectedSeasonId != seasonId) {
                                     browser.selectSeason(seasonId)
                                 }
+                                if (!isCurrent()) return@launchForCurrentRoute
                                 if (!requiresRestore) browser.refreshDetail(seriesId)
                             }
                         }
@@ -168,6 +191,19 @@ internal class BrowseNavigator(
             }
         }
     }
+
+    /** A delayed command must never start or continue against another tab's document. */
+    private fun launchForCurrentRoute(action: suspend (isCurrent: () -> Boolean) -> Unit) {
+        val generation = navigation.tabGeneration
+        val root = navigation.activeRoot
+        val stack = navigation.browseBackStack.toList()
+        val isCurrent = {
+            navigation.tabGeneration == generation && navigation.activeRoot == root &&
+                navigation.browseBackStack.toList() == stack
+        }
+        scope.launch { if (isCurrent()) action(isCurrent) }
+    }
+
 }
 
 internal const val BrowseSharedReturnDurationMs = 460L
