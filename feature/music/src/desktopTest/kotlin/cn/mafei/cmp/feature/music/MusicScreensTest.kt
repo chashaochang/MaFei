@@ -106,6 +106,98 @@ class MusicScreensTest {
         rule.onNodeWithContentDescription("移除歌曲二").assertExists()
     }
 
+    @Test fun libraryRefreshFailureKeepsSongsAndTheirPositionWhileFeedbackCanBeDismissed() {
+        var page by mutableStateOf(MusicPageState(songs, initialized = true))
+        var retries = 0
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(360.dp, 800.dp)) {
+                MusicLibraryScreen("音乐", MusicLibrarySection.Tracks, page, mafeiLayout(360f, 800f),
+                    onSection = {}, onBack = {}, onRetry = { retries++ }, onMore = {}, onOpen = {},
+                    onPlay = { _, _ -> }, artwork = art)
+            }
+        } }
+        val bounds = rule.onNodeWithText("歌曲一").fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { page = page.copy(error = "刷新歌曲失败") }
+        rule.onNodeWithTag("mafeiGlassConfirmCard").assertExists()
+        rule.onNodeWithText("刷新歌曲失败").assertExists()
+        assertEquals(bounds, rule.onNodeWithText("歌曲一").fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithText("关闭").performClick()
+        rule.onNodeWithTag("mafeiGlassConfirmCard").assertDoesNotExist()
+        rule.runOnIdle { page = page.copy(loading = true) }
+        rule.runOnIdle { page = page.copy(loading = false) }
+        rule.onNodeWithText("重试").performClick()
+        assertEquals(1, retries)
+        assertEquals("刷新歌曲失败", page.error)
+    }
+
+    @Test fun playerFailureDoesNotMoveTransportControlsAndRetryKeepsThePlayerMounted() {
+        var failure by mutableStateOf<String?>(null)
+        var retries = 0
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(360.dp, 800.dp)) {
+                MusicPlayerScreen(songs.first(), PlayerState(phase = PlayerPhase.Playing, durationMs = 180000), false, failure,
+                    songs, 0, MusicRepeatMode.Off, {}, {}, { retries++ }, {}, null, {}, {}, {}, {}, false, {}, {}, art, art)
+            }
+        } }
+        val bounds = rule.onNodeWithContentDescription("暂停").fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { failure = "播放准备失败" }
+        rule.onNodeWithText("播放准备失败").assertExists()
+        assertEquals(bounds, rule.onNodeWithContentDescription("暂停").fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithText("重试").performClick()
+        assertEquals(1, retries)
+        rule.onNodeWithContentDescription("播放队列").assertExists()
+    }
+
+    @Test fun libraryPaginationRetryKeepsLoadedSongsAndContinuesTheFailedPage() {
+        var page by mutableStateOf(MusicPageState(songs, cursor = PageCursor("next"), initialized = true, error = "下一页读取失败"))
+        var refreshed = 0
+        var continued = 0
+        val next = item("三", MediaType.Audio)
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(360.dp, 800.dp)) {
+                MusicLibraryScreen("音乐", MusicLibrarySection.Tracks, page, mafeiLayout(360f, 800f),
+                    onSection = {}, onBack = {},
+                    onRetry = { refreshed++; page = MusicPageState(listOf(songs.first()), initialized = true) },
+                    onMore = { continued++; page = MusicPageState(songs + next, initialized = true) },
+                    onOpen = {}, onPlay = { _, _ -> }, artwork = art)
+            }
+        } }
+        rule.onNodeWithText("重试").performClick()
+        assertEquals(0, refreshed)
+        assertEquals(1, continued)
+        rule.onNodeWithText("歌曲二").assertExists()
+        rule.onNodeWithText("歌曲三").assertExists()
+    }
+
+    @Test fun albumTrackPaginationRetryDoesNotRefreshTheWholeDetail() = checkDetailPagination(artist = false)
+    @Test fun artistAlbumPaginationRetryDoesNotRefreshTheWholeDetail() = checkDetailPagination(artist = true)
+
+    private fun checkDetailPagination(artist: Boolean) {
+        var tracks by mutableStateOf(MusicPageState(songs, initialized = true,
+            cursor = if (artist) null else PageCursor("tracks-next"), error = if (artist) null else "歌曲下一页读取失败"))
+        var albums by mutableStateOf(MusicPageState(listOf(item("二", MediaType.MusicAlbum)), initialized = true,
+            cursor = if (artist) PageCursor("albums-next") else null, error = if (artist) "专辑下一页读取失败" else null))
+        var refreshed = 0
+        var tracksContinued = 0
+        var albumsContinued = 0
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(900.dp, 800.dp)) {
+                MusicDetailScreen("音乐详情", artist,
+                    MusicDetailState(item("一", if (artist) MediaType.MusicArtist else MediaType.MusicAlbum)),
+                    tracks, albums, onBack = {}, onRetry = { refreshed++ },
+                    onMoreTracks = { tracksContinued++; tracks = tracks.copy(cursor = null, error = null) },
+                    onMoreAlbums = { albumsContinued++; albums = albums.copy(cursor = null, error = null) },
+                    onAlbum = {}, onPlay = { _, _ -> }, onFavorite = null, artwork = art)
+            }
+        } }
+        rule.onNodeWithText("重试").performClick()
+        assertEquals(0, refreshed)
+        assertEquals(if (artist) 0 else 1, tracksContinued)
+        assertEquals(if (artist) 1 else 0, albumsContinued)
+        assertEquals(songs, tracks.items)
+        assertEquals("二", albums.items.single().id.value)
+    }
+
     private fun save(name: String) {
         val bitmap = rule.onRoot().captureToImage()
         val pixels = bitmap.toPixelMap()

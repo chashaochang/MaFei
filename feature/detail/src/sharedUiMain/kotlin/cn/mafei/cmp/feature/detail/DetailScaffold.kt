@@ -69,7 +69,7 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.ui.LocalMaFeiNavigationChrome
 import cn.mafei.cmp.common.glass.GlassBackdrop
-import cn.mafei.cmp.common.ui.InlineProblem
+import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
 import cn.mafei.cmp.core.domain.ImageKind
 import cn.mafei.cmp.core.domain.MediaItem
@@ -191,10 +191,6 @@ internal fun BoxScope.DetailBody(
     item: MediaItem,
     scrollState: androidx.compose.foundation.ScrollState,
     collapseProgress: State<Float>,
-    loading: Boolean,
-    error: String?,
-    stale: Boolean,
-    onRetry: () -> Unit,
     onPlay: (() -> Unit)?,
     playTarget: MediaItem?,
     playbackBusy: Boolean,
@@ -206,7 +202,6 @@ internal fun BoxScope.DetailBody(
     actionsBusy: Boolean,
     seasons: List<MediaItem>,
     sectionsLoading: Boolean,
-    sectionsError: String?,
     onSeasonSelected: (MediaItem) -> Unit,
     playbackSources: List<DetailPlaybackSource>,
     onOpenExternalUrl: ((String) -> Unit)?,
@@ -342,13 +337,12 @@ internal fun BoxScope.DetailBody(
                     )
                 }
                 if (item.mediaType == MediaType.Series &&
-                    (seasons.isNotEmpty() || sectionsLoading || sectionsError != null)
+                    (seasons.isNotEmpty() || sectionsLoading)
                 ) {
                     Spacer(Modifier.height(DetailSectionSpacing))
                     SeriesSections(
                         seasons = seasons,
                         loading = sectionsLoading,
-                        error = sectionsError,
                         artwork = artwork,
                         sharedArtworkModifier = sharedArtworkModifier,
                         onSeasonSelected = onSeasonSelected,
@@ -370,11 +364,6 @@ internal fun BoxScope.DetailBody(
                 if (onOpenExternalUrl != null && item.externalUrls.isNotEmpty()) {
                     Spacer(Modifier.height(DetailSectionSpacing))
                     ExternalLinksSection(item.externalUrls, onOpenExternalUrl)
-                }
-                if (item.overview.isNullOrBlank() && item.mediaType != MediaType.Series && item.people.isEmpty() &&
-                    error != null && !stale
-                ) {
-                    InlineProblem(error, onRetry)
                 }
             }
         }
@@ -574,7 +563,7 @@ internal fun DetailState(loading: Boolean, error: String?, onRetry: () -> Unit) 
                 ),
                 contentAlignment = Alignment.Center,
             ) {
-                InlineProblem(error.orEmpty(), onRetry)
+                LegacyFailedView(onRetry, Modifier.fillMaxSize())
             }
         }
     }

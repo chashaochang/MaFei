@@ -5,6 +5,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
@@ -56,5 +57,14 @@ internal fun BrowseAccountModal(
         },
         onDismiss = { account.accountConnectError = null },
         backdrop = if (mineFullScreen) backdrop else feedbackBackdrop,
+    )
+    MaFeiErrorDialog(
+        message = account.accountsActionError.takeIf {
+            account.minePresented && account.mineBackStack.lastOrNull() is BrowseAccountSwitchRoute && !player.playerExpanded
+        },
+        backdrop = if (mineFullScreen) backdrop else feedbackBackdrop,
+        onDismiss = { account.accountsActionError = null },
+        busy = account.switchingAccountKey != null || account.deletingAccountKey != null,
+        title = "账号提示",
     )
 }

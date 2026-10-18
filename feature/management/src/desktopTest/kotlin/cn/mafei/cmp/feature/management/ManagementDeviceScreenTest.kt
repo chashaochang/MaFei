@@ -2,6 +2,7 @@ package cn.mafei.cmp.feature.management
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -36,5 +37,40 @@ class ManagementDeviceScreenTest {
         rule.onNodeWithContentDescription("撤销其他设备").performClick()
         assertEquals(0, revoked); rule.onNodeWithText("当前设备将保留授权", substring = true).assertExists()
         rule.onNodeWithText("取消").performClick(); assertEquals(0, revoked)
+    }
+
+    @Test fun failedRenamePreservesDraftAndShowsIndependentAcknowledgement() {
+        var state by mutableStateOf(ManagementDevicesState(listOf(current), loading = false))
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(360.dp, 780.dp)) {
+                ManagementDeviceDetailScreen(current, state, {}, {}, {}, {})
+            }
+        } }
+        rule.onNode(hasSetTextAction()).performTextReplacement("客厅设备")
+        val bounds = rule.onNodeWithText("保存名称").fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { state = state.copy(message = "设备操作失败，请重试", actionFailed = true) }
+        rule.onNodeWithTag("mafeiGlassConfirmCard").assertExists()
+        assertEquals(bounds, rule.onNodeWithText("保存名称").fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithText("知道了").performClick()
+        rule.onNode(hasSetTextAction()).assertTextContains("客厅设备")
+        rule.onNodeWithTag("mafeiGlassConfirmCard").assertDoesNotExist()
+        assertEquals("设备操作失败，请重试", state.message)
+    }
+
+    @Test fun refreshFailurePreservesVisibleDevicesAndRetryRemainsAvailable() {
+        val remote = current.copy(id = "tv", name = "TV", current = false)
+        var state by mutableStateOf(ManagementDevicesState(listOf(current, remote), loading = false))
+        var retried = false
+        rule.setContent { MaFeiTheme {
+            Box(Modifier.requiredSize(900.dp, 650.dp)) {
+                ManagementDevicesScreen(state, "device", 0, {}, { retried = true }, {}, {})
+            }
+        } }
+        val bounds = rule.onNodeWithText("TV").fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { state = state.copy(error = "设备刷新请求失败") }
+        rule.onNodeWithText("设备刷新请求失败").assertExists()
+        assertEquals(bounds, rule.onNodeWithText("TV").fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithText("重试").performClick()
+        assertTrue(retried)
     }
 }

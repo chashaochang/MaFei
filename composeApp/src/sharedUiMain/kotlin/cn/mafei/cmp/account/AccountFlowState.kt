@@ -15,6 +15,7 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
     var accountPasswordKeys by mutableStateOf(emptySet<String>())
     var accountsLoading by mutableStateOf(false)
     var accountsError by mutableStateOf<String?>(null)
+    var accountsActionError by mutableStateOf<String?>(null)
     var switchingAccountKey by mutableStateOf<String?>(null)
     var deletingAccountKey by mutableStateOf<String?>(null)
     var accountConnectBusy by mutableStateOf(false)
@@ -38,8 +39,6 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    accountConnections = emptyList()
-                    accountPasswordKeys = emptySet()
                     accountsError = "加载失败"
                 } finally {
                     accountsLoading = false
@@ -52,7 +51,7 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
         val connection = accountConnections.firstOrNull { it.credentialKey == item.key }
         if (connection != null && switchingAccountKey == null) {
             switchingAccountKey = item.key
-            accountsError = null
+            accountsActionError = null
             scope.launch {
                 try {
                     access.switchAccount(connection)
@@ -62,10 +61,10 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
                     // 保存的凭据不可恢复（系统清理/卸载重装/当初未落盘）：
                     // 这不是"切换失败"，而是"需要重新登录"。把用户带到
                     // 这台服务器的登录页并预填地址与用户名，登录一次即可。
-                    accountsError = null
+                    accountsActionError = null
                     onLoginRequired(connection)
                 } catch (_: Exception) {
-                    accountsError = "账号切换失败，请稍后重试"
+                    accountsActionError = "账号切换失败，请稍后重试"
                 } finally {
                     switchingAccountKey = null
                 }
@@ -77,7 +76,7 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
         val connection = accountConnections.firstOrNull { it.credentialKey == item.key }
         if (connection != null && !item.isCurrent && switchingAccountKey == null && deletingAccountKey == null) {
             deletingAccountKey = item.key
-            accountsError = null
+            accountsActionError = null
             scope.launch {
                 try {
                     access.deleteSavedConnection(connection)
@@ -86,7 +85,7 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    accountsError = "账号删除失败，请稍后重试"
+                    accountsActionError = "账号删除失败，请稍后重试"
                 } finally {
                     deletingAccountKey = null
                 }

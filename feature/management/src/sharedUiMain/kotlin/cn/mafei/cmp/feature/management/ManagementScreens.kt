@@ -26,13 +26,27 @@ fun ManagementDashboardScreen(
     onDevices: () -> Unit = {},
 ) {
     var confirmScan by remember { mutableStateOf(false) }
-    MaFeiActionBarScaffold("服务器控制台", onBack, modifier) {
+    val sections = listOf("服务器" to state.server, "媒体统计" to state.counts, "用户" to state.users,
+        "任务" to state.tasks, "播放会话" to state.sessions, "最近活动" to state.activity)
+    val hasData = sections.any { it.second.value != null }
+    val sectionError = sections.mapNotNull { (title, section) -> section.error?.let { "$title：$it" } }
+        .joinToString("\n").takeIf(String::isNotBlank)
+    val loading = sections.any { it.second.loading }
+    MaFeiActionBarScaffold("服务器控制台", onBack, modifier, overlay = { backdrop ->
+        MaFeiErrorDialog(state.actionMessage.takeIf { state.actionFailed }
+            ?: sectionError.takeIf { hasData && state.allowed == true }, backdrop,
+            onRetry = onRefresh.takeUnless { state.actionFailed }, busy = state.actionPending || loading,
+            title = if (state.actionFailed) "操作失败" else "控制台加载失败")
+        LegacyTransientToast(state.actionMessage.takeUnless { state.actionFailed || state.actionPending }, Modifier.align(Alignment.BottomCenter))
+    }) {
         when {
             state.permissionError != null -> Column(Modifier.align(Alignment.Center).padding(24.dp)) {
+                // mafei-feedback: full-page-error -- 管理权限未通过时阻断控制台整页，不与业务内容并排显示
                 Text(state.permissionError, color = MaterialTheme.colorScheme.onSurface)
                 LegacyListGroup(listOf(LegacyListGroupItem("重试", showArrow = false)), { onRefresh() })
             }
             state.allowed != true -> MaFeiLoadingIndicator(Modifier.align(Alignment.Center))
+            !hasData && sectionError != null && !loading -> LegacyFailedView(onRefresh, Modifier.fillMaxSize())
             else -> BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= 840.dp
                 val safe = LocalMaFeiSafeArea.current
@@ -40,11 +54,11 @@ fun ManagementDashboardScreen(
                     .padding(horizontal = 16.dp).padding(top = 12.dp, bottom = safe.bottom + 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     if (wide) Row(Modifier.widthIn(max = 1180.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DashboardPrimary(state, onRefresh, { confirmScan = true }, onTask, Modifier.weight(.57f))
-                        DashboardSecondary(state, onRefresh, onSession, Modifier.weight(.43f))
+                        DashboardPrimary(state, { confirmScan = true }, onTask, Modifier.weight(.57f))
+                        DashboardSecondary(state, onSession, Modifier.weight(.43f))
                     } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DashboardPrimary(state, onRefresh, { confirmScan = true }, onTask)
-                        DashboardSecondary(state, onRefresh, onSession)
+                        DashboardPrimary(state, { confirmScan = true }, onTask)
+                        DashboardSecondary(state, onSession)
                     }
                     LegacyListGroup(listOf(LegacyListGroupItem("设备")), { onDevices() },
                         Modifier.widthIn(max = 1180.dp).padding(top = 12.dp))
@@ -57,16 +71,16 @@ fun ManagementDashboardScreen(
 }
 
 @Composable
-private fun DashboardPrimary(state: ManagementState, onRefresh: () -> Unit, onScan: () -> Unit,
+private fun DashboardPrimary(state: ManagementState, onScan: () -> Unit,
     onTask: (ManagedTask) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ManagementContentGroup {
-            SectionState(state.server, onRefresh) { server ->
+            SectionState(state.server) { server ->
                 Text(if (server.online) "服务器在线" else "服务器离线", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 Text(server.name.ifBlank { "未知服务器" }, color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("${server.productName.ifBlank { "Jellyfin" }} ${server.version}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
-            SectionState(state.counts, onRefresh) { counts ->
+            SectionState(state.counts) { counts ->
                 Row(Modifier.fillMaxWidth()) {
                     Metric("电影", counts.movies, Modifier.weight(1f)); Metric("剧集", counts.series, Modifier.weight(1f))
                     Metric("单集", counts.episodes, Modifier.weight(1f))
@@ -75,11 +89,10 @@ private fun DashboardPrimary(state: ManagementState, onRefresh: () -> Unit, onSc
             val scanning = state.tasks.value.orEmpty().any { it.key == "RefreshLibrary" && it.busy } || state.scanLockedUntil > 0
             LegacyListGroup(listOf(LegacyListGroupItem(if (state.actionPending) "正在启动扫描" else if (scanning) "媒体库正在扫描" else "扫描媒体库", showArrow = false)),
                 { onScan() }, enabled = !state.actionPending && !scanning)
-            state.actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
         }
         ManagementContentGroup {
             GroupHeading("用户")
-            SectionState(state.users, onRefresh) { users -> Row(Modifier.fillMaxWidth()) {
+            SectionState(state.users) { users -> Row(Modifier.fillMaxWidth()) {
                 Metric("总数", users.size, Modifier.weight(1f))
                 Metric("管理员", users.count { it.administrator }, Modifier.weight(1f))
                 Metric("已禁用", users.count { it.disabled }, Modifier.weight(1f))
@@ -87,7 +100,7 @@ private fun DashboardPrimary(state: ManagementState, onRefresh: () -> Unit, onSc
         }
         ManagementContentGroup {
             GroupHeading("正在运行的任务")
-            SectionState(state.tasks, onRefresh) { tasks ->
+            SectionState(state.tasks) { tasks ->
                 val running = tasks.filter { !it.hidden && it.busy }
                 if (running.isEmpty()) Text("当前没有正在运行的任务", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 else LegacyListGroup(running.map { LegacyListGroupItem(it.name, trailing = "${it.progress.toInt()}%", subtitle = it.category) }, { onTask(running[it]) })
@@ -97,11 +110,11 @@ private fun DashboardPrimary(state: ManagementState, onRefresh: () -> Unit, onSc
 }
 
 @Composable
-private fun DashboardSecondary(state: ManagementState, onRefresh: () -> Unit, onSession: (ManagedSession) -> Unit, modifier: Modifier = Modifier) {
+private fun DashboardSecondary(state: ManagementState, onSession: (ManagedSession) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ManagementContentGroup {
             GroupHeading("当前播放会话")
-            SectionState(state.sessions, onRefresh) { sessions ->
+            SectionState(state.sessions) { sessions ->
                 if (sessions.isEmpty()) Text("当前没有播放中的会话", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 sessions.forEach { session -> Column(Modifier.fillMaxWidth().mafeiInteractive({ onSession(session) }, label = session.itemName.ifBlank { session.userName }), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(session.itemName.ifBlank { session.userName }, color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp)
@@ -112,7 +125,7 @@ private fun DashboardSecondary(state: ManagementState, onRefresh: () -> Unit, on
         }
         ManagementContentGroup {
             GroupHeading("最近活动")
-            SectionState(state.activity, onRefresh) { page ->
+            SectionState(state.activity) { page ->
                 if (page.items.isEmpty()) Text("暂无活动记录", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 page.items.forEach { activity -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(activity.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
@@ -126,10 +139,14 @@ private fun DashboardSecondary(state: ManagementState, onRefresh: () -> Unit, on
 
 @Composable
 fun ManagementSessionDetailScreen(session: ManagedSession?, pending: Boolean, message: String?, onBack: () -> Unit,
-    onPlayPause: () -> Unit, onStop: () -> Unit, onMessage: (String) -> Unit, modifier: Modifier = Modifier) {
+    onPlayPause: () -> Unit, onStop: () -> Unit, onMessage: (String) -> Unit, modifier: Modifier = Modifier,
+    actionFailed: Boolean = false) {
     var confirmStop by remember { mutableStateOf(false) }
     var draft by remember(session?.id) { mutableStateOf("") }
-    MaFeiActionBarScaffold("会话详情", onBack, modifier) {
+    MaFeiActionBarScaffold("会话详情", onBack, modifier, overlay = { backdrop ->
+        MaFeiErrorDialog(message.takeIf { actionFailed }, backdrop, busy = pending)
+        LegacyTransientToast(message.takeUnless { actionFailed || pending }, Modifier.align(Alignment.BottomCenter))
+    }) {
         if (session == null) Text("信息已失效，请返回后重试", Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.onSurface)
         else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
             .padding(bottom = LocalMaFeiSafeArea.current.bottom + 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -162,7 +179,6 @@ fun ManagementSessionDetailScreen(session: ManagedSession?, pending: Boolean, me
                 ManagementTextInput(draft, { draft = it }, "向此客户端发送消息")
                 LegacyListGroup(listOf(LegacyListGroupItem("发送消息", showArrow = false)), { onMessage(draft.trim()) }, enabled = !pending && draft.isNotBlank())
             }
-            message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
     if (confirmStop && session != null) LegacyConfirmDialog("停止播放", "${session.userName} · ${session.deviceName}\n${session.itemName}",
@@ -171,10 +187,17 @@ fun ManagementSessionDetailScreen(session: ManagedSession?, pending: Boolean, me
 
 @Composable
 fun ManagementTaskDetailScreen(task: ManagedTask?, loading: Boolean, error: String?, pending: Boolean,
-    message: String?, onBack: () -> Unit, onRetry: () -> Unit, onAction: () -> Unit, modifier: Modifier = Modifier) {
-    MaFeiActionBarScaffold("任务详情", onBack, modifier) {
+    message: String?, onBack: () -> Unit, onRetry: () -> Unit, onAction: () -> Unit, modifier: Modifier = Modifier,
+    actionFailed: Boolean = false) {
+    MaFeiActionBarScaffold("任务详情", onBack, modifier, overlay = { backdrop ->
+        MaFeiErrorDialog(message.takeIf { actionFailed } ?: error.takeIf { task != null }, backdrop,
+            onRetry = onRetry.takeUnless { actionFailed }, busy = pending || loading,
+            title = if (actionFailed) "操作失败" else "任务加载失败")
+        LegacyTransientToast(message.takeUnless { actionFailed || pending }, Modifier.align(Alignment.BottomCenter))
+    }) {
         if (task == null) Column(Modifier.align(Alignment.Center).padding(24.dp)) {
             if (loading) MaFeiLoadingIndicator() else {
+                // mafei-feedback: full-page-error -- 当前任务数据不存在时的整页失败状态，下方提供重试入口
                 Text(error ?: "信息已失效，请返回后重试", color = MaterialTheme.colorScheme.onSurface)
                 LegacyListGroup(listOf(LegacyListGroupItem("重试", showArrow = false)), { onRetry() })
             }
@@ -191,8 +214,11 @@ fun ManagementTaskDetailScreen(task: ManagedTask?, loading: Boolean, error: Stri
                 detailRow("上次开始", task.lastStart), detailRow("上次结束", task.lastEnd), detailRow("上次结果", task.lastStatus),
             ), {})
             if (task.description.isNotBlank()) ManagementContentGroup { GroupHeading("说明"); Text(task.description, color = MaterialTheme.colorScheme.onSurface) }
-            if (task.lastError.isNotBlank()) ManagementContentGroup { GroupHeading("上次错误"); Text(task.lastError, color = MaterialTheme.colorScheme.onSurface) }
-            message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (task.lastError.isNotBlank()) ManagementContentGroup {
+                GroupHeading("上次错误")
+                // mafei-feedback: business-history -- 展示服务器任务上一次执行的历史错误记录，不是当前操作反馈
+                Text(task.lastError, color = MaterialTheme.colorScheme.onSurface)
+            }
             if (task.id.isNotBlank()) LegacyListGroup(listOf(LegacyListGroupItem(if (task.busy) "取消任务" else "启动任务", showArrow = false)), { onAction() }, enabled = !pending)
         }
     }
@@ -211,14 +237,9 @@ private fun taskStateText(task: ManagedTask) = when (task.state) { "Running" -> 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface)
         .padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
-@Composable private fun <T> SectionState(section: ManagementSection<T>, onRetry: () -> Unit, content: @Composable (T) -> Unit) {
+@Composable private fun <T> SectionState(section: ManagementSection<T>, content: @Composable (T) -> Unit) {
     section.value?.let { content(it) }
-    when {
-        section.error != null -> Text(if (section.value == null) section.error else "刷新失败，正在显示上次结果",
-            Modifier.mafeiInteractive(onRetry, label = "重试").padding(vertical = 10.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-        section.loading && section.value == null -> MaFeiLoadingIndicator()
-    }
+    if (section.loading && section.value == null) MaFeiLoadingIndicator()
 }
 
 @Composable

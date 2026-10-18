@@ -55,7 +55,8 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
-import cn.mafei.cmp.common.ui.InlineProblem
+import cn.mafei.cmp.common.ui.LegacyFailedView
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.common.ui.LegacyBaseItemCard
 import cn.mafei.cmp.common.ui.mediaArtworkHoverTopInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
@@ -150,7 +151,7 @@ fun PersonDetailScreen(
                                 slideInVertically(tween(DetailMotionEnterMillis)) { it / 24 },
                             exit = fadeOut(tween(DetailMotionExitMillis)),
                         ) {
-                            InlineProblem(error.orEmpty(), onRetry)
+                            LegacyFailedView(onRetry, Modifier.fillMaxSize())
                         }
                     }
                 } else {
@@ -187,15 +188,6 @@ fun PersonDetailScreen(
                             PersonWorkSectionAnimated("电影", movies, onItem, artwork)
                             PersonWorkSectionAnimated("电视剧", series, onItem, artwork)
                             PersonWorkSectionAnimated("剧集", episodes, onItem, artwork)
-                            DetailAnimatedVisibility(
-                                visible = error != null && !loading,
-                                enter = fadeIn(tween(DetailMotionEnterMillis)),
-                                exit = fadeOut(tween(DetailMotionExitMillis)),
-                            ) {
-                                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
-                                    InlineProblem(error.orEmpty(), onRetry)
-                                }
-                            }
                         }
                     }
                 }
@@ -223,6 +215,13 @@ fun PersonDetailScreen(
                 surfaceMotion = motion,
             )
         }
+        MaFeiErrorDialog(
+            message = error.takeIf { person != null },
+            title = "人物详情加载失败",
+            backdrop = actionBarBackdrop,
+            busy = loading || sectionsLoading || overviewSheetVisible,
+            onRetry = onRetry,
+        )
     }
 }
 

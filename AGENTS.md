@@ -28,6 +28,7 @@
 
 - 本地开发、调试及设备验证一律使用独立开发包：包名 / applicationId / bundle identifier 必须是对应正式版标识加 `.dev`，Release 保持正式标识。构建、签名、安装与启动必须使用同一开发标识，安装前核验产物；不得覆盖或卸载手机上的正式版。HarmonyOS 与 Android 开发包为 `cn.xiaobai.mafei.dev`；iOS 按其正式 bundle identifier 加 `.dev`。签名材料只在本地配置，不提交。
 - 流程或边界变更：`./gradlew verifyAppBoundaries verifyDependencyBoundaries`，并运行相关行为测试。完整门禁：`./gradlew :check`；脚本测试：`node --test scripts/*.test.mjs scripts/*.test.cjs`。
+- 错误反馈不得插入内容区，统一遵循 [UI 反馈约束](common/ui/UI_POLICY.md#错误反馈不得进入内容流)；涉及提示、错误或加载状态时运行 `./gradlew verifyFeedbackPolicy`，禁止恢复旧内联提示 API 或绕过门禁。
 - 按受影响平台执行编译/测试；应用入口示例：`:composeApp:desktopTest`、`:composeApp:testDebugUnitTest`、`:composeApp:compileKotlinIosArm64`、`:composeApp:compileKotlinOhosArm64`。
 - 源码、自动测试、模拟器、真机、服务器及视觉验收分开报告。编译不能证明视觉和设备行为；UI 变更遵循完整 UI 规范的验收要求。
 - 自动化点击先读取布局树真实 `bounds`，点击内部有效点；禁止凭截图比例或肉眼估坐标，也不能据误点判断交互 Bug。

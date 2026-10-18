@@ -55,6 +55,8 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyListGroup
 import cn.mafei.cmp.common.ui.LegacyListGroupItem
 import cn.mafei.cmp.common.ui.MaFeiActionBar
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
+import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.MaFeiActionBarScaffold
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBarHeight
@@ -150,8 +152,7 @@ fun MineScreen(
                     )
 
                     when {
-                        historyLoading -> MineHistoryLoadingSection(columns)
-                        historyError != null -> MineHistoryErrorSection(onRetry = onHistoryRetry)
+                        historyLoading && historyItems.isEmpty() -> MineHistoryLoadingSection(columns)
                         visibleHistory.isNotEmpty() -> MineHistorySection(
                             items = visibleHistory,
                             columns = columns,
@@ -218,6 +219,13 @@ fun MineScreen(
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
+        MaFeiErrorDialog(
+            message = historyError,
+            backdrop = backdrop,
+            onRetry = onHistoryRetry,
+            busy = historyLoading,
+            title = "播放历史加载失败",
+        )
     }
 }
 
@@ -472,44 +480,6 @@ private fun MineHistoryLoadingSection(columns: Int) {
     }
 }
 
-@Composable
-private fun MineHistoryErrorSection(onRetry: () -> Unit) {
-    val popupColors = LocalMaFeiPopupColors.current
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            "最近在看",
-            Modifier.semantics { heading() },
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
-            lineHeight = 24.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Row(
-            Modifier.fillMaxWidth().height(64.dp)
-                .mafeiInteractive(onRetry, radiusDp = 0f, label = "播放历史加载失败，点击重试"),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                "播放历史加载失败，点击重试",
-                Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
-            )
-            Image(
-                painter = painterResource(MaFeiLegacyDrawables.replay),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant),
-            )
-        }
-    }
-}
-
 /** Mechanical Compose translation of ArkUI `MineHistoryPage`. */
 @Composable
 fun MineHistoryScreen(
@@ -541,26 +511,22 @@ fun MineHistoryScreen(
         title = "播放历史",
         onBack = onBack,
         modifier = modifier,
+        overlay = { backdrop ->
+            MaFeiErrorDialog(
+                message = if (items.isNotEmpty()) error ?: "加载更多失败，请重试".takeIf { loadMoreFailed } else null,
+                backdrop = backdrop,
+                onRetry = if (error != null) onRetry else onRetryLoadMore,
+                busy = loading || loadingMore,
+                title = "播放历史加载失败",
+            )
+        },
     ) {
         when {
-            loading -> MineHistoryPageLoadingGrid(
+            loading && items.isEmpty() -> MineHistoryPageLoadingGrid(
                 columns = columns,
                 modifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding),
             )
-            error != null -> Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("播放历史加载失败，点击重试", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "重试",
-                    Modifier.height(44.dp).mafeiInteractive(onRetry, radiusDp = 22f, label = "重试")
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            error != null && items.isEmpty() -> LegacyFailedView(onRetry)
             items.isEmpty() -> Column(
                 Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -612,7 +578,7 @@ fun MineHistoryScreen(
                             artwork = artwork,
                         )
                     }
-                    if (loadingMore || loadMoreFailed) {
+                    if (loadingMore) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             if (loadingMore) {
                                 Row(
@@ -627,22 +593,6 @@ fun MineHistoryScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         "正在加载",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 13.sp,
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    Modifier.fillMaxWidth().height(44.dp)
-                                        .mafeiInteractive(
-                                            onClick = { onRetryLoadMore?.invoke() },
-                                            radiusDp = 22f,
-                                            label = "加载更多失败，点击重试",
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        "加载更多失败，点击重试",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 13.sp,
                                     )

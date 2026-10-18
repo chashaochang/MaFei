@@ -33,7 +33,8 @@ fun queryDevices(devices: List<ManagedDevice>, query: DeviceQuery, nowMs: Long):
     return DevicePage(filtered.drop(page * 25).take(25), page, pages, filtered.size)
 }
 data class ManagementDevicesState(val devices: List<ManagedDevice>? = null, val loading: Boolean = true,
-    val error: String? = null, val permissionError: String? = null, val pending: Boolean = false, val message: String? = null)
+    val error: String? = null, val permissionError: String? = null, val pending: Boolean = false, val message: String? = null,
+    val actionFailed: Boolean = false)
 
 class ManagementDevicesBrowser(private val api: ServerManagement, val clock: EpochClock = SystemEpochClock) {
     private val mutable = MutableStateFlow(ManagementDevicesState())
@@ -62,6 +63,7 @@ class ManagementDevicesBrowser(private val api: ServerManagement, val clock: Epo
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { failed++ }
         refresh()
+        mutable.update { it.copy(actionFailed = failed > 0) }
         if (failed == 0) "已撤销设备授权" else "成功 ${ids.size - failed} · 失败 $failed"
     }
     private suspend fun permission(): Boolean {
@@ -72,10 +74,10 @@ class ManagementDevicesBrowser(private val api: ServerManagement, val clock: Epo
     private suspend fun action(block: suspend () -> String) {
         if (!actions.tryLock()) return
         try {
-            mutable.update { it.copy(pending = true, message = null) }
+            mutable.update { it.copy(pending = true, message = null, actionFailed = false) }
             if (permission()) { val message = block(); mutable.update { it.copy(message = message) } }
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { mutable.update { it.copy(message = failureText(failure)) } }
+        catch (failure: Exception) { mutable.update { it.copy(message = failureText(failure), actionFailed = true) } }
         finally { mutable.update { it.copy(pending = false) }; actions.unlock() }
     }
     private fun failureText(error: Exception) = when (error) {

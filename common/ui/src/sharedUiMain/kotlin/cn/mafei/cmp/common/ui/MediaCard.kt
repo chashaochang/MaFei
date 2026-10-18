@@ -286,13 +286,3 @@ fun ScreenHeading(title: String, subtitle: String? = null) {
         subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
-
-/** [message] must be user-safe text, never a raw provider exception or URL. */
-@Composable
-fun InlineProblem(message: String, onRetry: (() -> Unit)? = null) {
-    MaFeiInlineNotice(
-        message = message,
-        actionLabel = onRetry?.let { "重试" },
-        onAction = onRetry,
-    )
-}

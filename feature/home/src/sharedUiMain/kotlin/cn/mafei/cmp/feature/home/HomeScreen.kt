@@ -237,13 +237,18 @@ fun HomeScreen(
     val overviewHasContent = heroItems.isNotEmpty() || progressItems.isNotEmpty() || nextUpItems.isNotEmpty() ||
         recentItems.isNotEmpty() || collections.isNotEmpty()
     val showRefreshAction = refreshing && overviewHasContent
-    val showStatus = !authenticationRequired && error == null && (stale ||
-        if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty())
-    // Connection failures are modal feedback; keep the media grid and its
-    // scroll state intact instead of inserting a retry row into the feed.
-    var connectionErrorDismissed by remember(error, loading, homeLoading, refreshing) { mutableStateOf(false) }
-    val showConnectionError = error != null && !authenticationRequired &&
-        !loading && !homeLoading && !refreshing && !connectionErrorDismissed
+    val showStatus = !authenticationRequired && error == null &&
+        (if (overview) !overviewHasContent else collections.isEmpty() || items.isEmpty())
+    // Failed sections share one overlay, preserving the feed and its scroll anchor.
+    val failedCollections = if (!overview) emptyList() else collections.filter { collection ->
+        collection.id in homeLatestErrors && (!showFloatingTabs || collection == selectedFeedCollection)
+    }
+    val feedFeedback = failedCollections.takeIf { it.isNotEmpty() }?.joinToString("\n") {
+        "${it.name}：${homeLatestErrors.getValue(it.id)}"
+    }
+    val feedbackMessage = if (authenticationRequired) null else error ?: feedFeedback ?: if (stale) {
+        "当前显示离线缓存，恢复连接后可刷新。"
+    } else null
     val latestGap = if (layout.family == MaFeiLayoutFamily.Phone) 8.dp else 16.dp
     // Home library tabs have their own cached request stream. The ordinary
     // media-library cursor belongs to a different screen and must never be
@@ -558,7 +563,7 @@ fun HomeScreen(
               columnGapDp = latestGap.value,
               rowGapDp = gridVerticalGap.value,
               itemCount = feedVisualItemCount,
-              emptyContentHeightDp = if (latestFeedError != null) 120f else 96f,
+              emptyContentHeightDp = 96f,
               trailingContentHeightDp = if (loadingMore) 64f + gridVerticalGap.value else 0f,
           ).dp
       } else {
@@ -642,8 +647,7 @@ fun HomeScreen(
                     StatusContent(
                         collections, items, selectedCollection,
                         loading = loading || (overview && homeLoading),
-                        error = error, stale = stale, overview = overview,
-                        overviewHasContent = overviewHasContent, onRetry = onRetry,
+                        overview = overview, overviewHasContent = overviewHasContent,
                     )
                 }
             }
@@ -828,11 +832,7 @@ fun HomeScreen(
                             }
                         } else {
                             val feedError = collectionError?.takeIf { !collectionLoading }
-                            if (feedError != null) {
-                                HomeLatestFeedError(feedError) {
-                                    onCollection(collection)
-                                }
-                            } else {
+                            if (feedError == null) {
                                 Box(
                                     Modifier.fillMaxWidth().padding(horizontal = sceneControlLeading)
                                         .height(96.dp),
@@ -886,9 +886,7 @@ fun HomeScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     val feedError = latestFeedError?.takeIf { !latestFeedLoading }
                     if (feedError != null) {
-                        HomeLatestFeedError(feedError) {
-                            selectedFeedCollection?.let(onCollection)
-                        }
+                        Spacer(Modifier.height(96.dp))
                     } else {
                                 Box(
                                     Modifier.fillMaxWidth().padding(horizontal = sceneControlLeading)
@@ -1099,18 +1097,20 @@ fun HomeScreen(
               },
           )
       }
-      if (showConnectionError) {
-          cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = true) { connectionErrorDismissed = true }
-          cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog(
-              title = "连接失败",
-              content = error.orEmpty(),
-              confirmText = "重试",
-              dismissText = "取消",
-              onConfirm = { connectionErrorDismissed = true; onRetry() },
-              onDismiss = { connectionErrorDismissed = true },
-              backdrop = floatingTabsBackdrop,
-          )
-      }
+      MaFeiErrorDialog(
+          message = feedbackMessage,
+          title = when {
+              error != null -> "连接失败"
+              feedFeedback != null -> "加载失败"
+              else -> "离线内容"
+          },
+          backdrop = floatingTabsBackdrop,
+          busy = loading || homeLoading || refreshing || failedCollections.any { it.id in homeLatestLoading },
+          onRetry = {
+              if (error == null && failedCollections.isNotEmpty()) failedCollections.forEach(onCollection)
+              else onRetry()
+          },
+      )
       }
 }
 

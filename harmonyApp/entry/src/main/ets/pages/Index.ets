@@ -75,6 +75,7 @@ struct Index {
             [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]
           )
       } else {
+        // mafei-feedback: full-page-error -- Compose has not initialized, so no application content exists behind this host fallback.
         Text(this.errorMessage)
       }
     }

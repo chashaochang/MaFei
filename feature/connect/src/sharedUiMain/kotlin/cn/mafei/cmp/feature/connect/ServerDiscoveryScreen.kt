@@ -131,6 +131,7 @@ private fun ServerDiscoveryContent(
                 fontWeight = FontWeight.Medium,
             )
             Spacer(Modifier.height(12.dp))
+            // mafei-feedback: full-page-error -- Discovery produced no devices; the scan failure occupies the empty result page.
             Text(
                 errorText,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f),

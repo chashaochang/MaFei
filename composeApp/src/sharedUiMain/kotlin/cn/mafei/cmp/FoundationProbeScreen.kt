@@ -125,8 +125,10 @@ private fun ProbeControls(level: String, width: String, onLevel: (String) -> Uni
             OutlinedButton(onClick = onDialog, modifier = Modifier.fillMaxWidth()) { Text("检查弹层") }
             OutlinedButton(onClick = renderHealth::reportEffectFailure,
                 enabled = !renderHealth.effectFailed, modifier = Modifier.fillMaxWidth()) {
+                // mafei-feedback: diagnostic-state -- Developer probe reports the simulated renderer state being inspected.
                 Text(if (renderHealth.effectFailed) "已熔断 · 实体回退" else "模拟特效熔断")
             }
+            // mafei-feedback: diagnostic-state -- Developer probe explains the tested fallback state rather than an operation failure.
             Text(if (renderHealth.effectFailed)
                 "本窗口已停用玻璃特效，重开页面前不重试。请继续检查命中、滚动和弹层；切换主题或档位不会恢复特效。"
                 else "模拟按钮只验证故障后的回退策略，不代表已验证真实 GPU 故障恢复。",

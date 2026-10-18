@@ -27,16 +27,17 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
+import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
 import cn.mafei.cmp.common.ui.legacyMediaColumns
 import cn.mafei.cmp.common.ui.legacyMediaGridGap
 import cn.mafei.cmp.common.ui.mafeiPageTitleBarContentHeight
-import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.core.domain.CollectionId
 import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaItem
@@ -73,6 +74,10 @@ fun HomeLatestByLibraryScreen(
     val bottomPadding = safeArea.bottom + bottomOverlayInset +
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
     val hasContent = collections.any { latestByCollection[it.id].orEmpty().isNotEmpty() }
+    val sectionErrors = collections.mapNotNull { collection ->
+        errors[collection.id]?.let { "${collection.name}：$it" }
+    }
+    val initialFailure = !hasContent && loadingCollections.isEmpty() && sectionErrors.isNotEmpty()
 
     Box(modifier.fillMaxSize()) {
         Box(
@@ -85,6 +90,8 @@ fun HomeLatestByLibraryScreen(
                     title = "暂无媒体库",
                     modifier = Modifier.fillMaxSize(),
                 )
+            } else if (initialFailure) {
+                LegacyFailedView(onRetry, Modifier.fillMaxSize())
             } else {
                 MaFeiPullRefresh(
                     isRefreshing = loadingCollections.isNotEmpty() && !hasContent,
@@ -133,7 +140,7 @@ fun HomeLatestByLibraryScreen(
                                         poster = artwork?.let { draw -> { cardModifier -> draw(item, cardModifier) } },
                                     )
                                 }
-                            } else {
+                            } else if (error == null || collection.id in loadingCollections) {
                                 item(
                                     key = "latest-library-state:${collection.id.value}",
                                     span = { GridItemSpan(maxLineSpan) },
@@ -148,12 +155,6 @@ fun HomeLatestByLibraryScreen(
                                                 style = MaFeiLoadingStyle.Inline,
                                             )
                                         }
-                                        error != null -> Text(
-                                            "加载失败，点击重试",
-                                            Modifier.fillMaxWidth().mafeiInteractive(onRetry, radiusDp = 8f)
-                                                .padding(vertical = 20.dp),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
                                         else -> Text(
                                             "暂无最近添加",
                                             Modifier.fillMaxWidth().padding(vertical = 20.dp),
@@ -178,6 +179,13 @@ fun HomeLatestByLibraryScreen(
             onBack = onBack,
             backdrop = backdrop,
             modifier = Modifier.align(Alignment.TopCenter),
+        )
+        MaFeiErrorDialog(
+            message = sectionErrors.takeIf { hasContent && it.isNotEmpty() }?.joinToString("\n"),
+            title = "最近添加加载失败",
+            backdrop = backdrop,
+            busy = loadingCollections.isNotEmpty(),
+            onRetry = onRetry,
         )
     }
 }

@@ -37,7 +37,10 @@ fun PhotoCatalogScreen(title: String, albums: Boolean, page: MediaPageState, onB
             if (index != null && index >= grid.layoutInfo.totalItemsCount - 4 && page.cursor != null && !page.loadingMore && page.error == null) more()
         }
     }
-    MaFeiActionBarScaffold(title, onBack) {
+    MaFeiActionBarScaffold(title, onBack, overlay = { backdrop ->
+        MaFeiErrorDialog(page.error.takeIf { page.items.isNotEmpty() }, backdrop,
+            onRetry = onRetry, busy = page.loading || page.loadingMore, title = "照片加载失败")
+    }) {
         Column(Modifier.fillMaxSize()) {
             if (onSection != null) Row(Modifier.fillMaxWidth().height(48.dp)) {
                 listOf(false to "照片", true to "相册").forEach { (value, text) ->
@@ -80,7 +83,6 @@ fun PhotoCatalogScreen(title: String, albums: Boolean, page: MediaPageState, onB
                                 }
                             }
                             if (page.loadingMore) item(span = { GridItemSpan(maxLineSpan) }) { LegacyLoadingView(Modifier.fillMaxWidth().height(56.dp)) }
-                            if (page.error != null) item(span = { GridItemSpan(maxLineSpan) }) { LegacyFailedView(onRetry, Modifier.fillMaxWidth().height(100.dp)) }
                         }
                     }
                 }

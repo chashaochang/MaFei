@@ -133,11 +133,12 @@ private fun HistoryContent(
             )
         }
 
-        error != null -> Column(
+        error != null && items.isEmpty() -> Column(
             modifier,
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
+            // mafei-feedback: full-page-error -- No account rows are available; this whole-page state offers reload.
             Text(
                 error,
                 color = Color.White.copy(alpha = .78f),

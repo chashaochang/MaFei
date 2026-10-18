@@ -28,6 +28,7 @@ import cn.mafei.cmp.common.design_system.mafeiAdaptiveWindow
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.AccountHistoryScreen
 import cn.mafei.cmp.feature.connect.ConnectAtmosphere
@@ -249,6 +250,16 @@ internal fun SignedOutFlow(
                 onDismiss = { onErrorChange(null) },
                 backdrop = shellBackdrop,
             )
+            if (error == null) {
+                MaFeiErrorDialog(
+                    message = history.historyActionError ?: history.historyError.takeIf { historyItems.isNotEmpty() },
+                    backdrop = shellBackdrop,
+                    busy = history.historyLoading || busy || history.deletingAccountKey != null,
+                    onDismiss = { history.historyActionError = null },
+                    onRetry = if (history.historyActionError == null) history::loadHistory else null,
+                    title = "账号提示",
+                )
+            }
         }
     }
 }

@@ -11,7 +11,7 @@ class ManagementBrowserTest {
         override val currentDeviceId = "fixture-device"
         var allowed = true; var serverFailure: Exception? = null; var scans = 0
         var deviceValues = emptyList<ManagedDevice>(); val revoked = mutableListOf<String>(); var failedDevice: String? = null
-        var deviceFailure: Exception? = null
+        var deviceFailure: Exception? = null; var actionFailure: Exception? = null
         override suspend fun isAdministrator() = allowed
         override suspend fun server(): ManagedServer {
             serverFailure?.let { throw it }
@@ -25,7 +25,7 @@ class ManagementBrowserTest {
         override suspend fun startLibraryScan(): LibraryScanResult { scans++; return LibraryScanResult.Started }
         override suspend fun startTask(id: String) {}
         override suspend fun cancelTask(id: String) {}
-        override suspend fun sessionCommand(id: String, command: ManagedSessionCommand) {}
+        override suspend fun sessionCommand(id: String, command: ManagedSessionCommand) { actionFailure?.let { throw it } }
         override suspend fun sessionMessage(id: String, text: String) {}
         override suspend fun devices(): List<ManagedDevice> { deviceFailure?.let { throw it }; return deviceValues }
         override suspend fun renameDevice(id: String, customName: String) {}
@@ -66,6 +66,7 @@ class ManagementBrowserTest {
         val browser = ManagementDevicesBrowser(fake); browser.refresh(); browser.revokeOthers()
         assertEquals(listOf("a"), fake.revoked); assertEquals("成功 1 · 失败 1", browser.state.value.message)
         assertFalse(browser.state.value.pending)
+        assertTrue(browser.state.value.actionFailed)
     }
     @Test fun deviceBatchUsesConfiguredIdentityEvenIfCurrentDeviceIsMissingFromResponse(): Unit = runBlocking {
         val fake = Fake().also { it.deviceValues = listOf(device("remote")) }
@@ -75,6 +76,20 @@ class ManagementBrowserTest {
         val fake = Fake().also { it.deviceFailure = CancellationException() }; val browser = ManagementDevicesBrowser(fake)
         assertFailsWith<CancellationException> { browser.revokeOthers() }
         assertNull(browser.state.value.message); assertFalse(browser.state.value.pending)
+        assertFalse(browser.state.value.actionFailed)
+    }
+    @Test fun actionFailureIsDistinctFromSuccessAndClearsOnNextSuccessfulAction(): Unit = runBlocking {
+        val fake = Fake(); val browser = ManagementBrowser(fake)
+        browser.refresh()
+        fake.actionFailure = NetworkUnreachableError()
+        browser.sessionAction("session", ManagedSessionCommand.PlayPause)
+        assertTrue(browser.state.value.actionFailed)
+        assertNotNull(browser.state.value.actionMessage)
+        assertEquals("Server", browser.state.value.server.value?.name)
+        fake.actionFailure = null
+        browser.sessionAction("session", ManagedSessionCommand.PlayPause)
+        assertFalse(browser.state.value.actionFailed)
+        assertEquals("操作成功", browser.state.value.actionMessage)
     }
     private fun device(id: String, current: Boolean = false) = ManagedDevice(id, id, "", "", "", "", "", "", current)
     private class AssertionErrorException : Exception("must not request")

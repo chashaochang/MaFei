@@ -37,7 +37,11 @@ fun MusicLibraryScreen(
     val artistsState = rememberLazyGridState()
     val tracksState = rememberLazyListState()
     val safe = LocalMaFeiSafeArea.current
-    MaFeiActionBarScaffold(title, onBack) {
+    MaFeiActionBarScaffold(title, onBack, overlay = { backdrop ->
+        MaFeiErrorDialog(state.error.takeIf { state.items.isNotEmpty() }, backdrop,
+            onRetry = if (state.cursor != null) onMore else onRetry,
+            busy = state.loading || state.loadingMore, title = "音乐加载失败")
+    }) {
         Column(Modifier.fillMaxSize().padding(start = safe.start, end = safe.end)) {
             Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = layout.pagePaddingDp.dp)) {
                 MusicLibrarySection.entries.forEach { tab ->
@@ -74,7 +78,7 @@ fun MusicLibraryScreen(
                                     MusicTrackRow(item, index, item.id.value == currentId, preparing && item.id.value == currentId,
                                         playing, { onPlay(state.items, index) })
                                 }
-                                item { MusicPageFooter(state, onMore) }
+                                item { MusicPageFooter(state) }
                             }
                         } else BoxWithConstraints(Modifier.fillMaxSize()) {
                             val grid = if (section == MusicLibrarySection.Albums) albumsState else artistsState
@@ -92,7 +96,7 @@ fun MusicLibraryScreen(
                                 ), horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(maxOf(18.dp, hoverInset))) {
                                 items(state.items, key = { it.id.value }) { item -> MusicArtworkCard(item, { onOpen(item) }, artwork) }
-                                item(span = { GridItemSpan(maxLineSpan) }) { MusicPageFooter(state, onMore) }
+                                item(span = { GridItemSpan(maxLineSpan) }) { MusicPageFooter(state) }
                             }
                         }
                     }
@@ -103,12 +107,6 @@ fun MusicLibraryScreen(
 }
 
 @Composable
-internal fun MusicPageFooter(state: MusicPageState, onMore: () -> Unit) {
-    when {
-        state.loadingMore -> LegacyLoadingView(Modifier.fillMaxWidth().height(52.dp))
-        state.error != null && state.items.isNotEmpty() -> Box(Modifier.fillMaxWidth().height(52.dp)
-            .clickable(onClick = onMore), contentAlignment = Alignment.Center) {
-            Text("加载失败，点击重试", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
-    }
+internal fun MusicPageFooter(state: MusicPageState) {
+    if (state.loadingMore) LegacyLoadingView(Modifier.fillMaxWidth().height(52.dp))
 }

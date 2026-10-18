@@ -21,6 +21,7 @@ data class ManagementState(
     val activity: ManagementSection<ManagedActivityPage> = ManagementSection(),
     val actionPending: Boolean = false, val actionMessage: String? = null,
     val scanLockedUntil: Long = 0,
+    val actionFailed: Boolean = false,
 )
 
 /** Visible-route jobs own polling; account-scoped Repository owns request validity. */
@@ -34,6 +35,14 @@ class ManagementBrowser(private val api: ServerManagement, private val clock: Ep
 
     suspend fun refresh(): Unit = refreshes.withLock {
         if (!checkPermission()) return@withLock
+        mutable.update { it.copy(
+            server = it.server.copy(loading = true, error = null),
+            counts = it.counts.copy(loading = true, error = null),
+            users = it.users.copy(loading = true, error = null),
+            tasks = it.tasks.copy(loading = true, error = null),
+            sessions = it.sessions.copy(loading = true, error = null),
+            activity = it.activity.copy(loading = true, error = null),
+        ) }
         coroutineScope {
             listOf(
                 async { updateSection({ it.server }, { state, value -> state.copy(server = value) }) { api.server() } },
@@ -69,11 +78,21 @@ class ManagementBrowser(private val api: ServerManagement, private val clock: Ep
             if (scanBusy || clock.nowEpochMs() >= current.scanLockedUntil) current.copy(scanLockedUntil = 0) else current
         }
     }
-    suspend fun loadTask() { if (checkPermission()) refreshTasks() }
+    suspend fun loadTask() {
+        if (checkPermission()) {
+            mutable.update { it.copy(tasks = it.tasks.copy(loading = true, error = null)) }
+            refreshTasks()
+        }
+    }
     private suspend fun refreshSessions(): Unit = sessionReads.withLock {
         updateSection({ it.sessions }, { state, value -> state.copy(sessions = value) }) { api.sessions(clock.nowEpochMs()) }
     }
-    suspend fun loadSession() { if (checkPermission()) refreshSessions() }
+    suspend fun loadSession() {
+        if (checkPermission()) {
+            mutable.update { it.copy(sessions = it.sessions.copy(loading = true, error = null)) }
+            refreshSessions()
+        }
+    }
     suspend fun sessionAction(id: String, command: ManagedSessionCommand) = action {
         api.sessionCommand(id, command); refreshSessions()
         if (command == ManagedSessionCommand.Stop) "已停止播放" else "操作成功"
@@ -109,12 +128,12 @@ class ManagementBrowser(private val api: ServerManagement, private val clock: Ep
     private suspend fun action(block: suspend () -> String) {
         if (!actions.tryLock()) return
         try {
-            mutable.update { it.copy(actionPending = true, actionMessage = null) }
+            mutable.update { it.copy(actionPending = true, actionMessage = null, actionFailed = false) }
             if (!checkPermission()) return
             val message = block()
             mutable.update { it.copy(actionMessage = message) }
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { mutable.update { it.copy(actionMessage = failureText(failure)) } }
+        catch (failure: Exception) { mutable.update { it.copy(actionMessage = failureText(failure), actionFailed = true) } }
         finally { mutable.update { it.copy(actionPending = false) }; actions.unlock() }
     }
 

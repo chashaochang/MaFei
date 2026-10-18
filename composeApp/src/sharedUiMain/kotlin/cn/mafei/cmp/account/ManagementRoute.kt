@@ -35,8 +35,10 @@ internal fun ManagementRoute(repository: MediaRepository, session: MediaSession,
         state.actionPending, state.actionMessage, onBack,
         onPlayPause = { scope.launch { browser?.sessionAction(sessionId, cn.mafei.cmp.core.domain.ManagedSessionCommand.PlayPause) } },
         onStop = { scope.launch { browser?.sessionAction(sessionId, cn.mafei.cmp.core.domain.ManagedSessionCommand.Stop) } },
-        onMessage = { text -> scope.launch { browser?.sessionMessage(sessionId, text) } }, modifier)
+        onMessage = { text -> scope.launch { browser?.sessionMessage(sessionId, text) } }, modifier,
+        actionFailed = state.actionFailed)
     else ManagementTaskDetailScreen(state.tasks.value?.firstOrNull { it.id == taskId }, state.tasks.loading,
         error ?: state.tasks.error, state.actionPending, state.actionMessage, onBack, { retry++ },
-        onAction = { state.tasks.value?.firstOrNull { it.id == taskId }?.let { task -> scope.launch { browser?.taskAction(task) } } }, modifier)
+        onAction = { state.tasks.value?.firstOrNull { it.id == taskId }?.let { task -> scope.launch { browser?.taskAction(task) } } }, modifier,
+        actionFailed = state.actionFailed)
 }

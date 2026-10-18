@@ -69,6 +69,7 @@ import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiActionBarButton
 import cn.mafei.cmp.common.ui.MaFeiActionBarScaffold
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
@@ -419,6 +420,7 @@ fun GlassStyleScreen(
         title = "风格设置",
         onBack = onBack,
         modifier = modifier,
+        overlay = { backdrop -> MaFeiErrorDialog(error, backdrop, busy = saving, title = "保存失败") },
     ) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -451,7 +453,6 @@ fun GlassStyleScreen(
                     enabled = !saving,
                     onItemClick = { onSelectBottomNavigation(BottomNavigationType.entries[it]) },
                 )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         }
     }
@@ -471,6 +472,7 @@ fun AppearanceScreen(
         title = "外观与主题",
         onBack = onBack,
         modifier = modifier,
+        overlay = { backdrop -> MaFeiErrorDialog(error, backdrop, busy = saving, title = "保存失败") },
     ) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -495,7 +497,6 @@ fun AppearanceScreen(
                     enabled = !saving,
                     onItemClick = { onSelect(modes[it]) },
                 )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         }
     }

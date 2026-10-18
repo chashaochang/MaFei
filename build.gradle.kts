@@ -126,6 +126,20 @@ tasks.register<Exec>("verifyNoNativeMaterialUi") {
         rootProject.projectDir.absolutePath)
 }
 
+tasks.register<Exec>("verifyFeedbackPolicyTests") {
+    group = "verification"
+    description = "Tests feedback-policy guards against inline error regressions and broad exceptions."
+    commandLine("node", "--test", rootProject.file("scripts/verify-feedback-policy.test.mjs").absolutePath)
+}
+
+tasks.register<Exec>("verifyFeedbackPolicy") {
+    group = "verification"
+    description = "Rejects content-area failure notices and direct inline error text in active production sources."
+    dependsOn("verifyFeedbackPolicyTests")
+    commandLine("node", rootProject.file("scripts/verify-feedback-policy.mjs").absolutePath,
+        rootProject.projectDir.absolutePath)
+}
+
 val verifyDependencyBoundaries by tasks.registering(Exec::class) {
     group = "verification"
     description = "Checks production source dependencies independently of CPF/ABI configuration."
@@ -142,5 +156,5 @@ tasks.named("check") {
     dependsOn("verifySourceSize")
     dependsOn(gradle.includedBuild("build-logic").task(":test"))
     dependsOn(verifyDependencyBoundaries)
-    dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi")
+    dependsOn("verifyArchitecture", verifyNoSvgResources, "verifyNoNativeMaterialUi", "verifyFeedbackPolicy")
 }

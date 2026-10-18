@@ -85,8 +85,12 @@ class HomeLoadingStatusTest {
         // A single match also rejects a second, inline retry in the media feed.
         composeRule.onNodeWithText("重试").performClick()
         assertEquals(1, retries)
+        // A request that immediately fails with the same message must remain
+        // actionable; only dismissal or the owner's busy/error transition hides it.
+        composeRule.onNodeWithText("连接失败").assertExists()
+        composeRule.onNodeWithText("关闭").performClick()
         composeRule.onNodeWithText("连接失败").assertDoesNotExist()
-        composeRule.onNodeWithText("重试").assertDoesNotExist()
+        assertEquals(1, retries)
         composeRule.onNodeWithText("已加载的影片").assertExists()
     }
 

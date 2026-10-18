@@ -107,21 +107,6 @@ internal enum class BrowseSortField(val label: String) {
 }
 
 @Composable
-internal fun HomeLatestFeedError(message: String, onRetry: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        MaFeiInlineNotice(
-            message = message,
-            actionLabel = "重试",
-            onAction = onRetry,
-        )
-    }
-}
-
-@Composable
 internal fun HomeRefreshContainer(
     stretchHero: Boolean,
     refreshing: Boolean,
@@ -245,28 +230,17 @@ private fun <T : Comparable<T>> compareNullable(left: T?, right: T?, descending:
 @Composable
 internal fun StatusContent(
     collections: List<MediaCollection>, items: List<MediaItem>, selectedCollection: CollectionId?,
-    loading: Boolean, error: String?, stale: Boolean, overview: Boolean,
-    overviewHasContent: Boolean, onRetry: () -> Unit,
+    loading: Boolean, overview: Boolean, overviewHasContent: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (stale) Box(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaFeiShape.field)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-        ) {
-            Text("离线内容 · 当前显示缓存，恢复连接后可刷新。", Modifier.fillMaxWidth().padding(14.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-        }
-        error?.let { InlineProblem(it, if (loading) null else onRetry) }
         if (loading) {
             Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
                 MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
             }
         }
-        if (!loading && error == null && !(overview && overviewHasContent) && collections.isEmpty()) {
+        if (!loading && !(overview && overviewHasContent) && collections.isEmpty()) {
             LibraryEmptyState("这里还没有媒体库", "这个账号暂时没有可访问的媒体库。请检查服务器中的媒体库和账号权限。")
-        } else if (!loading && error == null && !(overview && overviewHasContent) && items.isEmpty()) {
+        } else if (!loading && !(overview && overviewHasContent) && items.isEmpty()) {
             LibraryEmptyState(
                 if (selectedCollection == null) "选择一个媒体库" else "还没有发现内容",
                 if (selectedCollection == null && !overview) "从导航中选择媒体库，开始浏览。" else "这个媒体库暂无内容，完成服务器扫描后可再刷新。",

@@ -119,10 +119,6 @@ fun MusicPlayerScreen(item: MediaItem, state: PlayerState, preparing: Boolean, e
                         }
                     }
                     if (preparing) LegacyLoadingView(Modifier.fillMaxWidth().height(48.dp))
-                    if (error != null || state.phase == PlayerPhase.Error) {
-                        Text(error ?: "播放失败，请重试", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
-                        LiquidButton(onRetry, backdrop) { Text("重试", color = Color.White) }
-                    }
                 }
             }
             if (wide) Row(Modifier.widthIn(max = 1080.dp).fillMaxWidth(),
@@ -162,6 +158,8 @@ fun MusicPlayerScreen(item: MediaItem, state: PlayerState, preparing: Boolean, e
         if (clearConfirm) MaFeiGlassConfirmDialog("清空播放队列", "确定清空播放队列吗？", "清空", "取消",
             onConfirm = { clearConfirm = false; queueVisible = false; onClear() },
             onDismiss = { clearConfirm = false; queueVisible = true }, backdrop = backdrop, destructive = true)
+        MaFeiErrorDialog(error ?: "播放失败，请重试".takeIf { state.phase == PlayerPhase.Error }, backdrop,
+            onRetry = onRetry, busy = preparing, title = "播放失败")
     }
 }
 

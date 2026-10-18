@@ -17,6 +17,7 @@ class SignedOutAccountStateTest {
         var switch: suspend () -> Unit = { error("credentials unavailable") }
         var connectAction: suspend () -> Unit = {}
         var mayDelete = true
+        var delete: suspend () -> Boolean = { mayDelete }
 
         override suspend fun savedConnections(): List<SavedConnection> {
             reads++
@@ -29,7 +30,7 @@ class SignedOutAccountStateTest {
 
         override suspend fun switchAccount(connection: SavedConnection) = switch()
 
-        override suspend fun deleteSavedConnection(connection: SavedConnection) = mayDelete
+        override suspend fun deleteSavedConnection(connection: SavedConnection) = delete()
 
         override suspend fun connect(provider: ProviderKind, baseUrl: String, username: String, password: String, rememberPassword: Boolean) = connectAction()
 
@@ -91,7 +92,62 @@ class SignedOutAccountStateTest {
             state.deleteAccount(accounts.item())
             assertEquals(listOf(accounts.connection), state.historyConnections)
             assertTrue(accounts.connection.credentialKey in state.rememberedPasswordKeys)
-            assertNotNull(state.historyError)
+            assertNull(state.historyError)
+            assertNotNull(state.historyActionError)
+        }
+
+    @Test
+    fun signedOutRefreshFailurePreservesHistoryAndKeepsActionErrorsSeparate() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val state = SignedOutAccountState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined), { false }, {}, {})
+            state.loadHistory()
+            accounts.load = { error("storage temporarily unavailable") }
+            state.loadHistory()
+            val loadError = assertNotNull(state.historyError)
+            assertEquals(listOf(accounts.connection), state.historyConnections)
+            assertEquals(setOf(accounts.connection.credentialKey), state.rememberedPasswordKeys)
+            assertFalse(state.historyLoading)
+            assertNull(state.historyActionError)
+
+            accounts.delete = { error("deletion failed") }
+            state.deleteAccount(accounts.item())
+            assertNotNull(state.historyActionError)
+            assertEquals(loadError, state.historyError, "An operation must not replace the refresh error")
+            assertEquals(listOf(accounts.connection), state.historyConnections)
+            assertEquals(setOf(accounts.connection.credentialKey), state.rememberedPasswordKeys)
+            assertNull(state.deletingAccountKey)
+        }
+
+    @Test
+    fun signedInRefreshFailurePreservesAccountsAndPasswordMarkers() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined))
+            state.loadAccounts()
+            accounts.load = { error("storage temporarily unavailable") }
+            state.loadAccounts()
+            assertNotNull(state.accountsError)
+            assertEquals(listOf(accounts.connection), state.accountConnections)
+            assertEquals(setOf(accounts.connection.credentialKey), state.accountPasswordKeys)
+            assertFalse(state.accountsLoading)
+            assertNull(state.accountsActionError)
+        }
+
+    @Test
+    fun signedInDeleteFailureOnlyUpdatesTheActionErrorChannel() =
+        runBlocking<Unit> {
+            val accounts = Accounts()
+            val state = AccountFlowState(accounts, CoroutineScope(coroutineContext + Dispatchers.Unconfined))
+            state.loadAccounts()
+            accounts.delete = { error("deletion failed") }
+            state.deleteAccount(accounts.item())
+            assertNotNull(state.accountsActionError)
+            assertNull(state.accountsError)
+            assertEquals(listOf(accounts.connection), state.accountConnections)
+            assertEquals(setOf(accounts.connection.credentialKey), state.accountPasswordKeys)
+            assertFalse(state.accountsLoading)
+            assertNull(state.deletingAccountKey)
         }
 
     @Test
@@ -145,12 +201,14 @@ class SignedOutAccountStateTest {
             var loginRequired = false
             state.switchAccount(accounts.item()) { loginRequired = true }
             assertFalse(loginRequired)
-            assertNotNull(state.accountsError)
+            assertNull(state.accountsError)
+            assertNotNull(state.accountsActionError)
             assertNull(state.switchingAccountKey)
             accounts.switch = { throw SavedAccountRequiresLoginException(accounts.connection.selection) }
             state.switchAccount(accounts.item()) { loginRequired = true }
             assertTrue(loginRequired)
             assertNull(state.accountsError)
+            assertNull(state.accountsActionError)
             assertNull(state.switchingAccountKey)
         }
 

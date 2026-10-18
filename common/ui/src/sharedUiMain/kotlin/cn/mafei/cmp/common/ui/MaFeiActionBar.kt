@@ -238,6 +238,7 @@ fun MaFeiActionBarScaffold(
     modifier: Modifier = Modifier,
     actionCount: Int = 0,
     actions: @Composable RowScope.(buttonBackdrop: GlassBackdrop) -> Unit = {},
+    overlay: @Composable BoxScope.(backdrop: GlassBackdrop) -> Unit = {},
     content: @Composable BoxScope.() -> Unit,
 ) {
     val safeArea = LocalMaFeiSafeArea.current
@@ -261,6 +262,7 @@ fun MaFeiActionBarScaffold(
             actions = actions,
             modifier = Modifier.align(Alignment.TopCenter),
         )
+        overlay(backdrop)
     }
 }
 

@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -82,7 +82,7 @@ internal fun MineAccountSheet(layout: MaFeiLayout, backdrop: GlassBackdrop, onDi
         val focusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
         Box(
-            Modifier.fillMaxSize().focusRequester(focusRequester).focusable().onPreviewKeyEvent { event ->
+            Modifier.fillMaxSize().focusRequester(focusRequester).focusable().onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
                     onDismiss()
                     true

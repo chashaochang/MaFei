@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.ColorFilter
 import org.jetbrains.compose.resources.painterResource
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
+import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.core.domain.ManagedDevice
 
@@ -32,24 +33,22 @@ fun ManagementDevicesScreen(state: ManagementDevicesState, currentDeviceId: Stri
             Image(painterResource(MaFeiLegacyDrawables.delete), null, Modifier.size(22.dp),
                 colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.error))
         }
-    }) {
-        Column(Modifier.align(Alignment.TopCenter).widthIn(max = 960.dp).fillMaxSize().verticalScroll(rememberScrollState())
+    }, overlay = { backdrop -> DeviceFeedbackOverlay(state, onRefresh, backdrop) }) {
+        if (state.devices == null) DeviceUnavailableState(state, onRefresh, Modifier.fillMaxSize())
+        else Column(Modifier.align(Alignment.TopCenter).widthIn(max = 960.dp).fillMaxSize().verticalScroll(rememberScrollState())
             .padding(16.dp).padding(bottom = LocalMaFeiSafeArea.current.bottom + 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             ManagementTextInput(query.text, { query = query.copy(text = it, page = 0) }, "搜索设备、应用或用户")
             LegacyListGroup(listOf(LegacyListGroupItem("筛选设备")), { showFilter = true })
-            if (state.permissionError == null) {
-                if (page.items.isNotEmpty()) LegacyListGroup(page.items.map { device -> LegacyListGroupItem(
+            if (page.items.isNotEmpty()) LegacyListGroup(page.items.map { device -> LegacyListGroupItem(
                     device.displayName, trailing = if (device.current) "当前设备" else "",
                     subtitle = "${device.appName} ${device.appVersion} · ${device.lastUserName}\n${device.lastActivity}",
                 ) }, { onDevice(page.items[it].id) })
-                else if (!state.loading && state.error == null) LegacyEmptyView("暂无已授权设备")
-                if (page.pages > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            else if (!state.loading && state.error == null) LegacyEmptyView("暂无已授权设备")
+            if (page.pages > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     LegacyListGroup(listOf(LegacyListGroupItem("上一页", showArrow = false)), { query = query.copy(page = page.page - 1) }, Modifier.weight(1f), enabled = page.page > 0)
                     Text("${page.page + 1} / ${page.pages}", color = MaterialTheme.colorScheme.onSurface)
                     LegacyListGroup(listOf(LegacyListGroupItem("下一页", showArrow = false)), { query = query.copy(page = page.page + 1) }, Modifier.weight(1f), enabled = page.page + 1 < page.pages)
-                }
             }
-            DeviceFeedback(state, onRefresh)
         }
     }
     if (showFilter) DeviceFilterSheet(query, devices.map { it.lastUserName }.filter(String::isNotBlank).distinct(),
@@ -63,10 +62,12 @@ fun ManagementDeviceDetailScreen(device: ManagedDevice?, state: ManagementDevice
     onRefresh: () -> Unit, onRename: (String) -> Unit, onRevoke: () -> Unit, modifier: Modifier = Modifier) {
     var name by remember(device?.id, device?.customName) { mutableStateOf(device?.displayName.orEmpty()) }
     var confirm by remember { mutableStateOf(false) }
-    MaFeiActionBarScaffold("设备详情", onBack, modifier) {
-        Column(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().verticalScroll(rememberScrollState())
+    val canEdit = !state.pending && state.permissionError == null
+    MaFeiActionBarScaffold("设备详情", onBack, modifier,
+        overlay = { backdrop -> DeviceFeedbackOverlay(state, onRefresh, backdrop, hasContent = device != null) }) {
+        if (device == null) DeviceUnavailableState(state, onRefresh, Modifier.fillMaxSize())
+        else Column(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().verticalScroll(rememberScrollState())
             .padding(16.dp).padding(bottom = LocalMaFeiSafeArea.current.bottom + 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (device != null && state.permissionError == null) {
                 Text(device.displayName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                 Text(if (device.current) "当前设备" else "已授权", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LegacyListGroup(listOf(
@@ -75,26 +76,36 @@ fun ManagementDeviceDetailScreen(device: ManagedDevice?, state: ManagementDevice
                     LegacyListGroupItem("最近活动", trailing = device.lastActivity, showArrow = false),
                 ), {})
                 Text("自定义名称", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ManagementTextInput(name, { name = it }, device.name, enabled = !state.pending)
-                LegacyListGroup(listOf(LegacyListGroupItem("保存名称", showArrow = false)), { onRename(name) }, enabled = !state.pending)
-                LegacyListGroup(listOf(LegacyListGroupItem("撤销授权", showArrow = false)), { confirm = true }, enabled = !state.pending && !device.current)
+                ManagementTextInput(name, { name = it }, device.name, enabled = canEdit)
+                LegacyListGroup(listOf(LegacyListGroupItem("保存名称", showArrow = false)), { onRename(name) }, enabled = canEdit)
+                LegacyListGroup(listOf(LegacyListGroupItem("撤销授权", showArrow = false)), { confirm = true }, enabled = canEdit && !device.current)
                 if (device.current) Text("当前设备不能撤销授权", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (!state.loading && state.error == null && state.permissionError == null) Text("信息已失效，请返回后重试", color = MaterialTheme.colorScheme.onSurface)
-            DeviceFeedback(state, onRefresh)
         }
     }
     if (confirm && device != null) LegacyConfirmDialog("撤销设备授权？", device.displayName, "撤销授权", "取消",
         { confirm = false; onRevoke() }, { confirm = false }, destructive = true)
 }
 
-@Composable private fun DeviceFeedback(state: ManagementDevicesState, onRefresh: () -> Unit) {
+@Composable private fun DeviceUnavailableState(state: ManagementDevicesState, onRefresh: () -> Unit, modifier: Modifier) {
     val error = state.permissionError ?: state.error
-    if (state.loading && state.devices == null) MaFeiLoadingIndicator()
-    if (error != null) {
-        Text(error, color = MaterialTheme.colorScheme.onSurface)
-        LegacyListGroup(listOf(LegacyListGroupItem("重试", showArrow = false)), { onRefresh() })
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (state.loading) MaFeiLoadingIndicator()
+        else Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // mafei-feedback: full-page-error -- 设备数据不可用时的整页阻断状态，下方提供重新加载入口
+            Text(error ?: "信息已失效，请返回后重试", color = MaterialTheme.colorScheme.onSurface)
+            LegacyListGroup(listOf(LegacyListGroupItem("重试", showArrow = false)), { onRefresh() })
+        }
     }
-    state.message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+}
+
+@Composable private fun BoxScope.DeviceFeedbackOverlay(state: ManagementDevicesState, onRefresh: () -> Unit,
+    backdrop: GlassBackdrop, hasContent: Boolean = state.devices != null) {
+    val error = state.message.takeIf { state.actionFailed }
+        ?: (state.permissionError ?: state.error).takeIf { hasContent }
+    MaFeiErrorDialog(error, backdrop, onRetry = onRefresh.takeUnless { state.actionFailed },
+        busy = state.pending || state.loading,
+        title = if (state.actionFailed) "设备操作失败" else "设备加载失败")
+    LegacyTransientToast(state.message.takeUnless { state.actionFailed || state.pending }, Modifier.align(Alignment.BottomCenter))
 }
 
 @Composable private fun DeviceFilterSheet(initial: DeviceQuery, users: List<String>, onDismiss: () -> Unit, onApply: (DeviceQuery) -> Unit) {

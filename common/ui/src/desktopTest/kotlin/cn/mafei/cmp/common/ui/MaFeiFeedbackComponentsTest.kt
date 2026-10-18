@@ -1,6 +1,7 @@
 package cn.mafei.cmp.common.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import cn.mafei.cmp.common.glass.captureGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -36,20 +39,39 @@ class MaFeiFeedbackComponentsTest {
     }
 
     @Test
-    fun noticeActionDispatchesWithoutMaterialButton() {
-        var clicks by mutableStateOf(0)
+    fun closingErrorKeepsRequestFailureAndBusyCycleCanPresentTheSameFailureAgain() {
+        var failure by mutableStateOf<String?>("服务器暂时不可用")
+        var busy by mutableStateOf(false)
+        var retries = 0
         composeRule.setContent {
             MaterialTheme {
-                MaFeiInlineNotice(
-                    message = "服务器暂时不可用",
-                    actionLabel = "重试",
-                    onAction = { clicks++ },
-                )
+                Box(Modifier.fillMaxSize()) {
+                    val backdrop = rememberGlassBackdrop()
+                    Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop))
+                    MaFeiErrorDialog(failure, backdrop, onRetry = { retries++ }, busy = busy)
+                }
             }
         }
 
         composeRule.onNodeWithText("服务器暂时不可用").assertIsDisplayed()
+        composeRule.onNodeWithText("关闭").performClick()
+        composeRule.onNodeWithText("服务器暂时不可用").assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals("服务器暂时不可用", failure)
+            assertEquals(0, retries)
+            busy = true
+        }
+        composeRule.runOnIdle { busy = false }
+        composeRule.onNodeWithText("服务器暂时不可用").assertIsDisplayed()
         composeRule.onNodeWithText("重试").performClick()
-        composeRule.runOnIdle { assertEquals(1, clicks) }
+        // A synchronous failure with unchanged text must not disappear.
+        composeRule.onNodeWithText("服务器暂时不可用").assertIsDisplayed()
+        composeRule.runOnIdle {
+            assertEquals(1, retries)
+            assertEquals("服务器暂时不可用", failure)
+            failure = null
+        }
+        composeRule.runOnIdle { failure = "服务器暂时不可用" }
+        composeRule.onNodeWithText("服务器暂时不可用").assertIsDisplayed()
     }
 }

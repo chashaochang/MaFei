@@ -52,7 +52,22 @@ fun MusicDetailScreen(
             }
         }
     }
-    MaFeiActionBarScaffold(detail.item?.title ?: fallbackTitle, onBack) {
+    val contentError = listOfNotNull(detail.error, tracks.error, albums.error.takeIf { artist })
+        .distinct().joinToString("\n").takeIf { it.isNotBlank() && detail.item != null }
+    MaFeiActionBarScaffold(detail.item?.title ?: fallbackTitle, onBack, overlay = { backdrop ->
+        MaFeiErrorDialog(contentError, backdrop, onRetry = {
+            val tracksNeedRefresh = tracks.error != null && (tracks.items.isEmpty() || tracks.cursor == null)
+            val albumsNeedRefresh = artist && albums.error != null && (albums.items.isEmpty() || albums.cursor == null)
+            if (detail.error != null || tracksNeedRefresh || albumsNeedRefresh) onRetry()
+            else {
+                // Retry failed continuation pages without replacing the accumulated list with page one.
+                if (tracks.error != null) onMoreTracks()
+                if (artist && albums.error != null) onMoreAlbums()
+            }
+        },
+            busy = detail.loading || tracks.loading || tracks.loadingMore || (artist && (albums.loading || albums.loadingMore)),
+            title = "音乐加载失败")
+    }) {
         when {
             detail.loading && detail.item == null -> LegacyLoadingView(Modifier.fillMaxSize())
             detail.error != null && detail.item == null -> LegacyFailedView(onRetry, Modifier.fillMaxSize())
@@ -77,7 +92,7 @@ fun MusicDetailScreen(
                                 MusicTrackRow(track, index, track.id.value == currentId, preparing && track.id.value == currentId,
                                     playing, { onPlay(tracks.items, index) })
                             }
-                            item { MusicSectionFeedback(tracks, onMoreTracks, onRetry) }
+                            item { MusicSectionFeedback(tracks) }
                         }
                     }
                 } else {
@@ -101,7 +116,7 @@ fun MusicDetailScreen(
                             MusicTrackRow(track, index, track.id.value == currentId, preparing && track.id.value == currentId,
                                 playing, { onPlay(tracks.items, index) })
                         }
-                        item(span = { GridItemSpan(maxLineSpan) }) { MusicSectionFeedback(tracks, onMoreTracks, onRetry) }
+                        item(span = { GridItemSpan(maxLineSpan) }) { MusicSectionFeedback(tracks) }
                         if (artist && (albums.items.isNotEmpty() || albums.loading || albums.error != null)) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Text("专辑", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp,
@@ -110,7 +125,7 @@ fun MusicDetailScreen(
                             items(albums.items, key = { "album:${it.id.value}" }) { album ->
                                 MusicArtworkCard(album, { onAlbum(album) }, artwork, Modifier.padding(bottom = maxOf(18.dp, albumHoverInset)))
                             }
-                            item(span = { GridItemSpan(maxLineSpan) }) { MusicSectionFeedback(albums, onMoreAlbums, onRetry) }
+                            item(span = { GridItemSpan(maxLineSpan) }) { MusicSectionFeedback(albums) }
                         }
                     }
                 }
@@ -120,12 +135,11 @@ fun MusicDetailScreen(
 }
 
 @Composable
-private fun MusicSectionFeedback(state: MusicPageState, onMore: () -> Unit, onRetry: () -> Unit) {
+private fun MusicSectionFeedback(state: MusicPageState) {
     when {
         state.loading -> LegacyLoadingView(Modifier.fillMaxWidth().height(64.dp))
-        state.error != null && state.items.isEmpty() -> LegacyFailedView(onRetry, Modifier.fillMaxWidth().height(180.dp))
-        state.initialized && state.items.isEmpty() -> LegacyEmptyView(modifier = Modifier.fillMaxWidth().height(200.dp))
-        else -> MusicPageFooter(state, onMore)
+        state.initialized && state.items.isEmpty() && state.error == null -> LegacyEmptyView(modifier = Modifier.fillMaxWidth().height(200.dp))
+        else -> MusicPageFooter(state)
     }
 }
 

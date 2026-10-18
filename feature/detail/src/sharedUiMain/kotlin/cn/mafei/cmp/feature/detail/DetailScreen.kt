@@ -34,6 +34,7 @@ import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.common.ui.LocalMaFeiWindowModalHost
 import cn.mafei.cmp.common.ui.MaFeiAnimatedModalOverlay
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.PersonRef
 
@@ -179,10 +180,6 @@ fun DetailScreen(
                                 item = loadedItem,
                                 scrollState = scrollState,
                                 collapseProgress = collapseProgress,
-                                loading = loading,
-                                error = error,
-                                stale = stale,
-                                onRetry = onRetry,
                                 onPlay = onPlay,
                                 playTarget = playTarget,
                                 playbackBusy = playbackBusy,
@@ -194,7 +191,6 @@ fun DetailScreen(
                                 actionsBusy = actionsBusy,
                                 seasons = seasons,
                                 sectionsLoading = sectionsLoading,
-                                sectionsError = sectionsError,
                                 onSeasonSelected = onSeasonSelected,
                                 playbackSources = playbackSources,
                                 onOpenExternalUrl = onOpenExternalUrl,
@@ -292,5 +288,14 @@ fun DetailScreen(
                 )
             }
         }
+        MaFeiErrorDialog(
+            message = listOfNotNull(error, sectionsError).distinct().takeIf {
+                item != null && it.isNotEmpty()
+            }?.joinToString("\n"),
+            title = "详情加载失败",
+            backdrop = actionBarBackdrop,
+            busy = loading || sectionsLoading || sheetVisible,
+            onRetry = onRetry,
+        )
     }
 }

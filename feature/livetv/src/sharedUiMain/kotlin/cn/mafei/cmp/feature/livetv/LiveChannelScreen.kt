@@ -21,7 +21,10 @@ fun LiveChannelScreen(title: String, page: MediaPageState, onBack: (() -> Unit)?
             if (last != null && last >= page.items.lastIndex - 3 && page.cursor != null && !page.loadingMore && page.error == null) onMore()
         }
     }
-    MaFeiActionBarScaffold(title, onBack) {
+    MaFeiActionBarScaffold(title, onBack, overlay = { backdrop ->
+        MaFeiErrorDialog(page.error.takeIf { page.items.isNotEmpty() }, backdrop,
+            onRetry = onRetry, busy = page.loading || page.loadingMore, title = "频道加载失败")
+    }) {
         when {
             page.loading && page.items.isEmpty() -> LegacyLoadingView(Modifier.fillMaxSize())
             page.error != null && page.items.isEmpty() -> LegacyFailedView(onRetry, Modifier.fillMaxSize())
@@ -39,7 +42,6 @@ fun LiveChannelScreen(title: String, page: MediaPageState, onBack: (() -> Unit)?
                             poster = { artwork(item, it) })
                     }
                     if (page.loadingMore) item(span = { GridItemSpan(maxLineSpan) }) { LegacyLoadingView(Modifier.fillMaxWidth().height(56.dp)) }
-                    if (page.error != null) item(span = { GridItemSpan(maxLineSpan) }) { LegacyFailedView(onRetry, Modifier.fillMaxWidth().height(100.dp)) }
                 }
             }
         }

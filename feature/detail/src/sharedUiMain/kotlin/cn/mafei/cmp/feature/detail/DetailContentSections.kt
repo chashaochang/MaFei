@@ -199,7 +199,6 @@ internal fun BoxScope.OverviewSheetOverlay(
 internal fun SeriesSections(
     seasons: List<MediaItem>,
     loading: Boolean,
-    error: String?,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)?,
     sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)?,
     onSeasonSelected: (MediaItem) -> Unit,
@@ -266,18 +265,6 @@ internal fun SeriesSections(
             Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.Center) {
                 MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Inline)
             }
-        }
-        DetailAnimatedVisibility(
-            visible = seasons.isEmpty() && !loading && error != null,
-            enter = fadeIn(tween(DetailMotionEnterMillis)),
-            exit = fadeOut(tween(DetailMotionExitMillis)),
-        ) {
-            Text(
-                error.orEmpty(),
-                Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 12.sp,
-            )
         }
     }
 }

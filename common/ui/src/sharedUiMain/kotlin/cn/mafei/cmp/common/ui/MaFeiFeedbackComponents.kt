@@ -9,9 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -37,16 +34,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import cn.mafei.cmp.common.design_system.MaFeiShape
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
 
 enum class MaFeiLoadingStyle { Page, Inline, Button }
-
-enum class MaFeiNoticeKind { Error, Warning, Info }
 
 /** Shared activity mark; animated values are read only while drawing. */
 @Composable
@@ -179,54 +172,6 @@ fun MaFeiRefreshIndicator(
         exit = androidx.compose.animation.fadeOut(tween(180)),
     ) {
         MaFeiLoadingIndicator(style = MaFeiLoadingStyle.Button)
-    }
-}
-
-/** Error/warning/info notice without Material's filled error container. */
-@Composable
-fun MaFeiInlineNotice(
-    message: String,
-    modifier: Modifier = Modifier,
-    kind: MaFeiNoticeKind = MaFeiNoticeKind.Error,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    val accent = when (kind) {
-        MaFeiNoticeKind.Error -> MaterialTheme.colorScheme.error
-        MaFeiNoticeKind.Warning -> Color(0xFFFFB74D)
-        MaFeiNoticeKind.Info -> MaterialTheme.colorScheme.primary
-    }
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(MaFeiShape.field)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .56f))
-            .drawBehind {
-                drawRoundRect(accent.copy(alpha = .72f), size = size.copy(width = 2.dp.toPx()))
-            }
-            .padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(accent),
-        )
-        Text(
-            message,
-            Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (actionLabel != null && onAction != null) {
-            Text(
-                actionLabel,
-                Modifier.mafeiInteractive(onAction, radiusDp = 16f, label = actionLabel)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                color = accent,
-                fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
     }
 }
 

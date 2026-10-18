@@ -22,6 +22,7 @@ internal class SignedOutAccountState(
     var rememberedPasswordKeys by mutableStateOf(emptySet<String>())
     var historyLoading by mutableStateOf(false)
     var historyError by mutableStateOf<String?>(null)
+    var historyActionError by mutableStateOf<String?>(null)
     var deletingAccountKey by mutableStateOf<String?>(null)
 
     fun loadHistory() {
@@ -37,8 +38,6 @@ internal class SignedOutAccountState(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    historyConnections = emptyList()
-                    rememberedPasswordKeys = emptySet()
                     historyError = "历史账号读取失败，请稍后重试"
                 } finally {
                     historyLoading = false
@@ -52,10 +51,10 @@ internal class SignedOutAccountState(
     fun deleteAccount(item: ConnectionHistoryItem) {
         val connection = historyConnections.firstOrNull { it.credentialKey == item.key }
         if (connection == null) {
-            historyError = "历史账号已失效，请刷新后重试"
+            historyActionError = "历史账号已失效，请刷新后重试"
         } else if (deletingAccountKey == null && !isBusy()) {
             deletingAccountKey = item.key
-            historyError = null
+            historyActionError = null
             scope.launch {
                 try {
                     if (accounts.deleteSavedConnection(connection)) {
@@ -65,12 +64,12 @@ internal class SignedOutAccountState(
                         historyConnections = historyConnections.filterNot { it.credentialKey == item.key }
                         rememberedPasswordKeys = rememberedPasswordKeys - item.key
                     } else {
-                        historyError = "该账号正在使用，无法删除"
+                        historyActionError = "该账号正在使用，无法删除"
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    historyError = "账号删除失败，请稍后重试"
+                    historyActionError = "账号删除失败，请稍后重试"
                 } finally {
                     deletingAccountKey = null
                 }
@@ -99,10 +98,10 @@ internal class SignedOutAccountState(
     fun select(item: ConnectionHistoryItem, onLoginRequired: (SavedConnection, String?) -> Unit) {
         val connection = historyConnections.firstOrNull { it.credentialKey == item.key }
         if (connection == null) {
-            historyError = "历史账号已失效，请刷新后重试"
+            historyActionError = "历史账号已失效，请刷新后重试"
         } else if (!isBusy()) {
             onBusyChange(true)
-            historyError = null
+            historyActionError = null
             scope.launch {
                 try {
                     accounts.switchAccount(connection)
@@ -121,7 +120,7 @@ internal class SignedOutAccountState(
                             null
                         }
                     onLoginRequired(connection, savedPassword)
-                    historyError = null
+                    historyActionError = null
                     onErrorChange(null)
                 } finally {
                     onBusyChange(false)
