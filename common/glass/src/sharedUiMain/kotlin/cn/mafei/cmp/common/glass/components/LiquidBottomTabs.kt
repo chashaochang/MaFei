@@ -61,7 +61,9 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.min
@@ -90,6 +92,7 @@ fun LiquidBottomTabs(
     style: LiquidBottomTabsStyle = LiquidBottomTabsStyle.Standard,
     compactProgress: () -> Float = { 0f },
     bottomInset: Dp = 0.dp,
+    onAnimationRunningChanged: (Boolean) -> Unit = {},
     content: @Composable RowScope.() -> Unit
 ) {
     // A navigation surface with no destinations has no meaningful geometry.
@@ -153,6 +156,7 @@ fun LiquidBottomTabs(
         val requestedIndex = selectedTabIndex().fastCoerceIn(0, tabsCount - 1)
         val latestRequestedIndex by rememberUpdatedState(requestedIndex)
         val latestOnTabSelected by rememberUpdatedState(onTabSelected)
+        val latestAnimationRunningChanged by rememberUpdatedState(onAnimationRunningChanged)
         val latestTabWidth by rememberUpdatedState(tabWidth)
         val latestIsLtr by rememberUpdatedState(isLtr)
         var currentIndex by remember(tabsCount) {
@@ -195,6 +199,11 @@ fun LiquidBottomTabs(
         // can either restart too often or capture an obsolete index.
         LaunchedEffect(requestedIndex, dampedDragAnimation) {
             currentIndex = requestedIndex
+        }
+        LaunchedEffect(dampedDragAnimation, offsetAnimation) {
+            snapshotFlow { dampedDragAnimation.isRunning || offsetAnimation.isRunning }
+                .distinctUntilChanged()
+                .collect { latestAnimationRunningChanged(it) }
         }
         LaunchedEffect(dampedDragAnimation) {
             snapshotFlow { currentIndex }

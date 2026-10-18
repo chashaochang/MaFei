@@ -5,7 +5,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -31,6 +31,59 @@ import cn.mafei.cmp.common.ui.generated.resources.ic_mine_sel
 import cn.mafei.cmp.common.ui.generated.resources.ic_mine_unsel
 import cn.mafei.cmp.common.ui.generated.resources.ic_search
 import org.jetbrains.compose.resources.painterResource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
+/** Delivers only the latest request; route acknowledgements never own a newer request. */
+@Stable
+internal class BottomNavigationSelectionScheduler(
+    private val scope: CoroutineScope,
+    private val interaction: MaFeiTabInteractionState?,
+    private val onDestination: (String) -> Unit,
+) {
+    private class Request(val destination: String) {
+        var delivered by mutableStateOf(false)
+        var job: Job? = null
+    }
+
+    private var pending by mutableStateOf<Request?>(null)
+    val pendingDestination: String? get() = pending?.destination
+    val deliveredDestination: String? get() = pending?.takeIf { it.delivered }?.destination
+
+    fun select(destination: String) {
+        pending?.job?.cancel()
+        val request = Request(destination)
+        pending = request
+        interaction?.selectionPending(true)
+        request.job = scope.launch {
+            // Draw the local droplet target before rebuilding the destination.
+            withFrameNanos { }
+            withFrameNanos { }
+            if (pending !== request) return@launch
+            request.delivered = true
+            try {
+                onDestination(destination)
+            } finally {
+                // A destination callback can itself enqueue another selection.
+                if (pending === request) interaction?.selectionPending(false)
+            }
+        }
+    }
+
+    fun acknowledge(destination: String) {
+        val request = pending ?: return
+        if (!request.delivered || request.destination != destination) return
+        pending = null
+        interaction?.selectionPending(false)
+    }
+
+    fun dispose() {
+        pending?.job?.cancel()
+        pending = null
+        interaction?.clear()
+    }
+}
 
 /** Keep scroll-driven dock morphing out of the shell's scene composition. */
 @Composable
@@ -45,22 +98,38 @@ internal fun BottomNavigationLayer(
     modifier: Modifier = Modifier,
 ) {
     val selectedIndex = destinations.indexOfFirst { it.key == selectedDestination }.coerceAtLeast(0)
+    val scope = rememberCoroutineScope()
+    val interaction = LocalMaFeiTabInteractionState.current
+    val currentOnDestination by rememberUpdatedState(onDestination)
+    val scheduler = remember(scope, interaction) {
+        BottomNavigationSelectionScheduler(scope, interaction) { currentOnDestination(it) }
+    }
+    LaunchedEffect(scheduler, selectedDestination, scheduler.deliveredDestination) {
+        scheduler.acknowledge(selectedDestination)
+    }
+    DisposableEffect(scheduler) { onDispose { scheduler.dispose() } }
+    val select: (Int) -> Unit = { index ->
+        destinations.getOrNull(index)?.let { scheduler.select(it.key) }
+    }
+    val visualIndex = destinations.indexOfFirst { it.key == scheduler.pendingDestination }
+        .takeIf { it >= 0 } ?: selectedIndex
     val resolvedCompactProgress = if (type == BottomNavigationType.Bar) 0f else compactProgress().coerceIn(0f, 1f)
     LiquidBottomTabs(
-        selectedTabIndex = { selectedIndex },
-        onTabSelected = { index -> destinations.getOrNull(index)?.let { onDestination(it.key) } },
+        selectedTabIndex = { visualIndex },
+        onTabSelected = select,
         backdrop = backdrop,
         tabsCount = destinations.size,
         widthBaselineTabCount = 4,
         compactProgress = { resolvedCompactProgress },
         style = if (type == BottomNavigationType.Bar) LiquidBottomTabsStyle.Bar else LiquidBottomTabsStyle.Standard,
         bottomInset = bottomInset,
+        onAnimationRunningChanged = { interaction?.animationRunning(it) },
         modifier = modifier,
     ) {
         destinations.forEachIndexed { index, item ->
-            val selected = selectedDestination == item.key
+            val selected = visualIndex == index
             LiquidBottomTab(
-                onClick = { onDestination(item.key) },
+                onClick = { select(index) },
                 index = index,
                 isSelected = selected,
                 collapseProgress = resolvedCompactProgress,
