@@ -72,6 +72,67 @@ class FavoriteRefreshFreshnessTest {
         assertEquals(4, f.adapter.requests.size)
     }
 
+    @Test fun switchingBackToACachedSortOfflineRestoresItsOwnPageAndCursor() = runBlocking {
+        val f = fixture()
+        val sortA = f.browser.state.value.favoriteSort
+        val sortB = sortA.copy(direction = if (sortA.direction == SortDirection.Ascending) SortDirection.Descending else SortDirection.Ascending)
+        f.adapter.fetch = { request ->
+            val prefix = if (request.sort == sortA) "a" else "b"
+            val suffix = if (request.cursor == null) "first" else "second"
+            Page(listOf(f.adapter.media("$prefix-$suffix")), PageCursor("$prefix-next-$suffix"))
+        }
+        f.browser.refreshFavorites()
+        f.browser.setFavoriteSort(sortB)
+        f.browser.loadMoreFavorites()
+        assertEquals(2, f.browser.state.value.favoriteItems.size)
+        f.adapter.fetch = { throw NetworkUnreachableError() }
+        f.browser.setFavoriteSort(sortA)
+        assertEquals(sortA, f.browser.state.value.favoriteSort)
+        assertEquals(listOf("a-first"), f.browser.state.value.favoriteItems.map { it.id.value })
+        assertEquals(PageCursor("a-next-first"), f.browser.state.value.favoriteNextCursor)
+        f.adapter.fetch = { request ->
+            assertEquals(sortA, request.sort)
+            assertEquals(PageCursor("a-next-first"), request.cursor)
+            Page(listOf(f.adapter.media("a-second")))
+        }
+        f.browser.loadMoreFavorites()
+        assertEquals(listOf("a-first", "a-second"), f.browser.state.value.favoriteItems.map { it.id.value })
+    }
+
+    @Test fun playbackChangeDoesNotCancelAnInFlightLibraryFirstPage() = runBlocking {
+        val f = fixture()
+        f.adapter.libraries = listOf("first", "second").map {
+            MediaCollection(CollectionId(it), f.adapter.serverId, f.adapter.provider, it)
+        }
+        f.adapter.fetch = { Page(listOf(f.adapter.media("initial"))) }
+        f.browser.start()
+        val release = CompletableDeferred<Unit>()
+        f.adapter.fetch = { release.await(); Page(listOf(f.adapter.media("selected-library"))) }
+        val selecting = launch(start = CoroutineStart.UNDISPATCHED) { f.browser.select(CollectionId("second")) }
+        assertTrue(f.browser.state.value.items.isEmpty())
+        f.repository.markPlaybackChanged(f.session)
+        release.complete(Unit)
+        selecting.join()
+        assertFalse(selecting.isCancelled)
+        assertFalse(f.browser.state.value.loading)
+        assertNull(f.browser.state.value.error)
+        assertEquals("selected-library", f.browser.state.value.items.single().id.value)
+    }
+
+    @Test fun playbackChangeDuringRefreshAllowsPublicationButDoesNotMarkItFresh() = runBlocking {
+        val f = fixture()
+        val release = CompletableDeferred<Unit>()
+        f.adapter.fetch = { release.await(); Page(listOf(f.adapter.media("loaded"))) }
+        val loading = launch(start = CoroutineStart.UNDISPATCHED) { f.browser.refreshFavoritesIfStale() }
+        f.repository.markPlaybackChanged(f.session)
+        release.complete(Unit)
+        loading.join()
+        assertFalse(loading.isCancelled)
+        assertEquals("loaded", f.browser.state.value.favoriteItems.single().id.value)
+        f.browser.refreshFavoritesIfStale()
+        assertEquals(2, f.adapter.requests.size)
+    }
+
     @Test fun automaticReentryDoesNotDuplicateAnInFlightRequestAndCancellationIsRetryable() = runBlocking {
         val f = fixture()
         val release = CompletableDeferred<Unit>()
@@ -147,7 +208,9 @@ class FavoriteRefreshFreshnessTest {
         f.browser.refreshFavoritesIfStale()
         f.repository.invalidate(f.session)
         f.browser.refreshFavoritesIfStale()
-        assertEquals(4, f.adapter.requests.size)
+        f.repository.markPlaybackChanged(f.session)
+        f.browser.refreshFavoritesIfStale()
+        assertEquals(5, f.adapter.requests.size)
     }
 
     @Test fun mutationDuringARequestCannotMarkTheOldResultFresh() = runBlocking {
@@ -187,13 +250,15 @@ class FavoriteRefreshFreshnessTest {
         override val capabilities = AdapterCapabilities(favoritesRead = true, favoritesEdit = true, watchedEdit = true)
         val requests = mutableListOf<PageRequest>()
         var fetch: suspend (PageRequest) -> Page<MediaItem> = { Page.empty() }
+        var libraries: List<MediaCollection> = emptyList()
         fun media(id: String) = MediaItem(MediaId(id), serverId, provider, id, MediaType.Movie)
         override suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem> {
             requests += request
             return fetch(request)
         }
         override suspend fun item(id: MediaId) = media(id.value)
-        override suspend fun collections(request: PageRequest): Page<MediaCollection> = Page.empty()
+        override suspend fun collections(request: PageRequest): Page<MediaCollection> = Page(libraries)
+        override suspend fun home(request: HomeFeedRequest) = HomeFeed()
         override suspend fun search(term: String, request: PageRequest): Page<MediaItem> = Page.empty()
         override suspend fun seasons(seriesId: MediaId): Page<MediaItem> = Page.empty()
         override suspend fun episodes(seriesId: MediaId, seasonId: MediaId?, request: PageRequest): Page<MediaItem> = Page.empty()

@@ -9,6 +9,7 @@ import kotlinx.coroutines.currentCoroutineContext
 internal class FavoriteBrowser(context: BrowserContext, private val nowEpochMs: () -> Long) : BrowserController(context) {
     private var favoriteTicket = 0L
     private var favoritePages = MediaPageAccumulator()
+    private var favoritePagesRequest: PageRequest? = null
     private var activeRefresh: Long? = null
     private var activeRefreshJob: Job? = null
     private var successfulRefreshAt: Long? = null
@@ -26,13 +27,14 @@ internal class FavoriteBrowser(context: BrowserContext, private val nowEpochMs: 
         activeRefresh = operation
         activeRefreshJob = currentCoroutineContext()[Job]
         try {
-            val revision = repository.cacheRevision(session)
+            val revision = repository.refreshRevision(session)
             if (operation != favoriteTicket) return
             val age = successfulRefreshAt?.let { nowEpochMs() - it }
             if (!force && successfulRevision == revision && age != null && age in 0 until 30_000L) return
             successfulRefreshAt = null
             if (!capabilities.favoritesRead) {
                 favoritePages = MediaPageAccumulator()
+                favoritePagesRequest = null
                 mutableState.value = state.value.copy(
                     favoriteItems = emptyList(), favoriteLoading = false, favoriteRefreshing = false,
                     favoriteLoadingMore = false, favoriteError = null, favoriteNextCursor = null, favoriteTotalEstimate = 0,
@@ -43,16 +45,18 @@ internal class FavoriteBrowser(context: BrowserContext, private val nowEpochMs: 
             val alreadyLoaded = state.value.favoriteItems.isNotEmpty() || state.value.favoriteTotalEstimate != null
             mutableState.value =
                 state.value.copy(favoriteLoading = !alreadyLoaded, favoriteRefreshing = alreadyLoaded, favoriteLoadingMore = false, favoriteError = null)
-            val loaded = repository.browse(session = session, query = MediaQuery.Items(null), request = favoriteRequest(), refresh = true)
+            val request = favoriteRequest()
+            val loaded = repository.browse(session = session, query = MediaQuery.Items(null), request = request, refresh = true)
             if (operation != favoriteTicket) return
-            if (loaded.origin == MediaLoadOrigin.StaleCache && alreadyLoaded) {
-                // The fallback only contains page one; a failed refresh must not discard later pages.
+            if (loaded.origin == MediaLoadOrigin.StaleCache && alreadyLoaded && favoritePagesRequest == request) {
+                // Retain accumulated pages only for the same query; another sort owns different cursors.
                 mutableState.value = state.value.copy(favoriteLoading = false, favoriteRefreshing = false)
                 return
             }
             val freshPages = MediaPageAccumulator()
             val page = freshPages.append(null, loaded.value)
             favoritePages = freshPages
+            favoritePagesRequest = request
             mutableState.value =
                 state.value.copy(
                     favoriteItems = page.items,
@@ -84,7 +88,7 @@ internal class FavoriteBrowser(context: BrowserContext, private val nowEpochMs: 
     }
 
     private suspend fun markFresh(operation: Long, revision: Long) {
-        val currentRevision = repository.cacheRevision(session)
+        val currentRevision = repository.refreshRevision(session)
         if (operation == favoriteTicket && revision == currentRevision) {
             successfulRevision = revision
             successfulRefreshAt = nowEpochMs()

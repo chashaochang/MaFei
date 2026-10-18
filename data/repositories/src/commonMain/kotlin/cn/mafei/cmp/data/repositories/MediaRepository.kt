@@ -46,6 +46,7 @@ class MediaRepository(
     private val mutex = Mutex()
     private var generation = 0L
     private var revision = 0L
+    private var refreshEpoch = 0L
     private var sequence = 0L
     private var active: Binding? = null
     private class Binding(val session: MediaSession, val adapter: MediaProviderAdapter)
@@ -82,10 +83,18 @@ class MediaRepository(
         clearData()
     }
 
-    /** Repository-wide invalidation revision, checked against the active session. */
-    suspend fun cacheRevision(session: MediaSession): Long = mutex.withLock {
+    /** Repository-wide refresh scheduling revision; distinct from in-flight publication validity. */
+    suspend fun refreshRevision(session: MediaSession): Long = mutex.withLock {
         requireActive(session)
-        revision
+        refreshEpoch
+    }
+
+    /** A confirmed Stop expires controller freshness without cancelling reads or discarding cached pages. */
+    suspend fun markPlaybackChanged(session: MediaSession) = mutex.withLock {
+        currentCoroutineContext().ensureActive()
+        // Media detaches before the application publishes its replacement session.
+        // A drained Stop from that retired player is normal cleanup, not cancellation.
+        if (active?.session === session) advanceRefreshEpoch()
     }
 
     suspend fun browse(
@@ -416,8 +425,14 @@ class MediaRepository(
 
     private fun clearData() {
         check(revision < Long.MAX_VALUE) { "Media cache revision exhausted" }
+        advanceRefreshEpoch()
         revision++
         pages.clear(); libraries.clear(); homes.clear(); details.clear(); people.clear(); listUserState.clear(); latest.clear()
+    }
+
+    private fun advanceRefreshEpoch() {
+        check(refreshEpoch < Long.MAX_VALUE) { "Media refresh revision exhausted" }
+        refreshEpoch++
     }
 
     private fun validateItem(session: MediaSession, item: MediaItem) {

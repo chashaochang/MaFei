@@ -166,7 +166,7 @@ class ChasingBrowser(
         activeRefreshJob = currentCoroutineContext()[Job]
         try {
             val followedIds = if (capabilities.chasing) store.seriesIds(session.accountId).distinct() else emptyList()
-            val revision = repository.cacheRevision(session)
+            val revision = repository.refreshRevision(session)
             if (operation != ticket) return
             val followedSet = followedIds.toSet()
             val age = successfulRefreshAt?.let { nowEpochMs() - it }
@@ -249,7 +249,7 @@ class ChasingBrowser(
     }
 
     private suspend fun markFresh(operation: Long, revision: Long, followedIds: Set<MediaId>) {
-        val currentRevision = repository.cacheRevision(session)
+        val currentRevision = repository.refreshRevision(session)
         if (operation == ticket && revision == currentRevision) {
             successfulRevision = revision
             successfulFollowedIds = followedIds

@@ -49,7 +49,7 @@ internal class ApplicationPlaybackRegistry(
                 onStopReported = {
                     // Retired players still drain Stop; they must never invalidate a replacement account.
                     if (!isClosed() && sessions.state.value.session === session) {
-                        sessions.media.invalidate(session.media)
+                        sessions.media.markPlaybackChanged(session.media)
                     }
                 },
             )

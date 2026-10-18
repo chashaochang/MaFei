@@ -135,17 +135,22 @@ class ChasingRefreshFreshnessTest {
         f.browser.refreshIfStale()
         f.repository.invalidate(f.session)
         f.browser.refreshIfStale()
-        assertEquals(3, f.adapter.resumeCalls)
+        f.repository.markPlaybackChanged(f.session)
+        f.browser.refreshIfStale()
+        assertEquals(4, f.adapter.resumeCalls)
     }
 
-    @Test fun invalidationDuringLoadingDoesNotMakeTheOldRequestFresh() = runBlocking {
+    @Test fun playbackChangeDuringLoadingPreservesPublicationWithoutMakingItFresh() = runBlocking {
         val f = fixture()
         val release = CompletableDeferred<Unit>()
         f.adapter.resume = { release.await(); Page.empty() }
         val old = launch(start = CoroutineStart.UNDISPATCHED) { f.browser.refreshIfStale() }
-        f.repository.invalidate(f.session)
+        f.repository.markPlaybackChanged(f.session)
         release.complete(Unit)
         old.join()
+        assertFalse(old.isCancelled)
+        assertFalse(f.browser.state.value.loading)
+        assertNull(f.browser.state.value.error)
         f.adapter.resume = { Page.empty() }
         f.browser.refreshIfStale()
         assertEquals(2, f.adapter.resumeCalls)

@@ -124,16 +124,16 @@ class ApplicationRuntimePlaybackTest {
     }
 
     @Test
-    fun acceptedStopInvalidatesTheActiveAccountsMediaCacheOnce() = runBlocking<Unit> {
+    fun acceptedStopExpiresTheActiveAccountsRefreshWindowOnce() = runBlocking<Unit> {
         val connection = fixtureConnection()
         val session = app.sessions.activate(connection, playbackBinding(connection))
         val playback = checkNotNull(app.playback(session))
-        val before = app.sessions.media.cacheRevision(session.media)
+        val before = app.sessions.media.refreshRevision(session.media)
         playUntilStarted(playback)
-        assertEquals(before, app.sessions.media.cacheRevision(session.media))
+        assertEquals(before, app.sessions.media.refreshRevision(session.media))
         playback.stop()
         playback.release() // Drain the accepted Stop before checking its reconciliation.
-        assertEquals(before + 1, app.sessions.media.cacheRevision(session.media))
+        assertEquals(before + 1, app.sessions.media.refreshRevision(session.media))
     }
 
     @Test
@@ -143,11 +143,11 @@ class ApplicationRuntimePlaybackTest {
             if (event.kind == PlaybackEventKind.Stop) throw cn.mafei.cmp.core.domain.ServerError(statusCode = 503, message = "report rejected")
         })
         val playback = checkNotNull(app.playback(session))
-        val before = app.sessions.media.cacheRevision(session.media)
+        val before = app.sessions.media.refreshRevision(session.media)
         playUntilStarted(playback)
         playback.stop()
         playback.release()
-        assertEquals(before, app.sessions.media.cacheRevision(session.media))
+        assertEquals(before, app.sessions.media.refreshRevision(session.media))
     }
 
     @Test
@@ -158,6 +158,37 @@ class ApplicationRuntimePlaybackTest {
     @Test
     fun delayedStopAfterLogoutCannotInvalidateTheNextLogin() = runBlocking<Unit> {
         assertLateStopCannotInvalidateReplacement(logoutFirst = true)
+    }
+
+    @Test
+    fun lateStopDuringDetachStillDrainsProviderResourceCleanup() = runBlocking<Unit> {
+        withTimeout(5_000) {
+            val connection = fixtureConnection()
+            val stopEntered = CompletableDeferred<Unit>()
+            val finishStop = CompletableDeferred<Unit>()
+            val released = CompletableDeferred<Unit>()
+            val binding = playbackBinding(connection, onRelease = { released.complete(Unit); Unit }) { event ->
+                if (event.kind == PlaybackEventKind.Stop) {
+                    stopEntered.complete(Unit)
+                    finishStop.await()
+                }
+            }
+            val session = app.sessions.activate(connection, binding)
+            val playback = checkNotNull(app.playback(session))
+            try {
+                playUntilStarted(playback)
+                playback.stop()
+                stopEntered.await()
+                // Reproduce detach's ordering: media closes before ApplicationSessionState changes.
+                app.sessions.media.close(session.media)
+                assertTrue(app.sessions.state.value.session === session)
+                finishStop.complete(Unit)
+                playback.release()
+                assertTrue(released.isCompleted, "Late Stop must not cancel the worker before queued resource cleanup")
+            } finally {
+                finishStop.complete(Unit)
+            }
+        }
     }
 
     private suspend fun assertLateStopCannotInvalidateReplacement(logoutFirst: Boolean) = withTimeout(5_000) {
@@ -181,11 +212,11 @@ class ApplicationRuntimePlaybackTest {
                 remoteUserId = "remote-b", credentialKey = "b".repeat(32), deviceId = "b".repeat(32),
             )
             val current = app.sessions.activate(replacement, playbackBinding(replacement))
-            val revision = app.sessions.media.cacheRevision(current.media)
+            val revision = app.sessions.media.refreshRevision(current.media)
             finishStop.complete(Unit)
             playback.release()
             assertTrue(app.sessions.state.value.session === current)
-            assertEquals(revision, app.sessions.media.cacheRevision(current.media))
+            assertEquals(revision, app.sessions.media.refreshRevision(current.media))
         } finally {
             finishStop.complete(Unit)
         }
@@ -196,12 +227,17 @@ class ApplicationRuntimePlaybackTest {
         withTimeout(5_000) { playback.controller.state.first { it.phase == cn.mafei.cmp.player.api.PlayerPhase.Playing } }
     }
 
-    private fun playbackBinding(connection: SavedConnection, onReport: suspend (PlaybackEvent) -> Unit = {}): ProviderSessionBinding {
+    private fun playbackBinding(
+        connection: SavedConnection,
+        onRelease: suspend () -> Unit = {},
+        onReport: suspend (PlaybackEvent) -> Unit = {},
+    ): ProviderSessionBinding {
         val delegate = bindingFor(connection)
         val playbackAdapter = object : MediaProviderAdapter by delegate.adapter {
             override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions) =
                 PlaybackPreparation.Ready(streamUrl = "https://media.test/playable.mp4")
             override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) = onReport(event)
+            override suspend fun releasePlayback(stream: PlaybackPreparation.Ready) = onRelease()
         }
         return object : ProviderSessionBinding by delegate {
             override val adapter = playbackAdapter

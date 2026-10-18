@@ -180,9 +180,37 @@ class MediaRepositoryTest {
         lateinit var continuation: Continuation<Page<MediaItem>>
         a.fetch = { suspendCoroutine { continuation = it } }
         val pending = Pending { r.browse(s, query) }
+        val refreshRevision = r.refreshRevision(s)
         r.invalidate(s)
+        assertEquals(refreshRevision + 1, r.refreshRevision(s))
         continuation.resume(Page(listOf(a.media())))
         assertIs<CancellationException>(pending.result!!.exceptionOrNull())
+    }
+
+    @Test fun playbackChangesExpireControllerFreshnessWithoutDroppingCacheOrInFlightReads() = runTest {
+        val a = StubAdapter(); val r = testRepository(FixedEpochClock()); val s = r.open(a)
+        r.browse(s, query)
+        val revision = r.refreshRevision(s)
+        lateinit var continuation: Continuation<Page<MediaItem>>
+        a.fetch = { suspendCoroutine { continuation = it } }
+        val pending = Pending { r.browse(s, query, refresh = true) }
+        r.markPlaybackChanged(s)
+        assertEquals(revision + 1, r.refreshRevision(s))
+        assertEquals(MediaLoadOrigin.FreshCache, r.browse(s, query).origin)
+        continuation.resume(Page(listOf(a.media("completed"))))
+        assertEquals("completed", pending.result!!.getOrThrow().value.items.single().id.value)
+        assertEquals("completed", r.browse(s, query).value.items.single().id.value)
+        assertEquals(2, a.calls)
+    }
+
+    @Test fun playbackChangesFromRetiredSessionsAreNoOpsBeforeAndAfterReplacement() = runTest {
+        val a = StubAdapter(); val r = testRepository(FixedEpochClock()); val old = r.open(a)
+        r.close(old)
+        r.markPlaybackChanged(old) // Normal Stop drainage must not throw logical cancellation.
+        val current = r.open(StubAdapter(AccountId("replacement")))
+        val revision = r.refreshRevision(current)
+        r.markPlaybackChanged(old)
+        assertEquals(revision, r.refreshRevision(current))
     }
 
     @Test fun authenticationFailureEvictsPreviouslyFreshCache() = runTest {
