@@ -26,7 +26,9 @@ class AuthenticatedConnection(val connection: SavedConnection, val binding: Prov
 /**
  * Server address + username/password login. Jellyfin LAN addresses may omit the
  * scheme and port; the original HarmonyOS HTTP/HTTPS and 8096/8920 candidates
- * are probed before authentication. Feiniu accepts either the original FNID or
+ * are probed before authentication. Explicit URLs without a port first log in
+ * as written, then discover alternatives only after a transport failure.
+ * Feiniu accepts either the original FNID or
  * a direct address and keeps the complete resolved route list. No OAuth.
  *
  * Logging in to an account that is already saved **reuses that account's local
@@ -90,7 +92,7 @@ class ProviderLogin(
             rawAddress.hasHttpScheme() -> validateSavedBaseUrl(rawAddress)
             else -> null
         }
-        val jellyfinCandidates = if (provider == ProviderKind.Jellyfin && exactUrl == null) {
+        val jellyfinCandidates = if (provider == ProviderKind.Jellyfin) {
             JellyfinAddressCandidates.fromInput(rawAddress).also {
                 if (it.isEmpty()) throw ClientConfigError("请输入有效的服务器地址")
             }
@@ -100,17 +102,7 @@ class ProviderLogin(
         // Empty passwords are supported by Jellyfin. Do not trim/normalize secrets.
         return try {
             when (provider) {
-                ProviderKind.Jellyfin -> {
-                    // Only the anonymous probe uses this placeholder; the real
-                    // namespace (and therefore the DeviceId) is fixed once the
-                    // address is resolved and a saved account can be looked up.
-                    val verified = if (exactUrl == null) {
-                        resolveJellyfinAddress(jellyfinCandidates, newCredentialKey())
-                    } else {
-                        null
-                    }
-                    jellyfin(exactUrl ?: requireNotNull(verified).baseUrl, verified, name, password)
-                }
+                ProviderKind.Jellyfin -> jellyfinAtAddress(exactUrl, jellyfinCandidates, name, password)
                 ProviderKind.Feiniu -> feiniu(rawAddress, name, password, feiniuRoutePreference)
             }
         } catch (cancelled: CancellationException) {
@@ -120,6 +112,35 @@ class ProviderLogin(
             // in message/cause. Only safe local categories cross the UI boundary.
             throw loginError(failure)
         }
+    }
+
+    private suspend fun jellyfinAtAddress(
+        exactUrl: HttpUrl?,
+        candidates: List<HttpUrl>,
+        username: String,
+        password: String,
+    ): AuthenticatedConnection {
+        if (exactUrl != null) {
+            // Explicit URLs keep their existing direct-login behavior. Only a
+            // transport failure can trigger conventional-port discovery; an
+            // HTTP/authentication/decoding failure already reached a server.
+            try {
+                return jellyfin(exactUrl, null, username, password)
+            } catch (failure: JellyfinConnectionError) {
+                val alternatives = candidates.filterNot { it == exactUrl }
+                if (alternatives.isEmpty()) throw failure // An explicit port is exact.
+                val verified = try {
+                    resolveJellyfinAddress(alternatives, newCredentialKey())
+                } catch (_: JellyfinConnectionError) {
+                    throw failure // Preserve the original timeout/transport category.
+                }
+                return jellyfin(verified.baseUrl, verified, username, password)
+            }
+        }
+        // Discovery only uses an anonymous placeholder. The real DeviceId is
+        // chosen after the successful address is matched to a saved account.
+        val verified = resolveJellyfinAddress(candidates, newCredentialKey())
+        return jellyfin(verified.baseUrl, verified, username, password)
     }
 
     private suspend fun resolveJellyfinAddress(
