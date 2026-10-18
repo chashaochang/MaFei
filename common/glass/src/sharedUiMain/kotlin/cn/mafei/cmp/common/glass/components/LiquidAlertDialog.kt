@@ -46,7 +46,7 @@ import com.kyant.shapes.RoundedRectangle
  * Port of the upstream catalog's dialog panel
  * (`app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt`).
  *
- * Uses the catalog's optical effects with the product's 24dp rounded rectangle:
+ * Uses the catalog's optical effects with the product's 32dp rounded rectangle:
  * `colorControls` + `blur` + `lens(depthEffect)`, a plain
  * highlight, and equal-width capsule actions — the optional dismiss one a wash
  * of the container, the confirm one filled with [accentColor]. A null [dismissText]
@@ -77,11 +77,11 @@ fun LiquidAlertDialog(
     val style = currentGlassStyle()
     val canSample = backdrop != null && currentGlassCapability().blur
     val material = if (!canSample) {
-        Modifier.clip(RoundedRectangle(24.dp)).background(containerColor.copy(alpha = 1f))
+        Modifier.clip(RoundedRectangle(32.dp)).background(containerColor.copy(alpha = 1f))
     } else {
         Modifier.drawBackdrop(
             backdrop = requireNotNull(backdrop).layer,
-            shape = { RoundedRectangle(24.dp) },
+            shape = { RoundedRectangle(32.dp) },
             effects = {
                 colorControls(
                     brightness = if (isLightTheme) .2f else 0f,
