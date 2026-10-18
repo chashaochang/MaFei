@@ -13,6 +13,10 @@ actual fun RuntimeShader(@Language("AGSL") shaderString: String): RuntimeShader 
     return AndroidRuntimeShader(shader)
 }
 
+// Android exposes only a mutable shader/program pair; sharing or pooling it would
+// cross component uniform state. Keep per-instance ownership and skip global warmup.
+internal actual fun prewarmRuntimeShaderProgram(@Language("AGSL") shaderString: String): Boolean = false
+
 actual fun RuntimeShader.asComposeShader(): Shader {
     return this.asAndroidRuntimeShader()
 }

@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.fastCoerceIn
+import cn.mafei.cmp.common.glass.internal.InteractiveHighlightShaderString
 import com.kyant.backdrop.RuntimeShader
 import com.kyant.backdrop.asComposeShader
 import com.kyant.backdrop.isRuntimeShaderSupported
@@ -41,17 +42,7 @@ class InteractiveHighlight(
     private val shader =
         if (isRuntimeShaderSupported()) {
             RuntimeShader(
-                """
-uniform float2 size;
-layout(color) uniform half4 color;
-uniform float radius;
-uniform float2 position;
-
-half4 main(float2 coord) {
-    float dist = distance(coord, position);
-    float intensity = smoothstep(radius, radius * 0.5, dist);
-    return color * intensity;
-}"""
+                InteractiveHighlightShaderString
             )
         } else {
             null

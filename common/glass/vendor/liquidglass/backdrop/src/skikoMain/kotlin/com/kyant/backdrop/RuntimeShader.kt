@@ -7,9 +7,14 @@ import org.intellij.lang.annotations.Language
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
 
-actual fun RuntimeShader(@Language("AGSL") shaderString: String): RuntimeShader {
-    val shader = RuntimeShaderBuilder(RuntimeEffect.makeForShader(shaderString))
-    return SkikoRuntimeShader(shader)
+private val compiledPrograms = CompiledRuntimeShaderCache { source -> RuntimeEffect.makeForShader(source) }
+
+actual fun RuntimeShader(@Language("AGSL") shaderString: String): RuntimeShader =
+    SkikoRuntimeShader(compiledPrograms.obtain(shaderString))
+
+internal actual fun prewarmRuntimeShaderProgram(@Language("AGSL") shaderString: String): Boolean {
+    compiledPrograms.obtain(shaderString)
+    return true
 }
 
 actual fun RuntimeShader.asComposeShader(): Shader {
@@ -20,7 +25,10 @@ fun RuntimeShader.asSkikoRuntimeShader(): RuntimeShaderBuilder {
     return (this as SkikoRuntimeShader).shader
 }
 
-internal class SkikoRuntimeShader(val shader: RuntimeShaderBuilder) : RuntimeShader {
+internal class SkikoRuntimeShader(val compiledProgram: RuntimeEffect) : RuntimeShader {
+
+    // Each consumer owns its uniforms/children, including after cache eviction.
+    val shader = RuntimeShaderBuilder(compiledProgram)
 
     override fun setFloatUniform(name: String, value: Float) {
         shader.uniform(name, value)

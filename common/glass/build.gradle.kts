@@ -10,6 +10,7 @@ plugins {
 
 dependencies {
     add("commonMainApi", project(":common:core"))
+    add("desktopTestImplementation", libs.compose.desktop)
 }
 
 // The two upstream source trees are pinned together; their Demo/build scripts

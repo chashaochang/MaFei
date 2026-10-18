@@ -8,6 +8,13 @@ expect fun RuntimeShader(@Language("AGSL") shaderString: String): RuntimeShader
 
 expect fun RuntimeShader.asComposeShader(): Shader
 
+/**
+ * Prepares a reusable immutable program when the platform exposes one. Does not
+ * instantiate a mutable uniform builder, draw, or warm the final GPU pipeline.
+ * Android returns false: its public RuntimeShader API cannot separate the program.
+ */
+internal expect fun prewarmRuntimeShaderProgram(@Language("AGSL") shaderString: String): Boolean
+
 interface RuntimeShader {
 
     fun setFloatUniform(name: String, value: Float)

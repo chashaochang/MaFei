@@ -12,6 +12,7 @@ import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.glass.GlassStyle
 import cn.mafei.cmp.common.glass.LocalGlassIntensity
 import cn.mafei.cmp.common.glass.LocalGlassStyle
+import cn.mafei.cmp.common.glass.internal.VerticalProgressiveBlurShaderString
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
@@ -56,24 +57,7 @@ internal fun Modifier.progressiveBlur(
             blur(blurRadius.toPx())
             runtimeShaderEffect(
                 key = "VerticalProgressiveBlur",
-                shaderString = """
-                    uniform shader content;
-
-                    uniform float2 size;
-                    layout(color) uniform half4 tint;
-                    uniform float tintIntensity;
-                    uniform float gradientStartFraction;
-                    uniform float opacity;
-
-                    half4 main(float2 coord) {
-                        float alpha = (1.0 - smoothstep(
-                            size.y * gradientStartFraction,
-                            size.y,
-                            coord.y
-                        )) * opacity;
-                        return mix(content.eval(coord) * alpha, tint * alpha, tintIntensity);
-                    }
-                """.trimIndent(),
+                shaderString = VerticalProgressiveBlurShaderString,
                 uniformShaderName = "content",
             ) {
                 setFloatUniform("size", size.width, size.height)

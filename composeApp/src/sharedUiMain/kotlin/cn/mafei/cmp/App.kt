@@ -44,6 +44,7 @@ fun App(
     var probe by remember { mutableStateOf(false) }
     val accounts = remember(runtime) { runtime.accountAccess() }
     val startup = rememberApplicationStartup(runtime)
+    BindGlassShaderWarmup(startupIdle = !startup.starting)
     val preferences = rememberApplicationPreferences(runtime)
     CompositionLocalProvider(LocalApplicationRuntime provides runtime) {
         if (probe) {
