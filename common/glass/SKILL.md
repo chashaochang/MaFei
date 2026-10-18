@@ -171,7 +171,7 @@ OHOS 保持 `rendererBackend=skia`。vendor 的 `Platform.kt` 中 RenderEffect�
 确认/提示弹窗已有标准实现，必须直接复用，不能重新设计：
 
 - 页面入口：`common/ui/.../MaFeiGlassConfirmDialog.kt`，只承载同层模态行为和产品文案。
-- 唯一展示实现：`common/glass/.../components/LiquidAlertDialog.kt`，参考源为 AndroidLiquidGlass 的 `destinations/DialogContent.kt`。保留参考的布局、圆角、内边距、等宽胶囊操作、光学参数及按压反馈；不要另造居中标题/分隔线式 Alert 或 Material 右下角文字按钮式 Alert。
+- 唯一展示实现：`common/glass/.../components/LiquidAlertDialog.kt`，参考源为 AndroidLiquidGlass 的 `destinations/DialogContent.kt`。保留参考的布局、内边距、等宽胶囊操作、光学参数及按压反馈；面板圆角遵循 `UI_POLICY.md` 中用户要求缩小后的统一标准。不要另造居中标题/分隔线式 Alert 或 Material 右下角文字按钮式 Alert。
 - 同层宿主必须传入真实、持续更新的页面 backdrop，不能传空采样层或无条件强制不透明。独立系统窗口不能跨窗口采样，复用同一展示实现并显式降级为实体材质，不称其为完整液态玻璃。
 - 用户选择半透明或高斯模糊时，仅按风格设置降级材质；布局和事件保持一致。删除等危险操作只调整语义色和文案，不创建另一套弹窗。
 - 验收除关闭/确认行为外，还须检查实时背景采样，以及手机/宽屏、深浅色、按压状态。复用了名为 `Glass` 的宿主不代表已接入标准组件。
