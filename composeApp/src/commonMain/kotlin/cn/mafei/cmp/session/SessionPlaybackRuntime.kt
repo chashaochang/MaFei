@@ -121,10 +121,12 @@ class SessionPlaybackRuntime private constructor(
             scope: CoroutineScope,
             nowMs: () -> Long,
             reportIntervalMs: Long = 10_000,
+            onStopReported: suspend () -> Unit = {},
         ): SessionPlaybackRuntime {
             val coordinator = ProviderPlaybackCoordinator(
                 adapterFor = { adapter },
                 scope = scope,
+                onStopReported = onStopReported,
             )
             val controller = DefaultPlayerController(
                 runtime = runtime,

@@ -66,6 +66,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     private val gateCallNumbers = mutableSetOf<Int>()
     private val gates = mutableListOf<CompletableDeferred<Unit>>()
     var reportFailure: ((PlaybackPreparation.Ready, PlaybackEvent) -> Unit)? = null
+    var stopReportGate: CompletableDeferred<Unit>? = null
 
     /** Parks the Nth (1-based) prepare call until it is explicitly opened. */
     fun gateCall(number: Int) {
@@ -135,6 +136,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     }
 
     override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) {
+        if (event.kind == PlaybackEventKind.Stop) stopReportGate?.await()
         reportFailure?.invoke(stream, event)
         reports += stream to event
     }
@@ -154,7 +156,7 @@ private class PlaybackOnlyAdapter : MediaProviderAdapter {
     override suspend fun setWatched(id: MediaId, watched: Boolean) = throw ClientConfigError("unused")
 }
 
-private class Harness(trackSelection: Boolean = false, isoDirectPlay: Boolean = false) {
+private class Harness(trackSelection: Boolean = false, isoDirectPlay: Boolean = false, onStopReported: suspend () -> Unit = {}) {
     val adapter = PlaybackOnlyAdapter()
     val runtime = FakePlayerRuntime(PlayerCapabilities(trackSelection = trackSelection, isoDirectPlay = isoDirectPlay))
     val scope = CoroutineScope(Dispatchers.Unconfined + Job())
@@ -163,6 +165,7 @@ private class Harness(trackSelection: Boolean = false, isoDirectPlay: Boolean = 
         adapterFor = { adapter },
         scope = scope,
         maxRenegotiationsPerGeneration = 1,
+        onStopReported = onStopReported,
     )
     val controller: DefaultPlayerController
 
@@ -211,6 +214,71 @@ class ProviderPlaybackCoordinatorTest {
         h.coordinator.stop(); assertEquals(1, h.adapter.releasedReadies.size)
     }
 
+    @Test fun reconciliationRunsOnlyAfterStopReportSucceeds() {
+        var reconciliations = 0
+        harness(onStopReported = { reconciliations++ }) { h ->
+            h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+            emitReadyAndPlaying(h)
+            repeat(3) { h.coordinator.reportSink(progressReport(h)) }
+            assertEquals(0, reconciliations)
+            val gate = CompletableDeferred<Unit>()
+            h.adapter.stopReportGate = gate
+            h.coordinator.stop()
+            assertEquals(0, reconciliations)
+            gate.complete(Unit)
+            assertEquals(PlaybackEventKind.Stop, h.adapter.reports.last().second.kind)
+            assertEquals(1, reconciliations)
+            h.coordinator.stop()
+            assertEquals(1, reconciliations)
+        }
+    }
+
+    @Test fun rejectedStopReportDoesNotReconcile() {
+        var reconciliations = 0
+        harness(onStopReported = { reconciliations++ }) { h ->
+            h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+            emitReadyAndPlaying(h)
+            h.adapter.reportFailure = { _, event ->
+                if (event.kind == PlaybackEventKind.Stop) throw cn.mafei.cmp.core.domain.ServerError(statusCode = 503, message = "report failed")
+            }
+            h.coordinator.stop()
+            assertEquals(0, reconciliations)
+            assertEquals(PlayerReportKind.Stop, h.failures.single().kind)
+        }
+    }
+
+    @Test fun localReconciliationFailureIsNotAProviderFailureAndDoesNotStopTheWorker() {
+        var reconciliations = 0
+        harness(onStopReported = {
+            reconciliations++
+            throw AuthenticationError(AuthFailureKind.TokenExpired, "local reconciliation failed")
+        }) { h ->
+            repeat(2) {
+                h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+                emitReadyAndPlaying(h)
+                h.coordinator.stop()
+            }
+            assertEquals(2, reconciliations)
+            assertTrue(h.failures.isEmpty())
+            assertEquals(0, h.coordinator.completedRenegotiations.value)
+        }
+    }
+
+    @Test fun reconciliationCancellationPropagatesWithoutBecomingAProviderFailure() {
+        val cancelled = CancellationException("reconciliation cancelled")
+        harness(onStopReported = { throw cancelled }) { h ->
+            val reportWorker = h.scope.coroutineContext[Job]!!.children.single()
+            var completion: Throwable? = null
+            reportWorker.invokeOnCompletion { completion = it }
+            h.coordinator.play(ProviderKind.Jellyfin, ITEM)
+            emitReadyAndPlaying(h)
+            h.coordinator.stop()
+            reportWorker.join()
+            assertTrue(completion === cancelled)
+            assertTrue(h.failures.isEmpty())
+        }
+    }
+
     @Test fun replacingAnUnstartedStreamStillReleasesItAndDoesNotCloseTheNewStream() = harness { h ->
         h.coordinator.play(ProviderKind.Jellyfin, ITEM)
         val first = h.adapter.preparedReadies.single()
@@ -224,11 +292,12 @@ class ProviderPlaybackCoordinatorTest {
     private fun harness(
         trackSelection: Boolean = false,
         isoDirectPlay: Boolean = false,
+        onStopReported: suspend () -> Unit = {},
         block: suspend (Harness) -> Unit,
     ) = runBlocking {
         // A hung coordinator must fail the test with a stack, never park CI.
         kotlinx.coroutines.withTimeout(10_000) {
-            val harness = Harness(trackSelection, isoDirectPlay)
+            val harness = Harness(trackSelection, isoDirectPlay, onStopReported)
             try {
                 block(harness)
             } finally {

@@ -16,6 +16,8 @@ import cn.mafei.cmp.core.secure_credential_api.SecureSecret
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.adapter_contract.MediaProviderAdapter
 import cn.mafei.cmp.data.adapter_contract.PlaybackEvent
+import cn.mafei.cmp.data.adapter_contract.PlaybackEventKind
+import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.data.adapter_contract.PlaybackPreparation
 import cn.mafei.cmp.core.domain.Page
 import cn.mafei.cmp.core.domain.PageRequest
@@ -34,12 +36,14 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.first
 
 private class Document : SettingsDocumentBackend {
     var bytes: ByteArray? = null
@@ -117,6 +121,91 @@ class ApplicationRuntimePlaybackTest {
     @AfterTest
     fun tearDown() {
         runBlocking { app.close() }
+    }
+
+    @Test
+    fun acceptedStopInvalidatesTheActiveAccountsMediaCacheOnce() = runBlocking<Unit> {
+        val connection = fixtureConnection()
+        val session = app.sessions.activate(connection, playbackBinding(connection))
+        val playback = checkNotNull(app.playback(session))
+        val before = app.sessions.media.cacheRevision(session.media)
+        playUntilStarted(playback)
+        assertEquals(before, app.sessions.media.cacheRevision(session.media))
+        playback.stop()
+        playback.release() // Drain the accepted Stop before checking its reconciliation.
+        assertEquals(before + 1, app.sessions.media.cacheRevision(session.media))
+    }
+
+    @Test
+    fun rejectedStopDoesNotInvalidateTheMediaCache() = runBlocking<Unit> {
+        val connection = fixtureConnection()
+        val session = app.sessions.activate(connection, playbackBinding(connection) { event ->
+            if (event.kind == PlaybackEventKind.Stop) throw cn.mafei.cmp.core.domain.ServerError(statusCode = 503, message = "report rejected")
+        })
+        val playback = checkNotNull(app.playback(session))
+        val before = app.sessions.media.cacheRevision(session.media)
+        playUntilStarted(playback)
+        playback.stop()
+        playback.release()
+        assertEquals(before, app.sessions.media.cacheRevision(session.media))
+    }
+
+    @Test
+    fun delayedStopFromASwitchedAccountCannotInvalidateTheNewAccount() = runBlocking<Unit> {
+        assertLateStopCannotInvalidateReplacement(logoutFirst = false)
+    }
+
+    @Test
+    fun delayedStopAfterLogoutCannotInvalidateTheNextLogin() = runBlocking<Unit> {
+        assertLateStopCannotInvalidateReplacement(logoutFirst = true)
+    }
+
+    private suspend fun assertLateStopCannotInvalidateReplacement(logoutFirst: Boolean) = withTimeout(5_000) {
+        val connection = fixtureConnection()
+        val stopEntered = CompletableDeferred<Unit>()
+        val finishStop = CompletableDeferred<Unit>()
+        val old = app.sessions.activate(connection, playbackBinding(connection) { event ->
+            if (event.kind == PlaybackEventKind.Stop) {
+                stopEntered.complete(Unit)
+                finishStop.await()
+            }
+        })
+        val playback = checkNotNull(app.playback(old))
+        try {
+            playUntilStarted(playback)
+            playback.stop()
+            stopEntered.await()
+            if (logoutFirst) app.sessions.logout(old)
+            val replacement = connection.copy(
+                account = connection.account.copy(id = AccountId("b"), userName = "b"),
+                remoteUserId = "remote-b", credentialKey = "b".repeat(32), deviceId = "b".repeat(32),
+            )
+            val current = app.sessions.activate(replacement, playbackBinding(replacement))
+            val revision = app.sessions.media.cacheRevision(current.media)
+            finishStop.complete(Unit)
+            playback.release()
+            assertTrue(app.sessions.state.value.session === current)
+            assertEquals(revision, app.sessions.media.cacheRevision(current.media))
+        } finally {
+            finishStop.complete(Unit)
+        }
+    }
+
+    private suspend fun playUntilStarted(playback: SessionPlaybackRuntime) {
+        playback.play(MediaId("item"))
+        withTimeout(5_000) { playback.controller.state.first { it.phase == cn.mafei.cmp.player.api.PlayerPhase.Playing } }
+    }
+
+    private fun playbackBinding(connection: SavedConnection, onReport: suspend (PlaybackEvent) -> Unit = {}): ProviderSessionBinding {
+        val delegate = bindingFor(connection)
+        val playbackAdapter = object : MediaProviderAdapter by delegate.adapter {
+            override suspend fun preparePlayback(item: MediaId, options: PlaybackOptions) =
+                PlaybackPreparation.Ready(streamUrl = "https://media.test/playable.mp4")
+            override suspend fun reportPlayback(stream: PlaybackPreparation.Ready, event: PlaybackEvent) = onReport(event)
+        }
+        return object : ProviderSessionBinding by delegate {
+            override val adapter = playbackAdapter
+        }
     }
 
     @Test

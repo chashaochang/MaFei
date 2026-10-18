@@ -31,9 +31,9 @@ internal fun BindBrowseDataLifecycle(
     LaunchedEffect(state.selectedCollection) { libraryGridState.scrollToItem(0) }
     LaunchedEffect(currentRoute) {
         if (currentRoute == BrowseFavoriteRoute || currentRoute == BrowseLibraryIndexRoute) {
-            browser.refreshFavorites()
+            browser.refreshFavoritesIfStale()
         }
-        if (currentRoute == BrowseChasingRoute) chasingBrowser.refresh()
+        if (currentRoute == BrowseChasingRoute) chasingBrowser.refreshIfStale()
     }
     // Legacy MineTab refreshes its independent resume + completed preview every
     // time the account surface becomes visible; it never borrows HomeFeed.resume.

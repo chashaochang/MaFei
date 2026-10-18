@@ -1,5 +1,6 @@
 package cn.mafei.cmp.feature.home
 
+import cn.mafei.cmp.common.core.SystemEpochClock
 import cn.mafei.cmp.core.domain.*
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.repositories.*
@@ -14,6 +15,7 @@ class MediaBrowser(
     session: MediaSession,
     val capabilities: AdapterCapabilities = AdapterCapabilities(),
     playbackPreferences: MediaPlaybackPreferences? = null,
+    nowEpochMs: () -> Long = SystemEpochClock::nowEpochMs,
 ) {
     private val context = BrowserContext(repository, session, capabilities)
     val state: StateFlow<MediaBrowserState> = context.state
@@ -21,7 +23,7 @@ class MediaBrowser(
 
     private val catalog = CatalogBrowser(context)
     private val search = SearchBrowser(context)
-    private val favorite = FavoriteBrowser(context)
+    private val favorite = FavoriteBrowser(context, nowEpochMs)
     private val detail = DetailBrowser(context, playbackPreferences)
     private val playbackSelection = PlaybackSelectionBrowser(context, playbackPreferences)
     private val person = PersonBrowser(context)
@@ -47,6 +49,8 @@ class MediaBrowser(
     fun clearSearch() = search.clearSearch()
 
     suspend fun refreshFavorites() = favorite.refreshFavorites()
+
+    suspend fun refreshFavoritesIfStale() = favorite.refreshFavoritesIfStale()
 
     suspend fun loadMoreFavorites() = favorite.loadMoreFavorites()
 

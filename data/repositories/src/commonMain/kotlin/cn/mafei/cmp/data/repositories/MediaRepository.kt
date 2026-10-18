@@ -82,6 +82,12 @@ class MediaRepository(
         clearData()
     }
 
+    /** Repository-wide invalidation revision, checked against the active session. */
+    suspend fun cacheRevision(session: MediaSession): Long = mutex.withLock {
+        requireActive(session)
+        revision
+    }
+
     suspend fun browse(
         session: MediaSession,
         query: MediaQuery,

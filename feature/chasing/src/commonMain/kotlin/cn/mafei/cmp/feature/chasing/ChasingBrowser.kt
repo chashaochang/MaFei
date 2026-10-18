@@ -7,13 +7,16 @@ import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.core.domain.PageRequest
 import cn.mafei.cmp.data.adapter_contract.AdapterCapabilities
 import cn.mafei.cmp.data.repositories.MediaQuery
+import cn.mafei.cmp.data.repositories.MediaLoadOrigin
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.MediaSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -144,27 +147,41 @@ class ChasingBrowser(
     private val mutableState = MutableStateFlow(ChasingState())
     val state: StateFlow<ChasingState> = mutableState.asStateFlow()
     private var ticket = 0L
+    private var activeRefresh: Long? = null
+    private var activeRefreshJob: Job? = null
+    private var successfulRefreshAt: Long? = null
+    private var successfulRevision: Long? = null
+    private var successfulFollowedIds: Set<MediaId>? = null
 
-    suspend fun refresh() {
+    suspend fun refresh() = refresh(force = true)
+
+    /** Check local follows even during the fresh window; they are outside the repository. */
+    suspend fun refreshIfStale() = refresh(force = false)
+
+    private suspend fun refresh(force: Boolean) {
+        // A cancelled route job can still be unwinding when a rapid return starts a new request.
+        if (!force && activeRefresh != null && activeRefreshJob?.isActive != false) return
         val operation = ++ticket
-        val hadContent = state.value.sections.isNotEmpty()
-        mutableState.value = state.value.copy(
-            loading = !hadContent,
-            refreshing = hadContent,
-            error = null,
-        )
-        if (!capabilities.chasing) {
-            publish(operation, followedCount = 0, ChasePlanner().plan(emptyList(), emptyList(), emptyList()))
-            return
-        }
+        activeRefresh = operation
+        activeRefreshJob = currentCoroutineContext()[Job]
         try {
-            val followedIds = store.seriesIds(session.accountId).distinct()
+            val followedIds = if (capabilities.chasing) store.seriesIds(session.accountId).distinct() else emptyList()
+            val revision = repository.cacheRevision(session)
+            if (operation != ticket) return
+            val followedSet = followedIds.toSet()
+            val age = successfulRefreshAt?.let { nowEpochMs() - it }
+            if (!force && successfulRevision == revision && successfulFollowedIds == followedSet &&
+                age != null && age in 0 until 30_000L) return
+            successfulRefreshAt = null
+            val hadContent = state.value.sections.isNotEmpty()
+            mutableState.value = state.value.copy(loading = !hadContent, refreshing = hadContent, error = null)
             if (followedIds.isEmpty()) {
                 publish(operation, followedCount = 0, ChasePlanner().plan(emptyList(), emptyList(), emptyList()))
+                markFresh(operation, revision, followedSet)
                 return
             }
-            val followedSet = followedIds.toSet()
             val cutoff = (nowEpochMs() - OneYearMilliseconds).coerceAtLeast(1L)
+            var allSourcesFresh = true
             val (resume, nextUp, followed) = coroutineScope {
                 val resumeTask = async(start = CoroutineStart.UNDISPATCHED) {
                     repository.browse(
@@ -172,7 +189,8 @@ class ChasingBrowser(
                         MediaQuery.Resume,
                         PageRequest(pageSize = 100),
                         refresh = true,
-                    ).value.items.filter { it.seriesId in followedSet }.map(::resumeItem)
+                    ).also { if (it.origin == MediaLoadOrigin.StaleCache) allSourcesFresh = false }
+                        .value.items.filter { it.seriesId in followedSet }.map(::resumeItem)
                 }
                 val nextUpTask = async(start = CoroutineStart.UNDISPATCHED) {
                     followedIds.map { seriesId ->
@@ -182,11 +200,13 @@ class ChasingBrowser(
                                     session,
                                     MediaQuery.ChasingNextUp(seriesId, cutoff),
                                     refresh = true,
-                                ).value.items.firstOrNull()?.let(::nextUpItem)
+                                ).also { if (it.origin == MediaLoadOrigin.StaleCache) allSourcesFresh = false }
+                                    .value.items.firstOrNull()?.let(::nextUpItem)
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (_: Exception) {
                                 // Legacy swallowed one-series Next Up failures and kept the rest.
+                                allSourcesFresh = false
                                 null
                             }
                         }
@@ -195,26 +215,45 @@ class ChasingBrowser(
                 val followedTask = async(start = CoroutineStart.UNDISPATCHED) {
                     followedIds.map { seriesId ->
                         async(start = CoroutineStart.UNDISPATCHED) {
-                            repository.item(session, seriesId, refresh = true).value.let(::followedItem)
+                            repository.item(session, seriesId, refresh = true)
+                                .also { if (it.origin == MediaLoadOrigin.StaleCache) allSourcesFresh = false }
+                                .value.let(::followedItem)
                         }
                     }.awaitAll()
                 }
                 Triple(resumeTask.await(), nextUpTask.await(), followedTask.await())
             }
             publish(operation, followedIds.size, ChasePlanner().plan(resume, nextUp, followed))
+            if (allSourcesFresh) markFresh(operation, revision, followedSet)
         } catch (cancelled: CancellationException) {
             if (operation == ticket) {
+                successfulRefreshAt = null
                 mutableState.value = state.value.copy(loading = false, refreshing = false)
             }
             throw cancelled
         } catch (_: Exception) {
             if (operation == ticket) {
+                successfulRefreshAt = null
                 mutableState.value = state.value.copy(
                     loading = false,
                     refreshing = false,
                     error = "追剧数据加载失败，请重试",
                 )
             }
+        } finally {
+            if (activeRefresh == operation) {
+                activeRefresh = null
+                activeRefreshJob = null
+            }
+        }
+    }
+
+    private suspend fun markFresh(operation: Long, revision: Long, followedIds: Set<MediaId>) {
+        val currentRevision = repository.cacheRevision(session)
+        if (operation == ticket && revision == currentRevision) {
+            successfulRevision = revision
+            successfulFollowedIds = followedIds
+            successfulRefreshAt = nowEpochMs()
         }
     }
 

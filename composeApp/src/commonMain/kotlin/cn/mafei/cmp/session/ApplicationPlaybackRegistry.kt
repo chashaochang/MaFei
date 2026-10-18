@@ -46,6 +46,12 @@ internal class ApplicationPlaybackRegistry(
                 },
                 scope = scope,
                 nowMs = { cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs() },
+                onStopReported = {
+                    // Retired players still drain Stop; they must never invalidate a replacement account.
+                    if (!isClosed() && sessions.state.value.session === session) {
+                        sessions.media.invalidate(session.media)
+                    }
+                },
             )
             if (playbacks.compareAndSet(current, current + (session to created))) {
                 ensurePlaybackObserver()

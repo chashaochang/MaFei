@@ -81,6 +81,8 @@ class ProviderPlaybackCoordinator(
     private val adapterFor: (ProviderKind) -> MediaProviderAdapter,
     private val scope: CoroutineScope,
     private val maxRenegotiationsPerGeneration: Int = 1,
+    /** Reconcile browsing facts only after the provider accepted the final Stop. */
+    private val onStopReported: suspend () -> Unit = {},
 ) {
     init {
         require(maxRenegotiationsPerGeneration >= 0)
@@ -185,16 +187,29 @@ class ProviderPlaybackCoordinator(
                     // Tasks queued for a superseded binding are dropped: a
                     // renegotiated load is never chased by stale reports.
                     if (task.binding !== bindingState.value && event.kind != PlaybackEventKind.Stop) continue
+                    val reportingAdapter = task.binding.adapter ?: continue
                     try {
-                        task.binding.adapter?.reportPlayback(checkNotNull(task.binding.ready), event)
+                        reportingAdapter.reportPlayback(checkNotNull(task.binding.ready), event)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (failure: DomainError) {
                         onFailure(task, failure, failure.message)
+                        continue
                     } catch (failure: UnsupportedOperationException) {
                         onFailure(task, null, failure.message)
+                        continue
                     } catch (failure: IllegalStateException) {
                         onFailure(task, null, failure.message)
+                        continue
+                    }
+                    if (event.kind == PlaybackEventKind.Stop) {
+                        try {
+                            onStopReported()
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // Local reconciliation cannot turn an accepted report into a provider failure.
+                        }
                     }
                 }
             }

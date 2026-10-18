@@ -58,6 +58,36 @@ private class StubAdapter : MediaProviderAdapter {
 class SessionPlaybackRuntimeTest {
 
     @Test
+    fun acceptedStopReachesTheSessionCallback() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+        val adapter = StubAdapter()
+        val engine = CountingRuntime()
+        var stoppedReports = 0
+        val playback = SessionPlaybackRuntime.create(
+            provider = ProviderKind.Jellyfin,
+            adapter = adapter,
+            runtime = engine,
+            scope = scope,
+            nowMs = { 0L },
+            onStopReported = {
+                assertEquals(PlaybackEventKind.Stop, adapter.reports.last().second.kind)
+                stoppedReports++
+            },
+        )
+        try {
+            val generation = checkNotNull(playback.play(MediaId("item-9")))
+            engine.emitReady(generation)
+            engine.emitPlaying(generation)
+            assertEquals(0, stoppedReports)
+            playback.stop()
+            assertEquals(1, stoppedReports)
+        } finally {
+            playback.release()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun sessionPlaybackBindsAdapterAndReportsThroughIt() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined + Job())
         val adapter = StubAdapter()
