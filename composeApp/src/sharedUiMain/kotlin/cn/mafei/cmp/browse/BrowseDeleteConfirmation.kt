@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 internal fun BrowseDeleteConfirmation(
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
-    state: cn.mafei.cmp.feature.home.MediaBrowserState,
+    browserState: State<cn.mafei.cmp.feature.home.MediaBrowserState>,
     navigation: BrowseNavigationState,
     selection: BrowseSelectionState,
     deleteConfirmBackdrop: cn.mafei.cmp.common.glass.GlassBackdrop,
@@ -26,12 +26,13 @@ internal fun BrowseDeleteConfirmation(
             backdrop = deleteConfirmBackdrop,
             onDismiss = { selection.pendingDeleteMedia = null },
             onConfirm = {
+                val detailId = browserState.value.detailId
                 selection.pendingDeleteMedia = null
                 selection.librarySelectedIds = emptySet()
                 scope.launch {
                     browser.deleteMedia(ids)
                     // 详情页里删除自身：数据已删，回退出详情（与旧版行为一致）。
-                    if (ids.any { it == state.detailId }) {
+                    if (ids.any { it == detailId }) {
                         if (navigation.browseBackStack.lastOrNull() is BrowseDetailRoute || navigation.browseBackStack.lastOrNull() is BrowseEpisodeRoute) {
                             navigation.browseBackStack.removeLastOrNull()
                         }

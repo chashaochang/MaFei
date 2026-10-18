@@ -44,7 +44,6 @@ internal fun BindBrowseNavigationDataLifecycle(
     search: BrowseSearchState,
     feiniu: FeiniuPreferenceState,
     provider: ProviderKind,
-    state: MediaBrowserState,
     navigation: BrowseNavigationState,
     chasingBrowser: ChasingBrowser,
     account: AccountFlowState,
@@ -56,7 +55,7 @@ internal fun BindBrowseNavigationDataLifecycle(
         tabInteraction?.awaitIdle()
         browser.resumeTabContext()
     }
-    BindBrowseDataLifecycle(browser, search, feiniu, provider, state, navigation.currentRoute, chasingBrowser, account, selection)
+    BindBrowseDataLifecycle(browser, search, feiniu, provider, navigation.currentRoute, chasingBrowser, account, selection)
 }
 
 @Composable

@@ -21,7 +21,7 @@ internal fun AccountRootBinding(
     account: AccountFlowState,
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
-    state: cn.mafei.cmp.feature.home.MediaBrowserState,
+    browserState: State<cn.mafei.cmp.feature.home.MediaBrowserState>,
     session: ApplicationSession,
     layout: MaFeiLayout,
     busy: Boolean,
@@ -34,6 +34,7 @@ internal fun AccountRootBinding(
     onLogout: () -> Unit,
     authenticationFailure: cn.mafei.cmp.core.domain.AuthFailureKind?,
 ) {
+    val state by rememberBrowseAccountReadState(browserState)
     // Navigation 3 keeps the outgoing entry composed during a transition.
     // Read the route at event time so a late pointer delivered to that
     // stale entry cannot mutate the active session.

@@ -19,7 +19,6 @@ import cn.mafei.cmp.session.*
 
 @Composable
 internal fun BrowseWindowBackground(
-    state: cn.mafei.cmp.feature.home.MediaBrowserState,
     layout: cn.mafei.cmp.common.design_system.MaFeiLayout,
     artworkCache: ArtworkMemoryCache,
     fetchArtwork: suspend (MediaImage, Int) -> ByteArray?,

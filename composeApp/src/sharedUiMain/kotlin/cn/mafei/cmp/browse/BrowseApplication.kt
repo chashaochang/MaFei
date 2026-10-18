@@ -132,7 +132,9 @@ internal fun BrowseApplication(
     }
     PruneBrowsePageScrollStates(navigation, pageScrollStates)
     BrowseShellRouteScope(navigation) { shellPresentation ->
-    val state = browserState.value
+    val collections by remember(browserState) {
+        derivedStateOf(structuralEqualityPolicy()) { browserState.value.collections }
+    }
     val libraryGridState by remember(navigation, pageScrollStates) {
         derivedStateOf {
             val route = navigation.browseBackStack.lastOrNull { it is BrowseLibraryRoute } ?: BrowseLibraryIndexRoute
@@ -183,11 +185,11 @@ internal fun BrowseApplication(
     val shellDestination = destination
     val chromeCompactProgress = rememberBrowseChromeProgress(destination, homeGridState, chasingListState, favoriteGridState, libraryGridState)
 
-    BindBrowseNavigationDataLifecycle(browser, search, feiniu, session.selection.provider, state, navigation, chasingBrowser, account, selection)
+    BindBrowseNavigationDataLifecycle(browser, search, feiniu, session.selection.provider, navigation, chasingBrowser, account, selection)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val layout = rememberBrowseWindowLayout(maxWidth, maxHeight)
-        BindHomeLibraryPrefetch(navigation, browser, state.collections, layout.isPhoneNavigation, active = !account.minePresented)
+        BindHomeLibraryPrefetch(navigation, browser, collections, layout.isPhoneNavigation, active = !account.minePresented)
         val currentPhoneLayout = rememberUpdatedState(layout.family == MaFeiLayoutFamily.Phone)
         val navigator = remember(browser, navigation, scope, search, artworkCache, fetchArtwork) {
             BrowseNavigator(browser, navigation, scope, search, artworkCache, fetchArtwork) { currentPhoneLayout.value }
@@ -200,7 +202,9 @@ internal fun BrowseApplication(
         // Phone owns a full-screen Mine stack; tablet/desktop keep the root
         // shell visible while child content changes in the content stack.
         val mineFullScreen = layout.isPhoneNavigation
-        val libraries = state.collections.map { collection -> MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library) }
+        val libraries = remember(collections) {
+            collections.map { collection -> MaFeiNavItem(collection.id.value, collection.name, MaFeiGlyph.Library) }
+        }
         val navigationItems = remember(chasingEnabled, libraries, libraryTabId) { browseNavigationItems(chasingEnabled, libraries, libraryTabId) }
         val destinations = navigationItems.bottom
         val sidebarDestinations = navigationItems.sidebar
@@ -234,7 +238,7 @@ internal fun BrowseApplication(
                 account,
                 scope,
                 browser,
-                state,
+                browserState,
                 session,
                 layout,
                 busy,
@@ -271,7 +275,7 @@ internal fun BrowseApplication(
                     when (route) {
                         BrowseMineRoute -> NavEntry(route) { MineEntryBinding(mineContent) }
                         BrowseMineHistoryRoute ->
-                            NavEntry(route) { MineHistoryEntryBinding(scope, browser, state, layout, player, popMineRoute, artworkCache, fetchArtwork) }
+                            NavEntry(route) { MineHistoryEntryBinding(scope, browser, browserState, layout, player, popMineRoute, artworkCache, fetchArtwork) }
                         BrowseAccountSwitchRoute -> NavEntry(route) { AccountSwitchEntryBinding(account, session, popMineRoute) }
                         BrowseAddAccountRoute -> NavEntry(route) { AddAccountEntryBinding(account, popMineRoute) }
                         is BrowseConnectAccountRoute -> NavEntry(route) { ConnectAccountEntryBinding(route, account, session, busy, popMineRoute) }
@@ -439,7 +443,6 @@ internal fun BrowseApplication(
                             topChromeScrolledProgress = { if (showingFullPageRoute) 0f else chromeCompactProgress.value },
                             background = {
                                 BrowseWindowBackground(
-                                    state,
                                     layout,
                                     artworkCache,
                                     fetchArtwork,
@@ -455,20 +458,29 @@ internal fun BrowseApplication(
                             windowControls = windowControls,
                             windowDragArea = windowDragArea,
                             scene = {
-                                val pageContent = rememberUpdatedState<@Composable (BrowseRoute) -> Unit> { route ->
-                                    BrowsePageEntry(
-                                        route, browser, scope, layout, player, playerShellState,
-                                        navigator, navigation, selection, selectDestination,
-                                        artworkCache, fetchArtwork, fetchPhotoArtwork,
-                                        homeGridState, pageScrollStates, chasingListState,
-                                        heroBackdrop, homeCarouselVisible, musicMiniPlayerMedia,
-                                        catalogs, search, chasingBrowser, chasingSelection,
-                                        chasingEnabled, playback, uriHandler, session,
-                                        runtime.sessions.media, runtime.photoSaver,
-                                    )
-                                }
-                                val entryProvider = remember {
-                                    { route: BrowseRoute -> NavEntry(route) { pageContent.value(route) } }
+                                val repository = runtime.sessions.media
+                                val photoSaver = runtime.photoSaver
+                                val entryProvider = rememberBrowseEntryProvider(
+                                    browser, scope, layout, player, playerShellState,
+                                    navigator, navigation, selection, selectDestination,
+                                    artworkCache, fetchArtwork, fetchPhotoArtwork,
+                                    homeGridState, pageScrollStates, chasingListState,
+                                    heroBackdrop, homeCarouselVisible, musicMiniPlayerMedia,
+                                    catalogs, search, chasingBrowser, chasingSelection,
+                                    chasingEnabled, playback, uriHandler, session, repository, photoSaver,
+                                ) {
+                                    { route ->
+                                        BrowsePageEntry(
+                                            route, browser, scope, layout, player, playerShellState,
+                                            navigator, navigation, selection, selectDestination,
+                                            artworkCache, fetchArtwork, fetchPhotoArtwork,
+                                            homeGridState, pageScrollStates, chasingListState,
+                                            heroBackdrop, homeCarouselVisible, musicMiniPlayerMedia,
+                                            catalogs, search, chasingBrowser, chasingSelection,
+                                            chasingEnabled, playback, uriHandler, session,
+                                            repository, photoSaver,
+                                        )
+                                    }
                                 }
                                 ApplicationNavDisplay(
                                     navigation = navigation,
@@ -508,7 +520,7 @@ internal fun BrowseApplication(
             }
         }
         // 管理员媒体删除确认（列表多选 / 详情页单条共用）。
-        BrowseDeleteConfirmation(scope, browser, state, navigation, selection, deleteConfirmBackdrop)
+        BrowseDeleteConfirmation(scope, browser, browserState, navigation, selection, deleteConfirmBackdrop)
     }
     }
     }

@@ -14,7 +14,6 @@ internal fun BindBrowseDataLifecycle(
     search: BrowseSearchState,
     feiniu: FeiniuPreferenceState,
     provider: ProviderKind,
-    state: cn.mafei.cmp.feature.home.MediaBrowserState,
     currentRoute: BrowseRoute,
     chasingBrowser: ChasingBrowser,
     account: AccountFlowState,

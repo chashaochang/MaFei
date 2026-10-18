@@ -17,13 +17,14 @@ import kotlinx.coroutines.launch
 internal fun MineHistoryEntryBinding(
     scope: kotlinx.coroutines.CoroutineScope,
     browser: MediaBrowser,
-    state: cn.mafei.cmp.feature.home.MediaBrowserState,
+    browserState: State<cn.mafei.cmp.feature.home.MediaBrowserState>,
     layout: MaFeiLayout,
     player: BrowsePlayerState,
     popMineRoute: () -> Unit,
     artworkCache: ArtworkMemoryCache,
     fetchArtwork: suspend (MediaImage, Int) -> ByteArray?,
 ) {
+    val state by rememberBrowseAccountReadState(browserState)
     MineHistoryScreen(
         items = state.historyItems,
         loading = state.historyLoading && state.historyItems.isEmpty(),
