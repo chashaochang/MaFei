@@ -3,6 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import bundleIdentity from '../runscript/resolveOhosBundle.cjs';
 
 // Run after publish{Debug,Release}BinariesToHarmonyApp and assembleHap. No extraction,
 // signing or deployment; generated header and library must match their source.
@@ -11,6 +12,9 @@ const hap = resolve(process.argv[3] ?? resolve(root, 'harmonyApp/entry/build/def
 function check(ok, message) { if (!ok) throw new Error(message); }
 const buildType = process.argv[4] ?? 'debug';
 check(['debug', 'release'].includes(buildType), 'Build type must be debug or release');
+const officialBundle = JSON.parse(readFileSync(resolve(root, 'harmonyApp/AppScope/app.json5'), 'utf8')).app.bundleName;
+bundleIdentity.verifyManifest(bundleIdentity.readHapManifest(hap), buildType,
+  bundleIdentity.resolveBundleName(officialBundle, buildType));
 const binaryDir = resolve(root, `composeApp/build/bin/ohosArm64/${buildType}Shared`);
 for (const [name, staged] of [
   ['libkn.so', 'harmonyApp/entry/libs/arm64-v8a/libkn.so'],

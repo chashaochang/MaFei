@@ -4,7 +4,9 @@ Open `MaFei.xcodeproj`, scheme **MaFei**. This is a UIKit scene/window host;
 the default screen is shared Compose login/browsing, not a Swift rewrite. The
 foundation probe remains under **实验室**. Each scene owns
 its own Compose controller. Both device and simulator targets are ARM64 only.
-The development bundle is `cn.xiaobai.mafei.cmp.dev`, separate from legacy.
+Debug builds use `cn.xiaobai.mafei.cmp.dev`; Release builds use
+`cn.xiaobai.mafei.cmp`. Keep the `.dev` suffix on local development builds so
+installing one cannot replace the Release app.
 
 The Xcode build phase runs `:composeApp:embedAndSignAppleFrameworkForXcode`,
 which builds `MaFeiShared` and synchronizes Compose resources. Keep script

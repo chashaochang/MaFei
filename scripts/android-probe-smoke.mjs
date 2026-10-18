@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 const serial = process.argv[2];
 if (!serial) throw new Error('Usage: node scripts/android-probe-smoke.mjs <adb-serial>');
 const adb = (...args) => execFileSync('adb', ['-s', serial, ...args], { encoding: 'utf8', timeout: 30_000 });
-const packageName = 'cn.xiaobai.mafei.cmp.dev';
+const packageName = 'cn.xiaobai.mafei.dev';
 function tree() {
   adb('shell', 'uiautomator', 'dump', '/sdcard/mafei-probe-smoke.xml');
   return adb('exec-out', 'cat', '/sdcard/mafei-probe-smoke.xml');

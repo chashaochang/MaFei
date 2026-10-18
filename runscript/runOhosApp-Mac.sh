@@ -24,9 +24,9 @@ START_TIME=$(date +%s)
 # ====================== [1. Default Configuration and Parameter Parsing] ======================
 DEFAULT_PLATFORM="ohosArm64"
 DEFAULT_TARGET_ID="127.0.0.1:5555"
-DEFAULT_BUNDLE_NAME="com.example.harmonyapp"
 DEFAULT_ABILITY_NAME="EntryAbility"
 LOCAL_OHOS_PATH=""
+BUNDLE_RESOLVER="$(cd "$(dirname "$0")" && pwd)/resolveOhosBundle.cjs"
 
 usage() {
     echo "Usage: $0 [options] [PLATFORM] [TARGET_ID]"
@@ -37,7 +37,7 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -m MODE       Build mode: debug or release (default: debug)"
-    echo "  -b BUNDLE     Set bundle name (current: $DEFAULT_BUNDLE_NAME)"
+    echo "  -b BUNDLE     Validate bundle name (default: host bundle + .dev for debug)"
     echo "  -a ABILITY    Set Ability name (current: $DEFAULT_ABILITY_NAME)"
     echo "  -d MODE       Debug mode: debug or attach (default: attach)"
     echo "  -p PATH       Set external OHOS project path (localOhosPath)"
@@ -46,13 +46,13 @@ usage() {
     echo "Examples:"
     echo "  $0 ohosArm64 127.0.0.1:5555"
     echo "  $0 -m release                  # Release build"
-    echo "  $0 -b com.test.app -a MainAbility"
+    echo "  $0 -b cn.xiaobai.mafei.dev -a EntryAbility"
     echo "  $0 -p /path/to/external/ohos/project"
-    exit 0
+    exit "${1:-0}"
 }
 
 # Preset variables
-BUNDLE_NAME=$DEFAULT_BUNDLE_NAME
+BUNDLE_NAME=""
 ABILITY_NAME=$DEFAULT_ABILITY_NAME
 BUILD_MODE="debug"
 DEBUG_MODE="attach"
@@ -63,6 +63,14 @@ NC='\033[0m'   # No Color
 POSITIONALS=()
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -m|-b|-a|-d|-p)
+            if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+                echo "Error: $1 requires a value" >&2
+                exit 2
+            fi
+            ;;
+    esac
+    case $1 in
         -m) BUILD_MODE="$2"; shift 2 ;;
         -b) BUNDLE_NAME="$2"; shift 2 ;;
         -a) ABILITY_NAME="$2"; shift 2 ;;
@@ -71,7 +79,7 @@ while [[ $# -gt 0 ]]; do
         -h) usage ;;
         -*)
             echo "Unknown option: $1"
-            usage
+            usage 2
             ;;
         *)
             POSITIONALS+=("$1")
@@ -79,6 +87,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+if [[ ${#POSITIONALS[@]} -gt 2 ]]; then
+    echo "Error: expected at most PLATFORM and TARGET_ID" >&2
+    exit 2
+fi
+if [[ "$BUILD_MODE" != debug && "$BUILD_MODE" != release ]]; then
+    echo "Error: build mode must be debug or release" >&2
+    exit 2
+fi
 
 PLATFORM=${POSITIONALS[0]:-$DEFAULT_PLATFORM}
 TARGET_ID=${POSITIONALS[1]:-$DEFAULT_TARGET_ID}
@@ -88,7 +104,6 @@ echo "  - Platform: $PLATFORM"
 echo "  - Device: $TARGET_ID"
 echo "  - Build mode: $BUILD_MODE"
 echo "  - Debug mode: $DEBUG_MODE"
-echo "  - Bundle: $BUNDLE_NAME"
 echo "  - Ability: $ABILITY_NAME"
 if [ -n "$LOCAL_OHOS_PATH" ]; then
     echo "  - External OHOS path: $LOCAL_OHOS_PATH"
@@ -137,8 +152,6 @@ echo " ($DEVECO_HOME)"
 HDC_BIN="$DEVECO_HOME/sdk/default/openharmony/toolchains/hdc"
 export DEVECO_SDK_HOME="$DEVECO_HOME/sdk"
 export PATH="$DEVECO_SDK_HOME:$DEVECO_HOME/jbr/Contents/Home/bin:$DEVECO_HOME/tools/node/bin:$DEVECO_HOME/tools/ohpm/bin:$DEVECO_HOME/tools/hvigor/bin:$PATH"
-"$HDC_BIN" -t "$TARGET_ID" shell aa force-stop "$BUNDLE_NAME" >/dev/null 2>&1 || true
-echo "[Harmony-Debug-Pipeline] Prep: hdc force-stop $BUNDLE_NAME (ignore errors if not running)"
 
 # Harmony run config: passed from IDE (Kotlin reads local.properties); defaults for CLI.
 if [ -n "$LOCAL_OHOS_PATH" ]; then
@@ -146,6 +159,11 @@ if [ -n "$LOCAL_OHOS_PATH" ]; then
 else
     HARMONY_APP_DIR="harmonyApp"
 fi
+# Resolve before any device command; an IDE may still pass the official bundle.
+BUNDLE_NAME=$(node "$BUNDLE_RESOLVER" "$HARMONY_APP_DIR/AppScope/app.json5" "$BUILD_MODE" "$BUNDLE_NAME")
+echo "  - Resolved bundle: $BUNDLE_NAME"
+"$HDC_BIN" -t "$TARGET_ID" shell aa force-stop "$BUNDLE_NAME" >/dev/null 2>&1 || true
+echo "[Harmony-Debug-Pipeline] Prep: hdc force-stop $BUNDLE_NAME (ignore errors if not running)"
 OHOS_KMP_RUN_GRADLE_MODULE="${OHOS_KMP_RUN_GRADLE_MODULE:-composeApp}"
 if [ "$BUILD_MODE" = "release" ]; then
     OHOS_KMP_RUN_PUBLISH_TASK="${OHOS_KMP_RUN_PUBLISH_TASK:-publishReleaseBinariesToHarmonyApp}"
@@ -229,13 +247,14 @@ if [ ! -f "$HAP_FILE" ]; then
     echo "  4. Check files in ${OHOS_KMP_RUN_ENTRY_MODULE}/build/default/outputs/default/ directory"
     exit 6
 fi
+node "$BUNDLE_RESOLVER" --verify-hap "$HAP_FILE" "$BUILD_MODE" "$BUNDLE_NAME"
 AVAILABLE_TARGETS=$("$HDC_BIN" list targets)
 if ! echo "$AVAILABLE_TARGETS" | grep -q "$TARGET_ID"; then
     echo -e "\033[31mError: Device $TARGET_ID is offline!\033[0m"
     exit 5
 fi
 
-echo "[Harmony-Debug-Pipeline] Install: bm install signed HAP (may uninstall/reinstall if a prior install failed)"
+echo "[Harmony-Debug-Pipeline] Install: bm install verified signed HAP"
 echo "Pushing debug components and installing HAP..."
 echo "  - Device: $TARGET_ID"
 # Install HAP (using temp directory)
@@ -243,16 +262,14 @@ REMOTE_HAP_DIR="/data/local/tmp/debug_install"
 "$HDC_BIN" -t "$TARGET_ID" shell mkdir -p "$REMOTE_HAP_DIR"
 "$HDC_BIN" -t "$TARGET_ID" file send "$HAP_FILE" "$REMOTE_HAP_DIR"
 
-INSTALL_OUTPUT=$("$HDC_BIN" -t "$TARGET_ID" shell bm install -p "$REMOTE_HAP_DIR/$SIGNED_HAP" 2>&1)
-sleep 1
-INSTALL_RESULT=$?
+if ! INSTALL_OUTPUT=$("$HDC_BIN" -t "$TARGET_ID" shell bm install -p "$REMOTE_HAP_DIR/$SIGNED_HAP" 2>&1); then
+    echo "Install failed: $INSTALL_OUTPUT" >&2
+    exit 7
+fi
 echo "Install status: $INSTALL_OUTPUT"
-if echo "$INSTALL_OUTPUT" | grep -qE "failed"; then
-    echo "Install failed detected, uninstalling and reinstalling..."
-    "$HDC_BIN" -t "$TARGET_ID" shell bm uninstall -n "$BUNDLE_NAME" >/dev/null 2>&1 || true
-    sleep 5
-    INSTALL_OUTPUT=$("$HDC_BIN" -t "$TARGET_ID" shell bm install -p "$REMOTE_HAP_DIR/$SIGNED_HAP" 2>&1)
-    sleep 5
+if ! echo "$INSTALL_OUTPUT" | grep -qi "success" || echo "$INSTALL_OUTPUT" | grep -qiE 'failed|error'; then
+    echo "Error: installation did not succeed; existing apps were not uninstalled." >&2
+    exit 7
 fi
 # ====================== [6. App Launch and Debug Mount] ======================
 echo "[Harmony-Debug-Pipeline] Run: aa start -a $ABILITY_NAME -b $BUNDLE_NAME (DEBUG_MODE=$DEBUG_MODE; debug uses -D)"

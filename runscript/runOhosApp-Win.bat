@@ -22,9 +22,9 @@ REM   Example: runOhosApp-Win.bat ohosArm64 127.0.0.1:5555
 
 set DEFAULT_PLATFORM=ohosArm64
 set DEFAULT_TARGET_ID=127.0.0.1:5555
-set DEFAULT_BUNDLE_NAME=com.example.harmonyapp
 set DEFAULT_ABILITY_NAME=EntryAbility
-set BUNDLE_NAME=%DEFAULT_BUNDLE_NAME%
+set BUNDLE_NAME=
+set "BUNDLE_RESOLVER=%~dp0resolveOhosBundle.cjs"
 set ABILITY_NAME=%DEFAULT_ABILITY_NAME%
 set BUILD_MODE=debug
 set DEBUG_MODE=attach
@@ -35,17 +35,30 @@ set TARGET_ID=
 REM Parse options (supports options in any position, e.g. ohosArm64 62Q0226107024702 -m release)
 :parse
 if "%~1"=="" goto done_parse
+for %%o in (-m -b -a -d -p) do if "%~1"=="%%o" if "%~2"=="" (
+  echo Error: %~1 requires a value
+  exit /b 2
+)
 if "%~1"=="-m" (set "BUILD_MODE=%~2" & shift & shift & goto parse)
 if "%~1"=="-b" (set "BUNDLE_NAME=%~2" & shift & shift & goto parse)
 if "%~1"=="-a" (set "ABILITY_NAME=%~2" & shift & shift & goto parse)
 if "%~1"=="-d" (set "DEBUG_MODE=%~2" & shift & shift & goto parse)
 if "%~1"=="-p" (set "LOCAL_OHOS_PATH=%~2" & shift & shift & goto parse)
 if "%~1"=="-h" goto show_help
+set "CURRENT_ARG=%~1"
+if "!CURRENT_ARG:~0,1!"=="-" (
+  echo Error: unknown option %~1
+  exit /b 2
+)
 REM Positional: first=PLATFORM, second=TARGET_ID
 if "!PLATFORM!"=="" (set "PLATFORM=%~1") else if "!TARGET_ID!"=="" (set "TARGET_ID=%~1")
 shift
 goto parse
 :done_parse
+if not "%BUILD_MODE%"=="debug" if not "%BUILD_MODE%"=="release" (
+  echo Error: build mode must be debug or release
+  exit /b 2
+)
 if "!PLATFORM!"=="" set "PLATFORM=%DEFAULT_PLATFORM%"
 if "!TARGET_ID!"=="" set "TARGET_ID=%DEFAULT_TARGET_ID%"
 
@@ -57,7 +70,6 @@ echo   - Platform: %PLATFORM%
 echo   - Device: %TARGET_ID%
 echo   - Build mode: %BUILD_MODE%
 echo   - Debug mode: %DEBUG_MODE%
-echo   - Bundle: %BUNDLE_NAME%
 echo   - Ability: %ABILITY_NAME%
 if not "%LOCAL_OHOS_PATH%"=="" echo   - External OHOS path: %LOCAL_OHOS_PATH%
 echo ------------------------------------------------------------
@@ -127,15 +139,24 @@ if not exist "%HDC_BIN%" (
   exit /b 1
 )
 
-"%HDC_BIN%" -t %TARGET_ID% shell aa force-stop %BUNDLE_NAME% 2>nul
-echo [Harmony-Debug-Pipeline] Prep: hdc force-stop %BUNDLE_NAME% (ignore errors if not running)
-
 REM Harmony run config: passed from IDE (Kotlin reads local.properties); defaults for CLI.
 if not "%LOCAL_OHOS_PATH%"=="" (
   set "HARMONY_APP_DIR=%LOCAL_OHOS_PATH%"
 ) else (
   set "HARMONY_APP_DIR=harmonyApp"
 )
+REM Resolve before any device command; normalize the official IDE bundle for debug.
+set "IDENTITY_OUTPUT=%TEMP%\mafei_bundle_%RANDOM%_%RANDOM%.txt"
+node "%BUNDLE_RESOLVER%" "%HARMONY_APP_DIR%\AppScope\app.json5" "%BUILD_MODE%" "%BUNDLE_NAME%" > "%IDENTITY_OUTPUT%"
+if errorlevel 1 (
+  del "%IDENTITY_OUTPUT%" 2>nul
+  exit /b 2
+)
+set /p BUNDLE_NAME=<"%IDENTITY_OUTPUT%"
+del "%IDENTITY_OUTPUT%" 2>nul
+echo   - Resolved bundle: %BUNDLE_NAME%
+"%HDC_BIN%" -t %TARGET_ID% shell aa force-stop %BUNDLE_NAME% 2>nul
+echo [Harmony-Debug-Pipeline] Prep: hdc force-stop %BUNDLE_NAME% (ignore errors if not running)
 if not defined OHOS_KMP_RUN_GRADLE_MODULE set "OHOS_KMP_RUN_GRADLE_MODULE=composeApp"
 if "%BUILD_MODE%"=="release" (
   if not defined OHOS_KMP_RUN_PUBLISH_TASK set "OHOS_KMP_RUN_PUBLISH_TASK=publishReleaseBinariesToHarmonyApp"
@@ -163,6 +184,7 @@ if not "%LOCAL_OHOS_PATH%"=="" (
 ) else (
   call gradlew.bat %OHOS_KMP_RUN_GRADLE_TASK%
 )
+if errorlevel 1 (echo Gradle publish failed & exit /b 1)
 
 echo [Harmony-Debug-Pipeline] Build: KMP publish finished  next ohpm/hvigor HAP (incremental builds may be faster)
 echo   - OHOS entry module: %OHOS_KMP_RUN_ENTRY_MODULE%
@@ -235,6 +257,8 @@ if not exist "%HAP_FILE%" (
   echo Suggested: check build logs, verify signing in DevEco Studio.
   exit /b 6
 )
+node "%BUNDLE_RESOLVER%" --verify-hap "%HAP_FILE%" "%BUILD_MODE%" "%BUNDLE_NAME%"
+if errorlevel 1 exit /b 6
 
 set DEVICE_FOUND=
 for /f "delims=" %%i in ('"%HDC_BIN%" list targets 2^>nul') do echo %%i | findstr /C:"%TARGET_ID%" >nul && set DEVICE_FOUND=1
@@ -243,7 +267,7 @@ if not defined DEVICE_FOUND (
   exit /b 5
 )
 
-echo [Harmony-Debug-Pipeline] Install: bm install signed HAP (may uninstall/reinstall if a prior install failed)
+echo [Harmony-Debug-Pipeline] Install: bm install verified signed HAP
 echo Pushing and installing HAP...
 echo   - Device: %TARGET_ID%
 set "REMOTE_HAP_DIR=/data/local/tmp/debug_install"
@@ -251,13 +275,17 @@ set "REMOTE_HAP_PATH=%REMOTE_HAP_DIR%/%SIGNED_HAP%"
 "%HDC_BIN%" -t %TARGET_ID% shell mkdir -p %REMOTE_HAP_DIR%
 "%HDC_BIN%" -t %TARGET_ID% file send "%HAP_FILE%" %REMOTE_HAP_DIR%
 
-"%HDC_BIN%" -t %TARGET_ID% shell bm install -p "%REMOTE_HAP_PATH%" 2>nul
-if errorlevel 1 (
-  echo Reinstall: uninstall then install again...
-  "%HDC_BIN%" -t %TARGET_ID% shell bm uninstall -n %BUNDLE_NAME% 2>nul
-  timeout /t 5 /nobreak >nul
-  "%HDC_BIN%" -t %TARGET_ID% shell bm install -p "%REMOTE_HAP_PATH%"
-  timeout /t 5 /nobreak >nul
+set "INSTALL_LOG=%TEMP%\mafei_install_%RANDOM%_%RANDOM%.log"
+set "INSTALL_ERR=0"
+"%HDC_BIN%" -t %TARGET_ID% shell bm install -p "%REMOTE_HAP_PATH%" > "%INSTALL_LOG%" 2>&1
+if errorlevel 1 set "INSTALL_ERR=1"
+type "%INSTALL_LOG%"
+findstr /I /C:"success" "%INSTALL_LOG%" >nul || set "INSTALL_ERR=1"
+findstr /I /C:"failed" /C:"error" "%INSTALL_LOG%" >nul && set "INSTALL_ERR=1"
+del "%INSTALL_LOG%" 2>nul
+if "!INSTALL_ERR!"=="1" (
+  echo Error: installation did not succeed; existing apps were not uninstalled.
+  exit /b 7
 )
 
 REM ====================== Launch App ======================
@@ -308,7 +336,7 @@ echo   TARGET_ID   Device ID (default: %DEFAULT_TARGET_ID%)
 echo.
 echo Options:
 echo   -m MODE    Build mode: debug or release (default: debug)
-echo   -b BUNDLE   Set bundle name (current: %DEFAULT_BUNDLE_NAME%)
+echo   -b BUNDLE   Validate bundle name; default is host bundle plus .dev for debug
 echo   -a ABILITY  Set Ability name (current: %DEFAULT_ABILITY_NAME%)
 echo   -d MODE     Debug mode: debug or attach (default: attach)
 echo   -p PATH     Set external OHOS project path (localOhosPath)
@@ -317,6 +345,6 @@ echo.
 echo Examples:
 echo   %~nx0 ohosArm64 127.0.0.1:5555
 echo   %~nx0 -m release
-echo   %~nx0 -b com.test.app -a MainAbility
+echo   %~nx0 -b cn.xiaobai.mafei.dev -a EntryAbility
 echo   %~nx0 -p D:\path\to\external\ohos\project
 exit /b 0
