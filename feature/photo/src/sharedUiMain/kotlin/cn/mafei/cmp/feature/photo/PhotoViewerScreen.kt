@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -41,6 +42,7 @@ fun PhotoViewerScreen(photos: List<MediaItem>, initialId: String, onBack: () -> 
     info: MediaItem?, infoLoading: Boolean, infoFailed: Boolean, onInfo: (MediaItem) -> Unit,
     artwork: @Composable (MediaItem, Modifier) -> Unit) {
     if (photos.isEmpty()) { LegacyFailedView(onBack, Modifier.fillMaxSize()); return }
+    val pageActive = LocalMaFeiPageActive.current
     val pager = rememberPagerState(initialPage = photos.indexOfFirst { it.id.value == initialId }.coerceAtLeast(0), pageCount = { photos.size })
     val current = photos.getOrNull(pager.currentPage) ?: photos.first()
     val safe = LocalMaFeiSafeArea.current
@@ -51,8 +53,11 @@ fun PhotoViewerScreen(photos: List<MediaItem>, initialId: String, onBack: () -> 
     var zoom by remember(current.id) { mutableStateOf(1f) }
     val scope = rememberCoroutineScope()
     fun interact() { slideshow = false }
-    LaunchedEffect(slideshow, pager.currentPage) {
-        if (slideshow) {
+    LaunchedEffect(pageActive, pager) {
+        if (!pageActive && pager.isScrollInProgress) pager.stopScroll(MutatePriority.PreventUserInput)
+    }
+    LaunchedEffect(pageActive, slideshow, pager.currentPage) {
+        if (pageActive && slideshow) {
             controls = false
             delay(5000)
             if (pager.currentPage < photos.lastIndex) pager.animateScrollToPage(pager.currentPage + 1)

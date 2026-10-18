@@ -1,6 +1,8 @@
 package cn.mafei.cmp.feature.photo
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -26,13 +28,19 @@ fun PhotoCatalogScreen(title: String, albums: Boolean, page: MediaPageState, onB
     onSection: ((Boolean) -> Unit)?, onRetry: () -> Unit, onMore: () -> Unit,
     onPhoto: (MediaItem) -> Unit, onAlbum: (MediaItem) -> Unit,
     artwork: @Composable (MediaItem, Modifier) -> Unit) {
+    val pageActive = LocalMaFeiPageActive.current
     val safe = LocalMaFeiSafeArea.current
     val photoState = rememberLazyGridState()
     val albumState = rememberLazyGridState()
     val grid = if (albums) albumState else photoState
     val groups = remember(page.items) { photoDateGroups(page.items) }
     val more by rememberUpdatedState(onMore)
-    LaunchedEffect(grid, page.cursor, page.loadingMore, page.error) {
+    LaunchedEffect(pageActive, grid, page.cursor, page.loadingMore, page.error) {
+        if (!pageActive) {
+            if (photoState.isScrollInProgress) photoState.stopScroll(MutatePriority.PreventUserInput)
+            if (albumState.isScrollInProgress) albumState.stopScroll(MutatePriority.PreventUserInput)
+            return@LaunchedEffect
+        }
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index }.collect { index ->
             if (index != null && index >= grid.layoutInfo.totalItemsCount - 4 && page.cursor != null && !page.loadingMore && page.error == null) more()
         }

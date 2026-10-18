@@ -1,5 +1,7 @@
 package cn.mafei.cmp.feature.favorite
 
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,7 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyEmptyView
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
 import cn.mafei.cmp.common.ui.MaFeiPageTitleBar
@@ -75,6 +78,7 @@ fun FavoriteScreen(
     modifier: Modifier = Modifier,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
+    val pageActive = LocalMaFeiPageActive.current
     val safeArea = LocalMaFeiSafeArea.current
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     var showSort by remember { mutableStateOf(false) }
@@ -87,7 +91,11 @@ fun FavoriteScreen(
         if (layout.navigation == NavigationPlacement.Bottom) 112.dp else 30.dp
     val backdrop = rememberGlassBackdrop()
 
-    LaunchedEffect(gridState, canLoadMore, loading, loadingMore, items.size) {
+    LaunchedEffect(pageActive, gridState, canLoadMore, loading, loadingMore, items.size) {
+        if (!pageActive) {
+            if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
+            return@LaunchedEffect
+        }
         snapshotFlow {
             val info = gridState.layoutInfo
             (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount

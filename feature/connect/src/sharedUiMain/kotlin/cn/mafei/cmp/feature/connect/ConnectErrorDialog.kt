@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import cn.mafei.cmp.common.glass.GlassBackdrop
 import cn.mafei.cmp.common.ui.MaFeiBackHandler
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 
 /** Flow-level feedback: keep this outside the captured form and navigation host. */
@@ -15,8 +16,9 @@ fun ConnectErrorDialog(
     backdrop: GlassBackdrop,
 ) {
     if (error == null) return
+    val pageActive = LocalMaFeiPageActive.current
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(error) { keyboard?.hide() }
+    LaunchedEffect(pageActive, error) { if (pageActive) keyboard?.hide() }
     MaFeiBackHandler(enabled = true, onBack = onDismiss)
     MaFeiGlassConfirmDialog(
         title = "连接提示",

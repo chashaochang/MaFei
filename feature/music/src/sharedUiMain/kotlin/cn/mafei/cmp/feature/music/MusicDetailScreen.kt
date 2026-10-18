@@ -1,6 +1,8 @@
 package cn.mafei.cmp.feature.music
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -42,9 +44,14 @@ fun MusicDetailScreen(
     artwork: @Composable (MediaItem, Modifier) -> Unit, currentId: String? = null,
     preparing: Boolean = false, playing: Boolean = false, bottomInset: Dp = 0.dp,
 ) {
+    val pageActive = LocalMaFeiPageActive.current
     val safe = LocalMaFeiSafeArea.current
     val gridState = rememberLazyGridState()
-    LaunchedEffect(gridState, artist, tracks.cursor, albums.cursor, tracks.loadingMore, albums.loadingMore) {
+    LaunchedEffect(pageActive, gridState, artist, tracks.cursor, albums.cursor, tracks.loadingMore, albums.loadingMore) {
+        if (!pageActive) {
+            if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
+            return@LaunchedEffect
+        }
         snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }.collect { last ->
             if (last != null && last >= gridState.layoutInfo.totalItemsCount - 4) {
                 if (artist && albums.cursor != null && albums.error == null && !albums.loadingMore) onMoreAlbums()

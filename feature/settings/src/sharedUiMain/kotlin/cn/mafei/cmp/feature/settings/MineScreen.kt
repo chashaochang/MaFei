@@ -1,6 +1,8 @@
 package cn.mafei.cmp.feature.settings
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +55,7 @@ import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.ui.LegacyListGroup
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.common.ui.LegacyListGroupItem
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiErrorDialog
@@ -498,6 +501,7 @@ fun MineHistoryScreen(
     onRetryLoadMore: (() -> Unit)? = null,
     artwork: (@Composable (MediaItem, Modifier) -> Unit)? = null,
 ) {
+    val pageActive = LocalMaFeiPageActive.current
     val safeArea = LocalMaFeiSafeArea.current
     val columns = when {
         layout.gridWidthDp >= 1920f -> 8
@@ -546,7 +550,11 @@ fun MineHistoryScreen(
                 val currentLoadingMore by rememberUpdatedState(loadingMore)
                 val currentLoadMoreFailed by rememberUpdatedState(loadMoreFailed)
                 // 触底续页：resume + 已看完两路的游标由 browser 决定是否还有。
-                LaunchedEffect(gridState, canLoadMore, items.size) {
+                LaunchedEffect(pageActive, gridState, canLoadMore, items.size) {
+                    if (!pageActive) {
+                        if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
+                        return@LaunchedEffect
+                    }
                     snapshotFlow {
                         val info = gridState.layoutInfo
                         (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount

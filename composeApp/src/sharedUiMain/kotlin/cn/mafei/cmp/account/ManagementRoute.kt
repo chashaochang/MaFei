@@ -2,6 +2,7 @@ package cn.mafei.cmp
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.data.repositories.MediaRepository
 import cn.mafei.cmp.data.repositories.MediaSession
 import cn.mafei.cmp.feature.management.*
@@ -12,11 +13,13 @@ import kotlinx.coroutines.launch
 internal fun ManagementRoute(repository: MediaRepository, session: MediaSession, taskId: String?,
     onBack: () -> Unit, onTask: (String) -> Unit, modifier: Modifier = Modifier,
     sessionId: String? = null, onSession: (String) -> Unit = {}, onDevices: () -> Unit = {}) {
+    val pageActive = LocalMaFeiPageActive.current
     var browser by remember(session) { mutableStateOf<ManagementBrowser?>(null) }
     var error by remember(session) { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(session, taskId, sessionId, retry) {
+    LaunchedEffect(pageActive, session, taskId, sessionId, retry) {
+        if (!pageActive) return@LaunchedEffect
         try {
             error = null
             val current = browser ?: ManagementBrowser(repository.management(session)).also { browser = it }

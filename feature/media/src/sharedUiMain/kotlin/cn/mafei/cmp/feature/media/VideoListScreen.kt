@@ -1,6 +1,8 @@
 package cn.mafei.cmp.feature.media
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +45,7 @@ import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.design_system.MaFeiLayout
 import cn.mafei.cmp.common.design_system.NavigationPlacement
 import cn.mafei.cmp.common.ui.LegacyEmptyView
+import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.common.ui.LegacyFailedView
 import cn.mafei.cmp.common.ui.LegacyMediaGridSkeleton
 import cn.mafei.cmp.common.ui.LegacySortChoice
@@ -103,6 +106,7 @@ fun VideoListScreen(
     onExitSelection: () -> Unit = {},
     onDeleteSelected: () -> Unit = {},
 ) {
+    val pageActive = LocalMaFeiPageActive.current
     val safeArea = LocalMaFeiSafeArea.current
     val currentLoadMore by rememberUpdatedState(onLoadMore)
     var showSort by remember { mutableStateOf(false) }
@@ -122,7 +126,11 @@ fun VideoListScreen(
     // that must not remove the page title itself.
     val actionBarBackdrop = rememberGlassBackdrop()
 
-    LaunchedEffect(gridState, canLoadMore, loading, loadingMore, items.size) {
+    LaunchedEffect(pageActive, gridState, canLoadMore, loading, loadingMore, items.size) {
+        if (!pageActive) {
+            if (gridState.isScrollInProgress) gridState.stopScroll(MutatePriority.PreventUserInput)
+            return@LaunchedEffect
+        }
         snapshotFlow {
             val info = gridState.layoutInfo
             (info.visibleItemsInfo.lastOrNull()?.index ?: -1) to info.totalItemsCount
