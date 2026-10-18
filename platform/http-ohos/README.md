@@ -1,8 +1,19 @@
 # OHOS HTTP：复用 CPF Curl 的 HTTP-only 修补版
 
-状态：**实现与 ARM64 Native/HAP 构建通过，设备运行 Pending**。入口
+状态：**实现与 ARM64 Native/HAP 构建通过，AAAA-only Jellyfin 登录真机通过**。入口
 `createOhosHttpTransport()` 返回冻结的 `HttpTransport`，重定向、总超时、
 读体上限继续复用 `platform:http-ktor`，没有新增模块、ArkTS 网络业务或更改最低 API 17。
+
+## AAAA-only 域名解析回退
+
+部分 OHOS libc 默认 `AF_UNSPEC` 查询会拒绝只有 AAAA 记录的域名，显式
+`AF_INET6` 查询可成功。Curl 仅在主机 DNS 失败、HTTP 状态和已发送请求字节均
+为 0 时，对原 easy handle 尝试 IPv6 一次。保留原 URL、端口、Host、TLS/SNI、
+未消费请求体、取消监听及外层总超时；不回退代理 DNS、连接、TLS 或发送错误，
+不重发已发送的 POST，不将服务器地址持久化为 IP。再次失败沿用原清理路径。
+
+原生 handle 测试覆盖一次回退、请求体和取消监听归属及拒绝回退条件。
+真机解析差异与验收范围见 [验证历史](../../docs/validation/VALIDATION_HISTORY.md)。
 
 ## 为什么是局部源码补丁
 
@@ -31,7 +42,7 @@
   `@ohos.net.http.d.ts` 的预置 CA 文档一致，但尚未在设备内实际验证。
 - Curl 自动解压且 Ktor 移除压缩/长度头；读体上限约束解压后内容。
 
-## 本轮实际证据
+## 首次接入的历史构建证据
 
 - Android 宿主编译通过；共享 Desktop / Android JVM HTTP 各 **32/32 实际通过**。
 - **12 项 OHOS 测试编译、ELF 链接通过，0 项设备执行**：
@@ -55,8 +66,10 @@ node scripts/verify-harmony-artifacts.mjs
 `/private/tmp/mafei-ohos-http-jvm-rerun.log`（64 项强制实际重跑）、
 `/private/tmp/mafei-ohos-http-publish.log`、`/private/tmp/mafei-ohos-http-hap.log`。
 
-## 仍需设备确认
+## 其余验证边界
 
-当前 `hdc list targets` 为 Empty，HAP 未签名、未安装。待真实 OHOS 执行上述测试，
-再验证受信 HTTPS、自签名/主机名不匹配拒绝、代理 CONNECT、取消/超时/关闭和截断读体；
-之后接生产账号/SDK。这里的构建成功不代表真实服务器登录或 Stage 1 整体完成。
+首次接入时设备未连接，以上 12 项测试只有编译证据。IPv6 回退加入后共 15 项
+原生测试已重新编译链接；设备 shell 执行受限，尚未实际运行这套测试。
+更新后的签名开发包已由用户确认真实 Jellyfin 登录成功；受信 HTTPS、自签名/
+主机名不匹配拒绝、代理 CONNECT、取消/超时/关闭和截断读体仍须分别设备验证。
+单个服务器登录通过不代表全部网络场景或 Stage 1 整体完成。

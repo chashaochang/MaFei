@@ -29,6 +29,7 @@ private class RequestHolder(
     val responseWrapper: StableRef<CurlResponseBodyData>,
 ) {
     var cancellation: DisposableHandle? = null
+    var retriedIpv6 = false
     fun dispose() {
         cancellation?.dispose()
         requestWrapper.dispose()
@@ -225,9 +226,17 @@ internal class CurlMultiApiHandler : Closeable {
                 val easyHandle = message.easy_handle
                     ?: error("Got a null easy handle from the message")
                 if (easyHandle !in activeHandles) continue
+                // Removing/re-adding a handle invalidates libcurl's message pointer.
+                val messageKind = message.msg
+                val resultCode = message.data.result
+                if (messageKind == CURLMSG.CURLMSG_DONE && resultCode == CURLE_COULDNT_RESOLVE_HOST) {
+                    val status = alloc<LongVar>()
+                    easyHandle.getInfo(CURLINFO_RESPONSE_CODE, status.ptr)
+                    if (retryIpv6AfterDnsFailure(easyHandle, resultCode, status.value)) continue
+                }
 
                 try {
-                    val result = processCompletedEasyHandle(message.msg, easyHandle, message.data.result)
+                    val result = processCompletedEasyHandle(messageKind, easyHandle, resultCode)
                     val deferred = activeHandles[easyHandle]!!.responseCompletable
                     if (deferred.isCompleted) {
                         // already completed with partial response
@@ -244,7 +253,49 @@ internal class CurlMultiApiHandler : Closeable {
         }
     }
 
-    private fun processCancelledEasyHandle(easyHandle: EasyHandle, cause: Throwable): CurlFail = memScoped {
+    /**
+     * Some OHOS libc resolvers reject AAAA-only hosts for AF_UNSPEC but resolve AF_INET6.
+     * Retry only before any request headers were sent. The same handle retains the URL,
+     * Host/SNI, TLS policy, unread upload, cancellation hook and outer request deadline.
+     * True means this completion was handled; the caller must skip its terminal cleanup.
+     */
+    internal fun retryIpv6AfterDnsFailure(easyHandle: EasyHandle, result: CURLcode, httpStatusCode: Long): Boolean {
+        val holder = activeHandles[easyHandle] ?: return false
+        if (result != CURLE_COULDNT_RESOLVE_HOST || httpStatusCode != 0L || holder.retriedIpv6 ||
+            holder.responseCompletable.isCompleted || !holder.request.executionContext.isActive) return false
+        val requestBytesSent = memScoped {
+            val bytes = alloc<LongVar>()
+            easyHandle.getInfo(CURLINFO_REQUEST_SIZE, bytes.ptr)
+            bytes.value
+        }
+        if (requestBytesSent != 0L) return false
+
+        holder.retriedIpv6 = true
+        var attachedToMulti = true
+        try {
+            curl_multi_remove_handle(multiHandle, easyHandle).verify()
+            attachedToMulti = false
+            easyHandle.option(CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6.toLong())
+            curl_multi_add_handle(multiHandle, easyHandle).verify()
+            // No StableRef, header list, upload channel or cancellation hook is released here.
+            return true
+        } catch (failure: Throwable) {
+            activeHandles.remove(easyHandle)
+            try {
+                processCancelledEasyHandle(easyHandle, failure, attachedToMulti)
+            } finally {
+                holder.responseCompletable.completeExceptionally(failure)
+                holder.dispose()
+            }
+            return true
+        }
+    }
+
+    private fun processCancelledEasyHandle(
+        easyHandle: EasyHandle,
+        cause: Throwable,
+        attachedToMulti: Boolean = true,
+    ): CurlFail = memScoped {
         try {
             val responseDataRef = alloc<COpaquePointerVar>()
             easyHandle.apply { getInfo(CURLINFO_PRIVATE, responseDataRef.ptr) }
@@ -256,7 +307,7 @@ internal class CurlMultiApiHandler : Closeable {
                 responseBuilder.headersBytes.close()
             }
         } finally {
-            cleanupEasyHandle(easyHandle)
+            cleanupEasyHandle(easyHandle, attachedToMulti)
         }
     }
 
@@ -352,7 +403,7 @@ internal class CurlMultiApiHandler : Closeable {
         }
     }
 
-    private fun cleanupEasyHandle(easyHandle: EasyHandle) {
+    private fun cleanupEasyHandle(easyHandle: EasyHandle, attachedToMulti: Boolean = true) {
         synchronized(easyHandlesToUnpauseLock) {
             easyHandlesToUnpause.removeAll { it.first == easyHandle }
         }
@@ -365,7 +416,7 @@ internal class CurlMultiApiHandler : Closeable {
                 ref.dispose()
             }
         }
-        curl_multi_remove_handle(multiHandle, easyHandle).verify()
+        if (attachedToMulti) curl_multi_remove_handle(multiHandle, easyHandle).verify()
         curl_easy_cleanup(easyHandle)
     }
 
