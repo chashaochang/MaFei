@@ -19,6 +19,11 @@ internal fun rememberBrowseEntryProvider(
     val content = remember(*inputs, calculation = contentFactory)
     val latestContent = rememberUpdatedState(content)
     return remember {
-        { route -> NavEntry(route) { latestContent.value(route) } }
+        // NavDisplay may request fresh entries while updating its owners. Reuse
+        // their content wrapper too; capturing route in a new lambda here would
+        // change each entry's content identity even with the same renderer.
+        val entryContent: @Composable (BrowseRoute) -> Unit = { route -> latestContent.value(route) }
+        val provider: (BrowseRoute) -> NavEntry<BrowseRoute> = { route -> NavEntry(route, content = entryContent) }
+        provider
     }
 }

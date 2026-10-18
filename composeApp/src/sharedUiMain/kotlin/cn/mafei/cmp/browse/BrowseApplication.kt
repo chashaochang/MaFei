@@ -232,26 +232,6 @@ internal fun BrowseApplication(
             }
         }
 
-        val mineContent: @Composable (Modifier) -> Unit = { modifier ->
-            AccountRootBinding(
-                modifier,
-                account,
-                scope,
-                browser,
-                browserState,
-                session,
-                layout,
-                busy,
-                player,
-                artworkCache,
-                fetchArtwork,
-                uriHandler,
-                embeddedWebHost,
-                reauthenticate,
-                onLogout,
-                authenticationFailure,
-            )
-        }
         val popMineRoute: () -> Unit = remember(account) {
             {
                 when (val route = account.mineBackStack.lastOrNull()) {
@@ -264,80 +244,107 @@ internal fun BrowseApplication(
                 if (account.mineBackStack.size > 1) account.mineBackStack.removeLastOrNull()
             }
         }
-        val accountNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
-            // Registered before NavDisplay so child routes/sheets handle Back
-            // first; at the account root it closes the whole account surface.
-            cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = account.minePresented) { account.minePresented = false }
-            NavDisplay(
-                backStack = account.mineBackStack,
-                onBack = { popMineRoute() },
-                entryProvider = { route ->
-                    when (route) {
-                        BrowseMineRoute -> NavEntry(route) { MineEntryBinding(mineContent) }
-                        BrowseMineHistoryRoute ->
-                            NavEntry(route) { MineHistoryEntryBinding(scope, browser, browserState, layout, player, popMineRoute, artworkCache, fetchArtwork) }
-                        BrowseAccountSwitchRoute -> NavEntry(route) { AccountSwitchEntryBinding(account, session, popMineRoute) }
-                        BrowseAddAccountRoute -> NavEntry(route) { AddAccountEntryBinding(account, popMineRoute) }
-                        is BrowseConnectAccountRoute -> NavEntry(route) { ConnectAccountEntryBinding(route, account, session, busy, popMineRoute) }
-                        BrowseServerDiscoveryRoute -> NavEntry(route) { ServerDiscoveryEntryBinding(account, popMineRoute) }
-                        BrowseSettingsRoute ->
-                            NavEntry(route) {
-                                SettingsEntryBinding(
-                                    account,
-                                    feiniu,
-                                    session,
-                                    playback,
-                                    popMineRoute,
-                                    runtime.appearance,
-                                    runtime.glassStyle,
-                                    homeCarouselVisible,
-                                    onHomeCarouselVisibleChanged,
-                                    currentPlayerRenderMode,
-                                    currentPlayerRenderModeChanged,
-                                    playerRenderModeSupported,
-                                )
-                            }
-                        BrowsePlayerSettingsRoute -> NavEntry(route) { PlayerSettingsEntryBinding(playback, popMineRoute, runtime.playerPreferences) }
-                        is BrowseManagementRoute ->
-                            NavEntry(route) { ManagementEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
-                        is BrowseManagementDevicesRoute ->
-                            NavEntry(route) { ManagementDevicesEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
-                        BrowseFeiniuConnectionPreferenceRoute -> NavEntry(route) { FeiniuConnectionPreferenceEntryBinding(feiniu, popMineRoute) }
-                        BrowseAppearanceRoute -> NavEntry(route) { AppearanceEntryBinding(popMineRoute, runtime.appearance) }
-                        BrowseGlassStyleRoute ->
-                            NavEntry(route) {
-                                GlassStyleEntryBinding(popMineRoute, runtime.glassStyle, currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged)
-                            }
-                        BrowseAddGroupRoute -> NavEntry(route) { AddGroupEntryBinding(popMineRoute) }
-                        BrowseAboutPrivacyRoute -> NavEntry(route) { AboutPrivacyEntryBinding(account, popMineRoute, uriHandler, embeddedWebHost) }
-                        BrowsePrivacyWebRoute -> NavEntry(route) { PrivacyWebEntryBinding(popMineRoute, uriHandler) }
-                        BrowseWebITongRoute ->
-                            NavEntry(route) {
-                                WebITongEntryBinding(
-                                    account,
-                                    scope,
-                                    session,
-                                    player,
-                                    playback,
-                                    popMineRoute,
-                                    uriHandler,
-                                    embeddedWebMemory,
-                                    onPlayerFullscreenChanged,
-                                    { runtime.sessions.state.value.session === session },
-                                    runtime.sessions.media,
-                                    runtime.deviceControls,
-                                )
-                            }
-                        BrowseUserAgreementRoute -> NavEntry(route) { UserAgreementEntryBinding(popMineRoute) }
-                        else -> NavEntry(route) {}
-                    }
-                },
-                modifier = mineHostModifier,
-            )
-        }
-        val currentAccountNavContent = rememberUpdatedState(accountNavContent)
-        val mineNavContent = remember(account) {
-            movableContentOf<Modifier> { modifier -> currentAccountNavContent.value(modifier) }
+        val mineNavContent = rememberRetainedAccountContent(
+            account, scope, browser, browserState, session, layout, busy, player,
+            artworkCache, fetchArtwork, uriHandler, embeddedWebHost, reauthenticate,
+            onLogout, authenticationFailure, popMineRoute, feiniu, playback, runtime,
+            homeCarouselVisible, onHomeCarouselVisibleChanged, currentPlayerRenderMode,
+            currentPlayerRenderModeChanged, playerRenderModeSupported,
+            currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged,
+            embeddedWebMemory, onPlayerFullscreenChanged,
+        ) {
+            val mineContent: @Composable (Modifier) -> Unit = { modifier ->
+                AccountRootBinding(
+                    modifier,
+                    account,
+                    scope,
+                    browser,
+                    browserState,
+                    session,
+                    layout,
+                    busy,
+                    player,
+                    artworkCache,
+                    fetchArtwork,
+                    uriHandler,
+                    embeddedWebHost,
+                    reauthenticate,
+                    onLogout,
+                    authenticationFailure,
+                )
+            }
+            val accountNavContent: @Composable (Modifier) -> Unit = { mineHostModifier ->
+                // Registered before NavDisplay so child routes/sheets handle Back
+                // first; at the account root it closes the whole account surface.
+                cn.mafei.cmp.common.ui.MaFeiBackHandler(enabled = account.minePresented) { account.minePresented = false }
+                NavDisplay(
+                    backStack = account.mineBackStack,
+                    onBack = { popMineRoute() },
+                    entryProvider = { route ->
+                        when (route) {
+                            BrowseMineRoute -> NavEntry(route) { MineEntryBinding(mineContent) }
+                            BrowseMineHistoryRoute ->
+                                NavEntry(route) { MineHistoryEntryBinding(scope, browser, browserState, layout, player, popMineRoute, artworkCache, fetchArtwork) }
+                            BrowseAccountSwitchRoute -> NavEntry(route) { AccountSwitchEntryBinding(account, session, popMineRoute) }
+                            BrowseAddAccountRoute -> NavEntry(route) { AddAccountEntryBinding(account, popMineRoute) }
+                            is BrowseConnectAccountRoute -> NavEntry(route) { ConnectAccountEntryBinding(route, account, session, busy, popMineRoute) }
+                            BrowseServerDiscoveryRoute -> NavEntry(route) { ServerDiscoveryEntryBinding(account, popMineRoute) }
+                            BrowseSettingsRoute ->
+                                NavEntry(route) {
+                                    SettingsEntryBinding(
+                                        account,
+                                        feiniu,
+                                        session,
+                                        playback,
+                                        popMineRoute,
+                                        runtime.appearance,
+                                        runtime.glassStyle,
+                                        homeCarouselVisible,
+                                        onHomeCarouselVisibleChanged,
+                                        currentPlayerRenderMode,
+                                        currentPlayerRenderModeChanged,
+                                        playerRenderModeSupported,
+                                    )
+                                }
+                            BrowsePlayerSettingsRoute -> NavEntry(route) { PlayerSettingsEntryBinding(playback, popMineRoute, runtime.playerPreferences) }
+                            is BrowseManagementRoute ->
+                                NavEntry(route) { ManagementEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
+                            is BrowseManagementDevicesRoute ->
+                                NavEntry(route) { ManagementDevicesEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
+                            BrowseFeiniuConnectionPreferenceRoute -> NavEntry(route) { FeiniuConnectionPreferenceEntryBinding(feiniu, popMineRoute) }
+                            BrowseAppearanceRoute -> NavEntry(route) { AppearanceEntryBinding(popMineRoute, runtime.appearance) }
+                            BrowseGlassStyleRoute ->
+                                NavEntry(route) {
+                                    GlassStyleEntryBinding(popMineRoute, runtime.glassStyle, currentLiquidGlassIntensity, currentLiquidGlassIntensityChanged)
+                                }
+                            BrowseAddGroupRoute -> NavEntry(route) { AddGroupEntryBinding(popMineRoute) }
+                            BrowseAboutPrivacyRoute -> NavEntry(route) { AboutPrivacyEntryBinding(account, popMineRoute, uriHandler, embeddedWebHost) }
+                            BrowsePrivacyWebRoute -> NavEntry(route) { PrivacyWebEntryBinding(popMineRoute, uriHandler) }
+                            BrowseWebITongRoute ->
+                                NavEntry(route) {
+                                    WebITongEntryBinding(
+                                        account,
+                                        scope,
+                                        session,
+                                        player,
+                                        playback,
+                                        popMineRoute,
+                                        uriHandler,
+                                        embeddedWebMemory,
+                                        onPlayerFullscreenChanged,
+                                        { runtime.sessions.state.value.session === session },
+                                        runtime.sessions.media,
+                                        runtime.deviceControls,
+                                    )
+                                }
+                            BrowseUserAgreementRoute -> NavEntry(route) { UserAgreementEntryBinding(popMineRoute) }
+                            else -> NavEntry(route) {}
+                        }
+                    },
+                    modifier = mineHostModifier,
+                )
+            }
+            accountNavContent
         }
 
         val activeMedia = player.playingMedia?.takeIf { it.id.value == playerShellState.resourceId }

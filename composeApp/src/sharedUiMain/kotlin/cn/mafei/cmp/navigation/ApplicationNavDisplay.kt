@@ -42,6 +42,19 @@ internal fun ApplicationNavDisplay(
         navigation.retainedRoots.forEach { root ->
             key(root) {
                 val rootKey = root.toString()
+                // Root activity updates its owners, not the fixed-input page renderer.
+                // Creating this tracked block inside remember keeps owner/content
+                // wrappers from invalidating every retained stack on a tab switch.
+                val stackContent: @Composable () -> Unit = remember(root, navigation, onBack, entryProvider) {
+                    {
+                        BrowseStackDisplay(
+                            backStack = navigation.backStackFor(root).toList(),
+                            onBack = onBack,
+                            entryProvider = entryProvider,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
                 DisposableEffect(rootKey) {
                     onDispose { rootStateHolder.removeState(rootKey) }
                 }
@@ -54,14 +67,10 @@ internal fun ApplicationNavDisplay(
                                     // Each tab owns its shared-element registry. A hidden copy of
                                     // the same poster can never become another tab's transition target.
                                     BrowseArtworkTransitionHost { artworkTransition ->
-                                      CompositionLocalProvider(LocalBrowseArtworkTransition provides artworkTransition) {
-                                        BrowseStackDisplay(
-                                            backStack = navigation.backStackFor(root).toList(),
-                                            onBack = onBack,
-                                            entryProvider = entryProvider,
-                                            modifier = Modifier.fillMaxSize(),
+                                        CompositionLocalProvider(
+                                            LocalBrowseArtworkTransition provides artworkTransition,
+                                            content = stackContent,
                                         )
-                                      }
                                     }
                                 }
                             }
