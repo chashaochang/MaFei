@@ -182,6 +182,72 @@ class MaFeiGlassConfirmDialogTest {
     }
 
     @Test
+    fun singleAcknowledgementPreservesThePanelAndActionStyling() {
+        val secondaryAction = mutableStateOf<String?>("取消")
+        composeRule.setContent {
+            MaFeiTheme {
+                Box(Modifier.size(390.dp, 640.dp)) {
+                    val backdrop = rememberGlassBackdrop()
+                    Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop).background(Color.DarkGray))
+                    MaFeiGlassConfirmDialog(
+                        title = "登录提示", content = "无法连接服务器，请检查地址后重试",
+                        confirmText = "知道了", dismissText = secondaryAction.value,
+                        onConfirm = { confirmed++ }, onDismiss = { dismissed++ }, backdrop = backdrop,
+                    )
+                }
+            }
+        }
+        val panel = composeRule.onNodeWithTag("mafeiGlassConfirmCard").fetchSemanticsNode().boundsInRoot
+        val cancel = composeRule.onNodeWithText("取消").fetchSemanticsNode().boundsInRoot
+        val confirm = composeRule.onNodeWithText("知道了").fetchSemanticsNode().boundsInRoot
+        assertEquals(cancel.width, confirm.width, .5f)
+
+        composeRule.runOnIdle { secondaryAction.value = null }
+        composeRule.onNodeWithText("取消").assertDoesNotExist()
+        val single = composeRule.onNodeWithText("知道了").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertEquals(panel, composeRule.onNodeWithTag("mafeiGlassConfirmCard").fetchSemanticsNode().boundsInRoot)
+        assertEquals(cancel.left, single.left, .5f)
+        assertEquals(confirm.right, single.right, .5f)
+        assertEquals(confirm.top, single.top, .5f)
+        assertEquals(with(composeRule.density) { 48.dp.toPx() }, single.height, .5f)
+        composeRule.onNodeWithText("知道了").performClick()
+        assertEquals(1, confirmed)
+        assertEquals(0, dismissed)
+
+        composeRule.runOnIdle { secondaryAction.value = "取消" }
+        assertEquals(cancel, composeRule.onNodeWithText("取消").fetchSemanticsNode().boundsInRoot)
+        assertEquals(confirm, composeRule.onNodeWithText("知道了").fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    fun singleAcknowledgementStillDismissesFromScrimAndEscape() {
+        composeRule.setContent {
+            MaFeiTheme {
+                Box(Modifier.size(390.dp, 640.dp)) {
+                    val backdrop = rememberGlassBackdrop()
+                    Box(Modifier.fillMaxSize().captureGlassBackdrop(backdrop).background(Color.DarkGray))
+                    MaFeiGlassConfirmDialog(
+                        title = "登录提示", content = "无法连接服务器，请检查地址后重试",
+                        confirmText = "知道了", dismissText = null,
+                        onConfirm = { confirmed++ }, onDismiss = { dismissed++ }, backdrop = backdrop,
+                    )
+                }
+            }
+        }
+        val scrim = composeRule.onNodeWithTag("mafeiGlassConfirmScrim")
+        val scrimBounds = scrim.fetchSemanticsNode().boundsInRoot
+        val panelBounds = composeRule.onNodeWithTag("mafeiGlassConfirmCard").fetchSemanticsNode().boundsInRoot
+        val safeY = (panelBounds.top - scrimBounds.top) / 2f
+        assertTrue(safeY > 0f)
+        scrim.performTouchInput { click(Offset(scrimBounds.width / 2f, safeY)) }
+        assertEquals(1, dismissed)
+        composeRule.onNodeWithTag("mafeiGlassConfirmCard").performKeyInput { pressKey(Key.Escape) }
+        assertEquals(2, dismissed)
+        assertEquals(0, confirmed)
+    }
+
+    @Test
     fun standardMaterialTracksTheRealBackdropInEveryStyle() {
         val style = mutableStateOf(GlassStyle.Liquid)
         val dark = mutableStateOf(true)

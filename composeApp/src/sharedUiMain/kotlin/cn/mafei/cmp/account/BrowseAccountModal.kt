@@ -5,6 +5,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.common.ui.MaFeiBackHandler
 import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.glass.captureGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
+import cn.mafei.cmp.common.glass.rememberGlassBackdrop
+import cn.mafei.cmp.feature.connect.ConnectErrorDialog
 import cn.mafei.cmp.session.*
 
 @Composable
@@ -18,10 +22,14 @@ internal fun BrowseAccountModal(
     authenticationMessage: String?,
     reauthenticate: () -> Unit,
 ) {
+    val sheetBackdrop = rememberGlassBackdrop()
+    val feedbackBackdrop = rememberCombinedGlassBackdrop(backdrop, sheetBackdrop)
     // 大屏：居中的详情页同规格模态。复用同一个 mineNavContent，
     // 所以来回切形态时里面停在哪一页、翻了几层都保持不变。
     if (account.minePresented && !mineFullScreen) {
-        MineAccountSheet(layout = layout, backdrop = backdrop, onDismiss = { account.minePresented = false }, content = mineNavContent)
+        Box(Modifier.fillMaxSize().captureGlassBackdrop(sheetBackdrop)) {
+            MineAccountSheet(layout = layout, backdrop = backdrop, onDismiss = { account.minePresented = false }, content = mineNavContent)
+        }
     }
     if (
         authenticationMessage != null &&
@@ -40,4 +48,13 @@ internal fun BrowseAccountModal(
             backdrop = backdrop,
         )
     }
+    // Keep login feedback above the account sheet: dismissing the message must
+    // not close the sheet or pop the connection form underneath it.
+    ConnectErrorDialog(
+        error = account.accountConnectError.takeIf {
+            account.minePresented && account.mineBackStack.lastOrNull() is BrowseConnectAccountRoute && !player.playerExpanded
+        },
+        onDismiss = { account.accountConnectError = null },
+        backdrop = if (mineFullScreen) backdrop else feedbackBackdrop,
+    )
 }

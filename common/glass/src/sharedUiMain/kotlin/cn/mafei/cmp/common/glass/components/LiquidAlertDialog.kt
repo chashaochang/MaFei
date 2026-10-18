@@ -48,9 +48,10 @@ import com.kyant.shapes.RoundedRectangle
  *
  * The material is the upstream one, not the app's own: a continuous 48dp
  * rounded rectangle over `colorControls` + `blur` + `lens(depthEffect)`, a plain
- * highlight, and two equal-width capsule actions — the dismiss one a wash of the
- * container, the confirm one filled with [accentColor]. The dim behind the panel
- * belongs to the page, so it stays with the caller.
+ * highlight, and equal-width capsule actions — the optional dismiss one a wash
+ * of the container, the confirm one filled with [accentColor]. A null [dismissText]
+ * omits the secondary action without changing the panel or action styling. The
+ * dim behind the panel belongs to the page, so it stays with the caller.
  *
  * Colors are parameters (like [LiquidButton]): this module owns material, not
  * theme. A separate platform window passes a null backdrop and uses the same
@@ -62,7 +63,7 @@ fun LiquidAlertDialog(
     title: String,
     message: String,
     confirmText: String,
-    dismissText: String,
+    dismissText: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     contentColor: Color,
@@ -119,13 +120,15 @@ fun LiquidAlertDialog(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AlertAction(
-                text = dismissText,
-                background = containerColor.copy(alpha = .2f),
-                textColor = contentColor,
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f),
-            )
+            if (dismissText != null) {
+                AlertAction(
+                    text = dismissText,
+                    background = containerColor.copy(alpha = .2f),
+                    textColor = contentColor,
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             AlertAction(
                 text = confirmText,
                 background = accentColor,

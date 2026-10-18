@@ -59,7 +59,6 @@ internal fun ConnectAccountEntryBinding(
     }
     ConnectScreen(
         busy = account.accountConnectBusy || prefilling,
-        error = account.accountConnectError,
         onSubmit = { provider, address, name, password, rememberPassword ->
             if (!prefilling)
                 account.connect(provider, address, name, password, rememberPassword) {

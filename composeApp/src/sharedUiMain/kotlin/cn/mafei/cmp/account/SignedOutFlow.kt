@@ -31,6 +31,7 @@ import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.AccountHistoryScreen
 import cn.mafei.cmp.feature.connect.ConnectAtmosphere
+import cn.mafei.cmp.feature.connect.ConnectErrorDialog
 import cn.mafei.cmp.feature.connect.ConnectScreen
 import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
 import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
@@ -80,7 +81,6 @@ internal fun SignedOutFlow(
     val connectContent: @Composable () -> Unit = {
         ConnectScreen(
             busy = busy,
-            error = error,
             onOpenHistory = {
                 if (backStack.lastOrNull() != AccountHistoryRoute) {
                     backStack.add(AccountHistoryRoute)
@@ -244,6 +244,11 @@ internal fun SignedOutFlow(
             Box(Modifier.align(Alignment.TopStart).padding(top = currentMaFeiSafeArea().top + 10.dp, start = 12.dp)) {
                 windowDragArea { Row(Modifier.height(44.dp).width(74.dp), verticalAlignment = Alignment.CenterVertically) { windowControls() } }
             }
+            ConnectErrorDialog(
+                error = error,
+                onDismiss = { onErrorChange(null) },
+                backdrop = shellBackdrop,
+            )
         }
     }
 }

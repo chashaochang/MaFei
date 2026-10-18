@@ -87,7 +87,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import cn.mafei.cmp.common.design_system.mafeiLayout
 import cn.mafei.cmp.common.design_system.currentMaFeiSafeArea
-import cn.mafei.cmp.common.ui.InlineProblem
 import cn.mafei.cmp.common.ui.MaFeiActionBar
 import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
@@ -159,7 +158,6 @@ private fun LoginGlassPanel(
 @Composable
 fun ConnectScreen(
     busy: Boolean,
-    error: String?,
     onSubmit: (ProviderKind, String, String, String, Boolean) -> Unit,
     onOpenHistory: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -282,7 +280,6 @@ fun ConnectScreen(
                                 onRememberPasswordChange = { formState.rememberPassword = it },
                                 busy = busy,
                                 canSubmit = canSubmit,
-                                error = error,
                                 onOpenHistory = onOpenHistory.takeIf { showHistory },
                                 onOpenServerDiscovery = onOpenServerDiscovery.takeIf {
                                     provider == ProviderKind.Jellyfin
@@ -400,7 +397,6 @@ private fun CompactLoginForm(
     onRememberPasswordChange: (Boolean) -> Unit,
     busy: Boolean,
     canSubmit: Boolean,
-    error: String?,
     onOpenHistory: (() -> Unit)?,
     onOpenServerDiscovery: (() -> Unit)?,
     serverAddressFocusRequest: Int,
@@ -494,8 +490,6 @@ private fun CompactLoginForm(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-
-        error?.let { InlineProblem(it) }
 
         Spacer(Modifier.height(4.dp))
         LiquidButton(

@@ -33,13 +33,15 @@ import cn.mafei.cmp.common.glass.components.LiquidAlertDialog
 /**
  * Same-layer modal host for the standard Liquid Glass Demo confirmation.
  * The caller records page content into [backdrop], outside this modal subtree.
+ * Pass a null [dismissText] for a notice with a single acknowledgement action;
+ * outside taps and Escape still call [onDismiss].
  */
 @Composable
 fun MaFeiGlassConfirmDialog(
     title: String,
     content: String,
     confirmText: String,
-    dismissText: String,
+    dismissText: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     backdrop: GlassBackdrop,
@@ -98,7 +100,7 @@ internal fun MaFeiConfirmDialogPanel(
     title: String,
     content: String,
     confirmText: String,
-    dismissText: String,
+    dismissText: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     backdrop: GlassBackdrop?,
