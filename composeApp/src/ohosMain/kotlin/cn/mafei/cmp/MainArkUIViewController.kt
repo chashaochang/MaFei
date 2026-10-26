@@ -19,6 +19,7 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.toKString
 import cn.mafei.cmp.session.ApplicationRuntime
+import cn.mafei.cmp.session.OhosContentReportConfiguration
 import cn.mafei.cmp.session.ProcessApplication
 import cn.mafei.cmp.storage.OhosPrivateCredentialStore
 import cn.mafei.cmp.storage.CompatibleOhosCredentialStore
@@ -31,6 +32,9 @@ import cn.mafei.cmp.data.migration.LegacySnapshotPayloadReader
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.MaFeiInsetsDp
 import cn.mafei.cmp.common.design_system.MaFeiWindowFeatures
+import cn.mafei.cmp.player.ui.LocalPlayerContentReportSubmitter
+import cn.mafei.cmp.player.ui.PlayerContentReportResult
+import cn.mafei.cmp.player.ui.PlayerContentReportSubmitter
 import platform.PerformanceAnalysisKit.HiLog.LOG_APP
 import platform.PerformanceAnalysisKit.HiLog.LOG_ERROR
 import platform.PerformanceAnalysisKit.HiLog.OH_LOG_PrintMsg
@@ -251,11 +255,26 @@ fun MainArkUIViewController(
             }
         }
         val windowFeatures by ohosWindowFeatures
+        val contentReportSubmitter: PlayerContentReportSubmitter = { request ->
+            val result = runtime.submitContentReport(
+                reportToken = OhosContentReportConfiguration.token,
+                title = request.title,
+                itemId = request.itemId,
+                description = request.description,
+                playSessionId = request.playSessionId,
+            )
+            PlayerContentReportResult(
+                submitted = result.submitted,
+                message = result.message,
+                alreadyReported = result.alreadyReported,
+            )
+        }
         CompositionLocalProvider(
             LocalNavigationEventDispatcherOwner provides navigationOwner,
             LocalMaFeiWindowFeatures provides windowFeatures,
             LocalEmbeddedWebHost provides OhosEmbeddedWebHost,
             cn.mafei.cmp.player.ui.LocalPlayerVideoBackdropSource provides ohosVideoBackdropSource,
+            LocalPlayerContentReportSubmitter provides contentReportSubmitter,
         ) {
             App(
                 runtime = runtime,

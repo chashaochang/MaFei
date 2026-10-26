@@ -28,6 +28,30 @@ val generateDanmakuConfiguration by tasks.registering {
     }
 }
 
+// Keep the legacy HarmonyOS report credential in ignored OHOS build output.
+val generateOhosContentReportConfiguration by tasks.registering {
+    val configuration = rootProject.layout.projectDirectory.file(
+        "legacy/harmony-arkts-reference/entry/src/main/ets/network/ReportService.ets",
+    )
+    val output = layout.buildDirectory.dir("generated/contentReport/ohosMain")
+    inputs.file(configuration)
+    outputs.dir(output)
+    doLast {
+        val source = configuration.asFile.readText()
+        val token = Regex("""REPORT_TOKEN:\s*string\s*=\s*'([^']+)'""")
+            .find(source)?.groupValues?.get(1)
+            ?.takeUnless(String::isBlank)
+            ?: error("HarmonyOS content-report configuration is missing")
+        val literal = groovy.json.JsonOutput.toJson(token).replace("$", "\\$")
+        val target = output.get().file("cn/mafei/cmp/session/OhosContentReportConfiguration.kt").asFile
+        target.parentFile.mkdirs()
+        target.writeText(
+            "package cn.mafei.cmp.session\n" +
+                "internal object OhosContentReportConfiguration { val token = $literal }\n",
+        )
+    }
+}
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -218,6 +242,7 @@ kotlin {
 
         val ohosMain by creating {
             dependsOn(cpfUiMain)
+            kotlin.srcDir(generateOhosContentReportConfiguration)
             dependencies {
                 api(libs.compose.export)
                 implementation(project(":player:runtime-ohos"))

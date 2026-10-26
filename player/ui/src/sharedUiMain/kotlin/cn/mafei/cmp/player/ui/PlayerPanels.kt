@@ -99,6 +99,7 @@ internal fun PlayerSidePanel(
     anchor: Rect?,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
+    showContentReport: Boolean,
     backdrop: GlassBackdrop,
     safeEnd: androidx.compose.ui.unit.Dp,
     safeStart: androidx.compose.ui.unit.Dp,
@@ -112,6 +113,7 @@ internal fun PlayerSidePanel(
     onSelectQuality: (Int) -> Unit,
     onSelectContentMode: (PlayerContentMode) -> Unit,
     onOpenPlaybackInfo: () -> Unit,
+    onReportContent: () -> Unit,
 ) {
     var entranceVisible by remember(panel) { mutableStateOf(false) }
     LaunchedEffect(panel) {
@@ -169,7 +171,7 @@ internal fun PlayerSidePanel(
         } * scale.coerceAtMost(1.3f)).coerceAtMost(
             (maxWidth - safeStart - safeEnd - 24.dp).coerceAtLeast(1.dp),
         )
-        val optionCount = if (isMorePanel) listOf(showAspectRatio, showPlaybackInfo).count { it }
+        val optionCount = if (isMorePanel) listOf(showAspectRatio, showPlaybackInfo, showContentReport).count { it }
             else options.size
         val desiredHeight = if (isEpisodePanel) {
             40.dp + PlayerEpisodeRowHeight * minOf(episodes.size, 6) + 24.dp
@@ -220,10 +222,12 @@ internal fun PlayerSidePanel(
                     aspectRatioLabel = playerContentModeLabel(state.contentMode),
                     showAspectRatio = showAspectRatio,
                     showPlaybackInfo = showPlaybackInfo,
+                    showContentReport = showContentReport,
                     entranceVisible = entranceVisible,
                     closing = closing,
                     onAspectRatio = { onOpenPanel(PlayerChromePanel.AspectRatio) },
                     onPlaybackInfo = onOpenPlaybackInfo,
+                    onReportContent = onReportContent,
                     largeType = anchoredMenu,
                     rowHeight = rowHeight,
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -315,7 +319,7 @@ internal fun PlayerSidePanel(
 }
 
 /**
- * 旧版「更多」面板（`PlayerChromePanel.More`）：画面比例入口 + 分隔线 + 播放信息入口。
+ * 「更多」面板：只显示当前宿主实际提供的播放器操作。
  * 任一入口在当前平台不存在时只画存在的那个，绝不画一条点了没反应的死行。
  */
 @Composable
@@ -323,28 +327,31 @@ private fun PlayerMorePanel(
     aspectRatioLabel: String,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
+    showContentReport: Boolean,
     entranceVisible: Boolean,
     closing: Boolean,
     onAspectRatio: () -> Unit,
     onPlaybackInfo: () -> Unit,
+    onReportContent: () -> Unit,
     modifier: Modifier = Modifier,
     largeType: Boolean = false,
     rowHeight: androidx.compose.ui.unit.Dp = 44.dp,
 ) {
-    val count = listOf(showAspectRatio, showPlaybackInfo).count { it }
+    val count = listOf(showAspectRatio, showPlaybackInfo, showContentReport).count { it }
+    var index = 0
     Column(modifier) {
         if (showAspectRatio) {
             PlayerPanelOptionRow(
                 option = PlayerPanelOption("aspect", "画面比例 · $aspectRatioLabel"),
                 entranceVisible = entranceVisible && !closing,
-                index = 0,
+                index = index++,
                 count = count,
                 largeType = largeType,
                 rowHeight = rowHeight,
                 onClick = onAspectRatio,
             )
         }
-        if (showAspectRatio && showPlaybackInfo) {
+        if (showAspectRatio && (showPlaybackInfo || showContentReport)) {
             Box(
                 Modifier.fillMaxWidth().height(1.dp).background(PlayerMenuDivider),
             )
@@ -353,11 +360,27 @@ private fun PlayerMorePanel(
             PlayerPanelOptionRow(
                 option = PlayerPanelOption("info", "播放信息"),
                 entranceVisible = entranceVisible && !closing,
-                index = if (showAspectRatio) 1 else 0,
+                index = index++,
                 count = count,
                 largeType = largeType,
                 rowHeight = rowHeight,
                 onClick = onPlaybackInfo,
+            )
+        }
+        if (showPlaybackInfo && showContentReport) {
+            Box(
+                Modifier.fillMaxWidth().height(1.dp).background(PlayerMenuDivider),
+            )
+        }
+        if (showContentReport) {
+            PlayerPanelOptionRow(
+                option = PlayerPanelOption("report", "举报内容"),
+                entranceVisible = entranceVisible && !closing,
+                index = index,
+                count = count,
+                largeType = largeType,
+                rowHeight = rowHeight,
+                onClick = onReportContent,
             )
         }
     }
@@ -461,10 +484,11 @@ internal fun playerPanelContentExitDurationMs(
     qualityOptions: List<PlayerQualityOption>,
     showAspectRatio: Boolean,
     showPlaybackInfo: Boolean,
+    showContentReport: Boolean = false,
 ): Long {
     if (panel == PlayerChromePanel.Episodes) return PlayerMenuCloseDurationMs.toLong()
     val count = when (panel) {
-        PlayerChromePanel.More -> listOf(showAspectRatio, showPlaybackInfo).count { it }
+        PlayerChromePanel.More -> listOf(showAspectRatio, showPlaybackInfo, showContentReport).count { it }
         PlayerChromePanel.AspectRatio -> playerContentModeChoices.size
         PlayerChromePanel.Speed -> 6
         PlayerChromePanel.Audio -> tracks.count { it.kind == TrackKind.Audio }

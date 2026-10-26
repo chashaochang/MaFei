@@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -18,8 +19,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +32,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +56,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.type
@@ -75,6 +83,9 @@ import cn.mafei.cmp.common.ui.MaFeiGlyph
 import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
+import cn.mafei.cmp.common.ui.MaFeiErrorDialog
+import cn.mafei.cmp.common.ui.MaFeiGlassConfirmDialog
+import cn.mafei.cmp.common.ui.LegacyTransientToast
 import cn.mafei.cmp.player.api.PlayerCapabilities
 import cn.mafei.cmp.player.api.PlayerContentMode
 import cn.mafei.cmp.player.api.PlayerDeviceControls
@@ -162,6 +173,7 @@ fun NowPlayingScreen(
     /** Host chrome is composed only in normal windowed playback. */
     hostWindowControls: @Composable RowScope.() -> Unit = {},
     hostWindowDragArea: @Composable (@Composable () -> Unit) -> Unit = { it() },
+    onSubmitContentReport: PlayerContentReportSubmitter? = null,
 ) {
     val nativeBackdrop = LocalPlayerVideoBackdropSource.current
     val currentVideoMode by rememberUpdatedState(state.contentMode)
@@ -207,6 +219,7 @@ fun NowPlayingScreen(
     val availableQualities = if (state.casting) emptyList() else qualityOptions
     val presentation = state.toNowPlayingPresentation(if (media.live) capabilities.copy(seek = false) else capabilities)
     val safeArea = currentMaFeiSafeArea()
+    val reportSubmitter = onSubmitContentReport ?: LocalPlayerContentReportSubmitter.current
     val hostFeatures = LocalMaFeiWindowFeatures.current
     val windowedController = hostFeatures.windowedHost
     val latestTogglePlay by rememberUpdatedState(onTogglePlay)
@@ -249,6 +262,11 @@ fun NowPlayingScreen(
     // 播放信息卡片是独立于侧栏面板的一层（旧版 isShowPlayBackInfo）：它盖住画面、
     // 清掉控件，并且参与返回层级。
     var playbackInfoVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    var reportComposerVisible by remember(media.id, state.generation) { mutableStateOf(false) }
+    var reportDescription by remember(media.id, state.generation) { mutableStateOf("") }
+    var reportSubmitting by remember(media.id, state.generation) { mutableStateOf(false) }
+    var reportFailure by remember(media.id, state.generation) { mutableStateOf<String?>(null) }
+    var reportNotice by remember(media.id, state.generation) { mutableStateOf<String?>(null) }
     // 旧版 30 秒刷新的状态区时钟（只在全屏行里渲染）。
     var clockText by remember { mutableStateOf("") }
 
@@ -337,6 +355,7 @@ fun NowPlayingScreen(
             qualityOptions = qualityOptions,
             showAspectRatio = capabilities.contentMode,
             showPlaybackInfo = playbackFacts != null,
+            showContentReport = reportSubmitter != null,
         )
         animationScope.launch {
             delay(contentExitMs)
@@ -352,6 +371,40 @@ fun NowPlayingScreen(
                 controlsVisible = false
             } else {
                 showControlsTemporarily()
+            }
+        }
+    }
+
+    fun submitContentReport() {
+        val submit = reportSubmitter ?: return
+        val description = reportDescription.trim().take(100)
+        if (description.isBlank() || reportSubmitting) return
+        reportSubmitting = true
+        reportFailure = null
+        animationScope.launch {
+            try {
+                val result = submit(
+                    PlayerContentReportRequest(
+                        title = media.title,
+                        itemId = media.id,
+                        description = description,
+                    ),
+                )
+                when {
+                    result == null -> reportFailure = "举报提交失败，请稍后重试"
+                    result.submitted || result.alreadyReported -> {
+                        reportComposerVisible = false
+                        reportDescription = ""
+                        reportNotice = result.message
+                    }
+                    else -> reportFailure = result.message
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                reportFailure = "举报提交失败，请检查网络后重试"
+            } finally {
+                reportSubmitting = false
             }
         }
     }
@@ -382,13 +435,17 @@ fun NowPlayingScreen(
     val durationMs = state.durationMs?.takeIf { it > 0L }
     val requestFullscreen = onFullscreenRequest
     val handleBack: () -> Unit = {
-        when (playerBackStep(panel != PlayerChromePanel.None, playbackInfoVisible,
-            fullscreen, requestFullscreen != null, windowedController && windowFullscreen)) {
-            PlayerBackStep.ClosePanel -> closePanel()
-            PlayerBackStep.ClosePlaybackInfo -> { playbackInfoVisible = false; showControlsTemporarily() }
-            PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
-            PlayerBackStep.ExitWindowFullscreen -> windowFullscreen = false
-            PlayerBackStep.LeavePlayer -> onBack()
+        if (reportComposerVisible) {
+            if (!reportSubmitting) reportComposerVisible = false
+        } else {
+            when (playerBackStep(panel != PlayerChromePanel.None, playbackInfoVisible,
+                fullscreen, requestFullscreen != null, windowedController && windowFullscreen)) {
+                PlayerBackStep.ClosePanel -> closePanel()
+                PlayerBackStep.ClosePlaybackInfo -> { playbackInfoVisible = false; showControlsTemporarily() }
+                PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
+                PlayerBackStep.ExitWindowFullscreen -> windowFullscreen = false
+                PlayerBackStep.LeavePlayer -> onBack()
+            }
         }
     }
     fun fillWindow() {
@@ -683,9 +740,8 @@ fun NowPlayingScreen(
                 safeEnd = safeArea.end,
                 backdrop = backdrop,
                 clockText = clockText,
-                // Legacy 「更多」 holds exactly 画面比例 and 播放信息; it appears
-                // only when at least one of the two exists on this platform.
-                showMenu = localCapabilities.contentMode || playbackFacts != null,
+                // Show 「更多」 only when this host supplies at least one action.
+                showMenu = localCapabilities.contentMode || playbackFacts != null || reportSubmitter != null,
                 onBack = handleBack,
                 onMenu = { openPanel(PlayerChromePanel.More) },
                 onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
@@ -882,6 +938,7 @@ fun NowPlayingScreen(
                         ?: panelAnchor)?.translate(-sceneOrigin),
                     showAspectRatio = localCapabilities.contentMode,
                     showPlaybackInfo = playbackFacts != null,
+                    showContentReport = reportSubmitter != null,
                     backdrop = backdrop,
                     safeEnd = safeArea.end,
                     safeStart = safeArea.start,
@@ -910,6 +967,13 @@ fun NowPlayingScreen(
                         closePanel()
                     },
                     onOpenPlaybackInfo = { closePanel(openPlaybackInfo = true) },
+                    onReportContent = {
+                        reportFailure = null
+                        reportNotice = null
+                        reportDescription = ""
+                        reportComposerVisible = true
+                        closePanel()
+                    },
                 )
             }
         }
@@ -951,15 +1015,83 @@ fun NowPlayingScreen(
                 startInset = safeArea.start,
                 windowControls = hostWindowControls, dragArea = hostWindowDragArea,
                 onBack = {
-                    if (panel != PlayerChromePanel.None) closePanel()
+                    if (reportComposerVisible) {
+                        if (!reportSubmitting) reportComposerVisible = false
+                    } else if (panel != PlayerChromePanel.None) closePanel()
                     else if (playbackInfoVisible) playbackInfoVisible = false
                     else onBack()
                 },
                 onMenu = { openPanel(PlayerChromePanel.More) },
                 onMenuBounds = { panelAnchors[PlayerChromePanel.More] = it },
-                showMenu = localCapabilities.contentMode || playbackFacts != null,
+                showMenu = localCapabilities.contentMode || playbackFacts != null || reportSubmitter != null,
                 onPictureInPicture = onPictureInPicture, onCasting = onCasting,
             )
         }
+        if (reportComposerVisible && reportSubmitter != null) {
+            MaFeiGlassConfirmDialog(
+                title = "举报内容",
+                content = "请描述「${media.title}」存在的问题，便于我们核实处理。",
+                confirmText = if (reportSubmitting) "提交中" else "提交",
+                dismissText = "取消",
+                confirmEnabled = reportDescription.isNotBlank() && !reportSubmitting,
+                dismissEnabled = !reportSubmitting,
+                onConfirm = ::submitContentReport,
+                onDismiss = { if (!reportSubmitting) reportComposerVisible = false },
+                backdrop = backdrop,
+                bodyContent = {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        BasicTextField(
+                            value = reportDescription,
+                            onValueChange = { reportDescription = it.take(100) },
+                            modifier = Modifier.fillMaxWidth()
+                                .border(1.dp, Color.White.copy(alpha = .18f), RoundedCornerShape(16.dp))
+                                .background(Color.White.copy(alpha = .07f), RoundedCornerShape(16.dp))
+                                .padding(14.dp)
+                                .height(96.dp)
+                                .testTag("contentReportDescription"),
+                            textStyle = TextStyle(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 15.sp,
+                                lineHeight = 21.sp,
+                            ),
+                            decorationBox = { innerTextField ->
+                                Box {
+                                    if (reportDescription.isBlank()) {
+                                        Text(
+                                            "请填写举报说明",
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = .45f),
+                                            fontSize = 15.sp,
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            },
+                        )
+                        Text(
+                            "${reportDescription.length}/100",
+                            Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.End,
+                        )
+                    }
+                },
+            )
+        }
+        MaFeiErrorDialog(
+            message = reportFailure,
+            backdrop = backdrop,
+            busy = reportSubmitting,
+            onRetry = ::submitContentReport,
+            onDismiss = { reportFailure = null },
+            title = "举报未提交",
+        )
+        LegacyTransientToast(
+            message = reportNotice,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,9 @@ fun MaFeiGlassConfirmDialog(
     backdrop: GlassBackdrop,
     modifier: Modifier = Modifier,
     destructive: Boolean = false,
+    confirmEnabled: Boolean = true,
+    dismissEnabled: Boolean = true,
+    bodyContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     if (!LocalMaFeiPageActive.current) return
     val scheme = MaterialTheme.colorScheme
@@ -85,6 +89,9 @@ fun MaFeiGlassConfirmDialog(
             onDismiss = onDismiss,
             destructive = destructive,
             backdrop = backdrop,
+            confirmEnabled = confirmEnabled,
+            dismissEnabled = dismissEnabled,
+            bodyContent = bodyContent,
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(horizontal = 24.dp)
@@ -107,6 +114,9 @@ internal fun MaFeiConfirmDialogPanel(
     backdrop: GlassBackdrop?,
     modifier: Modifier = Modifier,
     destructive: Boolean = false,
+    confirmEnabled: Boolean = true,
+    dismissEnabled: Boolean = true,
+    bodyContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val isLightTheme = scheme.background.luminance() > .5f
@@ -125,6 +135,9 @@ internal fun MaFeiConfirmDialogPanel(
             else Color(0xFF121212).copy(alpha = .4f),
         isLightTheme = isLightTheme,
         modifier = modifier,
+        confirmEnabled = confirmEnabled,
+        dismissEnabled = dismissEnabled,
+        contentSlot = bodyContent,
     )
 }
 

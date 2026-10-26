@@ -35,9 +35,13 @@ class PlayerMenuLayoutTest {
         tracks: List<PlayerTrack> = emptyList(),
         videoColor: Color = Color(0xFF35556B),
         style: GlassStyle = GlassStyle.Liquid,
+        reportSubmitter: PlayerContentReportSubmitter? = null,
     ) {
         rule.setContent { MaFeiTheme {
-            CompositionLocalProvider(LocalMaFeiWindowFeatures provides features) {
+            CompositionLocalProvider(
+                LocalMaFeiWindowFeatures provides features,
+                LocalPlayerContentReportSubmitter provides reportSubmitter,
+            ) {
                 GlassStyleScope(style) {
                 Box(Modifier.requiredSize(width.dp, height.dp).testTag("playerTestViewport")) {
                     NowPlayingScreen(NowPlayingMedia("v", "影片", ""), playerState?.value ?: PlayerState(phase = PlayerPhase.Paused),
@@ -63,6 +67,70 @@ class PlayerMenuLayoutTest {
         assertTrue(panel.height < 200f, "A two-action menu should fit its content")
         assertEquals(button.bottom + 8f, panel.top, 1f)
         rule.onNodeWithText("画面比例 · 适应").assertExists()
+    }
+
+    @Test fun reportActionIsHiddenWhenTheHostDoesNotProvideReporting() {
+        show(900, 600, true)
+        rule.onNodeWithContentDescription("更多设置").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithText("举报内容").assertDoesNotExist()
+    }
+
+    @Test fun reportActionAppearsWhenTheHostProvidesReporting() {
+        show(
+            900,
+            600,
+            true,
+            reportSubmitter = { PlayerContentReportResult(submitted = true, message = "已提交") },
+        )
+        rule.onNodeWithContentDescription("更多设置").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithText("举报内容").assertIsDisplayed()
+    }
+
+    @Test fun reportComposerRequiresADescriptionAndSubmitsTheCurrentItem() {
+        val requests = mutableListOf<PlayerContentReportRequest>()
+        show(900, 600, true, reportSubmitter = { request ->
+            requests += request
+            PlayerContentReportResult(submitted = true, message = "举报已提交")
+        })
+        openReportComposer()
+        rule.onNodeWithText("提交").assertIsNotEnabled()
+        rule.onNodeWithTag("contentReportDescription").performTextInput("Wrong episode")
+        rule.onNodeWithText("提交").assertIsEnabled().performClick()
+        rule.waitForIdle()
+
+        rule.runOnIdle {
+            assertEquals(listOf(PlayerContentReportRequest("影片", "v", "Wrong episode")), requests)
+        }
+        rule.onNodeWithTag("contentReportDescription").assertDoesNotExist()
+    }
+
+    @Test fun reportFailurePreservesTheDescriptionForRetry() {
+        var attempts = 0
+        show(900, 600, true, reportSubmitter = {
+            attempts++
+            PlayerContentReportResult(submitted = attempts > 1, message = if (attempts == 1) "网络不可用" else "举报已提交")
+        })
+        openReportComposer()
+        rule.onNodeWithTag("contentReportDescription").performTextInput("Wrong episode")
+        rule.onNodeWithText("提交").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("举报未提交").assertIsDisplayed()
+        rule.onNodeWithTag("contentReportDescription").assertTextContains("Wrong episode")
+        rule.onNodeWithText("重试").performClick()
+        rule.waitForIdle()
+
+        rule.runOnIdle { assertEquals(2, attempts) }
+        rule.onNodeWithTag("contentReportDescription").assertDoesNotExist()
+        rule.onNodeWithText("举报未提交").assertDoesNotExist()
+    }
+
+    private fun openReportComposer() {
+        rule.onNodeWithContentDescription("更多设置").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithText("举报内容").performClick()
+        rule.mainClock.advanceTimeBy(1000)
     }
 
     @Test fun tabletSpeedMenuOpensAboveTheBottomSpeedControlWithReadableType() {

@@ -475,6 +475,32 @@ class ApplicationRuntime(
      */
     fun playback(session: ApplicationSession): SessionPlaybackRuntime? = playbackRegistry.getOrCreate(session)
 
+    /** Content-report submission is exposed only through the HarmonyOS host. */
+    internal suspend fun submitContentReport(
+        reportToken: String,
+        title: String,
+        itemId: String,
+        description: String,
+        playSessionId: String? = null,
+    ): ContentReportResult {
+        val session = sessions.state.value.session
+            ?: return ContentReportResult(false, "账号会话已失效，请重新登录")
+        if (title.isBlank() || itemId.isBlank() || description.isBlank()) {
+            return ContentReportResult(false, "请填写举报说明后再提交")
+        }
+        return ContentReportService(transport, reportToken).submit(
+            ContentReportRequest(
+                title = title.take(512),
+                itemId = itemId.take(256),
+                serverUrl = session.connection.server.baseUrl.take(2_048),
+                description = description.trim().take(100),
+                playSessionId = playSessionId?.take(256),
+                reporterId = session.connection.remoteUserId.take(256),
+                reporterName = session.connection.account.displayName.take(256),
+            ),
+        )
+    }
+
     /** Host visibility only; account state and music queues remain owned by their services. */
     fun setHostForeground(foreground: Boolean) = playbackRegistry.setHostForeground(foreground)
 

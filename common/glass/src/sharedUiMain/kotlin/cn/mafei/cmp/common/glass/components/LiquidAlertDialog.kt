@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,6 +73,9 @@ fun LiquidAlertDialog(
     isLightTheme: Boolean,
     modifier: Modifier = Modifier,
     confirmContentColor: Color = Color.White,
+    confirmEnabled: Boolean = true,
+    dismissEnabled: Boolean = true,
+    contentSlot: @Composable ColumnScope.() -> Unit = {},
 ) {
     val glassIntensity = LocalGlassIntensity.current
     val style = currentGlassStyle()
@@ -113,6 +117,7 @@ fun LiquidAlertDialog(
             style = TextStyle(contentColor.copy(alpha = .68f), 15.sp),
             maxLines = 5,
         )
+        contentSlot()
         Row(
             Modifier
                 .padding(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 24.dp)
@@ -125,6 +130,7 @@ fun LiquidAlertDialog(
                     text = dismissText,
                     background = containerColor.copy(alpha = .2f),
                     textColor = contentColor,
+                    enabled = dismissEnabled,
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
@@ -133,6 +139,7 @@ fun LiquidAlertDialog(
                 text = confirmText,
                 background = accentColor,
                 textColor = confirmContentColor,
+                enabled = confirmEnabled,
                 onClick = onConfirm,
                 modifier = Modifier.weight(1f),
             )
@@ -151,6 +158,7 @@ private fun AlertAction(
     text: String,
     background: Color,
     textColor: Color,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -160,9 +168,11 @@ private fun AlertAction(
     val hovered by interactionSource.collectIsHoveredAsState()
     Row(
         modifier
+            .graphicsLayer { alpha = if (enabled) 1f else .5f }
             .clip(Capsule())
             .background(background)
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 role = Role.Button,
