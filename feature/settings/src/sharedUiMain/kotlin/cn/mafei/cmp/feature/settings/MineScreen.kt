@@ -154,9 +154,8 @@ fun MineScreen(
                         { onManagement() },
                     )
 
-                    when {
-                        historyLoading && historyItems.isEmpty() -> MineHistoryLoadingSection(columns)
-                        visibleHistory.isNotEmpty() -> MineHistorySection(
+                    if (visibleHistory.isNotEmpty()) {
+                        MineHistorySection(
                             items = visibleHistory,
                             columns = columns,
                             onItem = onHistoryItem,
@@ -445,41 +444,6 @@ private fun MineHistoryPoster(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-@Composable
-private fun MineHistoryLoadingSection(columns: Int) {
-    val popupColors = LocalMaFeiPopupColors.current
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(popupColors?.item ?: MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            "最近在看",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            repeat(2) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    repeat(columns) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(
-                                Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            )
-                            Box(
-                                Modifier.fillMaxWidth(.72f).height(13.dp).clip(RoundedCornerShape(7.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
