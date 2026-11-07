@@ -87,8 +87,6 @@ fun MaFeiLoadingIndicator(
                 size = androidx.compose.ui.geometry.Size(size.width - inset * 2f, size.height - inset * 2f),
                 style = Stroke(stroke, cap = StrokeCap.Round),
             )
-            val dot = size.minDimension * .055f
-            drawCircle(tint.copy(alpha = .62f), dot, center.copy(y = center.y - size.minDimension * .28f))
         }
     }
 }

@@ -48,6 +48,7 @@ fun MediaCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     poster: (@Composable (Modifier) -> Unit)? = null,
+    posterModifier: Modifier = Modifier,
     progress: Float? = null,
     onPlay: (() -> Unit)? = null,
     onToggleWatched: (() -> Unit)? = null,
@@ -65,7 +66,7 @@ fun MediaCard(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+            Modifier.fillMaxWidth().aspectRatio(2f / 3f).then(posterModifier)
                 .mafeiArtworkFeedback(interaction, RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {

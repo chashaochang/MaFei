@@ -47,11 +47,8 @@ internal val MaFeiActionBarVerticalInsetDp = 10.dp
 internal val MaFeiNavigationControlSizeDp = 44.dp
 internal val MaFeiNavigationControlIconSizeDp = 20.dp
 
-/**
- * 一级页面标题栏的高度（不含状态栏）。取值与旧版 `UIConstants.ACTION_BAR_HEIGHT = 56` 一致 ——
- * 旧版的 ActionBar 就是 56dp，页面用 `Blank(safeTop + ACTION_BAR_HEIGHT)` 给它让位。
- */
-val MaFeiPageTitleBarHeight = 56.dp
+/** Page content reserves the same height as the rendered single-row ActionBar. */
+val MaFeiPageTitleBarHeight = MaFeiActionBarHeightDp
 
 /**
  * Height reserved by a page below the shell's collapsed primary top bar.

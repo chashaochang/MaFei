@@ -14,15 +14,15 @@ class HomeHeroContentTest {
 
     @Test
     fun pinnedTabsReserveOnlyVisibleActions() {
-        assertEquals(48.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = true, showRefresh = false))
-        assertEquals(96.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = true, showRefresh = true))
+        assertEquals(48.dp, homeFloatingTabsEndInset(overlapsActions = true, hasSearch = true, showRefresh = false))
+        assertEquals(96.dp, homeFloatingTabsEndInset(overlapsActions = true, hasSearch = true, showRefresh = true))
     }
 
     @Test
     fun inlineTabsKeepFullWidthAndAbsentSearchReservesNothing() {
         for (refreshing in listOf(false, true)) {
-            assertEquals(0.dp, homeFloatingTabsEndInset(pinned = false, hasSearch = true, showRefresh = refreshing))
-            assertEquals(0.dp, homeFloatingTabsEndInset(pinned = true, hasSearch = false, showRefresh = refreshing))
+            assertEquals(0.dp, homeFloatingTabsEndInset(overlapsActions = false, hasSearch = true, showRefresh = refreshing))
+            assertEquals(0.dp, homeFloatingTabsEndInset(overlapsActions = true, hasSearch = false, showRefresh = refreshing))
         }
     }
 

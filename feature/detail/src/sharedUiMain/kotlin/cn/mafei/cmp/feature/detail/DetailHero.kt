@@ -123,7 +123,7 @@ internal fun DetailHero(
 
     val heroBounds = Modifier.fillMaxWidth().height(height)
     Box(
-        (sharedArtworkModifier?.invoke(item, heroBounds) ?: heroBounds)
+        heroBounds
             .padding(top = if (roundedHero) 12.dp else 0.dp)
             .clip(if (roundedHero) RoundedCornerShape(26.dp) else RoundedCornerShape(0.dp)),
     ) {
@@ -135,10 +135,11 @@ internal fun DetailHero(
         } else {
             Modifier.fillMaxSize().featherBottom(.64f)
         }
+        val sharedImageModifier = sharedArtworkModifier?.invoke(item, artworkModifier) ?: artworkModifier
         if (artwork != null) {
-            artwork(item, artworkModifier)
+            artwork(item, sharedImageModifier)
         } else {
-            TextPoster(item.title, artworkModifier)
+            TextPoster(item.title, sharedImageModifier)
         }
         Box(
             Modifier.fillMaxSize().background(

@@ -160,6 +160,7 @@ fun DetailScreen(
                     leadingBleed = atmosphereLeadingBleed,
                     trailingBleed = atmosphereTrailingBleed,
                     unblurred = largeDetailLayout,
+                    sharedArtworkModifier = sharedArtworkModifier.takeIf { largeDetailLayout },
                 )
             }
             AnimatedContent(

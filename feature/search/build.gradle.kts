@@ -13,4 +13,6 @@ dependencies {
     add("commonMainApi", project(":common:ui"))
     add("commonMainApi", project(":common:media"))
     add("commonMainImplementation", project(":data:repositories"))
+    add("desktopTestImplementation", libs.compose.upstream.ui.test)
+    add("desktopTestImplementation", libs.compose.desktop)
 }

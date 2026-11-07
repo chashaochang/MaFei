@@ -406,6 +406,7 @@ fun HomeScreen(
     val heroExtraHeight = with(density) { heroStretchPx.floatValue.toDp() }
     val heroRefreshProgress = (heroStretchPx.floatValue / heroRefreshThresholdPx).coerceIn(0f, 1f)
     val floatingTabsInsetPx = with(density) { HomeFloatingTabsInlineInset.roundToPx() }
+    val floatingActionHeightPx = with(density) { HomeFloatingActionSize.roundToPx() }
     val floatingTabsStickyTopPx = with(density) {
         when (layout.navigation) {
             NavigationPlacement.Drawer -> 88.dp
@@ -425,13 +426,15 @@ fun HomeScreen(
         floatingTabsStickyTopPx,
     ) {
         derivedStateOf {
-            val anchor = gridState.layoutInfo.visibleItemsInfo
+            val info = gridState.layoutInfo
+            val anchor = info.visibleItemsInfo
                 .firstOrNull { it.key == LatestFeedAnchorKey }
             resolveHomeFloatingTabsPlacement(
                 anchorOffsetY = anchor?.offset?.y,
                 anchorIndex = anchor?.index,
                 inlineInsetPx = floatingTabsInsetPx,
                 stickyTopPx = floatingTabsStickyTopPx,
+                beforeContentPaddingPx = info.beforeContentPadding,
             )
         }
     }
@@ -440,6 +443,11 @@ fun HomeScreen(
     }
     val floatingTabsPinned by remember(floatingTabsPlacement) {
         derivedStateOf { floatingTabsPlacement.value.pinned }
+    }
+    val floatingTabsOverlapTopActions by remember(floatingTabsPlacement, floatingTabsStickyTopPx, floatingActionHeightPx) {
+        derivedStateOf {
+            floatingTabsPlacement.value.topPx < floatingTabsStickyTopPx + floatingActionHeightPx
+        }
     }
     val gridScrolling by remember(gridState) { derivedStateOf { gridState.isScrollInProgress } }
     val heroAutoplayMinimumVisiblePx = with(density) { HomeHeroForegroundHiddenTail.roundToPx() }
@@ -822,7 +830,8 @@ fun HomeScreen(
                                         onToggleFavorite = onToggleFavorite?.let { toggle -> { toggle(item) } },
                                         isWatched = item.userData.isPlayed,
                                         isFavorite = item.userData.isFavorite,
-                                        modifier = transitionArtwork(item, artworkSource, Modifier.width(140.dp)),
+                                        modifier = Modifier.width(140.dp),
+                                        posterModifier = transitionArtwork(item, artworkSource, Modifier),
                                     )
                                 }
                             }
@@ -869,7 +878,7 @@ fun HomeScreen(
                                 painter(item, posterModifier)
                             }
                         },
-                        modifier = transitionArtwork(item, artworkSource, Modifier),
+                        posterModifier = transitionArtwork(item, artworkSource, Modifier),
                         progress = progress(item),
                         onPlay = onPlay?.let { play -> { play(item) } },
                         onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
@@ -928,7 +937,7 @@ fun HomeScreen(
                             painter(item, posterModifier)
                         }
                     },
-                    modifier = transitionArtwork(item, artworkSource, Modifier),
+                    posterModifier = transitionArtwork(item, artworkSource, Modifier),
                     progress = progress(item),
                     onPlay = onPlay?.let { play -> { play(item) } },
                     onToggleWatched = onToggleWatched?.let { toggle -> { toggle(item) } },
@@ -980,8 +989,9 @@ fun HomeScreen(
                           if (layout.navigation == NavigationPlacement.Bottom) safeArea.start else 0.dp,
                       end = layout.pagePaddingDp.dp + safeArea.end +
                           homeFloatingTabsEndInset(
-                              pinned = floatingTabsPinned,
-                              hasSearch = onSearch != null,
+                              overlapsActions = floatingTabsOverlapTopActions,
+                              hasSearch = onSearch != null &&
+                                  (layout.navigation == NavigationPlacement.Bottom || floatingTabsPinned),
                               showRefresh = showRefreshAction,
                           ),
                   ),
@@ -1013,13 +1023,11 @@ fun HomeScreen(
                       feedSelectionJob.value?.cancel()
                       feedSelectionJob.value = heroRefreshScope.launch {
                           if (!currentPageActive.value) return@launch
+                          val pinnedScrollOffset = gridState.layoutInfo.beforeContentPadding +
+                              floatingTabsInsetPx - floatingTabsStickyTopPx
                           gridState.animateScrollToItem(
                               index = anchorIndex,
-                              // Leave the same 8dp breathing room below the
-                              // floating strip that it has in the inline state.
-                              // Pinning the spacer at offset 0 put the first row
-                              // slightly underneath the glass tabs on phone.
-                              scrollOffset = -floatingTabsInsetPx,
+                              scrollOffset = pinnedScrollOffset,
                           )
                           if (!currentPageActive.value) return@launch
                           selectFeed()
@@ -1029,7 +1037,7 @@ fun HomeScreen(
                           // item and moves the page down after the animation.
                           gridState.requestScrollToItem(
                               index = anchorIndex,
-                              scrollOffset = -floatingTabsInsetPx,
+                              scrollOffset = pinnedScrollOffset,
                           )
                       }
                   },

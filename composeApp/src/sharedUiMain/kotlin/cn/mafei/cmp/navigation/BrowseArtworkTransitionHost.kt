@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import cn.mafei.cmp.common.ui.LocalMediaArtworkTransition
 import cn.mafei.cmp.common.ui.LocalMaFeiPageActive
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.session.*
@@ -35,6 +36,6 @@ internal fun BrowseArtworkTransitionHost(content: @Composable (@Composable (Medi
                     }
                 }
             }
-        content(sharedArtworkModifier)
+        CompositionLocalProvider(LocalMediaArtworkTransition provides sharedArtworkModifier) { content(sharedArtworkModifier) }
     }
 }

@@ -66,6 +66,7 @@ fun LegacyVideoCard(
     onToggleWatched: (() -> Unit)? = null,
     onToggleFavorite: (() -> Unit)? = null,
     posterAspectRatio: Float = 2f / 3f,
+    posterModifier: Modifier? = null,
 ) {
     val interaction = rememberMediaCardInteraction()
     Column(
@@ -81,6 +82,7 @@ fun LegacyVideoCard(
         val posterShape = RoundedCornerShape(6.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(posterAspectRatio)
+                .then(posterModifier ?: Modifier.mediaArtworkTransition(item))
                 .mafeiArtworkFeedback(interaction, posterShape)
                 .background(Color(0xFFCBD2D3))
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, posterShape),
@@ -175,6 +177,7 @@ fun LegacyBaseItemCard(
         val posterShape = RoundedCornerShape(10.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+                .mediaArtworkTransition(item)
                 .mafeiArtworkFeedback(interaction, posterShape)
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, posterShape)
                 .background(Color(0xFFCBD2D3)),

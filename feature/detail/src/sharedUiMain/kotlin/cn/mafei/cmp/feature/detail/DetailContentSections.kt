@@ -286,7 +286,8 @@ private fun RowScope.SeasonCard(
         }.joinToString(" · "),
         textAlign = TextAlign.Center,
         onClick = onClick,
-        modifier = sharedArtworkModifier?.invoke(season, modifier) ?: modifier,
+        modifier = modifier,
+        posterModifier = sharedArtworkModifier?.invoke(season, Modifier),
         poster = artwork?.let { draw ->
             { cardModifier -> draw(season, cardModifier) }
         },

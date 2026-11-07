@@ -106,7 +106,7 @@ fun SearchScreen(
     val backdrop = rememberGlassBackdrop()
     val actionBarBackdrop = rememberGlassBackdrop()
 
-    val pageHorizontalPadding = if (layout.gridWidthDp < 600f) 16.dp else 24.dp
+    val pageHorizontalPadding = layout.pagePaddingDp.dp
     val columns = legacyMediaColumns(layout.gridWidthDp)
     val phoneNavigation = layout.isPhoneNavigation
     val titleBarHeight = mafeiPageTitleBarContentHeight()

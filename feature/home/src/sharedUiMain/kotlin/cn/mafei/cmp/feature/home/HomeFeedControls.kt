@@ -28,18 +28,18 @@ internal val HomeFloatingTabsInlineInset = 8.dp
 
 internal val HomeFloatingTabsSlotHeight = 56.dp
 
-private val HomeFloatingActionSize = 40.dp
+internal val HomeFloatingActionSize = 40.dp
 
 internal val HomeFloatingActionGap = 8.dp
 
 private const val HomeFeedCardChromeHeightDp = 44f
 
 internal fun homeFloatingTabsEndInset(
-    pinned: Boolean,
+    overlapsActions: Boolean,
     hasSearch: Boolean,
     showRefresh: Boolean,
 ): Dp = when {
-    !pinned || !hasSearch -> 0.dp
+    !overlapsActions || !hasSearch -> 0.dp
     showRefresh -> 96.dp
     else -> 48.dp
 }
@@ -56,6 +56,7 @@ internal fun resolveHomeFloatingTabsPlacement(
     anchorIndex: Int?,
     inlineInsetPx: Int,
     stickyTopPx: Int,
+    beforeContentPaddingPx: Int = 0,
 ): HomeFloatingTabsPlacement {
     if (anchorOffsetY == null || anchorIndex == null) {
         return HomeFloatingTabsPlacement(
@@ -65,7 +66,9 @@ internal fun resolveHomeFloatingTabsPlacement(
             anchorIndex = null,
         )
     }
-    val naturalTop = anchorOffsetY + inlineInsetPx
+    // LazyGrid item offsets exclude its content padding; sibling overlays use
+    // viewport coordinates, including the safe-area padding when no hero exists.
+    val naturalTop = anchorOffsetY + beforeContentPaddingPx + inlineInsetPx
     val pinned = naturalTop <= stickyTopPx
     return HomeFloatingTabsPlacement(
         visible = true,

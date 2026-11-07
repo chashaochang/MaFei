@@ -186,6 +186,7 @@ fun SeasonDetailScreen(
                     leadingBleed = atmosphereLeadingBleed,
                     trailingBleed = atmosphereTrailingBleed,
                     unblurred = largeDetailLayout,
+                    sharedArtworkModifier = sharedArtworkModifier.takeIf { largeDetailLayout },
                 )
             }
             CompositionLocalProvider(LocalContentColor provides Color.White) {
@@ -330,7 +331,7 @@ private fun SeasonProjectHeader(
     val horizontalPadding = detailPageHorizontalPadding()
     val headerBounds = modifier.fillMaxWidth()
     Box(
-        (sharedArtworkModifier?.invoke(season, headerBounds) ?: headerBounds)
+        headerBounds
             .fillMaxWidth()
             .padding(
                 start = horizontalPadding,
@@ -380,12 +381,14 @@ private fun SeasonHero(
     val horizontalPadding = detailPageHorizontalPadding()
     val heroBounds = Modifier.fillMaxWidth().height(430.dp + extraHeight)
     Box(
-        sharedArtworkModifier?.invoke(season, heroBounds) ?: heroBounds,
+        heroBounds,
     ) {
+        val imageBounds = Modifier.fillMaxSize().seasonFeatherBottom()
+        val artworkModifier = sharedArtworkModifier?.invoke(season, imageBounds) ?: imageBounds
         if (landscapeArtwork != null) {
-            landscapeArtwork(season, Modifier.fillMaxSize().seasonFeatherBottom())
+            landscapeArtwork(season, artworkModifier)
         } else {
-            TextPoster(season.title, Modifier.fillMaxSize().seasonFeatherBottom())
+            TextPoster(season.title, artworkModifier)
         }
         Box(
             Modifier.fillMaxSize().background(
@@ -781,13 +784,14 @@ private fun SeasonEpisodeCard(
     val cardBounds = Modifier.width(180.dp).height(204.dp)
     val interaction = rememberMediaCardInteraction()
     Column(
-        (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds)
+        cardBounds
             .mafeiMediaCardInteraction(interaction, onClick, label = item.title),
         horizontalAlignment = Alignment.Start,
     ) {
         val imageShape = RoundedCornerShape(6.dp)
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                .let { sharedArtworkModifier?.invoke(item, it) ?: it }
                 .mafeiArtworkFeedback(interaction, imageShape)
                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, imageShape),
         ) {

@@ -104,6 +104,7 @@ internal fun DetailAtmosphere(
     trailingBleed: Dp = 0.dp,
     unblurred: Boolean = false,
     cachedArtwork: (@Composable (MediaItem, Dp, Modifier) -> Unit)? = null,
+    sharedArtworkModifier: (@Composable (MediaItem, Modifier) -> Modifier)? = null,
 ) {
     val atmosphereModifier = if (leadingBleed > 0.dp || trailingBleed > 0.dp) {
         Modifier
@@ -113,7 +114,8 @@ internal fun DetailAtmosphere(
     } else {
         Modifier.fillMaxSize().clipToBounds()
     }
-    Box(atmosphereModifier.background(MaterialTheme.colorScheme.background)) {
+    Box((item?.let { sharedArtworkModifier?.invoke(it, atmosphereModifier) } ?: atmosphereModifier)
+        .background(MaterialTheme.colorScheme.background)) {
         if (item != null && (artwork != null || cachedArtwork != null)) {
             val darkMode = isSystemInDarkTheme()
             val imageModifier = Modifier
@@ -399,7 +401,7 @@ private fun DetailProjectHeader(
     }
     val headerBounds = modifier.fillMaxWidth()
     Box(
-        (sharedArtworkModifier?.invoke(item, headerBounds) ?: headerBounds)
+        headerBounds
             .fillMaxWidth()
             .padding(
                 start = horizontalPadding,

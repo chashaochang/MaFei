@@ -151,14 +151,15 @@ internal fun HomeMediaShelf(
                 val interaction = rememberMediaCardInteraction()
                 val cardBounds = Modifier.width(width)
                 Column(
-                    (sharedArtworkModifier?.invoke(item, cardBounds) ?: cardBounds).mafeiMediaCardInteraction(
+                    cardBounds.mafeiMediaCardInteraction(
                         interaction,
                         onClick = { onItem(item) },
                         label = "查看${text.title}",
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                    val imageBounds = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                    Box((sharedArtworkModifier?.invoke(item, imageBounds) ?: imageBounds)
                         .mafeiArtworkFeedback(interaction, RoundedCornerShape(10.dp))) {
                         val posterModifier = Modifier.fillMaxSize()
                         if (artwork != null) {
