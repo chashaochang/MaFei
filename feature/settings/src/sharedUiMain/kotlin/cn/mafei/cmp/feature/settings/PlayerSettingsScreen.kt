@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import cn.mafei.cmp.common.design_system.LocalMaFeiSafeArea
 import cn.mafei.cmp.common.ui.*
 import cn.mafei.cmp.player.api.PlayerPlaybackPreferences
+import cn.mafei.cmp.player.api.PlayerEngineType
 
 /** Uses legacy decode order and cache choices; engine selection is added only when supported. */
 @Composable
@@ -34,6 +35,9 @@ fun PlayerSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     engineSelection: Boolean = false,
+    showPlayerRenderMode: Boolean = false,
+    playerRenderMode: String = PlayerRenderModeBuffer,
+    onPlayerRenderModeChanged: (String) -> Unit = {},
 ) {
     val safeArea = LocalMaFeiSafeArea.current
     Box(modifier.fillMaxSize()) {
@@ -62,6 +66,12 @@ fun PlayerSettingsScreen(
                                     cn.mafei.cmp.player.api.PlayerEngineType.Mpv -> "MPV"
                                 }, isSelected = preferences.engine == engine,
                             ) }, enabled = !saving, onItemClick = { onSelect(preferences.copy(engine = engines[it])) })
+                        }
+                        if (showPlayerRenderMode && preferences.engine == PlayerEngineType.Mpv) {
+                            PlayerRenderModeSetting(
+                                mode = playerRenderMode,
+                                onModeChange = onPlayerRenderModeChanged,
+                            )
                         }
                         Text("MPV 解码方式", fontSize = 16.sp, fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface)

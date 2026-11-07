@@ -8,7 +8,14 @@ import kotlinx.coroutines.launch
 
 /** Route-owned async presentation; the application store outlives route disposal. */
 @Composable
-internal fun PlayerSettingsRoute(store: PlayerPreferencesStore, engineSelection: Boolean = false, onBack: () -> Unit) {
+internal fun PlayerSettingsRoute(
+    store: PlayerPreferencesStore,
+    engineSelection: Boolean = false,
+    showPlayerRenderMode: Boolean = false,
+    playerRenderMode: String = "buffer",
+    onPlayerRenderModeChanged: (String) -> Unit = {},
+    onBack: () -> Unit,
+) {
     val preferences by store.state.collectAsState()
     var loading by remember(store) { mutableStateOf(true) }
     var loadFailed by remember(store) { mutableStateOf(false) }
@@ -55,5 +62,8 @@ internal fun PlayerSettingsRoute(store: PlayerPreferencesStore, engineSelection:
         },
         onBack = onBack,
         engineSelection = engineSelection,
+        showPlayerRenderMode = showPlayerRenderMode,
+        playerRenderMode = playerRenderMode,
+        onPlayerRenderModeChanged = onPlayerRenderModeChanged,
     )
 }

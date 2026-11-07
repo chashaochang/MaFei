@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
  * Player progress arrives every 250-500 ms. Collecting the complete [PlayerState] in [BrowseApplication] used to recompose the whole browse tree for every
  * progress tick even though only the player surfaces consume position/buffer data.
  */
-internal data class PlayerShellState(val phase: PlayerPhase = PlayerPhase.Idle, val resourceId: String? = null)
+internal data class PlayerShellState(val phase: PlayerPhase = PlayerPhase.Idle, val resourceId: String? = null, val pictureInPicture: Boolean = false)
 
 @Composable
 internal fun BoundNowPlayingScreen(

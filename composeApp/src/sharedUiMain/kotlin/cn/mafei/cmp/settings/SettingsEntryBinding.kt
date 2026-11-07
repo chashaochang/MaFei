@@ -5,7 +5,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.settings.SettingsScreen
-import cn.mafei.cmp.player.api.PlayerRenderMode
 import cn.mafei.cmp.session.*
 
 @Composable
@@ -19,9 +18,6 @@ internal fun SettingsEntryBinding(
     glassStyleStore: GlassStyleStore,
     homeCarouselVisible: State<Boolean>,
     onHomeCarouselVisibleChanged: (Boolean) -> Unit,
-    currentPlayerRenderMode: State<PlayerRenderMode>,
-    currentPlayerRenderModeChanged: State<(PlayerRenderMode) -> Unit>,
-    playerRenderModeSupported: Boolean,
 ) {
     SettingsScreen(
         onBack = popMineRoute,
@@ -56,13 +52,10 @@ internal fun SettingsEntryBinding(
             },
         homeCarouselVisible = { homeCarouselVisible.value },
         onHomeCarouselVisibleChanged = onHomeCarouselVisibleChanged,
-        showPlayerRenderMode = playerRenderModeSupported,
         onOpenPlayerSettings =
             if (playback?.controller?.capabilities?.playbackPreferences == true) {
                 { account.mineBackStack += BrowsePlayerSettingsRoute }
             } else null,
-        playerRenderMode = { currentPlayerRenderMode.value.storageValue },
-        onPlayerRenderModeChanged = { value -> currentPlayerRenderModeChanged.value(value.toPlayerRenderMode()) },
         modifier = Modifier.fillMaxSize(),
     )
 }

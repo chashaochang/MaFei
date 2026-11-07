@@ -301,12 +301,19 @@ internal fun BrowseApplication(
                                         runtime.glassStyle,
                                         homeCarouselVisible,
                                         onHomeCarouselVisibleChanged,
+                                    )
+                                }
+                            BrowsePlayerSettingsRoute ->
+                                NavEntry(route) {
+                                    PlayerSettingsEntryBinding(
+                                        playback,
+                                        popMineRoute,
+                                        runtime.playerPreferences,
                                         currentPlayerRenderMode,
                                         currentPlayerRenderModeChanged,
                                         playerRenderModeSupported,
                                     )
                                 }
-                            BrowsePlayerSettingsRoute -> NavEntry(route) { PlayerSettingsEntryBinding(playback, popMineRoute, runtime.playerPreferences) }
                             is BrowseManagementRoute ->
                                 NavEntry(route) { ManagementEntryBinding(route, account, session.media, popMineRoute, runtime.sessions.media) }
                             is BrowseManagementDevicesRoute ->
@@ -402,7 +409,12 @@ internal fun BrowseApplication(
                         }
                     },
                 )
-                if (!player.playerExpanded || playerMedia == null || playback == null)
+                // PiP collapses the player chrome back to the existing browse shell,
+                // but leaves the same player route and ArkUI XComponent composed below
+                // it. The system PiP window owns that surface until restoration; popping
+                // the player route here would dispose the native host and release the
+                // active playback session.
+                if (!player.playerExpanded || playerShellState.pictureInPicture)
                     browseContentStateHolder.SaveableStateProvider("browse-content") {
                         MaFeiAdaptiveShell(
                             layout = layout,

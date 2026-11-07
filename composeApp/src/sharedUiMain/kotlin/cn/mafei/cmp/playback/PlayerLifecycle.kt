@@ -111,4 +111,4 @@ internal fun rememberPlayerShellState(playback: SessionPlaybackRuntime?): Player
 internal fun kotlinx.coroutines.flow.Flow<PlayerState>.shellStates(): kotlinx.coroutines.flow.Flow<PlayerShellState> =
     map { it.toPlayerShellState() }.distinctUntilChanged()
 
-internal fun PlayerState.toPlayerShellState() = PlayerShellState(phase = phase, resourceId = resourceId)
+internal fun PlayerState.toPlayerShellState() = PlayerShellState(phase = phase, resourceId = resourceId, pictureInPicture = pictureInPicture)

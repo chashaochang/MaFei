@@ -96,9 +96,6 @@ fun SettingsScreen(
     glassStyleTitle: String = GlassStyle.Liquid.title,
     homeCarouselVisible: () -> Boolean = { true },
     onHomeCarouselVisibleChanged: (Boolean) -> Unit = {},
-    showPlayerRenderMode: Boolean = false,
-    playerRenderMode: () -> String = { PlayerRenderModeBuffer },
-    onPlayerRenderModeChanged: (String) -> Unit = {},
     onOpenPlayerSettings: (() -> Unit)? = null,
     appearanceTitle: String = DarkAppearanceTitle,
 ) {
@@ -126,12 +123,6 @@ fun SettingsScreen(
                         if (index == 0) onOpenAppearance() else onOpenGlassStyleSettings()
                     },
                 )
-                if (showPlayerRenderMode) {
-                    PlayerRenderModeSetting(
-                        mode = playerRenderMode(),
-                        onModeChange = onPlayerRenderModeChanged,
-                    )
-                }
                 if (onOpenPlayerSettings != null) {
                     LegacyListGroup(
                         items = listOf(LegacyListGroupItem("播放器设置")),
@@ -155,12 +146,12 @@ fun SettingsScreen(
     }
 }
 
-private const val PlayerRenderModeBuffer = "buffer"
+internal const val PlayerRenderModeBuffer = "buffer"
 private const val PlayerRenderModeDirect = "direct"
 
 /** The only platform currently exposing this preference is the Harmony player host. */
 @Composable
-private fun PlayerRenderModeSetting(
+internal fun PlayerRenderModeSetting(
     mode: String,
     onModeChange: (String) -> Unit,
 ) {
@@ -243,12 +234,11 @@ private fun HomeCarouselSetting(
     onEnabledChange: (Boolean) -> Unit,
 ) {
     val toggleBackdrop = rememberGlassBackdrop()
-    Row(
+    Box(
         Modifier
             .fillMaxWidth()
             .height(68.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f))
             .mafeiInteractive(
                 onClick = { onEnabledChange(!enabled) },
                 radiusDp = 16f,
@@ -257,33 +247,39 @@ private fun HomeCarouselSetting(
             .semantics {
                 contentDescription = "首页轮播图"
                 selected = enabled
-            }
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            },
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                "首页轮播图",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 16.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                "显示首页顶部推荐内容",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+        Box(
+            Modifier.matchParentSize().captureGlassBackdrop(toggleBackdrop)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)),
+        )
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "首页轮播图",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    "显示首页顶部推荐内容",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            LiquidToggle(
+                selected = { enabled },
+                onSelect = onEnabledChange,
+                backdrop = toggleBackdrop,
             )
         }
-        LiquidToggle(
-            selected = { enabled },
-            onSelect = onEnabledChange,
-            backdrop = toggleBackdrop,
-            modifier = Modifier.width(64.dp).height(40.dp),
-        )
     }
 }
 
