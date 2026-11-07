@@ -1,10 +1,9 @@
+// Modified by MaFei: reuse outline clipping geometry for highlight drawing.
 package com.kyant.backdrop.highlight
 
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PaintingStyle
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -24,7 +23,7 @@ import com.kyant.backdrop.internal.ShapeProvider
 import com.kyant.backdrop.internal.EffectLayerRecording
 import com.kyant.backdrop.internal.isInvisibleEffect
 import com.kyant.backdrop.internal.blur
-import com.kyant.backdrop.internal.clipOutline
+import com.kyant.backdrop.internal.OutlineClipCache
 import com.kyant.backdrop.internal.setRuntimeShader
 import com.kyant.backdrop.isGraphicsLayerEffectsSupported
 import com.kyant.backdrop.isRenderEffectSupported
@@ -83,7 +82,7 @@ internal class HighlightNode(
         Paint().apply {
             style = PaintingStyle.Stroke
         }
-    private var clipPath: Path? = null
+    private val outlineClip = OutlineClipCache()
 
     private val runtimeShaderCache = RuntimeShaderCacheImpl()
 
@@ -102,19 +101,12 @@ internal class HighlightNode(
         drawContent()
         if (!isGraphicsLayerEffectsSupported()) {
             val outline = shapeProvider.shape.createOutline(size, layoutDirection, this)
-            val clipPath =
-                if (outline is Outline.Rounded) {
-                    clipPath ?: Path().also { clipPath = it }
-                } else {
-                    null
-                }
-
             configurePaint(highlight)
             paint.alpha = highlight.alpha
 
             val canvas = drawContext.canvas
             canvas.save()
-            canvas.clipOutline(outline, clipPath)
+            outlineClip.clip(canvas, outline)
             canvas.drawOutline(outline, paint)
             canvas.restore()
             return
@@ -133,13 +125,6 @@ internal class HighlightNode(
                 )
 
             val outline = shapeProvider.shape.createOutline(size, layoutDirection, density)
-            val clipPath =
-                if (outline is Outline.Rounded) {
-                    clipPath ?: Path().also { clipPath = it }
-                } else {
-                    null
-                }
-
             highlightLayer.alpha = highlight.alpha
             highlightLayer.blendMode = highlight.style.blendMode
             val style = highlight.style
@@ -152,7 +137,7 @@ internal class HighlightNode(
                     translate(1f, 1f) {
                         val canvas = drawContext.canvas
                         canvas.save()
-                        canvas.clipOutline(outline, clipPath)
+                        outlineClip.clip(canvas, outline)
                         canvas.drawOutline(outline, paint)
                         canvas.restore()
                     }
@@ -179,7 +164,7 @@ internal class HighlightNode(
             graphicsContext?.releaseGraphicsLayer(layer)
             highlightLayer = null
         }
-        clipPath = null
+        outlineClip.clear()
         runtimeShaderCache.clear()
         prevStyle = null
     }

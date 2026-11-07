@@ -20,6 +20,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -101,28 +103,10 @@ fun LiquidButton(
                 },
                 layerBlock = if (pressEffectActive) {
                     {
-                        val width = size.width
-                        val height = size.height
-
-                        val progress = interactiveHighlight.pressProgress
-                        val scale = lerp(1f, 1f + 4f.dp.toPx() / size.height, progress)
-
-                        val maxOffset = size.minDimension
-                        val initialDerivative = 0.05f
-                        val offset = interactiveHighlight.offset
-                        translationX = maxOffset * tanh(initialDerivative * offset.x / maxOffset)
-                        translationY = maxOffset * tanh(initialDerivative * offset.y / maxOffset)
-
-                        val maxDragScale = 4f.dp.toPx() / size.height
-                        val offsetAngle = atan2(offset.y, offset.x)
-                        scaleX =
-                            scale +
-                                    maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
-                                    (width / height).fastCoerceAtMost(1f)
-                        scaleY =
-                            scale +
-                                    maxDragScale * abs(sin(offsetAngle) * offset.y / size.maxDimension) *
-                                    (height / width).fastCoerceAtMost(1f)
+                        applyLiquidButtonPressTransform(
+                            interactiveHighlight.pressProgress,
+                            interactiveHighlight.offset,
+                        )
                     }
                 } else {
                     null
@@ -176,4 +160,30 @@ fun LiquidButton(
         verticalAlignment = Alignment.CenterVertically,
         content = content
     )
+}
+
+internal fun GraphicsLayerScope.applyLiquidButtonPressTransform(progress: Float, offset: Offset) {
+    // Backdrop inverse transforms call this even when an idle button only samples
+    // scrolling content. Keep the animated formula, but skip its idle trig work.
+    if (progress == 0f && offset == Offset.Zero) {
+        translationX = 0f
+        translationY = 0f
+        scaleX = 1f
+        scaleY = 1f
+        return
+    }
+
+    val width = size.width
+    val height = size.height
+    val scale = lerp(1f, 1f + 4f.dp.toPx() / height, progress)
+    val maxOffset = size.minDimension
+    val initialDerivative = 0.05f
+    translationX = maxOffset * tanh(initialDerivative * offset.x / maxOffset)
+    translationY = maxOffset * tanh(initialDerivative * offset.y / maxOffset)
+    val maxDragScale = 4f.dp.toPx() / height
+    val offsetAngle = atan2(offset.y, offset.x)
+    scaleX = scale + maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
+        (width / height).fastCoerceAtMost(1f)
+    scaleY = scale + maxDragScale * abs(sin(offsetAngle) * offset.y / size.maxDimension) *
+        (height / width).fastCoerceAtMost(1f)
 }

@@ -29,6 +29,8 @@ class DampedDragAnimation(
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
     /** Override vertical expansion without widening variable-width tab labels. */
     val pressedScaleY: Float = pressedScale,
+    val consumePointerChanges: Boolean = false,
+    val onDragCancelled: DampedDragAnimation.() -> Unit = onDragStopped,
 ) {
 
     private val valueAnimationSpec =
@@ -74,15 +76,17 @@ class DampedDragAnimation(
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         inspectDragGestures(
             onDragStart = { down ->
+                if (consumePointerChanges) down.consume()
                 onDragStarted(down.position)
                 press()
             },
-            onDragEnd = {
+            onDragEnd = { up ->
+                if (consumePointerChanges) up.consume()
                 onDragStopped()
                 release()
             },
             onDragCancel = {
-                onDragStopped()
+                onDragCancelled()
                 release()
             }
         ) { change, dragAmount ->

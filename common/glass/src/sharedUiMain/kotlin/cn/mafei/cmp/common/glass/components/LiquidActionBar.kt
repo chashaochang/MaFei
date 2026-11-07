@@ -74,7 +74,11 @@ fun LiquidActionBar(
     val tintColor = if (isLightTheme) Color.White else MaterialTheme.colorScheme.background
     val progressiveBackdrop = rememberLayerBackdrop()
     val combinedBackdrop = rememberCombinedBackdrop(backdrop.layer, progressiveBackdrop)
-    val buttonBackdrop = remember(combinedBackdrop) { GlassBackdrop(combinedBackdrop, null) }
+    // A page may omit the full-width bar material while keeping each control
+    // as an independent liquid-glass button. In that case, sample the page
+    // directly instead of combining it with the intentionally empty bar layer.
+    val buttonBackdropLayer = if (materialAlpha <= 0f) backdrop.layer else combinedBackdrop
+    val buttonBackdrop = remember(buttonBackdropLayer) { GlassBackdrop(buttonBackdropLayer, null) }
     val resolvedActionCount = actionCount.coerceIn(0, 3)
     val navigationWidth = if (navigation == null) 0f else 44f
     val actionsWidth = if (resolvedActionCount == 0) 0f

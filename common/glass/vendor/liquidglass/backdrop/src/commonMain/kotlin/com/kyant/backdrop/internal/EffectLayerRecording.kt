@@ -1,3 +1,4 @@
+// Modified by MaFei: cache decorative-layer recordings without redundant keys.
 package com.kyant.backdrop.internal
 
 import androidx.compose.ui.geometry.Size
@@ -21,14 +22,17 @@ internal class EffectLayerRecording<Parameters : Any>(
         canReuse: Boolean = true,
         record: () -> Unit
     ) {
-        val key = Key(size, density.density, density.fontScale, layoutDirection, outline, parameters)
+        val densityValue = density.density
+        val fontScaleValue = density.fontScale
         val old = previous
-        if (canReuse && old != null && old.size == key.size && old.density == key.density &&
-            old.fontScale == key.fontScale && old.layoutDirection == key.layoutDirection &&
-            old.outline == key.outline && sameDrawingParameters(old.parameters, parameters)
+        if (canReuse && old != null && old.size == size && old.density == densityValue &&
+            old.fontScale == fontScaleValue && old.layoutDirection == layoutDirection &&
+            old.outline == outline && sameDrawingParameters(old.parameters, parameters)
         ) return
         record()
-        previous = if (canReuse) key else null
+        previous = if (canReuse) {
+            Key(size, densityValue, fontScaleValue, layoutDirection, outline, parameters)
+        } else null
     }
 
     fun clear() {

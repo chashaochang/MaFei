@@ -22,3 +22,9 @@ property, matching Compose 1.9.2 and the fork's existing OHOS implementation.
 returns the Skia shader directly (Compose's `Shader` is a typealias here).
 Desktop common/expect sources live in an intermediate `desktopGlassMain` source
 set; Skiko actuals remain in `desktopMain` (not in the same source set).
+
+MaFei rendering patches also cache rounded clipping geometry in `Outline.kt`,
+reuse that cache in highlight and inner-shadow drawing, and avoid allocating a
+new decorative-layer recording key when its drawing parameters are unchanged.
+The modified files carry MaFei modification notices; the upstream license is
+retained in `liquidglass/LICENSE`.
