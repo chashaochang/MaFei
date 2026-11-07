@@ -1,24 +1,14 @@
 const features = [
-    "filedownload",
-    "displaylanguage",
-    "subtitleappearancesettings",
-    "subtitleburnsettings",
-    //'sharing',
     "exit",
-    "htmlaudioautoplay",
-    "htmlvideoautoplay",
     "externallinks",
     "clientsettings",
-    "multiserver",
     "physicalvolumecontrol",
-    "remotecontrol",
-    "castmenuhashchange"
+    "multiserver"
 ];
 
 const plugins = [
     'NavigationPlugin',
-    'ExoPlayerPlugin',
-    'ExternalPlayerPlugin'
+    'ExoPlayerPlugin'
 ];
 
 // Add plugin loaders
@@ -60,11 +50,11 @@ window.NativeShell = {
     },
 
     downloadFile(downloadInfo) {
-        window.NativeInterface.downloadFiles(JSON.stringify([downloadInfo]));
+        window.NativeInterface.downloadFiles?.(JSON.stringify([downloadInfo]));
     },
 
     downloadFiles(downloadInfo) {
-        window.NativeInterface.downloadFiles(JSON.stringify(downloadInfo));
+        window.NativeInterface.downloadFiles?.(JSON.stringify(downloadInfo));
     },
 
     openClientSettings() {
@@ -81,6 +71,10 @@ window.NativeShell = {
 
     async execCast(action, args, callback) {
         this.castCallbacks = this.castCallbacks || {};
+        if (typeof window.NativeInterface.execCast !== 'function') {
+            callback && callback(new Error('Casting is not supported on this device'));
+            return;
+        }
         this.castCallbacks[action] = callback;
         window.NativeInterface.execCast(action, JSON.stringify(args));
     },
@@ -146,7 +140,11 @@ function getDeviceProfile(profileBuilder, item) {
 window.NativeShell.AppHost = {
     init() {
         try {
-            const result = JSON.parse(window.NativeInterface.getDeviceInformation());
+            const getDeviceInformation = window.NativeInterface?.getDeviceInformation;
+            const fallback = window.__MAFEI_DEVICE_INFORMATION__ || {};
+            const result = JSON.parse(typeof getDeviceInformation === "function"
+                ? getDeviceInformation()
+                : JSON.stringify(fallback));
             // set globally so they can be used elsewhere
             deviceId = result.deviceId;
             deviceName = result.deviceName;

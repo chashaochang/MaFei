@@ -11,7 +11,13 @@ import kotlinx.serialization.json.Json
 import kotlin.experimental.ExperimentalNativeApi
 
 @Serializable
-private data class WebHostEvent(val handle: Long, val action: String, val value: String = "", val canBack: Boolean = false)
+private data class WebHostEvent(
+    val handle: Long,
+    val action: String,
+    val value: String = "",
+    val canBack: Boolean = false,
+    val progress: Int = 0,
+)
 
 private object OhosWebEvents {
     val json = Json { ignoreUnknownKeys = true }
@@ -35,20 +41,29 @@ internal object OhosEmbeddedWebHost : EmbeddedWebHost {
     @Composable override fun Content(request: WebPageRequest, callbacks: EmbeddedWebCallbacks, modifier: Modifier) {
         val handle = remember(request) { ++OhosWebEvents.next }
         var revision by remember(request) { mutableLongStateOf(0) }
+        var refreshRevision by remember(request) { mutableLongStateOf(0) }
         var canBack by remember(request) { mutableStateOf(false) }
         val latestCallbacks by rememberUpdatedState(callbacks)
         DisposableEffect(handle) {
             OhosWebEvents.listeners[handle] = { event ->
                 if (event.action == "state") canBack = event.canBack
                 else if (event.action == "error") latestCallbacks.onFailure()
+                else if (event.action == "title") latestCallbacks.onTitleChanged(event.value)
+                else if (event.action == "progress") latestCallbacks.onProgressChanged(event.progress)
                 else latestCallbacks.onNativeAction(event.action, event.value)
             }
             callbacks.registerBack { if (canBack) { revision++; true } else false }
-            onDispose { OhosWebEvents.listeners.remove(handle); callbacks.registerBack(null) }
+            callbacks.registerRefresh { refreshRevision++ }
+            onDispose {
+                OhosWebEvents.listeners.remove(handle)
+                callbacks.registerBack(null)
+                callbacks.registerRefresh(null)
+            }
         }
         val args = androidx.compose.ui.napi.js {
             "handle"(handle.nApiValue())
             "revision"(revision.nApiValue())
+            "refreshRevision"(refreshRevision.nApiValue())
             "url"(request.url)
             "origin"(request.origin)
             "script"(request.bootstrapScript)

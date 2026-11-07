@@ -14,7 +14,14 @@ import platform.WebKit.*
 internal object IosEmbeddedWebHost : EmbeddedWebHost {
     @Composable override fun Content(request: WebPageRequest, callbacks: EmbeddedWebCallbacks, modifier: Modifier) {
         val delegate = remember(request) { object : NSObject(), WKNavigationDelegateProtocol {
+            @ObjCSignatureOverride
+            override fun webView(webView: WKWebView, didStartProvisionalNavigation: WKNavigation?) {
+                callbacks.onProgressChanged(0)
+            }
+            @ObjCSignatureOverride
             override fun webView(webView: WKWebView, didFinishNavigation: WKNavigation?) {
+                callbacks.onProgressChanged(100)
+                webView.title?.let(callbacks.onTitleChanged)
                 webView.URL?.absoluteString?.takeIf(request::accepts)?.let { callbacks.onNativeAction("location", it) }
             }
             override fun webView(webView: WKWebView, decidePolicyForNavigationAction: WKNavigationAction,
@@ -49,7 +56,13 @@ internal object IosEmbeddedWebHost : EmbeddedWebHost {
         }
         DisposableEffect(view) {
             callbacks.registerBack { if (view.canGoBack) { view.goBack(); true } else false }
-            onDispose { callbacks.registerBack(null); view.stopLoading(); view.navigationDelegate = null }
+            callbacks.registerRefresh { view.reload() }
+            onDispose {
+                callbacks.registerBack(null)
+                callbacks.registerRefresh(null)
+                view.stopLoading()
+                view.navigationDelegate = null
+            }
         }
         UIKitView(factory = { view }, modifier = modifier)
     }

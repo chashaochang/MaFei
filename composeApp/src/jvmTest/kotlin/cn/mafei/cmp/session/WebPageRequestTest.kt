@@ -43,6 +43,8 @@ class WebPageRequestTest {
         assertTrue(request.bootstrapScript.contains("\"LastConnectionMode\":2"))
         assertTrue(request.bootstrapScript.contains("\"ManualAddress\":\"https://nas.test/jellyfin\""))
         assertTrue(request.bootstrapScript.contains("location.origin !== \"https://nas.test\""))
+        assertTrue(request.bootstrapScript.contains("window.__MAFEI_DEVICE_INFORMATION__"))
+        assertTrue(request.bootstrapScript.contains("\"deviceId\":\"device\""))
         assertFalse(request.toString().contains("secret-token"))
         assertTrue(request.accepts("https://nas.test:443/jellyfin/web"))
         assertFalse(request.accepts("http://nas.test/jellyfin")); assertFalse(request.accepts("https://nas.test.evil/jellyfin"))

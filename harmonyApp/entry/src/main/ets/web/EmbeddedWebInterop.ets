@@ -6,12 +6,13 @@ import nativeApi from 'libentry.so';
 interface WebArgs {
   handle: number;
   revision: number;
+  refreshRevision: number;
   url: string;
   origin: string;
   script: string;
   deviceInformation: string;
 }
-interface WebEvent { handle: number; action: string; value: string; canBack: boolean; }
+interface WebEvent { handle: number; action: string; value: string; canBack: boolean; progress: number; }
 
 class NativeWebInterface {
   private controller: webview.WebviewController;
@@ -23,7 +24,7 @@ class NativeWebInterface {
   }
   private send(action: string, value: string = ''): void {
     if (!this.valid()) return;
-    const event: WebEvent = { handle: this.args.handle, action: action, value: value, canBack: false };
+    const event: WebEvent = { handle: this.args.handle, action: action, value: value, canBack: false, progress: 0 };
     if (value.length <= 32 * 1024) nativeApi.UpdateOhosWebState(JSON.stringify(event));
   }
   getDeviceInformation(): string { return this.valid() ? this.args.deviceInformation : '{}'; }
@@ -54,12 +55,17 @@ struct MaFeiEmbeddedWebSurface {
   private controller: webview.WebviewController = new webview.WebviewController();
   private interface: NativeWebInterface | undefined = undefined;
   private revision: number = 0;
+  private refreshRevision: number = 0;
   private alive: boolean = true;
 
   onCommand(): void {
     if (this.args.revision !== this.revision) {
       this.revision = this.args.revision;
       if (this.controller.accessBackward()) this.controller.backward();
+    }
+    if (this.args.refreshRevision !== this.refreshRevision) {
+      this.refreshRevision = this.args.refreshRevision;
+      this.controller.refresh();
     }
   }
   aboutToDisappear(): void {
@@ -73,9 +79,9 @@ struct MaFeiEmbeddedWebSurface {
   }
   private publishBackState(): void {
     if (!this.alive) return;
-    const event: WebEvent = { handle: this.args.handle, action: 'state', value: '', canBack: this.controller.accessBackward() };
+    const event: WebEvent = { handle: this.args.handle, action: 'state', value: '', canBack: this.controller.accessBackward(), progress: 0 };
     nativeApi.UpdateOhosWebState(JSON.stringify(event));
-    const location: WebEvent = { handle: this.args.handle, action: 'location', value: this.controller.getUrl(), canBack: false };
+    const location: WebEvent = { handle: this.args.handle, action: 'location', value: this.controller.getUrl(), canBack: false, progress: 0 };
     if (this.accepts(location.value)) nativeApi.UpdateOhosWebState(JSON.stringify(location));
   }
   private accepts(value: string): boolean {
@@ -91,11 +97,6 @@ struct MaFeiEmbeddedWebSurface {
     if (!['injectionScript.js', 'nativeshell.js', 'EventEmitter.js', 'ExoPlayerPlugin.js', 'NavigationPlugin.js'].includes(resource)) return undefined;
     const bytes = getContext(this).resourceManager.getRawFileContentSync(`native/${resource}`);
     let script = new util.TextDecoder('utf-8').decodeToString(bytes);
-    if (resource === 'nativeshell.js') {
-      // Only advertise operations actually connected to CMP. No fake download/remote-control support.
-      script += '\nwindow.NativeShell.AppHost.supports = c => ["externallinks", "clientsettings", "multiserver", "exit"].includes(c.toLowerCase());';
-      script += '\nwindow.NativeShell.getPlugins = () => ["NavigationPlugin", "ExoPlayerPlugin"];';
-    }
     const response = new WebResourceResponse();
     response.setResponseData(script); response.setResponseMimeType('application/javascript');
     response.setResponseEncoding('utf-8'); response.setResponseCode(200); response.setReasonMessage('OK');
@@ -116,6 +117,14 @@ struct MaFeiEmbeddedWebSurface {
         }
       })
       .onPageEnd((): void => this.publishBackState())
+      .onTitleReceive((event): void => {
+        const title: WebEvent = { handle: this.args.handle, action: 'title', value: event.title, canBack: false, progress: 0 };
+        nativeApi.UpdateOhosWebState(JSON.stringify(title));
+      })
+      .onProgressChange((event): void => {
+        const progress: WebEvent = { handle: this.args.handle, action: 'progress', value: '', canBack: false, progress: event.newProgress };
+        nativeApi.UpdateOhosWebState(JSON.stringify(progress));
+      })
       .onInterceptRequest((event) => {
         if (event) {
           const response = this.intercept(event.request.getRequestUrl());
@@ -125,17 +134,19 @@ struct MaFeiEmbeddedWebSurface {
       })
       .onErrorReceive((event): void => {
         if (event?.request.isMainFrame()) {
-          const state: WebEvent = { handle: this.args.handle, action: 'error', value: '', canBack: false };
+          const state: WebEvent = { handle: this.args.handle, action: 'error', value: '', canBack: false, progress: 100 };
           nativeApi.UpdateOhosWebState(JSON.stringify(state));
         }
       })
       .onOverrideUrlLoading((request): boolean => {
         const value = request.getRequestUrl();
         if (this.accepts(value)) return false;
-        const event: WebEvent = { handle: this.args.handle, action: 'openUrl', value: value, canBack: false };
+        const event: WebEvent = { handle: this.args.handle, action: 'openUrl', value: value, canBack: false, progress: 0 };
         nativeApi.UpdateOhosWebState(JSON.stringify(event)); return true;
       })
   }
 }
 
-export function registerEmbeddedWebInterop(): void { registerComposeInteropBuilder('MaFeiEmbeddedWeb', embeddedWebBuilder); }
+export function registerEmbeddedWebInterop(): void {
+  registerComposeInteropBuilder('MaFeiEmbeddedWeb', embeddedWebBuilder);
+}

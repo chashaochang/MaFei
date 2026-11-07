@@ -24,7 +24,12 @@ internal object AndroidEmbeddedWebHost : EmbeddedWebHost {
             settings.javaScriptEnabled = true; settings.domStorageEnabled = true
             settings.allowFileAccess = false; settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    callbacks.onProgressChanged(0)
+                }
                 override fun onPageFinished(view: WebView, url: String?) {
+                    callbacks.onProgressChanged(100)
+                    view.title?.let(callbacks.onTitleChanged)
                     if (url != null && request.accepts(url)) callbacks.onNativeAction("location", url)
                 }
                 override fun shouldOverrideUrlLoading(view: WebView, navigation: WebResourceRequest): Boolean {
@@ -46,10 +51,17 @@ internal object AndroidEmbeddedWebHost : EmbeddedWebHost {
                     val file = if (main) "injectionScript.js" else navigation.url.lastPathSegment ?: return null
                     if (file !in setOf("injectionScript.js", "nativeshell.js", "EventEmitter.js", "ExoPlayerPlugin.js", "NavigationPlugin.js")) return null
                     return try {
-                        var script = context.assets.open("native/$file").bufferedReader().use { it.readText() }
-                        if (file == "nativeshell.js") script += "\nwindow.NativeShell.AppHost.supports = c => ['externallinks','clientsettings','multiserver','exit'].includes(c.toLowerCase());\nwindow.NativeShell.getPlugins = () => ['NavigationPlugin','ExoPlayerPlugin'];"
+                        val script = context.assets.open("native/$file").bufferedReader().use { it.readText() }
                         WebResourceResponse("application/javascript", "utf-8", ByteArrayInputStream(script.toByteArray(Charsets.UTF_8)))
                     } catch (_: Exception) { null }
+                }
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                    callbacks.onProgressChanged(newProgress)
+                }
+                override fun onReceivedTitle(view: WebView, title: String?) {
+                    title?.let(callbacks.onTitleChanged)
                 }
             }
             if (request.bootstrapScript.isNotEmpty()) {
@@ -71,8 +83,9 @@ internal object AndroidEmbeddedWebHost : EmbeddedWebHost {
         } }
         DisposableEffect(view) {
             callbacks.registerBack { if (view.canGoBack()) { view.goBack(); true } else false }
+            callbacks.registerRefresh { view.reload() }
             onDispose {
-                callbacks.registerBack(null); view.stopLoading()
+                callbacks.registerBack(null); callbacks.registerRefresh(null); view.stopLoading()
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.removeWebMessageListener(view, "MaFeiBridge")
                 view.destroy()
             }

@@ -62,9 +62,12 @@ class WebPageRequest(
             }
             val key = "user-$userId-$serverId"
             val origin = WebPageRequest(baseUrl, "WebITong").origin
+            val device = buildJsonObject { put("deviceId", deviceId); put("deviceName", "MaFei")
+                put("appName", "MaFei"); put("appVersion", "2.0.0") }
             val script = """
                 (() => {
                   if (window.top !== window || location.origin !== ${JsonPrimitive(origin)}) return;
+                  window.__MAFEI_DEVICE_INFORMATION__ = $device;
                   try {
                     const previous = JSON.parse(localStorage.getItem('jellyfin_credentials') || '{"Servers":[]}');
                     for (const server of (previous.Servers || [])) {
@@ -75,8 +78,6 @@ class WebPageRequest(
                   } catch (_) {}
                 })();
             """.trimIndent()
-            val device = buildJsonObject { put("deviceId", deviceId); put("deviceName", "MaFei")
-                put("appName", "MaFei"); put("appVersion", "2.0.0") }
             return WebPageRequest(webServerAddress, "WebITong", script, device.toString())
         }
     }
