@@ -31,6 +31,18 @@ function replace(root, file, from, to) {
   writeFileSync(path, text.replace(from, to));
 }
 test('current frozen foundation passes', () => assert.match(verifyFoundation(source), /verified/));
+test('Native incremental compilation cannot be disabled', () => fixture(root => {
+  const path = resolve(root, 'gradle.properties');
+  const properties = readFileSync(path, 'utf8').replace(/^kotlin\.incremental\.native=.*\n?/gm, '');
+  writeFileSync(path, `${properties}\nkotlin.incremental.native=false\n`);
+  assert.throws(() => verifyFoundation(root), /Native incremental compilation/);
+}));
+test('OHOS Debug static caches cannot be disabled', () => fixture(root => {
+  const path = resolve(root, 'gradle.properties');
+  const properties = readFileSync(path, 'utf8').replace(/^kotlin\.native\.cacheKind\.ohos_arm64=.*\n?/gm, '');
+  writeFileSync(path, `${properties}\nkotlin.native.cacheKind.ohos_arm64=none\n`);
+  assert.throws(() => verifyFoundation(root), /OHOS static cache/);
+}));
 test('missing module fails', () => fixture(root => {
   rmSync(resolve(root, 'feature/home/build.gradle.kts'));
   assert.throws(() => verifyFoundation(root), /missing module/);

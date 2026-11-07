@@ -21,6 +21,8 @@ export function verifyFoundation(root) {
   }
   check(catalog.includes('org.jetbrains.compose.desktop:desktop-jvm-macos-arm64'), 'Desktop must use macOS ARM64 artifact');
   const properties = read('gradle.properties');
+  check(/^kotlin\.incremental\.native=true\s*$/m.test(properties), 'Native incremental compilation must be enabled');
+  check(/^kotlin\.native\.cacheKind\.ohos_arm64=static\s*$/m.test(properties), 'OHOS static cache must be enabled');
   check(/^rendererBackend=skia\s*$/m.test(properties), 'Renderer must be skia');
   check(/^ohosSkikoVersion=0\.9\.22\.2-1\.1\.0\s*$/m.test(properties), 'OHOS Skiko version drift');
   const settings = read('settings.gradle.kts');

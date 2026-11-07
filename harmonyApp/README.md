@@ -11,6 +11,27 @@ The pinned toolchain is Kotlin `2.2.21-1.1.0`, Compose and the OHPM host
 `1.9.2-1.1.0`, with Skiko `0.9.22.2-1.1.0` and the Skia renderer. Versions
 follow the [official CPF 1.1.0 release notes](https://atomgit.com/CPF-KMP-CMP/docs/blob/KMP-v2.2.21-1.1.0/zh-cn/release-notes/KMP-v2.2.21-1.1.0%26CMP-v1.9.2-1.1.0.md).
 
+## Debug incremental builds
+
+Native incremental compilation is enabled with `kotlin.incremental.native=true`.
+The OHOS target uses `kotlin.native.cacheKind.ohos_arm64=static`; the renderer
+remains Skia. This follows the [CPF Debug incremental build guide](https://atomgit.com/CPF-KMP-CMP/docs/blob/KMP-v2.2.21-1.1.0/zh-cn/深入开发/Debug增量构建效率提升.md).
+Per-file caches are generated in `composeApp/build/kotlin-native-ic-cache`.
+The first build populates those caches; keep them for ordinary development
+instead of running `clean` before every build.
+
+Measured on 2026-10-11 with the same OHOS Debug link task:
+
+| Scenario | Native link task | Entire Gradle build |
+| --- | ---: | ---: |
+| Forced link, Native cache disabled | 124.75s | 130.63s |
+| Forced link, warmed Native cache | 11.54s | 12.32s |
+| One OHOS Kotlin file changed | 14.16s | 25.53s |
+
+The source-change measurement used a temporary private probe without changing
+application behavior; the probe was removed afterwards. Forced links used the
+task-specific `--rerun`, so the comparison does not measure skipped tasks.
+
 ## Local prerequisites
 
 The HarmonyOS player requires the separately licensed, closed-source MFPlayer
@@ -44,10 +65,11 @@ node /path/to/DevEco/Contents/tools/hvigor/bin/hvigorw.js \
   --mode module -p module=entry@default -p product=default assembleHap
 ```
 
-From the repository root, validate the actual debug HAP:
+From the repository root, validate a run-script Debug HAP:
 
 ```bash
-node scripts/verify-harmony-artifacts.mjs
+node scripts/verify-harmony-artifacts.mjs "$PWD" \
+  harmonyApp/entry/build/default/outputs/default/entry-default-signed.hap debug
 ```
 
 This checks the source/staged libkn and header pair, Hvigor copy-in, the build
