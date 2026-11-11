@@ -33,6 +33,10 @@ internal class BrowseNavigator(
     val onOpenLatest: () -> Unit = ::openLatest
 
     fun selectRoot(root: BrowseRoute) {
+        if (!phoneLayout() && navigation.currentRoute == BrowseSearchRoute && navigation.browseBackStack.size > 1) {
+            closeSearch()
+            navigation.browseBackStack.removeLastOrNull()
+        }
         if (navigation.activeRoot == root) return
         navigation.selectRoot(root)
         browser.switchTabContext(root.toString(), navigation.retainedRoots.map { it.toString() }.toSet())
@@ -116,6 +120,11 @@ internal class BrowseNavigator(
         }
     }
 
+    private fun closeSearch() {
+        search.cancel()
+        browser.clearSearch()
+    }
+
     fun openLatest() {
         val route = BrowseLatestRoute()
         if (navigation.browseBackStack.lastOrNull() != route) {
@@ -141,10 +150,7 @@ internal class BrowseNavigator(
             // pop transition so the shared-element source remains alive.
             is BrowseDetailRoute -> Unit
             is BrowsePersonRoute -> browser.clearPerson()
-            BrowseSearchRoute -> {
-                search.cancel()
-                browser.clearSearch()
-            }
+            BrowseSearchRoute -> closeSearch()
             else -> Unit
         }
         if (navigation.browseBackStack.size > 1) {

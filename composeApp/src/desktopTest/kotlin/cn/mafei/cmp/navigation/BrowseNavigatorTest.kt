@@ -35,6 +35,44 @@ class BrowseNavigatorTest {
     @get:Rule val rule = createComposeRule()
 
     @Test
+    fun selectingHomeFromWideSearchReturnsToHome() = runBlocking<Unit> {
+        val (_, navigation, navigator) = fixture(this, isPhoneLayout = false)
+        navigator.openSearch()
+        assertEquals(BrowseSearchRoute, navigation.currentRoute)
+
+        navigator.selectRoot(BrowseHomeRoute)
+
+        assertEquals(BrowseHomeRoute, navigation.currentRoute)
+        assertEquals(listOf(BrowseHomeRoute), navigation.browseBackStack.toList())
+    }
+
+    @Test
+    fun leavingWideSearchKeepsThePreviousTabStackWithoutSearch() = runBlocking<Unit> {
+        val (_, navigation, navigator) = fixture(this, isPhoneLayout = false)
+        navigator.selectRoot(BrowseFavoriteRoute)
+        val detail = BrowseDetailRoute("favorite-movie", origin = BrowseDetailOrigin.Favorite)
+        navigation.browseBackStack += detail
+        navigator.openSearch()
+
+        navigator.selectRoot(BrowseHomeRoute)
+        assertEquals(BrowseHomeRoute, navigation.currentRoute)
+
+        navigator.selectRoot(BrowseFavoriteRoute)
+        assertEquals(detail, navigation.currentRoute)
+        assertEquals(listOf(BrowseFavoriteRoute, detail), navigation.browseBackStack.toList())
+    }
+
+    @Test
+    fun reselectingThePhoneTabDoesNotDismissSearch() = runBlocking<Unit> {
+        val (_, navigation, navigator) = fixture(this)
+        navigator.openSearch()
+
+        navigator.selectRoot(BrowseHomeRoute)
+
+        assertEquals(BrowseSearchRoute, navigation.currentRoute)
+    }
+
+    @Test
     fun suspendedSeasonRestoreCannotSelectTheOldSeasonInAnotherTab() = runBlocking<Unit> {
         withTimeout(5_000) {
             val fixture = fixture(this)
@@ -141,7 +179,7 @@ class BrowseNavigatorTest {
         }
     }
 
-    private suspend fun fixture(scope: CoroutineScope): NavigatorFixture {
+    private suspend fun fixture(scope: CoroutineScope, isPhoneLayout: Boolean = true): NavigatorFixture {
         lateinit var artworkCache: ArtworkMemoryCache
         rule.setContent {
             artworkCache = rememberArtworkMemoryCache(this@BrowseNavigatorTest, "browse-navigator-test")
@@ -153,7 +191,7 @@ class BrowseNavigatorTest {
         val navigation = BrowseNavigationState()
         browser.switchTabContext(navigation.activeRoot.toString())
         val search = BrowseSearchState(browser::search, { emptyList() }, {}, scope)
-        val navigator = BrowseNavigator(browser, navigation, scope, search, artworkCache, { _, _ -> null }, { true })
+        val navigator = BrowseNavigator(browser, navigation, scope, search, artworkCache, { _, _ -> null }, { isPhoneLayout })
         return NavigatorFixture(browser, navigation, navigator, adapter)
     }
 }
