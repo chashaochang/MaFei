@@ -82,6 +82,7 @@ import cn.mafei.cmp.common.glass.components.LiquidBottomTabsStyle
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.MaFeiSurface
+import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -173,7 +174,17 @@ fun ConnectScreen(
     showProviderSwitcher: Boolean = true,
     showHistory: Boolean = true,
     onOpenServerDiscovery: (() -> Unit)? = null,
-) {    val safeArea = currentMaFeiSafeArea()
+) {
+    val safeArea = currentMaFeiSafeArea()
+    val windowFeatures = LocalMaFeiWindowFeatures.current
+    val switcherTop = maxOf(
+        safeArea.top + if (routeTitle == null) 0.dp else 56.dp,
+        if (windowFeatures.windowedHost && !windowFeatures.windowFullscreen) {
+            windowFeatures.windowControlTopInsetDp.dp
+        } else {
+            0.dp
+        },
+    )
     val provider = formState.provider
     val baseUrl = formState.baseUrl
     val username = formState.username
@@ -304,7 +315,7 @@ fun ConnectScreen(
                         }
                     },
                     modifier = Modifier.align(Alignment.TopEnd)
-                        .padding(top = safeArea.top + if (routeTitle == null) 0.dp else 56.dp),
+                        .padding(top = switcherTop),
                 )
             }
         }
