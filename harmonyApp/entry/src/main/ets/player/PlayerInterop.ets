@@ -32,6 +32,7 @@ import { PlayerVideoBackdropCapture } from './PlayerVideoBackdropCapture';
 
 interface MaFeiPlayerSurfaceArgs extends SystemEngineSource {
   commandId: number;
+  loadId: number;
   keepScreenAwake: boolean;
   backdropRevision: number;
   backdropSampling: boolean;
@@ -265,6 +266,13 @@ struct MaFeiPlayerSurfaceHost {
     // Every command carries the current mode, so a surface that appears after
     // the viewer already picked a ratio still renders correctly.
     this.contentMode = command.contentMode === 'Fill' ? PlayerContentMode.Fill : PlayerContentMode.Fit;
+    // A second window can mount after deviceState or another auxiliary command
+    // has replaced "load". Restore each active source once, independently of
+    // the latest action; stop/release clear loadId so they cannot restart it.
+    if (command.loadId > 0 && command.handle > 0 &&
+        (this.lastLoad?.loadId !== command.loadId || this.lastLoad?.handle !== command.handle)) {
+      this.load(command);
+    }
     if (this.usingSystem) this.systemEngine.fit(command.contentMode === 'Fill');
     if (command.action === 'cast') {
       void this.systemSession.casting.choose(getContext(this) as common.UIAbilityContext); return;
@@ -308,7 +316,6 @@ struct MaFeiPlayerSurfaceHost {
     }
     switch (command.action) {
       case 'load':
-        this.load(command);
         break;
       case 'play':
         if (command.positionMs > 0) {

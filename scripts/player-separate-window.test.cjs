@@ -26,6 +26,7 @@ const abilityFile = 'harmonyApp/entry/src/main/ets/entryability/PlayerAbility.et
 
 function launcherHost(deviceType = '2in1') {
   const calls = [];
+  let mainRect = { width: 2200, height: 1400 };
   let id = 1, revision = 1, reject = false, pending;
   const native = {
     SetOhosPlayerWindowEnabled: enabled => calls.push(['enabled', enabled]),
@@ -48,7 +49,7 @@ function launcherHost(deviceType = '2in1') {
       calls.push(['start', want, options]);
       if (reject) throw new Error('Window unavailable');
     },
-  });
+  }, { getWindowProperties: () => ({ windowRect: mainRect }) });
   launcher.start();
   return {
     calls, tick: () => pending?.(), stop: () => launcher.stop(),
@@ -56,6 +57,7 @@ function launcherHost(deviceType = '2in1') {
     revise: () => revision++,
     reject: () => { reject = true; },
     destroyed: exports.playerWindowDestroyed,
+    resizeMain: (width, height) => { mainRect = { width, height }; },
   };
 }
 
@@ -71,6 +73,24 @@ test('PC opens one singleton and only a new media revision activates it again', 
   assert.equal(h.calls.filter(c => c[0] === 'start').length, 2);
   h.select(0); h.tick();
   assert.equal(h.calls.filter(c => c[0] === 'start').length, 2);
+});
+
+test('a new player matches the current main window in pixels and reuse keeps the user size', async () => {
+  const h = launcherHost();
+  h.resizeMain(2560, 1600);
+  h.tick(); await flush();
+  let options = h.calls.filter(c => c[0] === 'start').at(-1)[2];
+  assert.equal(options.windowWidth, 2560);
+  assert.equal(options.windowHeight, 1600);
+  h.resizeMain(1920, 1200);
+  h.revise(); h.tick(); await flush();
+  options = h.calls.filter(c => c[0] === 'start').at(-1)[2];
+  assert.equal(options.windowWidth, undefined);
+  assert.equal(options.windowHeight, undefined);
+  h.destroyed(); h.tick(); await flush();
+  options = h.calls.filter(c => c[0] === 'start').at(-1)[2];
+  assert.equal(options.windowWidth, 1920);
+  assert.equal(options.windowHeight, 1200);
 });
 
 test('phone and tablet retain their existing player presentation', () => {

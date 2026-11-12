@@ -89,6 +89,11 @@ available. Selecting another video reuses the player window. Closing it stops
 that playback, and window initialization failure restores the inline player.
 Phones and tablets keep the inline presentation.
 
+New player windows use the main window's current pixel dimensions. Reusing an
+open player preserves its size. The native surface restores the active load
+generation when it mounts, even if a device-state query has already replaced
+the original load action.
+
 The player publishes its own safe areas, native title-button bounds and
 fullscreen state. `ApplicationVisibility` aggregates the two Ability lifecycles
 so moving focus between the windows does not background the shared playback

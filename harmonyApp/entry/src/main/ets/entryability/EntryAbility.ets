@@ -372,13 +372,13 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    this.playerWindowLauncher = new PlayerWindowLauncher(this.context);
-    this.playerWindowLauncher.start();
     let mainWindow: window.Window | undefined = undefined;
     try {
       const createdWindow = windowStage.getMainWindowSync();
       mainWindow = createdWindow;
       this.mainWindow = createdWindow;
+      this.playerWindowLauncher = new PlayerWindowLauncher(this.context, createdWindow);
+      this.playerWindowLauncher.start();
       this.startOrientationPolicy(createdWindow);
       createdWindow.on('avoidAreaChange', this.avoidAreaChangeCallback);
       createdWindow.on('windowSizeChange', this.windowSizeChangeCallback);

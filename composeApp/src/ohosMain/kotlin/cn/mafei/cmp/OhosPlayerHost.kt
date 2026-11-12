@@ -78,6 +78,8 @@ private fun String.safeEndpoint(): String {
 /** One low-frequency command/session update sent to the native video surface. */
 private data class OhosPlayerCommandState(
     val commandId: Long = 0L,
+    /** Survives auxiliary commands until this source is stopped or replaced. */
+    val loadId: Long = 0L,
     val handle: Long = 0L,
     val action: String = "none",
     val url: String? = null,
@@ -586,6 +588,11 @@ private object OhosPlayerHostState {
         logOhosPlayer("host publish command=$nextCommandId action=$action handle=$handle")
         val next = OhosPlayerCommandState(
             commandId = nextCommandId,
+            loadId = when {
+                action == "load" -> nextCommandId
+                action == "stop" || action == "release" || handle != commandState.handle -> 0L
+                else -> commandState.loadId
+            },
             handle = handle,
             action = action,
             url = url,
@@ -812,6 +819,7 @@ private fun OhosPlayerCommandState.toJsParameter(actions: PlatformPlaybackAction
     headers.forEachIndexed { index, value -> headerValues[index] = value.nApiValue() }
     return js {
         "commandId"(commandId.nApiValue())
+        "loadId"(loadId.nApiValue())
         "keepScreenAwake"(keepScreenAwake)
         "backdropRevision"(ohosVideoBackdropRevision.nApiValue())
         "backdropSampling"(ohosVideoBackdropSource.sampling)
