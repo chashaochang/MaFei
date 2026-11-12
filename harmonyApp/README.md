@@ -94,6 +94,9 @@ open player preserves its size. The native surface restores the active load
 generation when it mounts, even if a device-state query has already replaced
 the original load action.
 
+The dedicated player fills its window with overlay controls and offers only
+system fullscreen. It does not add a separate in-window fullscreen mode.
+
 The player publishes its own safe areas, native title-button bounds and
 fullscreen state. `ApplicationVisibility` aggregates the two Ability lifecycles
 so moving focus between the windows does not background the shared playback

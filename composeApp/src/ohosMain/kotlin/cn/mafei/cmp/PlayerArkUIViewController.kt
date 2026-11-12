@@ -9,6 +9,7 @@ import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
 import cn.mafei.cmp.common.design_system.MaFeiInsetsDp
 import cn.mafei.cmp.common.design_system.MaFeiWindowFeatures
+import cn.mafei.cmp.player.ui.LocalStandalonePlayerWindow
 import kotlinx.cinterop.*
 import platform.ArkTS.ArkTS_Napi_NativeModule.*
 
@@ -81,6 +82,7 @@ fun PlayerArkUIViewController(env: napi_env): napi_value? = try {
         CompositionLocalProvider(
             LocalNavigationEventDispatcherOwner provides owner,
             LocalMaFeiWindowFeatures provides playerWindowFeatures,
+            LocalStandalonePlayerWindow provides true,
         ) {
             ohosPlayerWindowState.request?.let { request ->
                 key(request.id) { request.content() }

@@ -31,12 +31,16 @@ class PlayerWindowControllerTest {
         dark: Boolean = true, phase: PlayerPhase = PlayerPhase.Paused,
         volume: PlayerDeviceControls = PlayerDeviceControls.Unsupported,
         features: MaFeiWindowFeatures = MaFeiWindowFeatures(),
+        standalone: Boolean = false,
         size: MutableState<Pair<Int, Int>>? = null) {
         rule.setContent {
             MaFeiTheme(darkTheme = dark) {
-                CompositionLocalProvider(LocalMaFeiWindowFeatures provides features.copy(
-                    windowedHost = windowed, windowFullscreen = fullscreen.value,
-                )) {
+                CompositionLocalProvider(
+                    LocalMaFeiWindowFeatures provides features.copy(
+                        windowedHost = windowed, windowFullscreen = fullscreen.value,
+                    ),
+                    LocalStandalonePlayerWindow provides standalone,
+                ) {
                     NowPlayingScreen(
                         media = NowPlayingMedia("movie", "测试影片", ""),
                         state = PlayerState(phase = phase, durationMs = 120_000, positionMs = 30_000),
@@ -92,6 +96,42 @@ class PlayerWindowControllerTest {
         assertEquals(0, backs)
         rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
         assertEquals(1, backs)
+    }
+
+    @Test fun standalonePlayerFillsItsWindowAndOffersOnlySystemFullscreen() {
+        show(standalone = true)
+        val viewport = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
+        val video = rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot
+        assertEquals(viewport, video)
+        rule.onNodeWithTag("playerWindowHeader").assertDoesNotExist()
+        rule.onNodeWithContentDescription("窗口内全屏").assertDoesNotExist()
+        rule.onNodeWithContentDescription("系统全屏").assertIsDisplayed()
+        rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.W) }
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun standaloneFullscreenExitRestoresFilledWindowWithoutAnExtraBackLayer() {
+        show(standalone = true)
+        rule.onNodeWithContentDescription("系统全屏").performClick()
+        rule.onNodeWithContentDescription("退出系统全屏").assertIsDisplayed()
+        rule.onNodeWithContentDescription("窗口内全屏").assertDoesNotExist()
+        rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
+        assertEquals(listOf(true, false), requests)
+        rule.onNodeWithTag("playerWindowHeader").assertDoesNotExist()
+        rule.onNodeWithTag("viewport").performKeyInput { pressKey(Key.Escape) }
+        assertEquals(1, backs)
+    }
+
+    @Test fun standaloneVideoFillsTheWindowWhileItsControlsAvoidNativeTitleButtons() {
+        show(500, 720, standalone = true,
+            features = MaFeiWindowFeatures(windowControlTopInsetDp = 40f, windowControlEndInsetDp = 140f))
+        val viewport = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot
+        val video = rule.onNodeWithTag("video").fetchSemanticsNode().boundsInRoot
+        assertEquals(viewport, video)
+        val back = rule.onNodeWithContentDescription("返回").fetchSemanticsNode().boundsInRoot
+        val more = rule.onNodeWithContentDescription("更多设置").fetchSemanticsNode().boundsInRoot
+        assertTrue(back.top >= viewport.top + 40f)
+        assertTrue(more.right <= viewport.right - 140f)
     }
 
     @Test fun freeformTabletUsesWindowControlsEvenInANarrowPortraitWindow() {

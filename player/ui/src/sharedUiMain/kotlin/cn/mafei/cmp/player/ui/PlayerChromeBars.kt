@@ -134,12 +134,12 @@ internal fun PlayerTopChrome(
     onCasting: (() -> Unit)?,
 ) {
     val windowFeatures = LocalMaFeiWindowFeatures.current
-    val windowControlEndInset = if (windowFeatures.windowedHost && !fullscreen) {
+    val windowControlEndInset = if (windowFeatures.windowedHost && !windowFeatures.windowFullscreen) {
         windowFeatures.windowControlEndInsetDp.dp
     } else {
         0.dp
     }
-    val windowControlTopInset = if (windowFeatures.windowedHost && !fullscreen) {
+    val windowControlTopInset = if (windowFeatures.windowedHost && !windowFeatures.windowFullscreen) {
         windowFeatures.windowControlTopInsetDp.dp
     } else {
         0.dp
@@ -274,7 +274,7 @@ internal fun PlayerBottomChrome(
     onDanmakuToggle: (() -> Unit)? = null,
     windowedController: Boolean = false,
     windowFullscreen: Boolean = false,
-    onWindowFullscreen: () -> Unit = {},
+    onWindowFullscreen: (() -> Unit)? = null,
     deviceControls: PlayerDeviceControls = PlayerDeviceControls.Unsupported,
 ) {
     val audioTracks = tracks.filter { it.kind == TrackKind.Audio }
@@ -321,7 +321,7 @@ internal fun PlayerBottomChrome(
             options = playbackOptions,
             volume = { PlayerWindowVolume(deviceControls, backdrop) },
             screenModes = {
-                PlayerChromeButton(
+                if (onWindowFullscreen != null) PlayerChromeButton(
                     if (windowFullscreen && !fullscreen) PlayerChromeGlyph.WindowRestore else PlayerChromeGlyph.WindowFullscreen,
                     if (windowFullscreen && !fullscreen) "退出窗口内全屏" else "窗口内全屏", 44, 20,
                     backdrop, onWindowFullscreen, transparent = true,

@@ -222,6 +222,8 @@ fun NowPlayingScreen(
     val reportSubmitter = onSubmitContentReport ?: LocalPlayerContentReportSubmitter.current
     val hostFeatures = LocalMaFeiWindowFeatures.current
     val windowedController = hostFeatures.windowedHost
+    val standaloneWindow = windowedController && LocalStandalonePlayerWindow.current
+    val windowFillAvailable = windowedController && !standaloneWindow
     val latestTogglePlay by rememberUpdatedState(onTogglePlay)
     val latestSeek by rememberUpdatedState(onSeek)
     val latestSpeed by rememberUpdatedState(onSpeed)
@@ -439,7 +441,7 @@ fun NowPlayingScreen(
             if (!reportSubmitting) reportComposerVisible = false
         } else {
             when (playerBackStep(panel != PlayerChromePanel.None, playbackInfoVisible,
-                fullscreen, requestFullscreen != null, windowedController && windowFullscreen)) {
+                fullscreen, requestFullscreen != null, windowFillAvailable && windowFullscreen)) {
                 PlayerBackStep.ClosePanel -> closePanel()
                 PlayerBackStep.ClosePlaybackInfo -> { playbackInfoVisible = false; showControlsTemporarily() }
                 PlayerBackStep.ExitFullscreen -> requestFullscreen?.invoke(false)
@@ -467,7 +469,7 @@ fun NowPlayingScreen(
                 { delta -> latestSeek((state.positionMs + delta).coerceIn(0L, durationMs)); showControlsTemporarily() }
             } else null,
             onFullscreen = if (!locked && requestFullscreen != null) {{ requestFullscreen(!fullscreen) }} else null,
-            onWindowFullscreen = if (!locked && windowedController) ::fillWindow else null,
+            onWindowFullscreen = if (!locked && windowFillAvailable) ::fillWindow else null,
             onVolumeBy = if (!locked && deviceControls.maxVolume() > 0) ::adjustVolume else null,
             onMute = if (!locked && deviceControls.maxVolume() > 0) {{
                 val volume = deviceControls.volume() ?: 0
@@ -476,16 +478,12 @@ fun NowPlayingScreen(
             }} else null,
         ),
     ) {
-        val immersive = fullscreen || (windowedController && windowFullscreen)
+        val immersive = fullscreen || standaloneWindow || (windowedController && windowFullscreen)
         val windowHeaderVisible = windowedController && !immersive
         val stackedNativeChrome = maxWidth < 700.dp && hostFeatures.windowControlTopInsetDp > 0f
         val headerContentTop = safeArea.top + if (stackedNativeChrome) hostFeatures.windowControlTopInsetDp.dp else 0.dp
         val windowHeaderHeight = if (windowHeaderVisible) headerContentTop + 52.dp else 0.dp
-        val viewportTop = when {
-            windowHeaderVisible -> windowHeaderHeight
-            windowedController && !fullscreen -> safeArea.top + hostFeatures.windowControlTopInsetDp.dp
-            else -> 0.dp
-        }
+        val viewportTop = if (windowHeaderVisible) windowHeaderHeight else 0.dp
         BoxWithConstraints(Modifier.fillMaxSize().padding(top = viewportTop)
             .onSizeChanged { sceneSize = it }.onGloballyPositioned { sceneOrigin = it.positionInRoot() }) {
         // The player used to switch to its richer control set only after the
@@ -806,7 +804,7 @@ fun NowPlayingScreen(
                 largeTextControls = anchoredMenus,
                 windowedController = windowedController,
                 windowFullscreen = windowFullscreen,
-                onWindowFullscreen = ::fillWindow,
+                onWindowFullscreen = if (windowFillAvailable) ::fillWindow else null,
                 deviceControls = deviceControls,
                 onNext = onNext,
                 onPrevious = onPrevious,
