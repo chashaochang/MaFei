@@ -49,7 +49,7 @@ private var ohosSystemBackInput: OhosSystemBackInput? = null
  * Ability fallback input for the root Navigation 3 dispatcher. Dispatch through
  * the handler chain (including sheets and player menus), never pop a route here.
  */
-private class OhosSystemBackInput : NavigationEventInput() {
+internal class OhosSystemBackInput : NavigationEventInput() {
     private var hasEnabledHandlers = false
 
     override fun onHasEnabledHandlersChanged(hasEnabledHandlers: Boolean) {
@@ -275,6 +275,7 @@ fun MainArkUIViewController(
             LocalEmbeddedWebHost provides OhosEmbeddedWebHost,
             cn.mafei.cmp.player.ui.LocalPlayerVideoBackdropSource provides ohosVideoBackdropSource,
             LocalPlayerContentReportSubmitter provides contentReportSubmitter,
+            LocalPlayerWindowState provides ohosPlayerWindowState,
         ) {
             App(
                 runtime = runtime,

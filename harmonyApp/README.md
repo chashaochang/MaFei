@@ -79,3 +79,18 @@ bytes. It does not install the HAP or prove runtime linkage. By default the
 host has no signing configuration and emits an unsigned HAP. User signing and
 an attached HarmonyOS ARM device are required for installation and first frame.
 Do not substitute an x64 emulator or import production signing credentials.
+
+## PC player window
+
+On HarmonyOS PC (`deviceType === '2in1'`), `PlayerWindowLauncher` opens the
+non-exported singleton `PlayerAbility` for video playback. Its Compose entry
+point renders the existing session-owned player; the browser window stays
+available. Selecting another video reuses the player window. Closing it stops
+that playback, and window initialization failure restores the inline player.
+Phones and tablets keep the inline presentation.
+
+The player publishes its own safe areas, native title-button bounds and
+fullscreen state. `ApplicationVisibility` aggregates the two Ability lifecycles
+so moving focus between the windows does not background the shared playback
+runtime. The native surface resolves its owning window for brightness and
+screen-awake requests.

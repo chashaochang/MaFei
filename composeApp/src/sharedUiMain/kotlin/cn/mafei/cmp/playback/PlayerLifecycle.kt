@@ -23,6 +23,7 @@ internal fun BindBrowsePlayerLifecycle(
     detailId: MediaId?,
     onPlayerScreenChanged: (Boolean) -> Unit,
     onPlayerFullscreenChanged: (Boolean) -> Unit,
+    separateVideoWindow: Boolean = false,
 ) {
     val playback = player.playback
     val hostWindowFeatures = LocalMaFeiWindowFeatures.current
@@ -34,12 +35,12 @@ internal fun BindBrowsePlayerLifecycle(
     // than issuing another enter request. Do not key this effect by the local
     // player state: an internal request is asynchronous and must not be reset
     // before the window manager reports the resulting status.
-    LaunchedEffect(player.playerExpanded, hostWindowFeatures.windowedHost, hostWindowFeatures.windowFullscreen) {
-        if (player.playerExpanded && hostWindowFeatures.windowedHost && player.playerFullscreen != hostWindowFeatures.windowFullscreen) {
+    LaunchedEffect(player.playerExpanded, hostWindowFeatures.windowedHost, hostWindowFeatures.windowFullscreen, separateVideoWindow) {
+        if (!separateVideoWindow && player.playerExpanded && hostWindowFeatures.windowedHost && player.playerFullscreen != hostWindowFeatures.windowFullscreen) {
             player.playerFullscreen = hostWindowFeatures.windowFullscreen
         }
     }
-    val videoPlayerPresented = player.playerExpanded && player.playingMedia?.mediaType != MediaType.Audio
+    val videoPlayerPresented = !separateVideoWindow && player.playerExpanded && player.playingMedia?.mediaType != MediaType.Audio
     val currentPlayerScreenChanged by rememberUpdatedState(onPlayerScreenChanged)
     DisposableEffect(videoPlayerPresented) {
         currentPlayerScreenChanged(videoPlayerPresented)

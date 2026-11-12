@@ -121,8 +121,13 @@ internal fun BrowseApplication(
         remember(session) { { image -> runtime.loadPhotoArtwork(session, image) } }
     val playback = remember(session) { runtime.playback(session) }
     val player = remember(session) { BrowsePlayerState(playback, browser, scope) }
+    val playerWindow = LocalPlayerWindowState.current?.takeIf { it.accepts(player) }
+    val separateVideoWindow = playerWindow != null && player.playingMedia?.mediaType != MediaType.Audio
     val playerShellState = rememberPlayerShellState(playback)
-    BindBrowseSessionPlayerLifecycle(player, playerShellState, playerRenderMode, browserState, onPlayerScreenChanged, onPlayerFullscreenChanged)
+    BindBrowseSessionPlayerLifecycle(
+        player, playerShellState, playerRenderMode, browserState,
+        onPlayerScreenChanged, onPlayerFullscreenChanged, separateVideoWindow,
+    )
     val catalogs = rememberBrowseCatalogs(runtime.sessions.media, session.media)
     val musicStore = catalogs.music
     val preparedStream = playback?.prepared?.collectAsState()?.value
@@ -402,6 +407,8 @@ internal fun BrowseApplication(
                     windowControls = windowControls,
                     windowDragArea = windowDragArea,
                     onPlayerFullscreenChanged = onPlayerFullscreenChanged,
+                    playerWindow = playerWindow,
+                    liquidGlassIntensity = liquidGlassIntensity,
                     onReturnToBrowse = {
                         if (account.returnToEmbeddedWeb) {
                             account.returnToEmbeddedWeb = false
@@ -414,7 +421,7 @@ internal fun BrowseApplication(
                 // it. The system PiP window owns that surface until restoration; popping
                 // the player route here would dispose the native host and release the
                 // active playback session.
-                if (!player.playerExpanded || playerShellState.pictureInPicture)
+                if (!player.playerExpanded || playerShellState.pictureInPicture || separateVideoWindow)
                     browseContentStateHolder.SaveableStateProvider("browse-content") {
                         MaFeiAdaptiveShell(
                             layout = layout,

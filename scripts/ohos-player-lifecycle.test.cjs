@@ -6,6 +6,16 @@ const ts = require(process.env.MAFEI_TYPESCRIPT || 'typescript');
 
 test('ability visibility reaches the shared playback reducer before native surface observers', () => {
   const events = [], module = { exports: {} };
+  const visibility = { exports: {} };
+  const native = { default: { SetOhosApplicationForeground: visible => events.push(visible) } };
+  const visibilitySource = fs.readFileSync('harmonyApp/entry/src/main/ets/entryability/ApplicationVisibility.ets', 'utf8');
+  vm.runInNewContext(ts.transpileModule(visibilitySource, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+  } }).outputText, { module: visibility, exports: visibility.exports, require(name) {
+    if (name === '@kit.BasicServicesKit') return { deviceInfo: { deviceType: 'phone' } };
+    if (name === 'libentry.so') return native;
+    throw new Error(`Unexpected import: ${name}`);
+  } });
   const source = fs.readFileSync('harmonyApp/entry/src/main/ets/entryability/EntryAbility.ets', 'utf8');
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
@@ -13,7 +23,8 @@ test('ability visibility reaches the shared playback reducer before native surfa
     if (name === '@kit.AbilityKit') return { UIAbility: class {
       context = { eventHub: { emit: event => events.push(event) } };
     } };
-    if (name === 'libentry.so') return { default: { SetOhosApplicationForeground: visible => events.push(visible) } };
+    if (name === 'libentry.so') return native;
+    if (name === './ApplicationVisibility') return visibility.exports;
     return {};
   } });
   const ability = new module.exports.default();

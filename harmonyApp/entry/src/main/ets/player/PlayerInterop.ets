@@ -365,13 +365,14 @@ struct MaFeiPlayerSurfaceHost {
     }
   }
 
-  /** 窗口实例只在第一次用的时候取：拖动亮度时每帧都要写，不能每帧都 getLastWindow。 */
+  /** Resolve this surface's window, independently of which application window has focus. */
   private async resolveWindow(): Promise<window.Window | undefined> {
     if (this.playerWindow !== undefined) {
       return this.playerWindow;
     }
     try {
-      this.playerWindow = await window.getLastWindow(getContext(this) as common.UIAbilityContext);
+      const name = this.getUIContext().getWindowName();
+      if (name !== undefined) this.playerWindow = window.findWindow(name);
     } catch (_error) {
       hilog.warn(PLAYER_LOG_DOMAIN, PLAYER_LOG_TAG, 'window unavailable for brightness');
     }

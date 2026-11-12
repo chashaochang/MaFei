@@ -28,6 +28,7 @@
 | 起播、队列、清晰度意图 | `playback/BrowsePlayerState.kt` | 账号级播放意图，不持有浏览/账号导航栈 |
 | 全屏、宿主回调、自动下一集 | `playback/PlayerLifecycle.kt` | 进度与字幕变化不通知整个浏览壳层 |
 | 完整播放器和 Mini Player | `playback/BrowsePlayerHost.kt`、`BrowsePlayerOverlay.kt` | 复用已有 Player UI 与原生 Surface |
+| PC 独立播放窗口 | `playback/PlayerWindowState.kt`、`PlayerWindowPresentation.kt`、OHOS `PlayerArkUIViewController.kt` | 窗口只拥有呈现；复用会话播放状态，同一视频只挂载一个原生 Surface |
 
 浏览数据实现位于 `feature/browse-core/src/commonMain/kotlin/cn/mafei/cmp/feature/home/`：
 该纯共享 Kotlin 模块保留兼容包名，`feature/home` 只保留首页展示。
@@ -50,6 +51,7 @@
 
 - App 仍在 `key(session)` 内装配浏览流程。切换账号替换所有浏览、账号和播放意图对象；窗口大小变化不重建它们。
 - `BrowseNavigationState` 持有浏览栈和初始媒体快照；账号栈留在 `AccountFlowState`。播放器呈现不清空浏览栈。
+- 鸿蒙 PC 视频由 `PlayerAbility` 独立窗口呈现，主窗口继续浏览。同会话选片复用窗口，关闭窗口结束播放；创建失败回退原窗口。第二 Compose 入口复用会话与播放器，不创建另一份 Runtime，窗口避让、全屏和返回事件独立处理。
 - 首页网格保持原来的会话内状态，其余列表保留原来的 saveable 状态；最近媒体库入口继续按 server/account 保存。
 - `BrowserContext` 只有一份可观察媒体读模型和账号认证错误通道。请求序号、分页累加器、历史补全缓存、季快照归各控制器。
 - 收藏、已观看和删除经 `BrowserMediaFacts` 更新所有已展示副本；控制器之间只传递必要事实或只读回调，不互相持有实例。

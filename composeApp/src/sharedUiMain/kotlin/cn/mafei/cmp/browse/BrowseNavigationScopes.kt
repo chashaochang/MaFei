@@ -33,8 +33,12 @@ internal fun BindBrowseSessionPlayerLifecycle(
     state: State<MediaBrowserState>,
     onPlayerScreenChanged: (Boolean) -> Unit,
     onPlayerFullscreenChanged: (Boolean) -> Unit,
+    separateVideoWindow: Boolean = false,
 ) {
-    BindBrowsePlayerLifecycle(player, playerShellState, playerRenderMode, state.value.detailId, onPlayerScreenChanged, onPlayerFullscreenChanged)
+    BindBrowsePlayerLifecycle(
+        player, playerShellState, playerRenderMode, state.value.detailId,
+        onPlayerScreenChanged, onPlayerFullscreenChanged, separateVideoWindow,
+    )
 }
 
 /** The exact route is read only by the effect host, not by the application/session owner. */

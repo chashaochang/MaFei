@@ -16,11 +16,8 @@ import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.music.MusicCatalogStore
 import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.player.api.PlayerController
-import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
-import cn.mafei.cmp.player.ui.NowPlayingMedia
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @Composable
@@ -40,6 +37,8 @@ internal fun BrowsePlayerHost(
     windowDragArea: @Composable (@Composable () -> Unit) -> Unit,
     onPlayerFullscreenChanged: (Boolean) -> Unit,
     onReturnToBrowse: () -> Unit,
+    playerWindow: PlayerWindowState?,
+    liquidGlassIntensity: Float,
 ) {
     val scope = rememberCoroutineScope()
     val playback = player.playback
@@ -140,102 +139,47 @@ internal fun BrowsePlayerHost(
             )
         }
     } else if (player.playerExpanded && playerMedia != null && playback != null) {
-        BoundNowPlayingScreen(
-            media =
-                NowPlayingMedia(
-                    id = playerMedia.id.value,
-                    title = playerMedia.title,
-                    subtitle = playerMedia.miniPlayerSubtitle(),
-                    description = playerMedia.overview,
-                    live = playerMedia.mediaType == MediaType.LiveChannel,
-                ),
-            controller = playback.controller,
-            providerTracks = playback.tracks,
-            onBack = {
-                player.playerExpanded = false
-                onReturnToBrowse()
-                player.playerFullscreen = false
-                if (!hostWindowFeatures.windowedHost) onPlayerFullscreenChanged(false)
-                scope.launch {
-                    try {
-                        playback.stop()
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        player.playbackError = "停止播放失败，请重试"
-                    }
+        val close = {
+            player.playerExpanded = false
+            player.playerFullscreen = false
+            onReturnToBrowse()
+            if (playerWindow == null && !hostWindowFeatures.windowedHost) onPlayerFullscreenChanged(false)
+            scope.launch {
+                try {
+                    playback.stop()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    player.playbackError = "停止播放失败，请重试"
                 }
-            },
-            onTogglePlay = player.togglePlayback,
-            onRetry = { player.startPlayback(playerMedia) },
-            onSeek = { player.pendingSeekPosition = it },
-            onSpeed = { speed ->
-                scope.launch {
-                    try {
-                        playback.controller.speed(speed)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        player.playbackError = "播放器操作失败，请重试"
-                    }
-                }
-            },
-            onSelectTrack = { kind, id ->
-                scope.launch {
-                    try {
-                        playback.selectTrack(kind, id)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        player.playbackError = "播放器操作失败，请重试"
-                    }
-                }
-            },
-            playerSurface = playerSurface,
-            preparing = player.playbackBusy,
-            hostWindowControls = windowControls,
-            hostWindowDragArea = windowDragArea,
-            playbackError = player.playbackError,
-            modifier = Modifier.fillMaxSize(),
-            queue = player.playQueue,
-            onNext = player.playQueue?.takeIf { it.hasNext }?.let { { player.playNextEpisode() } },
-            onPrevious = player.playQueue?.takeIf { it.hasPrevious }?.let { { player.playPreviousEpisode() } },
-            onSelectEpisode = player.playQueue?.takeIf { it.size > 1 }?.let { { player.playEpisodeAt(it) } },
-            qualityOptions = qualityOptions,
-            onSelectQuality = { player.selectQuality(it) },
-            catalogItem = playerMedia,
-            prepared = preparedStream,
-            loadSeekPreview = { positionMs ->
-                repository
-                    .previewFrame(session = mediaSession, item = playerMedia.id, positionMs = positionMs, mediaSourceId = preparedStream?.mediaSourceId)
-                    ?.let { frame ->
-                        PlayerSeekPreviewFrame(
-                            encodedTile = frame.encodedTile,
-                            frameWidthPx = frame.frameWidthPx,
-                            frameHeightPx = frame.frameHeightPx,
-                            tileColumn = frame.tileColumn,
-                            tileRow = frame.tileRow,
-                        )
-                    } ?: playback.previewFrame(positionMs)
-            },
-            // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
-            // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
-            fullscreen = if (hostWindowFeatures.windowedHost) hostWindowFeatures.windowFullscreen else player.playerFullscreen,
-            onFullscreenChanged = { requested ->
-                player.playerFullscreen = requested
-                onPlayerFullscreenChanged(requested)
-            },
-            onSelectContentMode = { mode ->
-                scope.launch {
-                    try {
-                        playback.controller.setContentMode(mode)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        player.playbackError = "切换画面比例失败，请重试"
-                    }
-                }
-            },
-        )
+            }
+            Unit
+        }
+        val content: @Composable () -> Unit = {
+            BrowseVideoPlayer(
+                player = player,
+                playerMedia = playerMedia,
+                preparedStream = preparedStream,
+                qualityOptions = qualityOptions,
+                repository = repository,
+                mediaSession = mediaSession,
+                playerSurface = playerSurface,
+                windowControls = if (playerWindow == null) windowControls else ({}),
+                windowDragArea = if (playerWindow == null) windowDragArea else ({ it() }),
+                onPlayerFullscreenChanged = playerWindow?.let { it::requestFullscreen } ?: onPlayerFullscreenChanged,
+                onClose = close,
+            )
+        }
+        if (playerWindow != null) {
+            PlayerWindowPresentation(
+                window = playerWindow,
+                owner = player,
+                mediaKey = playerMedia.id.value,
+                title = playerMedia.title,
+                glassIntensity = liquidGlassIntensity,
+                onClose = close,
+                content = content,
+            )
+        } else content()
     }
 }

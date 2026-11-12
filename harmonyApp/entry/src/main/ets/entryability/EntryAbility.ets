@@ -4,10 +4,13 @@ import { KeyboardAvoidMode, window } from '@kit.ArkUI';
 import { display } from '@kit.ArkUI';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import nativeApi from 'libentry.so';
+import { PlayerWindowLauncher } from '../player/PlayerWindowLauncher';
+import { setApplicationWindowForeground } from './ApplicationVisibility';
 
 const DOMAIN = 0x4D46;
 
 export default class EntryAbility extends UIAbility {
+  private playerWindowLauncher?: PlayerWindowLauncher;
   private mainWindow?: window.Window;
   private orientationPoller?: number;
   private requestedOrientation?: window.Orientation;
@@ -369,6 +372,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    this.playerWindowLauncher = new PlayerWindowLauncher(this.context);
+    this.playerWindowLauncher.start();
     let mainWindow: window.Window | undefined = undefined;
     try {
       const createdWindow = windowStage.getMainWindowSync();
@@ -409,16 +414,19 @@ export default class EntryAbility extends UIAbility {
   }
 
   onForeground(): void {
-    nativeApi.SetOhosApplicationForeground(true);
+    setApplicationWindowForeground('main', true);
     this.context.eventHub.emit('onForeground');
   }
 
   onBackground(): void {
-    nativeApi.SetOhosApplicationForeground(false);
+    setApplicationWindowForeground('main', false);
     this.context.eventHub.emit('onBackground');
   }
 
   onWindowStageDestroy(): void {
+    this.playerWindowLauncher?.stop();
+    this.playerWindowLauncher = undefined;
+    setApplicationWindowForeground('main', false);
     if (this.orientationPoller !== undefined) {
       clearInterval(this.orientationPoller);
       this.orientationPoller = undefined;

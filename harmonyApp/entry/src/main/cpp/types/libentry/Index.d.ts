@@ -50,3 +50,18 @@ export const RegisterOhosPhotoSave: (handler: (payload: string) => void) => bool
 export const CompleteOhosPhotoSave: (id: number, result: number) => void
 export const ReleaseOhosPhotoSave: () => void
 export const UpdateOhosWebState: (payload: string) => boolean;
+
+export const PlayerArkUIViewController: () => ArkUIViewController
+export const SetOhosPlayerWindowEnabled: (enabled: boolean) => void
+export const GetOhosPlayerWindowRequestId: () => number
+export const GetOhosPlayerWindowRevision: () => number
+export const GetOhosPlayerWindowTitle: () => string
+export const GetOhosPlayerWindowFullscreenRevision: () => number
+export const IsOhosPlayerWindowFullscreenRequested: () => boolean
+export const CloseOhosPlayerWindow: (id: number) => void
+export const FailOhosPlayerWindow: (id: number) => void
+export const HandleOhosPlayerWindowBack: () => boolean
+export const UpdateOhosPlayerWindowMetrics: (
+  left: number, top: number, right: number, bottom: number,
+  controlsEnd: number, controlsTop: number, fullscreen: boolean
+) => void

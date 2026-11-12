@@ -2,6 +2,7 @@
 #include "hilog/log.h"
 #include "napi/native_api.h"
 #include <vector>
+#include "player_window_bridge.h"
 
 static napi_value CreateMainArkUIViewController(napi_env env, napi_callback_info info) {
     size_t count = 4;
@@ -326,6 +327,7 @@ static napi_value ReleasePhotoSave(napi_env env, napi_callback_info info) {
 
 static napi_value Init(napi_env env, napi_value exports) {
     androidx_compose_ui_arkui_init(env, exports);
+    RegisterPlayerWindowBridge(env, exports);
 
     napi_property_descriptor descriptors[] = {
         {"UpdateOhosWebState", nullptr, UpdateWebState, nullptr, nullptr, nullptr, napi_default, nullptr},
