@@ -25,7 +25,11 @@ class SessionArtworkTest {
             if (provider == ProviderKind.Feiniu) listOf(SavedFeiniuRoute(server.baseUrl, "Relay")) else emptyList())
     }
     private fun bind(c: SavedConnection, t: Transport) = DefaultProviderSessionFactory(t).restore(c, buildMap {
-        put(c.tokenAlias, SecureSecret.AuthToken(if (c.server.provider == ProviderKind.Jellyfin) "MediaBrowser" else "Bearer", "synthetic-token"))
+        put(c.tokenAlias, SecureSecret.AuthToken(when (c.server.provider) {
+            ProviderKind.Jellyfin, ProviderKind.Emby -> "MediaBrowser"
+            ProviderKind.Feiniu -> "Bearer"
+            ProviderKind.Plex -> "Plex"
+        }, "synthetic-token"))
         if (c.server.provider == ProviderKind.Feiniu) put(c.cookieAlias, SecureSecret.CookieText("session=fixture"))
     })
 
@@ -48,6 +52,22 @@ class SessionArtworkTest {
             targetWidthPx = 240,
         ))
         assertEquals("240", t.requests.single().url.queryParameters.first("maxWidth"))
+    }
+    @Test fun embyAndPlexArtworkUseServerHeadersWithoutCredentialsInUrls() = runBlocking<Unit> {
+        for (provider in listOf(ProviderKind.Emby, ProviderKind.Plex)) {
+            val t = Transport(); val c = connection(provider); val b = bind(c, t)
+            val url = if (provider == ProviderKind.Plex) "https://media.test/base/library/metadata/7/thumb"
+                else "https://media.test/base/Items/a/Images/Primary"
+            assertNotNull(SessionArtwork(t).load(c, b, MediaImage(url = url), targetWidthPx = 240))
+            val request = t.requests.single()
+            val header = if (provider == ProviderKind.Plex) "X-Plex-Token" else "X-Emby-Token"
+            assertEquals("synthetic-token", request.headers.first(header))
+            assertFalse(request.url.toEncodedString().contains("synthetic-token"))
+            if (provider == ProviderKind.Plex) assertEquals(url, request.url.toEncodedString())
+            else assertEquals("240", request.url.queryParameters.first("maxWidth"))
+            assertNull(SessionArtwork(t).load(c, b, MediaImage(url = "https://foreign.test/a")))
+            assertEquals(1, t.requests.size)
+        }
     }
     @Test fun foreignOriginAndDowngradeNeverReceiveCredentials() = runBlocking {
         val t = Transport(); val c = connection(); val b = bind(c, t)

@@ -102,4 +102,25 @@ class JellyfinDiscoveryApiTest {
         assertEquals("10.7.7", error.actualVersion)
         assertEquals("10.8.0", error.minimumSupported)
     }
+
+    @Test
+    fun embyDiscoveryUsesItsOwnVersionRangeAndNeverSendsAnInstalledToken() = runTest {
+        val transport = FakeJellyfinTransport()
+        transport.enqueueJson(200, """{"ProductName":"Emby Server","ServerName":"Cinema","Version":"4.9.1.0","Id":"emby-server"}""", base)
+        transport.enqueueJson(200, """{"Version":"3.5.0.0"}""", base)
+        val client = JellyfinClient(
+            JellyfinServerConfig(base, "MaFei", "Test", "device-1", "2.0.0",
+                cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Emby),
+            transport,
+            InMemoryJellyfinSessionState(cn.mafei.cmp.providers.jellyfin.core.JellyfinSession("u1", "fixture-token")),
+        )
+        val api = DefaultJellyfinDiscoveryApi(client)
+        assertEquals("4.9.1.0", api.verifiedServerInfo(base).info.version)
+        val failure = assertFailsWith<JellyfinUnsupportedServerVersionError> { api.verifiedServerInfo(base) }
+        assertEquals("4.0.0", failure.minimumSupported)
+        transport.requests.forEach {
+            assertEquals(null, it.headers.first("X-Emby-Token"))
+            assertEquals(false, it.headers.first("X-Emby-Authorization").orEmpty().contains("fixture-token"))
+        }
+    }
 }

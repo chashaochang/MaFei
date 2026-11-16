@@ -75,10 +75,10 @@ data class SavedConnection(
         if (server.provider == ProviderKind.Feiniu && feiniuRoutes.isEmpty()) {
             throw ClientConfigError("Saved Feiniu connection requires explicit routes")
         }
-        if (server.provider == ProviderKind.Jellyfin &&
+        if (server.provider != ProviderKind.Feiniu &&
             (feiniuRoutes.isNotEmpty() || feiniuOriginalAddress != null)
         ) {
-            throw ClientConfigError("Jellyfin connection cannot contain Feiniu connection metadata")
+            throw ClientConfigError("This provider cannot contain Feiniu connection metadata")
         }
         if (feiniuRoutes.size > 16 || feiniuRoutes.distinct().size != feiniuRoutes.size) {
             throw ClientConfigError("Saved Feiniu routes are duplicated or exceed the supported limit")
@@ -99,7 +99,7 @@ data class SavedConnection(
     /** User-entered login secret. Deliberately excluded from [aliases], which manages SDK sessions. */
     val passwordAlias: CredentialAlias get() = CredentialAlias("mafei/session/$credentialKey/password")
     val aliases: Set<CredentialAlias> get() = when (server.provider) {
-        ProviderKind.Jellyfin -> setOf(tokenAlias)
+        ProviderKind.Jellyfin, ProviderKind.Emby, ProviderKind.Plex -> setOf(tokenAlias)
         ProviderKind.Feiniu -> setOf(tokenAlias, cookieAlias)
     }
     override fun toString() = "SavedConnection(provider=${server.provider}, metadata=redacted)"

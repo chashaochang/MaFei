@@ -128,10 +128,12 @@ class DefaultJellyfinCatalogApi(
         itemId: String,
         limit: Int,
         fields: List<ItemField>,
-    ): List<BaseItemDto> = client.executeDecoding(
-        JellyfinRequests.similar(client.config.baseUrl, userId, itemId, limit, fields),
-        itemListSerializer,
-    )
+    ): List<BaseItemDto> {
+        val request = JellyfinRequests.similar(client.config.baseUrl, userId, itemId, limit, fields)
+        return if (client.config.protocol == cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Emby) {
+            client.executeDecoding(request, queryResultSerializer).items
+        } else client.executeDecoding(request, itemListSerializer)
+    }
 
     override suspend fun nextUp(
         userId: String,

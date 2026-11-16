@@ -18,6 +18,7 @@ internal class SignedOutAccountState(
     private val onBusyChange: (Boolean) -> Unit,
     private val onErrorChange: (String?) -> Unit,
 ) {
+    val plex = PlexAccountState(accounts, scope, isBusy, onBusyChange, onErrorChange)
     var historyConnections by mutableStateOf(emptyList<SavedConnection>())
     var rememberedPasswordKeys by mutableStateOf(emptySet<String>())
     var historyLoading by mutableStateOf(false)

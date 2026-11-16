@@ -5,6 +5,7 @@ import cn.mafei.cmp.providers.jellyfin.core.InMemoryJellyfinSessionState
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinClient
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinSession
+import cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol
 import cn.mafei.cmp.providers.jellyfin.testkit.FakeJellyfinTransport
 import cn.mafei.cmp.providers.jellyfin.testkit.JellyfinFixtures
 import cn.mafei.cmp.providers.jellyfin.wire.ItemKind
@@ -38,10 +39,10 @@ class JellyfinCatalogApiTest {
         val base: HttpUrl = HttpUrl.parse(JellyfinFixtures.BASE_URL)
     }
 
-    private class Fixture {
+    private class Fixture(protocol: MediaBrowserProtocol = MediaBrowserProtocol.Jellyfin) {
         val transport = FakeJellyfinTransport()
         val client = JellyfinClient(
-            JellyfinServerConfig(base, "MaFei", "Test", "device-1", "2.0.0"),
+            JellyfinServerConfig(base, "MaFei", "Test", "device-1", "2.0.0", protocol),
             transport,
             InMemoryJellyfinSessionState(JellyfinSession("u1", "tok")),
         )
@@ -173,5 +174,30 @@ class JellyfinCatalogApiTest {
         val episodeRequest = fixture.transport.requests[1]
         assertEquals("se1", episodeRequest.url.queryParameters.first("seasonId"))
         assertTrue(episodeRequest.url.encodedPath.contains("/Shows/s1/Episodes"))
+    }
+
+    @Test
+    fun embyCatalogScopesOnlyItsUserRoutesAndDecodesTheSimilarEnvelope() = runTest {
+        val fixture = Fixture(MediaBrowserProtocol.Emby)
+        repeat(3) { fixture.transport.enqueueJson(200, """{"Items":[],"TotalRecordCount":0}""", base) }
+        fixture.transport.enqueueJson(200, "[]", base)
+        fixture.transport.enqueueJson(200, """{"Id":"m1","Name":"Fixture","Type":"Movie"}""", base)
+        fixture.transport.enqueueJson(200, """{"Items":[{"Id":"m2","Name":"Related","Type":"Movie"}]}""", base)
+        fixture.transport.enqueueJson(200, """{"Items":[]}""", base)
+        fixture.api.views("u1")
+        fixture.api.items(cn.mafei.cmp.providers.jellyfin.transport.JellyfinItemQuery(userId = "u1", limit = 20))
+        fixture.api.resume("u1", limit = 12, includeItemTypes = listOf("Movie", "Episode"))
+        fixture.api.latest("u1", limit = 12, includeItemTypes = listOf("Movie"))
+        assertEquals("m1", fixture.api.item("u1", "m1").id)
+        assertEquals("m2", fixture.api.similar("u1", "m1", 12).single().id)
+        fixture.api.seasons("u1", "s1")
+        assertEquals(listOf(
+            "/Users/u1/Views", "/Users/u1/Items", "/Users/u1/Items/Resume",
+            "/Users/u1/Items/Latest", "/Users/u1/Items/m1", "/Items/m1/Similar", "/Shows/s1/Seasons",
+        ), fixture.transport.requests.map { it.url.encodedPath })
+        fixture.transport.requests.take(5).forEach { assertEquals(null, it.url.queryParameters.first("userId")) }
+        assertEquals("u1", fixture.transport.requests[5].url.queryParameters.first("userId"))
+        assertEquals("20", fixture.transport.requests[1].url.queryParameters.first("limit"))
+        fixture.transport.requests.forEach { assertEquals("tok", it.headers.first("X-Emby-Token")) }
     }
 }

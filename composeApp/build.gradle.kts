@@ -109,9 +109,11 @@ kotlin {
                 implementation(project(":data:migration"))
                 implementation(project(":data:adapter-jellyfin"))
                 implementation(project(":data:adapter-feiniu"))
+                implementation(project(":data:adapter-plex"))
                 implementation(project(":providers:jellyfin:discovery"))
                 implementation(project(":providers:jellyfin:facade"))
                 implementation(project(":providers:feiniu:facade"))
+                implementation(project(":providers:plex:core"))
 
                 implementation(project(":common:core"))
                 implementation(project(":common:glass"))

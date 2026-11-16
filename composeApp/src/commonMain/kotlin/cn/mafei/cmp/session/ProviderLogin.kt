@@ -75,6 +75,7 @@ class ProviderLogin(
         feiniuRoutePreference: FeiniuRoutePreference = FeiniuRoutePreference.Speed,
     ): AuthenticatedConnection {
         currentCoroutineContext().ensureActive()
+        if (provider == ProviderKind.Plex) throw ClientConfigError("请使用 Plex 浏览器授权")
         if (baseUrl.any { it.code < 32 || it.code == 127 }) {
             throw ClientConfigError("请输入完整的 HTTP 或 HTTPS 服务器地址")
         }
@@ -92,7 +93,7 @@ class ProviderLogin(
             rawAddress.hasHttpScheme() -> validateSavedBaseUrl(rawAddress)
             else -> null
         }
-        val jellyfinCandidates = if (provider == ProviderKind.Jellyfin) {
+        val jellyfinCandidates = if (provider == ProviderKind.Jellyfin || provider == ProviderKind.Emby) {
             JellyfinAddressCandidates.fromInput(rawAddress).also {
                 if (it.isEmpty()) throw ClientConfigError("请输入有效的服务器地址")
             }
@@ -102,8 +103,9 @@ class ProviderLogin(
         // Empty passwords are supported by Jellyfin. Do not trim/normalize secrets.
         return try {
             when (provider) {
-                ProviderKind.Jellyfin -> jellyfinAtAddress(exactUrl, jellyfinCandidates, name, password)
+                ProviderKind.Jellyfin, ProviderKind.Emby -> jellyfinAtAddress(provider, exactUrl, jellyfinCandidates, name, password)
                 ProviderKind.Feiniu -> feiniu(rawAddress, name, password, feiniuRoutePreference)
+                ProviderKind.Plex -> throw ClientConfigError("请使用 Plex 浏览器授权")
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -115,6 +117,7 @@ class ProviderLogin(
     }
 
     private suspend fun jellyfinAtAddress(
+        provider: ProviderKind,
         exactUrl: HttpUrl?,
         candidates: List<HttpUrl>,
         username: String,
@@ -125,32 +128,33 @@ class ProviderLogin(
             // transport failure can trigger conventional-port discovery; an
             // HTTP/authentication/decoding failure already reached a server.
             try {
-                return jellyfin(exactUrl, null, username, password)
+                return jellyfin(provider, exactUrl, null, username, password)
             } catch (failure: JellyfinConnectionError) {
                 val alternatives = candidates.filterNot { it == exactUrl }
                 if (alternatives.isEmpty()) throw failure // An explicit port is exact.
                 val verified = try {
-                    resolveJellyfinAddress(alternatives, newCredentialKey())
+                    resolveJellyfinAddress(provider, alternatives, newCredentialKey())
                 } catch (_: JellyfinConnectionError) {
                     throw failure // Preserve the original timeout/transport category.
                 }
-                return jellyfin(verified.baseUrl, verified, username, password)
+                return jellyfin(provider, verified.baseUrl, verified, username, password)
             }
         }
         // Discovery only uses an anonymous placeholder. The real DeviceId is
         // chosen after the successful address is matched to a saved account.
-        val verified = resolveJellyfinAddress(candidates, newCredentialKey())
-        return jellyfin(verified.baseUrl, verified, username, password)
+        val verified = resolveJellyfinAddress(provider, candidates, newCredentialKey())
+        return jellyfin(provider, verified.baseUrl, verified, username, password)
     }
 
     private suspend fun resolveJellyfinAddress(
+        provider: ProviderKind,
         candidates: List<HttpUrl>,
         deviceId: String,
     ): VerifiedJellyfinServer {
         for (candidate in candidates) {
             currentCoroutineContext().ensureActive()
             val facade = DefaultJellyfinFacade(
-                JellyfinServerConfig(candidate, "MaFei", "MaFei", deviceId, "2.0.0"),
+                JellyfinServerConfig(candidate, "MaFei", "MaFei", deviceId, "2.0.0", provider.mediaBrowserProtocol()),
                 LoginBorrowedTransport(transport),
             )
             try {
@@ -169,6 +173,7 @@ class ProviderLogin(
     }
 
     private suspend fun jellyfin(
+        provider: ProviderKind,
         url: HttpUrl,
         verified: VerifiedJellyfinServer?,
         username: String,
@@ -179,7 +184,7 @@ class ProviderLogin(
         // saved account contributes its own stable device, which renews that
         // registration instead of adding one per login.
         val known = savedConnectionFor(
-            ProviderKind.Jellyfin,
+            provider,
             SessionIdentity.serverAddress(url),
             null,
             verified?.info?.id,
@@ -189,7 +194,7 @@ class ProviderLogin(
         val presented = PresentedDevice(known?.deviceId ?: newCredentialKey(), borrowed = known != null)
         val state = InMemoryJellyfinSessionState()
         val facade = DefaultJellyfinFacade(
-            JellyfinServerConfig(url, "MaFei", "MaFei", presented.id, "2.0.0"),
+            JellyfinServerConfig(url, "MaFei", "MaFei", presented.id, "2.0.0", provider.mediaBrowserProtocol()),
             LoginBorrowedTransport(transport), state,
         )
         try {
@@ -210,7 +215,7 @@ class ProviderLogin(
             // installed.serverId is the server's own identity (exactly what the
             // account is keyed on remotely); it used to be dropped on the floor.
             val connection = connection(
-                provider = ProviderKind.Jellyfin,
+                provider = provider,
                 url = url,
                 presented = presented,
                 remoteServerId = installed.serverId ?: verified?.info?.id ?: authenticatedSystemInfo?.id,

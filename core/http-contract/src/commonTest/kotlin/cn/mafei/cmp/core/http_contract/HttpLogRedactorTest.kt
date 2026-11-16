@@ -11,7 +11,7 @@ class HttpLogRedactorTest {
 
     @Test
     fun masksSensitiveHeaderValues() {
-        for (name in listOf("Authorization", "authorization", "Cookie", "SET-COOKIE", "X-Emby-Token", "Proxy-Authorization", "X-Emby-Authorization", "Trim-MC-token")) {
+        for (name in listOf("Authorization", "authorization", "Cookie", "SET-COOKIE", "X-Emby-Token", "X-Plex-Token", "Proxy-Authorization", "X-Emby-Authorization", "Trim-MC-token")) {
             val redacted = redactor.redactHeader(name, "super-secret")
             assertFalse(redacted.contains("super-secret"), "header $name leaked")
             assertTrue(redacted.isNotEmpty())
@@ -32,6 +32,18 @@ class HttpLogRedactorTest {
         assertFalse(rendered.contains("abcdef0123456789"))
         assertTrue(rendered.contains("width=300"))
         assertTrue(rendered.contains("api_key="))
+    }
+
+    @Test
+    fun redactsPlexTokenQueryParametersRegardlessOfCase() {
+        val url = HttpUrl.parse(
+            "https://plex.example.org/library/parts/42?X-Plex-Token=plex-secret&x-plex-token=other-secret&download=1",
+        )
+        val rendered = redactor.redactUrl(url)
+
+        assertFalse(rendered.contains("plex-secret"))
+        assertFalse(rendered.contains("other-secret"))
+        assertTrue(rendered.contains("download=1"))
     }
 
     @Test

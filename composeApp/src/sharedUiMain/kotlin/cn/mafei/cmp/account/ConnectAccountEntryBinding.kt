@@ -3,9 +3,12 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.input.key.key
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.ConnectScreen
+import cn.mafei.cmp.feature.connect.PlexConnectActions
+import cn.mafei.cmp.common.ui.providerName
 import cn.mafei.cmp.feature.connect.rememberConnectFormState
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
@@ -19,6 +22,8 @@ internal fun ConnectAccountEntryBinding(
     popMineRoute: () -> Unit,
 ) {
     val formState = rememberConnectFormState()
+    val uriHandler = LocalUriHandler.current
+    DisposableEffect(account, route) { onDispose { account.plex.cancel() } }
     var prefilling by remember(route) { mutableStateOf(route.credentialKey != null) }
     LaunchedEffect(formState, route) {
         // Returning from discovery may recreate this entry. Preserve the
@@ -69,15 +74,23 @@ internal fun ConnectAccountEntryBinding(
         },
         modifier = Modifier.fillMaxSize(),
         formState = formState,
-        routeTitle =
-            if (route.provider == ProviderKind.Jellyfin) {
-                "连接 Jellyfin"
-            } else {
-                "连接飞牛影视"
-            },
+        routeTitle = "连接 ${providerName(route.provider)}",
         onBack = popMineRoute,
         showProviderSwitcher = false,
         showHistory = false,
+        plexState = account.plex.ui,
+        plexActions = PlexConnectActions(
+            authorize = { account.plex.authorize(uriHandler::openUri) },
+            openBrowser = { account.plex.reopen(uriHandler::openUri) },
+            connect = { serverId ->
+                account.plex.connect(serverId) {
+                    account.minePresented = false
+                    account.mineBackStack.clear()
+                    account.mineBackStack += BrowseMineRoute
+                }
+            },
+            cancel = account.plex::cancel,
+        ),
         onOpenServerDiscovery = {
             if (account.mineBackStack.lastOrNull() != BrowseServerDiscoveryRoute) {
                 account.mineBackStack += BrowseServerDiscoveryRoute

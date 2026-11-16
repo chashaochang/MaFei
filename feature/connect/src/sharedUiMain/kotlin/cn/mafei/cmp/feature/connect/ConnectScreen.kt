@@ -93,11 +93,11 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.mafeiInteractive
+import cn.mafei.cmp.common.ui.providerLogo
+import cn.mafei.cmp.common.ui.providerName
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.generated.resources.Res
 import cn.mafei.cmp.feature.connect.generated.resources.mafei_app_icon
-import cn.mafei.cmp.feature.connect.generated.resources.provider_feiniu
-import cn.mafei.cmp.feature.connect.generated.resources.provider_jellyfin
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -174,6 +174,9 @@ fun ConnectScreen(
     showProviderSwitcher: Boolean = true,
     showHistory: Boolean = true,
     onOpenServerDiscovery: (() -> Unit)? = null,
+    plexState: PlexConnectUiState = PlexConnectUiState(),
+    plexActions: PlexConnectActions = PlexConnectActions(),
+    onProviderChanged: () -> Unit = {},
 ) {
     val safeArea = currentMaFeiSafeArea()
     val windowFeatures = LocalMaFeiWindowFeatures.current
@@ -278,7 +281,16 @@ fun ConnectScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             CompactWelcome(topPadding = 6.dp)
-                            CompactLoginForm(
+                            if (provider == ProviderKind.Plex) {
+                                PlexConnectForm(
+                                    state = plexState,
+                                    actions = plexActions,
+                                    busy = busy,
+                                    backdrop = panelBackdrop,
+                                    onOpenHistory = onOpenHistory.takeIf { showHistory },
+                                    modifier = Modifier.widthIn(max = 375.dp).fillMaxWidth(),
+                                )
+                            } else CompactLoginForm(
                                 backdrop = panelBackdrop,
                                 provider = provider,
                                 baseUrl = baseUrl,
@@ -310,6 +322,7 @@ fun ConnectScreen(
                     backdrop = windowBackdrop,
                     onSelected = { selectedProvider ->
                         if (provider != selectedProvider) {
+                            onProviderChanged()
                             formState.provider = selectedProvider
                             formState.password = ""
                         }
@@ -359,7 +372,7 @@ private fun ProviderSwitcher(
     onSelected: (ProviderKind) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val providers = listOf(ProviderKind.Jellyfin, ProviderKind.Feiniu)
+    val providers = ProviderKind.entries
     val selectedIndex = providers.indexOf(provider).coerceAtLeast(0)
     LiquidBottomTabs(
         selectedTabIndex = { selectedIndex },
@@ -369,23 +382,18 @@ private fun ProviderSwitcher(
         backdrop = backdrop,
         tabsCount = providers.size,
         style = LiquidBottomTabsStyle.Compact,
-        // The visible capsule remains 112 x 52 dp. The transparent host leaves
-        // 24 dp horizontally so the selected droplet and its refraction fringe
-        // can overflow without being clipped at the first or last item.
-        modifier = modifier.width(160.dp).height(84.dp).alpha(if (enabled) 1f else .55f),
+        // Leave room for the selected droplet's refraction fringe.
+        modifier = modifier.width(272.dp).height(84.dp).alpha(if (enabled) 1f else .55f),
     ) {
         providers.forEachIndexed { index, item ->
-            val name = if (item == ProviderKind.Jellyfin) "Jellyfin" else "飞牛影视"
+            val name = providerName(item)
             LiquidBottomTab(
                 onClick = { if (enabled) onSelected(item) },
                 index = index,
                 isSelected = selectedIndex == index,
             ) {
                 Image(
-                    painter = painterResource(
-                        if (item == ProviderKind.Jellyfin) Res.drawable.provider_jellyfin
-                        else Res.drawable.provider_feiniu,
-                    ),
+                    painter = painterResource(providerLogo(item)),
                     contentDescription = name,
                     modifier = Modifier.size(21.dp).alpha(if (selectedIndex == index) 1f else .62f),
                 )

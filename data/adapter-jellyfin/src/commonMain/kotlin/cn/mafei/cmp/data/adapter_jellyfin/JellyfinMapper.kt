@@ -258,13 +258,14 @@ internal fun BaseItemDto.toMediaItem(
     serverId: ServerId,
     imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
     collectionId: CollectionId? = null,
+    provider: cn.mafei.cmp.core.domain.ProviderKind = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
 ): MediaItem? {
     val id = id?.takeIf { it.isNotBlank() } ?: return null
     val mediaType = (type ?: ItemKind.Unknown).toMediaType()
     return MediaItem(
         id = MediaId(id),
         serverId = serverId,
-        provider = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
+        provider = provider,
         title = name ?: "",
         channelNumber = channelNumber,
         currentProgram = currentProgram?.let { cn.mafei.cmp.core.domain.LiveProgram(it.name.orEmpty(), it.overview, it.startDate, it.endDate) },
@@ -406,13 +407,14 @@ internal fun MediaStreamDto.toMediaStreamInfo(): MediaStreamInfo = MediaStreamIn
 internal fun BaseItemDto.toMediaPerson(
     serverId: ServerId,
     imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
+    provider: cn.mafei.cmp.core.domain.ProviderKind = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
 ): MediaPerson? {
     val personId = id?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val displayName = name.orEmpty()
     return MediaPerson(
         id = MediaId(personId),
         serverId = serverId,
-        provider = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
+        provider = provider,
         name = displayName,
         sortName = sortName?.takeIf { it.isNotBlank() } ?: displayName,
         overview = overview,
@@ -548,12 +550,13 @@ private fun BaseItemDto.buildImages(
 internal fun BaseItemDto.toMediaCollection(
     serverId: ServerId,
     imageUrl: (itemId: String, imageType: ImageType, tag: String?) -> String,
+    provider: cn.mafei.cmp.core.domain.ProviderKind = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
 ): MediaCollection? {
     val id = id?.takeIf { it.isNotBlank() } ?: return null
     return MediaCollection(
         id = CollectionId(id),
         serverId = serverId,
-        provider = cn.mafei.cmp.core.domain.ProviderKind.Jellyfin,
+        provider = provider,
         name = name ?: "",
         mediaTypes = collectionType.toCollectionMediaTypes(),
         primaryImage = imageTags[ImageType.Primary.name]?.let { tag ->

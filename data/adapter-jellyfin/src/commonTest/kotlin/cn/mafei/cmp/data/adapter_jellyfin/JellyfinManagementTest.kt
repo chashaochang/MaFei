@@ -9,9 +9,9 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class JellyfinManagementTest {
-    private fun adapter(http: FakeJellyfinTransport) = JellyfinMediaProviderAdapter(
+    private fun adapter(http: FakeJellyfinTransport) = requireNotNull(JellyfinMediaProviderAdapter(
         DefaultJellyfinFacade(JellyfinServerConfig(HttpUrl.parse("https://server.test/jellyfin"), "MaFei", "test", "id", "2"),
-            http, InMemoryJellyfinSessionState(JellyfinSession("u", "fixture-token"))), ServerId("s"), AccountId("a"), "u").management
+            http, InMemoryJellyfinSessionState(JellyfinSession("u", "fixture-token"))), ServerId("s"), AccountId("a"), "u").management)
 
     @Test fun countAndServerFallbackFieldsMatchLegacy() = runSuspendTest {
         val http = FakeJellyfinTransport(); val api = adapter(http)

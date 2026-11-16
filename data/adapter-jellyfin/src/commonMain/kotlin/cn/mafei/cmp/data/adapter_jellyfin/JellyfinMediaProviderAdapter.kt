@@ -39,7 +39,6 @@ import cn.mafei.cmp.providers.jellyfin.transport.JellyfinRequests
 import cn.mafei.cmp.providers.jellyfin.wire.MediaProtocol
 import cn.mafei.cmp.providers.jellyfin.wire.MediaSourceInfoDto
 import cn.mafei.cmp.providers.jellyfin.wire.PlaybackInfoResponseDto
-import cn.mafei.cmp.providers.jellyfin.wire.TrickplayInfoDto
 import cn.mafei.cmp.providers.jellyfin.wire.WirePlayMethod
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -50,6 +49,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
+import cn.mafei.cmp.data.adapter_jellyfin.toMediaItem as mapMediaBrowserItem
+import cn.mafei.cmp.data.adapter_jellyfin.toMediaCollection as mapMediaBrowserCollection
+import cn.mafei.cmp.data.adapter_jellyfin.toMediaPerson as mapMediaBrowserPerson
 
 private const val HomeRecentLibraryLimit = 16
 
@@ -83,8 +85,11 @@ class JellyfinMediaProviderAdapter(
     private val danmakuFallback: cn.mafei.cmp.providers.jellyfin.playback.DandanPlayFallback? = null,
 ) : MediaProviderAdapter {
 
-    override val provider: ProviderKind = ProviderKind.Jellyfin
-    override val management: cn.mafei.cmp.data.adapter_contract.ServerManagement by lazy { JellyfinServerManagement(facade) }
+    override val provider: ProviderKind =
+        if (facade.client.config.protocol == cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Emby) ProviderKind.Emby else ProviderKind.Jellyfin
+    override val management: cn.mafei.cmp.data.adapter_contract.ServerManagement? by lazy {
+        if (provider == ProviderKind.Jellyfin) JellyfinServerManagement(facade) else null
+    }
     override suspend fun danmakuXml(itemId: MediaId): String? {
         try { facade.playback.danmakuXml(itemId.value)?.let { return it } }
         catch (cancelled: CancellationException) { throw cancelled }
@@ -102,11 +107,11 @@ class JellyfinMediaProviderAdapter(
         watchedFilter = true,
         watchedEdit = true, // POST/DELETE /Users/{id}/PlayedItems/{itemId}
         playbackReporting = true,
-        mediaDelete = true, // DELETE /Items?ids=... — the SERVER rejects non-admins
+        mediaDelete = provider == ProviderKind.Jellyfin,
         chasing = true,
-        music = true,
-        liveTv = true,
-        photos = true,
+        music = provider == ProviderKind.Jellyfin,
+        liveTv = provider == ProviderKind.Jellyfin,
+        photos = provider == ProviderKind.Jellyfin,
     )
 
     /** Streams this instance prepared; reportPlayback accepts only these. */
@@ -136,6 +141,22 @@ class JellyfinMediaProviderAdapter(
     private fun imageUrl(itemId: String, imageType: cn.mafei.cmp.providers.jellyfin.wire.ImageType, tag: String?): String =
         facade.images.itemImageUrl(itemId = itemId, imageType = imageType, tag = tag).toEncodedString()
 
+    private fun cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto.toMediaItem(
+        serverId: ServerId,
+        imageUrl: (String, cn.mafei.cmp.providers.jellyfin.wire.ImageType, String?) -> String,
+        collectionId: CollectionId? = null,
+    ) = mapMediaBrowserItem(serverId, imageUrl, collectionId, provider)
+
+    private fun cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto.toMediaCollection(
+        serverId: ServerId,
+        imageUrl: (String, cn.mafei.cmp.providers.jellyfin.wire.ImageType, String?) -> String,
+    ) = mapMediaBrowserCollection(serverId, imageUrl, provider)
+
+    private fun cn.mafei.cmp.providers.jellyfin.wire.BaseItemDto.toMediaPerson(
+        serverId: ServerId,
+        imageUrl: (String, cn.mafei.cmp.providers.jellyfin.wire.ImageType, String?) -> String,
+    ) = mapMediaBrowserPerson(serverId, imageUrl, provider)
+
     private suspend fun <T> translate(block: suspend () -> T): T =
         try {
             block()
@@ -155,6 +176,7 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun liveChannels(request: PageRequest): Page<MediaItem> {
+        if (!capabilities.liveTv) throw ClientConfigError("Live TV is unavailable for this provider")
         if (request.filter != cn.mafei.cmp.core.domain.MediaFilter() || request.sort != null)
             throw ClientConfigError("Legacy live channel listing does not send filters or sort options")
         val offset = decodeOffset(request.cursor)
@@ -163,6 +185,7 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun photos(query: cn.mafei.cmp.data.adapter_contract.PhotoCatalogQuery, request: PageRequest): Page<MediaItem> {
+        if (!capabilities.photos) throw ClientConfigError("Photos are unavailable for this provider")
         if (request.filter != cn.mafei.cmp.core.domain.MediaFilter() || request.sort != null)
             throw ClientConfigError("Photo ordering and type constraints belong to the selected legacy section")
         val offset = decodeOffset(request.cursor)
@@ -188,6 +211,7 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun photoOriginal(id: MediaId): cn.mafei.cmp.core.domain.MediaDownload {
+        if (!capabilities.photos) throw ClientConfigError("Photos are unavailable for this provider")
         val dto = translate { facade.catalog.item(jellyfinUserId, id.value) }
         if (dto.id != id.value || dto.type != cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo || dto.canDownload != true)
             throw ClientConfigError("Original photo download is not permitted")
@@ -281,25 +305,6 @@ class JellyfinMediaProviderAdapter(
         }
     }
 
-    private fun <T> interleave(pages: List<List<T>>, limit: Int): List<T> {
-        val result = ArrayList<T>(limit)
-        var itemIndex = 0
-        var appended = true
-        while (result.size < limit && appended) {
-            appended = false
-            pages.forEach { page ->
-                if (result.size < limit) {
-                    page.getOrNull(itemIndex)?.let { item ->
-                        result += item
-                        appended = true
-                    }
-                }
-            }
-            itemIndex += 1
-        }
-        return result
-    }
-
     override suspend fun items(collectionId: CollectionId?, request: PageRequest): Page<MediaItem> {
         val filter = request.filter
         if (!filter.searchTerm.isNullOrBlank()) {
@@ -328,6 +333,7 @@ class JellyfinMediaProviderAdapter(
         query: cn.mafei.cmp.data.adapter_contract.MusicCatalogQuery,
         request: PageRequest,
     ): Page<MediaItem> {
+        if (!capabilities.music) throw ClientConfigError("Music is unavailable for this provider")
         if (!request.filter.isEmpty || request.sort != null) {
             throw ClientConfigError("Music queries own their legacy filter and sort")
         }
@@ -528,6 +534,7 @@ class JellyfinMediaProviderAdapter(
     }
 
     override suspend fun canDeleteMedia(): Boolean {
+        if (!capabilities.mediaDelete) return false
         administratorCache?.let { return it }
         val policy = translate { facade.userdata.user(jellyfinUserId) }.policy
         val administrator = policy?.isAdministrator == true
@@ -1031,15 +1038,4 @@ private data class JellyfinReportingContext(
             runCatching { Json.Default.decodeFromString(serializer(), it) }.getOrNull()
         }
     }
-}
-
-private fun TrickplayInfoDto.toPlaybackPreviewInfo(routeWidth: Int): PlaybackPreviewInfo? {
-    val width = width ?: routeWidth
-    val height = height ?: return null
-    val interval = intervalMs ?: return null
-    val count = thumbnailCount ?: return null
-    val columns = tileWidth ?: return null
-    val rows = tileHeight ?: return null
-    if (width <= 0 || height <= 0 || interval <= 0L || count <= 0 || columns <= 0 || rows <= 0) return null
-    return PlaybackPreviewInfo(width, height, interval, count, columns, rows)
 }

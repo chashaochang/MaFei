@@ -17,7 +17,11 @@ class ProviderSessionsTest {
         var closes = 0
         override suspend fun execute(request: HttpRequest): HttpResponse {
             requests += request
-            val text = if (request.url.encodedPath.contains("mediadb")) """{"code":0,"data":[]}""" else """{"Items":[],"TotalRecordCount":0}"""
+            val text = when {
+                request.url.encodedPath.endsWith("/library/sections") -> """{"MediaContainer":{"Directory":[]}}"""
+                request.url.encodedPath.contains("mediadb") -> """{"code":0,"data":[]}"""
+                else -> """{"Items":[],"TotalRecordCount":0}"""
+            }
             val headers = HttpHeaders.Builder().add("Content-Type", "application/json")
             setCookie?.let { headers.add("Set-Cookie", it) }
             return HttpResponse(200, headers.build(), text.encodeToByteArray(), request.url, request.url)
@@ -33,7 +37,11 @@ class ProviderSessionsTest {
     }
 
     private fun secrets(connection: SavedConnection, value: String = "fixture-token"): Map<CredentialAlias, SecureSecret> = buildMap {
-        put(connection.tokenAlias, SecureSecret.AuthToken(if (connection.server.provider == ProviderKind.Jellyfin) "MediaBrowser" else "Bearer", value))
+        put(connection.tokenAlias, SecureSecret.AuthToken(when (connection.server.provider) {
+            ProviderKind.Jellyfin, ProviderKind.Emby -> "MediaBrowser"
+            ProviderKind.Plex -> "Plex"
+            ProviderKind.Feiniu -> "Bearer"
+        }, value))
         if (connection.server.provider == ProviderKind.Feiniu) put(connection.cookieAlias, SecureSecret.CookieText("session=original; Trim-MC-token=$value"))
     }
 
@@ -51,6 +59,36 @@ class ProviderSessionsTest {
         restarted.adapter.collections(PageRequest())
         assertEquals(header, transport.requests.last().headers.first("Authorization"))
         assertEquals(connection.aliases, first.aliases)
+    }
+
+    @Test fun restoredEmbyAndPlexUseTheirOwnProtocolAndStableDeviceIdentity() = runBlocking<Unit> {
+        for (provider in listOf(ProviderKind.Emby, ProviderKind.Plex)) {
+            val saved = connection(provider)
+            val transport = Transport()
+            val factory = DefaultProviderSessionFactory(transport)
+            repeat(2) {
+                val binding = factory.restore(saved, secrets(saved))
+                binding.adapter.collections(PageRequest())
+                assertEquals(provider, binding.adapter.provider)
+                assertNull(binding.webPage())
+            }
+            val first = transport.requests.first()
+            assertEquals(first.headers, transport.requests.last().headers)
+            when (provider) {
+                ProviderKind.Emby -> {
+                    assertEquals("/base/Users/remote-a/Views", first.url.encodedPath)
+                    assertEquals("fixture-token", first.headers.first("X-Emby-Token"))
+                    assertTrue(first.headers.first("X-Emby-Authorization")!!.contains("DeviceId=\"${saved.deviceId}\""))
+                }
+                ProviderKind.Plex -> {
+                    assertEquals("/base/library/sections", first.url.encodedPath)
+                    assertEquals("fixture-token", first.headers.first("X-Plex-Token"))
+                    assertEquals(saved.deviceId, first.headers.first("X-Plex-Client-Identifier"))
+                    assertNull(first.headers.first("Authorization"))
+                }
+                else -> error("Unexpected fixture provider")
+            }
+        }
     }
 
     @Test fun feiniuResponseCookieUpdateProjectsAuthoritativeFlowNotInitialCredentials() = runBlocking {
@@ -92,11 +130,12 @@ class ProviderSessionsTest {
             val transport = Transport(); val factory = DefaultProviderSessionFactory(transport)
             val first = factory.restore(a, secrets(a, "token-a")); val second = factory.restore(b, secrets(b, "token-b"))
             first.adapter.collections(PageRequest()); second.adapter.collections(PageRequest())
-            assertTrue(transport.requests[0].headers.first("Authorization")!!.contains("token-a"))
-            assertTrue(transport.requests[1].headers.first("Authorization")!!.contains("token-b"))
+            val header = if (provider == ProviderKind.Plex) "X-Plex-Token" else "Authorization"
+            assertTrue(transport.requests[0].headers.first(header)!!.contains("token-a"))
+            assertTrue(transport.requests[1].headers.first(header)!!.contains("token-b"))
             first.clear()
             second.adapter.collections(PageRequest())
-            assertTrue(transport.requests.last().headers.first("Authorization")!!.contains("token-b"))
+            assertTrue(transport.requests.last().headers.first(header)!!.contains("token-b"))
             assertEquals(b.account.id, second.adapter.accountId)
             assertTrue(a.aliases.intersect(b.aliases).isEmpty())
         }

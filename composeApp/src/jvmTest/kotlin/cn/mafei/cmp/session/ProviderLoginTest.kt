@@ -57,6 +57,38 @@ class ProviderLoginTest {
         assertEquals(0, transport.closes)
     }
 
+    @Test fun embyLoginKeepsProviderIdentityAndUsesUserScopedCatalogAndEmbyHeaders() = runBlocking<Unit> {
+        val transport = Transport(
+            Response("""{"User":{"Id":"remote-user","Name":"Demo"},"AccessToken":"fixture-token","ServerId":"remote-server"}"""),
+            Response("""{"ServerName":"Emby Cinema","Version":"4.9.1.0","Id":"remote-server"}"""),
+            Response("""{"Items":[{"Id":"movies","Name":"Movies","Type":"CollectionFolder","CollectionType":"movies"}],"TotalRecordCount":1}"""),
+        )
+        val result = ProviderLogin(transport).authenticate(ProviderKind.Emby, "https://media.test/emby", "demo", "pw")
+        assertEquals(ProviderKind.Emby, result.connection.server.provider)
+        assertEquals(ProviderKind.Emby, result.binding.adapter.provider)
+        assertEquals("Emby Cinema", result.connection.server.name)
+        assertNotNull(transport.requests.first().headers.first("X-Emby-Authorization"))
+        assertNull(transport.requests.first().headers.first("X-Emby-Token"))
+        assertEquals("fixture-token", transport.requests[1].headers.first("X-Emby-Token"))
+        assertEquals(ProviderKind.Emby, result.binding.adapter.collections(PageRequest()).items.single().provider)
+        assertEquals("/emby/Users/remote-user/Views", transport.requests.last().url.encodedPath)
+        assertNull(transport.requests.last().url.queryParameters.first("userId"))
+        assertFalse(result.binding.adapter.capabilities.mediaDelete)
+        assertFalse(result.binding.adapter.capabilities.music)
+        assertNull(result.binding.webPage())
+        result.binding.clear()
+    }
+
+    @Test fun plexPasswordLoginRequiresBrowserAuthorizationBeforeAnyNetworkRequest() = runBlocking<Unit> {
+        val transport = Transport()
+        val failure = assertFailsWith<ClientConfigError> {
+            ProviderLogin(transport).authenticate(ProviderKind.Plex, "https://media.test", "demo", "private-password")
+        }
+        assertTrue(failure.message.orEmpty().contains("Plex"))
+        assertFalse(failure.toString().contains("private-password"))
+        assertTrue(transport.requests.isEmpty())
+    }
+
     @Test fun jellyfinLoginAcceptsBareLanAddressAndEmptyPassword() = runBlocking<Unit> {
         val requests = mutableListOf<HttpRequest>()
         val transport = object : HttpTransport {
@@ -149,7 +181,7 @@ class ProviderLoginTest {
                 "https://user:secret@media.test",
                 "https://media.test?token=secret",
                 "https://media.test#secret",
-            ) + if (provider == ProviderKind.Jellyfin) listOf("fnid-only") else emptyList()
+            ) + if (provider in listOf(ProviderKind.Jellyfin, ProviderKind.Emby)) listOf("fnid-only") else emptyList()
             for (url in invalid) {
                 val error = assertFailsWith<ClientConfigError> { ProviderLogin(transport).authenticate(provider, url, "demo", "secret") }
                 assertFalse(error.toString().contains("secret"))
@@ -160,8 +192,8 @@ class ProviderLoginTest {
     }
 
     @Test fun failedAuthenticationNeverReturnsBindingOrLeaksServerMessage() = runBlocking<Unit> {
-        for (provider in ProviderKind.entries) {
-            val response = if (provider == ProviderKind.Jellyfin) Response("""{"detail":"echo-password-secret"}""", 401)
+        for (provider in listOf(ProviderKind.Jellyfin, ProviderKind.Emby, ProviderKind.Feiniu)) {
+            val response = if (provider != ProviderKind.Feiniu) Response("""{"detail":"echo-password-secret"}""", 401)
                 else Response("""{"code":100401,"msg":"echo-password-secret"}""")
             val transport = Transport(response)
             val error = assertFailsWith<AuthenticationError> {
@@ -183,7 +215,7 @@ class ProviderLoginTest {
     }
 
     @Test fun transportFailureIsSafeAndCancellationPropagates() = runBlocking<Unit> {
-        for (provider in ProviderKind.entries) {
+        for (provider in listOf(ProviderKind.Jellyfin, ProviderKind.Emby, ProviderKind.Feiniu)) {
             val transport = Transport()
             transport.failure = IllegalStateException("password-secret https://user:secret@media.test")
             val error = assertFailsWith<DomainError> { ProviderLogin(transport).authenticate(provider, "https://media.test", "demo", "pw") }

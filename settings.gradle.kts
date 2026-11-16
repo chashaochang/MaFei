@@ -59,9 +59,11 @@ include(
     ":providers:feiniu:facade",
     ":providers:feiniu:testkit",
 
+    ":providers:plex:core",
     ":data:adapter-contract",
     ":data:adapter-jellyfin",
     ":data:adapter-feiniu",
+    ":data:adapter-plex",
     ":data:repositories",
     ":data:migration",
 

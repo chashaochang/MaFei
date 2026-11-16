@@ -120,6 +120,40 @@ class ApplicationRuntime(
     }
 
     /** Fresh login; ownership transfers to sessions only after admission. */
+    suspend fun beginPlexLogin(): PlexLoginChallenge = plexLoginCall {
+        check(!isClosed) { "Application is closed" }
+        PlexLoginChallenge(cn.mafei.cmp.providers.plex.core.PlexAuthorizationApi(transport).begin(newCredentialKey()))
+    }
+
+    suspend fun awaitPlexServers(challenge: PlexLoginChallenge): PlexLoginServers = plexLoginCall {
+        check(!isClosed) { "Application is closed" }
+        PlexLoginServers(cn.mafei.cmp.providers.plex.core.PlexAuthorizationApi(transport).awaitAccount(challenge.challenge))
+    }
+
+    suspend fun connectPlex(servers: PlexLoginServers, serverId: String): ApplicationSession = plexLoginCall {
+        check(!isClosed) { "Application is closed" }
+        val access = cn.mafei.cmp.providers.plex.core.PlexAuthorizationApi(transport).connect(servers.account, serverId)
+        val saved = savedAccount(ProviderKind.Plex, SessionIdentity.serverAddress(access.baseUrl),
+            null, access.serverId, access.userId, access.username)
+        val localServerId = saved?.server?.id ?: SessionIdentity.serverId(ProviderKind.Plex, access.baseUrl, access.serverId)
+        val server = cn.mafei.cmp.core.domain.Server(localServerId, ProviderKind.Plex, access.serverName, access.baseUrl.toEncodedString())
+        val account = cn.mafei.cmp.core.domain.Account(saved?.account?.id ?: SessionIdentity.accountId(localServerId, access.userId),
+            localServerId, ProviderKind.Plex, access.username, access.username)
+        val connection = SavedConnection(server, account, access.userId, saved?.credentialKey ?: newCredentialKey(),
+            deviceId = access.clientId)
+        val binding = DefaultProviderSessionFactory(transport).restore(connection,
+            mapOf(connection.tokenAlias to SecureSecret.AuthToken("Plex", access.serverToken)))
+        try {
+            val session = sessions.activate(connection, binding)
+            mergeDuplicateAccounts(connection)
+            session
+        } catch (failure: Throwable) {
+            if (sessions.state.value.session?.binding !== binding) binding.clear()
+            if (failure is CancellationException) throw failure
+            throw ConnectionSaveException((failure as? CredentialAccessException)?.kind)
+        }
+    }
+
     suspend fun connect(
         provider: ProviderKind,
         baseUrl: String,

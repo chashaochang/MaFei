@@ -52,7 +52,8 @@ class JellyfinClient(
      */
     suspend fun <T> execute(request: HttpRequest, block: suspend (HttpResponse) -> T): T {
         return try {
-            val response = pipeline.execute(request)
+            val effective = if (config.protocol == MediaBrowserProtocol.Emby) embyCatalogRequest(config.baseUrl, request) else request
+            val response = pipeline.execute(effective)
             if (response.isSuccessful) {
                 try {
                     block(response)
@@ -157,11 +158,18 @@ private class JellyfinAuthorizationInterceptor(
         val sameOrigin = isSameOrigin(config.baseUrl, request.url)
         val tokenAllowed = mode != JellyfinRequestMode.ANONYMOUS && sameOrigin
         val token = if (tokenAllowed) sessionState.current.value?.accessToken else null
-        return chain.proceed(
-            request.newBuilder()
-                .setHeader("Authorization", formatHeader(token))
-                .build(),
-        )
+        val authorized = request.newBuilder()
+        request.headers.forEach { (name, _) ->
+            if (cn.mafei.cmp.core.http_contract.HttpCredentialHeaders.isCredentialHeader(name)) {
+                authorized.removeHeader(name)
+            }
+        }
+        authorized.setHeader("Authorization", formatHeader(token))
+        if (config.protocol == MediaBrowserProtocol.Emby) {
+            authorized.setHeader("X-Emby-Authorization", formatHeader(token))
+            if (token != null) authorized.setHeader("X-Emby-Token", token)
+        }
+        return chain.proceed(authorized.build())
     }
 
     private fun formatHeader(token: String?): String =

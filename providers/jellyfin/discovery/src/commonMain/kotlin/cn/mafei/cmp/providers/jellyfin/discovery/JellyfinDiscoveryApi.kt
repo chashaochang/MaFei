@@ -42,8 +42,9 @@ class DefaultJellyfinDiscoveryApi(
         minimumVersion: String,
     ): VerifiedJellyfinServer {
         val info = publicServerInfo(baseUrl)
-        if (!JellyfinVersionCompatibility.isSupported(info.version, minimumVersion)) {
-            throw JellyfinUnsupportedServerVersionError(actualVersion = info.version, minimumSupported = minimumVersion)
+        val minimum = if (client.config.protocol == cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Emby) "4.0.0" else minimumVersion
+        if (!JellyfinVersionCompatibility.isSupported(info.version, minimum)) {
+            throw JellyfinUnsupportedServerVersionError(actualVersion = info.version, minimumSupported = minimum)
         }
         return VerifiedJellyfinServer(baseUrl = baseUrl, info = info)
     }

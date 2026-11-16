@@ -79,6 +79,8 @@ import cn.mafei.cmp.common.ui.SavedAccountListGroup
 import cn.mafei.cmp.common.ui.SavedAccountListItem
 import cn.mafei.cmp.common.ui.mafeiInteractive
 import cn.mafei.cmp.common.ui.savedAccountListGroups
+import cn.mafei.cmp.common.ui.providerLogo
+import cn.mafei.cmp.common.ui.providerName
 import cn.mafei.cmp.core.domain.ProviderKind
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
@@ -526,22 +528,22 @@ fun AddAccountScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)),
                 ) {
-                    ProviderRow(
-                        title = "Jellyfin",
-                        description = "连接现有 Jellyfin 服务器",
-                        logo = MaFeiLegacyDrawables.jellyfinLogo,
-                        onClick = { onProvider(ProviderKind.Jellyfin) },
-                    )
-                    Box(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(.5.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = .42f)),
-                    )
-                    ProviderRow(
-                        title = "飞牛影视",
-                        description = "使用 FNID 或服务器地址连接飞牛影视",
-                        logo = MaFeiLegacyDrawables.feiniuLogo,
-                        onClick = { onProvider(ProviderKind.Feiniu) },
-                    )
+                    ProviderKind.entries.forEachIndexed { index, provider ->
+                        if (index > 0) Box(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(.5.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = .42f)),
+                        )
+                        ProviderRow(
+                            title = providerName(provider),
+                            description = when (provider) {
+                                ProviderKind.Feiniu -> "使用 FNID 或服务器地址连接飞牛影视"
+                                ProviderKind.Plex -> "使用 Plex 账号授权"
+                                else -> "连接现有 ${providerName(provider)} 服务器"
+                            },
+                            logo = providerLogo(provider),
+                            onClick = { onProvider(provider) },
+                        )
+                    }
                 }
             }
         }
@@ -806,7 +808,7 @@ private fun AccountProviderMenu(
 ) {
     val density = LocalDensity.current
     val menuWidth = 216.dp
-    val menuHeight = 112.dp
+    val menuHeight = (8 + 52 * ProviderKind.entries.size).dp
     val edgePadding = 8.dp
     val (menuWidthPx, menuHeightPx, edgePaddingPx) = with(density) {
         Triple(menuWidth.toPx(), menuHeight.toPx(), edgePadding.toPx())
@@ -833,22 +835,16 @@ private fun AccountProviderMenu(
         modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.width(menuWidth),
     ) {
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            AccountProviderMenuRow(
-                title = "Jellyfin",
-                logo = MaFeiLegacyDrawables.jellyfinLogo,
-                onClick = {
-                    onDismiss()
-                    onProvider(ProviderKind.Jellyfin)
-                },
-            )
-            AccountProviderMenuRow(
-                title = "飞牛影视",
-                logo = MaFeiLegacyDrawables.feiniuLogo,
-                onClick = {
-                    onDismiss()
-                    onProvider(ProviderKind.Feiniu)
-                },
-            )
+            ProviderKind.entries.forEach { provider ->
+                AccountProviderMenuRow(
+                    title = providerName(provider),
+                    logo = providerLogo(provider),
+                    onClick = {
+                        onDismiss()
+                        onProvider(provider)
+                    },
+                )
+            }
         }
     }
 }

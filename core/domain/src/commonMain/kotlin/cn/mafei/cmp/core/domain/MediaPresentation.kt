@@ -42,7 +42,13 @@ data class MediaDisplayStyle(
          * 目的是让「接入新 provider」必须在类型系统里做出选择，而不是静默落到某一侧。
          */
         fun forProvider(provider: ProviderKind): MediaDisplayStyle = when (provider) {
-            ProviderKind.Jellyfin -> Default
+            ProviderKind.Jellyfin, ProviderKind.Emby -> Default
+            ProviderKind.Plex -> Default.copy(sortableFields = listOf(
+                MediaSortField.Default, MediaSortField.Title, MediaSortField.DateAdded,
+                MediaSortField.DatePlayed, MediaSortField.PremiereDate,
+                MediaSortField.CommunityRating, MediaSortField.ProductionYear,
+                MediaSortField.PlayCount, MediaSortField.Runtime,
+            ))
             ProviderKind.Feiniu -> MediaDisplayStyle(
                 cardStyle = CardTextStyle.Plain,
                 heroSubtitleStyle = HeroSubtitleStyle.YearOnly,

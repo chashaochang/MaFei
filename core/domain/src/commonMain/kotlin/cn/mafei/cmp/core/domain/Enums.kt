@@ -12,6 +12,8 @@ import kotlinx.serialization.Serializable
 enum class ProviderKind {
     Jellyfin,
     Feiniu,
+    Emby,
+    Plex,
 }
 
 /**

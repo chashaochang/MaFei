@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
@@ -34,6 +35,7 @@ import cn.mafei.cmp.feature.connect.AccountHistoryScreen
 import cn.mafei.cmp.feature.connect.ConnectAtmosphere
 import cn.mafei.cmp.feature.connect.ConnectErrorDialog
 import cn.mafei.cmp.feature.connect.ConnectScreen
+import cn.mafei.cmp.feature.connect.PlexConnectActions
 import cn.mafei.cmp.feature.connect.ConnectionHistoryItem
 import cn.mafei.cmp.feature.connect.ServerDiscoveryScreen
 import cn.mafei.cmp.feature.connect.rememberConnectFormState
@@ -63,6 +65,11 @@ internal fun SignedOutFlow(
     var pendingDeleteAccount by remember(accounts) { mutableStateOf<ConnectionHistoryItem?>(null) }
     val pageBackdrop = rememberGlassBackdrop()
     val connectFormState = rememberConnectFormState()
+    val uriHandler = LocalUriHandler.current
+    LaunchedEffect(connectFormState.provider, backStack.lastOrNull()) {
+        if (connectFormState.provider != ProviderKind.Plex || backStack.lastOrNull() != ConnectRoute) history.plex.cancel()
+    }
+    DisposableEffect(history) { onDispose { history.plex.cancel() } }
     // Signed out means no account is in use, but the history panel must never
     // offer to delete whatever account the runtime still holds.
     val activeSelection = accounts.activeSelection
@@ -97,6 +104,14 @@ internal fun SignedOutFlow(
             modifier = Modifier.fillMaxSize(),
             pageBackdrop = pageBackdrop,
             formState = connectFormState,
+            plexState = history.plex.ui,
+            plexActions = PlexConnectActions(
+                authorize = { history.plex.authorize(uriHandler::openUri) },
+                openBrowser = { history.plex.reopen(uriHandler::openUri) },
+                connect = { history.plex.connect(it) },
+                cancel = history.plex::cancel,
+            ),
+            onProviderChanged = history.plex::cancel,
         )
     }
     val historyContent: @Composable () -> Unit = {

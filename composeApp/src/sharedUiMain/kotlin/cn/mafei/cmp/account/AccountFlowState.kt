@@ -20,6 +20,8 @@ internal class AccountFlowState(val access: AccountAccess, private val scope: ko
     var deletingAccountKey by mutableStateOf<String?>(null)
     var accountConnectBusy by mutableStateOf(false)
     var accountConnectError by mutableStateOf<String?>(null)
+    val plex = PlexAccountState(access, scope, { accountConnectBusy },
+        { accountConnectBusy = it }, { accountConnectError = it })
     var pendingDiscoveredServerAddress by mutableStateOf<String?>(null)
     var minePresented by mutableStateOf(false)
     var returnToEmbeddedWeb by mutableStateOf(false)

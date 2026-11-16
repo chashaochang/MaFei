@@ -2,7 +2,7 @@ package cn.mafei.cmp.core.http_contract
 
 /**
  * Canonical set of headers that carry credential material across the
- * Jellyfin and FNOS (Feiniu) protocols.
+ * Jellyfin, Emby, Plex and FNOS (Feiniu) protocols.
  *
  * Single source of truth for two consumers:
  * - [HttpRedirects] strips every header in this set when a redirect crosses
@@ -21,6 +21,7 @@ data object HttpCredentialHeaders {
         HttpHeaders.COOKIE.lowercase(),
         "x-emby-authorization", // Jellyfin client/device auth
         "x-emby-token", // Jellyfin access token
+        "x-plex-token",
         "x-auth-token",
         "x-access-token",
         "trim-mc-token", // FNOS media token

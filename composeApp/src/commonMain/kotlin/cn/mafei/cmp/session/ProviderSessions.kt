@@ -23,6 +23,8 @@ import cn.mafei.cmp.providers.jellyfin.core.JellyfinServerConfig
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinSession
 import cn.mafei.cmp.providers.jellyfin.core.JellyfinSessionState
 import cn.mafei.cmp.providers.jellyfin.facade.DefaultJellyfinFacade
+import cn.mafei.cmp.providers.plex.core.PlexClient
+import cn.mafei.cmp.data.adapter_plex.PlexMediaProviderAdapter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +50,11 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
         if (!saved.aliases.containsAll(secrets.keys)) throw ClientConfigError("Unexpected saved credential alias")
         val token = secrets[saved.tokenAlias] as? SecureSecret.AuthToken
             ?: throw ClientConfigError("Saved access token is missing or has an unsupported type")
-        val scheme = if (saved.server.provider == ProviderKind.Jellyfin) "MediaBrowser" else "Bearer"
+        val scheme = when (saved.server.provider) {
+            ProviderKind.Jellyfin, ProviderKind.Emby -> "MediaBrowser"
+            ProviderKind.Feiniu -> "Bearer"
+            ProviderKind.Plex -> "Plex"
+        }
         if (token.scheme != scheme || token.token.isBlank() || token.token != token.token.trim() || token.token.any { it.code < 32 || it.code == 127 }) {
             throw ClientConfigError("Saved access token type or scheme is unsupported")
         }
@@ -58,8 +64,9 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
             throw ClientConfigError("Saved cookie contains invalid control characters")
         }
         return when (saved.server.provider) {
-            ProviderKind.Jellyfin -> jellyfin(saved, token)
+            ProviderKind.Jellyfin, ProviderKind.Emby -> jellyfin(saved, token)
             ProviderKind.Feiniu -> feiniu(saved, token, cookie as? SecureSecret.CookieText)
+            ProviderKind.Plex -> plex(saved, token)
         }
     }
 
@@ -67,7 +74,8 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
         val installed = JellyfinSession(userId = connection.remoteUserId, accessToken = token.token)
         val state = SingleIdentityJellyfinState(installed)
         val facade = DefaultJellyfinFacade(
-            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei", connection.deviceId, "2.0.0"),
+            JellyfinServerConfig(validateSavedBaseUrl(connection.server.baseUrl), "MaFei", "MaFei", connection.deviceId, "2.0.0",
+                connection.server.provider.mediaBrowserProtocol()),
             BorrowedSessionTransport(transport) { state.current.value != null },
             state,
         )
@@ -94,7 +102,8 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
             override val source = source
             override val aliases = connection.aliases
             override fun clear() { state.clear() }
-            override suspend fun webPage(): WebPageRequest {
+            override suspend fun webPage(): WebPageRequest? {
+                if (connection.server.provider != ProviderKind.Jellyfin) return null
                 val user = facade.auth.currentUserDocument()
                 val active = state.current.value ?: throw CancellationException("Web account retired")
                 val userId = (user["Id"] as? kotlinx.serialization.json.JsonPrimitive)?.content
@@ -107,6 +116,18 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
                     cn.mafei.cmp.common.core.SystemEpochClock.nowEpochMs())
             }
         }
+    }
+
+    private fun plex(connection: SavedConnection, token: SecureSecret.AuthToken): ProviderSessionBinding {
+        val state = MutableStateFlow<SecureSecret.AuthToken?>(token)
+        val client = PlexClient(validateSavedBaseUrl(connection.server.baseUrl), connection.deviceId, token.token,
+            BorrowedSessionTransport(transport) { state.value != null })
+        val source = StateFlowCredentialSource(state) { active ->
+            if (active != null) SessionCredentialSnapshot(0, 0, mapOf(connection.tokenAlias to active))
+            else SessionCredentialSnapshot(1, 1, emptyMap())
+        }
+        return binding(PlexMediaProviderAdapter(client, connection.server.id, connection.account.id),
+            source, connection.aliases) { state.value = null }
     }
 
     private fun feiniu(connection: SavedConnection, token: SecureSecret.AuthToken, cookie: SecureSecret.CookieText?): ProviderSessionBinding {
@@ -144,6 +165,12 @@ class DefaultProviderSessionFactory(private val transport: HttpTransport) : Prov
             override val aliases = aliases.toSet()
             override fun clear() { onClear() }
         }
+}
+
+internal fun ProviderKind.mediaBrowserProtocol(): cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol = when (this) {
+    ProviderKind.Jellyfin -> cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Jellyfin
+    ProviderKind.Emby -> cn.mafei.cmp.providers.jellyfin.core.MediaBrowserProtocol.Emby
+    else -> throw ClientConfigError("Provider does not use the MediaBrowser protocol")
 }
 
 /** Only one preinstalled identity is supported. SDK set() cannot quietly replace its account. */

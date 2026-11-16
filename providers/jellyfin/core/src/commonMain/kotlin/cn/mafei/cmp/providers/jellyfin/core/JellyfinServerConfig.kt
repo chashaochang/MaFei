@@ -13,4 +13,8 @@ data class JellyfinServerConfig(
     val deviceName: String,
     val deviceId: String,
     val appVersion: String,
+    val protocol: MediaBrowserProtocol = MediaBrowserProtocol.Jellyfin,
 )
+
+/** The shared wire format has distinct catalog routes and version policies. */
+enum class MediaBrowserProtocol { Jellyfin, Emby }

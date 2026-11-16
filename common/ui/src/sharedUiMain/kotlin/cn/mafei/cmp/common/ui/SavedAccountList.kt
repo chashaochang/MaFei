@@ -254,10 +254,7 @@ private fun SavedAccountRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Image(
-                painter = painterResource(
-                    if (item.provider == ProviderKind.Jellyfin) MaFeiLegacyDrawables.jellyfinLogo
-                    else MaFeiLegacyDrawables.feiniuLogo,
-                ),
+                painter = painterResource(providerLogo(item.provider)),
                 contentDescription = null,
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
             )

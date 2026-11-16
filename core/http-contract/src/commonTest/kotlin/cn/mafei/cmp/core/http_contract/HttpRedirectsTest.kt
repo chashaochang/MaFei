@@ -136,14 +136,15 @@ class HttpRedirectsTest {
     }
 
     @Test
-    fun credentialHeaderSetCoversBothProtocols() {
-        for (expected in listOf("authorization", "proxy-authorization", "cookie", "x-emby-authorization", "x-emby-token", "trim-mc-token")) {
+    fun credentialHeaderSetCoversSupportedProviders() {
+        for (expected in listOf("authorization", "proxy-authorization", "cookie", "x-emby-authorization", "x-emby-token", "x-plex-token", "trim-mc-token")) {
             assertTrue(
                 HttpCredentialHeaders.ALL.contains(expected),
                 "credential header set must contain '$expected'",
             )
         }
         assertTrue(HttpCredentialHeaders.isCredentialHeader("X-Emby-Authorization"))
+        assertTrue(HttpCredentialHeaders.isCredentialHeader("X-Plex-Token"))
         assertFalse(HttpCredentialHeaders.isCredentialHeader("Accept"))
     }
 
@@ -230,11 +231,14 @@ class HttpRedirectsTest {
 
     @Test
     fun sameOriginRedirectKeepsCredentials() {
-        val previous = request(headers = listOf("Authorization" to "MediaBrowser token", "Cookie" to "mc=1"))
+        val previous = request(headers = listOf(
+            "Authorization" to "MediaBrowser token", "Cookie" to "mc=1", "X-Plex-Token" to "plex-token",
+        ))
         val next = HttpRedirects.nextRequest(previous, redirect(302, "/same/origin"), 0)!!
 
         assertEquals("MediaBrowser token", next.headers.first("authorization"))
         assertEquals("mc=1", next.headers.first("cookie"))
+        assertEquals("plex-token", next.headers.first("X-Plex-Token"))
     }
 
     @Test

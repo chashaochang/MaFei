@@ -34,6 +34,7 @@ data object DefaultHttpLogRedactor : HttpLogRedactor {
         "auth",
         "authorization",
         "x-emby-token",
+        "x-plex-token",
         "sign",
         "signature",
     )

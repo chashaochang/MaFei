@@ -30,19 +30,21 @@ internal class SessionArtwork(private val transport: HttpTransport) {
             return null
         }
         val target = when (connection.server.provider) {
-            ProviderKind.Jellyfin -> if (photoDimensions) url else url.newBuilder()
+            ProviderKind.Jellyfin, ProviderKind.Emby -> if (photoDimensions) url else url.newBuilder()
                 .setQueryParameter("maxWidth", targetWidthPx.coerceIn(96, 960).toString())
                 .setQueryParameter("quality", "85").build()
             ProviderKind.Feiniu -> url.newBuilder()
                 .setQueryParameter("w", targetWidthPx.coerceIn(96, 960).toString())
                 .build()
+            ProviderKind.Plex -> url
         }
         val request = HttpRequest.builder(HttpMethod.Get, target)
             .redirectPolicy(RedirectPolicy.FollowSameOrigin)
             .readPolicy(BodyReadPolicy.BufferedAtMost((if (photoDimensions) 16L else 4L) * 1024 * 1024))
             .timeoutMillis(12_000)
         when (connection.server.provider) {
-            ProviderKind.Jellyfin -> request.header("X-Emby-Token", token.token)
+            ProviderKind.Jellyfin, ProviderKind.Emby -> request.header("X-Emby-Token", token.token)
+            ProviderKind.Plex -> request.header("X-Plex-Token", token.token)
             ProviderKind.Feiniu -> {
                 val cookie = snapshot.secrets[connection.cookieAlias] as? SecureSecret.CookieText
                 FeiniuAssetsApi().playbackHeaders(FeiniuCredentials(token.token, cookie?.value.orEmpty()), route?.route == "Relay")

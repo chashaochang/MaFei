@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="269.72" android:viewportHeight="269.72">
+    <!-- Plex mark; adapted from Plezy, GPL-3.0. See PROVIDER_ASSETS.md. -->
+    <group android:translateX="-636.71" android:translateY="-89.58">
+        <path android:fillColor="#E5A00D" android:pathData="M774.47,359.3H677.74L768.67,224.5L677.74,89.58H774.47L865.4,224.5Z"/>
+    </group>
+</vector>
