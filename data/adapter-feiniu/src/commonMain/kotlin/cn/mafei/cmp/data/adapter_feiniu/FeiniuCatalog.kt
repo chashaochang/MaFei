@@ -238,6 +238,9 @@ internal class FeiniuCatalog(
                     ?: "剧集",
                 seriesId = seriesId,
                 seasonId = candidate.seasonId?.let(::MediaId),
+                // Episode listings may omit can_play. Only an explicit denial
+                // should suppress an episode before playback negotiation.
+                canPlay = (candidate.item.canPlay ?: 1) > 0,
             )
         }
         val nextOffset = offset + selected.size

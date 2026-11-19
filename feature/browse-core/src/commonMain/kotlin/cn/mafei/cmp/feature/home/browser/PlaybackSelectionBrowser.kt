@@ -53,7 +53,10 @@ internal class PlaybackSelectionBrowser(context: BrowserContext, private val pla
 
     suspend fun shortDramaEpisodes(series: MediaId, season: MediaId? = null, refresh: Boolean = false): ShortDramaEpisodeResult =
         collectShortDramaEpisodes { cursor ->
-            repository.browse(session, MediaQuery.Episodes(series, season), PageRequest(cursor = cursor), refresh = refresh).value
+            repository.browse(
+                session, MediaQuery.Episodes(series, season), PageRequest(cursor = cursor, pageSize = PageRequest.MAX_PAGE_SIZE),
+                refresh = refresh,
+            ).value
         }
 
     suspend fun shortDramaTarget(series: MediaId, season: MediaId?): MediaItem? {

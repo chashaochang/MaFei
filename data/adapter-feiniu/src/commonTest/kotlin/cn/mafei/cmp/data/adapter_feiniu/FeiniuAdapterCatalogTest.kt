@@ -262,7 +262,8 @@ class FeiniuAdapterCatalogTest {
         fixture.transport.enqueueJson(
             200,
             envelope(
-                """[{"guid":"resume-ts","title":"Resume TS","type":"Movie","poster":"/resume.jpg","duration":8048,"ts":312}]""",
+                """[{"guid":"resume-ts","title":"Resume TS","type":"Movie","poster":"/resume.jpg",
+                    "ancestor_guid":" lib-movies ","duration":8048,"ts":312}]""",
             ),
         )
         fixture.transport.enqueueJson(200, envelope("""{"list":[],"total":0}"""))
@@ -272,6 +273,7 @@ class FeiniuAdapterCatalogTest {
         val home = fixture.adapter.home(HomeFeedRequest())
 
         assertEquals(listOf("Resume TS"), home.resume.map { it.title })
+        assertEquals(CollectionId("lib-movies"), home.resume.single().collectionId)
         assertEquals(312_000L, home.resume.single().userData.playbackPositionMs)
         assertEquals(312.0 * 100.0 / 8048.0, home.resume.single().userData.playedPercentage)
         assertNull(home.resume.single().dateAddedEpochMs)
@@ -719,7 +721,7 @@ class FeiniuAdapterCatalogTest {
         fixture.transport.enqueueJson(
             200,
             envelope(
-                """{"guid":"series-1","title":"Series","type":"TV","poster":"/series.jpg"}""",
+                """{"guid":"series-1","title":"Series","type":"TV","poster":"/series.jpg","ancestor_guid":"lib-drama"}""",
             ),
         )
 
@@ -733,6 +735,7 @@ class FeiniuAdapterCatalogTest {
         val item = page.items.single()
         assertEquals(MediaType.Episode, item.mediaType)
         assertEquals(MediaId("series-1"), item.seriesId)
+        assertEquals(CollectionId("lib-drama"), item.collectionId)
         assertEquals("Series", item.seriesTitle)
         assertEquals(3, item.episodeNumber)
         assertEquals(200_000L, item.userData.lastPlayedEpochMs)
@@ -781,6 +784,22 @@ class FeiniuAdapterCatalogTest {
             "第 3 集",
             fixture.adapter.episodes(MediaId("series-1"), MediaId("season-2"), PageRequest()).items.single().title,
         )
+    }
+
+    @Test
+    fun episodesWithoutCanPlayRemainCandidatesButExplicitlyDisabledEpisodesDoNot() = runTest {
+        val fixture = Fixture()
+        fixture.transport.enqueueJson(
+            200,
+            envelope(
+                """[
+                    {"guid":"episode-1","title":"One","type":"Episode","episode_number":1},
+                    {"guid":"episode-2","title":"Two","type":"Episode","episode_number":2,"can_play":0}
+                ]""",
+            ),
+        )
+        val page = fixture.adapter.episodes(MediaId("series-1"), MediaId("season-1"), PageRequest())
+        assertEquals(listOf(true, false), page.items.map { it.canPlay })
     }
 
     @Test

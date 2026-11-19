@@ -212,6 +212,7 @@ internal class FeiniuMediaDetails(private val adapterSession: FeiniuAdapterSessi
 
     /** Same parent/series fallback walk as the legacy `itemContext()`. */
     private suspend fun detailContext(detail: FeiniuItemDetail, kind: cn.mafei.cmp.core.domain.MediaType): FeiniuDetailContext {
+        var collectionId = detail.ancestorGuid.toFeiniuCollectionId()
         var seriesId: String? = null
         var seasonId: String? = null
         var seriesTitle = detail.tvTitle?.trim()?.takeIf { it.isNotEmpty() }
@@ -235,6 +236,7 @@ internal class FeiniuMediaDetails(private val adapterSession: FeiniuAdapterSessi
             cn.mafei.cmp.core.domain.MediaType.Episode -> {
                 val parentId = detail.parentGuid?.trim().orEmpty()
                 val parent = adapterSession.optionalItemDetail(parentId)
+                collectionId = collectionId ?: parent?.ancestorGuid.toFeiniuCollectionId()
                 if (parent?.type.toFeiniuMediaType() == cn.mafei.cmp.core.domain.MediaType.Series) {
                     seriesId = parent?.guid?.trim()?.takeIf { it.isNotEmpty() } ?: parentId.takeIf { it.isNotEmpty() }
                     seriesTitle = seriesTitle
@@ -259,6 +261,7 @@ internal class FeiniuMediaDetails(private val adapterSession: FeiniuAdapterSessi
             seriesDetail = adapterSession.optionalItemDetail(seriesId)
         }
         seriesDetail?.let { series ->
+            collectionId = collectionId ?: series.ancestorGuid.toFeiniuCollectionId()
             seriesTitle = seriesTitle ?: series.title?.trim()?.takeIf(String::isNotEmpty)
             primary = primary ?: series.feiniuPrimaryImagePath()
             backdrop = backdrop ?: series.backdrops?.trim()?.takeIf { it.isNotEmpty() }
@@ -267,6 +270,7 @@ internal class FeiniuMediaDetails(private val adapterSession: FeiniuAdapterSessi
         primary = primary ?: backdrop
         backdrop = backdrop ?: primary
         return FeiniuDetailContext(
+            collectionId = collectionId,
             seriesId = seriesId,
             seasonId = seasonId,
             seriesTitle = seriesTitle,
@@ -348,6 +352,7 @@ internal class FeiniuMediaDetails(private val adapterSession: FeiniuAdapterSessi
             add(ImageKind.Logo, contextLogo)
         }
         return copy(
+            collectionId = collectionId ?: context.collectionId,
             title = if (useSeriesTitleForEpisode && mediaType == MediaType.Episode) {
                 context.seriesTitle?.takeIf(String::isNotBlank) ?: title
             } else {

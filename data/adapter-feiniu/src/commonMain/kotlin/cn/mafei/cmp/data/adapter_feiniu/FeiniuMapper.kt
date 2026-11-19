@@ -169,8 +169,8 @@ internal fun FeiniuMediaLibraryEntry.toMediaCollection(
 }
 
 /**
- * Maps one list item; guid-less entries are dropped. `collectionId` is the
- * query context the item was fetched under, not a wire field.
+ * Maps one list item; guid-less entries are dropped. Scoped queries supply
+ * their library explicitly; global feeds can carry it in ancestor_guid.
  */
 internal fun FeiniuMediaItem.toMediaItem(
     serverId: ServerId,
@@ -215,7 +215,7 @@ internal fun FeiniuMediaItem.toMediaItem(
         title = title.takeIf(String::isNotBlank) ?: fileName.orEmpty(),
         mediaType = mediaType,
         overview = overview,
-        collectionId = collectionId,
+        collectionId = collectionId ?: ancestorGuid.toFeiniuCollectionId(),
         parentId = parentGuid?.takeIf { it.isNotBlank() }?.let(::MediaId),
         seriesId = seriesId?.let(::MediaId),
         seriesTitle = seriesTitle,
@@ -321,6 +321,7 @@ internal fun cn.mafei.cmp.providers.feiniu.core.FeiniuPlayItem.toMediaItem(
 }
 
 internal data class FeiniuDetailContext(
+    val collectionId: CollectionId? = null,
     val seriesId: String? = null,
     val seasonId: String? = null,
     val seriesTitle: String? = null,
@@ -383,6 +384,7 @@ internal fun FeiniuItemDetail.toMediaItem(
         originalTitle = originalTitle?.takeIf { it.isNotBlank() }
             ?: title?.takeIf { it.isNotBlank() },
         overview = overview,
+        collectionId = context.collectionId ?: ancestorGuid.toFeiniuCollectionId(),
         parentId = parentGuid?.trim()?.takeIf { it.isNotEmpty() }?.let(::MediaId),
         seriesId = context.seriesId?.trim()?.takeIf { it.isNotEmpty() }?.let(::MediaId),
         seriesTitle = context.seriesTitle?.trim()?.takeIf { it.isNotEmpty() }
@@ -430,6 +432,9 @@ internal fun FeiniuItemDetail.toMediaItem(
         playbackTarget = playInfo.toMediaPlaybackTarget(),
     )
 }
+
+internal fun String?.toFeiniuCollectionId(): CollectionId? =
+    this?.trim()?.takeIf(String::isNotEmpty)?.let(::CollectionId)
 
 /** Exact domain translation of legacy `FeiniuVideoCatalogMapper.playbackTarget`. */
 private fun FeiniuPlayInfoData?.toMediaPlaybackTarget(): MediaPlaybackTarget? {
