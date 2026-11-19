@@ -191,7 +191,7 @@ class BrowseNavigatorTest {
         val navigation = BrowseNavigationState()
         browser.switchTabContext(navigation.activeRoot.toString())
         val search = BrowseSearchState(browser::search, { emptyList() }, {}, scope)
-        val navigator = BrowseNavigator(browser, navigation, scope, search, artworkCache, { _, _ -> null }, { isPhoneLayout })
+        val navigator = BrowseNavigator(browser, navigation, scope, search, artworkCache, { _, _ -> null }) { isPhoneLayout }
         return NavigatorFixture(browser, navigation, navigator, adapter)
     }
 }

@@ -107,7 +107,7 @@ internal fun MediaBrowserState.replaceUserData(id: MediaId, transform: (MediaUse
     )
 }
 
-internal fun MediaBrowserState.userDataFor(id: MediaId): MediaUserData? {
+fun MediaBrowserState.userDataFor(id: MediaId): MediaUserData? {
     fun List<MediaItem>.find() = firstOrNull { it.id == id }?.userData
     return items.find()
         ?: favoriteItems.find()

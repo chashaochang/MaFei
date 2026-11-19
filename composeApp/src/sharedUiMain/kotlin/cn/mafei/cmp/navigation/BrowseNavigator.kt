@@ -23,6 +23,7 @@ internal class BrowseNavigator(
     private val search: BrowseSearchState,
     private val artworkCache: ArtworkMemoryCache,
     private val fetchArtwork: suspend (MediaImage, Int) -> ByteArray?,
+    private val openMedia: ((MediaItem, String?, () -> Unit, () -> Boolean) -> Unit)? = null,
     private val phoneLayout: () -> Boolean,
 ) {
     private val shellContext: BrowseShellContext
@@ -86,7 +87,17 @@ internal class BrowseNavigator(
         } else if (browser.capabilities.photos && item.mediaType == MediaType.Photo) {
             navigation.browseInitialItems[item.id.value] = item
             navigation.browseBackStack += BrowsePhotoViewerRoute(item.parentId?.value ?: libraryId, item.id.value, libraryId, origin)
-        } else openDetailId(item.id, mediaName, item, origin, libraryId)
+        } else {
+            openWithShortDrama(item, libraryId) { openDetailId(item.id, mediaName, item, origin, libraryId) }
+        }
+    }
+
+    fun openWithShortDrama(item: MediaItem, libraryId: String? = shellContext.libraryId, fallback: () -> Unit) {
+        val root = navigation.activeRoot
+        val route = navigation.currentRoute
+        openMedia?.invoke(item, libraryId, fallback) {
+            root == navigation.activeRoot && route == navigation.currentRoute
+        } ?: fallback()
     }
 
     val openPerson: (cn.mafei.cmp.core.domain.PersonRef) -> Unit = { person ->

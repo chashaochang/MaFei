@@ -54,6 +54,9 @@ import cn.mafei.cmp.common.ui.LegacySortSheet
 import cn.mafei.cmp.common.ui.LegacyVideoCard
 import cn.mafei.cmp.common.ui.mediaArtworkGridHoverInset
 import cn.mafei.cmp.common.ui.MaFeiActionBar
+import cn.mafei.cmp.common.ui.MaFeiActionBarButton
+import cn.mafei.cmp.common.ui.MaFeiGlyph
+import cn.mafei.cmp.common.ui.MaFeiIcon
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiPullRefresh
@@ -105,6 +108,8 @@ fun VideoListScreen(
     onToggleSelected: (MediaItem) -> Unit = {},
     onExitSelection: () -> Unit = {},
     onDeleteSelected: () -> Unit = {},
+    onLibraryOptions: (() -> Unit)? = null,
+    onItemOptions: ((MediaItem) -> (() -> Unit)?)? = null,
 ) {
     val pageActive = LocalMaFeiPageActive.current
     val safeArea = LocalMaFeiSafeArea.current
@@ -211,6 +216,7 @@ fun VideoListScreen(
                     ) {
                         items(items, key = { it.id.value }) { item ->
                             val selected = item.id.value in selectedIds
+                            val options = if (!selectionMode) onItemOptions?.invoke(item) else null
                             Box {
                                 LegacyVideoCard(
                                     item = item,
@@ -226,7 +232,7 @@ fun VideoListScreen(
                                     // 管理员长按进入多选（legacy enterSelection）。
                                     onLongClick = if (canDeleteMedia && !selectionMode) {
                                         { onEnterSelection(item) }
-                                    } else null,
+                                    } else options,
                                     poster = artwork?.let { draw -> { cardModifier -> draw(item, cardModifier) } },
                                 )
                                 if (selectionMode) {
@@ -234,6 +240,18 @@ fun VideoListScreen(
                                         selected = selected,
                                         modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                                     )
+                                } else if (options != null) {
+                                    Box(
+                                        Modifier.align(Alignment.TopEnd).size(44.dp)
+                                            .mafeiInteractive(onClick = options, radiusDp = 22f, label = "${item.title}的播放模式"),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(
+                                            Modifier.size(26.dp).clip(RoundedCornerShape(13.dp))
+                                                .background(Color.Black.copy(alpha = 0.65f)),
+                                            contentAlignment = Alignment.Center,
+                                        ) { MaFeiIcon(MaFeiGlyph.More, Modifier.size(17.dp), color = Color.White) }
+                                    }
                                 }
                             }
                         }
@@ -262,6 +280,12 @@ fun VideoListScreen(
             onBack = onBack,
             backdrop = actionBarBackdrop,
             modifier = Modifier.align(Alignment.TopCenter),
+            actionCount = if (onLibraryOptions != null && !selectionMode) 1 else 0,
+            actions = { backdrop ->
+                if (onLibraryOptions != null && !selectionMode) {
+                    MaFeiActionBarButton(onLibraryOptions, backdrop, "媒体库选项") { MaFeiIcon(MaFeiGlyph.More) }
+                }
+            },
         )
     }
 

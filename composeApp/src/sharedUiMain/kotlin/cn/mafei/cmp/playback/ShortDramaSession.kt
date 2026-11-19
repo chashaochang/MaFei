@@ -7,7 +7,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaId
-import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.data.adapter_contract.PlaybackOptions
 import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.player.api.PlayerPhase
@@ -32,9 +31,6 @@ internal val LocalShortDramaForeground = staticCompositionLocalOf { true }
 
 internal class ShortDramaRequest(val item: MediaItem, val options: PlaybackOptions)
 
-internal fun isShortDramaEntry(item: MediaItem, libraryName: String?): Boolean =
-    item.mediaType == MediaType.Episode && libraryName?.trim() == "短剧"
-
 internal fun shortDramaWindow(index: Int, episodeCount: Int): IntRange =
     if (index in 0 until episodeCount) maxOf(0, index - 1)..minOf(episodeCount - 1, index + 1) else IntRange.EMPTY
 
@@ -55,6 +51,8 @@ internal class ShortDramaSession(
     private var active: MediaItem? = null
     private var closed = false
     private var foreground = true
+    private var covered = false
+    private var resumeAfterDetails = false
 
     fun slot(episode: MediaItem): Slot? = slots[episode.id]
 
@@ -81,7 +79,7 @@ internal class ShortDramaSession(
             when (current.playback.controller.state.value.phase) {
                 PlayerPhase.Ended -> prepare(current, episode, positionMs = 0)
                 PlayerPhase.Loading, PlayerPhase.Ready, PlayerPhase.Playing, PlayerPhase.Paused, PlayerPhase.Buffering ->
-                    current.playback.controller.play()
+                    if (!covered) current.playback.controller.play() else Unit
                 else -> Unit
             }
         } else if (changed) {
@@ -100,6 +98,7 @@ internal class ShortDramaSession(
     }
 
     suspend fun toggle() = commands.withLock {
+        if (covered || closed) return@withLock
         val episode = active ?: return@withLock
         val slot = slot(episode) ?: return@withLock
         val controller = slot.playback.controller
@@ -112,6 +111,38 @@ internal class ShortDramaSession(
             state.phase == PlayerPhase.Ready || state.phase == PlayerPhase.Paused -> controller.play()
             else -> Unit
         }
+    }
+
+    suspend fun seek(id: MediaId, positionMs: Long) = commands.withLock {
+        if (closed || covered || active?.id != id) return@withLock
+        slots[id]?.playback?.controller?.seek(positionMs)
+    }
+
+    suspend fun openDetails() = commands.withLock {
+        if (closed || covered) return@withLock
+        covered = true
+        val controller = active?.let(::slot)?.playback?.controller
+        if (controller == null) {
+            resumeAfterDetails = true
+            return@withLock
+        }
+        val phase = controller.state.value.phase
+        resumeAfterDetails = phase == PlayerPhase.Playing || phase == PlayerPhase.Buffering ||
+            phase == PlayerPhase.Loading || phase == PlayerPhase.Idle || phase == PlayerPhase.Ready
+        if (phase.acceptsPlaybackIntent()) controller.pause()
+    }
+
+    suspend fun closeDetails(play: Boolean) = commands.withLock {
+        if (closed || !covered) return@withLock
+        covered = false
+        val episode = active ?: return@withLock
+        val slot = slot(episode) ?: return@withLock
+        val controller = slot.playback.controller
+        if (play || resumeAfterDetails) {
+            if (controller.state.value.phase == PlayerPhase.Ended) prepare(slot, episode, positionMs = 0)
+            else if (controller.state.value.phase.acceptsPlaybackIntent()) controller.play()
+        }
+        resumeAfterDetails = false
     }
 
     fun close() {
@@ -148,7 +179,7 @@ internal class ShortDramaSession(
                     if (closed || slot !== this@ShortDramaSession.slot(episode)) return@withLock
                     slot.preparationFailed.value = generation == null
                     val controller = slot.playback.controller
-                    if (generation != null && active?.id == episode.id && controller.state.value.phase.acceptsPlaybackIntent()) {
+                    if (generation != null && !covered && active?.id == episode.id && controller.state.value.phase.acceptsPlaybackIntent()) {
                         controller.play()
                     }
                 }

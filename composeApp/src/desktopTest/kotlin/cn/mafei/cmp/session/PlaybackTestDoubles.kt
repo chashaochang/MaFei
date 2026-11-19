@@ -60,5 +60,6 @@ internal class CountingRuntime : PlayerRuntime {
 
     fun emitReady(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Ready(generation, 60_000)) }
     fun emitPlaying(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Playing(generation)) }
+    fun emitPaused(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Paused(generation)) }
     fun emitEnded(generation: PlaybackGeneration) { sink?.invoke(RuntimeEvent.Ended(generation)) }
 }

@@ -120,9 +120,16 @@ internal fun BrowseApplication(
     val fetchPhotoArtwork: suspend (MediaImage) -> ByteArray? =
         remember(session) { { image -> runtime.loadPhotoArtwork(session, image) } }
     val playback = remember(session) { runtime.playback(session) }
-    val player = remember(session) { BrowsePlayerState(playback, browser, scope) }
-    val shortDrama = player.shortDrama
     val shortDramaPlatform = LocalShortDramaPlatform.current
+    val shortDramaCapability by rememberUpdatedState(shortDramaPlatform != null)
+    val player = remember(session) {
+        val media = session.media
+        val entrance = ShortDramaEntrance(browser, runtime.shortDramaPreferences, "${media.serverId.value.length}:${media.serverId.value}${media.accountId.value}") { id ->
+            runtime.sessions.media.item(media, id).value
+        }
+        BrowsePlayerState(playback, browser, scope, entrance) { shortDramaCapability }
+    }
+    val shortDrama = player.shortDrama
     val shortDramaVisible = shortDrama != null && shortDramaPlatform != null
     val playerWindow = LocalPlayerWindowState.current?.takeIf { it.accepts(player) }
     val separateVideoWindow = playerWindow != null && player.playingMedia?.mediaType != MediaType.Audio
@@ -200,7 +207,7 @@ internal fun BrowseApplication(
         BindHomeLibraryPrefetch(navigation, browser, collections, layout.isPhoneNavigation, active = !account.minePresented)
         val currentPhoneLayout = rememberUpdatedState(layout.family == MaFeiLayoutFamily.Phone)
         val navigator = remember(browser, navigation, scope, search, artworkCache, fetchArtwork) {
-            BrowseNavigator(browser, navigation, scope, search, artworkCache, fetchArtwork) { currentPhoneLayout.value }
+            BrowseNavigator(browser, navigation, scope, search, artworkCache, fetchArtwork, player::openMedia) { currentPhoneLayout.value }
         }
         val onBrowseBack = navigator.onBack
         val showingDetail = shellPresentation.detail
@@ -400,6 +407,11 @@ internal fun BrowseApplication(
                         request = shortDrama,
                         platform = shortDramaPlatform,
                         browser = browser,
+                        onFullscreenChanged = onPlayerFullscreenChanged,
+                        onPlayerVisible = onPlayerScreenChanged,
+                        loadItem = { id -> runtime.sessions.media.item(session.media, id).value },
+                        loadArtwork = fetchArtwork,
+                        loadPreview = { id, source, time -> loadShortDramaPreview(runtime.sessions.media, session.media, id, source, time) },
                         createPlayback = { engine ->
                             SessionPlaybackRuntime.create(
                                 provider = session.selection.provider,
@@ -576,6 +588,14 @@ internal fun BrowseApplication(
         }
         // 管理员媒体删除确认（列表多选 / 详情页单条共用）。
         BrowseDeleteConfirmation(scope, browser, browserState, navigation, selection, deleteConfirmBackdrop)
+        val retryShortDramaEntry = player.retryShortDramaEntry
+        cn.mafei.cmp.common.ui.MaFeiErrorDialog(
+            message = if (retryShortDramaEntry != null) "暂时找不到可播放的分集。" else null,
+            backdrop = rememberGlassBackdrop(),
+            onRetry = retryShortDramaEntry,
+            onDismiss = player::dismissShortDramaEntryFailure,
+            title = "无法打开短剧",
+        )
     }
     }
     }

@@ -121,6 +121,7 @@ internal fun LibraryEntryBinding(
             bottomInset = if (musicMiniPlayerMedia != null) 76.dp else 0.dp,
         )
     } else {
+        val mode = remember(route.collectionId) { LibraryPlaybackModeMenuState() }
         VideoListScreen(
             title = state.collections.firstOrNull { it.id.value == route.collectionId }?.name.orEmpty(),
             items = state.items,
@@ -144,8 +145,14 @@ internal fun LibraryEntryBinding(
                     }
                 scope.launch { browser.setLibrarySort(state.librarySort.copy(direction = direction)) }
             },
-            onItem = { item -> navigator.openDetail(item, state.collections.firstOrNull { it.id.value == route.collectionId }?.name) },
-            onPlay = player.startPlayback,
+            onItem = { item -> navigator.openDetail(item, collection?.name, libraryId = route.collectionId) },
+            onPlay = { player.playFromEntry(it, route.collectionId) },
+            onLibraryOptions = collection?.let { { mode.openLibrary(it) } },
+            onItemOptions = { item ->
+                if (item.supportsShortDrama && item.mediaType != MediaType.Season && item.mediaType != MediaType.Episode) {
+                    { mode.openWork(item) }
+                } else null
+            },
             onToggleWatched =
                 if (browser.capabilities.watchedEdit) {
                     { item -> scope.launch { browser.toggleWatched(item) } }
@@ -189,5 +196,6 @@ internal fun LibraryEntryBinding(
                 )
             },
         )
+        LibraryPlaybackModeMenu(mode, player)
     }
 }

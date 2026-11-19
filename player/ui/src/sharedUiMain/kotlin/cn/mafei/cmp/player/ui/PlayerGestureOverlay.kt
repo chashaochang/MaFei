@@ -73,7 +73,7 @@ internal fun PlayerSeekFeedback(
 }
 
 @Composable
-private fun PlayerSeekPreviewImage(frame: PlayerSeekPreviewFrame) {
+fun PlayerSeekPreviewImage(frame: PlayerSeekPreviewFrame, modifier: Modifier = Modifier.width(220.dp).aspectRatio(16f / 9f)) {
     val encodedKey = frame.encodedTile.contentHashCode()
     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
         initialValue = null,
@@ -92,7 +92,7 @@ private fun PlayerSeekPreviewImage(frame: PlayerSeekPreviewFrame) {
         }
     }
     Box(
-        Modifier.width(220.dp).aspectRatio(16f / 9f)
+        modifier
             .clip(RoundedCornerShape(8.dp))
             .background(Color.Black.copy(alpha = .36f)),
     ) {

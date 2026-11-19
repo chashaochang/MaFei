@@ -105,6 +105,10 @@ class MediaBrowser(
 
     suspend fun toggleFavorite() = mediaActions.toggleFavorite()
 
+    suspend fun shortDramaQueueFor(item: MediaItem, refresh: Boolean = false) = playbackSelection.shortDramaQueueFor(item, refresh)
+
+    suspend fun shortDramaTarget(series: MediaId, season: MediaId? = null) = playbackSelection.shortDramaTarget(series, season)
+
     suspend fun toggleWatched() = mediaActions.toggleWatched()
 
     suspend fun toggleWatched(item: MediaItem) = mediaActions.toggleWatched(item)

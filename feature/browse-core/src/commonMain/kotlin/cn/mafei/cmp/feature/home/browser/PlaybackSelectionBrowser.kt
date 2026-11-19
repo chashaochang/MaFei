@@ -43,6 +43,27 @@ internal class PlaybackSelectionBrowser(context: BrowserContext, private val pla
         )
     }
 
+    suspend fun shortDramaQueueFor(item: MediaItem, refresh: Boolean): ShortDramaQueueResult {
+        val series = item.seriesId
+        if (series == null || item.mediaType != MediaType.Episode) return ShortDramaQueueResult(PlaybackQueue(listOf(item)), true)
+        val result = shortDramaEpisodes(series, refresh = refresh)
+        val ordered = if (result.items.any { it.id == item.id }) result.items else orderShortDramaEpisodes(result.items + item)
+        return ShortDramaQueueResult(PlaybackQueue(ordered, ordered.indexOfFirst { it.id == item.id }), result.complete)
+    }
+
+    suspend fun shortDramaEpisodes(series: MediaId, season: MediaId? = null, refresh: Boolean = false): ShortDramaEpisodeResult =
+        collectShortDramaEpisodes { cursor ->
+            repository.browse(session, MediaQuery.Episodes(series, season), PageRequest(cursor = cursor), refresh = refresh).value
+        }
+
+    suspend fun shortDramaTarget(series: MediaId, season: MediaId?): MediaItem? {
+        val episodes = shortDramaEpisodes(series, season).items.map { item ->
+            state.value.userDataFor(item.id)?.let { item.copy(userData = it) } ?: item
+        }
+        return episodes.filter { it.userData.hasProgress || it.userData.lastPlayedEpochMs != null }
+            .maxByOrNull { it.userData.lastPlayedEpochMs ?: Long.MIN_VALUE } ?: episodes.firstOrNull()
+    }
+
     /**
      * 起播 [item] 时的播放队列，等价于旧版 QueueManager.initializePlaybackQueue 的输入。
      *
@@ -75,3 +96,32 @@ internal class PlaybackSelectionBrowser(context: BrowserContext, private val pla
         return PlaybackQueue.forItem(item, episodes)
     }
 }
+
+data class ShortDramaQueueResult(val queue: PlaybackQueue, val complete: Boolean)
+
+internal data class ShortDramaEpisodeResult(val items: List<MediaItem>, val complete: Boolean)
+
+internal suspend fun collectShortDramaEpisodes(load: suspend (PageCursor?) -> Page<MediaItem>): ShortDramaEpisodeResult {
+    val episodes = mutableListOf<MediaItem>()
+    val cursors = mutableSetOf<PageCursor>()
+    var cursor: PageCursor? = null
+    return try {
+        do {
+            val page = load(cursor)
+            episodes += page.items.filter { it.mediaType == MediaType.Episode && it.canPlay }
+            cursor = page.nextCursor
+            check(cursor == null || cursors.add(cursor)) { "Repeated episode cursor" }
+        } while (cursor != null)
+        ShortDramaEpisodeResult(orderShortDramaEpisodes(episodes), true)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        ShortDramaEpisodeResult(orderShortDramaEpisodes(episodes), false)
+    }
+}
+
+internal fun orderShortDramaEpisodes(episodes: List<MediaItem>): List<MediaItem> =
+    episodes.distinctBy { it.id }
+        .groupBy { it.seasonId?.value ?: it.seasonNumber }
+        .values.sortedBy { season -> season.firstNotNullOfOrNull { it.seasonNumber } ?: Int.MAX_VALUE }
+        .flatMap { season -> season.sortedBy { it.episodeNumber ?: Int.MAX_VALUE } }

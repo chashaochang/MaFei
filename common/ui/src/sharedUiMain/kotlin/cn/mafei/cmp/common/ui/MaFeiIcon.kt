@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 
 enum class MaFeiGlyph {
     Home, Library, More, Back, Arrow, Chevron, Search, Refresh, Appearance, Account, History,
-    Play, Favorite, Watched, Clock, Close,
+    Play, Pause, Favorite, Watched, Clock, Close,
     PersonFilled,
 }
 
@@ -80,6 +80,7 @@ fun MaFeiIcon(
                     val play = Path().apply { moveTo(8f, 5f); lineTo(19f, 12f); lineTo(8f, 19f); close() }
                     drawPath(play, color)
                 }
+                MaFeiGlyph.Pause -> { line(9f, 6f, 9f, 18f); line(15f, 6f, 15f, 18f) }
                 MaFeiGlyph.Favorite -> {
                     val heart = Path().apply {
                         moveTo(12f, 20f)

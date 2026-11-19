@@ -3,7 +3,8 @@ package cn.mafei.cmp.session
 import cn.mafei.cmp.ShortDramaPlatform
 import cn.mafei.cmp.ShortDramaRequest
 import cn.mafei.cmp.ShortDramaSession
-import cn.mafei.cmp.isShortDramaEntry
+import cn.mafei.cmp.shortDramaMode
+import cn.mafei.cmp.supportsShortDrama
 import cn.mafei.cmp.core.domain.ClientConfigError
 import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
@@ -179,9 +180,42 @@ class ShortDramaSessionTest {
 
     @Test
     fun normalVideoDoesNotRouteToShortDrama() {
-        assertTrue(isShortDramaEntry(episodes.first(), "短剧"))
-        assertFalse(isShortDramaEntry(episodes.first(), "影视"))
-        assertFalse(isShortDramaEntry(episodes.first().copy(mediaType = MediaType.Movie), "短剧"))
+        assertTrue(episodes.first().supportsShortDrama)
+        assertTrue(episodes.first().copy(mediaType = MediaType.Movie).supportsShortDrama)
+        assertFalse(episodes.first().copy(mediaType = MediaType.Audio).supportsShortDrama)
+        assertFalse(shortDramaMode(null, null, "影视"))
+    }
+
+    @Test
+    fun detailsKeepsTheSamePlaybackGenerationAndRestoresIntent() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+        val session = buildSession(scope)
+        try {
+            session.select(episodes, 1)
+            val current = engine(session, 1)
+            val generation = current.generation()
+            current.emitReady(generation)
+            current.emitPlaying(generation)
+            session.openDetails()
+            assertTrue(current.commands.last() is RuntimeCommand.Pause)
+            current.emitPaused(generation)
+            session.closeDetails(play = false)
+            assertTrue(current.commands.last() is RuntimeCommand.Play)
+            current.emitPlaying(generation)
+            session.toggle()
+            current.emitPaused(generation)
+            session.openDetails()
+            val pausedCount = current.commands.size
+            session.closeDetails(play = false)
+            assertEquals(pausedCount, current.commands.size)
+            session.openDetails()
+            session.closeDetails(play = true)
+            assertTrue(current.commands.last() is RuntimeCommand.Play)
+            assertSame(generation, current.generation())
+        } finally {
+            session.close()
+            scope.cancel()
+        }
     }
 
     private fun buildSession(scope: CoroutineScope): ShortDramaSession = ShortDramaSession(

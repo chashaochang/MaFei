@@ -71,7 +71,9 @@ internal fun HomeEntryBinding(
         onItem = { item -> navigator.openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
         onHeroItem = { item ->
             val target = item.legacyHomeHeroDetailTarget()
-            navigator.openDetailId(target.mediaId, target.mediaName, item.takeIf { it.id == target.mediaId })
+            navigator.openWithShortDrama(item) {
+                navigator.openDetailId(target.mediaId, target.mediaName, item.takeIf { it.id == target.mediaId })
+            }
         },
         onPlay = player.startPlayback,
         onToggleWatched =

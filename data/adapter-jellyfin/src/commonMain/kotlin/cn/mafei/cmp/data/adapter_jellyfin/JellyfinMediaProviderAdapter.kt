@@ -373,7 +373,8 @@ class JellyfinMediaProviderAdapter(
 
     override suspend fun item(id: MediaId): MediaItem {
         val dto = translate { facade.catalog.item(jellyfinUserId, id.value) }
-        return (if (dto.type == cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo) photoItem(dto) else dto.toMediaItem(serverId, ::imageUrl))
+        return (if (dto.type == cn.mafei.cmp.providers.jellyfin.wire.ItemKind.Photo) photoItem(dto)
+            else dto.toMediaItem(serverId, ::imageUrl)?.copy(parentId = dto.parentId?.takeIf(String::isNotBlank)?.let(::MediaId)))
             ?: throw ResourceNotFoundError(resource = "jellyfin item $id")
     }
 

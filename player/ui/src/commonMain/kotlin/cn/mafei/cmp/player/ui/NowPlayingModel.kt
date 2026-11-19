@@ -69,7 +69,7 @@ internal fun playerPhaseStatus(phase: PlayerPhase): String = when (phase) {
     PlayerPhase.Released -> "播放器已关闭"
 }
 
-internal fun formatPlayerDuration(milliseconds: Long): String {
+fun formatPlayerDuration(milliseconds: Long): String {
     val totalSeconds = milliseconds.coerceAtLeast(0L) / 1_000L
     val hours = totalSeconds / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L

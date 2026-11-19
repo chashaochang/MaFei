@@ -69,7 +69,7 @@ internal fun BrowsePlayerHost(
                 onBack = { player.playerExpanded = false },
                 onTogglePlay = player.togglePlayback,
                 onRetry = {
-                    player.startPlayback(playerMedia)
+                    player.startPlaybackItem(playerMedia)
                     player.playerExpanded = true
                 },
                 onSeek = { player.pendingSeekPosition = it },

@@ -76,7 +76,7 @@ internal fun LatestEntryBinding(
             onRetry = { scope.launch { if (collectionLatest) collection?.let { latestStore.load(it, refresh = true) } else browser.refreshHome() } },
             onLoadMore = { collection?.let { scope.launch { latestStore.load(it, more = true) } } },
             onItem = { item -> navigator.openDetail(item, item.legacyHomeLatestMediaName(state.collections)) },
-            onPlay = player.startPlayback,
+            onPlay = { player.playFromEntry(it, collection?.id?.value) },
             onToggleWatched =
                 if (browser.capabilities.watchedEdit) {
                     { item ->

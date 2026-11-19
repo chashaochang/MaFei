@@ -47,7 +47,6 @@ internal fun DetailEntryBinding(
     // target is the authoritative play affordance;
     // preparation will report a real failure.
     val detailPlayTarget = state.detailPlayTarget
-    val shortDramaAvailable = LocalShortDramaPlatform.current != null
     DetailScreen(
         item = state.detail,
         loading = state.detailLoading,
@@ -55,7 +54,7 @@ internal fun DetailEntryBinding(
         onBack = navigator::pop,
         onRetry = { state.detailId?.let { id -> scope.launch { browser.openDetail(id) } } },
         onPlay = detailPlayTarget?.takeIf { playback != null }?.let { item ->
-            { player.startFromLibrary(item, route.mediaName, shortDramaAvailable) }
+            { player.playFromEntry(item, route.libraryId) }
         },
         playTarget = detailPlayTarget,
         onOpenExternalUrl = { url ->

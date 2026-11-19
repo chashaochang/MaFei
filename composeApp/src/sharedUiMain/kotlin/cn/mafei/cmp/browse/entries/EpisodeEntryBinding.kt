@@ -47,7 +47,6 @@ internal fun EpisodeEntryBinding(
         }
     }
     val episode = state.detail?.takeIf { it.id.value == route.episodeId } ?: initialEpisode
-    val shortDramaAvailable = LocalShortDramaPlatform.current != null
     DetailScreen(
         item = episode,
         // Once the route has an initial row, keep it
@@ -60,7 +59,7 @@ internal fun EpisodeEntryBinding(
         onBack = navigator::pop,
         onRetry = { scope.launch { browser.openDetail(MediaId(route.episodeId), initialEpisode) } },
         onPlay = episode?.takeIf { playback != null }?.let { item ->
-            { player.startFromLibrary(item, route.mediaName, shortDramaAvailable) }
+            { player.playFromEntry(item, route.libraryId) }
         },
         playTarget = episode,
         onOpenExternalUrl = { url ->

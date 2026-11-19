@@ -3,6 +3,7 @@ package cn.mafei.cmp
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import cn.mafei.cmp.core.domain.MediaItem
+import cn.mafei.cmp.core.domain.MediaCollection
 import cn.mafei.cmp.core.domain.MediaType
 import cn.mafei.cmp.feature.detail.legacyPlaybackResumePositionMs
 import cn.mafei.cmp.feature.home.MediaBrowser
@@ -11,6 +12,7 @@ import cn.mafei.cmp.feature.music.MusicRepeatMode
 import cn.mafei.cmp.player.api.PlayerPhase
 import cn.mafei.cmp.session.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Session-owned playback intent, queue and user selections. No route or window state is captured. */
@@ -18,6 +20,8 @@ internal class BrowsePlayerState(
     val playback: SessionPlaybackRuntime?,
     private val browser: MediaBrowser,
     private val scope: kotlinx.coroutines.CoroutineScope,
+    private val shortDramaEntrance: ShortDramaEntrance? = null,
+    private val shortDramaAvailable: () -> Boolean = { false },
 ) {
     var playingMedia by mutableStateOf<MediaItem?>(null)
     var playerFullscreen by mutableStateOf(false)
@@ -30,12 +34,65 @@ internal class BrowsePlayerState(
     var pendingSeekPosition by mutableStateOf<Long?>(null)
     var shortDrama by mutableStateOf<ShortDramaRequest?>(null)
         private set
+    var retryShortDramaEntry by mutableStateOf<(() -> Unit)?>(null)
+        private set
 
-    fun startFromLibrary(item: MediaItem, libraryName: String?, shortDramaAvailable: Boolean) {
-        if (!shortDramaAvailable || !isShortDramaEntry(item, libraryName)) {
-            startPlaybackItem(item)
-            return
+    private var entryJob: Job? = null
+
+    fun openMedia(item: MediaItem, libraryId: String?, fallback: () -> Unit, isCurrent: () -> Boolean = { true }) {
+        val entrance = shortDramaEntrance
+        entryJob?.cancel()
+        retryShortDramaEntry = null
+        if (entrance == null || !item.supportsShortDrama || playback == null) return fallback()
+        entryJob = scope.launch {
+            val matches = try {
+                entrance.matches(item, libraryId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            if (!isCurrent()) return@launch
+            if (!matches) {
+                fallback()
+                return@launch
+            }
+            val target = try {
+                entrance.target(item)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (!isCurrent()) return@launch
+            if (target == null) {
+                retryShortDramaEntry = { openMedia(item, libraryId, fallback, isCurrent) }
+            } else if (shortDramaAvailable()) {
+                startShortDrama(target)
+            } else {
+                startPlaybackItem(target)
+            }
         }
+    }
+
+    fun dismissShortDramaEntryFailure() { retryShortDramaEntry = null }
+
+    suspend fun shortDramaLibraryMode(collection: MediaCollection): Boolean =
+        shortDramaEntrance?.libraryMode(collection) ?: false
+
+    suspend fun shortDramaWorkMode(item: MediaItem): Boolean? = shortDramaEntrance?.workMode(item)
+
+    suspend fun setShortDramaLibrary(collection: MediaCollection, enabled: Boolean) {
+        shortDramaEntrance?.setLibrary(collection, enabled)
+    }
+
+    suspend fun setShortDramaWork(item: MediaItem, enabled: Boolean?) {
+        shortDramaEntrance?.setWork(item, enabled)
+    }
+
+    fun playFromEntry(item: MediaItem, libraryId: String?) = openMedia(item, libraryId, { startPlaybackItem(item) })
+
+    private fun startShortDrama(item: MediaItem) {
         val runtime = playback ?: return
         if (playbackBusy || shortDrama != null) return
         playbackBusy = true
@@ -130,23 +187,23 @@ internal class BrowsePlayerState(
         }
     }
 
-    val startPlayback: (MediaItem) -> Unit = { startPlaybackItem(it) }
+    val startPlayback: (MediaItem) -> Unit = { item -> openMedia(item, null, { startPlaybackItem(item) }) }
     val playNextEpisode: () -> Unit = {
         playQueue?.next()?.let { next ->
             playQueue = next
-            startPlayback(next.current)
+            startPlaybackItem(next.current)
         }
     }
     val playPreviousEpisode: () -> Unit = {
         playQueue?.previous()?.let { previous ->
             playQueue = previous
-            startPlayback(previous.current)
+            startPlaybackItem(previous.current)
         }
     }
     val playEpisodeAt: (Int) -> Unit = { index ->
         playQueue?.select(index)?.let { selected ->
             playQueue = selected
-            startPlayback(selected.current)
+            startPlaybackItem(selected.current)
         }
     }
     val playMusicQueue: (List<MediaItem>, Int) -> Unit = { tracks, index ->
@@ -191,7 +248,7 @@ internal class BrowsePlayerState(
                     PlayerPhase.Playing,
                     PlayerPhase.Buffering -> playback?.controller?.pause()
                     PlayerPhase.Ended,
-                    PlayerPhase.Error -> playingMedia?.let(startPlayback)
+                    PlayerPhase.Error -> playingMedia?.let { startPlaybackItem(it) }
                     PlayerPhase.Ready,
                     PlayerPhase.Paused -> playback?.controller?.play()
                     PlayerPhase.Idle,

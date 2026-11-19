@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import cn.mafei.cmp.common.design_system.LocalMaFeiWindowFeatures
+import cn.mafei.cmp.core.domain.MediaId
 import cn.mafei.cmp.core.domain.MediaItem
 import cn.mafei.cmp.core.domain.MediaType
+import cn.mafei.cmp.data.repositories.MediaRepository
+import cn.mafei.cmp.data.repositories.MediaSession
 import cn.mafei.cmp.player.api.PlayerController
 import cn.mafei.cmp.player.api.PlayerSeekPreviewFrame
 import cn.mafei.cmp.player.ui.NowPlayingMedia
@@ -45,7 +48,7 @@ internal fun BrowseVideoPlayer(
         providerTracks = playback.tracks,
         onBack = onClose,
         onTogglePlay = player.togglePlayback,
-        onRetry = { player.startPlayback(playerMedia) },
+        onRetry = { player.startPlaybackItem(playerMedia) },
         onSeek = { player.pendingSeekPosition = it },
         onSpeed = { speed ->
             scope.launch {
@@ -84,17 +87,8 @@ internal fun BrowseVideoPlayer(
         catalogItem = playerMedia,
         prepared = preparedStream,
         loadSeekPreview = { positionMs ->
-            repository
-                .previewFrame(session = mediaSession, item = playerMedia.id, positionMs = positionMs, mediaSourceId = preparedStream?.mediaSourceId)
-                ?.let { frame ->
-                    PlayerSeekPreviewFrame(
-                        encodedTile = frame.encodedTile,
-                        frameWidthPx = frame.frameWidthPx,
-                        frameHeightPx = frame.frameHeightPx,
-                        tileColumn = frame.tileColumn,
-                        tileRow = frame.tileRow,
-                    )
-                } ?: playback.previewFrame(positionMs)
+            loadShortDramaPreview(repository, mediaSession, playerMedia.id, preparedStream?.mediaSourceId, positionMs)
+                ?: playback.previewFrame(positionMs)
         },
         // 全屏请求先落在页面状态上，再交给宿主（旋转窗口 / 隐藏系统栏）。
         // 页面状态先行的原因：宿主是异步的，UI 布局不能等它。
@@ -116,3 +110,14 @@ internal fun BrowseVideoPlayer(
         },
     )
 }
+
+internal suspend fun loadShortDramaPreview(
+    repository: MediaRepository,
+    session: MediaSession,
+    id: MediaId,
+    mediaSourceId: String?,
+    time: Long,
+): PlayerSeekPreviewFrame? =
+    repository.previewFrame(session, id, time, mediaSourceId)?.let {
+        PlayerSeekPreviewFrame(it.encodedTile, it.frameWidthPx, it.frameHeightPx, it.tileColumn, it.tileRow)
+    }
