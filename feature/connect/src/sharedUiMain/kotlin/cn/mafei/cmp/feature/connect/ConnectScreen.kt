@@ -76,9 +76,6 @@ import cn.mafei.cmp.common.glass.GlassSurfaceSpec
 import cn.mafei.cmp.common.glass.captureGlassBackdrop
 import cn.mafei.cmp.common.glass.rememberCombinedGlassBackdrop
 import cn.mafei.cmp.common.glass.components.LiquidButton
-import cn.mafei.cmp.common.glass.components.LiquidBottomTab
-import cn.mafei.cmp.common.glass.components.LiquidBottomTabs
-import cn.mafei.cmp.common.glass.components.LiquidBottomTabsStyle
 import cn.mafei.cmp.common.glass.rememberGlassBackdrop
 import cn.mafei.cmp.common.design_system.MaFeiLayoutFamily
 import cn.mafei.cmp.common.design_system.MaFeiSurface
@@ -93,8 +90,6 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.mafeiInteractive
-import cn.mafei.cmp.common.ui.providerLogo
-import cn.mafei.cmp.common.ui.providerName
 import cn.mafei.cmp.core.domain.ProviderKind
 import cn.mafei.cmp.feature.connect.generated.resources.Res
 import cn.mafei.cmp.feature.connect.generated.resources.mafei_app_icon
@@ -328,7 +323,7 @@ fun ConnectScreen(
                         }
                     },
                     modifier = Modifier.align(Alignment.TopEnd)
-                        .padding(top = switcherTop),
+                        .padding(top = switcherTop + 12.dp, end = 24.dp),
                 )
             }
         }
@@ -361,44 +356,6 @@ private fun CompactWelcome(modifier: Modifier = Modifier, topPadding: Dp = 80.dp
             fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = .92f),
         )
-    }
-}
-
-@Composable
-private fun ProviderSwitcher(
-    provider: ProviderKind,
-    enabled: Boolean,
-    backdrop: GlassBackdrop,
-    onSelected: (ProviderKind) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val providers = ProviderKind.entries
-    val selectedIndex = providers.indexOf(provider).coerceAtLeast(0)
-    LiquidBottomTabs(
-        selectedTabIndex = { selectedIndex },
-        onTabSelected = { index ->
-            if (enabled) providers.getOrNull(index)?.let(onSelected)
-        },
-        backdrop = backdrop,
-        tabsCount = providers.size,
-        style = LiquidBottomTabsStyle.Compact,
-        // Leave room for the selected droplet's refraction fringe.
-        modifier = modifier.width(272.dp).height(84.dp).alpha(if (enabled) 1f else .55f),
-    ) {
-        providers.forEachIndexed { index, item ->
-            val name = providerName(item)
-            LiquidBottomTab(
-                onClick = { if (enabled) onSelected(item) },
-                index = index,
-                isSelected = selectedIndex == index,
-            ) {
-                Image(
-                    painter = painterResource(providerLogo(item)),
-                    contentDescription = name,
-                    modifier = Modifier.size(21.dp).alpha(if (selectedIndex == index) 1f else .62f),
-                )
-            }
-        }
     }
 }
 

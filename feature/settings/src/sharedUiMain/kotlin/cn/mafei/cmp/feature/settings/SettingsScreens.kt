@@ -74,6 +74,7 @@ import cn.mafei.cmp.common.ui.MaFeiLegacyDrawables
 import cn.mafei.cmp.common.ui.MaFeiLoadingIndicator
 import cn.mafei.cmp.common.ui.MaFeiLoadingStyle
 import cn.mafei.cmp.common.ui.MaFeiSavedAccountList
+import cn.mafei.cmp.common.ui.ProviderMenuOptions
 import cn.mafei.cmp.common.ui.SavedAccountDeleteAffordance
 import cn.mafei.cmp.common.ui.SavedAccountListGroup
 import cn.mafei.cmp.common.ui.SavedAccountListItem
@@ -834,45 +835,13 @@ private fun AccountProviderMenu(
         tint = MaterialTheme.colorScheme.surface,
         modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.width(menuWidth),
     ) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            ProviderKind.entries.forEach { provider ->
-                AccountProviderMenuRow(
-                    title = providerName(provider),
-                    logo = providerLogo(provider),
-                    onClick = {
-                        onDismiss()
-                        onProvider(provider)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountProviderMenuRow(
-    title: String,
-    logo: org.jetbrains.compose.resources.DrawableResource,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().height(52.dp)
-            .mafeiInteractive(onClick, radiusDp = 0f, label = title)
-            .padding(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Image(
-            painter = painterResource(logo),
-            contentDescription = null,
-            modifier = Modifier.size(28.dp),
-            contentScale = ContentScale.Fit,
-        )
-        Text(
-            title,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
+        ProviderMenuOptions(
+            modifier = Modifier.fillMaxWidth(),
+            rowHeight = 52.dp,
+            onProvider = {
+                onDismiss()
+                onProvider(it)
+            },
         )
     }
 }

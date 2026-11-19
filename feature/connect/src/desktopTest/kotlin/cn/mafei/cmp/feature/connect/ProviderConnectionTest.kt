@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
@@ -56,7 +57,7 @@ class ProviderConnectionTest {
             "飞牛影视" to ProviderKind.Feiniu,
             "Jellyfin" to ProviderKind.Jellyfin,
         )) {
-            click(compose.onNodeWithContentDescription(name))
+            selectProvider(name)
             compose.runOnIdle {
                 assertEquals(provider, form.provider)
                 assertEquals("https://media.example", form.baseUrl)
@@ -67,7 +68,7 @@ class ProviderConnectionTest {
             compose.runOnIdle { assertEquals(provider, submission) }
             compose.runOnIdle { form.password = "fixture-password" }
         }
-        click(compose.onNodeWithContentDescription("Plex"))
+        selectProvider("Plex")
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
         click(compose.onNodeWithText("连接 Plex"))
         compose.runOnIdle {
@@ -76,6 +77,60 @@ class ProviderConnectionTest {
             assertEquals(4, changes)
             assertEquals(1, authorizations)
         }
+    }
+
+    @Test
+    fun providerMenuMarksTheCurrentServiceAndDoesNotChangeItWhileBusy() {
+        val width = mutableStateOf(320)
+        val dark = mutableStateOf(true)
+        val busy = mutableStateOf(false)
+        val form = ConnectFormState().apply {
+            provider = ProviderKind.Feiniu
+            password = "fixture-password"
+        }
+        scene(width = { width.value }, dark = { dark.value }) {
+            ConnectScreen(
+                busy = busy.value,
+                onSubmit = { _, _, _, _, _ -> },
+                formState = form,
+                onProviderChanged = { error("The current provider did not change") },
+            )
+        }
+        val trigger = compose.onNodeWithTag("providerSwitcher")
+        val menu = compose.onNodeWithTag("providerMenu")
+        for (size in listOf(320, 900)) for (isDark in listOf(true, false)) {
+            compose.runOnIdle { width.value = size; dark.value = isDark }
+            val suffix = "$size-${if (isDark) "dark" else "light"}"
+            assertInsideScene(trigger)
+            val anchor = trigger.fetchSemanticsNode().boundsInRoot
+            menu.assertDoesNotExist()
+            capture("provider-$suffix-closed")
+            trigger.performTouchInput { down(center) }
+            compose.mainClock.advanceTimeBy(100)
+            val pressed = trigger.fetchSemanticsNode().boundsInRoot
+            assertEquals(anchor.center.x, pressed.center.x, .5f)
+            assertEquals(anchor.center.y, pressed.center.y, .5f)
+            assertInsideScene(trigger)
+            capture("provider-$suffix-pressed")
+            trigger.performTouchInput { up() }
+            menu.assertIsDisplayed()
+            capture("provider-$suffix-open", "providerMenu")
+            menuOption("飞牛影视").assertIsSelected()
+            for (other in listOf("Jellyfin", "Emby", "Plex")) menuOption(other).assertIsNotSelected()
+            click(menuOption("飞牛影视"))
+            menu.assertDoesNotExist()
+            compose.runOnIdle { assertEquals("fixture-password", form.password) }
+        }
+        click(trigger)
+        menu.performKeyInput { pressKey(Key.Escape) }
+        menu.assertDoesNotExist()
+        click(trigger)
+        compose.runOnIdle { busy.value = true }
+        menu.assertDoesNotExist()
+        trigger.assertIsNotEnabled()
+        click(trigger)
+        compose.runOnIdle { busy.value = false }
+        menu.assertDoesNotExist()
     }
 
     @Test
@@ -200,9 +255,19 @@ class ProviderConnectionTest {
         assertTrue(scene.contains(bounds.topLeft) && scene.contains(bounds.bottomRight), "$bounds outside $scene")
     }
 
-    private fun capture(name: String) {
+    private fun menuOption(name: String) =
+        compose.onNode(hasText(name) and hasAnyAncestor(hasTestTag("providerMenu")))
+
+    private fun selectProvider(name: String) {
+        click(compose.onNodeWithTag("providerSwitcher"))
+        click(menuOption(name))
+        compose.onNodeWithTag("providerSwitcher").assertTextEquals(name)
+        compose.onNodeWithTag("providerMenu").assertDoesNotExist()
+    }
+
+    private fun capture(name: String, tag: String = "providerScene") {
         val directory = System.getenv("MAFEI_CAPTURE_DIR") ?: return
-        val pixels = compose.onNodeWithTag("providerScene").captureToImage().toPixelMap()
+        val pixels = compose.onNodeWithTag(tag).captureToImage().toPixelMap()
         val bitmap = BufferedImage(pixels.width, pixels.height, BufferedImage.TYPE_INT_ARGB)
         for (y in 0 until pixels.height) for (x in 0 until pixels.width) {
             bitmap.setRGB(x, y, pixels[x, y].toArgb())

@@ -49,10 +49,8 @@ class ConnectWindowControlsTest {
             }
         }
 
-        fun switcherTop() = compose.onNodeWithTag(
-            "liquid-bottom-tabs",
-            useUnmergedTree = true,
-        ).fetchSemanticsNode().boundsInRoot.top
+        fun switcherTop() =
+            compose.onNodeWithTag("providerSwitcher").fetchSemanticsNode().boundsInRoot.top
 
         val normalTop = switcherTop()
 
